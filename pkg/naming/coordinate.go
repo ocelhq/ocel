@@ -57,8 +57,8 @@ type ReleaseToken struct {
 	token string
 }
 
-func NewReleaseToken(deploymentID, fingerprint string) ReleaseToken {
-	sum := sha256.Sum256([]byte(deploymentID + "\x00" + fingerprint))
+func NewReleaseToken(buildID, fingerprint string) ReleaseToken {
+	sum := sha256.Sum256([]byte(buildID + "\x00" + fingerprint))
 	return ReleaseToken{token: releasePrefix + hex.EncodeToString(sum[:])[:8]}
 }
 
@@ -138,13 +138,12 @@ func (c Coordinate) Description(detail string) string {
 const EnvTierTagKey = "ocel:env-tier"
 
 type TagValues struct {
-	ManagedBy  string
-	EnvTier    environment.Tier
-	BuildID    string
-	Deployment string
-	Promotion  string
-	Route      string
-	ExpiresAt  string
+	ManagedBy string
+	EnvTier   environment.Tier
+	BuildID   string
+	Promotion string
+	Route     string
+	ExpiresAt string
 }
 
 func (c Coordinate) Tags(v TagValues) map[string]string {
@@ -156,7 +155,6 @@ func (c Coordinate) Tags(v TagValues) map[string]string {
 		"ocel:app":        c.App,
 		"ocel:release":    c.Release.String(),
 		"ocel:build":      v.BuildID,
-		"ocel:deployment": v.Deployment,
 		"ocel:promotion":  v.Promotion,
 		"ocel:component":  c.Kind.Component(),
 		"ocel:route":      v.Route,

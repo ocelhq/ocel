@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 import { type RouteDeps, resolveRouteDeps } from "../src/index";
+import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
 
-function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
+function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
     app: "web",
     framework: "next",
-    identity: "deploy-1",
-    deploymentId: "deploy-1",
-    buildId: "build-1",
+    release: "deploy-1",
+    buildId: "deploy-1",
     routingManifest: {
       buildId: "build-1",
       basePath: "",
@@ -27,17 +26,17 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 function bindingReturning(
-  identity: string | undefined,
-  record: DeploymentRecord | undefined,
-): DeploymentsBinding {
+  release: string | undefined,
+  record: ReleaseRecord | undefined,
+): ReleasesBinding {
   return answerEveryRecordWith(async () => {
-    if (!identity) return { kind: "no-pointer" };
-    if (!record) return { kind: "dangling", identity };
-    return { kind: "record", identity, record };
+    if (!release) return { kind: "no-pointer" };
+    if (!record) return { kind: "dangling", release };
+    return { kind: "record", release, record };
   });
 }
 
-function failingBinding(): DeploymentsBinding {
+function failingBinding(): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     throw new Error("store unreachable");
   });
@@ -93,7 +92,7 @@ describe("resolveRouteDeps", () => {
     const routeDeps = deps as RouteDeps;
     expect(routeDeps.manifest).toEqual(record.routingManifest);
     expect(routeDeps.functionUrls).toEqual(record.functionUrls);
-    expect(routeDeps.deploymentId).toBe("deploy-1");
+    expect(routeDeps.appBuildId).toBe("deploy-1");
   });
 
   it("fills the asset store's prefix from the record's asset prefix", async () => {
@@ -167,7 +166,7 @@ describe("resolveRouteDeps", () => {
 describe("the image origin of a routed deployment", () => {
   const entryUrl = "https://r1-x.o.example.com";
 
-  function imageRecord(): DeploymentRecord {
+  function imageRecord(): ReleaseRecord {
     const record = makeRecord({ functionUrls: { "bundle-0": entryUrl } });
     return { ...record, routingManifest: { ...record.routingManifest!, entry: "bundle-0" } };
   }

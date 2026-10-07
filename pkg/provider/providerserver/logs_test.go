@@ -37,17 +37,17 @@ type recordedApp struct {
 func recordApps(t *testing.T, vendor *fake.Provider, tier environment.Tier, env string, apps ...recordedApp) {
 	t.Helper()
 	for _, recorded := range apps {
-		build, err := provider.ParseBuild(buildIdentity(recorded.seq))
+		build, err := provider.ParseRelease(releaseFor(recorded.seq))
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = stackrecords.Write(context.Background(), vendor.KeyValues(), tier, "shop", naming.AppStack(env, recorded.app, build.Release()), stackrecords.Stack{
-			Kind:       provider.StackApp,
-			App:        recorded.app,
-			Release:    build.Release().String(),
-			Build:      build.String(),
-			Functions:  recorded.functions,
-			Containers: recorded.containers,
+		err = stackrecords.Write(context.Background(), vendor.KeyValues(), tier, "shop", naming.AppStack(env, recorded.app, build.Token()), stackrecords.Stack{
+			Kind:         provider.StackApp,
+			App:          recorded.app,
+			ReleaseToken: build.Token().String(),
+			Release:      build.String(),
+			Functions:    recorded.functions,
+			Containers:   recorded.containers,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -59,9 +59,9 @@ func webFunction(seq int) []provider.Function {
 	return []provider.Function{{Name: "web-server", Physical: "web-fn-" + string(rune('a'+seq))}}
 }
 
-func promoteBuilds(t *testing.T, vendor *fake.Provider, tier environment.Tier, pointer string, builds map[string]string) {
+func promoteReleases(t *testing.T, vendor *fake.Provider, tier environment.Tier, pointer string, builds map[string]string) {
 	t.Helper()
-	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: builds}
+	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Releases: builds}
 	if _, err := ledger.New(vendor.KeyValues(), tier, "shop").Promote(context.Background(), promotion, pointer, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func twoReleasesOfWeb(t *testing.T) (contractv1connect.ProviderServiceClient, *f
 		recordedApp{app: "web", seq: 1, functions: webFunction(1)},
 		recordedApp{app: "api", seq: 2, functions: []provider.Function{{Name: "api-server", Physical: "api-fn"}}},
 	)
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(1), "api": buildIdentity(2)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(1), "api": releaseFor(2)})
 	vendor.FakeLogs().Append("web-fn-a", logLine(1*time.Minute, "old web"))
 	vendor.FakeLogs().Append("web-fn-b", logLine(2*time.Minute, "live web"))
 	vendor.FakeLogs().Append("api-fn", logLine(3*time.Minute, "live api"))
@@ -246,7 +246,7 @@ func TestReadLogsLabelsAWorkersEntriesWithTheWorker(t *testing.T) {
 		},
 		containers: []provider.AppContainer{{Name: resources.WorkerName("mailer"), Physical: "mailer-box"}},
 	})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
 	vendor.FakeLogs().Append("web-fn", logLine(1*time.Minute, "served"))
 	vendor.FakeLogs().Append("media-fn", logLine(2*time.Minute, "resized"))
 	vendor.FakeLogs().Append("mailer-box", logLine(3*time.Minute, "sent"))
@@ -276,8 +276,8 @@ func TestReadLogsReadsThePreviewEnvironmentItIsAskedFor(t *testing.T) {
 	edgeProvisioned(t, vendor, environment.TierPreview, "shop")
 	recordApps(t, vendor, environment.TierPreview, "feature-x", recordedApp{app: "web", seq: 0, functions: []provider.Function{{Name: "web-server", Physical: "x-fn"}}})
 	recordApps(t, vendor, environment.TierPreview, "feature-y", recordedApp{app: "web", seq: 1, functions: []provider.Function{{Name: "web-server", Physical: "y-fn"}}})
-	promoteBuilds(t, vendor, environment.TierPreview, "feature-x", map[string]string{"web": buildIdentity(0)})
-	promoteBuilds(t, vendor, environment.TierPreview, "feature-y", map[string]string{"web": buildIdentity(1)})
+	promoteReleases(t, vendor, environment.TierPreview, "feature-x", map[string]string{"web": releaseFor(0)})
+	promoteReleases(t, vendor, environment.TierPreview, "feature-y", map[string]string{"web": releaseFor(1)})
 	vendor.FakeLogs().Append("x-fn", logLine(time.Minute, "from x"))
 	vendor.FakeLogs().Append("y-fn", logLine(time.Minute, "from y"))
 
@@ -313,7 +313,7 @@ func TestReadLogsPassesTheWindowTheLimitAndTheFilterToTheProvider(t *testing.T) 
 	client, vendor := contractServed(t, "1.0.0")
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
 	for i, message := range []string{"boot", "error one", "idle", "error two", "error three", "error four"} {
 		vendor.FakeLogs().Append("web-fn-a", logLine(time.Duration(i)*time.Minute, message))
 	}
@@ -362,7 +362,7 @@ func TestReadLogsStopsWhenTheProviderRefusesTheRead(t *testing.T) {
 	client := servedProvider(t, "1.0.0", failingLogs{Provider: vendor})
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
 
 	read, err := readLogsOf(t, client, logsRequest())
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -394,8 +394,8 @@ func TestReadLogsNamesTheReleaseOfASourceThatNoLongerExists(t *testing.T) {
 	client := servedProvider(t, "1.0.0", partlyMissingLogs{Provider: vendor})
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
-	build, err := provider.ParseBuild(buildIdentity(0))
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
+	build, err := provider.ParseRelease(releaseFor(0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,8 +409,8 @@ func TestReadLogsNamesTheReleaseOfASourceThatNoLongerExists(t *testing.T) {
 	if want := []string{contractv1.LogNotice_KIND_SOURCE_GONE.String(), contractv1.LogNotice_KIND_CAUGHT_UP.String()}; !slices.Equal(read.order, want) {
 		t.Fatalf("ReadLogs() sent %v, want %v", read.order, want)
 	}
-	if message := read.notices[0].GetMessage(); !strings.Contains(message, build.Release().String()) || !strings.Contains(message, "web") {
-		t.Errorf("ReadLogs() said %q of the missing source, want it to name its app and release %s", message, build.Release())
+	if message := read.notices[0].GetMessage(); !strings.Contains(message, build.Token().String()) || !strings.Contains(message, "web") {
+		t.Errorf("ReadLogs() said %q of the missing source, want it to name its app and release %s", message, build.Token())
 	}
 }
 
@@ -441,18 +441,18 @@ func TestAStackRecordNamesTheBuildThePromotionPointsAt(t *testing.T) {
 			promoted = recorded.Promotion
 		}
 	}
-	if len(promoted.Builds) == 0 {
+	if len(promoted.Releases) == 0 {
 		t.Fatalf("the deploy's active promotion %q names no builds", active.Active)
 	}
 	stacks, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for app, build := range promoted.Builds {
+	for app, build := range promoted.Releases {
 		var recorded []string
 		for _, stack := range stacks {
 			if stack.Kind == provider.StackApp && stack.App == app {
-				recorded = append(recorded, stack.Build)
+				recorded = append(recorded, stack.Release)
 			}
 		}
 		if !slices.Equal(recorded, []string{build}) {
@@ -569,7 +569,7 @@ func liveWeb(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provi
 	client, vendor := contractServed(t, "1.0.0")
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
 	return client, vendor
 }
 
@@ -681,7 +681,7 @@ func spiedWeb(t *testing.T, spy *spyingLogs) contractv1connect.ProviderServiceCl
 		recordedApp{app: "web", seq: 0, functions: webFunction(0)},
 		recordedApp{app: "web", seq: 1, functions: webFunction(1)},
 	)
-	promoteBuilds(t, spy.Provider, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(1)})
+	promoteReleases(t, spy.Provider, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(1)})
 	return client
 }
 
@@ -837,7 +837,7 @@ func TestReadLogsKeepsTheStreamOpenWhenTheProvidersTailEndsBeforeTheCallerCancel
 func TestReadLogsNamesTheReleaseOfASourceThatIsGoneWhileTailing(t *testing.T) {
 	t.Parallel()
 	client, vendor := liveWeb(t)
-	build, err := provider.ParseBuild(buildIdentity(0))
+	build, err := provider.ParseRelease(releaseFor(0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -847,10 +847,10 @@ func TestReadLogsNamesTheReleaseOfASourceThatIsGoneWhileTailing(t *testing.T) {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
 	tailOpened(t, vendor)
-	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSourceGone, Target: provider.LogTarget{App: "web", Source: "http", Release: build.Release().String()}})
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSourceGone, Target: provider.LogTarget{App: "web", Source: "http", Release: build.Token().String()}})
 	gone := tailed.next().GetNotice()
-	if gone.GetKind() != contractv1.LogNotice_KIND_SOURCE_GONE || !strings.Contains(gone.GetMessage(), build.Release().String()) || !strings.Contains(gone.GetMessage(), "web") {
-		t.Errorf("a source gone while tailing reached the caller as %v, want KIND_SOURCE_GONE naming its app and release %s", gone, build.Release())
+	if gone.GetKind() != contractv1.LogNotice_KIND_SOURCE_GONE || !strings.Contains(gone.GetMessage(), build.Token().String()) || !strings.Contains(gone.GetMessage(), "web") {
+		t.Errorf("a source gone while tailing reached the caller as %v, want KIND_SOURCE_GONE naming its app and release %s", gone, build.Token())
 	}
 }
 
@@ -902,7 +902,7 @@ func TestReadLogsSendsAnEntryThatBothHistoryAndTheTailReadOnce(t *testing.T) {
 	})
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
-	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
+	promoteReleases(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": releaseFor(0)})
 
 	tailed := tailLogsOf(t, client, logsRequest())
 	if got, want := tailed.historyUntilCaughtUp(), []string{"at the boundary"}; !slices.Equal(got, want) {

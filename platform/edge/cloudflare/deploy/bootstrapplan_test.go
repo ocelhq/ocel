@@ -20,9 +20,9 @@ import (
 
 func seedBootstrapBundles(t *testing.T, store, writer string) {
 	t.Helper()
-	priorStore, priorWriter := deploymentsStoreBundle, isrWriterBundle
-	deploymentsStoreBundle, isrWriterBundle = []byte(store), []byte(writer)
-	t.Cleanup(func() { deploymentsStoreBundle, isrWriterBundle = priorStore, priorWriter })
+	priorStore, priorWriter := releasesStoreBundle, isrWriterBundle
+	releasesStoreBundle, isrWriterBundle = []byte(store), []byte(writer)
+	t.Cleanup(func() { releasesStoreBundle, isrWriterBundle = priorStore, priorWriter })
 }
 
 func bootstrapMock(t *testing.T, provisioned bool) *cfMock {
@@ -125,7 +125,7 @@ func TestPlanBootstrap(t *testing.T) {
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		deploymentsStoreBundle = []byte("export default {rebuilt:1}")
+		releasesStoreBundle = []byte("export default {rebuilt:1}")
 
 		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
@@ -264,7 +264,7 @@ func TestBootstrapConverges(t *testing.T) {
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		deploymentsStoreBundle = []byte("export default {rebuilt:1}")
+		releasesStoreBundle = []byte("export default {rebuilt:1}")
 
 		out, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
@@ -286,7 +286,7 @@ func TestBootstrapConverges(t *testing.T) {
 			t.Errorf("secrets after re-upload = %v, want %s kept", m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding)
 		}
 		for _, offer := range out.Offers {
-			if offer.Kind == edge.OfferDeploymentsStore && credOf(t, offer) != "" {
+			if offer.Kind == edge.OfferReleasesStore && credOf(t, offer) != "" {
 				t.Error("a drift re-upload minted a fresh credential, orphaning the stored one")
 			}
 		}
@@ -334,7 +334,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 		}
 		for _, offer := range out.Offers {
 			switch offer.Kind {
-			case edge.OfferDeploymentsStore:
+			case edge.OfferReleasesStore:
 				if cred := credOf(t, offer); cred != m.putSecrets[0].text {
 					t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
 				}
@@ -358,7 +358,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 func credOf(t *testing.T, offer edge.Offer) string {
 	t.Helper()
 	switch offer.Kind {
-	case edge.OfferDeploymentsStore:
+	case edge.OfferReleasesStore:
 		return offer.Values[edge.OfferKeyStoreBootstrapCredential]
 	case edge.OfferISRWriter:
 		return offer.Values[edge.OfferKeyISRWriterBootstrapCredential]
@@ -372,7 +372,7 @@ func endpoints(out edge.BootstrapOutput) map[edge.OfferKind]string {
 	found := map[edge.OfferKind]string{}
 	for _, offer := range out.Offers {
 		switch offer.Kind {
-		case edge.OfferDeploymentsStore:
+		case edge.OfferReleasesStore:
 			found[offer.Kind] = offer.Values[edge.OfferKeyStoreEndpoint]
 		case edge.OfferISRWriter:
 			found[offer.Kind] = offer.Values[edge.OfferKeyISRWriterEndpoint]

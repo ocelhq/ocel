@@ -44,7 +44,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 		Pointer:     pointerFor(tier, name),
 		PromotionID: promotionID,
 		Tag:         req.GetTag(),
-		Builds:      make(map[string]string, len(manifest.GetApps())),
+		Releases:    make(map[string]string, len(manifest.GetApps())),
 	}
 	if !ephemeral(env) {
 		spec.Infra = naming.InfraStack(name)
@@ -59,7 +59,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 			return provider.DeploySpec{}, err
 		}
 		entry.Workers = workers[entry.App]
-		spec.Builds[entry.App] = entry.Build.String()
+		spec.Releases[entry.App] = entry.Release.String()
 		spec.Apps = append(spec.Apps, entry)
 	}
 	return spec, nil
@@ -77,15 +77,15 @@ func appEntry(app *contractv1.ManifestApp, env, promotionID string) (provider.Ap
 	if err := naming.Validate("app name", name); err != nil {
 		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
-	identity, err := provider.NewBuild(app.GetDeploymentId(), promotionID, env, fingerprintVariables(app.GetVariables()))
+	release, err := provider.NewRelease(app.GetBuildId(), promotionID, env, fingerprintVariables(app.GetVariables()))
 	if err != nil {
 		return provider.AppEntry{}, err
 	}
 	container := app.GetContainer()
 	return provider.AppEntry{
 		App:             name,
-		Stack:           naming.AppStack(env, name, identity.Release()),
-		Build:           identity,
+		Stack:           naming.AppStack(env, name, release.Token()),
+		Release:         release,
 		Manifest:        app,
 		Image:           container.GetImage(),
 		HealthCheckPath: container.GetHealthCheckPath(),
@@ -137,13 +137,13 @@ func appCoordinate(p provider.DeploySpec, app string, release naming.ReleaseToke
 }
 
 func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
-	coordinate := appCoordinate(p, entry.App, entry.Build.Release())
+	coordinate := appCoordinate(p, entry.App, entry.Release.Token())
 	coordinate.Kind = naming.KindFunction
 	return coordinate.Tags(naming.TagValues{
-		ManagedBy:  "ocel",
-		EnvTier:    p.Tier,
-		Deployment: entry.Build.DeploymentID(),
-		Promotion:  p.PromotionID,
+		ManagedBy: "ocel",
+		EnvTier:   p.Tier,
+		BuildID:   entry.Release.BuildID(),
+		Promotion: p.PromotionID,
 	})
 }
 

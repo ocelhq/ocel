@@ -3,11 +3,11 @@ export interface SqlStore {
   transactionSync<T>(closure: () => T): T;
 }
 
-export interface DeploymentRecord {
+export interface ReleaseRecord {
   app: string;
   framework: string;
-  identity: string;
-  deploymentId: string;
+  release: string;
+  buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
   assetPrefix: string;
@@ -15,7 +15,7 @@ export interface DeploymentRecord {
   isrWriteSecret?: string;
   createdAt: number;
   edgeWorkers?: EdgeWorkers;
-  buildFingerprint?: string;
+  releaseFingerprint?: string;
   variables?: VariableRecord[];
 }
 
@@ -37,7 +37,7 @@ export interface PointerMove {
   pointer?: string;
   replaces?: string | null;
   promotionId: string;
-  records: DeploymentRecord[];
+  records: ReleaseRecord[];
   labels?: ServedLabel[];
 }
 
@@ -48,7 +48,7 @@ export interface ServedLabel {
 
 export type PointerMoveOutcome = "moved" | "stale";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
@@ -82,7 +82,7 @@ export function ensureSchema(store: SqlStore): void {
      CREATE TABLE IF NOT EXISTS served (
        pointer TEXT NOT NULL,
        app TEXT NOT NULL,
-       identity TEXT NOT NULL,
+       release TEXT NOT NULL,
        data TEXT NOT NULL,
        PRIMARY KEY (pointer, app)
      );
@@ -132,10 +132,10 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     for (const record of move.records) {
       store.sql.exec(
-        `INSERT INTO served (pointer, app, identity, data) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO served (pointer, app, release, data) VALUES (?, ?, ?, ?)`,
         pointer,
         record.app,
-        record.identity,
+        record.release,
         JSON.stringify(record),
       );
       store.sql.exec(`INSERT OR IGNORE INTO apps (app) VALUES (?)`, record.app);
@@ -178,35 +178,35 @@ export function listApps(store: SqlStore): string[] {
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; identity: string }
-  | { kind: "record"; identity: string; record: DeploymentRecord };
+  | { kind: "unchanged"; release: string }
+  | { kind: "record"; release: string; record: ReleaseRecord };
 
-type ServedRow = { app: string; identity: string; data: string };
+type ServedRow = { app: string; release: string; data: string };
 
 function selectServedResult(
   rows: ServedRow[],
   app: string | undefined,
-  knownIdentity: string | undefined,
+  knownRelease: string | undefined,
 ): PointerRecordResult {
   if (app === undefined && rows.length > 1) return { kind: "ambiguous-app" };
   const row = app === undefined ? rows[0] : rows.find((r) => r.app === app);
   if (!row) return { kind: "no-pointer" };
-  if (row.identity === knownIdentity) return { kind: "unchanged", identity: row.identity };
+  if (row.release === knownRelease) return { kind: "unchanged", release: row.release };
   return {
     kind: "record",
-    identity: row.identity,
-    record: JSON.parse(row.data) as DeploymentRecord,
+    release: row.release,
+    record: JSON.parse(row.data) as ReleaseRecord,
   };
 }
 
 export function readLabelRecord(
   store: SqlStore,
   label: string,
-  knownIdentity?: string,
+  knownRelease?: string,
 ): PointerRecordResult {
   const rows = store.sql
     .exec<ServedRow>(
-      `SELECT served.app, served.identity, served.data
+      `SELECT served.app, served.release, served.data
        FROM labels JOIN served ON served.pointer = labels.pointer
          AND (labels.app = '' OR served.app = labels.app)
        WHERE labels.label = ?
@@ -214,21 +214,21 @@ export function readLabelRecord(
       label,
     )
     .toArray();
-  return selectServedResult(rows, undefined, knownIdentity);
+  return selectServedResult(rows, undefined, knownRelease);
 }
 
 export function readPointerRecord(
   store: SqlStore,
   app?: string,
-  knownIdentity?: string,
+  knownRelease?: string,
 ): PointerRecordResult {
   const rows = store.sql
     .exec<ServedRow>(
-      `SELECT app, identity, data FROM served WHERE pointer = ? ORDER BY app`,
+      `SELECT app, release, data FROM served WHERE pointer = ? ORDER BY app`,
       DEFAULT_POINTER,
     )
     .toArray();
-  return selectServedResult(rows, app, knownIdentity);
+  return selectServedResult(rows, app, knownRelease);
 }
 
 export type Initialization = "adopted" | "refused";

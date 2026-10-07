@@ -157,9 +157,9 @@ func TestScriptBindings(t *testing.T) {
 		},
 		{
 			name:   "a service maps to a service binding",
-			worker: edge.Worker{Main: mainModule(), Services: map[string]string{"DEPLOYMENTS": "ocel-proj-store"}},
+			worker: edge.Worker{Main: mainModule(), Services: map[string]string{"RELEASES": "ocel-proj-store"}},
 			typ:    "service",
-			want:   []map[string]string{{"name": "DEPLOYMENTS", "service": "ocel-proj-store"}},
+			want:   []map[string]string{{"name": "RELEASES", "service": "ocel-proj-store"}},
 		},
 		{
 			name:   "a client certificate becomes an mtls_certificate binding naming its certificate id",
@@ -302,7 +302,7 @@ func TestBindObjectStore(t *testing.T) {
 
 	t.Run("a bundle with no store still gets the binding", func(t *testing.T) {
 		composed := bindObjectStore(
-			withService(edge.Worker{Main: mainModule()}, "DEPLOYMENTS", "ocel-proj-store"),
+			withService(edge.Worker{Main: mainModule()}, "RELEASES", "ocel-proj-store"),
 			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
 		)
 
@@ -325,7 +325,7 @@ func TestBindObjectStore(t *testing.T) {
 		}
 
 		composed := bindObjectStore(
-			withService(worker, "DEPLOYMENTS", "ocel-proj-store"),
+			withService(worker, "RELEASES", "ocel-proj-store"),
 			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
 		)
 		meta := metadataFromMultipart(t, composed, "")

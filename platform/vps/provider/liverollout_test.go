@@ -67,7 +67,7 @@ func liveSpec(t *testing.T, tag string) provider.StackSpec {
 		App: &provider.AppSpec{
 			App:             liveApp,
 			Compute:         provider.ComputeContainer,
-			Deployment:      hex.EncodeToString(sum[:])[:32],
+			BuildID:         hex.EncodeToString(sum[:])[:32],
 			Image:           fixtureAt(tag),
 			HealthCheckPath: healthPath,
 		},

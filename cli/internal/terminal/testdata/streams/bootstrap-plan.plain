@@ -12,8 +12,8 @@ Proposed changes to the production bootstrap, fronted by the cloudflare edge:
     ~ OcelDispatchFunction  AWS::Lambda::Function
 
 + cloudflare/edge  [cloudflare-edge]
-    + ocel-edge-cache         Cloudflare::R2Bucket
-    + ocel-deployments-store  Cloudflare::Worker
+    + ocel-edge-cache      Cloudflare::R2Bucket
+    + ocel-releases-store  Cloudflare::Worker
 
 This cannot be undone.
 

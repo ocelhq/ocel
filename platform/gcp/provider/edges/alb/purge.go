@@ -18,7 +18,7 @@ type servedRelease struct {
 	Tagged  bool   `json:"tagged,omitempty"`
 }
 
-func readReleaseTag(record router.DeploymentRecord) string {
+func readReleaseTag(record router.ReleaseRecord) string {
 	segments := strings.Split(record.IsrPrefix, "/")
 	if len(segments) != 5 || segments[4] != "isr" {
 		return ""
@@ -29,13 +29,13 @@ func readReleaseTag(record router.DeploymentRecord) string {
 	return segments[3]
 }
 
-func isReleaseTagged(record router.DeploymentRecord) bool {
+func isReleaseTagged(record router.ReleaseRecord) bool {
 	return record.Framework == buildoutput.FrameworkNext && record.Physical == ""
 }
 
 func newServedKey(pointer, app string) string { return pointer + "/" + app }
 
-func (s *stack) servedHostnames(move router.PointerMove, app string, record router.DeploymentRecord) []string {
+func (s *stack) servedHostnames(move router.PointerMove, app string, record router.ReleaseRecord) []string {
 	var hostnames []string
 	for hostname, host := range s.recorded.Hosts {
 		if _, _, deployment := router.ParseDeploymentPointer(host.Pointer); deployment {

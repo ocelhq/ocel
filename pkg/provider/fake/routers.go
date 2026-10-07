@@ -91,13 +91,13 @@ func pointerOf(state edge.StackState, pointer string) projectPointer {
 	return projectPointer{slug: state.Slug, tier: state.Tier, pointer: router.ResolvePointer(pointer)}
 }
 
-func (d *DataPlane) Builds(slug string, tier environment.Tier, pointer string) map[string]string {
+func (d *DataPlane) Releases(slug string, tier environment.Tier, pointer string) map[string]string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
 }
 
-func (d *DataPlane) FindServingPointer(hostname string) (pointer string, builds map[string]string) {
+func (d *DataPlane) FindServingPointer(hostname string) (pointer string, releases map[string]string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	at, routed := d.hosts[hostname]
@@ -173,13 +173,13 @@ func (d *DataPlane) written(at projectPointer) int {
 	return d.writes[at]
 }
 
-func (d *DataPlane) serveOver(at projectPointer, builds map[string]string, move router.PointerMove, read int) bool {
+func (d *DataPlane) serveOver(at projectPointer, releases map[string]string, move router.PointerMove, read int) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.writes[at] != read {
 		return false
 	}
-	d.served[at] = maps.Clone(builds)
+	d.served[at] = maps.Clone(releases)
 	d.writes[at]++
 	d.unrouteHosts(at, move.ListHostsToWithdraw())
 	for _, host := range move.Hosts {
@@ -334,9 +334,9 @@ func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
 
 func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
 	s.plane.beginPointerMove(progress)
-	builds := make(map[string]string, len(move.Records))
+	releases := make(map[string]string, len(move.Records))
 	for app, record := range move.Records {
-		builds[app] = record.Build
+		releases[app] = record.Release
 	}
 	at := pointerOf(s.stack.State(), move.Pointer)
 	for range moveAttempts {
@@ -347,7 +347,7 @@ func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, 
 		if err := s.plane.refusePointerMove(); err != nil {
 			return err
 		}
-		if s.plane.serveOver(at, builds, move, read) {
+		if s.plane.serveOver(at, releases, move, read) {
 			return nil
 		}
 	}

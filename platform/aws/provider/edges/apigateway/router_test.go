@@ -13,7 +13,7 @@ func TestAPointerMoveWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *
 	ctx := context.Background()
 	w := newWorld()
 	_, stack := previewing(t, w)
-	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: previewEntry}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestAPointerMoveWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *
 
 	err := openRouter(stack).MovePointer(ctx, router.PointerMove{
 		Pointer:     previewPoint,
-		Promotion:   router.Promotion{PromotionID: "p-displaced", Ts: 1, Builds: map[string]string{"web": record.Build}},
+		Promotion:   router.Promotion{PromotionID: "p-displaced", Ts: 1, Releases: map[string]string{"web": record.Release}},
 		StillActive: func(context.Context) error { return displaced },
 	}, progress.Discard())
 	if !errors.Is(err, displaced) {

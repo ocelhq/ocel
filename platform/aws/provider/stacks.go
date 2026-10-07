@@ -98,9 +98,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Invoker:     lambda.NewFromConfig(p.aws),
 		CodeUpdater: lambda.NewFromConfig(p.aws),
 
-		StoreScriptName:          params.DeploymentsStore.ScriptName,
-		StoreEndpoint:            params.DeploymentsStore.Endpoint,
-		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCredential,
+		StoreScriptName:          params.ReleasesStore.ScriptName,
+		StoreEndpoint:            params.ReleasesStore.Endpoint,
+		StoreBootstrapCredential: params.ReleasesStore.BootstrapCredential,
 
 		ISRWriterEndpoint:            params.ISRWriter.Endpoint,
 		ISRWriterBootstrapCredential: params.ISRWriter.BootstrapCredential,

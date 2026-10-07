@@ -143,7 +143,7 @@ export function deps(scenario: Scenario): RouteDeps {
     },
     functionUrls: scenario.functionUrls ?? {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing(
       { "/404.html": "not found", ...(scenario.files ?? {}) },

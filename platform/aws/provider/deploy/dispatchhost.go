@@ -19,7 +19,7 @@ const (
 	assetPrefixEnv        = "OCEL_ASSET_PREFIX"
 	slugEnv               = "OCEL_SLUG"
 	appNameEnv            = "OCEL_APP"
-	deploymentIDEnv       = "OCEL_DEPLOYMENT_ID"
+	buildIDEnv            = "OCEL_BUILD_ID"
 	routingManifestInTask = "/var/task/" + edge.RoutingManifestFile
 
 	functionURLBudgetBytes = 80

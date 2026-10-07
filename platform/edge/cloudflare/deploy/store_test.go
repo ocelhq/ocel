@@ -26,7 +26,7 @@ type labelTarget struct{ pointer, app string }
 type fakeStore struct {
 	mu       sync.Mutex
 	pointers map[string]string
-	served   map[string]map[string]router.DeploymentRecord
+	served   map[string]map[string]router.ReleaseRecord
 	apps     map[string]bool
 	labels   map[string]labelTarget
 	moves    []pointerMoveBody
@@ -41,7 +41,7 @@ func (f *fakeStore) serving(pointer, app string) string {
 	if pointer == "" {
 		pointer = router.DefaultPointer
 	}
-	return f.served[pointer][app].Build
+	return f.served[pointer][app].Release
 }
 
 func (f *fakeStore) findServedBuild(label string) string {
@@ -54,10 +54,10 @@ func (f *fakeStore) findServedBuild(label string) string {
 	served := f.served[at.pointer]
 	if at.app == "" && len(served) == 1 {
 		for _, record := range served {
-			return record.Build
+			return record.Release
 		}
 	}
-	return served[at.app].Build
+	return served[at.app].Release
 }
 
 func (f *fakeStore) dropLabels(pointer string) {
@@ -84,7 +84,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 	t.Helper()
 	f := &fakeStore{
 		pointers: map[string]string{},
-		served:   map[string]map[string]router.DeploymentRecord{},
+		served:   map[string]map[string]router.ReleaseRecord{},
 		apps:     map[string]bool{},
 		labels:   map[string]labelTarget{},
 		owner:    storeOwnerToken,
@@ -153,7 +153,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 			return
 		}
 		f.moves = append(f.moves, body)
-		f.served[pointer] = map[string]router.DeploymentRecord{}
+		f.served[pointer] = map[string]router.ReleaseRecord{}
 		for _, record := range body.Records {
 			f.served[pointer][record.App] = record
 			f.apps[record.App] = true
@@ -197,7 +197,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 	}))
 	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, _ *http.Request) {
 		f.pointers = map[string]string{}
-		f.served = map[string]map[string]router.DeploymentRecord{}
+		f.served = map[string]map[string]router.ReleaseRecord{}
 		f.apps = map[string]bool{}
 		f.labels = map[string]labelTarget{}
 		f.version = nil
@@ -237,14 +237,14 @@ func movePointer(t *testing.T, p *cloudflare, state edge.StackState, move router
 	}
 }
 
-func pointerMoveOf(promotionID, pointer string, records ...router.DeploymentRecord) router.PointerMove {
+func pointerMoveOf(promotionID, pointer string, records ...router.ReleaseRecord) router.PointerMove {
 	move := router.PointerMove{
 		Pointer:   pointer,
-		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
-		Records:   map[string]router.DeploymentRecord{},
+		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Releases: map[string]string{}},
+		Records:   map[string]router.ReleaseRecord{},
 	}
 	for _, record := range records {
-		move.Promotion.Builds[record.App] = record.Build
+		move.Promotion.Releases[record.App] = record.Release
 		move.Records[record.App] = record
 	}
 	return move
@@ -257,9 +257,9 @@ func TestAPointerMoveServesItsRecordsOnItsPointerInTheStore(t *testing.T) {
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
 
-	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
-	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b2"}))
-	movePointer(t, p, state, pointerMoveOf("promo-2", "", router.DeploymentRecord{App: "web", Build: "b3"}))
+	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: "b1"}))
+	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.ReleaseRecord{App: "web", Release: "b2"}))
+	movePointer(t, p, state, pointerMoveOf("promo-2", "", router.ReleaseRecord{App: "web", Release: "b3"}))
 
 	if served := store.serving("", "web"); served != "b3" {
 		t.Errorf("the default pointer serves %q, want b3, the last promotion moved onto it", served)
@@ -282,7 +282,7 @@ func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
 	srv, store := fakeStoreFor(t, "s3cr3t")
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
-	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
+	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.ReleaseRecord{App: "web", Release: "b1"}))
 
 	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
@@ -419,7 +419,7 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		movePointer(t, p, state, pointerMoveOf("p1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
+		movePointer(t, p, state, pointerMoveOf("p1", "", router.ReleaseRecord{App: "web", Release: "b1"}))
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
 		}
@@ -450,8 +450,8 @@ func TestAPreviewPointerMoveServesEachOfItsHostsByItsLabel(t *testing.T) {
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
 	move := pointerMoveOf("promo-preview", "pr-42",
-		router.DeploymentRecord{App: "web", Build: "b1"},
-		router.DeploymentRecord{App: "admin", Build: "b2"})
+		router.ReleaseRecord{App: "web", Release: "b1"},
+		router.ReleaseRecord{App: "admin", Release: "b2"})
 	move.Hosts = []edge.PreviewHost{
 		{Hostname: "pr-42-web-aaaaaaaaaaaaaaaabbbbbbbb.preview.example.com", App: "web"},
 		{Hostname: "pr-42-admin-ccccccccccccccccdddddddd.preview.example.com", App: "admin"},
@@ -474,7 +474,7 @@ func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
 	p := &cloudflare{}
 	state := testState(srv.URL, "s3cr3t")
 	hosts := []edge.PreviewHost{{Hostname: "pr-42-aaaaaaaaaaaaaaaabbbbbbbb.preview.example.com"}}
-	move := pointerMoveOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"})
+	move := pointerMoveOf("promo-preview", "pr-42", router.ReleaseRecord{App: "web", Release: "b1"})
 	move.Hosts = hosts
 	movePointer(t, p, state, move)
 

@@ -3,12 +3,12 @@
 // Runtime types generated with workerd@1.20260708.1 2026-07-13 nodejs_compat
 interface __BaseEnv_Env {
 	BOOTSTRAP_SECRET: "dev-secret";
-	DEPLOYMENTS_DO: DurableObjectNamespace<import("./src/index").DeploymentsStore>;
+	RELEASES_DO: DurableObjectNamespace<import("./src/index").ReleasesStore>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/index");
-		durableNamespaces: "DeploymentsStore";
+		durableNamespaces: "ReleasesStore";
 	}
 	interface Env extends __BaseEnv_Env {}
 }

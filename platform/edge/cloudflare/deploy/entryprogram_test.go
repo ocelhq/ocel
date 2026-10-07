@@ -22,7 +22,7 @@ func programmed(slug string, tier environment.Tier) EntryProgram {
 			Secrets:   map[string]string{"OCEL_ORIGIN_KEY": "s"},
 		},
 		Values:                   map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
-		StoreScriptName:          "ocel-deployments-store-preview",
+		StoreScriptName:          "ocel-releases-store-preview",
 		StoreEndpoint:            "https://store.example",
 		StoreBootstrapCredential: "store-cred",
 		ISRWriterScriptName:      "ocel-isr-writer-preview",
@@ -82,7 +82,7 @@ func TestEntryProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 
 	_, err := entry.Build()
 	if err == nil {
-		t.Fatal("Build succeeded, want a preview entry with no deployments-store worker refused")
+		t.Fatal("Build succeeded, want a preview entry with no releases-store worker refused")
 	}
 	if !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierPreview)) {
 		t.Errorf("error = %q, want it to name the bootstrap that provisions the store", err)

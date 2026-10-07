@@ -18,14 +18,14 @@ type DeploySpec struct {
 
 	PromotionID string
 	Tag         string
-	Builds      map[string]string
+	Releases    map[string]string
 	Phase       string
 }
 
 type AppEntry struct {
 	App      string
 	Stack    naming.StackName
-	Build    Build
+	Release  Release
 	Manifest *contractv1.ManifestApp
 
 	Image           string

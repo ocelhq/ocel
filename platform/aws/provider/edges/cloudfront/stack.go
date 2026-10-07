@@ -159,7 +159,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames, superseded []string, stillActive router.StillActive) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.ReleaseRecord, hostnames, superseded []string, stillActive router.StillActive) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (s *stack) onPreviewWildcard() bool {
 	return s.own.Distribution == "" && s.tier() == environment.TierPreview && s.previewBase() != ""
 }
 
-func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord) (route, error) {
+func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, records map[string]router.ReleaseRecord) (route, error) {
 	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
@@ -205,14 +205,14 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 
 	app := apps[0]
 	record := records[app]
-	identity := record.Build
+	release := record.Release
 	secret, err := s.originSecret(ctx, c)
 	if err != nil {
 		return route{}, err
 	}
-	published := route{Stack: s.spec().name, Release: identity, Secret: secret.Presented(record.CreatedAt)}
+	published := route{Stack: s.spec().name, Release: release, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
-		front, err := s.serveContainers(ctx, c, promotionID, app, identity)
+		front, err := s.serveContainers(ctx, c, promotionID, app, release)
 		if err != nil {
 			return route{}, err
 		}
@@ -221,11 +221,11 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 		return published, nil
 	}
 	if record.EntryFunction == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, identity)
+		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release)
 	}
 	published.Origin = originHost(record.FunctionURLs[record.Entry])
 	if published.Origin == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotionID, app, identity, record.EntryFunction, Kind)
+		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotionID, app, release, record.EntryFunction, Kind)
 	}
 	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
@@ -236,13 +236,13 @@ func (s *stack) keyValues(c Clients) awsports.KeyValues {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
 }
 
-func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app, identity string) (awsports.ContainerFront, error) {
+func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app, release string) (awsports.ContainerFront, error) {
 	front, found, err := awsports.ReadContainerFront(ctx, s.keyValues(c), s.tier())
 	if err != nil {
 		return awsports.ContainerFront{}, err
 	}
 	if !found {
-		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s tier records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotionID, app, identity, s.tier())
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s tier records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotionID, app, release, s.tier())
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
@@ -313,14 +313,14 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 	if err != nil || !found {
 		return err
 	}
-	records := make(map[string]router.DeploymentRecord, len(active.Builds))
-	for app, build := range active.Builds {
-		record, staged, err := s.openLedger(c).Record(ctx, app, build)
+	records := make(map[string]router.ReleaseRecord, len(active.Releases))
+	for app, release := range active.Releases {
+		record, staged, err := s.openLedger(c).Record(ctx, app, release)
 		if err != nil {
 			return err
 		}
 		if !staged {
-			return fmt.Errorf("serve %s: the deployments ledger has no record for %s/%s, the release promotion %s serves; re-run the deploy that built it", hostname, app, build, active.PromotionID)
+			return fmt.Errorf("serve %s: the ledger has no record for %s/%s, the release promotion %s serves; re-run the deploy that built it", hostname, app, release, active.PromotionID)
 		}
 		records[app] = record
 	}

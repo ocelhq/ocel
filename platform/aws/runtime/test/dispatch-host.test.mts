@@ -76,7 +76,7 @@ function host(): DispatchHost {
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
     slug: "p1",
     app: "web",
-    deploymentId: "d1",
+    appBuildId: "d1",
     assetPrefix: "",
     originFetch: siblingOriginFetch(credentials, "us-east-1", capturing),
   };

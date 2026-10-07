@@ -29,22 +29,22 @@ var logsEpoch = time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
 
 func logsNow() time.Time { return logsEpoch.Add(10 * time.Minute) }
 
-func buildIdentity(seq int) string {
+func releaseFor(seq int) string {
 	return fmt.Sprintf("%032x~%012x", seq+1, seq+1)
 }
 
 func recordApp(t *testing.T, project clitest.FakeProject, tier environment.Tier, env, app string, seq int, functionName, physical string) {
 	t.Helper()
-	build, err := provider.ParseBuild(buildIdentity(seq))
+	build, err := provider.ParseRelease(releaseFor(seq))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = stackrecords.Write(context.Background(), project.Provider.KeyValues(), tier, clitest.FixtureSlug, naming.AppStack(env, app, build.Release()), stackrecords.Stack{
-		Kind:      provider.StackApp,
-		App:       app,
-		Release:   build.Release().String(),
-		Build:     build.String(),
-		Functions: []provider.Function{{Name: functionName, Physical: physical}},
+	err = stackrecords.Write(context.Background(), project.Provider.KeyValues(), tier, clitest.FixtureSlug, naming.AppStack(env, app, build.Token()), stackrecords.Stack{
+		Kind:         provider.StackApp,
+		App:          app,
+		ReleaseToken: build.Token().String(),
+		Release:      build.String(),
+		Functions:    []provider.Function{{Name: functionName, Physical: physical}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func deployedWithLogs(t *testing.T) clitest.FakeProject {
 	recordApp(t, project, environment.TierProduction, stackrecords.ProductionEnv, "web", 0, "web-server", "web-old")
 	recordApp(t, project, environment.TierProduction, stackrecords.ProductionEnv, "web", 1, "web-server", "web-live")
 	recordApp(t, project, environment.TierProduction, stackrecords.ProductionEnv, "api", 2, "api-server", "api-live")
-	promotion := router.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": buildIdentity(1), "api": buildIdentity(2)}}
+	promotion := router.Promotion{PromotionID: "promo-1", Ts: 1, Releases: map[string]string{"web": releaseFor(1), "api": releaseFor(2)}}
 	if _, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).Promote(context.Background(), promotion, "", ""); err != nil {
 		t.Fatal(err)
 	}

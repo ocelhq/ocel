@@ -277,7 +277,7 @@ message ManifestApp {
 
   string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
 
-  string deployment_id = 6;
+  string build_id = 6;
 
   bool client_bundle = 8;
 
@@ -760,7 +760,7 @@ message CredentialProblem {
 message Promotion {
   string promotion_id = 1;
   int64 ts = 2;
-  map<string, string> builds = 3;
+  map<string, string> releases = 3;
   string tag = 4;
   common.progress.v1.Propagation propagation = 5;
 }

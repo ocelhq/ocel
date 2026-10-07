@@ -205,7 +205,7 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier e
 		params []string
 	}{
 		{edge.OfferCacheStore, []string{names.cacheStoreParam}},
-		{edge.OfferDeploymentsStore, []string{names.deploymentsStoreParam}},
+		{edge.OfferReleasesStore, []string{names.releasesStoreParam}},
 		{edge.OfferISRWriter, []string{names.isrWriterParam, names.isrWriterSeedParam}},
 	} {
 		if !slices.Contains(adoption.Offers, adopted.offer) {

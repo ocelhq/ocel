@@ -17,13 +17,13 @@ import (
 )
 
 type Input struct {
-	Project      *project.Project
-	Tier         environmentv1.Tier
-	Resources    []declaration.Resource
-	Variables    map[string][]variables.Variable
-	Built        build.Output
-	Usages       []attribution.Usage
-	DeploymentID func(projectDir, app string) (string, error)
+	Project   *project.Project
+	Tier      environmentv1.Tier
+	Resources []declaration.Resource
+	Variables map[string][]variables.Variable
+	Built     build.Output
+	Usages    []attribution.Usage
+	BuildID   func(projectDir, app string) (string, error)
 
 	WorkerCeilings []provider.WorkerCeiling
 }
@@ -42,15 +42,15 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 		values:       in.Variables,
 		ceilings:     in.WorkerCeilings,
 	})
-	if err != nil || in.DeploymentID == nil {
+	if err != nil || in.BuildID == nil {
 		return manifest, err
 	}
 	for _, app := range manifest.GetApps() {
-		id, err := in.DeploymentID(cfg.Dir, app.GetName())
+		id, err := in.BuildID(cfg.Dir, app.GetName())
 		if err != nil {
 			return nil, err
 		}
-		app.DeploymentId = id
+		app.BuildId = id
 	}
 	return manifest, nil
 }

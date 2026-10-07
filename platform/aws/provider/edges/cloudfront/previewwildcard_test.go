@@ -106,7 +106,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Hosts: listPreviewHosts(pointer), Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
-		Builds:      map[string]string{"web": "d1.f1"},
+		Releases:    map[string]string{"web": "d1.f1"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
@@ -461,7 +461,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer), Promotion: router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
-			Builds:      map[string]string{"web": "d1.f1"},
+			Releases:    map[string]string{"web": "d1.f1"},
 		}}, progress.Discard()); err != nil {
 			t.Fatalf("Promote(%s): %v", previewPointer, err)
 		}
@@ -516,8 +516,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
 			Pointer:   previewPointer,
 			Hosts:     listPreviewHosts(previewPointer),
-			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Builds: map[string]string{"web": "d1.f1"}},
-			Records:   map[string]router.DeploymentRecord{record.App: record},
+			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Releases: map[string]string{"web": "d1.f1"}},
+			Records:   map[string]router.ReleaseRecord{record.App: record},
 		}, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {
@@ -548,7 +548,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			Pointer:    previewPointer,
 			Hosts:      moved,
 			Superseded: listPreviewHosts(previewPointer),
-			Promotion:  router.Promotion{PromotionID: "preview-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}},
+			Promotion:  router.Promotion{PromotionID: "preview-moved", Ts: 2, Releases: map[string]string{"web": "d1.f1"}},
 		}, progress.Discard()); err != nil {
 			t.Fatalf("MovePointer: %v", err)
 		}
@@ -570,7 +570,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: deployment, Hosts: listPreviewHosts("deployment1"), Promotion: router.Promotion{
 			PromotionID: "preview-d1",
 			Ts:          1,
-			Builds:      map[string]string{"web": "d1.f1"},
+			Releases:    map[string]string{"web": "d1.f1"},
 		}}, progress.Discard()); err != nil {
 			t.Fatalf("Promote(%s): %v", deployment, err)
 		}
@@ -593,7 +593,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer), Promotion: router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
-			Builds:      map[string]string{"web": "d1.f1"},
+			Releases:    map[string]string{"web": "d1.f1"},
 		}}, progress.Discard()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}

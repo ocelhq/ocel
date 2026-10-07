@@ -88,7 +88,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			return err
 		}
 	}
-	return router.Unserved{Err: fmt.Errorf("move the pointer to promotion %s: the deployments store served another promotion on every one of %d attempts, so this move stopped rather than overwrite it", move.Promotion.PromotionID, moveAttempts)}
+	return router.Unserved{Err: fmt.Errorf("move the pointer to promotion %s: the releases store served another promotion on every one of %d attempts, so this move stopped rather than overwrite it", move.Promotion.PromotionID, moveAttempts)}
 }
 
 func listPointerLabels(hosts []edge.PreviewHost) []pointerLabel {

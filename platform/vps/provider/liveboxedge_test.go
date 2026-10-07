@@ -67,10 +67,10 @@ func (f front) serves(t *testing.T, vm machine, path string) string {
 		" http://"+caddy.Container+path))
 }
 
-func liveRecord(tag string, staged release) router.DeploymentRecord {
-	return router.DeploymentRecord{
+func liveRecord(tag string, staged release) router.ReleaseRecord {
+	return router.ReleaseRecord{
 		App:        liveApp,
-		Build:      tag,
+		Release:    tag,
 		Entry:      "/",
 		Image:      fixtureAt(tag),
 		Physical:   staged.physical,
@@ -80,7 +80,7 @@ func liveRecord(tag string, staged release) router.DeploymentRecord {
 
 func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag string, staged release, at int64) {
 	t.Helper()
-	promotion := router.Promotion{PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag}}
+	promotion := router.Promotion{PromotionID: id, Ts: at, Releases: map[string]string{liveApp: tag}}
 	promoteRecord(t, p, stack, "", promotion, liveRecord(tag, staged))
 }
 
@@ -94,7 +94,7 @@ func ownPromotion(promotion router.Promotion) router.Promotion {
 	return promotion
 }
 
-func promoteRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.DeploymentRecord, hosts ...edge.PreviewHost) {
+func promoteRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, promotion router.Promotion, record router.ReleaseRecord, hosts ...edge.PreviewHost) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -102,7 +102,7 @@ func promoteRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	state := stack.State()
 	releases := ledger.New(p.KeyValues(), state.Tier, state.Slug)
 	if err := releases.PutStaged(ctx, record); err != nil {
-		t.Fatalf("PutStaged(%s/%s): %v", record.App, record.Build, err)
+		t.Fatalf("PutStaged(%s/%s): %v", record.App, record.Release, err)
 	}
 	replaces, err := releases.ActivePromotionID(ctx, pointer)
 	if err != nil {
@@ -114,7 +114,7 @@ func promoteRecord(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := routed(t, p, stack).MovePointer(ctx, router.PointerMove{
 		Pointer:   pointer,
 		Promotion: promotion,
-		Records:   map[string]router.DeploymentRecord{record.App: record},
+		Records:   map[string]router.ReleaseRecord{record.App: record},
 		Hosts:     hosts,
 	}, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(%s): %v", promotion.PromotionID, err)
@@ -269,8 +269,8 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
 
 	err := f.routes.MovePointer(context.Background(), router.PointerMove{
-		Promotion: router.Promotion{PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"}},
-		Records:   map[string]router.DeploymentRecord{liveApp: liveRecord("one", one)},
+		Promotion: router.Promotion{PromotionID: "p-rollback", Ts: 3, Releases: map[string]string{liveApp: "one"}},
+		Records:   map[string]router.ReleaseRecord{liveApp: liveRecord("one", one)},
 	}, progress.Discard())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer has succeeded, and docker run would then reach for a registry with no credentials on this path")

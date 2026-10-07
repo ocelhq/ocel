@@ -1261,7 +1261,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 					Values: map[string]string{"namespaceId": "ns-42"},
 					Offers: []edge.Offer{
 						{Kind: edge.OfferCacheStore, Values: offeredStore()},
-						{Kind: edge.OfferDeploymentsStore, Values: offeredDeploymentsStore()},
+						{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()},
 						{Kind: edge.OfferISRWriter, Values: offeredISRWriter(previewSuffix(tc.tier), "cred")},
 					},
 				}})

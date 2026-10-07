@@ -145,7 +145,7 @@ describe("destroyOnCurrentBootstrap", () => {
       async () => {
         ran.push("destroy");
         if (!refreshed) {
-          throw new Error("deployments store GET /apps: status 404: Not Found");
+          throw new Error("releases store GET /apps: status 404: Not Found");
         }
       },
       async () => {
@@ -160,7 +160,7 @@ describe("destroyOnCurrentBootstrap", () => {
   it("says why both the destroy and the refresh failed", async () => {
     const attempt = destroyOnCurrentBootstrap(
       async () => {
-        throw new Error("deployments store GET /apps: status 404: Not Found");
+        throw new Error("releases store GET /apps: status 404: Not Found");
       },
       async () => {
         throw new Error("Account's Cache Policies limit reached");

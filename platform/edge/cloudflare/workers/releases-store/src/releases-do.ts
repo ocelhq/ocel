@@ -5,7 +5,7 @@ import type { Env } from "./env";
 import type { Initialization, PointerMove, PointerMoveOutcome, PointerRecordResult } from "./store";
 import * as store from "./store";
 
-export class DeploymentsStore extends DurableObject<Env> {
+export class ReleasesStore extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     store.ensureSchema(ctx.storage);
@@ -42,12 +42,12 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.listApps(this.ctx.storage);
   }
 
-  async readPointerRecord(app?: string, knownIdentity?: string): Promise<PointerRecordResult> {
-    return store.readPointerRecord(this.ctx.storage, app, knownIdentity);
+  async readPointerRecord(app?: string, knownRelease?: string): Promise<PointerRecordResult> {
+    return store.readPointerRecord(this.ctx.storage, app, knownRelease);
   }
 
-  async readLabelRecord(label: string, knownIdentity?: string): Promise<PointerRecordResult> {
-    return store.readLabelRecord(this.ctx.storage, label, knownIdentity);
+  async readLabelRecord(label: string, knownRelease?: string): Promise<PointerRecordResult> {
+    return store.readLabelRecord(this.ctx.storage, label, knownRelease);
   }
 
   async readVersionStamp(): Promise<string | undefined> {

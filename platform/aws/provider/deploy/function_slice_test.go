@@ -498,7 +498,7 @@ func TestBytecodeCacheEnabled(t *testing.T) {
 
 func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
 	t.Helper()
-	coord := storageCoordinate(env, project, app, deployedAs(buildID).Release())
+	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return isrConfig{
 		Coord:    coord,
 		Bucket:   "assets-xyz",
@@ -545,7 +545,7 @@ func TestISREnv(t *testing.T) {
 
 func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) bytecodeConfig {
 	t.Helper()
-	coord := storageCoordinate(env, project, app, deployedAs(buildID).Release())
+	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return bytecodeConfig{
 		Bucket: "assets-xyz",
 		Prefix: bytecodePrefixOf(coord),

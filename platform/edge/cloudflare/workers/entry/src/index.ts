@@ -7,9 +7,8 @@ import {
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { deploymentImageOrigin, functionUrlImageOrigin } from "@framework/next-router/image";
-import { type CacheDeps, deploymentScope } from "./cache";
+import { buildScope, type CacheDeps } from "./cache";
 import { withClientAddress } from "./client-address";
-import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
 import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
@@ -19,6 +18,7 @@ import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
+import { type ReleaseRecord, type ReleasesDeps, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
 import { invalidateSnapshot } from "./tag-clock";
 
@@ -57,7 +57,7 @@ function bound(deps: RouteDeps): DispatchDeps {
       ? coloPrerender({
           cache,
           interception,
-          scope: deploymentScope(deps),
+          scope: buildScope(deps),
           basePath: deps.manifest.basePath,
         })
       : undefined,
@@ -91,7 +91,7 @@ export type ResolveBase = Omit<
   | "edge"
   | "slug"
   | "app"
-  | "deploymentId"
+  | "appBuildId"
 > & {
   interception?: Omit<InterceptionTier, "config">;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
@@ -107,81 +107,73 @@ export type ResolveBase = Omit<
 export type ServeFetch = (request: Request) => Promise<Response>;
 
 interface ServeRuntime {
-  serve: (record: DeploymentRecord, deployments: DeploymentsDeps, base: ResolveBase) => ServeFetch;
-  routeDeps?: (
-    record: DeploymentRecord,
-    deployments: DeploymentsDeps,
-    base: ResolveBase,
-  ) => RouteDeps;
+  serve: (record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase) => ServeFetch;
+  routeDeps?: (record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase) => RouteDeps;
 }
 
 const routedRuntime: ServeRuntime = {
-  serve: (record, deployments, base) => {
-    const deps = bound(routedDeps(record, deployments, base));
+  serve: (record, releases, base) => {
+    const deps = bound(routedDeps(record, releases, base));
     return async (request) => withRouterHeader(await dispatch(request, deps));
   },
   routeDeps: routedDeps,
 };
 
 const originRuntime: ServeRuntime = {
-  serve: (record, deployments, base) =>
+  serve: (record, releases, base) =>
     nodeOrigin({
-      app: deployments.app ?? record.app,
+      app: releases.app ?? record.app,
       functionUrls: record.functionUrls,
       originFetch: base.originFetch,
     }),
 };
 
-function runtimeFor(record: DeploymentRecord): ServeRuntime {
+function runtimeFor(record: ReleaseRecord): ServeRuntime {
   return record.routingManifest ? routedRuntime : originRuntime;
 }
 
-async function resolveRecord(deployments: DeploymentsDeps): Promise<DeploymentRecord | Response> {
-  const resolution = await resolveDeployment(deployments);
+async function resolveRecord(releases: ReleasesDeps): Promise<ReleaseRecord | Response> {
+  const resolution = await resolveRelease(releases);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
   return resolution.record;
 }
 
 export async function resolveServe(
-  deployments: DeploymentsDeps,
+  releases: ReleasesDeps,
   base: ResolveBase,
 ): Promise<ServeFetch | Response> {
-  const record = await resolveRecord(deployments);
+  const record = await resolveRecord(releases);
   if (record instanceof Response) return record;
 
-  const serving = runtimeFor(record).serve(record, deployments, base);
+  const serving = runtimeFor(record).serve(record, releases, base);
   return async (request) => withRouterHeader(await serving(request));
 }
 
 export async function resolveRouteDeps(
-  deployments: DeploymentsDeps,
+  releases: ReleasesDeps,
   base: ResolveBase,
 ): Promise<RouteDeps | Response> {
-  const record = await resolveRecord(deployments);
+  const record = await resolveRecord(releases);
   if (record instanceof Response) return record;
 
   const runtime = runtimeFor(record);
   if (!runtime.routeDeps) return unroutedFrameworkResponse(record.framework);
 
-  return runtime.routeDeps(record, deployments, base);
+  return runtime.routeDeps(record, releases, base);
 }
 
-function routedDeps(
-  record: DeploymentRecord,
-  deployments: DeploymentsDeps,
-  base: ResolveBase,
-): RouteDeps {
+function routedDeps(record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase): RouteDeps {
   const { edgeRuntime, imagesAtDeployment, ...rest } = base;
   const { edgeWorkers } = record;
   const manifest = record.routingManifest;
   if (!manifest) {
-    throw new Error(`deployment ${record.deploymentId} has no routing manifest to route with`);
+    throw new Error(`release ${record.release} has no routing manifest to route with`);
   }
-  const app = deployments.app ?? record.app;
-  if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, deployments.slug, app)) {
+  const app = releases.app ?? record.app;
+  if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, releases.slug, app)) {
     throw new Error(
-      `deployment ${record.deploymentId} of ${deployments.slug}/${app} names an edge bundle outside its own prefix`,
+      `release ${record.release} of ${releases.slug}/${app} names an edge bundle outside its own prefix`,
     );
   }
   return {
@@ -194,9 +186,9 @@ function routedDeps(
             rest.originFetch ?? rest.fetch ?? fetch,
           )
         : undefined),
-    slug: deployments.slug,
+    slug: releases.slug,
     app,
-    deploymentId: record.deploymentId,
+    appBuildId: record.buildId,
     edge:
       edgeRuntime && edgeWorkers
         ? createEdgeInvoker(
@@ -215,7 +207,7 @@ function routedDeps(
               env: record.env,
               envelope: record.envelope,
               envelopeKey: edgeRuntime.envelopeKey,
-              buildFingerprint: record.buildFingerprint,
+              releaseFingerprint: record.releaseFingerprint,
             },
           )
         : undefined,
@@ -279,8 +271,8 @@ export default {
     const originFetch = originFetchFor(env);
 
     const host = new URL(request.url).host;
-    let deployments: DeploymentsDeps = {
-      binding: env.DEPLOYMENTS,
+    let releases: ReleasesDeps = {
+      binding: env.RELEASES,
       slug: env.OCEL_SLUG,
       host,
       app: env.OCEL_APP ?? domainApp(env.OCEL_DOMAIN_APPS, host),
@@ -292,11 +284,11 @@ export default {
         slug: env.OCEL_PREVIEW_GLOBAL === "1" ? undefined : env.OCEL_SLUG,
       });
       if (target === null) return deploymentNotFoundResponse();
-      deployments = { binding: env.DEPLOYMENTS, host, slug: target.slug, label: target.label };
+      releases = { binding: env.RELEASES, host, slug: target.slug, label: target.label };
     }
-    if (!deployments.slug) return deploymentNotFoundResponse();
+    if (!releases.slug) return deploymentNotFoundResponse();
 
-    const serveRequest = await resolveServe(deployments, {
+    const serveRequest = await resolveServe(releases, {
       fetch,
       originFetch,
       imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),

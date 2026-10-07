@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-func TestValidateDeploymentID(t *testing.T) {
+func TestValidateBuildID(t *testing.T) {
 	t.Run("accepts a minted id", func(t *testing.T) {
 		for _, id := range []string{
 			"00000000000000000000000000000000",
 			"d1a2b3c4d5e6f708192a3b4c5d6e7f80",
 			"ffffffffffffffffffffffffffffffff",
 		} {
-			if err := ValidateDeploymentID(id); err != nil {
-				t.Errorf("ValidateDeploymentID(%q) = %v, want nil", id, err)
+			if err := ValidateBuildID(id); err != nil {
+				t.Errorf("ValidateBuildID(%q) = %v, want nil", id, err)
 			}
 		}
 	})
@@ -31,8 +31,8 @@ func TestValidateDeploymentID(t *testing.T) {
 			"../../etc/passwd",
 			strings.Repeat("a", 64),
 		} {
-			if err := ValidateDeploymentID(id); err == nil {
-				t.Errorf("ValidateDeploymentID(%q) = nil, want an error", id)
+			if err := ValidateBuildID(id); err == nil {
+				t.Errorf("ValidateBuildID(%q) = nil, want an error", id)
 			}
 		}
 	})

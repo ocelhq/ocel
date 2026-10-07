@@ -26,18 +26,18 @@ const (
 
 var errDropped = errors.New("a prune dropped this promotion")
 
-func previewRecord(build string) router.DeploymentRecord {
-	return router.DeploymentRecord{
-		App: "web", Build: build, Physical: previewService,
+func previewRecord(build string) router.ReleaseRecord {
+	return router.ReleaseRecord{
+		App: "web", Release: build, Physical: previewService,
 		Revisions: map[string]string{previewService: previewService + "-" + build},
 	}
 }
 
-func deploymentMove(promotionID, hostname string, record router.DeploymentRecord) router.PointerMove {
+func deploymentMove(promotionID, hostname string, record router.ReleaseRecord) router.PointerMove {
 	return router.PointerMove{
 		Pointer:   router.FormatDeploymentPointer("pr-7", promotionID),
-		Promotion: router.Promotion{PromotionID: promotionID, Builds: map[string]string{record.App: record.Build}},
-		Records:   map[string]router.DeploymentRecord{record.App: record},
+		Promotion: router.Promotion{PromotionID: promotionID, Releases: map[string]string{record.App: record.Release}},
+		Records:   map[string]router.ReleaseRecord{record.App: record},
 		Hosts:     []edge.PreviewHost{{Hostname: hostname, App: record.App}},
 	}
 }
@@ -266,7 +266,7 @@ const (
 	previewPointer = "pr-7"
 )
 
-func aliasMove(promotionID, hostname string, record router.DeploymentRecord) router.PointerMove {
+func aliasMove(promotionID, hostname string, record router.ReleaseRecord) router.PointerMove {
 	move := deploymentMove(promotionID, hostname, record)
 	move.Pointer = previewPointer
 	return move
@@ -395,7 +395,7 @@ func TestARouterThatServesEachPreviewDeploymentOnItsOwnHostnameSaysSo(t *testing
 
 const siblingAlias = "shop-dddddddddddddddd.preview.example.com"
 
-func rotatedMove(promotionID string, record router.DeploymentRecord, superseded ...string) router.PointerMove {
+func rotatedMove(promotionID string, record router.ReleaseRecord, superseded ...string) router.PointerMove {
 	move := aliasMove(promotionID, rotatedAlias, record)
 	for _, hostname := range superseded {
 		move.Superseded = append(move.Superseded, edge.PreviewHost{Hostname: hostname, App: "web"})
@@ -545,7 +545,7 @@ func TestASupersededAliasWhoseUnrouteAppliedBeforeItFailedIsRoutedAgain(t *testi
 
 var errUntagRefused = errors.New("cloud run refused to remove the tag")
 
-func failingAnUntag(t *testing.T) (*world, routerStack, router.DeploymentRecord, router.PointerMove, string) {
+func failingAnUntag(t *testing.T) (*world, routerStack, router.ReleaseRecord, router.PointerMove, string) {
 	t.Helper()
 	ctx := context.Background()
 	w, stack := previewRouter(t)

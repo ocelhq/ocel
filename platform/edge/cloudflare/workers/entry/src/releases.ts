@@ -2,11 +2,11 @@ import type { RoutingManifest } from "@framework/next-protocol/routing-manifest"
 import type { EdgeWorkers } from "./edge";
 import { lruSet } from "./lru";
 
-export interface DeploymentRecord {
+export interface ReleaseRecord {
   app: string;
   framework: string;
-  identity: string;
-  deploymentId: string;
+  release: string;
+  buildId: string;
   entry?: string;
   routingManifest?: RoutingManifest | null;
   functionUrls: Record<string, string>;
@@ -17,31 +17,31 @@ export interface DeploymentRecord {
   edgeWorkers?: EdgeWorkers;
   env?: Record<string, string>;
   envelope?: string;
-  buildFingerprint?: string;
+  releaseFingerprint?: string;
 }
 
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; identity: string }
-  | { kind: "record"; identity: string; record: DeploymentRecord }
-  | { kind: "dangling"; identity: string };
+  | { kind: "unchanged"; release: string }
+  | { kind: "record"; release: string; record: ReleaseRecord }
+  | { kind: "dangling"; release: string };
 
-export interface DeploymentsBinding {
+export interface ReleasesBinding {
   readPointerRecord(args: {
     slug: string;
     app?: string;
-    knownIdentity?: string;
+    knownRelease?: string;
   }): Promise<PointerRecordResult>;
   readLabelRecord(args: {
     slug: string;
     label: string;
-    knownIdentity?: string;
+    knownRelease?: string;
   }): Promise<PointerRecordResult>;
 }
 
-export interface DeploymentsDeps {
-  binding: DeploymentsBinding;
+export interface ReleasesDeps {
+  binding: ReleasesBinding;
   slug: string;
   host: string;
   app?: string;
@@ -49,8 +49,8 @@ export interface DeploymentsDeps {
   now?: () => number;
 }
 
-export type DeploymentResolution =
-  | { kind: "found"; record: DeploymentRecord }
+export type ReleaseResolution =
+  | { kind: "found"; record: ReleaseRecord }
   | { kind: "not-found" }
   | { kind: "unavailable" };
 
@@ -58,30 +58,30 @@ const RECORD_TTL_MS = 5_000;
 export const RECORD_CACHE_MAX = 64;
 
 interface CacheEntry {
-  identity: string;
-  record: DeploymentRecord;
+  release: string;
+  record: ReleaseRecord;
   at: number;
 }
 
-const recordCache = new WeakMap<DeploymentsBinding, Map<string, CacheEntry>>();
+const recordCache = new WeakMap<ReleasesBinding, Map<string, CacheEntry>>();
 
-function cacheMap(binding: DeploymentsBinding): Map<string, CacheEntry> {
+function cacheMap(binding: ReleasesBinding): Map<string, CacheEntry> {
   let map = recordCache.get(binding);
   if (!map) recordCache.set(binding, (map = new Map()));
   return map;
 }
 
-function cacheKey(deps: DeploymentsDeps): string {
+function cacheKey(deps: ReleasesDeps): string {
   return deps.host;
 }
 
-function describeDeployScope(deps: DeploymentsDeps): string {
+function describeDeployScope(deps: ReleasesDeps): string {
   if (deps.label !== undefined) return `${deps.slug}/${deps.label}`;
   if (deps.app) return `${deps.slug}/${deps.app}`;
   return deps.slug;
 }
 
-export async function resolveDeployment(deps: DeploymentsDeps): Promise<DeploymentResolution> {
+export async function resolveRelease(deps: ReleasesDeps): Promise<ReleaseResolution> {
   const now = (deps.now ?? Date.now)();
   const cache = cacheMap(deps.binding);
   const key = cacheKey(deps);
@@ -94,22 +94,22 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
 
   let result: PointerRecordResult;
   try {
-    const knownIdentity = cached?.identity;
+    const knownRelease = cached?.release;
     result =
       deps.label === undefined
-        ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownIdentity })
-        : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownIdentity });
+        ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownRelease })
+        : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownRelease });
   } catch (error) {
     const scope = describeDeployScope(deps);
     if (cached) {
       const ageSeconds = Math.round((now - cached.at) / 1000);
       console.error(
-        `ocel: the deployments store did not answer for ${scope}; serving the record cached ${ageSeconds}s ago`,
+        `ocel: the releases store did not answer for ${scope}; serving the record cached ${ageSeconds}s ago`,
         error,
       );
       return { kind: "found", record: cached.record };
     }
-    console.error(`ocel: the deployments store did not answer for ${scope}; answering 503`, error);
+    console.error(`ocel: the releases store did not answer for ${scope}; answering 503`, error);
     return { kind: "unavailable" };
   }
 
@@ -125,7 +125,7 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
       lruSet(
         cache,
         key,
-        { identity: result.identity, record: result.record, at: now },
+        { release: result.release, record: result.record, at: now },
         RECORD_CACHE_MAX,
       );
       return { kind: "found", record: result.record };

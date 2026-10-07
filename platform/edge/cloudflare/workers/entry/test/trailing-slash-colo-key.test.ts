@@ -96,7 +96,7 @@ describe("the resolved path is what keys the response", () => {
       expect((await serve(get("/p"), admin)).headers.get("x-ocel-cache")).toBe("MISS");
       await drain();
 
-      expect(web.deploymentId).toBe(admin.deploymentId);
+      expect(web.appBuildId).toBe(admin.appBuildId);
       expect(web.manifest.buildId).toBe(admin.manifest.buildId);
       expect(renders()).toBe(2);
       expect(keys()).toEqual([
@@ -108,7 +108,7 @@ describe("the resolved path is what keys the response", () => {
     it("gives two deployments of one app a key each", async () => {
       const { scenario, drain, renders, keys } = coloScenario(true, true);
       const first = deps(scenario);
-      const second = { ...first, deploymentId: "d2" };
+      const second = { ...first, appBuildId: "d2" };
 
       expect((await serve(get("/p"), first)).headers.get("x-ocel-cache")).toBe("MISS");
       await drain();

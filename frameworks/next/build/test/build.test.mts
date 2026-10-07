@@ -30,7 +30,7 @@ function app(overrides: Partial<NextBuild> = {}): NextBuild {
     name: "web",
     cwd: nextApp(),
     outputDir: "/out/apps/web",
-    deploymentId: "0123456789abcdef0123456789abcdef",
+    buildId: "0123456789abcdef0123456789abcdef",
     nextRuntimeDir: "/var/host/next",
     ...overrides,
   };
@@ -71,8 +71,8 @@ describe("buildNext", () => {
     expect(env.OCEL_OUTPUT_DIR).toBe("/out/apps/marketing");
   });
 
-  it("points Next at the adapter and the deployment id it builds under", async () => {
-    const env = await envOf(app({ deploymentId: "fedcba9876543210fedcba9876543210" }));
+  it("points Next at the adapter and the build id it builds under", async () => {
+    const env = await envOf(app({ buildId: "fedcba9876543210fedcba9876543210" }));
     expect(env.NEXT_ADAPTER_PATH).toBe(ADAPTER);
     expect(env.NEXT_DEPLOYMENT_ID).toBe("fedcba9876543210fedcba9876543210");
   });

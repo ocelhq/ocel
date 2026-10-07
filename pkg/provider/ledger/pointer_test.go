@@ -11,7 +11,7 @@ import (
 )
 
 func promotion(id string) router.Promotion {
-	return router.Promotion{PromotionID: id, Builds: map[string]string{"web": "web-" + id}}
+	return router.Promotion{PromotionID: id, Releases: map[string]string{"web": "web-" + id}}
 }
 
 func promoted(t *testing.T, promotions ...router.Promotion) ledger.Pointer {
@@ -279,7 +279,7 @@ func TestARollbackPromotesTheTargetsBuildsAsANewPromotion(t *testing.T) {
 	t.Parallel()
 
 	pointer := promoted(t, promotion("p1"), promotion("p2"))
-	rolled := router.Promotion{PromotionID: "r1", Builds: pointer.Promotions[1].Builds}
+	rolled := router.Promotion{PromotionID: "r1", Releases: pointer.Promotions[1].Releases}
 
 	after, _, err := pointer.Rollback("p1", rolled, "p2", ledger.KeptPromotions)
 	if err != nil {
@@ -295,7 +295,7 @@ func TestARollbackToAPromotionTakenBackIsRefused(t *testing.T) {
 
 	pointer := unpromoted(t, promoted(t, promotion("p1"), promotion("p2"), promotion("p3")), "p2")
 
-	_, _, err := pointer.Rollback("p2", router.Promotion{PromotionID: "r1", Builds: promotion("p2").Builds}, "p3", ledger.KeptPromotions)
+	_, _, err := pointer.Rollback("p2", router.Promotion{PromotionID: "r1", Releases: promotion("p2").Releases}, "p3", ledger.KeptPromotions)
 	refused := refusedWith(t, err, refusal.CodeInvalid)
 	if !strings.Contains(refused.Message, "p2") {
 		t.Errorf("the refusal does not name the promotion taken back: %s", refused.Message)
@@ -307,7 +307,7 @@ func TestARollbackToAPromotionThePointerNoLongerRecordsIsRefused(t *testing.T) {
 
 	pointer, _ := promoted(t, promotion("p1"), promotion("p2"), promotion("p3")).Retain(0)
 
-	_, _, err := pointer.Rollback("p1", router.Promotion{PromotionID: "r1", Builds: promotion("p1").Builds}, "p3", ledger.KeptPromotions)
+	_, _, err := pointer.Rollback("p1", router.Promotion{PromotionID: "r1", Releases: promotion("p1").Releases}, "p3", ledger.KeptPromotions)
 	refusedWith(t, err, refusal.CodeInvalid)
 }
 

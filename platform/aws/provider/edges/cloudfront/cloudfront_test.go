@@ -178,11 +178,11 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	return stack
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.DeploymentRecord {
+func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.ReleaseRecord {
 	t.Helper()
-	record := router.DeploymentRecord{
+	record := router.ReleaseRecord{
 		App:           "web",
-		Build:         "d1.f1",
+		Release:       "d1.f1",
 		Entry:         "/",
 		EntryFunction: entryFunction,
 		FunctionURLs:  map[string]string{"/": url},
@@ -217,11 +217,11 @@ func recordFront(t *testing.T, w *world, tier environment.Tier) {
 	}
 }
 
-func stagedContainer(t *testing.T, stack edge.EdgeStack) router.DeploymentRecord {
+func stagedContainer(t *testing.T, stack edge.EdgeStack) router.ReleaseRecord {
 	t.Helper()
-	record := router.DeploymentRecord{
+	record := router.ReleaseRecord{
 		App:         "web",
-		Build:       "d1.f1",
+		Release:     "d1.f1",
 		Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
 		Physical:    "shop-prod-web-container-r3f8a1c90",
 		Origin:      "http://" + fakeFront.Host,
@@ -239,7 +239,7 @@ func promotion() router.Promotion {
 }
 
 func promotionOf(id string) router.Promotion {
-	return router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
+	return router.Promotion{PromotionID: id, Ts: 1, Releases: map[string]string{"web": "d1.f1"}}
 }
 
 func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) route {
@@ -566,11 +566,11 @@ func TestPromote(t *testing.T) {
 		stack := reconciled(t, w)
 		bound(t, stack)
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		record.Build, record.CreatedAt = "d0.f0", rotatedAt.Unix()-1
+		record.Release, record.CreatedAt = "d0.f0", rotatedAt.Unix()-1
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		deployedBefore := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
+		deployedBefore := router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: deployedBefore}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
@@ -579,11 +579,11 @@ func TestPromote(t *testing.T) {
 			t.Errorf("the route presents %q, want the secret the release was deployed with: it accepts nothing minted after it", published.Secret)
 		}
 
-		record.Build, record.CreatedAt = "d2.f2", rotatedAt.Unix()
+		record.Release, record.CreatedAt = "d2.f2", rotatedAt.Unix()
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		deployedAfter := router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}
+		deployedAfter := router.Promotion{PromotionID: "p2", Ts: 2, Releases: map[string]string{"web": record.Release}}
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: deployedAfter}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
@@ -603,7 +603,7 @@ func TestPromote(t *testing.T) {
 
 		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
 			Promotion: promotion(),
-			Records:   map[string]router.DeploymentRecord{record.App: record},
+			Records:   map[string]router.ReleaseRecord{record.App: record},
 		}, progress.Discard())
 		var unserved router.Unserved
 		if !errors.As(err, &unserved) {

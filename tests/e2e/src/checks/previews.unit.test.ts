@@ -26,7 +26,7 @@ const release = (id: string, over: Partial<PreviewRelease> = {}): PreviewRelease
   app: "web",
   urls: [`https://alias-${id}.test`],
   deploymentUrl: `https://${id}.test`,
-  deploymentId: id,
+  buildId: id,
   ...over,
 });
 

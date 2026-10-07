@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const deploymentID = "0123456789abcdef0123456789abcdef"
+const buildID = "0123456789abcdef0123456789abcdef"
 
 func productionRequest(apps ...*contractv1.ManifestApp) *contractv1.DeployRequest {
 	return &contractv1.DeployRequest{
@@ -27,8 +27,8 @@ func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	t.Parallel()
 
 	spec, err := buildDeploySpec(productionRequest(
-		&contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID},
-		&contractv1.ManifestApp{Name: "admin", DeploymentId: deploymentID},
+		&contractv1.ManifestApp{Name: "web", BuildId: buildID},
+		&contractv1.ManifestApp{Name: "admin", BuildId: buildID},
 	), "p1")
 	if err != nil {
 		t.Fatalf("buildDeploySpec() error = %v", err)
@@ -43,8 +43,8 @@ func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 		t.Errorf("a production spec points at %q, want %q", spec.Pointer, router.DefaultPointer)
 	}
 	for _, entry := range spec.Apps {
-		if spec.Builds[entry.App] != entry.Build.String() {
-			t.Errorf("the promotion records %q as %s's build, want %s", spec.Builds[entry.App], entry.App, entry.Build)
+		if spec.Releases[entry.App] != entry.Release.String() {
+			t.Errorf("the promotion records %q as %s's release, want %s", spec.Releases[entry.App], entry.App, entry.Release)
 		}
 		if entry.Stack.Env != stackrecords.ProductionEnv || entry.Stack.App != entry.App {
 			t.Errorf("%s's stack is %s, want it named for the app in production", entry.App, entry.Stack)
@@ -56,7 +56,7 @@ func TestBuildDeploySpecLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T
 	t.Parallel()
 
 	spec, err := buildDeploySpec(&contractv1.DeployRequest{
-		Manifest: &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web", DeploymentId: deploymentID}}},
+		Manifest: &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web", BuildId: buildID}}},
 		Environment: &environmentv1.Environment{
 			Tier:      environmentv1.Tier_TIER_PREVIEW,
 			Identity:  "pr-7",
@@ -77,7 +77,7 @@ func TestBuildDeploySpecLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T
 func TestBuildDeploySpecRefusesAnAppNamedForTheInfraStack(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildDeploySpec(productionRequest(&contractv1.ManifestApp{Name: naming.InfraApp, DeploymentId: deploymentID}), "p1")
+	_, err := buildDeploySpec(productionRequest(&contractv1.ManifestApp{Name: naming.InfraApp, BuildId: buildID}), "p1")
 	if err == nil || !strings.Contains(err.Error(), naming.InfraApp) {
 		t.Fatalf("buildDeploySpec() with an app named %q = %v, want a refusal naming it", naming.InfraApp, err)
 	}
@@ -87,17 +87,17 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 	t.Parallel()
 
 	before, err := appEntry(&contractv1.ManifestApp{
-		Name:         "web",
-		DeploymentId: deploymentID,
-		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 1}},
+		Name:      "web",
+		BuildId:   buildID,
+		Variables: []*contractv1.ManifestVariable{{Key: "API_URL", Version: 1}},
 	}, stackrecords.ProductionEnv, "p1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	after, err := appEntry(&contractv1.ManifestApp{
-		Name:         "web",
-		DeploymentId: deploymentID,
-		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 2}},
+		Name:      "web",
+		BuildId:   buildID,
+		Variables: []*contractv1.ManifestVariable{{Key: "API_URL", Version: 2}},
 	}, stackrecords.ProductionEnv, "p1")
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 	t.Parallel()
 
-	release := naming.NewReleaseToken(deploymentID, "f")
+	release := naming.NewReleaseToken(buildID, "f")
 	entries := []stackrecords.NamedStack{
 		{Name: naming.InfraStack(stackrecords.ProductionEnv)},
 		{Name: naming.AppStack(stackrecords.ProductionEnv, "web", release)},
@@ -136,7 +136,7 @@ func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanContain(t *testing.T) {
 	t.Parallel()
 
 	_, err := buildDeploySpec(productionRequest(
-		&contractv1.ManifestApp{Name: "Web", DeploymentId: deploymentID}), "p1")
+		&contractv1.ManifestApp{Name: "Web", BuildId: buildID}), "p1")
 	if err == nil {
 		t.Fatal("buildDeploySpec() accepted an app named \"Web\", so the store would record a name the edge lowercases out of every hostname")
 	}
@@ -156,8 +156,8 @@ func containerRequest(image string) *contractv1.DeployRequest {
 		Manifest: &contractv1.Manifest{
 			Slug: "shop",
 			Apps: []*contractv1.ManifestApp{
-				{Name: "api", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/", MinInstances: 1, MaxInstances: 1}}},
-				{Name: "web", DeploymentId: deploymentID, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}},
+				{Name: "api", BuildId: buildID, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/", MinInstances: 1, MaxInstances: 1}}},
+				{Name: "web", BuildId: buildID, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}},
 			},
 		},
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
@@ -172,8 +172,8 @@ func TestEveryAppIsPromotedUnderTheBuildItsOwnDeployProvisioned(t *testing.T) {
 		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
 	for _, entry := range spec.Apps {
-		if spec.Builds[entry.App] != entry.Build.String() {
-			t.Errorf("the promotion records %q as %s's build, want %s, the build whose stack this deploy provisions", spec.Builds[entry.App], entry.App, entry.Build)
+		if spec.Releases[entry.App] != entry.Release.String() {
+			t.Errorf("the promotion records %q as %s's release, want %s, the release whose stack this deploy provisions", spec.Releases[entry.App], entry.App, entry.Release)
 		}
 	}
 }
@@ -190,8 +190,29 @@ func TestTwoDeploysOfOneBuiltOutputNeverShareABuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, app := range []string{"api", "web"} {
-		if first.Builds[app] == second.Builds[app] {
-			t.Errorf("both deploys promote %s build %s, so the second's record would stand in for the first's when a rollback names it", app, first.Builds[app])
+		if first.Releases[app] == second.Releases[app] {
+			t.Errorf("both deploys promote %s release %s, so the second's record would stand in for the first's when a rollback names it", app, first.Releases[app])
 		}
+	}
+}
+
+func TestAnAppsTagsNameItsBuildAndItsReleaseAndNoDeployment(t *testing.T) {
+	t.Parallel()
+
+	spec, err := buildDeploySpec(productionRequest(&contractv1.ManifestApp{Name: "web", BuildId: buildID}), "p1")
+	if err != nil {
+		t.Fatalf("buildDeploySpec() error = %v", err)
+	}
+	entry := spec.Apps[0]
+
+	tags := appTags(spec, entry)
+	if tags["ocel:build"] != buildID {
+		t.Errorf("ocel:build = %q, want the build id %q the app was built under", tags["ocel:build"], buildID)
+	}
+	if tags["ocel:release"] != entry.Release.Token().String() {
+		t.Errorf("ocel:release = %q, want the release token %q", tags["ocel:release"], entry.Release.Token())
+	}
+	if _, ok := tags["ocel:deployment"]; ok {
+		t.Errorf("tags = %v, want no ocel:deployment: the build id is what the stack was built from", tags)
 	}
 }

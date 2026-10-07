@@ -44,8 +44,8 @@ func TestAFakePointerMoveStopsServingTheHostnamesItSupersedesAndNoOthers(t *test
 		t.Helper()
 		if err := stack.MovePointer(context.Background(), router.PointerMove{
 			Pointer:    "pr-7",
-			Promotion:  router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
-			Records:    map[string]router.DeploymentRecord{"web": {App: "web", Build: "b1"}},
+			Promotion:  router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}},
+			Records:    map[string]router.ReleaseRecord{"web": {App: "web", Release: "b1"}},
 			Hosts:      hosts,
 			Superseded: superseded,
 		}, nil); err != nil {
@@ -88,7 +88,7 @@ func openFakeRouter(t *testing.T, kind edge.Kind, routedBy router.Kind) (routerc
 		Spec:   router.StackSpec{Tier: spec.Tier, Slug: spec.Slug},
 		Prior:  router.NewStackState(stack.State()),
 		Serving: func(pointer string) string {
-			return plane.Builds(spec.Slug, spec.Tier, pointer)[routerconformance.App]
+			return plane.Releases(spec.Slug, spec.Tier, pointer)[routerconformance.App]
 		},
 		FailNextPointerMove: plane.FailNextPointerMove,
 	}, plane

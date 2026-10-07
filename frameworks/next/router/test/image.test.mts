@@ -85,7 +85,7 @@ describe("a url no runtime can parse", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        deploymentId: "d1",
+        appBuildId: "d1",
         app: "web",
         origin: async () => new Response("optimized"),
       });
@@ -103,7 +103,7 @@ describe("a url no runtime can parse", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        deploymentId: "d1",
+        appBuildId: "d1",
         app: "web",
         origin: async () => {
           called = true;
@@ -248,7 +248,7 @@ describe("serveImage", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        deploymentId: "d1",
+        appBuildId: "d1",
         app: "web",
         origin: async (payload) => {
           seen.push(payload);
@@ -281,7 +281,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      deploymentId: "d1",
+      appBuildId: "d1",
       app: "web",
       origin: async (payload) => {
         seen.push(payload);
@@ -300,7 +300,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      deploymentId: "d1",
+      appBuildId: "d1",
       app: "web",
       origin: async () => {
         called = true;
@@ -320,7 +320,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      deploymentId: "d1",
+      appBuildId: "d1",
       app: "web",
       origin: async () => new Response("optimized"),
     });
@@ -337,7 +337,7 @@ describe("serveImage", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        deploymentId: "d1",
+        appBuildId: "d1",
         app: "web",
         origin: async () => new Response("optimized"),
       });

@@ -228,7 +228,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
 	s := stackOn(m.provider(t), state)
 
-	movePointer(t, s.p, state, pointerMoveOf("promo-1", router.DefaultPointer, router.DeploymentRecord{App: "web", Build: "b1"}))
+	movePointer(t, s.p, state, pointerMoveOf("promo-1", router.DefaultPointer, router.ReleaseRecord{App: "web", Release: "b1"}))
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}

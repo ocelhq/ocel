@@ -243,7 +243,7 @@ func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error
 			assetPrefixEnv:     prefix,
 			slugEnv:            r.cfg.Slug,
 			appNameEnv:         spec.App.App,
-			deploymentIDEnv:    spec.App.Deployment,
+			buildIDEnv:         spec.App.BuildID,
 		},
 	}
 	if r.cfg.AssetBucket != "" {

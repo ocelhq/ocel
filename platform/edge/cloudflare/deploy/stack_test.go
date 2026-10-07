@@ -94,7 +94,7 @@ func migrationSteps(t *testing.T, migrations map[string]any) [][]string {
 
 func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	t.Run("every declared class gets its binding", func(t *testing.T) {
-		for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
+		for _, do := range []durableObjectWorker{releasesStoreWorker, isrWriterWorker} {
 			found := doBindings(t, doMetadataFromMultipart(t, testStoreWorker(), do, nil))
 			if len(found) != len(do.classes) {
 				t.Errorf("bound %d Durable Object classes, want %d: %v", len(found), len(do.classes), found)
@@ -142,7 +142,7 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	})
 
 	t.Run("an up-to-date script declares no migration at all", func(t *testing.T) {
-		for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
+		for _, do := range []durableObjectWorker{releasesStoreWorker, isrWriterWorker} {
 			var deployed []string
 			for _, step := range do.migrations {
 				deployed = append(deployed, step.sqliteClasses...)
@@ -177,7 +177,7 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	t.Run("switching observability off reaches the account-level workers too", func(t *testing.T) {
 		t.Setenv(envObservability, "off")
 
-		meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, nil)
+		meta := doMetadataFromMultipart(t, testStoreWorker(), releasesStoreWorker, nil)
 		obs, ok := meta["observability"].(map[string]any)
 		if !ok {
 			t.Fatalf("metadata has no observability object: %v", meta["observability"])
@@ -630,7 +630,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 
 	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
 
-	moved := func(t *testing.T, own private, record router.DeploymentRecord) router.DeploymentRecord {
+	moved := func(t *testing.T, own private, record router.ReleaseRecord) router.ReleaseRecord {
 		t.Helper()
 		srv, store := fakeStoreFor(t, "s3cr3t")
 		state := keyedState(srv.URL, "s3cr3t")
@@ -643,7 +643,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 		t.Parallel()
 
 		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
-			router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
+			router.ReleaseRecord{App: "web", Release: "b1", Envelope: dataKey})
 
 		if got.Envelope == dataKey || got.Envelope == "" {
 			t.Fatalf("served envelope = %q, want the data key wrapped, never bare", got.Envelope)
@@ -663,7 +663,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 	t.Run("a stack the shared entry serves serves the envelope as the origin sealed it", func(t *testing.T) {
 		t.Parallel()
 
-		got := moved(t, private{}, router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
+		got := moved(t, private{}, router.ReleaseRecord{App: "web", Release: "b1", Envelope: dataKey})
 		if got.Envelope != dataKey {
 			t.Errorf("served envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
 		}
@@ -673,7 +673,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 		t.Parallel()
 
 		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
-			router.DeploymentRecord{App: "web", Build: "b1"})
+			router.ReleaseRecord{App: "web", Release: "b1"})
 		if got.Envelope != "" {
 			t.Errorf("served envelope = %q, want none", got.Envelope)
 		}
@@ -688,8 +688,8 @@ func TestDestroy(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		movePointer(t, p, state, pointerMoveOf("api-1", "", router.DeploymentRecord{App: "api", Build: "b1"}))
-		movePointer(t, p, state, pointerMoveOf("web-1", "", router.DeploymentRecord{App: "web", Build: "b2"}))
+		movePointer(t, p, state, pointerMoveOf("api-1", "", router.ReleaseRecord{App: "api", Release: "b1"}))
+		movePointer(t, p, state, pointerMoveOf("web-1", "", router.ReleaseRecord{App: "web", Release: "b2"}))
 		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
@@ -915,12 +915,12 @@ func TestWorkerDecoration(t *testing.T) {
 		t.Parallel()
 
 		worker := edge.Worker{Services: map[string]string{"EXISTING": "x"}}
-		out := withService(worker, "DEPLOYMENTS", "ocel-proj-store")
+		out := withService(worker, "RELEASES", "ocel-proj-store")
 
-		if _, ok := worker.Services["DEPLOYMENTS"]; ok {
+		if _, ok := worker.Services["RELEASES"]; ok {
 			t.Error("withService mutated the caller's Worker.Services map")
 		}
-		if out.Services["DEPLOYMENTS"] != "ocel-proj-store" || out.Services["EXISTING"] != "x" {
+		if out.Services["RELEASES"] != "ocel-proj-store" || out.Services["EXISTING"] != "x" {
 			t.Errorf("out.Services = %v", out.Services)
 		}
 	})
@@ -944,7 +944,7 @@ func TestWorkerDecoration(t *testing.T) {
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{
 			Worker:              testStoreWorker(),
-			StoreScriptName:     "ocel-deployments-store",
+			StoreScriptName:     "ocel-releases-store",
 			ISRWriterScriptName: "ocel-isr-writer",
 		}}
 
@@ -953,7 +953,7 @@ func TestWorkerDecoration(t *testing.T) {
 			t.Fatalf("genericWorker: %v", err)
 		}
 
-		if worker.Services[genericStoreBinding] != "ocel-deployments-store" {
+		if worker.Services[genericStoreBinding] != "ocel-releases-store" {
 			t.Errorf("Services[%s] = %q", genericStoreBinding, worker.Services[genericStoreBinding])
 		}
 		if worker.Services[genericISRWriterBinding] != "ocel-isr-writer" {
@@ -967,7 +967,7 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("the isr writer is left unbound when the bootstrap offers none", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
+		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"}}
 
 		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
@@ -987,7 +987,7 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		t.Parallel()
 
 		spec := edge.StackSpec{
-			Program:    &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"},
+			Program:    &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"},
 			DomainApps: map[string]string{"shop.example": "web", "admin.shop.example": "admin"},
 		}
 
@@ -1005,7 +1005,7 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 	t.Run("a project that binds no hostname to an app leaves the var unset", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
+		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"}}
 
 		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
@@ -1023,7 +1023,7 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		spec := edge.StackSpec{
 			Version:    "v2",
 			Slug:       "acme-web",
-			Program:    &edge.ProgramSpec{Name: "ocel-web", Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"},
+			Program:    &edge.ProgramSpec{Name: "ocel-web", Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"},
 			DomainApps: map[string]string{"shop.example": "web"},
 		}
 		moved := spec

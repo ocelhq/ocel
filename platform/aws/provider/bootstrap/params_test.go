@@ -15,7 +15,7 @@ import (
 func cloudflareAdoption() edge.Adoption {
 	return edge.Adoption{
 		Values: map[string]string{"cacheBucket": "ocel-edge-cache"},
-		Offers: []edge.OfferKind{edge.OfferCacheStore, edge.OfferDeploymentsStore, edge.OfferISRWriter},
+		Offers: []edge.OfferKind{edge.OfferCacheStore, edge.OfferReleasesStore, edge.OfferISRWriter},
 	}
 }
 
@@ -38,8 +38,8 @@ func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredStore()); err != nil {
 		t.Fatalf("adoptCacheStore: %v", err)
 	}
-	if err := adoptDeploymentsStore(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredDeploymentsStore()); err != nil {
-		t.Fatalf("adoptDeploymentsStore: %v", err)
+	if err := adoptReleasesStore(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredReleasesStore()); err != nil {
+		t.Fatalf("adoptReleasesStore: %v", err)
 	}
 	if err := adoptISRWriter(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
 		t.Fatalf("adoptISRWriter: %v", err)
@@ -91,7 +91,7 @@ func TestPlanParametersOnAFreshAccountCreatesEveryParameter(t *testing.T) {
 		passphraseParam,
 		names.valuesParam,
 		names.cacheStoreParam,
-		names.deploymentsStoreParam,
+		names.releasesStoreParam,
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
 		names.credentialsParam,

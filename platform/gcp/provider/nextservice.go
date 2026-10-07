@@ -29,7 +29,7 @@ const (
 	assetPrefixEnvVar       = "OCEL_ASSET_PREFIX"
 	slugEnvVar              = "OCEL_SLUG"
 	appNameEnvVar           = "OCEL_APP"
-	deploymentIDEnvVar      = "OCEL_DEPLOYMENT_ID"
+	buildIDEnvVar           = "OCEL_BUILD_ID"
 	isrPrefixEnvVar         = "OCEL_ISR_PREFIX"
 	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
 	isrBucketEnvVar         = "OCEL_ISR_BUCKET"
@@ -176,7 +176,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
 		env[appNameEnvVar] = app.App
-		env[deploymentIDEnvVar] = app.Deployment
+		env[buildIDEnvVar] = app.BuildID
 	}
 	maps.Copy(env, newNextCacheEnv(app.ISR, cache))
 	return env

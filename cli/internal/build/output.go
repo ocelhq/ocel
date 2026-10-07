@@ -71,7 +71,7 @@ func EdgeApps(projectDir string) ([]string, error) {
 	return apps, nil
 }
 
-func BuildID(projectDir, app string) (string, error) {
+func ServeBuildID(projectDir, app string) (string, error) {
 	root, err := buildoutput.Root(projectDir)
 	if err != nil {
 		return "", err

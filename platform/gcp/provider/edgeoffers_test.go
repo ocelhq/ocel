@@ -90,12 +90,12 @@ func (h *offersHarness) count(prefix string) int {
 func storeOffer(credential string) edge.Offer {
 	values := map[string]string{
 		edge.OfferKeyStoreEndpoint:   "https://s.example.workers.dev",
-		edge.OfferKeyStoreScriptName: "ocel-deployments-store",
+		edge.OfferKeyStoreScriptName: "ocel-releases-store",
 	}
 	if credential != "" {
 		values[edge.OfferKeyStoreBootstrapCredential] = credential
 	}
-	return edge.Offer{Kind: edge.OfferDeploymentsStore, Values: values}
+	return edge.Offer{Kind: edge.OfferReleasesStore, Values: values}
 }
 
 func writerOffer(credential string) edge.Offer {
@@ -136,8 +136,8 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkersAndCertificateAndKeepsTheirCre
 	if !found {
 		t.Fatal("no record of the adopted edge was written")
 	}
-	if want := (adoptedWorker{Endpoint: "https://s.example.workers.dev", ScriptName: "ocel-deployments-store"}); adopted.DeploymentsStore != want {
-		t.Errorf("deployments store = %+v, want %+v", adopted.DeploymentsStore, want)
+	if want := (adoptedWorker{Endpoint: "https://s.example.workers.dev", ScriptName: "ocel-releases-store"}); adopted.ReleasesStore != want {
+		t.Errorf("releases store = %+v, want %+v", adopted.ReleasesStore, want)
 	}
 	if want := (adoptedWorker{Endpoint: "https://w.example.workers.dev", ScriptName: "ocel-isr-writer"}); adopted.ISRWriter != want {
 		t.Errorf("isr writer = %+v, want %+v", adopted.ISRWriter, want)
@@ -148,7 +148,7 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkersAndCertificateAndKeepsTheirCre
 	if adopted.Values["cacheBucket"] != "ocel-edge-cache" {
 		t.Errorf("values = %v, want the bootstrap's cacheBucket", adopted.Values)
 	}
-	if got, want := h.credentials(t), `{"deploymentsStore":"c1","isrWriter":"c2"}`; got != want {
+	if got, want := h.credentials(t), `{"releasesStore":"c1","isrWriter":"c2"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q", got, want)
 	}
 	seed, _ := h.secrets.latest(t, h.clients.ISRWriterSeedSecret(environment.TierProduction, cloudflareKind))
@@ -192,7 +192,7 @@ func TestABootstrapReofferedWithoutCredentialsKeepsTheStoredOnes(t *testing.T) {
 	if got := h.secrets.versionsAdded(); got != added {
 		t.Errorf("a re-offer that changed nothing added %d secret versions", got-added)
 	}
-	if after, _ := h.record(t); after.DeploymentsStore != before.DeploymentsStore || after.ISRWriter != before.ISRWriter {
+	if after, _ := h.record(t); after.ReleasesStore != before.ReleasesStore || after.ISRWriter != before.ISRWriter {
 		t.Errorf("record moved from %+v to %+v", before, after)
 	}
 
@@ -202,7 +202,7 @@ func TestABootstrapReofferedWithoutCredentialsKeepsTheStoredOnes(t *testing.T) {
 	if got, want := h.secrets.versionsAdded(), added+1; got != want {
 		t.Errorf("a new credential for one worker added %d versions, want 1", got-added)
 	}
-	if got, want := h.credentials(t), `{"deploymentsStore":"c9","isrWriter":"c2"}`; got != want {
+	if got, want := h.credentials(t), `{"releasesStore":"c9","isrWriter":"c2"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q: the other worker's credential is kept", got, want)
 	}
 }
@@ -291,7 +291,7 @@ func TestReadingTheAdoptedEdgeBeforeBootstrapIsNotReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	adopted, creds, err := requireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
-	if err != nil || adopted.ISRWriter.ScriptName != "ocel-isr-writer" || creds.DeploymentsStore != "c1" || creds.ISRWriter != "c2" {
+	if err != nil || adopted.ISRWriter.ScriptName != "ocel-isr-writer" || creds.ReleasesStore != "c1" || creds.ISRWriter != "c2" {
 		t.Errorf("requireAdoptedEdge after bootstrap = %+v %+v %v", adopted, creds, err)
 	}
 	if seed, err := readISRWriterSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); err != nil || len(seed) != 64 {

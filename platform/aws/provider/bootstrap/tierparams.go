@@ -30,10 +30,10 @@ type TierParams struct {
 	EdgeValues    map[string]string
 	EdgeValuesErr error
 
-	CacheStore       CacheStore
-	DeploymentsStore DeploymentsStore
-	ISRWriter        ISRWriter
-	ISRWriterSeed    string
+	CacheStore    CacheStore
+	ReleasesStore ReleasesStore
+	ISRWriter     ISRWriter
+	ISRWriterSeed string
 
 	OriginSecret    OriginSecret
 	OriginSecretErr error
@@ -89,7 +89,7 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 		names.credentialsParam,
 		names.valuesParam,
 		names.cacheStoreParam,
-		names.deploymentsStoreParam,
+		names.releasesStoreParam,
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
 		names.originSecretParam,
@@ -129,9 +129,9 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 			return TierParams{}, fmt.Errorf("parse cache store: %w", err)
 		}
 	}
-	if raw, ok := found[names.deploymentsStoreParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.DeploymentsStore); err != nil {
-			return TierParams{}, fmt.Errorf("parse deployments store: %w", err)
+	if raw, ok := found[names.releasesStoreParam]; ok {
+		if err := json.Unmarshal([]byte(raw), &p.ReleasesStore); err != nil {
+			return TierParams{}, fmt.Errorf("parse releases store: %w", err)
 		}
 	}
 	if raw, ok := found[names.isrWriterParam]; ok {

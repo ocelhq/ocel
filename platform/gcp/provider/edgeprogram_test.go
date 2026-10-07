@@ -39,7 +39,7 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 		Tier: environment.TierProduction, Entry: entryRequest(environment.TierProduction, "shop").Entry,
 		Namespace: "ocel", Slug: "shop", Env: "main", PreviewBaseDomain: "preview.example.com", PreviewKey: "k",
 		Origin:                   cloudflare.OriginBindings{ClientCertificate: "m1"},
-		StoreScriptName:          "ocel-deployments-store",
+		StoreScriptName:          "ocel-releases-store",
 		StoreEndpoint:            "https://s.example.workers.dev",
 		StoreBootstrapCredential: "c1",
 		ISRWriterScriptName:      "ocel-isr-writer",
@@ -48,7 +48,7 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	if err != nil {
 		t.Fatal(err)
 	}
-	if program.Spec.Name != want.Spec.Name || program.Spec.StoreScriptName != "ocel-deployments-store" ||
+	if program.Spec.Name != want.Spec.Name || program.Spec.StoreScriptName != "ocel-releases-store" ||
 		program.Spec.StoreEndpoint != "https://s.example.workers.dev" || program.Spec.BootstrapCredential != "c1" ||
 		program.Spec.ISRWriterScriptName != "ocel-isr-writer" {
 		t.Errorf("program = %+v, want %+v", program.Spec, want.Spec)
@@ -78,7 +78,7 @@ func TestTheSharedPreviewEntryProgramReadsEveryDeploymentThroughTheAdoptedStore(
 	if err != nil {
 		t.Fatalf("ProgramEdge = %v", err)
 	}
-	if program.Spec.StoreScriptName != "ocel-deployments-store" || len(program.Spec.Worker.Services) == 0 {
+	if program.Spec.StoreScriptName != "ocel-releases-store" || len(program.Spec.Worker.Services) == 0 {
 		t.Errorf("program = %+v, want the store bound as a service", program.Spec)
 	}
 }

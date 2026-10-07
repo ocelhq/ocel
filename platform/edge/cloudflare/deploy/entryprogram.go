@@ -66,7 +66,7 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	if p.Slug == "" {
 		if p.StoreScriptName == "" {
 			return provider.EdgeProgram{}, refusal.Refuse(refusal.CodeNotReady,
-				"no deployments-store worker found for the preview bootstrap, and the shared preview entry reads every deployment through it; re-run `%s` to provision it",
+				"no releases-store worker found for the preview bootstrap, and the shared preview entry reads every deployment through it; re-run `%s` to provision it",
 				provider.BootstrapCommand(environment.TierPreview))
 		}
 		worker = withService(worker, genericStoreBinding, p.StoreScriptName)

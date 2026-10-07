@@ -131,7 +131,7 @@ func (r *deployRun) stageArtifact(
 	if err != nil {
 		return provider.Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
-	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
+	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
 	coordinate.Name = name
 
 	path, err := packArtifact(dir, rels, overlay)

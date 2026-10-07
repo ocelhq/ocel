@@ -19,7 +19,7 @@ func NameUnderStem(stem, name string) bool {
 	return name == stem || strings.HasPrefix(name, stem+"-")
 }
 
-var ErrStoreAbsent = errors.New("the deployments store is not provisioned")
+var ErrStoreAbsent = errors.New("the releases store is not provisioned")
 
 type StackSpec struct {
 	Version    string

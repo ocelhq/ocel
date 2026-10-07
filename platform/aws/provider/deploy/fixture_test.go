@@ -40,24 +40,24 @@ func nextCacheFixture(t *testing.T, name string) []byte {
 	return body
 }
 
-const testDeploymentID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
+const testBuildID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 
-func deploymentIDFor(label string) string {
-	if naming.ValidateDeploymentID(label) == nil {
+func buildIDFor(label string) string {
+	if naming.ValidateBuildID(label) == nil {
 		return label
 	}
 	sum := sha256.Sum256([]byte(label))
 	return hex.EncodeToString(sum[:16])
 }
 
-func deployedAs(deploymentID string) provider.Build { return fingerprinted(deploymentID, "") }
+func deployedAs(buildID string) provider.Release { return fingerprinted(buildID, "") }
 
-func fingerprinted(deploymentID, values string) provider.Build {
-	return deployedInto(stackrecords.ProductionEnv, deploymentID, values)
+func fingerprinted(buildID, values string) provider.Release {
+	return deployedInto(stackrecords.ProductionEnv, buildID, values)
 }
 
-func deployedInto(environment, deploymentID, values string) provider.Build {
-	id, err := provider.NewBuild(deploymentIDFor(deploymentID), "p1", environment, values)
+func deployedInto(environment, buildID, values string) provider.Release {
+	id, err := provider.NewRelease(buildIDFor(buildID), "p1", environment, values)
 	if err != nil {
 		panic(err)
 	}

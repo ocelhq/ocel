@@ -69,7 +69,7 @@ if (!existsSync(resultPath)) {
 }
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
 const app = result.apps?.[0];
-if (!result.slug || !app?.name || !app?.buildId) {
+if (!result.slug || !app?.name || !app?.serveBuildId) {
   fail(`${resultPath} is missing slug/app name/build id: ${JSON.stringify(result)}`);
 }
 
@@ -86,7 +86,7 @@ const keyPrefix = bytecodeCacheKeyPrefix({
     environment: result.environment,
     slug: result.slug,
     app: app.name,
-    buildId: app.buildId,
+    buildId: app.serveBuildId,
   }),
   functionName,
 });

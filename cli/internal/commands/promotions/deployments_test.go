@@ -31,14 +31,14 @@ func promotedThrice(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
 	recordPromotions(t, project, append(firstTwoPromotions(),
-		router.Promotion{PromotionID: "promo-3", Ts: 3, Builds: map[string]string{"web": "build-3~fp4"}})...)
+		router.Promotion{PromotionID: "promo-3", Ts: 3, Releases: map[string]string{"web": "build-3~fp4"}})...)
 	return project
 }
 
 func firstTwoPromotions() []router.Promotion {
 	return []router.Promotion{
-		{PromotionID: "promo-1", Ts: 1, Tag: "v1.0.0", Builds: map[string]string{"web": "build-1~fp1"}},
-		{PromotionID: "promo-2", Ts: 2, Builds: map[string]string{"web": "build-2~fp2", "admin": "build-2~fp3"},
+		{PromotionID: "promo-1", Ts: 1, Tag: "v1.0.0", Releases: map[string]string{"web": "build-1~fp1"}},
+		{PromotionID: "promo-2", Ts: 2, Releases: map[string]string{"web": "build-2~fp2", "admin": "build-2~fp3"},
 			Propagation: &router.Propagation{Typical: 5 * time.Second}},
 	}
 }
@@ -49,8 +49,8 @@ func recordPromotions(t *testing.T, project clitest.FakeProject, promotions ...r
 	releases := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug)
 	replaces := ""
 	for _, promotion := range promotions {
-		for app, build := range promotion.Builds {
-			if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: app, Build: build}); err != nil {
+		for app, build := range promotion.Releases {
+			if err := releases.PutStaged(context.Background(), router.ReleaseRecord{App: app, Release: build}); err != nil {
 				t.Fatalf("stage %s=%s: %v", app, build, err)
 			}
 		}

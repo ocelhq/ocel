@@ -12,8 +12,8 @@
   "apps": [
     {
       "name": "web",
-      "buildId": "bld_1",
-      "deploymentId": "3f7c1b9a5e2d4c8f",
+      "buildId": "3f7c1b9a5e2d4c8f",
+      "serveBuildId": "bld_1",
       "urls": [
         "https://app.example.com"
       ]

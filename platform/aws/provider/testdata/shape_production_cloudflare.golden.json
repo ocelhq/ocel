@@ -467,14 +467,14 @@
       }
     },
     {
-      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-deployments-store",
+      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-releases-store",
       "scope": "project:shop/shared:production",
       "vendor": "cloudflare",
       "type": "cloudflare_workers_script",
-      "name": "ocel-deployments-store",
+      "name": "ocel-releases-store",
       "properties": {
         "durable_objects": [
-          "DeploymentsStore"
+          "ReleasesStore"
         ]
       }
     },

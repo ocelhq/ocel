@@ -162,7 +162,7 @@ func (s *stack) deleteRule(ctx context.Context, c Clients, rule string) error {
 	return nil
 }
 
-func readTargetGroups(ctx context.Context, c Clients, tier environment.Tier, records map[string]router.DeploymentRecord) (map[string]string, error) {
+func readTargetGroups(ctx context.Context, c Clients, tier environment.Tier, records map[string]router.ReleaseRecord) (map[string]string, error) {
 	byService := map[string]string{}
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		physical := records[app].Physical

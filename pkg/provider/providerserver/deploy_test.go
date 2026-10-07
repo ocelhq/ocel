@@ -40,7 +40,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-const webDeploymentID = "0123456789abcdef0123456789abcdef"
+const webBuildID = "0123456789abcdef0123456789abcdef"
 
 const artifactPath = "apps/web/functions/server.func"
 
@@ -119,9 +119,9 @@ func deployRequest() *contractv1.DeployRequest {
 				Hostnames: []string{"shop.example"},
 			}},
 			Apps: []*contractv1.ManifestApp{{
-				Name:         "web",
-				Framework:    &contractv1.Framework{Name: "next"},
-				DeploymentId: webDeploymentID,
+				Name:      "web",
+				Framework: &contractv1.Framework{Name: "next"},
+				BuildId:   webBuildID,
 				Artifact: serverless(&contractv1.ManifestFunction{
 					LogicalName:  "server",
 					Framework:    &contractv1.Framework{Name: "next"},
@@ -207,8 +207,8 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	if specs[1].App.Functions[0].Artifact.Key == "" {
 		t.Error("the app spec has a function with no artifact, so the upload never reached the release")
 	}
-	if specs[1].App.Deployment != webDeploymentID {
-		t.Errorf("the app spec names deployment %q, want %q: dispatch serves the build the CLI built under this id", specs[1].App.Deployment, webDeploymentID)
+	if specs[1].App.BuildID != webBuildID {
+		t.Errorf("the app spec names deployment %q, want %q: dispatch serves the build the CLI built under this id", specs[1].App.BuildID, webBuildID)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.
 	}
 }
 
-const adminDeploymentID = "fedcba9876543210fedcba9876543210"
+const adminBuildID = "fedcba9876543210fedcba9876543210"
 
 func twoAppRequest() *contractv1.DeployRequest {
 	req := deployRequest()
@@ -250,9 +250,9 @@ func twoAppRequest() *contractv1.DeployRequest {
 		},
 	})
 	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
-		Name:         "admin",
-		Framework:    &contractv1.Framework{Name: "next"},
-		DeploymentId: adminDeploymentID,
+		Name:      "admin",
+		Framework: &contractv1.Framework{Name: "next"},
+		BuildId:   adminBuildID,
 		Artifact: serverless(&contractv1.ManifestFunction{
 			LogicalName:  "admin-server",
 			Framework:    &contractv1.Framework{Name: "next"},
@@ -355,7 +355,7 @@ func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 	if len(infra.Bindings) != 1 || infra.Bindings[0].Name != "orders" {
 		t.Errorf("the infra stack records bindings %v, want the resource it provisioned", infra.Bindings)
 	}
-	if app.App != "web" || app.Build == "" {
+	if app.App != "web" || app.Release == "" {
 		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
 	}
 	if len(app.Functions) != 1 {
@@ -1345,7 +1345,7 @@ func TestAPruneThatFailedToWithdrawADeploymentHostnameReclaimsItsBuildOnTheRetry
 		}
 		var destroyed []string
 		for _, event := range recorded(stream) {
-			if line := saidLine(event); strings.HasPrefix(line, "Destroying the stack of web build") {
+			if line := saidLine(event); strings.HasPrefix(line, "Destroying the stack of web release") {
 				destroyed = append(destroyed, line)
 			}
 		}
@@ -1361,7 +1361,7 @@ func TestAPruneThatFailedToWithdrawADeploymentHostnameReclaimsItsBuildOnTheRetry
 		t.Errorf("the retried prune left the pruned deployment's hostname served by %q, want nothing", pointer)
 	}
 	if len(destroyed) == 0 {
-		t.Errorf("the retried prune destroyed nothing, want the builds of the deployments the refused prune dropped")
+		t.Errorf("the retried prune destroyed nothing, want the releases of the deployments the refused prune dropped")
 	}
 }
 

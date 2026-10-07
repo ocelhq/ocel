@@ -208,7 +208,7 @@ func promotionLine(p *contractv1.Promotion) string {
 	if p.GetTag() != "" {
 		tag = "tag " + p.GetTag()
 	}
-	return fmt.Sprintf("%s  created %s  %s  %s", p.GetPromotionId(), terminal.EpochDateTime(p.GetTs()), tag, deployedIdentities(p.GetBuilds()))
+	return fmt.Sprintf("%s  created %s  %s  %s", p.GetPromotionId(), terminal.EpochDateTime(p.GetTs()), tag, deployedReleases(p.GetReleases()))
 }
 
 func promotionIDs(history []*contractv1.PromotionHistoryEntry) string {

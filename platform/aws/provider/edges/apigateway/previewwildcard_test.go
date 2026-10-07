@@ -87,11 +87,11 @@ func rulesOn(t *testing.T, w *world, domain string) map[string]*fakeRule {
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
-	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: previewEntry}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
-	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
+	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Releases: map[string]string{"web": record.Release}}
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Hosts: listSlugPreviewHosts(stack.State().Slug, pointer), Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
@@ -359,7 +359,7 @@ func TestPromoteStopsRoutingTheHostnamesTheMoveSupersedes(t *testing.T) {
 	promotePreview(t, stack, previewPoint)
 	moved := listPreviewHosts("moved")
 
-	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}}
+	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Releases: map[string]string{"web": "d1.f1"}}
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: previewPoint, Hosts: moved, Superseded: listPreviewHosts(previewPoint), Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestAPointerMoveReadsTheSharedWildcardsRulesOnceHoweverManyHostsItRoutes(t 
 	w.gateway.pageSize = 1_000
 	w.gateway.calls = nil
 
-	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Builds: map[string]string{"web": "d1.f1"}}
+	promotion := router.Promotion{PromotionID: "p-moved", Ts: 2, Releases: map[string]string{"web": "d1.f1"}}
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: previewPoint, Hosts: moved, Superseded: listPreviewHosts(previewPoint), Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer: %v", err)
 	}

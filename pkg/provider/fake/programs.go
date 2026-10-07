@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ProgramStore = "fake-deployments-store"
+	ProgramStore = "fake-releases-store"
 
 	ProgramEdgeVar    = "OCEL_EDGE"
 	ProgramPreviewVar = "OCEL_PREVIEW_BASE_DOMAIN"

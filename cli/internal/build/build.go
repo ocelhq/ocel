@@ -153,7 +153,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		return fmt.Errorf("create %s: %w", buildoutput.Dir, err)
 	}
 
-	deploymentIDs, err := recordDeploymentIDs(cfg, cfg.Apps)
+	buildIDs, err := recordBuildIDs(cfg, cfg.Apps)
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				Name:          a.Name,
 				Cwd:           filepath.Join(cfg.Dir, a.Path),
 				OutputDir:     buildoutput.AppRoot(outputDir, a.Name),
-				DeploymentID:  deploymentIDs[a.Name],
+				BuildID:       buildIDs[a.Name],
 				Folder:        a.Folder,
 				Env:           env.set,
 				EdgeKind:      string(cfg.EdgeKind()),

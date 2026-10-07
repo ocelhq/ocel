@@ -41,21 +41,21 @@ type Environment struct {
 type App struct {
 	Name         string   `json:"name"`
 	BuildID      string   `json:"buildId,omitempty"`
-	DeploymentID string   `json:"deploymentId,omitempty"`
+	ServeBuildID string   `json:"serveBuildId,omitempty"`
 	URLs         []string `json:"urls"`
 }
 
 func New(cfg *project.Project, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
 	apps := make([]App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
-		buildID, err := build.BuildID(cfg.Dir, a.GetName())
+		serveBuildID, err := build.ServeBuildID(cfg.Dir, a.GetName())
 		if err != nil {
 			return Record{}, err
 		}
 		apps = append(apps, App{
 			Name:         a.GetName(),
-			BuildID:      buildID,
-			DeploymentID: a.GetDeploymentId(),
+			BuildID:      a.GetBuildId(),
+			ServeBuildID: serveBuildID,
 			URLs:         appURLs(results, a.GetName()),
 		})
 	}

@@ -16,6 +16,6 @@
     "OCEL_APP": "web",
     "OCEL_SLUG": "dev"
   },
-  "services": [{ "binding": "DEPLOYMENTS", "service": "deployments-store" }],
+  "services": [{ "binding": "RELEASES", "service": "releases-store" }],
   "worker_loaders": [{ "binding": "LOADER" }]
 }

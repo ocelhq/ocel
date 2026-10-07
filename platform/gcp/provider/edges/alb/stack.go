@@ -32,7 +32,7 @@ func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
 }
 
-func (s *stack) released(ctx context.Context, records map[string]router.DeploymentRecord, progress progress.Log) error {
+func (s *stack) released(ctx context.Context, records map[string]router.ReleaseRecord, progress progress.Log) error {
 	hosts := maps.Clone(s.recorded.Hosts)
 	var took []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
@@ -194,11 +194,11 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if err != nil || !found {
 		return "", err
 	}
-	identity, released := active.Builds[app]
+	release, released := active.Releases[app]
 	if !released {
 		return "", nil
 	}
-	record, staged, err := s.openLedger().Record(ctx, app, identity)
+	record, staged, err := s.openLedger().Record(ctx, app, release)
 	if err != nil || !staged {
 		return "", err
 	}

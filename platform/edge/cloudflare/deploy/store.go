@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-var errStoreRequestUnbuildable = errors.New("build deployments-store request")
+var errStoreRequestUnbuildable = errors.New("build releases-store request")
 
 func isUnauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
@@ -46,8 +46,8 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) wrapEnvelopes(records map[string]router.DeploymentRecord) ([]router.DeploymentRecord, error) {
-	served := make([]router.DeploymentRecord, 0, len(records))
+func (s *stack) wrapEnvelopes(records map[string]router.ReleaseRecord) ([]router.ReleaseRecord, error) {
+	served := make([]router.ReleaseRecord, 0, len(records))
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		record := records[app]
 		if record.Envelope != "" && s.own.wrapsEnvelopes() {
@@ -80,11 +80,11 @@ func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string
 }
 
 type pointerMoveBody struct {
-	Pointer     string                    `json:"pointer,omitempty"`
-	Replaces    string                    `json:"replaces,omitempty"`
-	PromotionID string                    `json:"promotionId"`
-	Records     []router.DeploymentRecord `json:"records"`
-	Labels      []pointerLabel            `json:"labels,omitempty"`
+	Pointer     string                 `json:"pointer,omitempty"`
+	Replaces    string                 `json:"replaces,omitempty"`
+	PromotionID string                 `json:"promotionId"`
+	Records     []router.ReleaseRecord `json:"records"`
+	Labels      []pointerLabel         `json:"labels,omitempty"`
 }
 
 type pointerLabel struct {
@@ -116,7 +116,7 @@ func (p *cloudflare) readServedApps(ctx context.Context, state edge.StackState) 
 	return apps, nil
 }
 
-var errStoreIdentityTaken = errors.New("the deployments store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
+var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
 
 func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
@@ -158,14 +158,14 @@ func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret,
 		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
 	}
 	if slug == "" {
-		return nil, fmt.Errorf("deployments store: no project slug")
+		return nil, fmt.Errorf("releases store: no project slug")
 	}
 
 	var encoded []byte
 	if body != nil {
 		marshalled, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("marshal deployments-store request body: %w", err)
+			return nil, fmt.Errorf("marshal releases-store request body: %w", err)
 		}
 		encoded = marshalled
 	}
@@ -199,17 +199,17 @@ func (p *cloudflare) storeAttempt(ctx context.Context, endpoint, slug, secret, m
 
 	res, err := p.storeClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call deployments store %s %s: %w", method, subpath, err)
+		return nil, fmt.Errorf("call releases store %s %s: %w", method, subpath, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(res.Body)
-		return res, fmt.Errorf("deployments store %s %s: status %d: %s", method, subpath, res.StatusCode, string(respBody))
+		return res, fmt.Errorf("releases store %s %s: status %d: %s", method, subpath, res.StatusCode, string(respBody))
 	}
 	if out != nil {
 		if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-			return res, fmt.Errorf("decode deployments store %s %s response: %w", method, subpath, err)
+			return res, fmt.Errorf("decode releases store %s %s response: %w", method, subpath, err)
 		}
 	}
 	return res, nil

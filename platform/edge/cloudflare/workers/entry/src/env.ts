@@ -1,4 +1,4 @@
-import type { DeploymentsBinding } from "./deployments";
+import type { ReleasesBinding } from "./releases";
 
 export interface IsrWriterBinding {
   fetch(request: Request): Promise<Response>;
@@ -10,7 +10,7 @@ export interface CacheEntrypointProps {
 }
 
 export interface Env {
-  DEPLOYMENTS: DeploymentsBinding;
+  RELEASES: ReleasesBinding;
   OCEL_SLUG: string;
   OCEL_APP?: string;
   OCEL_DOMAIN_APPS?: string;

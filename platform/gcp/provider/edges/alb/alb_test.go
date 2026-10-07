@@ -88,9 +88,9 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 		},
 		Hostname:    "shop.example.com",
 		PreviewBase: "preview.example.com",
-		Record: func(app, build string) router.DeploymentRecord {
-			return router.DeploymentRecord{
-				App: app, Build: build, Physical: conformanceService,
+		Record: func(app, build string) router.ReleaseRecord {
+			return router.ReleaseRecord{
+				App: app, Release: build, Physical: conformanceService,
 				Revisions: map[string]string{conformanceService: "rev-" + build},
 			}
 		},
@@ -284,15 +284,15 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
 	for _, build := range []struct{ identity, revision string }{{"b1", "web-00001-abc"}, {"b2", "web-00002-def"}} {
-		if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-			App: "web", Build: build.identity, Physical: "ocel-shop-prod-web",
+		if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+			App: "web", Release: build.identity, Physical: "ocel-shop-prod-web",
 			Revisions: map[string]string{"ocel-shop-prod-web": build.revision},
 		}); err != nil {
 			t.Fatalf("PutStaged(%s) = %v", build.identity, err)
 		}
 	}
 	for _, step := range []struct{ id, identity string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
-		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}}}, progress.Discard())
+		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: step.id, Releases: map[string]string{"web": step.identity}}}, progress.Discard())
 		if err != nil {
 			t.Fatalf("Promote(%s) = %v", step.id, err)
 		}
@@ -698,13 +698,13 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -723,14 +723,14 @@ func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	progress := &fake.Log{}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}, progress); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -745,13 +745,13 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
@@ -773,13 +773,13 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "admin", Build: "b1", Physical: "ocel-shop-prod-admin",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "admin", Release: "b1", Physical: "ocel-shop-prod-admin",
 		Revisions: map[string]string{"ocel-shop-prod-admin": "ocel-shop-prod-admin-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"admin": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -840,13 +840,13 @@ func openRouter(shared edge.EdgeStack) fake.PromotingStack {
 func promotedWithHealthPath(t *testing.T, stack edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 }
@@ -914,15 +914,15 @@ func TestAWarmThatFailsThroughTheLoadBalancerNamesTheRevisionItWarmed(t *testing
 		t.Fatalf("BindDomain = %v", err)
 	}
 	w.warmFails = errors.New("connection refused")
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	log := &warnings{Log: progress.Discard()}
 
-	move := router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}
+	move := router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}
 	if err := openRouter(stack).MovePointer(ctx, move, log); err != nil {
 		t.Fatalf("MovePointer = %v", err)
 	}

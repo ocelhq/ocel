@@ -34,7 +34,7 @@ func anApp() provider.AppSpec {
 	return provider.AppSpec{
 		App:             "web",
 		Compute:         provider.ComputeContainer,
-		Deployment:      deployment,
+		BuildID:         deployment,
 		Image:           loadedImageRef,
 		HealthCheckPath: "/healthz",
 	}
@@ -79,7 +79,7 @@ func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 		t.Fatal(err)
 	}
 	next := anApp()
-	next.Deployment = "fedcba9876543210fedcba9876543210"
+	next.BuildID = "fedcba9876543210fedcba9876543210"
 	second, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, next), nil)
 	if err != nil {
 		t.Fatal(err)

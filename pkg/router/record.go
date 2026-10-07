@@ -2,11 +2,11 @@ package router
 
 import "github.com/ocelhq/ocel/pkg/edge"
 
-type DeploymentRecord struct {
+type ReleaseRecord struct {
 	App                  string            `json:"app"`
 	Framework            string            `json:"framework"`
-	Build                string            `json:"identity"`
-	DeploymentID         string            `json:"deploymentId"`
+	Release              string            `json:"release"`
+	BuildID              string            `json:"buildId"`
 	Entry                string            `json:"entry"`
 	EntryFunction        string            `json:"entryFunction,omitempty"`
 	Image                string            `json:"image,omitempty"`
@@ -22,7 +22,7 @@ type DeploymentRecord struct {
 	IsrWriteSecret       string            `json:"isrWriteSecret,omitempty"`
 	CreatedAt            int64             `json:"createdAt"`
 	EdgeWorkers          *Code             `json:"edgeWorkers,omitempty"`
-	BuildFingerprint     string            `json:"buildFingerprint,omitempty"`
+	ReleaseFingerprint   string            `json:"releaseFingerprint,omitempty"`
 	Variables            []VariableRecord  `json:"variables,omitempty"`
 	Env                  map[string]string `json:"env,omitempty"`
 	Envelope             string            `json:"envelope,omitempty"`

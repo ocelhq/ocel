@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func TestBuildID(t *testing.T) {
+func TestServeBuildID(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -53,25 +53,25 @@ func TestBuildID(t *testing.T) {
 			for rel, contents := range tt.contents {
 				writeAppFile(t, root, rel, []byte(contents))
 			}
-			got, err := BuildID(root, tt.app)
+			got, err := ServeBuildID(root, tt.app)
 			if err != nil {
-				t.Fatalf("BuildID(%q) = %v", tt.app, err)
+				t.Fatalf("ServeServeBuildID(%q) = %v", tt.app, err)
 			}
 			if got != tt.want {
-				t.Errorf("BuildID(%q) = %q, want %q", tt.app, got, tt.want)
+				t.Errorf("ServeServeBuildID(%q) = %q, want %q", tt.app, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestAnUnreadableServeDescriptorFailsTheBuildIDRatherThanReadingAsNone(t *testing.T) {
+func TestAnUnreadableServeDescriptorFailsTheServeBuildIDRatherThanReadingAsNone(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte("not json"))
 
-	if got, err := BuildID(root, "api"); err == nil {
-		t.Errorf("BuildID = %q, nil over a descriptor that is not JSON, want the corruption reported rather than recorded as no build", got)
+	if got, err := ServeBuildID(root, "api"); err == nil {
+		t.Errorf("ServeBuildID = %q, nil over a descriptor that is not JSON, want the corruption reported rather than recorded as no build", got)
 	}
 	if apps, err := EdgeApps(root); err == nil {
 		t.Errorf("EdgeApps = %v, nil over a descriptor that is not JSON, want the corruption reported rather than read as no edge need", apps)

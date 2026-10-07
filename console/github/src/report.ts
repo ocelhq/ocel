@@ -15,7 +15,7 @@ export const deployResultSchema = z.looseObject({
     z.looseObject({
       name: z.string(),
       buildId: z.string().optional(),
-      deploymentId: z.string().optional(),
+      serveBuildId: z.string().optional(),
       urls: z.array(z.string()),
     }),
   ),

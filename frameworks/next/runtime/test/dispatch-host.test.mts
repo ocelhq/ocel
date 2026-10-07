@@ -72,7 +72,7 @@ function host(): DispatchHost {
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
     slug: "p1",
     app: "web",
-    deploymentId: "d1",
+    appBuildId: "d1",
     assetPrefix: "",
     originFetch: capturing,
   };
@@ -257,7 +257,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
       OCEL_ASSET_PREFIX: "prod/shop/web/r0a1b2c3d/assets",
       OCEL_SLUG: "shop",
       OCEL_APP: "web",
-      OCEL_DEPLOYMENT_ID: "d1",
+      OCEL_BUILD_ID: "d1",
     },
     localOrigin,
     { originFetch: fetch },

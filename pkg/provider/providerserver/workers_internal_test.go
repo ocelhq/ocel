@@ -14,9 +14,9 @@ import (
 
 func serverlessApp(name string) *contractv1.ManifestApp {
 	return &contractv1.ManifestApp{
-		Name:         name,
-		DeploymentId: deploymentID,
-		Artifact:     &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
+		Name:     name,
+		BuildId:  buildID,
+		Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
 	}
 }
 

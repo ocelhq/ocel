@@ -36,19 +36,19 @@ func activePromotion(history []*contractv1.PromotionHistoryEntry) *contractv1.Pr
 	return nil
 }
 
-func deployedIdentities(identityByApp map[string]string) string {
-	if len(identityByApp) == 0 {
+func deployedReleases(releaseByApp map[string]string) string {
+	if len(releaseByApp) == 0 {
 		return "—"
 	}
-	apps := make([]string, 0, len(identityByApp))
-	for app := range identityByApp {
+	apps := make([]string, 0, len(releaseByApp))
+	for app := range releaseByApp {
 		apps = append(apps, app)
 	}
 	slices.Sort(apps)
 
 	pairs := make([]string, 0, len(apps))
 	for _, app := range apps {
-		pairs = append(pairs, app+"="+identityByApp[app])
+		pairs = append(pairs, app+"="+releaseByApp[app])
 	}
 	return strings.Join(pairs, " ")
 }

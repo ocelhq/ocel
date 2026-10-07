@@ -18,8 +18,8 @@ type Pointer struct {
 	PendingRemovals []RecordedPromotion `json:"pendingRemovals,omitempty"`
 }
 
-func (p Pointer) ListDeploymentRemovals() []router.PointerRemoval {
-	return collectDeploymentRemovals(p.Name, append(slices.Clone(p.Promotions), p.PendingRemovals...))
+func (p Pointer) ListReleaseRemovals() []router.PointerRemoval {
+	return collectReleaseRemovals(p.Name, append(slices.Clone(p.Promotions), p.PendingRemovals...))
 }
 
 type RecordedPromotion struct {

@@ -84,12 +84,12 @@ func infraLast(name naming.StackName) int {
 
 type ReclaimTarget struct {
 	App      string
-	Build    provider.Build
+	Release  provider.Release
 	Stack    naming.StackName
 	Prefixes []string
 }
 
-func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, surviving, servingHere []string, containersRetained bool) ([]ReclaimTarget, []string, error) {
+func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving, servingHere []string, containersRetained bool) ([]ReclaimTarget, []string, error) {
 	if len(removed) == 0 {
 		return nil, nil, nil
 	}
@@ -103,18 +103,18 @@ func ReclaimTargets(slug, env string, removed []router.DeploymentRecord, survivi
 		if isRetainedContainer(containersRetained, record.Image) {
 			continue
 		}
-		identity, err := provider.ParseBuild(record.Build)
+		release, err := provider.ParseRelease(record.Release)
 		if err != nil {
-			refused = append(refused, ledger.RecordKey(record.App, record.Build))
-			errs = append(errs, refusal.Refuse(refusal.CodeInvalid, "the record of %s names no build its stack is named for, so it is kept: %s", record.App, err.Error()))
+			refused = append(refused, ledger.RecordKey(record.App, record.Release))
+			errs = append(errs, refusal.Refuse(refusal.CodeInvalid, "the record of %s names no release its stack is named for, so it is kept: %s", record.App, err.Error()))
 			continue
 		}
-		release := identity.Release()
+		token := release.Token()
 		targets = append(targets, ReclaimTarget{
 			App:      record.App,
-			Build:    identity,
-			Stack:    naming.AppStack(env, record.App, release),
-			Prefixes: reclaimedPrefixes(slug, env, record.App, release, elsewhere, here),
+			Release:  release,
+			Stack:    naming.AppStack(env, record.App, token),
+			Prefixes: reclaimedPrefixes(slug, env, record.App, token, elsewhere, here),
 		})
 	}
 	return targets, refused, errors.Join(errs...)
@@ -144,15 +144,15 @@ type appRelease struct {
 func releasesOf(keys []string) map[appRelease]bool {
 	served := make(map[appRelease]bool, len(keys))
 	for _, key := range keys {
-		app, build, ok := ledger.SplitRecordKey(key)
+		app, rendered, ok := ledger.SplitRecordKey(key)
 		if !ok {
 			continue
 		}
-		identity, err := provider.ParseBuild(build)
+		release, err := provider.ParseRelease(rendered)
 		if err != nil {
 			continue
 		}
-		served[appRelease{app: app, release: identity.Release().String()}] = true
+		served[appRelease{app: app, release: release.Token().String()}] = true
 	}
 	return served
 }
@@ -165,17 +165,17 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, pointer string, droppe
 	if err != nil {
 		return err
 	}
-	if err := s.removeDeployments(ctx, unnamed.DeploymentRemovals, progress); err != nil {
+	if err := s.removeReleases(ctx, unnamed.ReleaseRemovals, progress); err != nil {
 		return err
 	}
 	if err := reclaimUnnamed(ctx, s.provider, s.ledger, pointer, unnamed, progress); err != nil {
 		return err
 	}
-	return s.forgetRemovedDeployments(ctx, pointer, unnamed.DeploymentRemovals)
+	return s.forgetRemovedReleases(ctx, pointer, unnamed.ReleaseRemovals)
 }
 
 func unreclaimedWarning(promotionID string, err error) string {
-	return fmt.Sprintf("Promotion %s serves, but reclaiming the builds it dropped past the newest %d promotions failed, and what was not reclaimed stays until this environment is destroyed: %v",
+	return fmt.Sprintf("Promotion %s serves, but reclaiming the releases it dropped past the newest %d promotions failed, and what was not reclaimed stays until this environment is destroyed: %v",
 		promotionID, ledger.KeptPromotions, err)
 }
 
@@ -191,10 +191,10 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, l projectLedger, p
 		unreclaimed[key] = true
 	}
 	for i, target := range targets {
-		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
+		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
 		if err := destroyReclaimTarget(ctx, p, l.slug, l.tier, target, progress); err != nil {
 			errs = append(errs, err)
-			unreclaimed[ledger.RecordKey(target.App, target.Build.String())] = true
+			unreclaimed[ledger.RecordKey(target.App, target.Release.String())] = true
 		}
 	}
 	reclaimed := slices.DeleteFunc(slices.Clone(unnamed.UnnamedRecordKeys), func(key string) bool { return unreclaimed[key] })
@@ -262,25 +262,25 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 	}
 	var targets []ReclaimTarget
 	for _, entry := range provisioned {
-		if named[ledger.RecordKey(entry.App, entry.Build.String())] {
+		if named[ledger.RecordKey(entry.App, entry.Release.String())] {
 			continue
 		}
 		targets = append(targets, ReclaimTarget{
 			App:      entry.App,
-			Build:    entry.Build,
+			Release:  entry.Release,
 			Stack:    entry.Stack,
-			Prefixes: []string{appCoordinate(r.spec, entry.App, entry.Build.Release()).StoragePrefix()},
+			Prefixes: []string{appCoordinate(r.spec, entry.App, entry.Release.Token()).StoragePrefix()},
 		})
 	}
 	var errs []error
 	reclaimed := make([]string, 0, len(targets))
 	for i, target := range targets {
-		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
+		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
 		if err := destroyReclaimTarget(ctx, r.provider, r.spec.Slug, r.spec.Tier, target, progress); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		reclaimed = append(reclaimed, ledger.RecordKey(target.App, target.Build.String()))
+		reclaimed = append(reclaimed, ledger.RecordKey(target.App, target.Release.String()))
 	}
 	return errors.Join(append(errs, r.ledger.ForgetUnnamedRecords(ctx, reclaimed))...)
 }

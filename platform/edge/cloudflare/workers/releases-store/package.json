@@ -1,5 +1,5 @@
 {
-  "name": "@platform/cf-deployments-store",
+  "name": "@platform/cf-releases-store",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,

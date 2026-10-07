@@ -98,18 +98,16 @@ export async function checkOwnReleases(
   first: PreviewRelease,
   second: PreviewRelease,
 ): Promise<void> {
-  if (first.deploymentId === second.deploymentId) {
-    throw new Error(
-      `${app}'s two preview deployments both carry the release ${first.deploymentId}`,
-    );
+  if (first.buildId === second.buildId) {
+    throw new Error(`${app}'s two preview deployments both carry the release ${first.buildId}`);
   }
   for (const each of [first, second]) {
-    await requireServing(clock, each.deploymentUrl, each.deploymentId);
+    await requireServing(clock, each.deploymentUrl, each.buildId);
     await clock.sleep(SETTLE_MS);
-    const again = await probeDeployment(clock, each.deploymentUrl, each.deploymentId);
+    const again = await probeDeployment(clock, each.deploymentUrl, each.buildId);
     if (!again.served) {
       throw new Error(
-        `${each.deploymentUrl}${DEPLOYMENT_PATH} stopped serving deployment ${each.deploymentId} and answered ${again.said}`,
+        `${each.deploymentUrl}${DEPLOYMENT_PATH} stopped serving deployment ${each.buildId} and answered ${again.said}`,
       );
     }
   }
@@ -117,7 +115,7 @@ export async function checkOwnReleases(
   if (alias === undefined) {
     throw new Error(`${app}'s newer preview deployment names no alias url`);
   }
-  await requireServing(clock, alias, second.deploymentId);
+  await requireServing(clock, alias, second.buildId);
 }
 
 export async function checkPruned(
@@ -128,19 +126,19 @@ export async function checkPruned(
 ): Promise<string> {
   let last = "";
   const stopped = await pollUntil(clock, PRUNE_DEADLINE_MS, PRUNE_POLL_MS, async () => {
-    const seen = await probeDeployment(clock, pruned.deploymentUrl, pruned.deploymentId);
+    const seen = await probeDeployment(clock, pruned.deploymentUrl, pruned.buildId);
     last = seen.said;
     return !seen.served;
   });
   if (!stopped) {
     throw new Error(
-      `${pruned.deploymentUrl}${DEPLOYMENT_PATH} of ${app} still serves deployment ${pruned.deploymentId} ${PRUNE_DEADLINE_MS / 1000}s after the prune`,
+      `${pruned.deploymentUrl}${DEPLOYMENT_PATH} of ${app} still serves deployment ${pruned.buildId} ${PRUNE_DEADLINE_MS / 1000}s after the prune`,
     );
   }
-  const stillThere = await probeDeployment(clock, kept.deploymentUrl, kept.deploymentId);
+  const stillThere = await probeDeployment(clock, kept.deploymentUrl, kept.buildId);
   if (!stillThere.served) {
     throw new Error(
-      `${kept.deploymentUrl}${DEPLOYMENT_PATH} of ${app} stopped serving the kept deployment ${kept.deploymentId} and answered ${stillThere.said}`,
+      `${kept.deploymentUrl}${DEPLOYMENT_PATH} of ${app} stopped serving the kept deployment ${kept.buildId} and answered ${stillThere.said}`,
     );
   }
   return last;

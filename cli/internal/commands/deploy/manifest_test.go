@@ -68,7 +68,7 @@ func TestTheBuildIsHandedTheWorkersEachAppHosts(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
 	dependencies := newTestDependencies()
-	stubRecordedDeploymentIDs(&dependencies)
+	stubRecordedBuildIDs(&dependencies)
 	source := filepath.Join(root, discovery.DefaultRootDirName, "jobs.ts") + ":4"
 	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
 		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: source}}, nil
@@ -93,7 +93,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
 	dependencies := newTestDependencies()
-	stubRecordedDeploymentIDs(&dependencies)
+	stubRecordedBuildIDs(&dependencies)
 
 	var built map[string]build.AppVariables
 	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
@@ -467,7 +467,7 @@ func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 }
 
 func recordBuildApp(dependencies *Dependencies) *bool {
-	stubRecordedDeploymentIDs(dependencies)
+	stubRecordedBuildIDs(dependencies)
 	ran := false
 	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		ran = true
@@ -613,7 +613,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
-		clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", "api", "deployment-id"), recorded+"\n")
+		clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", "api", "build-id"), recorded+"\n")
 		dependencies := newTestDependencies()
 
 		s, _ := newBuildSpan(t)
@@ -623,10 +623,10 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 		apps := manifest.GetApps()
-		if len(apps) != 1 || apps[0].GetDeploymentId() != recorded {
+		if len(apps) != 1 || apps[0].GetBuildId() != recorded {
 			ids := make([]string, 0, len(apps))
 			for _, app := range apps {
-				ids = append(ids, app.GetDeploymentId())
+				ids = append(ids, app.GetBuildId())
 			}
 			t.Errorf("manifest apps have deployments %q, want api alone having %q", ids, recorded)
 		}
@@ -653,7 +653,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		generated := ""
 		dependencies := newTestDependencies()
-		stubRecordedDeploymentIDs(&dependencies)
+		stubRecordedBuildIDs(&dependencies)
 		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 			data, err := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
 			if err != nil {
@@ -944,8 +944,8 @@ func TestADeployAttributesEachFunctionToTheAppThatBuiltIt(t *testing.T) {
 		if api.GetFramework().GetName() != "node" || !slices.Equal(productionHostnames(api), []string{"api.acme.com"}) {
 			t.Errorf("api = %s on %v, want node with its own production domain, lower-cased", api.GetFramework().GetName(), productionHostnames(api))
 		}
-		if api.GetDeploymentId() != recordedDeploymentID("api") {
-			t.Errorf("api deployment = %q, want the id its build recorded", api.GetDeploymentId())
+		if api.GetBuildId() != recordedBuildID("api") {
+			t.Errorf("api deployment = %q, want the id its build recorded", api.GetBuildId())
 		}
 		if functions := api.GetServerless().GetFunctions(); len(functions) != 1 || functions[0].GetArtifactPath() != "output/api" {
 			t.Errorf("api functions = %v, want the api function attributed to it", functions)
@@ -994,11 +994,11 @@ export default {
 			if len(functions) != 1 || functions[0].GetLogicalName() != "fn--"+app+"--"+app || functions[0].GetArtifactPath() != "output/"+app {
 				t.Errorf("%s functions = %v, want its own function attributed to it", app, functions)
 			}
-			if a.GetDeploymentId() != recordedDeploymentID(app) {
-				t.Errorf("%s deployment = %q, want the id its own build recorded", app, a.GetDeploymentId())
+			if a.GetBuildId() != recordedBuildID(app) {
+				t.Errorf("%s deployment = %q, want the id its own build recorded", app, a.GetBuildId())
 			}
 		}
-		if recordedDeploymentID("web") == recordedDeploymentID("admin") {
+		if recordedBuildID("web") == recordedBuildID("admin") {
 			t.Fatal("the fixture gives both apps one id, so this proves nothing")
 		}
 	})
@@ -1228,8 +1228,8 @@ func TestAnAppsOwnBuildFailureEndsNoSecondSpan(t *testing.T) {
 func TestAFailureAssemblingTheManifestAfterTheBuildsEndsASpanOfItsOwn(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
 	dependencies.BuildApps = buildingEach("")
-	dependencies.DeploymentID = func(string, string) (string, error) {
-		return "", errors.New("no deployment id for app \"web\"; run `ocel build`")
+	dependencies.BuildID = func(string, string) (string, error) {
+		return "", errors.New("no build id for app \"web\"; run `ocel build`")
 	}
 
 	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})

@@ -361,7 +361,7 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 	t.Parallel()
 
 	b, registry := fronting(t)
-	registry.front.plan = []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanCreate}}
+	registry.front.plan = []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate}}
 
 	installs, err := b.plannedFronts(context.Background(), environment.TierProduction, []string{albFeature})
 	if err != nil {
@@ -373,7 +373,7 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 	}
 
 	for what, groups := range map[string][]provider.ChangeGroup{"installs": installs, "removes": removes} {
-		if len(groups) != 1 || groups[0].Name != edge.EdgeGroupName(alb.Kind) || len(groups[0].Changes) != 1 || groups[0].Changes[0].Name != "ocel-deployments-store" {
+		if len(groups) != 1 || groups[0].Name != edge.EdgeGroupName(alb.Kind) || len(groups[0].Changes) != 1 || groups[0].Changes[0].Name != "ocel-releases-store" {
 			t.Errorf("%s = %+v, want one edge group carrying the front's planned worker", what, groups)
 		}
 	}

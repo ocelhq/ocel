@@ -21,11 +21,11 @@ const (
 	previewPointer  = "conformance-preview"
 )
 
-func containerRecord(f *fakeAWS) func(app, build string) router.DeploymentRecord {
-	return func(app, build string) router.DeploymentRecord {
+func containerRecord(f *fakeAWS) func(app, build string) router.ReleaseRecord {
+	return func(app, build string) router.ReleaseRecord {
 		physical := "ocel-shop-" + app + "-" + build
 		f.release(physical, build)
-		return router.DeploymentRecord{App: app, Build: build, Physical: physical}
+		return router.ReleaseRecord{App: app, Release: build, Physical: physical}
 	}
 }
 
@@ -71,7 +71,7 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 			return fixtureOn(t, current, environment.TierPreview, previewPointer)
 		},
 		Hostname: testHostname,
-		Record: func(app, build string) router.DeploymentRecord {
+		Record: func(app, build string) router.ReleaseRecord {
 			return containerRecord(current)(app, build)
 		},
 	})
@@ -98,11 +98,11 @@ func claimedStack(t *testing.T, f *fakeAWS, claims ...router.Claim) router.Stack
 	return stack
 }
 
-func moveOnto(t *testing.T, stack router.Stack, pointer string, records ...router.DeploymentRecord) error {
+func moveOnto(t *testing.T, stack router.Stack, pointer string, records ...router.ReleaseRecord) error {
 	t.Helper()
-	move := router.PointerMove{Pointer: pointer, Promotion: router.Promotion{PromotionID: "p", Builds: map[string]string{}}, Records: map[string]router.DeploymentRecord{}}
+	move := router.PointerMove{Pointer: pointer, Promotion: router.Promotion{PromotionID: "p", Releases: map[string]string{}}, Records: map[string]router.ReleaseRecord{}}
 	for _, record := range records {
-		move.Promotion.Builds[record.App] = record.Build
+		move.Promotion.Releases[record.App] = record.Release
 		move.Records[record.App] = record
 	}
 	return stack.MovePointer(context.Background(), move, progress.Discard())
@@ -177,7 +177,7 @@ func TestAPromoteOfAReleaseTheClusterDoesNotRunIsUnservedAndFlipsNothing(t *test
 	f := newFakeAWS()
 	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate})
 
-	err := moveOnto(t, stack, "", router.DeploymentRecord{App: "admin", Build: "b1", Physical: "ocel-shop-admin-gone"})
+	err := moveOnto(t, stack, "", router.ReleaseRecord{App: "admin", Release: "b1", Physical: "ocel-shop-admin-gone"})
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
 		t.Fatalf("MovePointer onto a service the cluster does not run = %v, want router.Unserved", err)

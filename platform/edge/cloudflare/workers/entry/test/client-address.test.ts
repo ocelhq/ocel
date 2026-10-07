@@ -7,11 +7,11 @@ import { answerEveryRecordWith, capturing, makeRecord, withGlobalFetch } from ".
 
 const binding = answerEveryRecordWith(async () => {
   const record = makeRecord();
-  return { kind: "record", identity: record.identity, record };
+  return { kind: "record", release: record.release, record };
 });
 
 const env: Env = {
-  DEPLOYMENTS: binding,
+  RELEASES: binding,
   OCEL_SLUG: "p1",
   OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
   OCEL_EDGE_SECRET_KEY: "secretkey",

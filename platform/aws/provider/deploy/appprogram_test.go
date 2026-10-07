@@ -36,11 +36,11 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
-			App:        "web",
-			Framework:  buildoutput.FrameworkNext,
-			Router:     router.Kind(cloudfront.Kind),
-			Entry:      "fn--web--entry",
-			Deployment: "d1",
+			App:       "web",
+			Framework: buildoutput.FrameworkNext,
+			Router:    router.Kind(cloudfront.Kind),
+			Entry:     "fn--web--entry",
+			BuildID:   "d1",
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
@@ -78,8 +78,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	if entry[routingManifestEnv] != routingManifestInTask {
 		t.Errorf("%s = %q, want the routing manifest the spec passed", routingManifestEnv, entry[routingManifestEnv])
 	}
-	if entry[deploymentIDEnv] != "d1" {
-		t.Errorf("%s = %q, want the deployment the spec named", deploymentIDEnv, entry[deploymentIDEnv])
+	if entry[buildIDEnv] != "d1" {
+		t.Errorf("%s = %q, want the build the spec named", buildIDEnv, entry[buildIDEnv])
 	}
 	if entry["OCEL_ISR_PREFIX"] != spec.App.ISR.Prefix {
 		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec passed", entry["OCEL_ISR_PREFIX"])

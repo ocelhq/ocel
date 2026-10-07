@@ -39,7 +39,7 @@ func (s *stack) routeKey(pointer, app string) host.RouteKey {
 type promotable struct {
 	key    host.RouteKey
 	app    string
-	record router.DeploymentRecord
+	record router.ReleaseRecord
 }
 
 func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []promotable, progress progress.Log) error {
@@ -75,15 +75,15 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	}, progress)
 }
 
-func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.DeploymentRecord) (promotable, bool, error) {
-	app, identity := record.App, record.Build
+func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.ReleaseRecord) (promotable, bool, error) {
+	app, release := record.App, record.Release
 	if record.Physical == "" {
 		return promotable{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
 		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
-			promotionID, app, identity, record.Physical, record.Image, record.HealthPath)
+			promotionID, app, release, record.Physical, record.Image, record.HealthPath)
 	}
 	hasImage, err := s.e.machine.HasImage(ctx, record.Image)
 	if err != nil {
@@ -92,12 +92,12 @@ func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, r
 	if !hasImage {
 		return promotable{}, false, refusal.Refuse(refusal.CodeNotReady,
 			"promote %s: this box no longer has %s for %s/%s; %s is unchanged\nDeploy again",
-			promotionID, record.Image, app, identity, app)
+			promotionID, record.Image, app, release, app)
 	}
 	return promotable{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
 
-func declaredBy(record router.DeploymentRecord) []string {
+func declaredBy(record router.ReleaseRecord) []string {
 	declared := make([]string, 0, len(record.Variables)+len(record.Env))
 	for _, variable := range record.Variables {
 		declared = append(declared, variable.Key)

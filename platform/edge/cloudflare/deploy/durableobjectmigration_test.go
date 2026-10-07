@@ -10,14 +10,14 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/option"
 )
 
-const liveDeploymentsStoreSettings = `{
+const liveReleasesStoreSettings = `{
   "result": {
     "compatibility_date": "2026-07-13",
     "compatibility_flags": ["nodejs_compat"],
     "usage_model": "standard",
     "bindings": [
       {"name": "BOOTSTRAP_SECRET", "type": "secret_text"},
-      {"class_name": "DeploymentsStore", "name": "DEPLOYMENTS_DO",
+      {"class_name": "ReleasesStore", "name": "RELEASES_DO",
        "namespace_id": "96859c78dede4eaaba17a47a51fc3ff4",
        "type": "durable_object_namespace"}
     ]
@@ -69,9 +69,9 @@ func TestDeployedClasses(t *testing.T) {
 		{
 			name:   "reads the class off the live settings response",
 			status: http.StatusOK,
-			body:   liveDeploymentsStoreSettings,
-			script: "ocel-deployments-store-preview",
-			want:   []string{"DeploymentsStore"},
+			body:   liveReleasesStoreSettings,
+			script: "ocel-releases-store-preview",
+			want:   []string{"ReleasesStore"},
 		},
 		{
 			name:   "a script that does not exist has no classes",
@@ -104,14 +104,14 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("a class the script already declares is not redeclared", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveDeploymentsStoreSettings), "ocel-deployments-store-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveReleasesStoreSettings), "ocel-releases-store-preview")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}
 
-		meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, classes)
+		meta := doMetadataFromMultipart(t, testStoreWorker(), releasesStoreWorker, classes)
 		if migrations, present := meta["migrations"]; present {
-			t.Fatalf("upload declares migrations %v against a script that already has DeploymentsStore; "+
+			t.Fatalf("upload declares migrations %v against a script that already has ReleasesStore; "+
 				"Cloudflare rejects this with 10074", migrations)
 		}
 	})

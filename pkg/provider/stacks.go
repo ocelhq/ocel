@@ -68,13 +68,13 @@ type Bindings interface {
 }
 
 type AppSpec struct {
-	App        string
-	Framework  string
-	Entry      string
-	Deployment string
-	Compute    Compute
-	Router     router.Kind
-	Functions  []FunctionSpec
+	App       string
+	Framework string
+	Entry     string
+	BuildID   string
+	Compute   Compute
+	Router    router.Kind
+	Functions []FunctionSpec
 
 	Image                     string
 	HealthCheckPath           string

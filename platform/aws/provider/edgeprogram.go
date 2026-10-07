@@ -34,9 +34,9 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		PreviewBaseDomain:        req.PreviewBaseDomain,
 		PreviewKey:               req.PreviewKey,
 		Origin:                   values.Bindings(),
-		StoreScriptName:          params.DeploymentsStore.ScriptName,
-		StoreEndpoint:            params.DeploymentsStore.Endpoint,
-		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCredential,
+		StoreScriptName:          params.ReleasesStore.ScriptName,
+		StoreEndpoint:            params.ReleasesStore.Endpoint,
+		StoreBootstrapCredential: params.ReleasesStore.BootstrapCredential,
 		ISRWriterScriptName:      params.ISRWriter.ScriptName,
 	}
 	if params.EdgeValuesErr == nil {

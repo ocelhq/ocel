@@ -185,8 +185,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		if got.Tag != "v9" {
 			t.Errorf("tag = %q, want %q", got.Tag, "v9")
 		}
-		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].BuildID != "bld_api_1" {
-			t.Errorf("apps = %+v, want one api app with build id bld_api_1", got.Apps)
+		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].ServeBuildID != "bld_api_1" {
+			t.Errorf("apps = %+v, want one api app with serve build id bld_api_1", got.Apps)
 		}
 		if len(got.Apps) == 1 && !slices.Contains(got.Apps[0].URLs, "https://"+productionDomain) {
 			t.Errorf("apps = %+v, want api's URLs to include the hostname it serves on", got.Apps)

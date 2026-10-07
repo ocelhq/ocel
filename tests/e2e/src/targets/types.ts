@@ -40,7 +40,7 @@ export type PreviewRelease = {
   app: string;
   urls: string[];
   deploymentUrl: string;
-  deploymentId: string;
+  buildId: string;
 };
 
 export interface Previews {

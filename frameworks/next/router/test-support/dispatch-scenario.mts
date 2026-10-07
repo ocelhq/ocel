@@ -37,7 +37,7 @@ export function baseDeps(overrides: TestRouteDeps = {}): RouteDeps {
   return {
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: noAssets(),
     ...rest,

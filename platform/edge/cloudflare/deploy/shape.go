@@ -26,7 +26,7 @@ func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 		Shared: []pricing.Shaped{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
 			{Name: cache, Type: cost.TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
-			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(deploymentsStoreWorker)},
+			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(releasesStoreWorker)},
 			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
 		Environment: []pricing.Shaped{

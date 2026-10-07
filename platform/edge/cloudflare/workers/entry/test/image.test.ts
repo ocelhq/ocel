@@ -47,7 +47,7 @@ function imageDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing({ "/404.html": "<h1>not found</h1>" }),
     ...overrides,
@@ -179,8 +179,8 @@ describe("the /_next/image route", () => {
     const image = (deps: RouteDeps) =>
       serve(imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"), deps);
 
-    const first = imageDeps({ cache, imageOrigin, deploymentId: "d1" });
-    const second = imageDeps({ cache, imageOrigin, deploymentId: "d2" });
+    const first = imageDeps({ cache, imageOrigin, appBuildId: "d1" });
+    const second = imageDeps({ cache, imageOrigin, appBuildId: "d2" });
     expect(second.manifest.buildId).toBe(first.manifest.buildId);
     expect(first.manifest.assetHashes).toBeUndefined();
 

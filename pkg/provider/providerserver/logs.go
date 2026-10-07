@@ -195,13 +195,13 @@ func (h *handlers) chooseLogTargets(ctx context.Context, p provider.Provider, ti
 		return len(req.GetApps()) > 0 && !slices.Contains(req.GetApps(), stack.Name.App)
 	})
 	if !req.GetAllReleases() {
-		live, err := h.readLiveBuilds(ctx, tier, env, req)
+		live, err := h.readLiveReleases(ctx, tier, env, req)
 		if err != nil {
 			return nil, err
 		}
 		apps = slices.DeleteFunc(apps, func(stack stackrecords.NamedStack) bool {
-			build, promoted := live[stack.Name.App]
-			return !promoted || build != stack.Build
+			release, promoted := live[stack.Name.App]
+			return !promoted || release != stack.Release
 		})
 	}
 	var targets []provider.LogTarget
@@ -225,7 +225,7 @@ func refuseUndeployedApps(deployed []stackrecords.NamedStack, named []string) er
 	return nil
 }
 
-func (h *handlers) readLiveBuilds(ctx context.Context, tier environment.Tier, env string, req *contractv1.ReadLogsRequest) (map[string]string, error) {
+func (h *handlers) readLiveReleases(ctx context.Context, tier environment.Tier, env string, req *contractv1.ReadLogsRequest) (map[string]string, error) {
 	session, err := h.openEdgeSession(ctx, tier, req.GetSlug(), req.GetEdge())
 	if undeployed(err) {
 		return nil, nil
@@ -239,7 +239,7 @@ func (h *handlers) readLiveBuilds(ctx context.Context, tier environment.Tier, en
 	}
 	for _, promoted := range pointer.Promotions {
 		if promoted.PromotionID == pointer.Active {
-			return promoted.Builds, nil
+			return promoted.Releases, nil
 		}
 	}
 	return nil, nil

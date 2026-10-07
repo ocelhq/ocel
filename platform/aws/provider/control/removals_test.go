@@ -56,7 +56,7 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		variablesKeyStack: {summary("VariablesKey", "AWS::KMS::Key")},
 	}
 	b.Edge = &planningEdge{removals: []edge.PlanChange{
-		{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanDelete},
+		{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanDelete},
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete, Slow: true},
 	}}
 	b.Edges = registryOf(b.Edge)

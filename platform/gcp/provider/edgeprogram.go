@@ -31,9 +31,9 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		PreviewBaseDomain:        req.PreviewBaseDomain,
 		PreviewKey:               req.PreviewKey,
 		Origin:                   cloudflare.OriginBindings{ClientCertificate: adopted.ClientCertificate.ID, RefreshesThroughQueue: true},
-		StoreScriptName:          adopted.DeploymentsStore.ScriptName,
-		StoreEndpoint:            adopted.DeploymentsStore.Endpoint,
-		StoreBootstrapCredential: credentials.DeploymentsStore,
+		StoreScriptName:          adopted.ReleasesStore.ScriptName,
+		StoreEndpoint:            adopted.ReleasesStore.Endpoint,
+		StoreBootstrapCredential: credentials.ReleasesStore,
 		ISRWriterScriptName:      adopted.ISRWriter.ScriptName,
 		Values:                   adopted.Values,
 	}.Build()

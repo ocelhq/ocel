@@ -60,8 +60,8 @@ func releasePrefix(release int) string {
 func stagedRelease(t *testing.T, stack edge.EdgeStack, app, build string, release int, framework string) {
 	t.Helper()
 	physical := "ocel-shop-prod-" + app
-	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.DeploymentRecord{
-		App: app, Build: build, Physical: physical, Framework: framework,
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.ReleaseRecord{
+		App: app, Release: build, Physical: physical, Framework: framework,
 		IsrPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
 		Revisions: map[string]string{physical: physical + "-" + build},
 	}); err != nil {
@@ -72,8 +72,8 @@ func stagedRelease(t *testing.T, stack edge.EdgeStack, app, build string, releas
 func stagedFunctionRelease(t *testing.T, stack edge.EdgeStack, app, build string, release int, framework string) {
 	t.Helper()
 	entry := "ocel-shop-prod-" + app
-	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.DeploymentRecord{
-		App: app, Build: build, EntryFunction: entry, Framework: framework,
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.ReleaseRecord{
+		App: app, Release: build, EntryFunction: entry, Framework: framework,
 		IsrPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
 		Revisions: map[string]string{entry: entry + "-" + build},
 	}); err != nil {
@@ -84,7 +84,7 @@ func stagedFunctionRelease(t *testing.T, stack edge.EdgeStack, app, build string
 func promoted(t *testing.T, stack edge.EdgeStack, log progress.Log, id, pointer string, builds map[string]string) {
 	t.Helper()
 	err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{
-		Pointer: pointer, Promotion: router.Promotion{PromotionID: id, Builds: builds},
+		Pointer: pointer, Promotion: router.Promotion{PromotionID: id, Releases: builds},
 	}, log)
 	if err != nil {
 		t.Fatalf("MovePointer(%s) = %v", id, err)
@@ -246,7 +246,7 @@ func TestADeploymentPointerRecordsNoRelease(t *testing.T) {
 	t.Parallel()
 
 	_, w, shared := reconciled(t)
-	records := map[string]router.DeploymentRecord{"web": {App: "web", Framework: buildoutput.FrameworkNext, IsrPrefix: releasePrefix(1), Physical: "ocel-shop-prod-web", Revisions: map[string]string{"ocel-shop-prod-web": "rev-1"}}}
+	records := map[string]router.ReleaseRecord{"web": {App: "web", Framework: buildoutput.FrameworkNext, IsrPrefix: releasePrefix(1), Physical: "ocel-shop-prod-web", Revisions: map[string]string{"ocel-shop-prod-web": "rev-1"}}}
 	move := router.PointerMove{Pointer: router.FormatDeploymentPointer("pr-7", "p1"), Records: records}
 	if err := (routerStack{s: shared.(*stack)}).MovePointer(context.Background(), move, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer = %v", err)
@@ -300,7 +300,7 @@ func TestAReleaseTagIsTheReleaseTokenOfTheISRPrefix(t *testing.T) {
 		"production/shop/web/rXYZ/isr":        "",
 		"":                                    "",
 	} {
-		if got := readReleaseTag(router.DeploymentRecord{IsrPrefix: prefix}); got != want {
+		if got := readReleaseTag(router.ReleaseRecord{IsrPrefix: prefix}); got != want {
 			t.Errorf("readReleaseTag(%q) = %q, want %q", prefix, got, want)
 		}
 	}
@@ -389,8 +389,8 @@ func TestPromotingAPreviewAliasClearsOnlyTheHostnamesItMovesNeverTheDeploymentHo
 	alias := router.PointerMove{
 		Pointer:   "pr-7",
 		Hosts:     []edge.PreviewHost{{Hostname: "shop-pr-7.preview.example.com", App: "web"}},
-		Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b2"}},
-		Records:   map[string]router.DeploymentRecord{"web": previewRecord("b2")},
+		Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b2"}},
+		Records:   map[string]router.ReleaseRecord{"web": previewRecord("b2")},
 	}
 	if err := stack.MovePointer(context.Background(), alias, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(alias) = %v", err)
@@ -424,8 +424,8 @@ func TestAPreviewPromotionClearsOnlyThePreviewHostnamesItServes(t *testing.T) {
 	bound(t, stack, "shop.example.com", "web")
 	stagedRelease(t, stack, "web", "b0", 1, "")
 	promoted(t, stack, progress.Discard(), "p0", "", map[string]string{"web": "b0"})
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "shop--pr-7", IsrPrefix: releasePrefix(2),
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: "shop--pr-7", IsrPrefix: releasePrefix(2),
 		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-b1"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -434,7 +434,7 @@ func TestAPreviewPromotionClearsOnlyThePreviewHostnamesItServes(t *testing.T) {
 	err := openRouter(stack).MovePointer(ctx, router.PointerMove{
 		Pointer:   "pr-7",
 		Hosts:     []edge.PreviewHost{{Hostname: "shop-pr-7.preview.example.com", App: "web"}},
-		Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
+		Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}},
 	}, progress.Discard())
 	if err != nil {
 		t.Fatalf("MovePointer = %v", err)

@@ -136,12 +136,12 @@ func TestBuild(t *testing.T) {
 			{Framework: "next", Name: "docs", Cwd: filepath.Join(root, "apps/docs"), OutputDir: buildoutput.AppRoot(outputDir, "docs")},
 		} {
 			app := got.Apps[i]
-			recorded, err := DeploymentID(root, want.Name)
+			recorded, err := BuildID(root, want.Name)
 			if err != nil {
-				t.Fatalf("DeploymentID(%s): %v", want.Name, err)
+				t.Fatalf("BuildID(%s): %v", want.Name, err)
 			}
-			if app.DeploymentID != recorded {
-				t.Errorf("%s builds under deployment id %q, want its recorded %q", want.Name, app.DeploymentID, recorded)
+			if app.BuildID != recorded {
+				t.Errorf("%s builds under build id %q, want its recorded %q", want.Name, app.BuildID, recorded)
 			}
 			if app.Framework != want.Framework || app.Name != want.Name || app.Cwd != want.Cwd || app.OutputDir != want.OutputDir || app.Folder != want.Folder || app.Entrypoint != "" || app.FunctionDir != "" {
 				t.Errorf("app[%d] = %+v, want %+v", i, app, want)
@@ -150,8 +150,8 @@ func TestBuild(t *testing.T) {
 				t.Errorf("%s POSTHOG_ID = %q, want %q", want.Name, app.Env["POSTHOG_ID"], want.Env["POSTHOG_ID"])
 			}
 		}
-		if got.Apps[0].DeploymentID == got.Apps[1].DeploymentID {
-			t.Errorf("both apps build under %q, want an id each", got.Apps[0].DeploymentID)
+		if got.Apps[0].BuildID == got.Apps[1].BuildID {
+			t.Errorf("both apps build under %q, want an id each", got.Apps[0].BuildID)
 		}
 
 		fns, err := ReadFunctions(root)
@@ -534,8 +534,8 @@ func TestBuild(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		if got, err := BuildID(root, "api"); err != nil || len(got) != 16 {
-			t.Errorf("BuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
+		if got, err := ServeBuildID(root, "api"); err != nil || len(got) != 16 {
+			t.Errorf("ServeBuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
 		}
 	})
 
@@ -741,8 +741,8 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)
 			}
 		}
-		if got, err := BuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
-			t.Errorf("BuildID = %q, %v, want the artifact hash", got, err)
+		if got, err := ServeBuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
+			t.Errorf("ServeBuildID = %q, %v, want the artifact hash", got, err)
 		}
 	})
 }

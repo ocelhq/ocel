@@ -41,12 +41,12 @@ type Rollback struct {
 
 type Tags map[string]string
 
-func ReadTags(ctx context.Context, pins Pins, record router.DeploymentRecord) (Tags, error) {
+func ReadTags(ctx context.Context, pins Pins, record router.ReleaseRecord) (Tags, error) {
 	if record.Revisions[ResolveService(record)] == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"build %s of %s recorded no revision of the service it answers on, and a deployment is answered on the tags of the revisions its deploy created: "+
+			"release %s of %s recorded no revision of the service it answers on, and a deployment is answered on the tags of the revisions its deploy created: "+
 				"re-deploy %s so its release records one",
-			record.Build, record.App, record.App)
+			record.Release, record.App, record.App)
 	}
 	tags := Tags{}
 	for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
@@ -134,14 +134,14 @@ func MovePointer(ctx context.Context, pins Pins, pointers Pointers, move router.
 }
 
 func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progress progress.Log) error {
-	var pinning []router.DeploymentRecord
+	var pinning []router.ReleaseRecord
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
 		record := move.Records[app]
 		if len(record.Revisions) == 0 {
 			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
-				"build %s of %s recorded no revision, and a promotion on Cloud Run is a traffic pin onto the revision the build deployed: "+
+				"release %s of %s recorded no revision, and a promotion on Cloud Run is a traffic pin onto the revision the release deployed: "+
 					"re-deploy %s so its release records one, then promote that",
-				record.Build, app, app)}
+				record.Release, app, app)}
 		}
 		pinning = append(pinning, record)
 	}
@@ -169,7 +169,7 @@ func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progres
 	return nil
 }
 
-func WarmRevisions(ctx context.Context, warm func(ctx context.Context, service, revision, path string) error, records map[string]router.DeploymentRecord, progress progress.Log) {
+func WarmRevisions(ctx context.Context, warm func(ctx context.Context, service, revision, path string) error, records map[string]router.ReleaseRecord, progress progress.Log) {
 	var (
 		waiting sync.WaitGroup
 		mu      sync.Mutex
@@ -317,7 +317,7 @@ func readRollback(ctx context.Context, pins Pins, each pinned) (Rollback, error)
 	return Rollback{Previous: earlier.Previous, Opened: rollback.Opened || earlier.Opened}, nil
 }
 
-func ResolveService(record router.DeploymentRecord) string {
+func ResolveService(record router.ReleaseRecord) string {
 	if record.Physical != "" {
 		return record.Physical
 	}

@@ -14,7 +14,7 @@ func TestAStagedEnvelopeIsSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) 
 	l := openProjectLedger(fake.NewProvider(fake.Options{}), environment.TierProduction, "shop")
 	const envelope = "the data key the edge opens its secrets with"
 
-	if err := l.putStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Envelope: envelope}); err != nil {
+	if err := l.putStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Envelope: envelope}); err != nil {
 		t.Fatalf("putStaged: %v", err)
 	}
 
@@ -25,7 +25,7 @@ func TestAStagedEnvelopeIsSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) 
 	if kept.Envelope == "" || kept.Envelope == envelope {
 		t.Errorf("the ledger keeps the envelope as %q, want it sealed: whoever reads the origin's table would otherwise hold the key to every secret the edge serves", kept.Envelope)
 	}
-	records, err := l.readRecords(ctx, router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}, []string{"web"})
+	records, err := l.readRecords(ctx, router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}, []string{"web"})
 	if err != nil {
 		t.Fatalf("records: %v", err)
 	}
