@@ -325,6 +325,10 @@
           "default": 0,
           "title": "App Outcome"
         },
+        "release": {
+          "default": "",
+          "type": "string"
+        },
         "storagePrefix": {
           "default": "",
           "type": "string"
