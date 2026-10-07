@@ -174,7 +174,7 @@ func phaseNames() map[string]bool {
 func TestAFailedDeployCarriesItsErrorCodeAndNoErrorText(t *testing.T) {
 	enableTelemetry(t)
 	fixture, dependencies := setUpNamedAppProject(t)
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{}, &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: errors.New("cannot compile /home/someone/secret-path/app.ts")}
 	}
 
@@ -196,7 +196,7 @@ func TestAFailedDeployCarriesItsErrorCodeAndNoErrorText(t *testing.T) {
 func TestAFailedDeployWithNoCodeReportsInternal(t *testing.T) {
 	enableTelemetry(t)
 	fixture, dependencies := setUpNamedAppProject(t)
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{}, errors.New("simulated build failure")
 	}
 
@@ -212,7 +212,7 @@ func TestADeployCancelledMidRunReportsItAsInterrupted(t *testing.T) {
 	enableTelemetry(t)
 	fixture, dependencies := setUpNamedAppProject(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		cancel()
 		return build.Output{}, ctx.Err()
 	}
@@ -257,7 +257,7 @@ func TestAPreviewDeployRecordsAPreviewTarget(t *testing.T) {
 func TestAFailedPreviewDeployCarriesItsErrorCode(t *testing.T) {
 	enableTelemetry(t)
 	fixture, dependencies := setUpNamedAppProject(t)
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{}, &clierror.Error{Code: clierror.CodeProviderUnavailable}
 	}
 	opts := previewUpOptions{name: "staging", persistent: true}
@@ -300,7 +300,7 @@ func TestADeployThatFailedIsStillTheInstallsFirstDeployUntilOneSucceeds(t *testi
 	enableTelemetry(t)
 	fixture, dependencies := setUpNamedAppProject(t)
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{}, errors.New("simulated build failure")
 	}
 

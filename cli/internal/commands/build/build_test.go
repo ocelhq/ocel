@@ -43,7 +43,7 @@ export default {
 		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: source}}, nil
 	}
 	var handed build.HostedWorkers
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, workers build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]build.AppVariables, _ map[string]string, workers build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		handed = workers
 		return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 	}
@@ -73,7 +73,7 @@ export default {
 
 		var built *project.Project
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 			built = cfg
 			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
@@ -119,7 +119,7 @@ export default {
 
 		var archs map[string]string
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]build.AppVariables, asked map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
 				Functions: []build.Function{{Route: "index", App: "api"}},
@@ -153,7 +153,7 @@ export default { slug: "test-app" };
 `)
 
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
@@ -210,7 +210,7 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 
 	dependencies := newTestDependencies()
 	var built *project.Project
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		built = cfg
 		return build.Output{}, nil
 	}
@@ -233,9 +233,9 @@ export default {
 };
 `)
 
-	var env map[string]map[string]string
+	var env map[string]build.AppVariables
 	dependencies := newTestDependencies()
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		env = handed
 		return build.Output{}, nil
 	}
@@ -243,7 +243,7 @@ export default {
 	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
-	if got, want := env["web"][processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
+	if got, want := env["web"].Env[processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
 		t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
 	}
 }
@@ -257,7 +257,7 @@ func TestBuildPointsANextAppAtTheCacheHandlerDirectoryItsProviderDeclares(t *tes
 
 	dependencies := newTestDependencies()
 	var host build.Host
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
 		host = handed
 		return build.Output{}, nil
 	}
@@ -280,7 +280,7 @@ func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testin
 
 	dependencies := newTestDependencies()
 	var host build.Host
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
 		host = handed
 		return build.Output{}, nil
 	}
@@ -306,7 +306,7 @@ export default {
 
 	dependencies := newTestDependencies()
 	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, nil
 	}
@@ -338,7 +338,7 @@ export default {
 
 	dependencies := newTestDependencies()
 	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, nil
 	}

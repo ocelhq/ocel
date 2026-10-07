@@ -1191,12 +1191,12 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		envSet(t, fixture, "PAGE_ID", "page_admin", envOptions{folder: "/admin"})
 
 		dependencies := newTestDependencies()
-		got := captureBuildEnv(&dependencies)
+		got := captureBuildVariables(&dependencies)
 
 		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
 			t.Fatalf("runDeploy err = %v; output=%s", err, out)
 		}
-		if (*got)["web"]["PAGE_ID"] != "page_web" || (*got)["admin"]["PAGE_ID"] != "page_admin" {
+		if (*got)["web"].Env["PAGE_ID"] != "page_web" || (*got)["admin"].Env["PAGE_ID"] != "page_admin" {
 			t.Errorf("build environments = %v, want each app the value it resolved", *got)
 		}
 	})
@@ -1235,12 +1235,12 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		writeRootApp(t, fixture.Root)
 
 		dependencies := newTestDependencies()
-		got := captureBuildEnv(&dependencies)
+		got := captureBuildVariables(&dependencies)
 
 		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
 			t.Fatalf("runDeploy err = %v; output=%s", err, out)
 		}
-		if (*got)[clitest.FixtureSlug]["PAGE_ID"] != "page_owned_by_platform" {
+		if (*got)[clitest.FixtureSlug].Env["PAGE_ID"] != "page_owned_by_platform" {
 			t.Errorf("build environment = %v, want the value the other project stores", *got)
 		}
 	})
@@ -1299,7 +1299,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 				fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 				envSet(t, fixture, "PAGE_ID", "page_shared", envOptions{preview: true})
 				envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
-				got := captureBuildEnv(&dependencies)
+				got := captureBuildVariables(&dependencies)
 
 				if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: tc.deploying, persistent: true}); err != nil {
 					t.Fatalf("runPreviewUp err = %v; output=%s", err, out)
@@ -1307,9 +1307,9 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 				if len(*got) == 0 {
 					t.Fatal("no app was built, so nothing resolved a value")
 				}
-				for app, env := range *got {
-					if env["PAGE_ID"] != tc.want {
-						t.Errorf("%s built with PAGE_ID=%q, want %q", app, env["PAGE_ID"], tc.want)
+				for app, built := range *got {
+					if built.Env["PAGE_ID"] != tc.want {
+						t.Errorf("%s built with PAGE_ID=%q, want %q", app, built.Env["PAGE_ID"], tc.want)
 					}
 				}
 			})
@@ -1319,7 +1319,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
 		fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
-		got := captureBuildEnv(&dependencies)
+		got := captureBuildVariables(&dependencies)
 
 		if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true}); err != nil {
 			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the declarations; output=%s", err, out)
@@ -1327,9 +1327,9 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		if len(*got) == 0 {
 			t.Fatal("no app was built, so nothing resolved a value")
 		}
-		for app, env := range *got {
-			if env["PAGE_ID"] != "page_staging" {
-				t.Errorf("%s built with PAGE_ID=%q, want %q", app, env["PAGE_ID"], "page_staging")
+		for app, built := range *got {
+			if built.Env["PAGE_ID"] != "page_staging" {
+				t.Errorf("%s built with PAGE_ID=%q, want %q", app, built.Env["PAGE_ID"], "page_staging")
 			}
 		}
 	})
@@ -1338,7 +1338,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		envSet(t, fixture, "PAGE_ID", "page_shared", envOptions{preview: true})
 		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
-		got := captureBuildEnv(&dependencies)
+		got := captureBuildVariables(&dependencies)
 
 		up := func(when string) {
 			t.Helper()
@@ -1349,9 +1349,9 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 			if len(*got) == 0 {
 				t.Fatalf("no app was built %s, so nothing resolved a value", when)
 			}
-			for app, env := range *got {
-				if env["PAGE_ID"] != "page_staging" {
-					t.Errorf("%s built %s with PAGE_ID=%q, want %q", when, app, env["PAGE_ID"], "page_staging")
+			for app, built := range *got {
+				if built.Env["PAGE_ID"] != "page_staging" {
+					t.Errorf("%s built %s with PAGE_ID=%q, want %q", when, app, built.Env["PAGE_ID"], "page_staging")
 				}
 			}
 		}
@@ -1679,17 +1679,17 @@ export default {
 
 func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
 	stubRecordedDeploymentIDs(dependencies)
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		*built = true
 		return functionsOnDisk(cfg)
 	}
 }
 
-func captureBuildEnv(dependencies *Dependencies) *map[string]map[string]string {
+func captureBuildVariables(dependencies *Dependencies) *map[string]build.AppVariables {
 	stubRecordedDeploymentIDs(dependencies)
-	var got map[string]map[string]string
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
-		got = envByApp
+	var got map[string]build.AppVariables
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		got = variables
 		return functionsOnDisk(cfg)
 	}
 	return &got
@@ -1722,7 +1722,7 @@ func storedValue(t *testing.T, fixture clitest.FakeProject, key string) variable
 func recordingHost(dependencies *Dependencies) *build.Host {
 	handed := &build.Host{}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		*handed = host
 		return buildApps(ctx, cfg, env, archs, workers, host, log)
 	}

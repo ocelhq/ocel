@@ -28,7 +28,7 @@ func registryProject(t *testing.T, registry string) (Dependencies, clitest.FakeP
 	stubAppImages(&dependencies, "api")
 	built := false
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		built = true
 		return buildApps(ctx, cfg, env, archs, workers, host, log)
 	}
@@ -273,7 +273,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		built = archs
 		return buildApps(ctx, cfg, env, archs, workers, host, log)
 	}
@@ -304,7 +304,7 @@ func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		built = archs
 		return buildApps(ctx, cfg, env, archs, workers, host, log)
 	}

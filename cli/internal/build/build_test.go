@@ -120,7 +120,7 @@ func TestBuild(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, map[string]map[string]string{"web": {"POSTHOG_ID": "ph-web"}}, Log{}); err != nil {
+		if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{"POSTHOG_ID": "ph-web"}}}, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -450,7 +450,7 @@ func TestBuild(t *testing.T) {
 	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
 		t.Parallel()
 
-		for _, name := range []string{"PATH", processenv.AppFolderEnvVar, processenv.PhaseEnvVar} {
+		for _, name := range []string{"PATH", processenv.AppFolderEnvVar, processenv.PhaseEnvVar, processenv.LiveDirEnvVar} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
@@ -463,7 +463,7 @@ func TestBuild(t *testing.T) {
 				}}
 
 				cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
-				err := builder.Build(context.Background(), cfg, map[string]map[string]string{"web": {name: "hijacked"}}, Log{})
+				err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{name: "hijacked"}}}, Log{})
 				if err == nil || !strings.Contains(err.Error(), name) {
 					t.Errorf("Build err = %v, want a refusal naming %q", err, name)
 				}
@@ -789,8 +789,8 @@ type nodeOnly struct {
 	host Host
 }
 
-func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, env map[string]map[string]string, log Log) error {
-	return tools{node: n.node}.functions(ctx, cfg, env, n.host, log)
+func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, log Log) error {
+	return tools{node: n.node}.functions(ctx, cfg, variables, n.host, log)
 }
 
 func outputRoot(t *testing.T, projectDir string) string {

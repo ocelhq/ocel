@@ -1126,7 +1126,7 @@ func TestAFirstPreviewUpWhoseBuildFailsAfterItsInfraIsProvisionedLeavesThePrevie
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := previewDependencies("feature/login", "")
 	stubBuild(&dependencies, apiFunction())
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{}, errors.New("simulated build failure")
 	}
 
