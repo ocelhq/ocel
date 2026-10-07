@@ -20,6 +20,7 @@ var (
 	containerRuntime  = load("dist/container-runtime-" + ContainerArch)
 	envSourceSync     = load("dist/envsourcesync-" + ContainerArch)
 	realtimeGateway   = load("dist/realtime-gateway-" + ContainerArch)
+	bastion           = load("dist/bastion-" + ContainerArch)
 	nextServerRuntime = loadNextServerRuntime()
 )
 
@@ -47,6 +48,8 @@ func ContainerRuntime(arch string) ([]byte, error) {
 func EnvSourceSync() []byte { return envSourceSync }
 
 func RealtimeGateway() []byte { return realtimeGateway }
+
+func Bastion() []byte { return bastion }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

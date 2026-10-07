@@ -96,3 +96,19 @@ func TestTheRealtimeGatewayIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns
 		t.Error("RealtimeGateway() is another payload")
 	}
 }
+
+func TestTheBastionIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t *testing.T) {
+	binary, err := elf.NewFile(bytes.NewReader(Bastion()))
+	if err != nil {
+		t.Fatalf("Bastion() is no ELF binary: %v", err)
+	}
+	if binary.Machine != elf.EM_X86_64 {
+		t.Errorf("Bastion() is built for %s, and Cloud Run runs x86_64 alone", binary.Machine)
+	}
+	if section := binary.Section(".interp"); section != nil {
+		t.Error("the bastion asks for a dynamic loader, and the image it runs in has none")
+	}
+	if bytes.Equal(Bastion(), RealtimeGateway()) || bytes.Equal(Bastion(), EnvSourceSync()) || bytes.Equal(Bastion(), containerRuntime) {
+		t.Error("Bastion() is another payload")
+	}
+}

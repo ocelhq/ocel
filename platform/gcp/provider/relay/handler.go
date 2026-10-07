@@ -45,6 +45,10 @@ func NewHandler(allowed []string) http.Handler {
 			http.Error(w, "the relay forwards to this environment's databases and caches alone", http.StatusForbidden)
 			return
 		}
+		if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			http.Error(w, "the relay speaks websocket alone", http.StatusUpgradeRequired)
+			return
+		}
 		dialed, err := dial(r.Context(), target)
 		if err != nil {
 			http.Error(w, "the relay could not reach the target: "+err.Error(), http.StatusBadGateway)
