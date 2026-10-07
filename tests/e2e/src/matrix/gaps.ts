@@ -36,7 +36,17 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { buildVariables, deploy, iac, kv, lifecycle, prerender, realtime, sdk, tasks } from "./fixtures";
+import {
+  buildVariables,
+  deploy,
+  iac,
+  kv,
+  lifecycle,
+  prerender,
+  realtime,
+  sdk,
+  tasks,
+} from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
