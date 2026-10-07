@@ -77,7 +77,7 @@ func ServeBuildID(projectDir, app string) (string, error) {
 		return "", err
 	}
 	desc, _, err := buildoutput.ReadServeDescriptor(root, app)
-	return desc.BuildID, err
+	return desc.ServeBuildID, err
 }
 
 func builtApps(root string) ([]string, error) {

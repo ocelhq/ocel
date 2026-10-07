@@ -24,13 +24,13 @@ func TestServeBuildID(t *testing.T) {
 		{
 			name:     "reads the serve descriptor every framework writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","buildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","serveBuildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","buildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","serveBuildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
@@ -55,10 +55,10 @@ func TestServeBuildID(t *testing.T) {
 			}
 			got, err := ServeBuildID(root, tt.app)
 			if err != nil {
-				t.Fatalf("ServeServeBuildID(%q) = %v", tt.app, err)
+				t.Fatalf("ServeBuildID(%q) = %v", tt.app, err)
 			}
 			if got != tt.want {
-				t.Errorf("ServeServeBuildID(%q) = %q, want %q", tt.app, got, tt.want)
+				t.Errorf("ServeBuildID(%q) = %q, want %q", tt.app, got, tt.want)
 			}
 		})
 	}

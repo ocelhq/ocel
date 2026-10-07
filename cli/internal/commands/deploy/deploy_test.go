@@ -259,7 +259,7 @@ func readDeployRecord(t *testing.T, root string) deployrecord.Record {
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"node","buildId":"`+buildID+`"}`)
+		`{"framework":"node","serveBuildId":"`+buildID+`"}`)
 }
 
 func setUpProviderProject(t *testing.T, options string, transforms string) (clitest.FakeProject, Dependencies) {

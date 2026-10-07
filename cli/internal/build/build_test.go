@@ -662,7 +662,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
 		}
-		if desc.Framework != "node" || len(desc.BuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
+		if desc.Framework != "node" || len(desc.ServeBuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
 			t.Errorf("serve descriptor = %+v, want a node app's descriptor", desc)
 		}
 		if _, err := os.Stat(filepath.Join(functionDir, edge.ServeDescriptorFile)); err == nil {
