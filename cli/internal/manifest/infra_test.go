@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"slices"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -75,6 +76,38 @@ func TestTheInfraManifestOfAContainerAppIsAssembledBeforeItsImageIsBuilt(t *test
 	}
 	if len(infra.GetResources()) != 1 {
 		t.Errorf("the infra manifest declares %d resources, want orders", len(infra.GetResources()))
+	}
+}
+
+func TestTheInfraManifestServesTheProductionDomainsDeclaredOnItsApps(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{
+		Slug:    "shop",
+		Dir:     t.TempDir(),
+		Domains: project.Domains{Production: []string{"shop.example"}},
+		Apps:    []project.App{{Name: "api", Path: "apps/api", Compute: "serverless", ProductionDomains: []string{"api.shop.example"}}},
+	}
+	resources := []declaration.Resource{
+		{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "apps/api/src/db.ts:1"},
+	}
+
+	infra, err := AssembleInfra(InfraInput{Project: cfg, Tier: environmentv1.Tier_TIER_PRODUCTION, Resources: resources})
+	if err != nil {
+		t.Fatalf("AssembleInfra() error = %v", err)
+	}
+	var served []string
+	for _, domains := range infra.GetDomains() {
+		if domains.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+			served = append(served, domains.GetHostnames()...)
+		}
+	}
+	if want := []string{"shop.example", "api.shop.example"}; !slices.Equal(served, want) {
+		t.Errorf("the infra manifest serves production on %v, want %v: the provider refuses infra for a production deploy with nowhere to serve, and the app that declares api.shop.example is not in it",
+			served, want)
+	}
+	if got := cfg.Domains.Production; !slices.Equal(got, []string{"shop.example"}) {
+		t.Errorf("AssembleInfra() changed the project's production domains to %v", got)
 	}
 }
 

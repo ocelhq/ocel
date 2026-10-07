@@ -247,7 +247,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			workerCeilings: facts.workerCeilings,
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
-			infra:          newInfraProvisioning(provider, cfg, env, facts.workerCeilings, opts.dry, opts.prebuilt),
+			infra:          newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt),
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
 		}

@@ -115,7 +115,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			Tier:      environmentv1.Tier_TIER_PRODUCTION,
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
-		infra := newInfraProvisioning(provider, cfg, env, facts.workerCeilings, opts.dry, opts.prebuilt)
+		infra := newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt)
 
 		browser := dependencies.IsBrowserReachable(stdin)
 		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")

@@ -1121,7 +1121,7 @@ func TestAFirstPreviewUpThatBuildsNothingToDeployLeavesNoPreviewBehind(t *testin
 	}
 }
 
-func TestAFirstPreviewUpWhoseBuildFailsLeavesNoPreviewBehind(t *testing.T) {
+func TestAFirstPreviewUpWhoseBuildFailsAfterItsInfraIsProvisionedLeavesThePreviewRecorded(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := previewDependencies("feature/login", "")
@@ -1136,9 +1136,16 @@ func TestAFirstPreviewUpWhoseBuildFailsLeavesNoPreviewBehind(t *testing.T) {
 		t.Fatal("runPreviewUp succeeded through a failed build")
 	}
 
-	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
-	if !errors.Is(err, keyvalue.ErrNotFound) {
-		t.Errorf("reading staging's record after its first preview up failed to build = %v, want nothing recorded: `ocel preview ls` would list a preview that was never deployed", err)
+	if sent := sentProvisionInfras(t, fixture); len(sent) != 1 {
+		t.Fatalf("the CLI sent %d ProvisionInfra requests, want the infra provisioned before the build failed", len(sent))
+	}
+	meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), fixture.Provider.KeyValues(), environment.TierPreview, clitest.FixtureSlug, "staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Lifecycle != stackrecords.LifecyclePersistent {
+		t.Errorf("staging records lifecycle %q after its first preview up failed to build, want persistent: its infra was provisioned, and `ocel preview rm` finds it through that record",
+			meta.Lifecycle)
 	}
 }
 

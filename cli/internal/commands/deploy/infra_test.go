@@ -9,7 +9,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -105,7 +109,44 @@ func TestAPersistentPreviewProvisionsItsInfraBeforeItBuilds(t *testing.T) {
 	if len(infra) != 1 || infra[0].GetEnvironment().GetIdentity() != "staging" {
 		t.Fatalf("the CLI sent %d ProvisionInfra requests, want one for preview staging", len(infra))
 	}
-	if !sentDeploy(t, fixture).GetInfraProvisioned() {
+	deployed := sentDeploy(t, fixture)
+	if !deployed.GetInfraProvisioned() {
 		t.Error("the preview deploy did not say its infra was provisioned")
+	}
+	if alias := infra[0].GetAliasToken(); alias == "" || alias != deployed.GetAliasToken() {
+		t.Errorf("ProvisionInfra was sent the alias token %q and Deploy %q, want the one alias the build was given in both: the provider records it with the preview",
+			alias, deployed.GetAliasToken())
+	}
+}
+
+func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	ctx := context.Background()
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
+	uploads := declaration.Resource{Name: "uploads", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Bucket: &resourcesv1.BucketConfig{}, Source: "src/files.ts:1"}
+
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project}, false, false)
+		for _, resources := range [][]declaration.Resource{{orders}, {orders}, {orders, uploads}} {
+			if err := infra.provision(ctx, resources, nil); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("provision() error = %v; stdout=%s", err, stdout.String())
+	}
+
+	if sent := sentProvisionInfras(t, fixture); len(sent) != 2 {
+		t.Errorf("the CLI sent %d ProvisionInfra requests, want 2: one for orders, none again for the same orders, one once uploads is declared", len(sent))
 	}
 }

@@ -83,8 +83,7 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 		return nil, nil, err
 	}
 	steps := newBuildSteps(a.phase)
-	provisionInfra := func(ctx context.Context) error { return a.infra.provision(ctx, resources, inline) }
-	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers(), provisionInfra)
+	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers(), resources, inline)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,7 +98,7 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 	return assembled, inline, nil
 }
 
-func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers, provisionInfra func(context.Context) error) (build.Output, error) {
+func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers, resources []declaration.Resource, inline []*bindingsv1.Binding) (build.Output, error) {
 	cfg, span := a.cfg, a.span
 	conflicts, err := build.FindNextConfigConflicts(cfg, a.host)
 	if err != nil {
@@ -129,7 +128,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 		}
 	}
 	span.End(nil)
-	if err := provisionInfra(ctx); err != nil {
+	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
 	}
 	var built build.Output
