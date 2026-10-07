@@ -118,3 +118,40 @@ func TestForwardPortsRefusesABindingNothingPublished(t *testing.T) {
 		t.Errorf("ForwardPorts() error = %v, want a refusal naming missing", err)
 	}
 }
+
+func TestForwardPortsLeavesAPostgresBindingAddressedByAURLUnforwarded(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	if result, _ := deploy(t, client, inlinePostgresRequest(servePostgres(t, "170004", 0).url(), "17")); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the inline record published", result.GetError())
+	}
+	var asked []provider.Binding
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			asked = req.Bindings
+			forwards := make([]provider.PortForward, 0, len(req.Bindings))
+			for _, binding := range req.Bindings {
+				forwards = append(forwards, provider.PortForward{Binding: binding.Name, LocalAddress: "127.0.0.1:41234"})
+			}
+			return forwards, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest(inlineOrders))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	if len(asked) != 0 {
+		t.Errorf("the hook was asked to forward %v, want nothing: a client connects by the url, which a forward cannot carry the server name of", asked)
+	}
+	if len(responses) != 1 || len(responses[0].GetBindings()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{inlineOrders}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one leaving %s unforwarded", len(responses), inlineOrders)
+	}
+}
