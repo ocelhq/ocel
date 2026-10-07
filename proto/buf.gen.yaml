@@ -9,6 +9,7 @@ inputs:
       - proto/common/environment
       - proto/common/plan
       - proto/common/progress
+      - proto/console
       - proto/provider
 plugins:
   - local: protoc-gen-es

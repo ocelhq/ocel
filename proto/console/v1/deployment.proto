@@ -1,0 +1,389 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "app/resources/v1/variables.proto";
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "google/protobuf/timestamp.proto";
+import "opentelemetry/proto/trace/v1/trace.proto";
+
+enum DeploymentKind {
+  DEPLOYMENT_KIND_UNSPECIFIED = 0;
+  DEPLOYMENT_KIND_DEPLOY = 1;
+  DEPLOYMENT_KIND_PREVIEW_UP = 2;
+  DEPLOYMENT_KIND_ROLLBACK = 3;
+}
+
+enum DeploymentOutcome {
+  DEPLOYMENT_OUTCOME_UNSPECIFIED = 0;
+  DEPLOYMENT_OUTCOME_SUCCEEDED = 1;
+  DEPLOYMENT_OUTCOME_FAILED = 2;
+}
+
+enum AppOutcome {
+  APP_OUTCOME_UNSPECIFIED = 0;
+  APP_OUTCOME_SUCCEEDED = 1;
+  APP_OUTCOME_FAILED = 2;
+  APP_OUTCOME_SKIPPED = 3;
+}
+
+enum ComputeKind {
+  COMPUTE_KIND_UNSPECIFIED = 0;
+  COMPUTE_KIND_SERVERLESS = 1;
+  COMPUTE_KIND_CONTAINER = 2;
+}
+
+enum TriggerKind {
+  TRIGGER_KIND_UNSPECIFIED = 0;
+  TRIGGER_KIND_CLI = 1;
+  TRIGGER_KIND_CI = 2;
+  TRIGGER_KIND_GIT = 3;
+}
+
+enum EnvironmentEventKind {
+  ENVIRONMENT_EVENT_KIND_UNSPECIFIED = 0;
+  ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED = 1;
+  ENVIRONMENT_EVENT_KIND_DESTROYED = 2;
+}
+
+message ReportedEnvironment {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string identity = 2 [(buf.validate.field).string.max_len = 128];
+}
+
+message Provider {
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+
+  string region = 2 [(buf.validate.field).string.max_len = 64];
+}
+
+message Edge {
+  string kind = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+}
+
+message Promotion {
+  string id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  int64 seq = 2 [(buf.validate.field).int64.gt = 0];
+
+  string tag = 3 [(buf.validate.field).string.max_len = 128];
+}
+
+message Trigger {
+  TriggerKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string actor = 2 [(buf.validate.field).string.max_len = 256];
+}
+
+message Source {
+  string commit = 1 [(buf.validate.field).string = {min_len: 7, max_len: 64}];
+
+  string branch = 2 [(buf.validate.field).string.max_len = 256];
+
+  bool dirty = 3;
+}
+
+message CI {
+  string provider = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+
+  string repo = 2 [(buf.validate.field).string.max_len = 256];
+
+  string run_url = 3 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {uri: true, max_len: 2048}
+  }];
+
+  uint32 pr = 4;
+}
+
+message Runtime {
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 32}];
+
+  string arch = 2 [(buf.validate.field).string.max_len = 32];
+}
+
+message Variable {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+
+  app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  repeated string folders = 3 [(buf.validate.field).repeated = {
+    max_items: 100
+    items: {string: {max_len: 512}}
+  }];
+
+  string description = 4 [(buf.validate.field).string.max_len = 1000];
+
+  string group = 5 [(buf.validate.field).string.max_len = 256];
+
+  bool required = 6;
+}
+
+message App {
+  option (buf.validate.message).cel = {
+    id: "app.build_on_success"
+    message: "a succeeded app names the build it deployed"
+    expression: "this.outcome != 1 || this.build_id != ''"
+  };
+  option (buf.validate.message).cel = {
+    id: "app.release_on_success"
+    message: "a succeeded app names the release it made live"
+    expression: "this.outcome != 1 || this.release != ''"
+  };
+
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
+
+  string folder = 2 [(buf.validate.field).string.max_len = 512];
+
+  Runtime runtime = 3;
+
+  string framework = 4 [(buf.validate.field).string.max_len = 64];
+
+  ComputeKind compute = 5 [(buf.validate.field).enum.defined_only = true];
+
+  string build_id = 6 [(buf.validate.field).string.max_len = 256];
+
+  string release = 7 [(buf.validate.field).string.max_len = 256];
+
+  repeated string urls = 8 [(buf.validate.field).repeated = {
+    max_items: 100
+    items: {string: {uri: true}}
+  }];
+
+  repeated string hostnames = 9 [(buf.validate.field).repeated = {
+    max_items: 100
+    items: {string: {min_len: 1, max_len: 253}}
+  }];
+
+  string health_path = 10 [(buf.validate.field).string.max_len = 512];
+
+  AppOutcome outcome = 11 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string error = 12 [(buf.validate.field).string.max_len = 4000];
+
+  repeated Variable variables = 13 [(buf.validate.field).repeated.max_items = 500];
+}
+
+message ResourceBinding {
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  string source = 2 [(buf.validate.field).string.max_len = 512];
+
+  repeated string property_keys = 3 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {string: {min_len: 1, max_len: 256}}
+  }];
+}
+
+message Resource {
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  string type = 2 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+
+  ResourceBinding binding = 3;
+}
+
+message Grant {
+  string verb = 1 [(buf.validate.field).string.max_len = 64];
+
+  repeated string actions = 2 [(buf.validate.field).repeated = {
+    max_items: 100
+    items: {string: {min_len: 1, max_len: 128}}
+  }];
+}
+
+message Link {
+  string app = 1 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
+
+  string resource = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  repeated Grant grants = 3 [(buf.validate.field).repeated.max_items = 100];
+}
+
+message Usage {
+  string app = 1 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
+
+  string resource = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  repeated string files = 3 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {string: {max_len: 512}}
+  }];
+}
+
+message Deployment {
+  option (buf.validate.message).cel = {
+    id: "deployment.promotion_on_success"
+    message: "a succeeded deployment names the promotion it made active"
+    expression: "this.outcome != 1 || has(this.promotion)"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.no_promotion_on_failure"
+    message: "a failed deployment made nothing active, so it names no promotion"
+    expression: "this.outcome != 2 || !has(this.promotion)"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.preview_up_in_preview"
+    message: "a preview up deploys to the preview tier"
+    expression: "this.kind != 2 || this.environment.tier == 1"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.finished_after_started"
+    message: "a deployment finishes at or after it starts"
+    expression: "this.finished_at >= this.started_at"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.unique_app_names"
+    message: "each app is reported once"
+    expression: "this.apps.map(a, a.name).unique()"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.unique_resource_names"
+    message: "each resource is reported once"
+    expression: "this.resources.map(r, r.name).unique()"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.unique_variable_groups"
+    message: "each variable group is defined once"
+    expression: "this.variable_groups.map(g, g.key).unique()"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.variable_groups_defined"
+    message: "a variable names a group the project defines"
+    expression: "this.apps.all(a, a.variables.all(v, v.group == '' || this.variable_groups.exists(g, g.key == v.group)))"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.links_reference_known"
+    message: "a link names an app and a resource this deployment reports"
+    expression: "this.links.all(l, this.apps.exists(a, a.name == l.app) && this.resources.exists(r, r.name == l.resource))"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.usages_reference_known"
+    message: "a usage names an app and a resource this deployment reports"
+    expression: "this.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))"
+  };
+
+  string id = 1 [
+    (buf.validate.field).string.pattern = "^[0-9a-f]{32}$",
+    (buf.validate.field).cel = {
+      id: "deployment.id_is_a_trace_id"
+      message: "an all zero id is not a valid trace id"
+      expression: "this != '00000000000000000000000000000000'"
+    }
+  ];
+
+  DeploymentKind kind = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  DeploymentOutcome outcome = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string slug = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  ReportedEnvironment environment = 5 [(buf.validate.field).required = true];
+
+  Provider provider = 6 [(buf.validate.field).required = true];
+
+  string target = 7 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+    pattern: "^[^/\\s]+(?:/[^/\\s]+)+$"
+  }];
+
+  google.protobuf.Timestamp started_at = 8 [(buf.validate.field).required = true];
+
+  google.protobuf.Timestamp finished_at = 9 [(buf.validate.field).required = true];
+
+  string cli_version = 10 [(buf.validate.field).string.max_len = 64];
+
+  Promotion promotion = 11;
+
+  string error = 12 [(buf.validate.field).string.max_len = 4000];
+
+  Edge edge = 13;
+
+  repeated App apps = 14 [(buf.validate.field).repeated.max_items = 100];
+
+  repeated Resource resources = 15 [(buf.validate.field).repeated.max_items = 200];
+
+  repeated Link links = 16 [(buf.validate.field).repeated.max_items = 2000];
+
+  repeated Usage usages = 17 [(buf.validate.field).repeated.max_items = 2000];
+
+  repeated app.resources.v1.GroupDefinition variable_groups = 18 [(buf.validate.field).repeated.max_items = 500];
+
+  Source source = 19;
+
+  CI ci = 20;
+
+  Trigger trigger = 21 [(buf.validate.field).required = true];
+
+  repeated opentelemetry.proto.trace.v1.Span spans = 22 [(buf.validate.field).repeated.max_items = 500];
+}
+
+message EnvironmentEvent {
+  option (buf.validate.message).cel = {
+    id: "environment_event.preview_removed_in_preview"
+    message: "a removed preview is in the preview tier"
+    expression: "this.kind != 1 || this.environment.tier == 1"
+  };
+  option (buf.validate.message).cel = {
+    id: "environment_event.preview_removed_names_preview"
+    message: "a removed preview names the preview"
+    expression: "this.kind != 1 || this.environment.identity != ''"
+  };
+
+  EnvironmentEventKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  ReportedEnvironment environment = 3 [(buf.validate.field).required = true];
+
+  google.protobuf.Timestamp at = 4 [(buf.validate.field).required = true];
+
+  Source source = 5;
+
+  CI ci = 6;
+}
+
+message ReportRequest {
+  Deployment deployment = 1 [(buf.validate.field).required = true];
+}
+
+message ReportResponse {
+}
+
+message RecordEnvironmentEventRequest {
+  EnvironmentEvent event = 1 [(buf.validate.field).required = true];
+}
+
+message RecordEnvironmentEventResponse {
+}
+
+service DeploymentService {
+  rpc Report(ReportRequest) returns (ReportResponse);
+
+  rpc RecordEnvironmentEvent(RecordEnvironmentEventRequest) returns (RecordEnvironmentEventResponse);
+}
