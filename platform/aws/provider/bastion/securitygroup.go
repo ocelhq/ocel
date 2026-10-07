@@ -163,8 +163,8 @@ func (c Clients) limitEgress(ctx context.Context, id string, group *ec2types.Sec
 		}
 	}
 	if len(missing) > 0 {
-		if _, err := c.EC2.AuthorizeSecurityGroupEgress(ctx, &ec2.AuthorizeSecurityGroupEgressInput{GroupId: aws.String(id), IpPermissions: missing}); err != nil {
-			return fmt.Errorf("open egress %s on security group %s: %w", describeRules(missing), id, err)
+		if err := c.openEgress(ctx, id, missing); err != nil {
+			return err
 		}
 	}
 	if len(extra) > 0 {
@@ -173,6 +173,28 @@ func (c Clients) limitEgress(ctx context.Context, id string, group *ec2types.Sec
 		}
 	}
 	return nil
+}
+
+func (c Clients) openEgress(ctx context.Context, id string, permissions []ec2types.IpPermission) error {
+	_, err := c.EC2.AuthorizeSecurityGroupEgress(ctx, &ec2.AuthorizeSecurityGroupEgressInput{GroupId: aws.String(id), IpPermissions: permissions})
+	if isDuplicateRule(err) {
+		for _, permission := range permissions {
+			_, err = c.EC2.AuthorizeSecurityGroupEgress(ctx, &ec2.AuthorizeSecurityGroupEgressInput{GroupId: aws.String(id), IpPermissions: []ec2types.IpPermission{permission}})
+			if err != nil && !isDuplicateRule(err) {
+				break
+			}
+			err = nil
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("open egress %s on security group %s: %w", describeRules(permissions), id, err)
+	}
+	return nil
+}
+
+func isDuplicateRule(err error) bool {
+	var api smithy.APIError
+	return errors.As(err, &api) && api.ErrorCode() == "InvalidPermission.Duplicate"
 }
 
 func describeRules(permissions []ec2types.IpPermission) string {

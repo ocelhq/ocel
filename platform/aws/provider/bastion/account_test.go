@@ -74,6 +74,8 @@ type account struct {
 	onDescribe    func(*task)
 	groupBusy     int
 	nextID        int
+
+	beforeAuthorize func(*securityGroup, []ec2types.IpPermission)
 }
 
 func newAccount() *account {
@@ -568,6 +570,15 @@ func (a *account) AuthorizeSecurityGroupEgress(_ context.Context, in *ec2.Author
 	defer a.mu.Unlock()
 	a.record("AuthorizeSecurityGroupEgress " + aws.ToString(in.GroupId))
 	g := a.groups[aws.ToString(in.GroupId)]
+	if a.beforeAuthorize != nil {
+		a.beforeAuthorize(g, in.IpPermissions)
+		a.beforeAuthorize = nil
+	}
+	for _, wanted := range in.IpPermissions {
+		if slices.ContainsFunc(g.egress, func(p ec2types.IpPermission) bool { return samePermission(p, wanted) }) {
+			return nil, &smithy.GenericAPIError{Code: "InvalidPermission.Duplicate", Message: "the specified rule already exists"}
+		}
+	}
 	g.egress = append(g.egress, in.IpPermissions...)
 	return &ec2.AuthorizeSecurityGroupEgressOutput{}, nil
 }
