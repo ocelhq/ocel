@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/livedir"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
+	"github.com/ocelhq/ocel/cli/internal/userconfig"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -67,6 +68,19 @@ func (l Log) flushShared() {
 	}
 }
 
+func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariables) (Log, error) {
+	var readable []string
+	for _, a := range apps {
+		live := variables[a.Name].Live
+		if err := livedir.RefuseUnnamableKeys(live); err != nil {
+			return l, fmt.Errorf("app %q: %w", a.Name, err)
+		}
+		readable = append(readable, slices.Collect(maps.Values(live))...)
+		readable = append(readable, readBindingSecrets(live)...)
+	}
+	return l.hiding(redaction.NewValues(readable)), nil
+}
+
 type Output struct {
 	Functions []Function
 	Images    map[string]string
@@ -74,7 +88,7 @@ type Output struct {
 
 type nodeRun func(ctx context.Context, scriptPath string, request []byte, log Log) error
 
-type imageBuild func(ctx context.Context, app image.App, arch string, progress io.Writer) (image.Image, error)
+type imageBuild func(ctx context.Context, app image.App, arch string, live image.LiveValues, progress io.Writer) (image.Image, error)
 
 type builtArchitecture func(ctx context.Context, repository, digest string) (string, error)
 
@@ -85,9 +99,10 @@ type tools struct {
 	image        imageBuild
 	architecture builtArchitecture
 	addFiles     fileAddition
+	liveHashKey  func() ([]byte, error)
 }
 
-var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles}
+var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
 
 func Apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	return installed.apps(ctx, cfg, variables, archs, workers, host, log)
@@ -104,7 +119,7 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 	if err := t.functions(ctx, cfg, variables, host, log); err != nil {
 		return Output{}, err
 	}
-	images, err := t.images(ctx, cfg, archs, workers, log)
+	images, err := t.images(ctx, cfg, variables, archs, workers, log)
 	if err != nil {
 		return Output{}, err
 	}
@@ -116,24 +131,22 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 }
 
 func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
-	var readable []string
+	var reading []project.App
 	for _, a := range cfg.Apps {
 		if !CanReadVariablesAtBuild(a) {
 			continue
 		}
-		readable = append(readable, slices.Collect(maps.Values(variables[a.Name].Live))...)
-		readable = append(readable, readBindingSecrets(variables[a.Name].Live)...)
 		if err := refuseReservedNames(a.Name, variables[a.Name]); err != nil {
 			return err
 		}
-		if err := livedir.RefuseUnnamableKeys(variables[a.Name].Live); err != nil {
-			return fmt.Errorf("app %q: %w", a.Name, err)
-		}
+		reading = append(reading, a)
 	}
-	hidden := redaction.NewValues(readable)
-	log = log.hiding(hidden)
+	log, err = log.hideLiveValues(reading, variables)
+	if err != nil {
+		return err
+	}
 	defer log.flushShared()
-	defer func() { err = hidden.HideError(err) }()
+	defer func() { err = log.hidden.HideError(err) }()
 
 	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
 		return err
@@ -193,7 +206,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			}
 			appLog, ended := log.App(a.Name)
 			err = compile(ctx, cfg, a, outputDir, env, appLog)
-			ended(hidden.HideError(err))
+			ended(log.hidden.HideError(err))
 			if err != nil {
 				return err
 			}

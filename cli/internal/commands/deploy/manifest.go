@@ -324,7 +324,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.A
 	for _, app := range build.ImageApps(cfg.Apps) {
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
-			if !processenv.IsInjected(true, v.Key) {
+			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(true, v.Key) {
 				keys = append(keys, v.Key)
 			}
 		}
@@ -332,7 +332,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.A
 			continue
 		}
 		slices.Sort(keys)
-		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its values yet: %s. Code that reads one while the app builds sees it unset", app.Name, strings.Join(slices.Compact(keys), ", ")))
+		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its plaintext values yet: %s. Code that reads one while the app builds sees it unset", app.Name, strings.Join(slices.Compact(keys), ", ")))
 	}
 	return warnings
 }
@@ -340,7 +340,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.A
 func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string]map[string]string, error) {
 	var apps []string
 	for _, app := range cfg.Apps {
-		if build.CanReadVariablesAtBuild(app) {
+		if build.CanReadVariablesAtBuild(app) || app.RunsOn(provider.ComputeContainer) {
 			apps = append(apps, app.Name)
 		}
 	}

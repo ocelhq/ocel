@@ -36,17 +36,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import {
-  buildVariables,
-  deploy,
-  iac,
-  kv,
-  lifecycle,
-  prerender,
-  realtime,
-  sdk,
-  tasks,
-} from "./fixtures";
+import { buildVariables, deploy, iac, kv, lifecycle, realtime, sdk, tasks } from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
@@ -70,19 +60,6 @@ const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.r
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 
 export const gaps: Gap[] = [
-  {
-    id: "image-builds-get-no-bindings",
-    reason:
-      "a box runs a Next app as a container whose image BuildKit builds, and ocel deploy hands bindings only to a build it runs itself, so next build fails collecting page data for a route that reads postgres until the image build gets them as secret mounts over the host's network",
-    where: [
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [prerender.next],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
   {
     id: "rest-api-reorders-the-query",
     reason:

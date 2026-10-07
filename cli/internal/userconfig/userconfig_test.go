@@ -448,3 +448,52 @@ func TestMarkingADeployKeepsTheInstallIDAndTheOtherSettings(t *testing.T) {
 		t.Errorf("setting k = %s, want it kept", got)
 	}
 }
+
+func TestTheLiveHashKeyIsRandomPerConfigHomeAndStableWithinOne(t *testing.T) {
+	confighome.Isolate(t)
+	first, err := userconfig.EnsureLiveHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 32 {
+		t.Errorf("the key is %d bytes, want 32", len(first))
+	}
+	again, err := userconfig.EnsureLiveHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(again, first) {
+		t.Error("the key changed between calls, so every build would miss its cache")
+	}
+	confighome.Isolate(t)
+	other, err := userconfig.EnsureLiveHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(other, first) {
+		t.Error("two config homes share a key")
+	}
+}
+
+func TestConcurrentFirstLiveHashKeyCreationConverges(t *testing.T) {
+	confighome.Isolate(t)
+	keys := make([][]byte, 32)
+	var wg sync.WaitGroup
+	for i := range keys {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			key, err := userconfig.EnsureLiveHashKey()
+			if err != nil {
+				t.Error(err)
+			}
+			keys[i] = key
+		}()
+	}
+	wg.Wait()
+	for _, key := range keys {
+		if !bytes.Equal(key, keys[0]) {
+			t.Fatal("callers saw different keys")
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	railpack "github.com/railwayapp/railpack/buildkit"
 	"github.com/tonistiigi/fsutil"
 
@@ -25,7 +26,7 @@ const (
 	platformAttr       = "platform"
 )
 
-func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image, error) {
+func Build(ctx context.Context, app App, arch string, live LiveValues, progress io.Writer) (Image, error) {
 	recipe, err := ChooseRecipe(app)
 	if err != nil {
 		return Image{}, err
@@ -48,7 +49,7 @@ func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image
 		progress = &lockedWriter{w: progress}
 	}
 	defer railpackLogsTo(progress)()
-	opt, done, err := recipe.solve(arch)
+	opt, done, err := recipe.solve(arch, live)
 	if err != nil {
 		return Image{}, err
 	}
@@ -60,10 +61,10 @@ func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image
 		defer close(reported)
 		report(status, progress)
 	}()
-	resp, err := recipe.run(ctx, buildkit, opt, status)
+	resp, err := recipe.run(ctx, buildkit, opt, live, status)
 	<-reported
 	if err != nil {
-		return Image{}, fmt.Errorf("build %s: %w", app.Name, err)
+		return Image{}, d.explainFailedBuild(app.Name, live, err)
 	}
 
 	image, err := imageFor(app.Slug, app.Name, resp.ExporterResponse[exptypes.ExporterImageDigestKey])
@@ -78,16 +79,31 @@ func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image
 
 func (r Recipe) railpack() bool { return r.Dockerfile == "" }
 
-func (r Recipe) solve(arch string) (client.SolveOpt, func(), error) {
+func (r Recipe) solve(arch string, live LiveValues) (client.SolveOpt, func(), error) {
 	opt, done, err := r.unpinned()
-	if err != nil || arch == "" {
+	if err != nil {
 		return opt, done, err
 	}
+	if live.hasValues() {
+		opt.Session = live.newSecretsSession()
+		opt.AllowedEntitlements = []string{networkHostEntitlement}
+		hashArg := dockerfileLiveHashArg
+		if r.railpack() {
+			hashArg = railpackSecretsHashArg
+		}
+		setFrontendAttr(&opt, buildArgAttrPrefix+hashArg, live.Hash)
+	}
+	if arch != "" {
+		setFrontendAttr(&opt, platformAttr, images.ContainerPlatform(arch))
+	}
+	return opt, done, nil
+}
+
+func setFrontendAttr(opt *client.SolveOpt, key, value string) {
 	if opt.FrontendAttrs == nil {
 		opt.FrontendAttrs = map[string]string{}
 	}
-	opt.FrontendAttrs[platformAttr] = images.ContainerPlatform(arch)
-	return opt, done, nil
+	opt.FrontendAttrs[key] = value
 }
 
 func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
@@ -111,9 +127,11 @@ func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
 	return opt, func() { _ = os.RemoveAll(planDir) }, nil
 }
 
-func (r Recipe) run(ctx context.Context, buildkit *client.Client, opt client.SolveOpt, status chan *client.SolveStatus) (*client.SolveResponse, error) {
+func (r Recipe) run(ctx context.Context, buildkit *client.Client, opt client.SolveOpt, live LiveValues, status chan *client.SolveStatus) (*client.SolveResponse, error) {
 	if r.railpack() {
-		return buildkit.Build(ctx, opt, "", railpack.Build, status)
+		return buildkit.Build(ctx, opt, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			return railpack.Build(ctx, liveGateway{Client: c, keys: live.listKeys()})
+		}, status)
 	}
 	return buildkit.Solve(ctx, nil, opt, status)
 }

@@ -165,7 +165,7 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 			t.Error("the node builder ran for a project whose only app runs in an image")
 			return nil
 		},
-		image: func(_ context.Context, app image.App, arch string, _ io.Writer) (image.Image, error) {
+		image: func(_ context.Context, app image.App, arch string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
 			asked = arch
 			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
 		},
@@ -187,7 +187,7 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 func builtImage(t *testing.T, cfg *project.Project) Output {
 	t.Helper()
 	built, err := tools{
-		image: func(_ context.Context, app image.App, _ string, _ io.Writer) (image.Image, error) {
+		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
 			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:" + strings.Repeat("a", 64)}, nil
 		},
 	}.apps(context.Background(), cfg, nil, nil, nil, Host{}, Log{})
@@ -259,5 +259,91 @@ func TestAPrebuiltImageBuiltForAnotherArchitectureThanTheTargetRunsIsRefused(t *
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("readPrebuilt() = %v, want it to name %q", err, want)
 		}
+	}
+}
+
+func TestAContainerAppIsBuiltWithTheBindingsAndSecretsOfItsOwnAppAlone(t *testing.T) {
+	cfg := containerProject(t, "")
+	cfg.Apps = append(cfg.Apps, project.App{Name: "api", Path: "services/web", Compute: "container"})
+	got := map[string]map[string]string{}
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, live image.LiveValues, _ io.Writer) (image.Image, error) {
+			got[app.Name] = live.Values
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), cfg, map[string]AppVariables{
+		"web": {Env: map[string]string{"PLAIN": "p"}, Live: map[string]string{"OCEL_BINDING_DB": "db-web"}},
+		"api": {Live: map[string]string{"OCEL_BINDING_KV": "kv-api"}},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Fatalf("apps() = %v", err)
+	}
+
+	if want := map[string]string{"OCEL_BINDING_DB": "db-web"}; !maps.Equal(got["web"], want) {
+		t.Errorf("web was built with %v, want %v: the plain variables are not secrets, and another app's are not its own", got["web"], want)
+	}
+	if want := map[string]string{"OCEL_BINDING_KV": "kv-api"}; !maps.Equal(got["api"], want) {
+		t.Errorf("api was built with %v, want %v", got["api"], want)
+	}
+}
+
+func TestNoValueAContainerBuildWasGivenReachesTheLogOrTheError(t *testing.T) {
+	const value = "postgres://u:hunter2@127.0.0.1:5432/db"
+	cfg := containerProject(t, "")
+	var logged strings.Builder
+	log := Log{AppLog: func(string) (io.Writer, func(error)) { return &logged, func(error) {} }}
+
+	_, err := tools{
+		image: func(_ context.Context, _ image.App, _ string, _ image.LiveValues, progress io.Writer) (image.Image, error) {
+			_, _ = io.WriteString(progress, "connecting to "+value+"\n")
+			return image.Image{}, errors.New("build web: could not reach " + value)
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), cfg, map[string]AppVariables{
+		"web": {Live: map[string]string{"OCEL_BINDING_DB": value}},
+	}, nil, nil, Host{}, log)
+
+	if err == nil {
+		t.Fatal("apps() succeeded though the image build failed")
+	}
+	if strings.Contains(err.Error(), "hunter2") || strings.Contains(logged.String(), "hunter2") {
+		t.Errorf("a value the build was given reached its output:\nlog: %s\nerror: %v", logged.String(), err)
+	}
+}
+
+func TestTheLiveValuesOfAContainerBuildAreHashedWithTheMachinesKey(t *testing.T) {
+	values := map[string]string{"OCEL_BINDING_DB": "db-web"}
+	hashed := map[string]string{}
+	for _, key := range []string{"one machine", "another machine"} {
+		_, err := tools{
+			image: func(_ context.Context, app image.App, _ string, live image.LiveValues, _ io.Writer) (image.Image, error) {
+				hashed[key] = live.Hash
+				return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+			},
+			liveHashKey: func() ([]byte, error) { return []byte(key), nil },
+		}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{"web": {Live: values}}, nil, nil, Host{}, Log{})
+		if err != nil {
+			t.Fatalf("apps() = %v", err)
+		}
+	}
+
+	if hashed["one machine"] == "" || hashed["one machine"] == hashed["another machine"] {
+		t.Errorf("the same values hashed to %q on one machine and %q on another, want two different hashes, so a hash names no value without the key", hashed["one machine"], hashed["another machine"])
+	}
+}
+
+func TestAContainerBuildWithNoLiveValuesNeverReadsTheMachinesKey(t *testing.T) {
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) {
+			t.Error("the build read the key though it hashes nothing")
+			return nil, nil
+		},
+	}.apps(context.Background(), containerProject(t, ""), nil, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Fatalf("apps() = %v", err)
 	}
 }

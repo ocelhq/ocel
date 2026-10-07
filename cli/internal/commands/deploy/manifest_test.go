@@ -1793,7 +1793,7 @@ func TestADeployThatCannotRevealASecretStopsBeforeItProvisionsAnything(t *testin
 	}
 }
 
-func TestADeployWarnsThatAnImageBuildGetsNoneOfTheValuesItsAppDeclares(t *testing.T) {
+func TestADeployWarnsOfTheValuesAnImageBuildGetsNoneOfAndHandsItTheSensitiveAndSecretOnes(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[
   {"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true},
   {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
@@ -1808,7 +1808,7 @@ func TestADeployWarnsThatAnImageBuildGetsNoneOfTheValuesItsAppDeclares(t *testin
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 
 	dependencies := newTestDependencies()
-	captureBuildVariables(&dependencies)
+	built := captureBuildVariables(&dependencies)
 	stubAppImages(&dependencies, "web", "api")
 	clitest.ServeImageDaemon(t, "amd64")
 
@@ -1817,14 +1817,21 @@ func TestADeployWarnsThatAnImageBuildGetsNoneOfTheValuesItsAppDeclares(t *testin
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
 	for _, app := range []string{"web", "api"} {
-		want := `app "` + app + `" builds as an image, and an image build gets none of its values yet: PAGE_ID, SESSION_SECRET, STRIPE_API_KEY.`
+		want := `app "` + app + `" builds as an image, and an image build gets none of its plaintext values yet: PAGE_ID.`
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+		live := (*built)[app].Live
+		if live["STRIPE_API_KEY"] != "sk_live_sensitive" || live["SESSION_SECRET"] != "ss_live_secret" {
+			t.Errorf("the image build of %s was handed %v, want its sensitive and secret values", app, live)
+		}
+		if _, ok := live["PAGE_ID"]; ok {
+			t.Errorf("the image build of %s was handed the plaintext PAGE_ID as a secret", app)
 		}
 	}
 }
 
-func TestADeployWarnsThatAnImageBuildGetsNoneOfItsValuesWhenEveryOneIsPlaintext(t *testing.T) {
+func TestADeployWarnsOfPlaintextValuesAnImageBuildGetsNoneOfWhenEveryOneIsPlaintext(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
 	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: "container" }`)
@@ -1839,7 +1846,7 @@ func TestADeployWarnsThatAnImageBuildGetsNoneOfItsValuesWhenEveryOneIsPlaintext(
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
-	if want := `app "api" builds as an image, and an image build gets none of its values yet: PAGE_ID.`; !strings.Contains(out, want) {
+	if want := `app "api" builds as an image, and an image build gets none of its plaintext values yet: PAGE_ID.`; !strings.Contains(out, want) {
 		t.Errorf("output lacks %q:\n%s", want, out)
 	}
 	if strings.Contains(out, processenv.AppURLEnvVar+",") || strings.Contains(out, ", "+processenv.AppURLEnvVar) {

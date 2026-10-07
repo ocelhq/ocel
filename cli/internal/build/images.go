@@ -21,15 +21,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
-func (t tools) images(ctx context.Context, cfg *project.Project, archs map[string]string, workers HostedWorkers, log Log) (map[string]string, error) {
-	var refs map[string]string
-	for _, app := range ImageApps(cfg.Apps) {
+func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
+	apps := ImageApps(cfg.Apps)
+	log, err = log.hideLiveValues(apps, variables)
+	if err != nil {
+		return nil, err
+	}
+	defer log.flushShared()
+	defer func() { err = log.hidden.HideError(err) }()
+	hashKey, err := t.ensureLiveHashKey(apps, variables)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, app := range apps {
 		described, err := image.Describe(cfg, app)
 		if err != nil {
 			return nil, err
 		}
 		appLog, ended := log.App(app.Name)
-		built, err := t.image(ctx, described, archs[app.Name], appLog)
+		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, hashKey), appLog)
 		if sources, hosts := workers[app.Name]; hosts && err == nil {
 			built, err = t.addWorkerEntry(ctx, cfg, app, built, archs[app.Name], sources, appLog)
 		}
@@ -46,6 +57,15 @@ func (t tools) images(ctx context.Context, cfg *project.Project, archs map[strin
 		refs[app.Name] = built.Ref
 	}
 	return refs, nil
+}
+
+func (t tools) ensureLiveHashKey(apps []project.App, variables map[string]AppVariables) ([]byte, error) {
+	for _, app := range apps {
+		if len(variables[app.Name].Live) > 0 {
+			return t.liveHashKey()
+		}
+	}
+	return nil, nil
 }
 
 func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
