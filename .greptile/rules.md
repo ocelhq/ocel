@@ -178,7 +178,7 @@ the compiler checks it.
    func field on `Hooks`.** Nil means absent. Steps that only make sense together are one
    nested group, a pointer that is nil as a whole, so the compiler keeps them paired.
 3. **A yes/no or constant about a provider is a `Facts` field.**
-4. **One word, one meaning across `pkg/` and those vendors.**
+4. **One word, one meaning across `pkg/` and those vendors, as [GLOSSARY.md](../GLOSSARY.md) records it.**
 5. **A method never repeats its receiver's noun.**
 6. **One vendor file per port, per hook, or per hook group, named after it.** The
    vendor's root file contains the constructor, the `Facts` literal, the `Hooks` literal
@@ -211,6 +211,7 @@ Fails when:
 - A package re-exports or aliases another package's identifiers.
 - `Plan` names desired state, or `Spec` names a consented diff.
 - A value, function, file, test or message is named with a metaphor or a coined word.
+- `GLOSSARY.md` changes without a linked issue a maintainer agreed to.
 
 ## Signal
  

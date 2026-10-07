@@ -31,6 +31,12 @@ When they conflict:
 - Product = DX, perceived performance, customer's cloud bill (what users feel)
 - Polish = internal perf, your own spend, elegance (nice, never necessary)
 
+## Vocabulary
+
+[GLOSSARY.md](GLOSSARY.md) is binding: use its words, with its meanings, in code, messages and
+pull requests. Never edit it; a term that seems to need an entry is called out in the pull
+request.
+
 ## Codebase Map
 
 Boundaries, not contents. Every top-level directory is here except dotfile directories,
