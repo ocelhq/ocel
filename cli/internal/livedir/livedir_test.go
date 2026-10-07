@@ -47,7 +47,7 @@ func TestWriteHandsEachValueAsAPrivateFileUnderItsKey(t *testing.T) {
 }
 
 func TestWriteRefusesAKeyThatNamesNoPlainFileInTheDir(t *testing.T) {
-	for _, key := range []string{"", ".", "..", ".hidden", "../ESCAPED", "a/b", `a\b`, "/abs"} {
+	for _, key := range []string{"", ".", "..", ".hidden", "../ESCAPED", "a/b", `a\b`, "/abs", "CON", "prn", "Aux", "NUL", "nul.txt", "COM1", "com9", "LPT1", "lpt9"} {
 		parent := t.TempDir()
 		_, err := Write(parent, "ocel-live-", map[string]string{key: "x"})
 		if err == nil || !strings.Contains(err.Error(), "rename it where it is declared") {
@@ -55,6 +55,14 @@ func TestWriteRefusesAKeyThatNamesNoPlainFileInTheDir(t *testing.T) {
 		}
 		if entries, _ := os.ReadDir(parent); len(entries) != 0 {
 			t.Errorf("Write(%q) left %d entries under %s, want nothing created for a refused key", key, len(entries), parent)
+		}
+	}
+}
+
+func TestWriteHandsOverAKeyThatOnlyStartsLikeAWindowsDeviceName(t *testing.T) {
+	for _, key := range []string{"CONFIG", "NULL_VALUE", "COM10", "AUXILIARY"} {
+		if _, err := Write(t.TempDir(), "ocel-live-", map[string]string{key: "x"}); err != nil {
+			t.Errorf("Write(%q) err = %v, want the key written", key, err)
 		}
 	}
 }

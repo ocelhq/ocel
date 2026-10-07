@@ -27,11 +27,23 @@ var errRemoved = errors.New("the process removed its live dirs and creates no mo
 
 func RefuseUnnamableKeys(values map[string]string) error {
 	for _, key := range slices.Sorted(maps.Keys(values)) {
-		if key == "" || strings.ContainsAny(key, `/\`) || strings.HasPrefix(key, ".") {
+		if key == "" || strings.ContainsAny(key, `/\`) || strings.HasPrefix(key, ".") || isWindowsDeviceName(key) {
 			return fmt.Errorf("%q names no file a live dir can hold; rename it where it is declared", key)
 		}
 	}
 	return nil
+}
+
+func isWindowsDeviceName(key string) bool {
+	base, _, _ := strings.Cut(strings.ToUpper(key), ".")
+	switch base {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) {
+		return base[3] >= '1' && base[3] <= '9'
+	}
+	return false
 }
 
 func Write(parent, pattern string, values map[string]string) (string, error) {
