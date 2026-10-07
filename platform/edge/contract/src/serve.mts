@@ -8,7 +8,7 @@ export type NeedDetail = {
 
 export type ServeDescriptor = {
   framework: string;
-  buildId: string;
+  serveBuildId: string;
   edgeRouting: boolean;
   entry: string;
   needs: Partial<Record<Need, NeedDetail>>;

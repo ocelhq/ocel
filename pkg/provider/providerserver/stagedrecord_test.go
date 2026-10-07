@@ -208,7 +208,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 
 func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", BuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", ServeBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
@@ -235,7 +235,7 @@ func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t
 
 func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", BuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", ServeBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

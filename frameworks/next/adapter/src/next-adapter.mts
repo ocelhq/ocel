@@ -572,7 +572,7 @@ const adapter = {
 
     const serve: ServeDescriptor = {
       framework: "next",
-      buildId,
+      serveBuildId: buildId,
       edgeRouting: true,
       entry,
       needs,

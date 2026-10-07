@@ -110,7 +110,7 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	if descriptor.Framework != "python" {
 		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "python")
 	}
-	if descriptor.BuildID == "" {
+	if descriptor.ServeBuildID == "" {
 		t.Error("the serve descriptor names no build id, and a release is identified by one")
 	}
 	if len(descriptor.Needs) != 0 {

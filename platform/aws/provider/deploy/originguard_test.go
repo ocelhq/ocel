@@ -198,7 +198,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 
 	cfg := guardedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
-		"apps/api/serve.json": `{"framework":"node","buildId":"API1","entry":"/"}`,
+		"apps/api/serve.json": `{"framework":"node","serveBuildId":"API1","entry":"/"}`,
 	})
 	coord := storageCoordinate("prod", "shop", "api", fixedRelease(t))
 	spec := servingSpec(t, cfg, "api", "express", coord)

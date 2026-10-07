@@ -208,7 +208,7 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 		t.Error("the app spec has a function with no artifact, so the upload never reached the release")
 	}
 	if specs[1].App.BuildID != webBuildID {
-		t.Errorf("the app spec names deployment %q, want %q: dispatch serves the build the CLI built under this id", specs[1].App.BuildID, webBuildID)
+		t.Errorf("the app spec names build %q, want %q: dispatch serves the build the CLI built under this id", specs[1].App.BuildID, webBuildID)
 	}
 }
 

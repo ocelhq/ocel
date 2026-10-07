@@ -86,10 +86,10 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 		return err
 	}
 	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
-		Framework: framework.Name,
-		BuildID:   buildID,
-		Entry:     entryRouteID,
-		Needs:     map[edge.Need]edge.NeedDetail{},
+		Framework:    framework.Name,
+		ServeBuildID: buildID,
+		Entry:        entryRouteID,
+		Needs:        map[edge.Need]edge.NeedDetail{},
 	})
 }
 
