@@ -286,47 +286,45 @@ message Deployment {
     not_in: [0]
   }];
 
-  string slug = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+  common.environment.v1.Environment environment = 4 [(buf.validate.field).required = true];
 
-  common.environment.v1.Environment environment = 5 [(buf.validate.field).required = true];
+  Provider provider = 5 [(buf.validate.field).required = true];
 
-  Provider provider = 6 [(buf.validate.field).required = true];
-
-  string target = 7 [(buf.validate.field).string = {
+  string target = 6 [(buf.validate.field).string = {
     min_len: 1
     max_len: 256
     pattern: "^[^/\\s]+(?:/[^/\\s]+)+$"
   }];
 
-  google.protobuf.Timestamp started_at = 8 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp started_at = 7 [(buf.validate.field).required = true];
 
-  google.protobuf.Timestamp finished_at = 9 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp finished_at = 8 [(buf.validate.field).required = true];
 
-  string cli_version = 10 [(buf.validate.field).string.max_len = 64];
+  string cli_version = 9 [(buf.validate.field).string.max_len = 64];
 
-  Promotion promotion = 11;
+  Promotion promotion = 10;
 
-  string error = 12 [(buf.validate.field).string.max_len = 4000];
+  string error = 11 [(buf.validate.field).string.max_len = 4000];
 
-  Edge edge = 13;
+  Edge edge = 12;
 
-  repeated App apps = 14 [(buf.validate.field).repeated.max_items = 100];
+  repeated App apps = 13 [(buf.validate.field).repeated.max_items = 100];
 
-  repeated Resource resources = 15 [(buf.validate.field).repeated.max_items = 200];
+  repeated Resource resources = 14 [(buf.validate.field).repeated.max_items = 200];
 
-  repeated Link links = 16 [(buf.validate.field).repeated.max_items = 2000];
+  repeated Link links = 15 [(buf.validate.field).repeated.max_items = 2000];
 
-  repeated Usage usages = 17 [(buf.validate.field).repeated.max_items = 2000];
+  repeated Usage usages = 16 [(buf.validate.field).repeated.max_items = 2000];
 
-  repeated app.resources.v1.GroupDefinition variable_groups = 18 [(buf.validate.field).repeated.max_items = 500];
+  repeated app.resources.v1.GroupDefinition variable_groups = 17 [(buf.validate.field).repeated.max_items = 500];
 
-  Source source = 19;
+  Source source = 18;
 
-  CI ci = 20;
+  CI ci = 19;
 
-  Trigger trigger = 21 [(buf.validate.field).required = true];
+  Trigger trigger = 20 [(buf.validate.field).required = true];
 
-  repeated opentelemetry.proto.trace.v1.Span spans = 22 [(buf.validate.field).repeated.max_items = 500];
+  repeated opentelemetry.proto.trace.v1.Span spans = 21 [(buf.validate.field).repeated.max_items = 500];
 }
 
 message EnvironmentEvent {
@@ -346,12 +344,19 @@ message EnvironmentEvent {
     expression: "!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED"
   };
 
-  EnvironmentEventKind kind = 1 [(buf.validate.field).enum = {
+  string id = 1 [
+    (buf.validate.field).string.pattern = "^[0-9a-f]{32}$",
+    (buf.validate.field).cel = {
+      id: "environment_event.id_is_a_trace_id"
+      message: "an all zero id is not a valid trace id"
+      expression: "this != '00000000000000000000000000000000'"
+    }
+  ];
+
+  EnvironmentEventKind kind = 2 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
   }];
-
-  string slug = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
 
   common.environment.v1.Environment environment = 3 [(buf.validate.field).required = true];
 
@@ -363,14 +368,18 @@ message EnvironmentEvent {
 }
 
 message ReportRequest {
-  Deployment deployment = 1 [(buf.validate.field).required = true];
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  Deployment deployment = 2 [(buf.validate.field).required = true];
 }
 
 message ReportResponse {
 }
 
 message RecordEnvironmentEventRequest {
-  EnvironmentEvent event = 1 [(buf.validate.field).required = true];
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  EnvironmentEvent event = 2 [(buf.validate.field).required = true];
 }
 
 message RecordEnvironmentEventResponse {
