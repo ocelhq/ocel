@@ -435,6 +435,29 @@ func TestANodeBuildLogRecordWithNoOpenSpanIsDebugDetailOfTheProcessorsSpan(t *te
 	}
 }
 
+func TestProcessorHidesWhatItIsToldToInEveryLineRecordAndFailure(t *testing.T) {
+	ctx, run := newRun(t)
+	var out strings.Builder
+	hide := func(text string) string { return strings.ReplaceAll(text, "ss_live", "[secret]") }
+	p := &Processor{Span: run.build, Forward: &out, Hide: hide}
+
+	logged, _ := json.Marshal(record{Type: typeLog, App: "api", Stage: "build", Message: "read ss_live"})
+	failed, _ := json.Marshal(record{Type: typeError, App: "api", Stage: "build", Message: "rejected ss_live"})
+	p.Scan(ctx, strings.NewReader("printed ss_live\n"+Prefix+string(logged)+"\n"+Prefix+string(failed)+"\n"))
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	for name, said := range map[string]string{"forwarded output": out.String(), "failure": p.Failure(), "run log": readLog(t, run)} {
+		if strings.Contains(said, "ss_live") {
+			t.Errorf("the %s holds the hidden value: %s", name, said)
+		}
+	}
+	if out.String() != "printed [secret]\n" {
+		t.Errorf("forwarded output = %q, want the line with the value hidden", out.String())
+	}
+}
+
 func send(p *Processor, rec record) {
 	raw, _ := json.Marshal(rec)
 	p.line(Prefix + string(raw))

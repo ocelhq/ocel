@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
@@ -16,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/livedir"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -25,6 +28,8 @@ import (
 type Log struct {
 	Shared io.Writer
 	AppLog func(app string) (log io.Writer, ended func(error))
+
+	hidden redaction.Values
 }
 
 func (l Log) shared() io.Writer {
@@ -38,7 +43,16 @@ func (l Log) App(name string) (io.Writer, func(error)) {
 	if l.AppLog == nil {
 		return l.shared(), func(error) {}
 	}
-	return l.AppLog(name)
+	w, ended := l.AppLog(name)
+	return l.hidden.Writer(w), ended
+}
+
+func (l Log) hiding(values redaction.Values) Log {
+	l.hidden = values
+	if l.Shared != nil {
+		l.Shared = values.Writer(l.Shared)
+	}
+	return l
 }
 
 type Output struct {
@@ -90,10 +104,12 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 }
 
 func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
+	var readable []string
 	for _, a := range cfg.Apps {
 		if !CanReadVariablesAtBuild(a) {
 			continue
 		}
+		readable = append(readable, slices.Collect(maps.Values(variables[a.Name].Live))...)
 		if err := checkVariableNames(variables[a.Name].Env); err != nil {
 			return err
 		}
@@ -104,6 +120,10 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			return fmt.Errorf("app %q: %w", a.Name, err)
 		}
 	}
+	hidden := redaction.NewValues(readable)
+	log = log.hiding(hidden)
+	defer func() { err = hidden.HideError(err) }()
+
 	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
 		return err
 	}
@@ -162,7 +182,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			}
 			appLog, ended := log.App(a.Name)
 			err = compile(ctx, cfg, a, outputDir, env, unset, appLog)
-			ended(err)
+			ended(hidden.HideError(err))
 			if err != nil {
 				return err
 			}
