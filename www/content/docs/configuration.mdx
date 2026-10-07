@@ -328,6 +328,88 @@ missing and publish it before the deploy:
 - run: ocel preview up pr-${{ github.event.number }}
 ```
 
+## lifecycle
+
+Commands `ocel deploy` runs on your machine at points of a deploy. `preBuild` is the first: a
+command that runs once per deploy, after your infrastructure is provisioned and before any app is
+built. It is where a database migration goes.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "my-app",
+  "lifecycle": { "preBuild": "pnpm drizzle-kit migrate" }
+}
+```
+
+Written as an object, it takes four fields:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": "web" }],
+  "lifecycle": {
+    "preBuild": {
+      "command": "pnpm migrate",
+      "app": "web",
+      "previews": "persistent",
+      "timeout": "15m"
+    }
+  }
+}
+```
+
+| Field | Means |
+| --- | --- |
+| `command` | The shell command to run. |
+| `app` | The app whose variables the command also receives, and whose directory it runs from. Left off, the command runs from the project directory and receives the bindings alone. |
+| `previews` | Which previews run it: `persistent` (the default), `all` or `none`. Production always runs it. |
+| `timeout` | How long it may run, as a duration such as `90s` or `15m`. Left off, 30 minutes. Past it, the command is stopped with everything it started. |
+
+The command reads your resources the way your code does. Every binding of the project is in
+`OCEL_LIVE_DIR`, forwarded to the deployed resource, so `postgres("main").connectionString` in
+`drizzle.config.ts` is the deployed database, exactly as it is under `ocel run`. A provider that
+forwards no port runs the command without bindings and the deploy says so. Its output streams into
+the deploy.
+
+A command that exits non-zero, or runs past its `timeout`, stops the deploy before anything is built.
+The infrastructure stays as provisioned, nothing is promoted, and the release that was serving keeps
+serving.
+
+It never runs on `ocel rollback` or `ocel env set`. `ocel deploy --dry` lists it in the plan and runs
+nothing. `--prebuilt` builds nothing and leaves provisioning to the deploy itself, so it skips the
+command and says so: run it yourself first with `ocel run --env`.
+
+### Previews
+
+An ephemeral preview, the kind `ocel preview up` makes for a branch, gets no infrastructure of its own.
+It shares the preview tier's databases with every other ephemeral preview, so a migration run from one
+changes what all of them read. `persistent`, the default, runs the command for production and for
+persistent previews, which have their own. `all` runs it for every preview, which suits a preview
+bound to a database branch of its own (see [bindings](#bindings)). `none` leaves previews alone.
+
+### Expand and contract
+
+Between the command and the promotion, the release that is serving runs against the new schema. This
+holds for a migration run after the build too. Write migrations that the running release survives:
+expand first (add the column, the table or the index, nullable or defaulted), deploy code that uses
+it, and contract in a later deploy (drop what nothing reads). A rename is an add, a copy and a drop
+across three deploys.
+
+### npm's prebuild is a different thing
+
+npm and yarn 1 run a `prebuild` script from `package.json` before the `build` script, once per app,
+with the build's environment. `lifecycle.preBuild` runs once per deploy, with the deployed bindings.
+They do not replace each other. When both are set, both run, and the deploy warns once so a migration
+is not run twice by accident. Move the command out of the `prebuild` script when only
+`lifecycle.preBuild` should run it.
+
+### By hand
+
+`ocel run --env production -- pnpm drizzle-kit migrate` opens the same forwards against the deployed
+environment and runs a command of your choosing with its bindings. See [`ocel run`](/docs/cli/run).
+
 ## Another config per target
 
 A file named `ocel.<target>.json` is the same project deployed somewhere else — a box of

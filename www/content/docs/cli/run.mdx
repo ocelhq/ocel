@@ -1,8 +1,30 @@
 ---
 title: ocel run
-description: Dummy description for ocel run.
+description: Run a one-off command with your project's resource connections.
 ---
 
 ```bash
-ocel run
+ocel run [--env <environment>] -- <command> [args...]
 ```
+
+Runs the command with your resources' connections. They reach it as files under `OCEL_LIVE_DIR`, the
+way they reach an app, so `postgres("main").connectionString` works in the command's code. The exit
+code is the command's own.
+
+Without `--env`, the connections are the dev resources `ocel dev` runs.
+
+## --env
+
+`--env production` runs the command against the resources of the deployed production environment, and
+`--env preview` against the current branch's preview. `ocel run` opens a port forward to each of the
+project's resources through the provider, as `ocel deploy` does for
+[`lifecycle.preBuild`](/docs/configuration#lifecycle), runs the command, and closes the forwards when it
+exits.
+
+```bash
+ocel run --env production -- pnpm drizzle-kit migrate
+```
+
+The command receives the bindings alone: the project's variables are resolved by a deploy. It stops
+before the command starts when nothing is deployed to the environment yet, or when the provider
+forwards no port.
