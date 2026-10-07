@@ -24,22 +24,35 @@ func RefuseUnsupportedTopicsTasksAndWorkers(facts provider.Facts, manifest *cont
 		declared, facts.Vendor)
 }
 
+func refuseInvalidWorkers(manifest *contractv1.Manifest) error {
+	seen := map[string]bool{}
+	for _, worker := range manifest.GetWorkers() {
+		name := worker.GetName()
+		if err := naming.Validate("worker name", name); err != nil {
+			return refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
+		}
+		if seen[name] {
+			return refusal.Refuse(refusal.CodeInvalid, "this manifest declares worker %q twice, and tasks and consumers name the one worker they run on", name)
+		}
+		seen[name] = true
+		if err := provider.RefuseConcurrency(worker.GetConcurrency()); err != nil {
+			return refusal.Refuse(refusal.CodeInvalid, "worker %q %s", name, err)
+		}
+	}
+	return nil
+}
+
 func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.WorkerSpec, error) {
+	if err := refuseInvalidWorkers(manifest); err != nil {
+		return nil, err
+	}
 	computes := make(map[string]provider.Compute, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		computes[app.GetName()] = provider.ComputeOf(app)
 	}
 	byApp := map[string][]provider.WorkerSpec{}
-	seen := map[string]bool{}
 	for _, worker := range manifest.GetWorkers() {
 		name := worker.GetName()
-		if err := naming.Validate("worker name", name); err != nil {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
-		}
-		if seen[name] {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "this manifest declares worker %q twice, and tasks and consumers name the one worker they run on", name)
-		}
-		seen[name] = true
 		compute, found := computes[worker.GetApp()]
 		if !found {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q joins app %q, and this manifest deploys no app by that name", name, worker.GetApp())
@@ -47,9 +60,6 @@ func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.Work
 		if provider.Compute(worker.GetCompute()) != compute {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q runs on %q compute, and its app %q runs on %q: a worker runs on its app's compute",
 				name, worker.GetCompute(), worker.GetApp(), compute)
-		}
-		if err := provider.RefuseConcurrency(worker.GetConcurrency()); err != nil {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q %s", name, err)
 		}
 		byApp[worker.GetApp()] = append(byApp[worker.GetApp()], provider.WorkerSpec{Name: name, Concurrency: int(worker.GetConcurrency())})
 	}

@@ -24,6 +24,7 @@ type Stack struct {
 
 	Containers []provider.AppContainer `json:"containers,omitempty"`
 
+	Resources      []byte `json:"resources,omitempty"`
 	ResourceDigest string `json:"resource_digest,omitempty"`
 
 	WrittenBy provider.WrittenBy `json:"writer,omitempty"`
