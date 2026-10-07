@@ -141,7 +141,7 @@ already change, rename it; elsewhere the ≤50-line rule applies; beyond that, f
   `fix(cli): deploy reads ocel.json from the project root`.
 - The body gives the rationale. Commit messages and pull request bodies are the
   decision records, and no file in the repository repeats their rationale.
-- Every commit builds and passes its checks.
+- Every commit builds. The checks run on the tip of the pull request.
 - No agent or AI co-author or attribution lines.
 
 ## Pull requests
