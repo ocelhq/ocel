@@ -84,7 +84,6 @@ const (
 	bastionTaskARN            = "arn:aws:ecs:*:*:task/" + bastion.Prefix + "-*/*"
 	bastionTaskDefinitionARN  = "arn:aws:ecs:*:*:task-definition/" + bastion.Prefix + "-*:*"
 	portForwardingDocumentARN = "arn:aws:ssm:*:*:document/" + bastion.PortForwardingDocument
-	ownSessionARN             = "arn:aws:ssm:*:*:session/${aws:userid}-*"
 
 	scalableTargetARN = "arn:aws:application-autoscaling:*:*:scalable-target/*"
 	scalingAlarmARN   = "arn:aws:cloudwatch:*:*:alarm:TargetTracking-service/ocel-*"
@@ -571,8 +570,13 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Resources: []string{bastionTaskARN},
 		},
 		{
-			Actions:   []string{"ecs:ExecuteCommand", "ecs:ListTasks"},
+			Actions:   []string{"ecs:DescribeClusters", "ecs:ExecuteCommand"},
 			Resources: []string{bastionClusterARN},
+		},
+		{
+			Actions:   []string{"ecs:ListTasks"},
+			Resources: []string{UnscopedResource},
+			Condition: map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastionClusterARN}},
 		},
 		{
 			Actions:   []string{"ecs:DeleteTaskDefinitions"},
@@ -581,10 +585,6 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"ssm:StartSession"},
 			Resources: []string{bastionTaskARN, portForwardingDocumentARN},
-		},
-		{
-			Actions:   []string{"ssm:TerminateSession"},
-			Resources: []string{ownSessionARN},
 		},
 		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},

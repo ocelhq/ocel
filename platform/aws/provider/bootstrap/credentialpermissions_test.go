@@ -837,11 +837,11 @@ func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T
 		{action: "ecs:StopTask", resource: bastionTaskARN, condition: "null"},
 		{action: "ecs:ExecuteCommand", resource: bastionClusterARN, condition: "null"},
 		{action: "ecs:ExecuteCommand", resource: bastionTaskARN, condition: "null"},
-		{action: "ecs:ListTasks", resource: bastionClusterARN, condition: "null"},
+		{action: "ecs:ListTasks", resource: UnscopedResource, condition: onBastion},
+		{action: "ecs:DescribeClusters", resource: bastionClusterARN, condition: "null"},
 		{action: "ecs:DeleteTaskDefinitions", resource: bastionTaskDefinitionARN, condition: "null"},
 		{action: "ssm:StartSession", resource: bastionTaskARN, condition: "null"},
 		{action: "ssm:StartSession", resource: portForwardingDocumentARN, condition: "null"},
-		{action: "ssm:TerminateSession", resource: ownSessionARN, condition: "null"},
 	}
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
@@ -855,12 +855,34 @@ func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T
 
 func TestNoCredentialRunsOrReachesAnythingBeyondTheBastionScopes(t *testing.T) {
 	reachable := []string{"ecs:RunTask", "ecs:StopTask", "ecs:ExecuteCommand", "ssm:StartSession", "ssm:TerminateSession"}
-	scopes := []string{bastionClusterARN, bastionTaskARN, bastionTaskDefinitionARN, portForwardingDocumentARN, ownSessionARN}
+	scopes := []string{bastionClusterARN, bastionTaskARN, bastionTaskDefinitionARN, portForwardingDocumentARN}
 	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			if slices.Contains(reachable, g.action) && !slices.Contains(scopes, g.resource) {
 				t.Errorf("the %s credential grants %s on %s, which reaches past the bastion cluster's tasks and the one port forwarding document", purpose, g.action, g.resource)
 			}
+		}
+	}
+}
+
+func TestEveryCredentialListsTasksOnlyOfABastionClusterAndAgainstTheResourceAWSEvaluates(t *testing.T) {
+	onBastion := conditionJSON(t, map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastionClusterARN}})
+	for purpose, document := range bothCredentials(t) {
+		for g := range grantsOf(t, document) {
+			if g.action != "ecs:ListTasks" {
+				continue
+			}
+			if g.resource != UnscopedResource || g.condition != onBastion {
+				t.Errorf("the %s credential grants ecs:ListTasks on %s under %s, want it on %s under ecs:cluster of a bastion cluster: AWS evaluates ListTasks against a container instance, so a cluster ARN never matches", purpose, g.resource, g.condition, UnscopedResource)
+			}
+		}
+	}
+}
+
+func TestNoCredentialTerminatesSessionsItHasNoCallFor(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		if actionsOf(t, document)["ssm:TerminateSession"] {
+			t.Errorf("the %s credential grants ssm:TerminateSession, which no port forward calls: a session ends with the TerminateSession flag on its own data channel", purpose)
 		}
 	}
 }
