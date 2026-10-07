@@ -66,7 +66,7 @@ export interface OcelConfig {
 export interface AppConfig {
   /** The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on. */
   arch?: "x86_64" | "arm64";
-  /** How a container app's image is built. */
+  /** How the app is built. */
   build?: BuildConfig;
   /** What the app runs on: serverless functions packed per route, or one container image serving everything. */
   compute?: "serverless" | "container";
@@ -90,8 +90,10 @@ export interface AppConfig {
   path: string;
 }
 
-/** How a container app's image is built. */
+/** How the app is built. */
 export interface BuildConfig {
+  /** Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Left off, true. Set false to build as if no resource were provisioned. */
+  bindings?: boolean;
   /** The command that builds the app inside the image. Left off, the app's own build script runs. */
   command?: string;
   /** The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to. */

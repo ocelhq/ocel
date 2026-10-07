@@ -34,7 +34,7 @@ type AppConfig struct {
 	Arch       string           `json:"arch,omitempty" doc:"The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on." enum:"x86_64,arm64"`
 	Folder     string           `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`
 	Domains    *AppDomainConfig `json:"domains,omitempty" doc:"The hostnames this app is served on."`
-	Build      *BuildConfig     `json:"build,omitempty" doc:"How a container app's image is built."`
+	Build      *BuildConfig     `json:"build,omitempty" doc:"How the app is built."`
 	Health     *HealthConfig    `json:"health,omitempty" doc:"How a container app is checked before it is served."`
 
 	MinInstances *int `json:"minInstances,omitempty" minimum:"0" doc:"The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts."`
@@ -45,6 +45,7 @@ type BuildConfig struct {
 	Dockerfile string `json:"dockerfile,omitempty" doc:"The Dockerfile to build from. A relative path resolves against the app's directory."`
 	Context    string `json:"context,omitempty" doc:"The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to."`
 	Command    string `json:"command,omitempty" doc:"The command that builds the app inside the image. Left off, the app's own build script runs."`
+	Bindings   *bool  `json:"bindings,omitempty" doc:"Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Left off, true. Set false to build as if no resource were provisioned."`
 }
 
 type HealthConfig struct {

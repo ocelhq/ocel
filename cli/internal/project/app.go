@@ -29,6 +29,8 @@ type App struct {
 	Serverless        *Serverless
 	Container         *Container
 	undetected        error
+
+	BuildsWithBindings bool
 }
 
 type Serverless struct {
@@ -166,6 +168,8 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 			Folder:            a.Folder,
 			Arch:              architecture,
 			ProductionDomains: domains,
+
+			BuildsWithBindings: a.Build == nil || a.Build.Bindings == nil || *a.Build.Bindings,
 		}
 		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path))); err != nil {
 			return nil, err
@@ -245,11 +249,13 @@ func rootApp(name, dir string) ([]App, error) {
 		Path:       ".",
 		Serverless: &Serverless{Framework: framework, Detected: true},
 		Container:  &Container{},
+
+		BuildsWithBindings: true,
 	}}, nil
 }
 
 func normalizeBuild(a configdoc.AppConfig) (*Build, error) {
-	if a.Build == nil {
+	if a.Build == nil || a.Build.Dockerfile == "" && a.Build.Context == "" && a.Build.Command == "" {
 		return nil, nil
 	}
 	dockerfile := strings.TrimSpace(a.Build.Dockerfile)
@@ -307,7 +313,7 @@ func refuseContainerConfig(app App, compute provider.Compute, container *Contain
 	build, health := container.Build, container.Health
 	if build != nil {
 		return fmt.Errorf(
-			"app %q configures a `build`, and it runs on %q compute, which builds no image: `build` configures a container image and nothing else — give %q `compute: \"container\"`, or remove its `build`",
+			"app %q configures an image `build`, and it runs on %q compute, which builds no image: `build.dockerfile`, `build.context` and `build.command` configure a container image and nothing else — give %q `compute: \"container\"`, or remove them from its `build`",
 			app.Name, compute, app.Name,
 		)
 	}
