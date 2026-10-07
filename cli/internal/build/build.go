@@ -163,20 +163,20 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			err = errors.Join(err, livedir.Remove(dir))
 		}
 	}()
-	environment := func(a project.App) (env map[string]string, unset []string, err error) {
+	deliverValues := func(a project.App) (environment, error) {
 		if !CanReadVariablesAtBuild(a) {
-			return nil, nil, nil
+			return environment{}, nil
 		}
 		var liveDir string
 		if live := variables[a.Name].Live; len(live) > 0 {
-			liveDir, err = livedir.Write("", "ocel-live-", live)
+			dir, err := livedir.Write("", "ocel-live-", live)
 			if err != nil {
-				return nil, nil, err
+				return environment{}, err
 			}
+			liveDir = dir
 			liveDirs = append(liveDirs, liveDir)
 		}
-		env, unset = environmentOf(variables[a.Name], liveDir)
-		return env, unset, nil
+		return composeEnvironment(variables[a.Name], liveDir), nil
 	}
 
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
@@ -186,31 +186,31 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework(); {
 		case compiledFromSource(name):
-			env, unset, err := environment(a)
+			env, err := deliverValues(a)
 			if err != nil {
 				return err
 			}
 			appLog, ended := log.App(a.Name)
-			err = compile(ctx, cfg, a, outputDir, env, unset, appLog)
+			err = compile(ctx, cfg, a, outputDir, env, appLog)
 			ended(hidden.HideError(err))
 			if err != nil {
 				return err
 			}
 		case name == buildoutput.FrameworkNext:
 			nextApps = append(nextApps, a)
-			env, unset, err := environment(a)
+			env, err := deliverValues(a)
 			if err != nil {
 				return err
 			}
 			req.Apps = append(req.Apps, nodeAppBuild{
-				Unset:         unset,
+				Unset:         env.unset,
 				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
 				Cwd:           filepath.Join(cfg.Dir, a.Path),
 				OutputDir:     buildoutput.AppRoot(outputDir, a.Name),
 				DeploymentID:  deploymentIDs[a.Name],
 				Folder:        a.Folder,
-				Env:           env,
+				Env:           env.set,
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 

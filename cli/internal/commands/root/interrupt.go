@@ -30,5 +30,5 @@ func installInterruptHandler(parent context.Context, stderr io.Writer, bus *run.
 func killChildrenAndRemoveLiveDirs() {
 	providerprocess.KillAllLive()
 	childprocess.KillAll()
-	livedir.RemoveAll()
+	livedir.RemoveRecorded()
 }

@@ -7,10 +7,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
-func environmentOf(values AppVariables, liveDir string) (env map[string]string, unset []string) {
-	env = make(map[string]string, len(values.Env)+1)
+type environment struct {
+	set   map[string]string
+	unset []string
+}
+
+func composeEnvironment(values AppVariables, liveDir string) environment {
+	env := make(map[string]string, len(values.Env)+1)
 	maps.Copy(env, values.Env)
 	env[processenv.LiveDirEnvVar] = liveDir
+	var unset []string
 	for key := range values.Env {
 		unset = append(unset, processenv.DeliveredVariablePrefix+key)
 	}
@@ -18,5 +24,5 @@ func environmentOf(values AppVariables, liveDir string) (env map[string]string, 
 		unset = append(unset, key, processenv.DeliveredVariablePrefix+key)
 	}
 	slices.Sort(unset)
-	return env, slices.Compact(unset)
+	return environment{set: env, unset: slices.Compact(unset)}
 }
