@@ -34,9 +34,26 @@ export function laneNamed(name: string): Lane {
   return name as Lane;
 }
 
-export type Concern = "deploy" | "lifecycle" | "sdk" | "kv" | "tasks" | "realtime" | "iac";
+export type Concern =
+  | "deploy"
+  | "lifecycle"
+  | "sdk"
+  | "build-variables"
+  | "kv"
+  | "tasks"
+  | "realtime"
+  | "iac";
 
-export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "kv", "tasks", "realtime", "iac"];
+export const CONCERNS: Concern[] = [
+  "deploy",
+  "lifecycle",
+  "sdk",
+  "build-variables",
+  "kv",
+  "tasks",
+  "realtime",
+  "iac",
+];
 
 const NAMED_ONLY: Concern[] = ["iac"];
 

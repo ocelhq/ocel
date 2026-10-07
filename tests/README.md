@@ -21,7 +21,9 @@ and the targets and variants it runs on. A fixture belongs to one concern: `depl
 whether a runtime runs on a target at all, and its apps under `fixtures/deploy/` declare no
 resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
-usable, from `fixtures/sdk/`; `kv` asks whether a kv store behaves as the map in #1474 says on
+usable, from `fixtures/sdk/`; `build-variables` asks whether a Next build that reads a
+sensitive and a secret value at import deploys, leaving neither in `.ocel/output` or a live
+dir, from `fixtures/build-variables/`; `kv` asks whether a kv store behaves as the map in #1474 says on
 a target, from `fixtures/kv/`, restarting what the app declared and, where the target keeps
 releases, redeploying it to see its data survive; `tasks` asks whether topics, tasks and
 workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `realtime` asks
@@ -133,8 +135,8 @@ pnpm --filter @ocel-tests/e2e smoke --target <aws|gcp|vps|dev|next>
 ```
 
 The E2E Tests run on every push to main and on a release pull request, against the
-emulators and VMs: `deploy`, `lifecycle`, `sdk`, `kv`, `tasks` and `realtime`, `lifecycle`
-cells first, plus `deploy/node` on a box whose docker 28 bootstrap adopts. `iac` deploys real
+emulators and VMs: `deploy`, `lifecycle`, `sdk`, `build-variables`, `kv`, `tasks` and
+`realtime`, `lifecycle` cells first, plus `deploy/node` on a box whose docker 28 bootstrap adopts. `iac` deploys real
 SST and Pulumi stacks, so only a workflow dispatch that names it runs it, and only with
 `skips=run`: the gap list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). The
 run spreads each edge of a fixture group over one member of that group, rotated by the

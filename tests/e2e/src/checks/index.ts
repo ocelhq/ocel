@@ -1,4 +1,5 @@
 export * from "./bindings";
+export * from "./buildVariables";
 export * from "./env";
 export * from "./health";
 export * from "./kv";
