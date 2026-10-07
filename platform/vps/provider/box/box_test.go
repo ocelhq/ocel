@@ -39,13 +39,13 @@ type machine struct {
 	upstream    map[host.RouteKey]string
 	swept       map[string]bool
 	calls       []string
-	releases    []host.Release
+	rollouts    []host.Rollout
 	started     []host.Container
 	headed      []string
 	previewBase string
 	refusals    map[string]error
 	visited     []string
-	releasing   func(host.Release) error
+	rollingOut  func(host.Rollout) error
 	byHand      int
 	tables      int
 
@@ -121,18 +121,18 @@ func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) 
 	return m.upstream[key], nil
 }
 
-func (m *machine) Release(_ context.Context, rel host.Release, _ progress.Log) error {
-	if len(rel.Apps) == 0 {
+func (m *machine) RollOut(_ context.Context, rollout host.Rollout, _ progress.Log) error {
+	if len(rollout.Apps) == 0 {
 		return nil
 	}
-	m.releases = append(m.releases, rel)
-	onto := make([]string, 0, len(rel.Apps))
-	for _, app := range rel.Apps {
+	m.rollouts = append(m.rollouts, rollout)
+	onto := make([]string, 0, len(rollout.Apps))
+	for _, app := range rollout.Apps {
 		onto = append(onto, app.App+" onto "+app.Target)
 	}
 	m.calls = append(m.calls, "release "+strings.Join(onto, ", "))
-	if m.releasing != nil {
-		if err := m.releasing(rel); err != nil {
+	if m.rollingOut != nil {
+		if err := m.rollingOut(rollout); err != nil {
 			return err
 		}
 	}
@@ -141,15 +141,15 @@ func (m *machine) Release(_ context.Context, rel host.Release, _ progress.Log) e
 	}
 	for {
 		read := m.tables
-		if rel.StillActive != nil {
-			if err := rel.StillActive(context.Background()); err != nil {
+		if rollout.StillActive != nil {
+			if err := rollout.StillActive(context.Background()); err != nil {
 				return router.Unserved{Err: err}
 			}
 		}
 		if m.tables != read {
 			continue
 		}
-		for _, app := range rel.Apps {
+		for _, app := range rollout.Apps {
 			m.upstream[app.RouteKey] = app.Target
 		}
 		m.tables++
@@ -483,8 +483,8 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then cuts over", m.calls, want)
 	}
-	if m.releases[0].Apps[0].HealthPath != "/healthz" {
-		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.releases[0].Apps[0].HealthPath)
+	if m.rollouts[0].Apps[0].HealthPath != "/healthz" {
+		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.rollouts[0].Apps[0].HealthPath)
 	}
 }
 
@@ -505,7 +505,7 @@ func TestAPromotionOfARecordWhosePathWasDiscoveredSaysSoToTheGate(t *testing.T) 
 		t.Fatalf("Promote: %v", err)
 	}
 
-	if got := m.releases[0].Apps[0]; got.HealthPath != "/up" || !got.HealthPathDiscovered {
+	if got := m.rollouts[0].Apps[0]; got.HealthPath != "/up" || !got.HealthPathDiscovered {
 		t.Errorf("the release is gated on %q (discovered %t), want /up marked discovered: a failed gate then says the path came from probing", got.HealthPath, got.HealthPathDiscovered)
 	}
 }
@@ -603,16 +603,16 @@ func TestAPromotionOvertakenWhileItGatedNeverCutsOverTheBoxAwayFromTheOneThatOve
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	m.releasing = func(rel host.Release) error {
-		m.releasing = nil
+	m.rollingOut = func(rollout host.Rollout) error {
+		m.rollingOut = nil
 		overtaking := ledger.New(store, environment.TierProduction, slug)
 		if _, err := overtaking.Promote(context.Background(), router.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", "p2"); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
-		if rel.StillActive == nil {
+		if rollout.StillActive == nil {
 			return nil
 		}
-		if err := rel.StillActive(context.Background()); err != nil {
+		if err := rollout.StillActive(context.Background()); err != nil {
 			return router.Unserved{Err: err}
 		}
 		return nil
@@ -936,7 +936,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 	removed, kept := front.PreviewWildcardRemovals(wildcard)
 
 	if removed.Action != edge.PlanDelete {
-		t.Errorf("the removed group is actioned %q, want %q: releasing the wildcard takes down the route that serves it", removed.Action, edge.PlanDelete)
+		t.Errorf("the removed group is actioned %q, want %q: rollingOut the wildcard takes down the route that serves it", removed.Action, edge.PlanDelete)
 	}
 	if len(removed.Changes) != 1 || removed.Changes[0].Name != wildcard {
 		t.Fatalf("the removed group has %v, want the one route claiming %s", removed.Changes, wildcard)
@@ -1006,8 +1006,8 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testin
 	}
 
 	keys := map[string]bool{}
-	for _, rel := range m.releases {
-		for _, app := range rel.Apps {
+	for _, rollout := range m.rollouts {
+		for _, app := range rollout.Apps {
 			keys[app.Owner] = true
 		}
 	}

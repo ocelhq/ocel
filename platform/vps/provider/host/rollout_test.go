@@ -39,18 +39,18 @@ var (
 	apiNextTarget = apiCurrent + ":" + containerimage.PortText
 )
 
-func aRelease() Release {
-	return Release{
-		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: nextTarget, HealthPath: "/healthz"}},
+func aRollout() Rollout {
+	return Rollout{
+		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: nextTarget, HealthPath: "/healthz"}},
 		DeployTimeout: 30 * time.Second,
 		DrainTimeout:  30 * time.Second,
 	}
 }
 
-func bothApps() Release {
-	rel := aRelease()
-	rel.Apps = append(rel.Apps, AppRelease{RouteKey: keyed("api"), Target: apiNextTarget, HealthPath: "/up"})
-	return rel
+func bothApps() Rollout {
+	rollout := aRollout()
+	rollout.Apps = append(rollout.Apps, AppRollout{RouteKey: keyed("api"), Target: apiNextTarget, HealthPath: "/up"})
+	return rollout
 }
 
 func documentOf(t *testing.T, state RoutingTable) string {
@@ -93,14 +93,14 @@ func everyIdle(command string) session.Result {
 	return session.Result{Stdout: idle.String()}
 }
 
-type releaseBench struct {
+type rolloutBench struct {
 	*bench
 	recorded string
 }
 
-func (f *releaseBench) at(fragment string) int { return f.bench.at(fragment) }
+func (f *rolloutBench) at(fragment string) int { return f.bench.at(fragment) }
 
-func (f *releaseBench) after(from int, match func(string) bool) int {
+func (f *rolloutBench) after(from int, match func(string) bool) int {
 	for at, command := range f.commands() {
 		if at > from && match(command) {
 			return at
@@ -109,7 +109,7 @@ func (f *releaseBench) after(from int, match func(string) bool) int {
 	return -1
 }
 
-func (f *releaseBench) count(match func(string) bool) int {
+func (f *rolloutBench) count(match func(string) bool) int {
 	counted := 0
 	for _, command := range f.commands() {
 		if match(command) {
@@ -119,9 +119,9 @@ func (f *releaseBench) count(match func(string) bool) int {
 	return counted
 }
 
-func (f *releaseBench) cutover() int { return f.after(-1, cutsOver) }
+func (f *rolloutBench) cutover() int { return f.after(-1, cutsOver) }
 
-func (f *releaseBench) state(t *testing.T) RoutingTable {
+func (f *rolloutBench) state(t *testing.T) RoutingTable {
 	t.Helper()
 	f.mu.Lock()
 	recorded := f.recorded
@@ -141,9 +141,9 @@ func upstreamsOf(state RoutingTable) map[string]string {
 	return upstreams
 }
 
-func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *releaseBench {
+func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *rolloutBench {
 	t.Helper()
-	box := &releaseBench{bench: machine(nil), recorded: recorded}
+	box := &rolloutBench{bench: machine(nil), recorded: recorded}
 	proxied := servesProxy(box.bench, &box.recorded)
 	var once sync.Once
 	box.answer = func(command string) (session.Result, bool) {
@@ -166,15 +166,15 @@ func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *rel
 	return box
 }
 
-func benched(t *testing.T, gate, cutover session.Result) *releaseBench {
+func benched(t *testing.T, gate, cutover session.Result) *rolloutBench {
 	t.Helper()
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Log) (*releaseBench, error) {
+func rolledOut(t *testing.T, rollout Rollout, gate, cutover session.Result, progress progress.Log) (*rolloutBench, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
-	return box, box.host().Release(context.Background(), rel, progress)
+	return box, box.host().RollOut(context.Background(), rollout, progress)
 }
 
 func unserved(err error) bool {
@@ -194,8 +194,8 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 		}
 		return proxied(command)
 	}
-	if err := box.host().Release(context.Background(), bothApps(), nil); err != nil {
-		t.Fatalf("Release(web and api) = %v", err)
+	if err := box.host().RollOut(context.Background(), bothApps(), nil); err != nil {
+		t.Fatalf("RollOut(web and api) = %v", err)
 	}
 
 	gate := box.at(quoted("gate"))
@@ -252,7 +252,7 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 	box := benchedOn(t, before,
 		session.Result{Code: 4, Stdout: switchboard.Ungated + " " + apiNextTarget + "/up\n", Stderr: apiNextTarget + " never answered /up within 30s"},
 		session.Result{})
-	err := box.host().Release(context.Background(), bothApps(), nil)
+	err := box.host().RollOut(context.Background(), bothApps(), nil)
 	if err == nil {
 		t.Fatal("a promotion whose api never came up released successfully")
 	}
@@ -286,7 +286,7 @@ func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *t
 
 	box := benchedOn(t, twoAppsServing(t), session.Result{},
 		session.Result{Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"})
-	err := box.host().Release(context.Background(), bothApps(), nil)
+	err := box.host().RollOut(context.Background(), bothApps(), nil)
 	if err == nil {
 		t.Fatal("a promotion whose cutover the proxy rejected released successfully")
 	}
@@ -342,8 +342,8 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 		return proxied(command)
 	}
 
-	if err := box.host().Release(context.Background(), bothApps(), nil); err != nil {
-		t.Fatalf("Release() beside a neighbour that wrote after the gate = %v: a moved digest is recomposed onto, not refused", err)
+	if err := box.host().RollOut(context.Background(), bothApps(), nil); err != nil {
+		t.Fatalf("RollOut() beside a neighbour that wrote after the gate = %v: a moved digest is recomposed onto, not refused", err)
 	}
 	if gated := box.count(gates); gated != 1 {
 		t.Errorf("the promotion gated %d times, want once: the targets it gated are still the ones it writes, and only the write moved", gated)
@@ -368,7 +368,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 		}
 		return proxied(command)
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("a write refused on every attempt failed with %v, want %s: another writer is writing to the box, and the deploy is told to run again", err, refusal.CodeBusy)
@@ -399,7 +399,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 			t.Parallel()
 
 			box := benchedOn(t, configFor(t, nextTarget), answer[0], answer[1])
-			if err := box.host().Release(context.Background(), aRelease(), nil); err == nil {
+			if err := box.host().RollOut(context.Background(), aRollout(), nil); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
 			if box.at("docker rm --force "+quoted(physical)) >= 0 {
@@ -412,9 +412,9 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 func TestTheOldContainerIsStoppedOnlyAfterTheCutoverReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
 	t.Parallel()
 
-	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &fake.Log{})
+	box, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, &fake.Log{})
 	if err != nil {
-		t.Fatalf("Release() = %v", err)
+		t.Fatalf("RollOut() = %v", err)
 	}
 	call := box.cutover()
 	stop := box.at("docker stop " + quoted(retiring))
@@ -449,7 +449,7 @@ func TestEveryWayTheGateOrTheCutoverCanFailReachesTheSameEndState(t *testing.T) 
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box, err := released(t, aRelease(), answer[0], answer[1], nil)
+			box, err := rolledOut(t, aRollout(), answer[0], answer[1], nil)
 			if err == nil {
 				t.Fatalf("%s released successfully", what)
 			}
@@ -483,7 +483,7 @@ func TestAFailureTheCutoverCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnT
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box, err := released(t, aRelease(), session.Result{}, answered, nil)
+			box, err := rolledOut(t, aRollout(), session.Result{}, answered, nil)
 			if err == nil {
 				t.Fatalf("%s released successfully", what)
 			}
@@ -514,7 +514,7 @@ func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.
 		}
 		return err
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
 		t.Fatal("a cutover that never came back released successfully")
 	}
@@ -544,7 +544,7 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 
 	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}),
 		session.Result{Code: 3, Stderr: "answered /healthz with status 500"}, session.Result{})
-	if err := box.host().Release(context.Background(), aRelease(), nil); err == nil {
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err == nil {
 		t.Fatal("a first deploy whose app never came up released successfully")
 	}
 	if box.at("docker stop") >= 0 {
@@ -558,9 +558,9 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 func TestAGateOnADiscoveredHealthPathThatFailsSaysItWasFoundByProbingAndHowToNameOne(t *testing.T) {
 	t.Parallel()
 
-	discovered := aRelease()
+	discovered := aRollout()
 	discovered.Apps[0].HealthPathDiscovered = true
-	_, err := released(t, discovered, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{}, nil)
+	_, err := rolledOut(t, discovered, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{}, nil)
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
@@ -583,7 +583,7 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 
 			blank := bothApps()
 			blank.Apps[1].HealthPath = path
-			box, err := released(t, blank, session.Result{}, session.Result{}, nil)
+			box, err := rolledOut(t, blank, session.Result{}, session.Result{}, nil)
 			if err == nil {
 				t.Fatalf("a release with %s released successfully", what)
 			}
@@ -605,8 +605,8 @@ func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, command := range box.commands() {
 		if strings.Contains(command, quoted("--retire")) {
@@ -630,8 +630,8 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 		}
 		return proxied(command)
 	}
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	want, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{
 		Grace:  30 * time.Second,
@@ -670,9 +670,9 @@ func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T
 	t.Parallel()
 
 	progress := &fake.Log{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
+	_, err := rolledOut(t, aRollout(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
 	if err != nil {
-		t.Fatalf("Release() over a drain that read zero = %v", err)
+		t.Fatalf("RollOut() over a drain that read zero = %v", err)
 	}
 	lines := progress.Lines()
 	drained := slices.Index(lines, "INFO Drained retired container shop-web-older00000: nothing was in flight")
@@ -688,9 +688,9 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
 	progress := &fake.Log{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
+	_, err := rolledOut(t, aRollout(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
 	if err != nil {
-		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
+		t.Fatalf("RollOut() over an expired drain = %v, want the new release serving", err)
 	}
 	want := "WARN Retired container shop-web-older00000 still had 2 requests in flight when its 30s drain window closed: " +
 		"open requests get 502 or a truncated response; websockets and server-sent-events reconnect"
@@ -703,8 +703,8 @@ func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing
 	t.Parallel()
 
 	progress := &fake.Log{}
-	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if _, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, progress); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, want := range []string{
 		"INFO Waiting up to 30s for web to answer 2xx on shop-web-abc123def456:8080/healthz, then switching the proxy to it",
@@ -780,7 +780,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	t.Parallel()
 
 	prior := configFor(t, retired)
-	box := &releaseBench{bench: machine(nil), recorded: prior}
+	box := &rolloutBench{bench: machine(nil), recorded: prior}
 	config := renderedFrom(prior)
 	proxied := servesPair(box.bench, &box.recorded, &config)
 	died := false
@@ -807,9 +807,9 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 		}
 	}
 
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
-		t.Fatal("Release() over a write that died between its moves = nil, want the release refused")
+		t.Fatal("RollOut() over a write that died between its moves = nil, want the release refused")
 	}
 	box.mu.Lock()
 	table, rendered := box.recorded, config
@@ -981,8 +981,8 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 		return proxied(command)
 	}
 
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() beside a deploy that rewrote %s after it was read = %v: the compare-and-set exists to refuse a lost update, not a neighbour", ProxyConfig, err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() beside a deploy that rewrote %s after it was read = %v: the compare-and-set exists to refuse a lost update, not a neighbour", ProxyConfig, err)
 	}
 	state := box.state(t)
 	if got := upstreamsOf(state); got["web"] != nextTarget || got["api"] != "prod-api-1:8080" {
@@ -1003,7 +1003,7 @@ func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(
 		return proxied(command)
 	}
 
-	err := box.host().Release(context.Background(), aRelease(), progress)
+	err := box.host().RollOut(context.Background(), aRollout(), progress)
 	if err == nil {
 		t.Fatal("the stop after the cutover was refused and the release reported success")
 	}
@@ -1045,7 +1045,7 @@ func diagnosed(t *testing.T, gate session.Result, state, logs string) string {
 			return proxied(command)
 		}
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release the gate refused returned no error at all")
 	}
@@ -1130,7 +1130,7 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 }
 
-func refusedAfter(t *testing.T, putBack session.Result) (*releaseBench, error) {
+func refusedAfter(t *testing.T, putBack session.Result) (*rolloutBench, error) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{Code: 5, Stderr: "cannot parse the proxy's upstreams"})
 	proxied := box.answer
@@ -1147,7 +1147,7 @@ func refusedAfter(t *testing.T, putBack session.Result) (*releaseBench, error) {
 		}
 		return proxied(command)
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release the helper refused returned no error at all")
 	}
@@ -1176,7 +1176,7 @@ func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPu
 	}
 }
 
-func strandedByWrite(t *testing.T, landed bool, back session.Result) (*releaseBench, error) {
+func strandedByWrite(t *testing.T, landed bool, back session.Result) (*rolloutBench, error) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{})
 	proxied := box.answer
@@ -1200,7 +1200,7 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*releaseBe
 		}
 		return proxied(command)
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release whose cutover configuration was never written released successfully")
 	}
@@ -1263,8 +1263,8 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	t.Parallel()
 
 	progress := &fake.Log{}
-	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if _, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, progress); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	stated := strings.Join(progress.Lines(), "\n")
 	for what, wanted := range map[string]string{
@@ -1280,7 +1280,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 
 	quiet := &fake.Log{}
 	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
-	if err := first.host().Release(context.Background(), aRelease(), quiet); err != nil {
+	if err := first.host().RollOut(context.Background(), aRollout(), quiet); err != nil {
 		t.Fatal(err)
 	}
 	if stated := strings.Join(quiet.Lines(), "\n"); strings.Contains(stated, "Draining") {
@@ -1288,7 +1288,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 }
 
-func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*releaseBench, context.Context) {
+func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*rolloutBench, context.Context) {
 	t.Helper()
 	box := benched(t, session.Result{}, session.Result{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1318,7 +1318,7 @@ func TestAReleaseInterruptedAtTheCutoverStillPutsTheProxyBackAndRemovesWhatItSta
 		}
 		return hit
 	}, session.Result{Code: 2, Stderr: "the proxy answered nothing"})
-	err := box.host().Release(ctx, aRelease(), nil)
+	err := box.host().RollOut(ctx, aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release whose cutover failed under a cancelled context released successfully")
 	}
@@ -1345,7 +1345,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 		writes++
 		return writes == 1
 	}, session.Result{Code: 1, Stderr: "connection reset after the move"})
-	err := box.host().Release(ctx, aRelease(), nil)
+	err := box.host().RollOut(ctx, aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release whose cutover configuration was never confirmed released successfully")
 	}
@@ -1381,8 +1381,8 @@ func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstrea
 		return proxied(command)
 	}
 
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	if got := upstreamsOf(box.state(t))["web"]; got != overtaking {
 		t.Errorf("the release left web routed to %s, want %s: a release that cut over the route since has drained and stopped %s, and routing back onto it serves 502s", got, overtaking, nextTarget)
@@ -1401,7 +1401,7 @@ func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *te
 		return proxied(command)
 	}
 
-	err := box.host().Release(context.Background(), bothApps(), nil)
+	err := box.host().RollOut(context.Background(), bothApps(), nil)
 	if err == nil {
 		t.Fatal("a release whose retiree would not stop reported success")
 	}
@@ -1450,7 +1450,7 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 				return proxied(command)
 			}
 
-			err := box.host().Release(context.Background(), aRelease(), nil)
+			err := box.host().RollOut(context.Background(), aRollout(), nil)
 			stopped := !strings.HasSuffix(running, " true\n") && running != ""
 			if stopped && err != nil {
 				t.Errorf("a release whose refused stop of %s was followed by a box that %s = %v, want it served: a container that is not running is the end the stop was for",
@@ -1476,8 +1476,8 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutover
 		return proxied(command)
 	}
 
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
 		t.Errorf("the release stopped %s after the proxy said it is still in use: a rollback that cut over a route back onto it while this release drained it then serves a stopped container", retiring)
@@ -1501,8 +1501,8 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverR
 		return proxied(command)
 	}
 
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
 		t.Errorf("the release stopped %s while %s routes web to it: the rollback that wrote that route cuts over to a stopped container and web answers 502 until the next deploy", retiring, ProxyConfig)
@@ -1521,12 +1521,12 @@ func TestWhatFollowsTheCutoverCannotAskWhetherItsRetireeIsIdleStopsNothingAndSay
 		return proxied(command)
 	}
 
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
 		t.Errorf("the release stopped %s without knowing whether a route dials it again", retiring)
 	}
 	if err == nil || !strings.Contains(err.Error(), retiring) || !strings.Contains(err.Error(), "permission denied reading /proc") {
-		t.Errorf("Release() = %v, want it to name %s as still running and why", err, retiring)
+		t.Errorf("RollOut() = %v, want it to name %s as still running and why", err, retiring)
 	}
 }
 
@@ -1535,12 +1535,12 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 
 	before := configFor(t, retired)
 	box := benchedOn(t, before, session.Result{}, session.Result{})
-	rel := aRelease()
-	rel.StillActive = func(context.Context) error {
+	rollout := aRollout()
+	rollout.StillActive = func(context.Context) error {
 		return refusal.Refuse(refusal.CodeBusy, "promotion p2 no longer owns production: p3 took it")
 	}
 
-	err := box.host().Release(context.Background(), rel, nil)
+	err := box.host().RollOut(context.Background(), rollout, nil)
 	if err == nil {
 		t.Fatal("a release whose promotion was overtaken released successfully")
 	}
@@ -1579,7 +1579,7 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 				}
 				return answered(command)
 			}
-			if err := box.host().Release(context.Background(), aRelease(), nil); err == nil {
+			if err := box.host().RollOut(context.Background(), aRollout(), nil); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
 			if box.at("docker rm --force "+quoted(physical)) >= 0 {
@@ -1600,7 +1600,7 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 		}
 		return answered(command)
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
@@ -1616,8 +1616,8 @@ func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, session.Result{}, session.Result{})
-	if err := box.host().Release(context.Background(), Release{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, nil); err != nil {
-		t.Fatalf("Release() of no apps = %v", err)
+	if err := box.host().RollOut(context.Background(), Rollout{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, nil); err != nil {
+		t.Fatalf("RollOut() of no apps = %v", err)
 	}
 	if ran := box.commands(); len(ran) != 0 {
 		t.Errorf("a release of no apps ran %v on the box: a promotion whose apps run nowhere on this box has nothing here to put in front", ran)
@@ -1645,7 +1645,7 @@ func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *te
 		return proxied(command)
 	}
 
-	err := box.host().Release(context.Background(), bothApps(), nil)
+	err := box.host().RollOut(context.Background(), bothApps(), nil)
 	if err == nil {
 		t.Fatal("a promotion whose cutover configuration reported failure released successfully")
 	}
@@ -1703,8 +1703,8 @@ func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunnin
 		},
 	}), session.Result{}, session.Result{})
 
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() = %v", err)
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+quoted(retiring)) >= 0 {
 		t.Errorf("the release stopped %s, which %s still routes to: a deployment's own hostname answers 502 the moment its preview moves on", retiring, deployment.Pointer)

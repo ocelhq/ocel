@@ -485,7 +485,7 @@ func TestADeployThatFindsThePlacedFileGoneOrRewrittenPlacesItsRenderingAgain(t *
 
 			adopted := adoptedBox(t, serving)
 			drift(adopted)
-			if err := adopted.host().Release(context.Background(), aRelease(), nil); err != nil {
+			if err := adopted.host().RollOut(context.Background(), aRollout(), nil); err != nil {
 				t.Fatalf("Release() = %v", err)
 			}
 			state, err := ReadRoutingTable([]byte(adopted.recorded))
@@ -563,7 +563,7 @@ func TestAPlacedFileThatMatchesWhatTheTableRendersIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
 	adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
-	if err := adopted.host().Release(context.Background(), aRelease(), nil); err != nil {
+	if err := adopted.host().RollOut(context.Background(), aRollout(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 	if adopted.count(writesProxy) == 0 {
@@ -754,12 +754,12 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).Release(context.Background(), aRelease(), nil)
+			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), nil)
 		},
 		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().Release(context.Background(), aRelease(), nil)
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), nil)
 		},
 		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())

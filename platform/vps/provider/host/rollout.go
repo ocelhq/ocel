@@ -29,42 +29,42 @@ const (
 	drainCeiling = "open requests get 502 or a truncated response; websockets and server-sent-events reconnect"
 )
 
-type Release struct {
-	Apps          []AppRelease
+type Rollout struct {
+	Apps          []AppRollout
 	DeployTimeout time.Duration
 	DrainTimeout  time.Duration
 	StillActive   func(ctx context.Context) error
 }
 
-type AppRelease struct {
+type AppRollout struct {
 	RouteKey
 	Target               string
 	HealthPath           string
 	HealthPathDiscovered bool
 }
 
-func (a AppRelease) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
+func (a AppRollout) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
 
-func (a AppRelease) route() AppRoute {
+func (a AppRollout) route() AppRoute {
 	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target}
 }
 
-func (a AppRelease) gate() string { return a.Target + a.path() }
+func (a AppRollout) gate() string { return a.Target + a.path() }
 
-func (a AppRelease) name() string { return containerOf(a.Target) }
+func (a AppRollout) name() string { return containerOf(a.Target) }
 
-func (a AppRelease) pathSource() string {
+func (a AppRollout) pathSource() string {
 	if a.HealthPathDiscovered {
 		return fmt.Sprintf("found earlier by probing, since %s sets no %q: set it to name the path yourself, e.g. %s", a.App, healthKey, healthPathExample)
 	}
 	return fmt.Sprintf("set by %q", healthKey)
 }
 
-func (r Release) apps() string { return listed(r.Apps, func(app AppRelease) string { return app.App }) }
+func (r Rollout) apps() string { return listed(r.Apps, func(app AppRollout) string { return app.App }) }
 
-func (r Release) names() string { return listed(r.Apps, AppRelease.name) }
+func (r Rollout) names() string { return listed(r.Apps, AppRollout.name) }
 
-func (r Release) waiting() string {
+func (r Rollout) waiting() string {
 	them := "it"
 	if len(r.Apps) > 1 {
 		them = "them"
@@ -98,15 +98,15 @@ func containerOf(address string) string {
 	return name
 }
 
-func (h *Host) Release(ctx context.Context, rel Release, progress progress.Log) error {
-	for _, app := range rel.Apps {
+func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.Log) error {
+	for _, app := range rollout.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
 			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
 				"release %s onto %s: no health check path\nSet %q in your project configuration",
 				app.App, h.named(), healthKey)}
 		}
 	}
-	if len(rel.Apps) == 0 {
+	if len(rollout.Apps) == 0 {
 		return nil
 	}
 	elevation, err := h.reachDocker(ctx)
@@ -114,61 +114,61 @@ func (h *Host) Release(ctx context.Context, rel Release, progress progress.Log) 
 		return router.Unserved{Err: err}
 	}
 
-	gates := make([]string, 0, len(rel.Apps))
-	names := make([]string, 0, len(rel.Apps))
-	for _, app := range rel.Apps {
+	gates := make([]string, 0, len(rollout.Apps))
+	names := make([]string, 0, len(rollout.Apps))
+	for _, app := range rollout.Apps {
 		gates = append(gates, app.gate())
 		names = append(names, app.name())
 	}
-	say(progress, rel.waiting())
-	gated, err := h.stream(ctx, renderStartWatch(names, gateCommand(rel.DeployTimeout, gates)), nil, elevation)
+	say(progress, rollout.waiting())
+	gated, err := h.stream(ctx, renderStartWatch(names, gateCommand(rollout.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
-		return h.ungated(ctx, rel, "never came back with an exit code", err.Error(), "", elevation)
+		return h.ungated(ctx, rollout, "never came back with an exit code", err.Error(), "", elevation)
 	}
 	if name, crashed := findUnstarted(gated.Stdout); crashed {
-		return h.refuseUnstartedRelease(ctx, rel, name, elevation)
+		return h.refuseUnstartedRollout(ctx, rollout, name, elevation)
 	}
 	if gated.Code != 0 {
-		return h.ungated(ctx, rel, fmt.Sprintf("exited %d", gated.Code), strings.TrimSpace(gated.Stderr), gated.Stdout, elevation)
+		return h.ungated(ctx, rollout, fmt.Sprintf("exited %d", gated.Code), strings.TrimSpace(gated.Stderr), gated.Stdout, elevation)
 	}
 
 	var cut cutover
 	var overtaken error
 	shaped, err := h.composeRouting(ctx, func(current RoutingTable) (RoutingTable, error) {
-		if rel.StillActive != nil {
-			if overtaken = rel.StillActive(ctx); overtaken != nil {
+		if rollout.StillActive != nil {
+			if overtaken = rollout.StillActive(ctx); overtaken != nil {
 				return current, overtaken
 			}
 		}
-		cut = cutting(rel, current)
+		cut = cutting(rollout, current)
 		return cut.routed(current), nil
 	})
 	if err != nil {
 		if overtaken != nil {
-			return h.overtaken(ctx, rel, overtaken, elevation)
+			return h.overtaken(ctx, rollout, overtaken, elevation)
 		}
-		return h.stranded(ctx, rel, cut, err, elevation)
+		return h.stranded(ctx, rollout, cut, err, elevation)
 	}
 	if err := h.takenUp(ctx, shaped, false, elevation); err != nil {
-		return h.unfronted(ctx, rel, err, elevation)
+		return h.unfronted(ctx, rollout, err, elevation)
 	}
 
 	for _, retiree := range cut.retiring {
 		say(progress, fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
-			containerOf(retiree), rel.DrainTimeout, drainCeiling))
+			containerOf(retiree), rollout.DrainTimeout, drainCeiling))
 	}
-	cutOver, err := h.stream(ctx, words(cutoverCommand(rel.DrainTimeout, cut.retiring)), nil, elevation)
+	cutOver, err := h.stream(ctx, words(cutoverCommand(rollout.DrainTimeout, cut.retiring)), nil, elevation)
 	if err != nil {
-		return h.refuseFailedCutover(ctx, rel, cut, "never came back with an exit code", err.Error(), elevation)
+		return h.refuseFailedCutover(ctx, rollout, cut, "never came back with an exit code", err.Error(), elevation)
 	}
 	if cutOver.Code != 0 {
-		return h.refuseFailedCutover(ctx, rel, cut, fmt.Sprintf("exited %d", cutOver.Code), strings.TrimSpace(cutOver.Stderr), elevation)
+		return h.refuseFailedCutover(ctx, rollout, cut, fmt.Sprintf("exited %d", cutOver.Code), strings.TrimSpace(cutOver.Stderr), elevation)
 	}
-	tellDrain(progress, cutOver.Stdout, rel.DrainTimeout)
-	return h.stopRetired(ctx, rel, cut, progress, elevation)
+	tellDrain(progress, cutOver.Stdout, rollout.DrainTimeout)
+	return h.stopRetired(ctx, rollout, cut, progress, elevation)
 }
 
-func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress progress.Log, elevation string) error {
+func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, progress progress.Log, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -197,7 +197,7 @@ func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progre
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: cut over to %s, which now serve, but what follows the cutover did not all finish:\n%s",
-		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
+		rollout.apps(), h.named(), rollout.names(), strings.Join(failed, "\n"))
 }
 
 func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
@@ -251,14 +251,14 @@ func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string
 }
 
 type cutover struct {
-	rel      Release
+	rollout  Rollout
 	prior    []AppRoute
 	retiring []string
 }
 
-func cutting(rel Release, table RoutingTable) cutover {
-	cut := cutover{rel: rel}
-	for _, app := range rel.Apps {
+func cutting(rollout Rollout, table RoutingTable) cutover {
+	cut := cutover{rollout: rollout}
+	for _, app := range rollout.Apps {
 		at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == app.RouteKey })
 		if at < 0 {
 			continue
@@ -273,18 +273,18 @@ func cutting(rel Release, table RoutingTable) cutover {
 	return cut
 }
 
-func (c cutover) composed() bool { return len(c.rel.Apps) > 0 }
+func (c cutover) composed() bool { return len(c.rollout.Apps) > 0 }
 
 func (c cutover) routed(table RoutingTable) RoutingTable {
-	table.Grace = c.rel.DrainTimeout
-	for _, app := range c.rel.Apps {
+	table.Grace = c.rollout.DrainTimeout
+	for _, app := range c.rollout.Apps {
 		table.Routes = Routing(table.Routes, app.route())
 	}
 	return table
 }
 
 func (c cutover) back(table RoutingTable) (RoutingTable, error) {
-	for _, app := range c.rel.Apps {
+	for _, app := range c.rollout.Apps {
 		ours := func(route AppRoute) bool { return route.RouteKey == app.RouteKey }
 		at := slices.IndexFunc(table.Routes, ours)
 		if at < 0 || table.Routes[at].Upstream != app.Target {
@@ -705,20 +705,20 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
 }
 
-func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said, elevation string) error {
+func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
 		verdict = "no reason given"
 	}
-	failed := rel.Apps
+	failed := rollout.Apps
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		if len(fields) != 2 || fields[0] != switchboard.Ungated {
 			continue
 		}
-		if at := slices.IndexFunc(rel.Apps, func(app AppRelease) bool { return app.gate() == fields[1] }); at >= 0 {
-			failed = rel.Apps[at : at+1]
+		if at := slices.IndexFunc(rollout.Apps, func(app AppRollout) bool { return app.gate() == fields[1] }); at >= 0 {
+			failed = rollout.Apps[at : at+1]
 		}
 	}
 	var evidence strings.Builder
@@ -733,34 +733,34 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 			logs = noLogOutput
 		}
 		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (%s)\nstate: %s\nlogs (last %s lines): %s",
-			app.gate(), rel.DeployTimeout, app.pathSource(), state, appLogTail, logs)
+			app.gate(), rollout.DeployTimeout, app.pathSource(), state, appLogTail, logs)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
-		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseUnstartedRelease(ctx context.Context, rel Release, name, elevation string) error {
+func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	app := name
-	if at := slices.IndexFunc(rel.Apps, func(each AppRelease) bool { return each.name() == name }); at >= 0 {
-		app = rel.Apps[at].App
+	if at := slices.IndexFunc(rollout.Apps, func(each AppRollout) bool { return each.name() == name }); at >= 0 {
+		app = rollout.Apps[at].App
 	}
 	state := h.said(ctx, stateCommand(name), elevation)
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the previous release is still live\n%s%s",
-		rel.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) overtaken(ctx context.Context, rel Release, why error, elevation string) error {
+func (h *Host) overtaken(ctx context.Context, rollout Rollout, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
-		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error, elevation string) error {
+func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	code := refusal.CodeNotReady
@@ -771,23 +771,23 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 	} else if restored, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(code,
 			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left running",
-			rel.apps(), h.named(), written, why, written, err, rel.names())
+			rollout.apps(), h.named(), written, why, written, err, rollout.names())
 	} else if restored {
 		rolled = written + " restored"
 	}
 	return router.Unserved{Err: refusal.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not cut over: %v\n%s%s",
-		rel.apps(), h.named(), written, why, rolled, h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), written, why, rolled, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) unfronted(ctx context.Context, rel Release, why error, elevation string) error {
+func (h *Host) unfronted(ctx context.Context, rollout Rollout, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
-		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseFailedCutover(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
+func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cutover, outcome, verdict, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -796,11 +796,11 @@ func (h *Host) refuseFailedCutover(ctx context.Context, rel Release, cut cutover
 	if _, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"release %s onto %s: the cutover helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
-			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
+			rollout.apps(), h.named(), outcome, verdict, rollout.names(), err)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the cutover helper %s; the previous release is still live\n%s%s",
-		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel, elevation))}
+		rollout.apps(), h.named(), outcome, verdict, h.discard(ctx, rollout, elevation))}
 }
 
 func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool, error) {
@@ -816,17 +816,17 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 	return true, errors.Join(back.failedPlace, err)
 }
 
-func (h *Host) discard(ctx context.Context, rel Release, elevation string) string {
-	targets := make([]string, 0, len(rel.Apps))
-	for _, app := range rel.Apps {
+func (h *Host) discard(ctx context.Context, rollout Rollout, elevation string) string {
+	targets := make([]string, 0, len(rollout.Apps))
+	for _, app := range rollout.Apps {
 		targets = append(targets, app.Target)
 	}
 	idle, err := h.idleUpstreams(ctx, targets, elevation)
 	if err != nil {
-		return fmt.Sprintf("\n%s left running: %v", rel.names(), err)
+		return fmt.Sprintf("\n%s left running: %v", rollout.names(), err)
 	}
 	var left strings.Builder
-	for _, app := range rel.Apps {
+	for _, app := range rollout.Apps {
 		if !slices.Contains(idle, app.Target) {
 			continue
 		}

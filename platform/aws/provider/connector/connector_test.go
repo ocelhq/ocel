@@ -82,7 +82,7 @@ func TestTheFunctionReadsItsKeyParameterAndNothingElseInTheStore(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestTheConnectorIsWokenOnceAMinuteToBeat(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestAnInstallNamingNoPublicKeyIsRefused(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	if _, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", Config: []byte(`{}`)}, sealingKeys); err == nil {
+	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", Config: []byte(`{}`)}, sealingKeys); err == nil {
 		t.Error("a template with no public key rendered, and the console refuses every heartbeat from a connector that published none")
 	}
 }
@@ -228,7 +228,7 @@ func TestTheTemplateIncludesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestATemplateNamingNoKeyIsRefused(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	if _, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, nil); err == nil {
+	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, nil); err == nil {
 		t.Error("a template naming no key rendered, and an empty Resources list is a policy CloudFormation refuses or a grant that reaches nothing")
 	}
 }

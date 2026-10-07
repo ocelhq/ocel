@@ -55,19 +55,19 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 			return router.Unserved{Err: err}
 		}
 	}
-	apps := make([]host.AppRelease, 0, len(ready))
+	apps := make([]host.AppRollout, 0, len(ready))
 	for _, release := range ready {
 		if err := s.rerun(ctx, release, progress); err != nil {
 			return router.Unserved{Err: err}
 		}
-		apps = append(apps, host.AppRelease{
+		apps = append(apps, host.AppRollout{
 			RouteKey:             release.key,
 			Target:               release.record.Physical + ":" + containerimage.PortText,
 			HealthPath:           release.record.HealthPath,
 			HealthPathDiscovered: release.record.HealthPathDiscovered,
 		})
 	}
-	return s.e.machine.Release(ctx, host.Release{
+	return s.e.machine.RollOut(ctx, host.Rollout{
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
