@@ -3,9 +3,12 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,7 +18,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
 func forwardPortsRequest(names ...string) *contractv1.ForwardPortsRequest {
@@ -348,7 +354,18 @@ func TestWhatTheProviderSaysWhileOpeningForwardsAndWhileTheyAreHeldReachesTheCal
 
 func TestWhatTheProviderSaysOnceItsForwardsAreClosedGoesNowhere(t *testing.T) {
 	builtProject(t)
-	client, vendor := deployServed(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	served := &lateWrites{returned: make(chan struct{})}
+	server := httptest.NewServer(served.watching(providerserver.ConformanceMux(providerserver.Config{
+		Version: "1.0.0",
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return vendor, nil },
+	})))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	bootstrappedOverRPC(t, client)
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 	opened := make(chan progress.Log, 1)
 	closed := make(chan struct{})
@@ -368,12 +385,25 @@ func TestWhatTheProviderSaysOnceItsForwardsAreClosedGoesNowhere(t *testing.T) {
 		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
 	}
 	said := <-opened
+	served.watch()
 	leave()
 	stream.Close()
 	<-closed
-	for range 50 {
+	deadline := time.After(5 * time.Second)
+	for returned := false; !returned; {
 		said.Warn("A connection to orders failed")
-		time.Sleep(time.Millisecond)
+		select {
+		case <-served.returned:
+			returned = true
+		case <-deadline:
+			t.Fatal("ForwardPorts never returned after the caller left")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	said.Warn("A connection to orders failed")
+
+	if late := served.late.Load(); late != 0 {
+		t.Errorf("ForwardPorts wrote %d times to its response after returning, want what the provider says then dropped", late)
 	}
 }
 
@@ -410,3 +440,60 @@ func TestWhatTheProviderSaysWhileClosingForwardsThatFailedGoesNowhere(t *testing
 	stream.Close()
 	<-closed
 }
+
+type lateWrites struct {
+	mutex    sync.Mutex
+	watched  bool
+	done     bool
+	returned chan struct{}
+	late     atomic.Int32
+}
+
+func (l *lateWrites) watch() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.watched = true
+}
+
+func (l *lateWrites) watching(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/ForwardPorts") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(&lateWriter{ResponseWriter: w, watch: l}, r)
+		l.mutex.Lock()
+		defer l.mutex.Unlock()
+		if l.watched && !l.done {
+			l.done = true
+			close(l.returned)
+		}
+	})
+}
+
+type lateWriter struct {
+	http.ResponseWriter
+	watch *lateWrites
+}
+
+func (w *lateWriter) Write(p []byte) (int, error) {
+	w.watch.mutex.Lock()
+	defer w.watch.mutex.Unlock()
+	if w.watch.done {
+		w.watch.late.Add(1)
+		return len(p), nil
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *lateWriter) Flush() {
+	w.watch.mutex.Lock()
+	defer w.watch.mutex.Unlock()
+	if w.watch.done {
+		w.watch.late.Add(1)
+		return
+	}
+	w.ResponseWriter.(http.Flusher).Flush()
+}
+
+func (w *lateWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
