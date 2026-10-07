@@ -67,7 +67,7 @@ func servedOnWildcard(t *testing.T, project clitest.FakeProject, slug string, pr
 		t.Fatal(err)
 	}
 	for _, preview := range previews {
-		stack := stackrecords.StackKey(environment.TierPreview, slug, naming.AppStack(preview, "web", naming.NewRelease("b1", "")))
+		stack := stackrecords.StackKey(environment.TierPreview, slug, naming.AppStack(preview, "web", naming.NewReleaseToken("b1", "")))
 		entry, err := keyvalue.ReadOrEmpty(ctx, store, stack)
 		if err != nil {
 			t.Fatal(err)

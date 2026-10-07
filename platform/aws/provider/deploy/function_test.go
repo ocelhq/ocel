@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-func fixedRelease(t *testing.T) naming.Release {
+func fixedRelease(t *testing.T) naming.ReleaseToken {
 	t.Helper()
-	release, err := naming.ParseRelease("r3f8a1c90")
+	release, err := naming.ParseReleaseToken("r3f8a1c90")
 	if err != nil {
 		t.Fatalf("parse release: %v", err)
 	}

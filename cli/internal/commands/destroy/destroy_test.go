@@ -32,7 +32,7 @@ func deployedToPreview(t *testing.T) clitest.FakeProject {
 	project := clitest.SetUpProject(t)
 	clitest.Bootstrap(t, project.Provider, environment.TierPreview, fake.FeatureCache, fake.FeatureImages)
 	clitest.RecordStacks(t, project, environment.TierPreview,
-		naming.InfraStack("pr-1"), naming.InfraStack("pr-2"), naming.AppStack("pr-1", "web", naming.NewRelease("b1", "")))
+		naming.InfraStack("pr-1"), naming.InfraStack("pr-2"), naming.AppStack("pr-1", "web", naming.NewReleaseToken("b1", "")))
 	clitest.RecordEdgeStack(t, project, environment.TierPreview, fake.KindDirect)
 	return project
 }
@@ -41,7 +41,7 @@ func deployedToProduction(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
 	clitest.RecordStacks(t, project, environment.TierProduction,
-		naming.InfraStack(stackrecords.ProductionEnv), naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewRelease("b1", "")))
+		naming.InfraStack(stackrecords.ProductionEnv), naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken("b1", "")))
 	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindDirect)
 	return project
 }

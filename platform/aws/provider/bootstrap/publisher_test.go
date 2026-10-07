@@ -167,7 +167,7 @@ func TestTagPublisher(t *testing.T) {
 		if len(pattern.DynamoDB.Keys.PK.S) != 1 || pattern.DynamoDB.Keys.PK.S[0]["prefix"] != "PROJECT#" {
 			t.Errorf("pk rule = %+v, want a PROJECT# prefix; without it upload sessions reach this function", pattern.DynamoDB.Keys.PK.S)
 		}
-		if prefix := pattern.DynamoDB.Keys.PK.S[0]["prefix"]; !strings.HasPrefix(naming.StackKey("shop", naming.AppStack("prod", "web", naming.NewRelease("b1", ""))), prefix) {
+		if prefix := pattern.DynamoDB.Keys.PK.S[0]["prefix"]; !strings.HasPrefix(naming.StackKey("shop", naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))), prefix) {
 			t.Errorf("pk rule %q does not match a tag partition, so no snapshot would ever be republished", prefix)
 		}
 		if len(pattern.DynamoDB.Keys.SK.S) != 1 || pattern.DynamoDB.Keys.SK.S[0] != "#META" {

@@ -110,7 +110,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 	t.Parallel()
 
-	release := naming.NewRelease(deploymentID, "f")
+	release := naming.NewReleaseToken(deploymentID, "f")
 	entries := []stackrecords.NamedStack{
 		{Name: naming.InfraStack(stackrecords.ProductionEnv)},
 		{Name: naming.AppStack(stackrecords.ProductionEnv, "web", release)},

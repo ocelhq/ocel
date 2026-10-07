@@ -14,7 +14,7 @@ func sliceCoordinate(project, app, name string) naming.Coordinate {
 		App:     app,
 		Kind:    naming.KindDatabase,
 		Name:    name,
-		Release: naming.NewRelease("b7f3a91c", "fp8a1c"),
+		Release: naming.NewReleaseToken("b7f3a91c", "fp8a1c"),
 	}
 }
 
@@ -25,7 +25,7 @@ func TestSliceDatabaseName(t *testing.T) {
 		t.Parallel()
 
 		got := sliceDatabaseName(sliceCoordinate("shop", "web", "main"))
-		release := naming.NewRelease("b7f3a91c", "fp8a1c").String()
+		release := naming.NewReleaseToken("b7f3a91c", "fp8a1c").String()
 		want := "shop_prod_web_main_" + release
 		if got != want {
 			t.Errorf("sliceDatabaseName() = %q, want %q", got, want)

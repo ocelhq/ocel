@@ -517,7 +517,7 @@ func listPolicyActions(action any) []string {
 const edgeTagKeyPattern = "PROJECT#*#TAG#*"
 
 func TestEdgeTagKeys(t *testing.T) {
-	release, err := naming.ParseRelease("r3f8a1c9d")
+	release, err := naming.ParseReleaseToken("r3f8a1c9d")
 	if err != nil {
 		t.Fatalf("ParseRelease: %v", err)
 	}

@@ -72,7 +72,7 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 				t.Fatal(err)
 			}
 			spec.Edge = shieldingFront{front}
-			spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
+			spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 			spec.App.Guard = nil
 		},
 		"a node function": func(_ *testing.T, _ *Provider, spec *provider.StackSpec) {

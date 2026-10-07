@@ -127,7 +127,7 @@ func bindingEnvironment(p provider.DeploySpec) string {
 	return p.Env
 }
 
-func appCoordinate(p provider.DeploySpec, app string, release naming.Release) naming.Coordinate {
+func appCoordinate(p provider.DeploySpec, app string, release naming.ReleaseToken) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(p.Slug),
 		Env:     p.Env,

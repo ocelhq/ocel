@@ -27,7 +27,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
+func storageCoordinate(env, slug, app string, release naming.ReleaseToken) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(slug),
 		Env:     naming.Sanitize(env),

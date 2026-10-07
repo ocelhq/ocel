@@ -83,7 +83,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	ref := provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,
-		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
+		Name:    naming.AppStack("prod", "web", naming.NewReleaseToken("d1", "f1")),
 	}
 
 	served, err := stacks.Provision(context.Background(), provider.StackSpec{

@@ -191,7 +191,7 @@ func releaseRef(deploymentID string) provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,
-		Name:    naming.AppStack("prod", "web", naming.NewRelease(deploymentID, "f1")),
+		Name:    naming.AppStack("prod", "web", naming.NewReleaseToken(deploymentID, "f1")),
 	}
 }
 

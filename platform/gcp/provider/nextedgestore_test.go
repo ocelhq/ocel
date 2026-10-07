@@ -61,7 +61,7 @@ func behindTheWorkerWithItsWriter(t *testing.T) *wallet {
 		t.Fatal(err)
 	}
 	w.spec = behindTheWorker(routedNextSpec())
-	w.spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
+	w.spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 	return w
 }
 

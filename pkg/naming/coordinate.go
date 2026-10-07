@@ -53,25 +53,25 @@ const releasePrefix = "r"
 
 var releasePattern = regexp.MustCompile(`^r[0-9a-f]{8}$`)
 
-type Release struct {
+type ReleaseToken struct {
 	token string
 }
 
-func NewRelease(deploymentID, fingerprint string) Release {
+func NewReleaseToken(deploymentID, fingerprint string) ReleaseToken {
 	sum := sha256.Sum256([]byte(deploymentID + "\x00" + fingerprint))
-	return Release{token: releasePrefix + hex.EncodeToString(sum[:])[:8]}
+	return ReleaseToken{token: releasePrefix + hex.EncodeToString(sum[:])[:8]}
 }
 
-func ParseRelease(value string) (Release, error) {
+func ParseReleaseToken(value string) (ReleaseToken, error) {
 	if !releasePattern.MatchString(value) {
-		return Release{}, fmt.Errorf("release token %q must be %q followed by 8 hex digits", value, releasePrefix)
+		return ReleaseToken{}, fmt.Errorf("release token %q must be %q followed by 8 hex digits", value, releasePrefix)
 	}
-	return Release{token: value}, nil
+	return ReleaseToken{token: value}, nil
 }
 
-func (r Release) String() string { return r.token }
+func (r ReleaseToken) String() string { return r.token }
 
-func (r Release) IsZero() bool { return r.token == "" }
+func (r ReleaseToken) IsZero() bool { return r.token == "" }
 
 type Coordinate struct {
 	Project string
@@ -79,7 +79,7 @@ type Coordinate struct {
 	App     string
 	Kind    Kind
 	Name    string
-	Release Release
+	Release ReleaseToken
 }
 
 func (c Coordinate) Validate() error {

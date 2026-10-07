@@ -124,7 +124,7 @@ func isRetainedContainer(containersRetained bool, image string) bool {
 	return containersRetained && image != ""
 }
 
-func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere, here map[appRelease]bool) []string {
+func reclaimedPrefixes(slug, env, app string, release naming.ReleaseToken, elsewhere, here map[appRelease]bool) []string {
 	coordinate := naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
 	released := appRelease{app: app, release: release.String()}
 	switch {

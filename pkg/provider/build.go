@@ -61,8 +61,8 @@ func (id Build) IsZero() bool { return id.deploymentID == "" && id.fingerprint =
 
 func (id Build) String() string { return id.deploymentID + identitySeparator + id.fingerprint }
 
-func (id Build) Release() naming.Release {
-	return naming.NewRelease(id.deploymentID, id.fingerprint)
+func (id Build) Release() naming.ReleaseToken {
+	return naming.NewReleaseToken(id.deploymentID, id.fingerprint)
 }
 
 func WriteLenPrefixed(h io.Writer, b []byte) {

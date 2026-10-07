@@ -26,7 +26,7 @@ func TestFitKeepsFixedFieldsAndMarksTruncation(t *testing.T) {
 		App:     "web",
 		Kind:    KindFunction,
 		Name:    "api-users-with-a-very-long-route-identifier",
-		Release: NewRelease("build-1", ""),
+		Release: NewReleaseToken("build-1", ""),
 	}
 	got := c.PhysicalName(64)
 	if len(got) > 64 {
@@ -43,7 +43,7 @@ func TestFitKeepsFixedFieldsAndMarksTruncation(t *testing.T) {
 }
 
 func TestFitStaysCollisionSafe(t *testing.T) {
-	base := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewRelease("b1", "")}
+	base := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewReleaseToken("b1", "")}
 	long := strings.Repeat("route-segment-", 6)
 
 	a, b := base, base
@@ -56,7 +56,7 @@ func TestFitStaysCollisionSafe(t *testing.T) {
 }
 
 func TestFitIsStableWhenItFits(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewRelease("build-1", "")}
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewReleaseToken("build-1", "")}
 	want := "shop-prod-web-api-users-" + c.Release.String()
 	if got := c.PhysicalName(64); got != want {
 		t.Errorf("PhysicalName = %q, want %q", got, want)
@@ -64,7 +64,7 @@ func TestFitIsStableWhenItFits(t *testing.T) {
 }
 
 func TestFitOmitsEmptySegments(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewRelease("build-1", "")}
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewReleaseToken("build-1", "")}
 	want := "shop-prod-web-" + c.Release.String()
 	if got := c.PhysicalName(64); got != want {
 		t.Errorf("PhysicalName = %q, want %q", got, want)
@@ -75,19 +75,19 @@ func TestFitOmitsEmptySegments(t *testing.T) {
 }
 
 func TestReleaseSeparatesBuildFromFingerprint(t *testing.T) {
-	if NewRelease("build-1", "fp-a") == NewRelease("build-1", "fp-b") {
+	if NewReleaseToken("build-1", "fp-a") == NewReleaseToken("build-1", "fp-b") {
 		t.Error("a changed value fingerprint must mint a new release")
 	}
-	if NewRelease("build-1", "") == NewRelease("build-2", "") {
+	if NewReleaseToken("build-1", "") == NewReleaseToken("build-2", "") {
 		t.Error("a changed build must mint a new release")
 	}
-	if _, err := ParseRelease(NewRelease("build-1", "fp").String()); err != nil {
+	if _, err := ParseReleaseToken(NewReleaseToken("build-1", "fp").String()); err != nil {
 		t.Errorf("ParseRelease rejected a minted release: %v", err)
 	}
 }
 
 func TestStackNamesRoundTrip(t *testing.T) {
-	release := NewRelease("build-1", "fp")
+	release := NewReleaseToken("build-1", "fp")
 	for _, want := range []StackName{
 		InfraStack("prod"),
 		InfraStack("pr-7"),
@@ -105,7 +105,7 @@ func TestStackNamesRoundTrip(t *testing.T) {
 }
 
 func TestStackNamesHaveFixedArity(t *testing.T) {
-	if got := AppStack("prod", "web", NewRelease("b", "")).String(); strings.Count(got, FieldSeparator) != 2 {
+	if got := AppStack("prod", "web", NewReleaseToken("b", "")).String(); strings.Count(got, FieldSeparator) != 2 {
 		t.Errorf("app stack %q must always include env, app and release", got)
 	}
 	for _, bad := range []string{"prod", "prod--web", "prod--web--nothex", "prod--infra--r00000000", "prod--web--r1--extra"} {
@@ -127,7 +127,7 @@ func TestValidateRejectsTheFieldSeparator(t *testing.T) {
 }
 
 func TestStorageKeysShareOnePrefix(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewRelease("b", "")}
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewReleaseToken("b", "")}
 	prefix := c.StoragePrefix()
 	for _, key := range []string{
 		c.FunctionArtifactKey("deadbeef"),
@@ -152,7 +152,7 @@ func TestStorageKeysShareOnePrefix(t *testing.T) {
 }
 
 func TestDynamoKeysLeadWithTheProject(t *testing.T) {
-	stack := AppStack("prod", "web", NewRelease("b", ""))
+	stack := AppStack("prod", "web", NewReleaseToken("b", ""))
 	for _, key := range []string{
 		ProjectKey("shop"),
 		StackKey("shop", stack),
@@ -219,7 +219,7 @@ func TestTaskKeysPartitionByProjectAndEnvironmentApartFromSessions(t *testing.T)
 }
 
 func TestStackKeysRoundTrip(t *testing.T) {
-	want := AppStack("pr-7", "web", NewRelease("build-1", "fp"))
+	want := AppStack("pr-7", "web", NewReleaseToken("build-1", "fp"))
 	project, got, err := ParseStackKey(StackKey("shop", want))
 	if err != nil {
 		t.Fatalf("ParseStackKey: %v", err)
@@ -251,7 +251,7 @@ func TestResourceIDsReadAsEnglish(t *testing.T) {
 }
 
 func TestTagsDropEmptyFacts(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "index", Release: NewReleaseToken("b", "")}
 	tags := c.Tags(TagValues{ManagedBy: "ocel-cli/1.2.3", EnvTier: "production", BuildID: "b"})
 	if _, ok := tags["ocel:expires-at"]; ok {
 		t.Error("an absent fact must not become an empty tag")
@@ -265,7 +265,7 @@ func TestTagsDropEmptyFacts(t *testing.T) {
 }
 
 func TestTheTierADeployServesIsTaggedAsItsEnvTier(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "pr-7", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
+	c := Coordinate{Project: "shop", Env: "pr-7", App: "web", Kind: KindFunction, Name: "index", Release: NewReleaseToken("b", "")}
 	tags := c.Tags(TagValues{EnvTier: "preview"})
 	if tags["ocel:env-tier"] != "preview" {
 		t.Errorf("ocel:env-tier = %q, want %q: IAM conditions scope an edge's grants to one tier by this tag", tags["ocel:env-tier"], "preview")

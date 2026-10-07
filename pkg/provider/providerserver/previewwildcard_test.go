@@ -208,7 +208,7 @@ func TestPlanRemovePreviewWildcardRefusesWhileAProjectStillHasLivePreviews(t *te
 	seedStack(t, vendor, environment.TierPreview, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Tier: environment.TierPreview, GlobalPreview: "preview.acme.com"},
 	})
-	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", naming.NewRelease("b1", "")))
+	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", "")))
 
 	if _, err := client.PlanRemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
