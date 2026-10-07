@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
@@ -55,12 +56,20 @@ func (c Clients) findTaskRole(ctx context.Context, name string) (string, error) 
 }
 
 func (c Clients) createTaskRole(ctx context.Context, spec Spec, name string) (string, error) {
+	boundary, err := arn.Parse(spec.Boundary)
+	if err != nil {
+		return "", fmt.Errorf("the app boundary %q is no ARN, so the bastion's task role cannot name the account it trusts: %w", spec.Boundary, err)
+	}
 	trust, err := json.Marshal(map[string]any{
 		"Version": "2012-10-17",
 		"Statement": []map[string]any{{
 			"Effect":    "Allow",
 			"Principal": map[string]any{"Service": ecsTasksPrincipal},
 			"Action":    "sts:AssumeRole",
+			"Condition": map[string]any{
+				"StringEquals": map[string]string{"aws:SourceAccount": boundary.AccountID},
+				"ArnLike":      map[string]string{"aws:SourceArn": "arn:" + boundary.Partition + ":ecs:*:" + boundary.AccountID + ":*"},
+			},
 		}},
 	})
 	if err != nil {
