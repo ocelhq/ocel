@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -26,7 +25,7 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 		Dir:  root,
 		Apps: []project.App{{Name: "web", Path: "server", Serverless: &project.Serverless{Framework: "python"}}},
 	}
-	apps, err := attributionApps(cfg, []build.Function{{App: "web"}})
+	apps, err := attributionApps(cfg)
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}
@@ -45,7 +44,7 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 		Dir:  root,
 		Apps: []project.App{{Name: "web", Path: "server", Serverless: &project.Serverless{Framework: "python"}}},
 	}
-	apps, err := attributionApps(cfg, []build.Function{{App: "web"}})
+	apps, err := attributionApps(cfg)
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}
@@ -70,7 +69,7 @@ func TestAContainerAppWithACrateBesideItsPackageJSONIsReadAsJS(t *testing.T) {
 		Dir:  root,
 		Apps: []project.App{{Name: "web", Path: "web", Compute: "container"}},
 	}
-	apps, err := attributionApps(cfg, nil)
+	apps, err := attributionApps(cfg)
 	if err != nil {
 		t.Fatalf("attributionApps: %v", err)
 	}
@@ -97,7 +96,7 @@ func TestAnAppUsesOnlyWhatItCanBindAndNeverAWorkerOrConsumer(t *testing.T) {
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER, Name: "email", Source: "server/main.py:3", Consumer: &resourcesv1.ConsumerConfig{Topic: "orders"}},
 	}
 
-	usages, err := FindUsages(context.Background(), cfg, build.Output{Functions: []build.Function{{App: "web"}}}, resources)
+	usages, err := FindUsages(context.Background(), cfg, resources)
 	if err != nil {
 		t.Fatalf("FindUsages: %v", err)
 	}

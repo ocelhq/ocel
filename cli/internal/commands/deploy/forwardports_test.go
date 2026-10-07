@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -26,13 +27,14 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const forwardedPostgresKey = "OCEL_RESOURCE_POSTGRES_main"
 
 type forwardsSeen struct {
-	mu           sync.Mutex
+	mutex        sync.Mutex
 	asked        []provider.PortForwardRequest
 	closedBefore []string
 }
@@ -42,13 +44,13 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	seen := &forwardsSeen{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
 		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
-			seen.mu.Lock()
+			seen.mutex.Lock()
 			seen.asked = append(seen.asked, req)
-			seen.mu.Unlock()
+			seen.mutex.Unlock()
 			go func() {
 				<-ctx.Done()
-				seen.mu.Lock()
-				defer seen.mu.Unlock()
+				seen.mutex.Lock()
+				defer seen.mutex.Unlock()
 				seen.closedBefore = fixture.Requests.Procedures()
 			}()
 			forwards := make([]provider.PortForward, 0, len(req.Bindings))
@@ -112,9 +114,9 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
 		t.Errorf("the CLI asked to forward %v, want the one binding the built app uses", sent)
 	}
-	seen.mu.Lock()
+	seen.mutex.Lock()
 	closedBefore := slices.Clone(seen.closedBefore)
-	seen.mu.Unlock()
+	seen.mutex.Unlock()
 	if closedBefore == nil || slices.Contains(closedBefore, contractv1connect.ProviderServiceDeployProcedure) {
 		t.Errorf("the forwards closed after %v, want them closed once the build ended and before the deploy", closedBefore)
 	}
@@ -221,8 +223,8 @@ export function handler() {
 	if _, ok := built.Live[forwardedPostgresKey]; !ok {
 		t.Error("the build was not handed main, which the provider forwarded")
 	}
-	if !strings.Contains(said, "goes without the bindings of") {
-		t.Errorf("the deploy said %q, want it to say the build goes without the bucket the provider forwards no port to", said)
+	if !strings.Contains(said, "goes without the bindings of files,") || strings.Contains(said, "files--files") {
+		t.Errorf("the deploy said %q, want it to say the build goes without files, named as the app declares it", said)
 	}
 }
 
@@ -313,7 +315,7 @@ func TestADryDeployOfResourcesNotYetDeployedBuildsWithoutBindingsAndSaysSo(t *te
 	if _, ok := built.Live[forwardedPostgresKey]; ok {
 		t.Errorf("the dry run was built with %s, want no bindings for resources nothing has deployed", forwardedPostgresKey)
 	}
-	if !strings.Contains(said, "The build goes without the bindings of main, since it is not deployed yet") {
+	if !strings.Contains(said, "The build goes without the bindings of main: ") || !strings.Contains(said, "not deployed yet") {
 		t.Errorf("the dry run said %q, want it to say the build goes without main's binding", said)
 	}
 }
@@ -347,5 +349,72 @@ func TestADeployLeavesNoForwardedBindingsPasswordInTheProjectsOcelDirectory(t *t
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAnEphemeralPreviewOfResourcesNothingPublishedBuildsWithoutTheirBindingsAndLeavesTheRefusalToItsDeploy(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubGit(&dependencies, "feature/login", "")
+	fixture := setUpPreviewProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil || !strings.Contains(err.Error(), "--persistent") {
+		t.Errorf("runPreviewUp() = %v, want the deploy's own refusal of a preview nothing covers", err)
+	}
+	if _, ok := built.Live[forwardedPostgresKey]; ok {
+		t.Errorf("the preview was built with %s, which nothing published", forwardedPostgresKey)
+	}
+	if said := stdout.String(); !strings.Contains(said, "The build goes without the bindings of main") {
+		t.Errorf("the preview said %q, want it to say the build goes without main", said)
+	}
+}
+
+func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWhy(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
+		}
+	})
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	if _, ok := built.Live[forwardedPostgresKey]; ok {
+		t.Errorf("the build was handed %s, which nothing forwarded", forwardedPostgresKey)
+	}
+	if !strings.Contains(said, "The build goes without the bindings of main: ") || !strings.Contains(said, "is not running") {
+		t.Errorf("the deploy said %q, want it to say the build goes without main and why", said)
+	}
+}
+
+func TestANextAppBuiltAsAnImageForwardsNoPort(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	clitest.WriteUsageMonorepo(t, fixture.Root)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
+`)
+	forwardingPorts(t, fixture)
+	built := false
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		built = true
+		return build.Output{}, errors.New("the image is not built in this test")
+	}
+
+	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
+
+	if !built {
+		t.Fatal("the deploy never reached the build, so it never decided whether to forward")
+	}
+	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
+		t.Errorf("the CLI forwarded ports for %v, want none for an image build, which never reads the live directory", sent)
 	}
 }

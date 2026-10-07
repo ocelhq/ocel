@@ -87,7 +87,7 @@ func readPublishedBindings(ctx context.Context, p provider.Provider, spec provid
 		published, err := store.ResolveBinding(ctx, scope, bindingEnvironment(spec), name)
 		if errors.Is(err, variablestore.ErrNotPublished) {
 			return nil, refusal.Refuse(refusal.CodeNotReady,
-				"%s publishes no binding %s, so there is nothing to forward a port to: deploy it, and its infra is provisioned before the build", spec.Slug, name)
+				"%s is not deployed yet: nothing is published under %s, so no port forwards to it", spec.Slug, name)
 		}
 		if err != nil {
 			return nil, err

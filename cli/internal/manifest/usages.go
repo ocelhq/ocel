@@ -40,8 +40,8 @@ func (e *DanglingUsageError) Error() string {
 	)
 }
 
-func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, resources []declaration.Resource) ([]attribution.Usage, error) {
-	apps, err := attributionApps(cfg, servedByFunctions(built.Functions, cfg))
+func FindUsages(ctx context.Context, cfg *project.Project, resources []declaration.Resource) ([]attribution.Usage, error) {
+	apps, err := attributionApps(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -54,17 +54,13 @@ func FindUsages(ctx context.Context, cfg *project.Project, built build.Output, r
 	return attribution.FindUsages(ctx, cfg.Dir, apps, declared)
 }
 
-func attributionApps(cfg *project.Project, functions []build.Function) ([]attribution.App, error) {
-	configName := filepath.Base(cfg.Path)
-	detected := detectedApps(functions)
+func attributionApps(cfg *project.Project) ([]attribution.App, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, err
 	}
-	named := make(map[string]bool, len(cfg.Apps))
 	out := make([]attribution.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		named[a.Name] = true
 		inAnImage := a.RunsOn(provider.ComputeContainer)
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
@@ -76,20 +72,23 @@ func attributionApps(cfg *project.Project, functions []build.Function) ([]attrib
 			Members:   workspaceMembers(inAnImage, appDir),
 		})
 	}
+	return out, nil
+}
 
+func RefuseUnnamedApps(cfg *project.Project, built build.Output) error {
 	var unnamed []string
-	for _, name := range detected {
-		if !named[name] {
+	for _, name := range detectedApps(servedByFunctions(built.Functions, cfg)) {
+		if !slices.ContainsFunc(cfg.Apps, func(a project.App) bool { return a.Name == name }) {
 			unnamed = append(unnamed, name)
 		}
 	}
 	if len(unnamed) > 0 {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"this project builds %s, which `apps` in %s does not name: ocel reads a named app's source to tell which resources it may be handed, and refuses to deploy an app it can attribute nothing to — give each one a name and a path under `apps`",
-			english.And(english.Quoted(unnamed)), configName,
+			english.And(english.Quoted(unnamed)), filepath.Base(cfg.Path),
 		)
 	}
-	return out, nil
+	return nil
 }
 
 func detectedApps(functions []build.Function) []string {

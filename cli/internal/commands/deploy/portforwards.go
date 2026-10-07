@@ -7,13 +7,14 @@ import (
 	"maps"
 	"slices"
 
+	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -63,11 +64,11 @@ func (f *portForwards) deliver(values map[string]build.AppVariables) {
 	}
 }
 
-func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource) (*portForwards, error) {
+func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage) (*portForwards, error) {
 	if i == nil || !i.providerProcess.Facts().GetForwardsPorts() {
 		return nil, nil
 	}
-	uses, err := i.findBoundUses(ctx, cfg, resources)
+	uses, err := i.findBoundUses(cfg, resources, usages)
 	if err != nil || len(uses) == 0 {
 		return nil, err
 	}
@@ -84,26 +85,30 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	slices.Sort(declared)
 
 	var forwards *portForwards
-	unpublished := false
+	var notReady error
 	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)), func() (err error) {
 		forwards, err = i.openPortForwards(ctx, steps, uses, &contractv1.ForwardPortsRequest{Slug: cfg.Slug, Environment: i.env, Bindings: names})
-		if code, refused := provider.RefusedCode(err); i.dry && refused && code == refusal.CodeNotReady {
-			unpublished = true
+		if code, refused := provider.RefusedCode(err); refused && code == refusal.CodeNotReady {
+			notReady = err
 			return nil
 		}
 		return err
 	})
-	if unpublished {
-		why := "it is not deployed yet"
-		if len(declared) > 1 {
-			why = "they are not all deployed yet"
-		}
-		steps.phase.Say(fmt.Sprintf("The build goes without the bindings of %s, since %s", english.And(declared), why))
+	if notReady != nil {
+		steps.phase.Say(fmt.Sprintf("The build goes without the bindings of %s: %s", english.And(declared), refusalMessage(notReady)))
 	}
 	return forwards, err
 }
 
-func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Project, resources []declaration.Resource) ([]appBinding, error) {
+func refusalMessage(err error) string {
+	var rpcErr *connect.Error
+	if errors.As(err, &rpcErr) {
+		return rpcErr.Message()
+	}
+	return err.Error()
+}
+
+func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage) ([]appBinding, error) {
 	built := map[string]bool{}
 	for _, app := range build.FunctionApps(cfg.Apps) {
 		if app.BuildsWithBindings && app.Framework() == buildoutput.FrameworkNext {
@@ -113,12 +118,9 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 	if len(built) == 0 {
 		return nil, nil
 	}
-	usages, err := manifest.FindUsages(ctx, cfg, build.Output{}, resources)
-	if err != nil {
-		return nil, err
-	}
 	infra := i.sent.GetManifest()
 	if infra == nil {
+		var err error
 		if infra, err = i.assemble(resources); err != nil {
 			return nil, err
 		}
@@ -166,7 +168,7 @@ func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSt
 		stop()
 		return nil, err
 	}
-	if unforwarded := resp.GetUnforwarded(); len(unforwarded) > 0 {
+	if unforwarded := declaredNames(uses, resp.GetUnforwarded()); len(unforwarded) > 0 {
 		steps.phase.Say(fmt.Sprintf("The build goes without the bindings of %s, since the provider forwards no port to them", english.And(unforwarded)))
 	}
 	byApp, err := liveBindings(uses, resp.GetBindings())
@@ -175,6 +177,17 @@ func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSt
 	}
 	forwards.bindings = byApp
 	return forwards, nil
+}
+
+func declaredNames(uses []appBinding, bound []string) []string {
+	var declared []string
+	for _, use := range uses {
+		if slices.Contains(bound, use.bound) && !slices.Contains(declared, use.declared) {
+			declared = append(declared, use.declared)
+		}
+	}
+	slices.Sort(declared)
+	return declared
 }
 
 func awaitForwardsAnswer(answered <-chan *contractv1.ForwardPortsResponse, ended chan error) (*contractv1.ForwardPortsResponse, error) {
