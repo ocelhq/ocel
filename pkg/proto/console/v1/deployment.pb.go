@@ -8,8 +8,8 @@ package consolev1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v11 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	v1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v12 "go.opentelemetry.io/proto/otlp/trace/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -329,58 +329,6 @@ func (EnvironmentEventKind) EnumDescriptor() ([]byte, []int) {
 	return file_console_v1_deployment_proto_rawDescGZIP(), []int{5}
 }
 
-type ReportedEnvironment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
-	Identity      string                 `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReportedEnvironment) Reset() {
-	*x = ReportedEnvironment{}
-	mi := &file_console_v1_deployment_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReportedEnvironment) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReportedEnvironment) ProtoMessage() {}
-
-func (x *ReportedEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReportedEnvironment.ProtoReflect.Descriptor instead.
-func (*ReportedEnvironment) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ReportedEnvironment) GetTier() v1.Tier {
-	if x != nil {
-		return x.Tier
-	}
-	return v1.Tier(0)
-}
-
-func (x *ReportedEnvironment) GetIdentity() string {
-	if x != nil {
-		return x.Identity
-	}
-	return ""
-}
-
 type Provider struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -391,7 +339,7 @@ type Provider struct {
 
 func (x *Provider) Reset() {
 	*x = Provider{}
-	mi := &file_console_v1_deployment_proto_msgTypes[1]
+	mi := &file_console_v1_deployment_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +351,7 @@ func (x *Provider) String() string {
 func (*Provider) ProtoMessage() {}
 
 func (x *Provider) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[1]
+	mi := &file_console_v1_deployment_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +364,7 @@ func (x *Provider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provider.ProtoReflect.Descriptor instead.
 func (*Provider) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{1}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Provider) GetName() string {
@@ -442,7 +390,7 @@ type Edge struct {
 
 func (x *Edge) Reset() {
 	*x = Edge{}
-	mi := &file_console_v1_deployment_proto_msgTypes[2]
+	mi := &file_console_v1_deployment_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +402,7 @@ func (x *Edge) String() string {
 func (*Edge) ProtoMessage() {}
 
 func (x *Edge) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[2]
+	mi := &file_console_v1_deployment_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +415,7 @@ func (x *Edge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Edge.ProtoReflect.Descriptor instead.
 func (*Edge) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{2}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Edge) GetKind() string {
@@ -488,7 +436,7 @@ type Promotion struct {
 
 func (x *Promotion) Reset() {
 	*x = Promotion{}
-	mi := &file_console_v1_deployment_proto_msgTypes[3]
+	mi := &file_console_v1_deployment_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +448,7 @@ func (x *Promotion) String() string {
 func (*Promotion) ProtoMessage() {}
 
 func (x *Promotion) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[3]
+	mi := &file_console_v1_deployment_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +461,7 @@ func (x *Promotion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Promotion.ProtoReflect.Descriptor instead.
 func (*Promotion) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{3}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Promotion) GetId() string {
@@ -547,7 +495,7 @@ type Trigger struct {
 
 func (x *Trigger) Reset() {
 	*x = Trigger{}
-	mi := &file_console_v1_deployment_proto_msgTypes[4]
+	mi := &file_console_v1_deployment_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +507,7 @@ func (x *Trigger) String() string {
 func (*Trigger) ProtoMessage() {}
 
 func (x *Trigger) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[4]
+	mi := &file_console_v1_deployment_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -572,7 +520,7 @@ func (x *Trigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Trigger.ProtoReflect.Descriptor instead.
 func (*Trigger) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{4}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Trigger) GetKind() TriggerKind {
@@ -600,7 +548,7 @@ type Source struct {
 
 func (x *Source) Reset() {
 	*x = Source{}
-	mi := &file_console_v1_deployment_proto_msgTypes[5]
+	mi := &file_console_v1_deployment_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +560,7 @@ func (x *Source) String() string {
 func (*Source) ProtoMessage() {}
 
 func (x *Source) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[5]
+	mi := &file_console_v1_deployment_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +573,7 @@ func (x *Source) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Source.ProtoReflect.Descriptor instead.
 func (*Source) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{5}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Source) GetCommit() string {
@@ -651,7 +599,7 @@ func (x *Source) GetDirty() bool {
 
 type CI struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
 	RunUrl        string                 `protobuf:"bytes,3,opt,name=run_url,json=runUrl,proto3" json:"run_url,omitempty"`
 	Pr            uint32                 `protobuf:"varint,4,opt,name=pr,proto3" json:"pr,omitempty"`
@@ -661,7 +609,7 @@ type CI struct {
 
 func (x *CI) Reset() {
 	*x = CI{}
-	mi := &file_console_v1_deployment_proto_msgTypes[6]
+	mi := &file_console_v1_deployment_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +621,7 @@ func (x *CI) String() string {
 func (*CI) ProtoMessage() {}
 
 func (x *CI) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[6]
+	mi := &file_console_v1_deployment_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,12 +634,12 @@ func (x *CI) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CI.ProtoReflect.Descriptor instead.
 func (*CI) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{6}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *CI) GetProvider() string {
+func (x *CI) GetName() string {
 	if x != nil {
-		return x.Provider
+		return x.Name
 	}
 	return ""
 }
@@ -727,7 +675,7 @@ type Runtime struct {
 
 func (x *Runtime) Reset() {
 	*x = Runtime{}
-	mi := &file_console_v1_deployment_proto_msgTypes[7]
+	mi := &file_console_v1_deployment_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -739,7 +687,7 @@ func (x *Runtime) String() string {
 func (*Runtime) ProtoMessage() {}
 
 func (x *Runtime) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[7]
+	mi := &file_console_v1_deployment_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -752,7 +700,7 @@ func (x *Runtime) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Runtime.ProtoReflect.Descriptor instead.
 func (*Runtime) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{7}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Runtime) GetName() string {
@@ -769,112 +717,28 @@ func (x *Runtime) GetArch() string {
 	return ""
 }
 
-type Variable struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Class         v11.VariableClass      `protobuf:"varint,2,opt,name=class,proto3,enum=app.resources.v1.VariableClass" json:"class,omitempty"`
-	Folders       []string               `protobuf:"bytes,3,rep,name=folders,proto3" json:"folders,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Group         string                 `protobuf:"bytes,5,opt,name=group,proto3" json:"group,omitempty"`
-	Required      bool                   `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Variable) Reset() {
-	*x = Variable{}
-	mi := &file_console_v1_deployment_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Variable) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Variable) ProtoMessage() {}
-
-func (x *Variable) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Variable.ProtoReflect.Descriptor instead.
-func (*Variable) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *Variable) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *Variable) GetClass() v11.VariableClass {
-	if x != nil {
-		return x.Class
-	}
-	return v11.VariableClass(0)
-}
-
-func (x *Variable) GetFolders() []string {
-	if x != nil {
-		return x.Folders
-	}
-	return nil
-}
-
-func (x *Variable) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *Variable) GetGroup() string {
-	if x != nil {
-		return x.Group
-	}
-	return ""
-}
-
-func (x *Variable) GetRequired() bool {
-	if x != nil {
-		return x.Required
-	}
-	return false
-}
-
 type App struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
-	Runtime       *Runtime               `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Framework     string                 `protobuf:"bytes,4,opt,name=framework,proto3" json:"framework,omitempty"`
-	Compute       ComputeKind            `protobuf:"varint,5,opt,name=compute,proto3,enum=console.v1.ComputeKind" json:"compute,omitempty"`
-	BuildId       string                 `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	Release       string                 `protobuf:"bytes,7,opt,name=release,proto3" json:"release,omitempty"`
-	Urls          []string               `protobuf:"bytes,8,rep,name=urls,proto3" json:"urls,omitempty"`
-	Hostnames     []string               `protobuf:"bytes,9,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
-	HealthPath    string                 `protobuf:"bytes,10,opt,name=health_path,json=healthPath,proto3" json:"health_path,omitempty"`
-	Outcome       AppOutcome             `protobuf:"varint,11,opt,name=outcome,proto3,enum=console.v1.AppOutcome" json:"outcome,omitempty"`
-	Error         string                 `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
-	Variables     []*Variable            `protobuf:"bytes,13,rep,name=variables,proto3" json:"variables,omitempty"`
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Name          string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Folder        string                   `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Runtime       *Runtime                 `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Framework     string                   `protobuf:"bytes,4,opt,name=framework,proto3" json:"framework,omitempty"`
+	Compute       ComputeKind              `protobuf:"varint,5,opt,name=compute,proto3,enum=console.v1.ComputeKind" json:"compute,omitempty"`
+	BuildId       string                   `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	Release       string                   `protobuf:"bytes,7,opt,name=release,proto3" json:"release,omitempty"`
+	Urls          []string                 `protobuf:"bytes,8,rep,name=urls,proto3" json:"urls,omitempty"`
+	Hostnames     []string                 `protobuf:"bytes,9,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
+	HealthPath    string                   `protobuf:"bytes,10,opt,name=health_path,json=healthPath,proto3" json:"health_path,omitempty"`
+	Outcome       AppOutcome               `protobuf:"varint,11,opt,name=outcome,proto3,enum=console.v1.AppOutcome" json:"outcome,omitempty"`
+	Error         string                   `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
+	Variables     []*v1.VariableDefinition `protobuf:"bytes,13,rep,name=variables,proto3" json:"variables,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *App) Reset() {
 	*x = App{}
-	mi := &file_console_v1_deployment_proto_msgTypes[9]
+	mi := &file_console_v1_deployment_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +750,7 @@ func (x *App) String() string {
 func (*App) ProtoMessage() {}
 
 func (x *App) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[9]
+	mi := &file_console_v1_deployment_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +763,7 @@ func (x *App) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use App.ProtoReflect.Descriptor instead.
 func (*App) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{9}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *App) GetName() string {
@@ -986,7 +850,7 @@ func (x *App) GetError() string {
 	return ""
 }
 
-func (x *App) GetVariables() []*Variable {
+func (x *App) GetVariables() []*v1.VariableDefinition {
 	if x != nil {
 		return x.Variables
 	}
@@ -1004,7 +868,7 @@ type ResourceBinding struct {
 
 func (x *ResourceBinding) Reset() {
 	*x = ResourceBinding{}
-	mi := &file_console_v1_deployment_proto_msgTypes[10]
+	mi := &file_console_v1_deployment_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1016,7 +880,7 @@ func (x *ResourceBinding) String() string {
 func (*ResourceBinding) ProtoMessage() {}
 
 func (x *ResourceBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[10]
+	mi := &file_console_v1_deployment_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1029,7 +893,7 @@ func (x *ResourceBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceBinding.ProtoReflect.Descriptor instead.
 func (*ResourceBinding) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{10}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResourceBinding) GetName() string {
@@ -1064,7 +928,7 @@ type Resource struct {
 
 func (x *Resource) Reset() {
 	*x = Resource{}
-	mi := &file_console_v1_deployment_proto_msgTypes[11]
+	mi := &file_console_v1_deployment_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1076,7 +940,7 @@ func (x *Resource) String() string {
 func (*Resource) ProtoMessage() {}
 
 func (x *Resource) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[11]
+	mi := &file_console_v1_deployment_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1089,7 +953,7 @@ func (x *Resource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resource.ProtoReflect.Descriptor instead.
 func (*Resource) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{11}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Resource) GetName() string {
@@ -1115,7 +979,7 @@ func (x *Resource) GetBinding() *ResourceBinding {
 
 type Grant struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Verb          string                 `protobuf:"bytes,1,opt,name=verb,proto3" json:"verb,omitempty"`
+	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	Actions       []string               `protobuf:"bytes,2,rep,name=actions,proto3" json:"actions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1123,7 +987,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_console_v1_deployment_proto_msgTypes[12]
+	mi := &file_console_v1_deployment_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +999,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[12]
+	mi := &file_console_v1_deployment_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,12 +1012,12 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{12}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *Grant) GetVerb() string {
+func (x *Grant) GetLabel() string {
 	if x != nil {
-		return x.Verb
+		return x.Label
 	}
 	return ""
 }
@@ -1176,7 +1040,7 @@ type Link struct {
 
 func (x *Link) Reset() {
 	*x = Link{}
-	mi := &file_console_v1_deployment_proto_msgTypes[13]
+	mi := &file_console_v1_deployment_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1052,7 @@ func (x *Link) String() string {
 func (*Link) ProtoMessage() {}
 
 func (x *Link) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[13]
+	mi := &file_console_v1_deployment_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1065,7 @@ func (x *Link) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Link.ProtoReflect.Descriptor instead.
 func (*Link) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{13}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Link) GetApp() string {
@@ -1236,7 +1100,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_console_v1_deployment_proto_msgTypes[14]
+	mi := &file_console_v1_deployment_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1248,7 +1112,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[14]
+	mi := &file_console_v1_deployment_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1261,7 +1125,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{14}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Usage) GetApp() string {
@@ -1291,7 +1155,7 @@ type Deployment struct {
 	Kind           DeploymentKind         `protobuf:"varint,2,opt,name=kind,proto3,enum=console.v1.DeploymentKind" json:"kind,omitempty"`
 	Outcome        DeploymentOutcome      `protobuf:"varint,3,opt,name=outcome,proto3,enum=console.v1.DeploymentOutcome" json:"outcome,omitempty"`
 	Slug           string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	Environment    *ReportedEnvironment   `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
+	Environment    *v11.Environment       `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
 	Provider       *Provider              `protobuf:"bytes,6,opt,name=provider,proto3" json:"provider,omitempty"`
 	Target         string                 `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
 	StartedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
@@ -1304,7 +1168,7 @@ type Deployment struct {
 	Resources      []*Resource            `protobuf:"bytes,15,rep,name=resources,proto3" json:"resources,omitempty"`
 	Links          []*Link                `protobuf:"bytes,16,rep,name=links,proto3" json:"links,omitempty"`
 	Usages         []*Usage               `protobuf:"bytes,17,rep,name=usages,proto3" json:"usages,omitempty"`
-	VariableGroups []*v11.GroupDefinition `protobuf:"bytes,18,rep,name=variable_groups,json=variableGroups,proto3" json:"variable_groups,omitempty"`
+	VariableGroups []*v1.GroupDefinition  `protobuf:"bytes,18,rep,name=variable_groups,json=variableGroups,proto3" json:"variable_groups,omitempty"`
 	Source         *Source                `protobuf:"bytes,19,opt,name=source,proto3" json:"source,omitempty"`
 	Ci             *CI                    `protobuf:"bytes,20,opt,name=ci,proto3" json:"ci,omitempty"`
 	Trigger        *Trigger               `protobuf:"bytes,21,opt,name=trigger,proto3" json:"trigger,omitempty"`
@@ -1315,7 +1179,7 @@ type Deployment struct {
 
 func (x *Deployment) Reset() {
 	*x = Deployment{}
-	mi := &file_console_v1_deployment_proto_msgTypes[15]
+	mi := &file_console_v1_deployment_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1327,7 +1191,7 @@ func (x *Deployment) String() string {
 func (*Deployment) ProtoMessage() {}
 
 func (x *Deployment) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[15]
+	mi := &file_console_v1_deployment_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1340,7 +1204,7 @@ func (x *Deployment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Deployment.ProtoReflect.Descriptor instead.
 func (*Deployment) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{15}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Deployment) GetId() string {
@@ -1371,7 +1235,7 @@ func (x *Deployment) GetSlug() string {
 	return ""
 }
 
-func (x *Deployment) GetEnvironment() *ReportedEnvironment {
+func (x *Deployment) GetEnvironment() *v11.Environment {
 	if x != nil {
 		return x.Environment
 	}
@@ -1462,7 +1326,7 @@ func (x *Deployment) GetUsages() []*Usage {
 	return nil
 }
 
-func (x *Deployment) GetVariableGroups() []*v11.GroupDefinition {
+func (x *Deployment) GetVariableGroups() []*v1.GroupDefinition {
 	if x != nil {
 		return x.VariableGroups
 	}
@@ -1501,7 +1365,7 @@ type EnvironmentEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          EnvironmentEventKind   `protobuf:"varint,1,opt,name=kind,proto3,enum=console.v1.EnvironmentEventKind" json:"kind,omitempty"`
 	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
-	Environment   *ReportedEnvironment   `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	Environment   *v11.Environment       `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=at,proto3" json:"at,omitempty"`
 	Source        *Source                `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	Ci            *CI                    `protobuf:"bytes,6,opt,name=ci,proto3" json:"ci,omitempty"`
@@ -1511,7 +1375,7 @@ type EnvironmentEvent struct {
 
 func (x *EnvironmentEvent) Reset() {
 	*x = EnvironmentEvent{}
-	mi := &file_console_v1_deployment_proto_msgTypes[16]
+	mi := &file_console_v1_deployment_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1523,7 +1387,7 @@ func (x *EnvironmentEvent) String() string {
 func (*EnvironmentEvent) ProtoMessage() {}
 
 func (x *EnvironmentEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[16]
+	mi := &file_console_v1_deployment_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1536,7 +1400,7 @@ func (x *EnvironmentEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentEvent.ProtoReflect.Descriptor instead.
 func (*EnvironmentEvent) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{16}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EnvironmentEvent) GetKind() EnvironmentEventKind {
@@ -1553,7 +1417,7 @@ func (x *EnvironmentEvent) GetSlug() string {
 	return ""
 }
 
-func (x *EnvironmentEvent) GetEnvironment() *ReportedEnvironment {
+func (x *EnvironmentEvent) GetEnvironment() *v11.Environment {
 	if x != nil {
 		return x.Environment
 	}
@@ -1590,7 +1454,7 @@ type ReportRequest struct {
 
 func (x *ReportRequest) Reset() {
 	*x = ReportRequest{}
-	mi := &file_console_v1_deployment_proto_msgTypes[17]
+	mi := &file_console_v1_deployment_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1602,7 +1466,7 @@ func (x *ReportRequest) String() string {
 func (*ReportRequest) ProtoMessage() {}
 
 func (x *ReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[17]
+	mi := &file_console_v1_deployment_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1615,7 +1479,7 @@ func (x *ReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportRequest.ProtoReflect.Descriptor instead.
 func (*ReportRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{17}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReportRequest) GetDeployment() *Deployment {
@@ -1633,7 +1497,7 @@ type ReportResponse struct {
 
 func (x *ReportResponse) Reset() {
 	*x = ReportResponse{}
-	mi := &file_console_v1_deployment_proto_msgTypes[18]
+	mi := &file_console_v1_deployment_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1645,7 +1509,7 @@ func (x *ReportResponse) String() string {
 func (*ReportResponse) ProtoMessage() {}
 
 func (x *ReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[18]
+	mi := &file_console_v1_deployment_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1658,7 +1522,7 @@ func (x *ReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResponse.ProtoReflect.Descriptor instead.
 func (*ReportResponse) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{18}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{16}
 }
 
 type RecordEnvironmentEventRequest struct {
@@ -1670,7 +1534,7 @@ type RecordEnvironmentEventRequest struct {
 
 func (x *RecordEnvironmentEventRequest) Reset() {
 	*x = RecordEnvironmentEventRequest{}
-	mi := &file_console_v1_deployment_proto_msgTypes[19]
+	mi := &file_console_v1_deployment_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1682,7 +1546,7 @@ func (x *RecordEnvironmentEventRequest) String() string {
 func (*RecordEnvironmentEventRequest) ProtoMessage() {}
 
 func (x *RecordEnvironmentEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[19]
+	mi := &file_console_v1_deployment_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1695,7 +1559,7 @@ func (x *RecordEnvironmentEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordEnvironmentEventRequest.ProtoReflect.Descriptor instead.
 func (*RecordEnvironmentEventRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{19}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RecordEnvironmentEventRequest) GetEvent() *EnvironmentEvent {
@@ -1713,7 +1577,7 @@ type RecordEnvironmentEventResponse struct {
 
 func (x *RecordEnvironmentEventResponse) Reset() {
 	*x = RecordEnvironmentEventResponse{}
-	mi := &file_console_v1_deployment_proto_msgTypes[20]
+	mi := &file_console_v1_deployment_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1725,7 +1589,7 @@ func (x *RecordEnvironmentEventResponse) String() string {
 func (*RecordEnvironmentEventResponse) ProtoMessage() {}
 
 func (x *RecordEnvironmentEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_deployment_proto_msgTypes[20]
+	mi := &file_console_v1_deployment_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1738,7 +1602,7 @@ func (x *RecordEnvironmentEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordEnvironmentEventResponse.ProtoReflect.Descriptor instead.
 func (*RecordEnvironmentEventResponse) Descriptor() ([]byte, []int) {
-	return file_console_v1_deployment_proto_rawDescGZIP(), []int{20}
+	return file_console_v1_deployment_proto_rawDescGZIP(), []int{18}
 }
 
 var File_console_v1_deployment_proto protoreflect.FileDescriptor
@@ -1746,11 +1610,7 @@ var File_console_v1_deployment_proto protoreflect.FileDescriptor
 const file_console_v1_deployment_proto_rawDesc = "" +
 	"\n" +
 	"\x1bconsole/v1/deployment.proto\x12\n" +
-	"console.v1\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(opentelemetry/proto/trace/v1/trace.proto\"x\n" +
-	"\x13ReportedEnvironment\x12;\n" +
-	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12$\n" +
-	"\bidentity\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\bidentity\"J\n" +
+	"console.v1\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(opentelemetry/proto/trace/v1/trace.proto\"J\n" +
 	"\bProvider\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x04name\x12\x1f\n" +
 	"\x06region\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\x06region\"%\n" +
@@ -1764,34 +1624,26 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\aTrigger\x127\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x17.console.v1.TriggerKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x1e\n" +
-	"\x05actor\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05actor\"c\n" +
-	"\x06Source\x12!\n" +
-	"\x06commit\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\a\x18@R\x06commit\x12 \n" +
+	"\x05actor\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05actor\"t\n" +
+	"\x06Source\x122\n" +
+	"\x06commit\x18\x01 \x01(\tB\x1a\xbaH\x17\xd8\x01\x01r\x122\x10^[0-9a-f]{7,64}$R\x06commit\x12 \n" +
 	"\x06branch\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x06branch\x12\x14\n" +
-	"\x05dirty\x18\x03 \x01(\bR\x05dirty\"\x82\x01\n" +
-	"\x02CI\x12%\n" +
-	"\bprovider\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\bprovider\x12\x1c\n" +
+	"\x05dirty\x18\x03 \x01(\bR\x05dirty\"z\n" +
+	"\x02CI\x12\x1d\n" +
+	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x04name\x12\x1c\n" +
 	"\x04repo\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x04repo\x12'\n" +
 	"\arun_url\x18\x03 \x01(\tB\x0e\xbaH\v\xd8\x01\x01r\x06\x18\x80\x10\x88\x01\x01R\x06runUrl\x12\x0e\n" +
 	"\x02pr\x18\x04 \x01(\rR\x02pr\"E\n" +
 	"\aRuntime\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18 R\x04name\x12\x1b\n" +
-	"\x04arch\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18 R\x04arch\"\xfe\x01\n" +
-	"\bVariable\x12\x1c\n" +
-	"\x03key\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\x03key\x12A\n" +
-	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05class\x12)\n" +
-	"\afolders\x18\x03 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10d\"\x05r\x03\x18\x80\x04R\afolders\x12*\n" +
-	"\vdescription\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xe8\aR\vdescription\x12\x1e\n" +
-	"\x05group\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x05group\x12\x1a\n" +
-	"\brequired\x18\x06 \x01(\bR\brequired\"\xa9\x06\n" +
+	"\x04arch\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18 R\x04arch\"\xb0\a\n" +
 	"\x03App\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18?R\x04name\x12 \n" +
 	"\x06folder\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\x06folder\x12-\n" +
-	"\aruntime\x18\x03 \x01(\v2\x13.console.v1.RuntimeR\aruntime\x12%\n" +
-	"\tframework\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18@R\tframework\x12;\n" +
-	"\acompute\x18\x05 \x01(\x0e2\x17.console.v1.ComputeKindB\b\xbaH\x05\x82\x01\x02\x10\x01R\acompute\x12#\n" +
+	"\aruntime\x18\x03 \x01(\v2\x13.console.v1.RuntimeR\aruntime\x12D\n" +
+	"\tframework\x18\x04 \x01(\tB&\xbaH#\xd8\x01\x01r\x1eR\x04nodeR\x04nextR\x02goR\x06pythonR\x04rustR\tframework\x12=\n" +
+	"\acompute\x18\x05 \x01(\x0e2\x17.console.v1.ComputeKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\acompute\x12#\n" +
 	"\bbuild_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\abuildId\x12\"\n" +
 	"\arelease\x18\a \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\arelease\x12#\n" +
 	"\x04urls\x18\b \x03(\tB\x0f\xbaH\f\x92\x01\t\x10d\"\x05r\x03\x88\x01\x01R\x04urls\x12/\n" +
@@ -1801,22 +1653,22 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"healthPath\x12<\n" +
 	"\aoutcome\x18\v \x01(\x0e2\x16.console.v1.AppOutcomeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aoutcome\x12\x1e\n" +
-	"\x05error\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xa0\x1fR\x05error\x12=\n" +
-	"\tvariables\x18\r \x03(\v2\x14.console.v1.VariableB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\tvariables:\xe6\x01\xbaH\xe2\x01\x1am\n" +
-	"\x14app.build_on_success\x12+a succeeded app names the build it deployed\x1a(this.outcome != 1 || this.build_id != ''\x1aq\n" +
-	"\x16app.release_on_success\x12.a succeeded app names the release it made live\x1a'this.outcome != 1 || this.release != ''\"\x8c\x01\n" +
+	"\x05error\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xa0\x1fR\x05error\x12M\n" +
+	"\tvariables\x18\r \x03(\v2$.app.resources.v1.VariableDefinitionB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\tvariables:\xbc\x02\xbaH\xb8\x02\x1a\x97\x01\n" +
+	"\x14app.build_on_success\x12+a succeeded app names the build it deployed\x1aRthis.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.build_id != ''\x1a\x9b\x01\n" +
+	"\x16app.release_on_success\x12.a succeeded app names the release it made live\x1aQthis.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.release != ''\"\x8c\x01\n" +
 	"\x0fResourceBinding\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04name\x12 \n" +
 	"\x06source\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\x06source\x127\n" +
-	"\rproperty_keys\x18\x03 \x03(\tB\x12\xbaH\x0f\x92\x01\f\x10\xc8\x01\"\ar\x05\x10\x01\x18\x80\x02R\fpropertyKeys\"\x80\x01\n" +
+	"\rproperty_keys\x18\x03 \x03(\tB\x12\xbaH\x0f\x92\x01\f\x10\xc8\x01\"\ar\x05\x10\x01\x18\x80\x02R\fpropertyKeys\"\xb1\x01\n" +
 	"\bResource\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04name\x12\x1d\n" +
-	"\x04type\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x04type\x125\n" +
-	"\abinding\x18\x03 \x01(\v2\x1b.console.v1.ResourceBindingR\abinding\"Q\n" +
-	"\x05Grant\x12\x1b\n" +
-	"\x04verb\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x18@R\x04verb\x12+\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04name\x12N\n" +
+	"\x04type\x18\x02 \x01(\tB:\xbaH7r5R\bpostgresR\x06bucketR\x05topicR\x04taskR\x02kvR\brealtimeR\x06customR\x04type\x125\n" +
+	"\abinding\x18\x03 \x01(\v2\x1b.console.v1.ResourceBindingR\abinding\"S\n" +
+	"\x05Grant\x12\x1d\n" +
+	"\x05label\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x18@R\x05label\x12+\n" +
 	"\aactions\x18\x02 \x03(\tB\x11\xbaH\x0e\x92\x01\v\x10d\"\ar\x05\x10\x01\x18\x80\x01R\aactions\"\x80\x01\n" +
 	"\x04Link\x12\x1b\n" +
 	"\x03app\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18?R\x03app\x12&\n" +
@@ -1828,7 +1680,7 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\bresource\x12&\n" +
 	"\x05files\x18\x03 \x03(\tB\x10\xbaH\r\x92\x01\n" +
-	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xe0\x15\n" +
+	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xc7\x18\n" +
 	"\n" +
 	"Deployment\x12\x9b\x01\n" +
 	"\x02id\x18\x01 \x01(\tB\x8a\x01\xbaH\x86\x01\xba\x01q\n" +
@@ -1838,8 +1690,8 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\aoutcome\x18\x03 \x01(\x0e2\x1d.console.v1.DeploymentOutcomeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aoutcome\x12\x1e\n" +
 	"\x04slug\x18\x04 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12I\n" +
-	"\venvironment\x18\x05 \x01(\v2\x1f.console.v1.ReportedEnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x128\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12L\n" +
+	"\venvironment\x18\x05 \x01(\v2\".common.environment.v1.EnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x128\n" +
 	"\bprovider\x18\x06 \x01(\v2\x14.console.v1.ProviderB\x06\xbaH\x03\xc8\x01\x01R\bprovider\x12:\n" +
 	"\x06target\x18\a \x01(\tB\"\xbaH\x1fr\x1d\x10\x01\x18\x80\x022\x16^[^/\\s]+(?:/[^/\\s]+)+$R\x06target\x12A\n" +
 	"\n" +
@@ -1860,28 +1712,30 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\x06source\x18\x13 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
 	"\x02ci\x18\x14 \x01(\v2\x0e.console.v1.CIR\x02ci\x125\n" +
 	"\atrigger\x18\x15 \x01(\v2\x13.console.v1.TriggerB\x06\xbaH\x03\xc8\x01\x01R\atrigger\x12C\n" +
-	"\x05spans\x18\x16 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans:\xae\v\xbaH\xaa\v\x1a\x86\x01\n" +
-	"\x1fdeployment.promotion_on_success\x129a succeeded deployment names the promotion it made active\x1a(this.outcome != 1 || has(this.promotion)\x1a\x92\x01\n" +
-	"\"deployment.no_promotion_on_failure\x12Aa failed deployment made nothing active, so it names no promotion\x1a)this.outcome != 2 || !has(this.promotion)\x1az\n" +
-	" deployment.preview_up_in_preview\x12(a preview up deploys to the preview tier\x1a,this.kind != 2 || this.environment.tier == 1\x1au\n" +
+	"\x05spans\x18\x16 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans:\x92\x0e\xbaH\x8e\x0e\x1a\xbc\x01\n" +
+	"\x1fdeployment.promotion_on_success\x127a succeeded deployment names the promotion it made live\x1a`this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_SUCCEEDED || has(this.promotion)\x1a\xc5\x01\n" +
+	"\"deployment.no_promotion_on_failure\x12?a failed deployment made nothing live, so it names no promotion\x1a^this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_FAILED || !has(this.promotion)\x1a\x9d\x01\n" +
+	"\x1bdeployment.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\x1a\xd4\x01\n" +
+	" deployment.preview_up_in_preview\x12(a preview up deploys to the preview tier\x1a\x85\x01this.kind != console.v1.DeploymentKind.DEPLOYMENT_KIND_PREVIEW_UP || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW\x1au\n" +
 	"!deployment.finished_after_started\x12+a deployment finishes at or after it starts\x1a#this.finished_at >= this.started_at\x1a[\n" +
 	"\x1bdeployment.unique_app_names\x12\x19each app is reported once\x1a!this.apps.map(a, a.name).unique()\x1aj\n" +
 	" deployment.unique_resource_names\x12\x1eeach resource is reported once\x1a&this.resources.map(r, r.name).unique()\x1au\n" +
 	"!deployment.unique_variable_groups\x12#each variable group is defined once\x1a+this.variable_groups.map(g, g.key).unique()\x1a\xbb\x01\n" +
 	"\"deployment.variable_groups_defined\x12,a variable names a group the project defines\x1agthis.apps.all(a, a.variables.all(v, v.group == '' || this.variable_groups.exists(g, g.key == v.group)))\x1a\xc9\x01\n" +
 	" deployment.links_reference_known\x12:a link names an app and a resource this deployment reports\x1aithis.links.all(l, this.apps.exists(a, a.name == l.app) && this.resources.exists(r, r.name == l.resource))\x1a\xcc\x01\n" +
-	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\"\xdb\x04\n" +
+	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\"\xb6\a\n" +
 	"\x10EnvironmentEvent\x12@\n" +
 	"\x04kind\x18\x01 \x01(\x0e2 .console.v1.EnvironmentEventKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x1e\n" +
 	"\x04slug\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12I\n" +
-	"\venvironment\x18\x03 \x01(\v2\x1f.console.v1.ReportedEnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x122\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12L\n" +
+	"\venvironment\x18\x03 \x01(\v2\".common.environment.v1.EnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x122\n" +
 	"\x02at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x02at\x12*\n" +
 	"\x06source\x18\x05 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
-	"\x02ci\x18\x06 \x01(\v2\x0e.console.v1.CIR\x02ci:\x99\x02\xbaH\x95\x02\x1a\x86\x01\n" +
-	",environment_event.preview_removed_in_preview\x12(a removed preview is in the preview tier\x1a,this.kind != 1 || this.environment.tier == 1\x1a\x89\x01\n" +
-	"/environment_event.preview_removed_names_preview\x12#a removed preview names the preview\x1a1this.kind != 1 || this.environment.identity != ''\"O\n" +
+	"\x02ci\x18\x06 \x01(\v2\x0e.console.v1.CIR\x02ci:\xf1\x04\xbaH\xed\x04\x1a\xf2\x01\n" +
+	",environment_event.preview_removed_in_preview\x12(a removed preview is in the preview tier\x1a\x97\x01this.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW\x1a\xce\x01\n" +
+	"/environment_event.preview_removed_names_preview\x12#a removed preview names the preview\x1avthis.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.identity != ''\x1a\xa4\x01\n" +
+	"\"environment_event.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\"O\n" +
 	"\rReportRequest\x12>\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x16.console.v1.DeploymentB\x06\xbaH\x03\xc8\x01\x01R\n" +
@@ -1935,7 +1789,7 @@ func file_console_v1_deployment_proto_rawDescGZIP() []byte {
 }
 
 var file_console_v1_deployment_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_console_v1_deployment_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_console_v1_deployment_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_console_v1_deployment_proto_goTypes = []any{
 	(DeploymentKind)(0),                    // 0: console.v1.DeploymentKind
 	(DeploymentOutcome)(0),                 // 1: console.v1.DeploymentOutcome
@@ -1943,76 +1797,72 @@ var file_console_v1_deployment_proto_goTypes = []any{
 	(ComputeKind)(0),                       // 3: console.v1.ComputeKind
 	(TriggerKind)(0),                       // 4: console.v1.TriggerKind
 	(EnvironmentEventKind)(0),              // 5: console.v1.EnvironmentEventKind
-	(*ReportedEnvironment)(nil),            // 6: console.v1.ReportedEnvironment
-	(*Provider)(nil),                       // 7: console.v1.Provider
-	(*Edge)(nil),                           // 8: console.v1.Edge
-	(*Promotion)(nil),                      // 9: console.v1.Promotion
-	(*Trigger)(nil),                        // 10: console.v1.Trigger
-	(*Source)(nil),                         // 11: console.v1.Source
-	(*CI)(nil),                             // 12: console.v1.CI
-	(*Runtime)(nil),                        // 13: console.v1.Runtime
-	(*Variable)(nil),                       // 14: console.v1.Variable
-	(*App)(nil),                            // 15: console.v1.App
-	(*ResourceBinding)(nil),                // 16: console.v1.ResourceBinding
-	(*Resource)(nil),                       // 17: console.v1.Resource
-	(*Grant)(nil),                          // 18: console.v1.Grant
-	(*Link)(nil),                           // 19: console.v1.Link
-	(*Usage)(nil),                          // 20: console.v1.Usage
-	(*Deployment)(nil),                     // 21: console.v1.Deployment
-	(*EnvironmentEvent)(nil),               // 22: console.v1.EnvironmentEvent
-	(*ReportRequest)(nil),                  // 23: console.v1.ReportRequest
-	(*ReportResponse)(nil),                 // 24: console.v1.ReportResponse
-	(*RecordEnvironmentEventRequest)(nil),  // 25: console.v1.RecordEnvironmentEventRequest
-	(*RecordEnvironmentEventResponse)(nil), // 26: console.v1.RecordEnvironmentEventResponse
-	(v1.Tier)(0),                           // 27: common.environment.v1.Tier
-	(v11.VariableClass)(0),                 // 28: app.resources.v1.VariableClass
-	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
-	(*v11.GroupDefinition)(nil),            // 30: app.resources.v1.GroupDefinition
-	(*v12.Span)(nil),                       // 31: opentelemetry.proto.trace.v1.Span
+	(*Provider)(nil),                       // 6: console.v1.Provider
+	(*Edge)(nil),                           // 7: console.v1.Edge
+	(*Promotion)(nil),                      // 8: console.v1.Promotion
+	(*Trigger)(nil),                        // 9: console.v1.Trigger
+	(*Source)(nil),                         // 10: console.v1.Source
+	(*CI)(nil),                             // 11: console.v1.CI
+	(*Runtime)(nil),                        // 12: console.v1.Runtime
+	(*App)(nil),                            // 13: console.v1.App
+	(*ResourceBinding)(nil),                // 14: console.v1.ResourceBinding
+	(*Resource)(nil),                       // 15: console.v1.Resource
+	(*Grant)(nil),                          // 16: console.v1.Grant
+	(*Link)(nil),                           // 17: console.v1.Link
+	(*Usage)(nil),                          // 18: console.v1.Usage
+	(*Deployment)(nil),                     // 19: console.v1.Deployment
+	(*EnvironmentEvent)(nil),               // 20: console.v1.EnvironmentEvent
+	(*ReportRequest)(nil),                  // 21: console.v1.ReportRequest
+	(*ReportResponse)(nil),                 // 22: console.v1.ReportResponse
+	(*RecordEnvironmentEventRequest)(nil),  // 23: console.v1.RecordEnvironmentEventRequest
+	(*RecordEnvironmentEventResponse)(nil), // 24: console.v1.RecordEnvironmentEventResponse
+	(*v1.VariableDefinition)(nil),          // 25: app.resources.v1.VariableDefinition
+	(*v11.Environment)(nil),                // 26: common.environment.v1.Environment
+	(*timestamppb.Timestamp)(nil),          // 27: google.protobuf.Timestamp
+	(*v1.GroupDefinition)(nil),             // 28: app.resources.v1.GroupDefinition
+	(*v12.Span)(nil),                       // 29: opentelemetry.proto.trace.v1.Span
 }
 var file_console_v1_deployment_proto_depIdxs = []int32{
-	27, // 0: console.v1.ReportedEnvironment.tier:type_name -> common.environment.v1.Tier
-	4,  // 1: console.v1.Trigger.kind:type_name -> console.v1.TriggerKind
-	28, // 2: console.v1.Variable.class:type_name -> app.resources.v1.VariableClass
-	13, // 3: console.v1.App.runtime:type_name -> console.v1.Runtime
-	3,  // 4: console.v1.App.compute:type_name -> console.v1.ComputeKind
-	2,  // 5: console.v1.App.outcome:type_name -> console.v1.AppOutcome
-	14, // 6: console.v1.App.variables:type_name -> console.v1.Variable
-	16, // 7: console.v1.Resource.binding:type_name -> console.v1.ResourceBinding
-	18, // 8: console.v1.Link.grants:type_name -> console.v1.Grant
-	0,  // 9: console.v1.Deployment.kind:type_name -> console.v1.DeploymentKind
-	1,  // 10: console.v1.Deployment.outcome:type_name -> console.v1.DeploymentOutcome
-	6,  // 11: console.v1.Deployment.environment:type_name -> console.v1.ReportedEnvironment
-	7,  // 12: console.v1.Deployment.provider:type_name -> console.v1.Provider
-	29, // 13: console.v1.Deployment.started_at:type_name -> google.protobuf.Timestamp
-	29, // 14: console.v1.Deployment.finished_at:type_name -> google.protobuf.Timestamp
-	9,  // 15: console.v1.Deployment.promotion:type_name -> console.v1.Promotion
-	8,  // 16: console.v1.Deployment.edge:type_name -> console.v1.Edge
-	15, // 17: console.v1.Deployment.apps:type_name -> console.v1.App
-	17, // 18: console.v1.Deployment.resources:type_name -> console.v1.Resource
-	19, // 19: console.v1.Deployment.links:type_name -> console.v1.Link
-	20, // 20: console.v1.Deployment.usages:type_name -> console.v1.Usage
-	30, // 21: console.v1.Deployment.variable_groups:type_name -> app.resources.v1.GroupDefinition
-	11, // 22: console.v1.Deployment.source:type_name -> console.v1.Source
-	12, // 23: console.v1.Deployment.ci:type_name -> console.v1.CI
-	10, // 24: console.v1.Deployment.trigger:type_name -> console.v1.Trigger
-	31, // 25: console.v1.Deployment.spans:type_name -> opentelemetry.proto.trace.v1.Span
-	5,  // 26: console.v1.EnvironmentEvent.kind:type_name -> console.v1.EnvironmentEventKind
-	6,  // 27: console.v1.EnvironmentEvent.environment:type_name -> console.v1.ReportedEnvironment
-	29, // 28: console.v1.EnvironmentEvent.at:type_name -> google.protobuf.Timestamp
-	11, // 29: console.v1.EnvironmentEvent.source:type_name -> console.v1.Source
-	12, // 30: console.v1.EnvironmentEvent.ci:type_name -> console.v1.CI
-	21, // 31: console.v1.ReportRequest.deployment:type_name -> console.v1.Deployment
-	22, // 32: console.v1.RecordEnvironmentEventRequest.event:type_name -> console.v1.EnvironmentEvent
-	23, // 33: console.v1.DeploymentService.Report:input_type -> console.v1.ReportRequest
-	25, // 34: console.v1.DeploymentService.RecordEnvironmentEvent:input_type -> console.v1.RecordEnvironmentEventRequest
-	24, // 35: console.v1.DeploymentService.Report:output_type -> console.v1.ReportResponse
-	26, // 36: console.v1.DeploymentService.RecordEnvironmentEvent:output_type -> console.v1.RecordEnvironmentEventResponse
-	35, // [35:37] is the sub-list for method output_type
-	33, // [33:35] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	4,  // 0: console.v1.Trigger.kind:type_name -> console.v1.TriggerKind
+	12, // 1: console.v1.App.runtime:type_name -> console.v1.Runtime
+	3,  // 2: console.v1.App.compute:type_name -> console.v1.ComputeKind
+	2,  // 3: console.v1.App.outcome:type_name -> console.v1.AppOutcome
+	25, // 4: console.v1.App.variables:type_name -> app.resources.v1.VariableDefinition
+	14, // 5: console.v1.Resource.binding:type_name -> console.v1.ResourceBinding
+	16, // 6: console.v1.Link.grants:type_name -> console.v1.Grant
+	0,  // 7: console.v1.Deployment.kind:type_name -> console.v1.DeploymentKind
+	1,  // 8: console.v1.Deployment.outcome:type_name -> console.v1.DeploymentOutcome
+	26, // 9: console.v1.Deployment.environment:type_name -> common.environment.v1.Environment
+	6,  // 10: console.v1.Deployment.provider:type_name -> console.v1.Provider
+	27, // 11: console.v1.Deployment.started_at:type_name -> google.protobuf.Timestamp
+	27, // 12: console.v1.Deployment.finished_at:type_name -> google.protobuf.Timestamp
+	8,  // 13: console.v1.Deployment.promotion:type_name -> console.v1.Promotion
+	7,  // 14: console.v1.Deployment.edge:type_name -> console.v1.Edge
+	13, // 15: console.v1.Deployment.apps:type_name -> console.v1.App
+	15, // 16: console.v1.Deployment.resources:type_name -> console.v1.Resource
+	17, // 17: console.v1.Deployment.links:type_name -> console.v1.Link
+	18, // 18: console.v1.Deployment.usages:type_name -> console.v1.Usage
+	28, // 19: console.v1.Deployment.variable_groups:type_name -> app.resources.v1.GroupDefinition
+	10, // 20: console.v1.Deployment.source:type_name -> console.v1.Source
+	11, // 21: console.v1.Deployment.ci:type_name -> console.v1.CI
+	9,  // 22: console.v1.Deployment.trigger:type_name -> console.v1.Trigger
+	29, // 23: console.v1.Deployment.spans:type_name -> opentelemetry.proto.trace.v1.Span
+	5,  // 24: console.v1.EnvironmentEvent.kind:type_name -> console.v1.EnvironmentEventKind
+	26, // 25: console.v1.EnvironmentEvent.environment:type_name -> common.environment.v1.Environment
+	27, // 26: console.v1.EnvironmentEvent.at:type_name -> google.protobuf.Timestamp
+	10, // 27: console.v1.EnvironmentEvent.source:type_name -> console.v1.Source
+	11, // 28: console.v1.EnvironmentEvent.ci:type_name -> console.v1.CI
+	19, // 29: console.v1.ReportRequest.deployment:type_name -> console.v1.Deployment
+	20, // 30: console.v1.RecordEnvironmentEventRequest.event:type_name -> console.v1.EnvironmentEvent
+	21, // 31: console.v1.DeploymentService.Report:input_type -> console.v1.ReportRequest
+	23, // 32: console.v1.DeploymentService.RecordEnvironmentEvent:input_type -> console.v1.RecordEnvironmentEventRequest
+	22, // 33: console.v1.DeploymentService.Report:output_type -> console.v1.ReportResponse
+	24, // 34: console.v1.DeploymentService.RecordEnvironmentEvent:output_type -> console.v1.RecordEnvironmentEventResponse
+	33, // [33:35] is the sub-list for method output_type
+	31, // [31:33] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_console_v1_deployment_proto_init() }
@@ -2026,7 +1876,7 @@ func file_console_v1_deployment_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_console_v1_deployment_proto_rawDesc), len(file_console_v1_deployment_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   21,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

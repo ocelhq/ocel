@@ -16,10 +16,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -32,7 +35,7 @@ func validDeployment() *consolev1.Deployment {
 		Kind:    consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
 		Outcome: consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED,
 		Slug:    "shop",
-		Environment: &consolev1.ReportedEnvironment{
+		Environment: &environmentv1.Environment{
 			Tier: environmentv1.Tier_TIER_PRODUCTION,
 		},
 		Provider:   &consolev1.Provider{Name: "aws", Region: "eu-west-1"},
@@ -43,13 +46,14 @@ func validDeployment() *consolev1.Deployment {
 		Promotion:  &consolev1.Promotion{Id: "p_01", Seq: 3},
 		Trigger:    &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI},
 		Apps: []*consolev1.App{{
-			Name:    "web",
-			BuildId: "b_01",
-			Release: "r_01",
-			Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
-			Compute: consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS,
-			Urls:    []string{"https://shop.example.com"},
-			Variables: []*consolev1.Variable{{
+			Name:      "web",
+			BuildId:   "b_01",
+			Release:   "r_01",
+			Outcome:   consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+			Compute:   consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS,
+			Framework: buildoutput.FrameworkNext,
+			Urls:      []string{"https://shop.example.com"},
+			Variables: []*resourcesv1.VariableDefinition{{
 				Key:      "STRIPE_KEY",
 				Class:    resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 				Required: true,
@@ -58,12 +62,12 @@ func validDeployment() *consolev1.Deployment {
 		}},
 		Resources: []*consolev1.Resource{{
 			Name: "db",
-			Type: "postgres",
+			Type: string(provider.BindingPostgres),
 		}},
 		Links: []*consolev1.Link{{
 			App:      "web",
 			Resource: "db",
-			Grants:   []*consolev1.Grant{{Verb: "read", Actions: []string{"connect"}}},
+			Grants:   []*consolev1.Grant{{Label: "read", Actions: []string{"connect"}}},
 		}},
 		Usages: []*consolev1.Usage{{
 			App:      "web",
@@ -73,9 +77,9 @@ func validDeployment() *consolev1.Deployment {
 		VariableGroups: []*resourcesv1.GroupDefinition{{Key: "stripe", Required: true}},
 		Source:         &consolev1.Source{Commit: "0123456789abcdef", Branch: "main"},
 		Ci: &consolev1.CI{
-			Provider: "github-actions",
-			Repo:     "ocelhq/shop",
-			RunUrl:   "https://github.com/ocelhq/shop/actions/runs/1",
+			Name:   "github-actions",
+			Repo:   "ocelhq/shop",
+			RunUrl: "https://github.com/ocelhq/shop/actions/runs/1",
 		},
 		Spans: []*tracev1.Span{{Name: "deploy"}},
 	}
@@ -85,7 +89,7 @@ func validEnvironmentEvent() *consolev1.EnvironmentEvent {
 	return &consolev1.EnvironmentEvent{
 		Kind:        consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
 		Slug:        "shop",
-		Environment: &consolev1.ReportedEnvironment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"},
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"},
 		At:          timestamppb.New(started),
 	}
 }
@@ -98,48 +102,90 @@ func failedDeployment() *consolev1.Deployment {
 	return d
 }
 
-func requireRule(t *testing.T, err error, rule string) {
-	t.Helper()
-	var violations *protovalidate.ValidationError
-	if !errors.As(err, &violations) {
-		t.Fatalf("expected a validation error, got %v", err)
-	}
-	for _, v := range violations.Violations {
-		if v.Proto.GetRuleId() == rule {
-			return
-		}
-	}
-	t.Fatalf("expected rule %s among %v", rule, err)
+type refusal[T proto.Message] struct {
+	name   string
+	start  func() T
+	mutate func(T)
+	rule   string
 }
 
-func TestDeploymentValidation(t *testing.T) {
-	valid := []struct {
-		name  string
-		start func() *consolev1.Deployment
-	}{
-		{name: "a succeeded deploy that names its promotion is valid", start: validDeployment},
-		{name: "a failed deploy with no promotion is valid", start: failedDeployment},
-	}
-	validator, err := protovalidate.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range valid {
+func requireRefusals[T proto.Message](t *testing.T, valid func() T, cases []refusal[T]) {
+	t.Helper()
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validator.Validate(tc.start()); err != nil {
-				t.Fatalf("expected a valid deployment, got %v", err)
+			start := tc.start
+			if start == nil {
+				start = valid
 			}
+			msg := start()
+			tc.mutate(msg)
+			err := protovalidate.Validate(msg)
+			if err == nil {
+				t.Fatal("expected protovalidate to refuse it")
+			}
+			if tc.rule == "" {
+				return
+			}
+			var violations *protovalidate.ValidationError
+			if !errors.As(err, &violations) {
+				t.Fatalf("expected a validation error, got %v", err)
+			}
+			for _, v := range violations.Violations {
+				if v.Proto.GetRuleId() == tc.rule {
+					return
+				}
+			}
+			t.Fatalf("expected rule %s among %v", tc.rule, err)
 		})
 	}
+}
 
-	invalid := []struct {
-		name   string
-		start  func() *consolev1.Deployment
-		mutate func(*consolev1.Deployment)
-		rule   string
-	}{
+func requireAccepted(t *testing.T, name string, msg proto.Message) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		if err := protovalidate.Validate(msg); err != nil {
+			t.Fatalf("expected protovalidate to accept it, got %v", err)
+		}
+	})
+}
+
+func TestProtovalidateAcceptsEveryDeploymentTheCLICanReport(t *testing.T) {
+	requireAccepted(t, "a succeeded deploy that names its promotion", validDeployment())
+	requireAccepted(t, "a failed deploy with no promotion", failedDeployment())
+
+	unclassified := validDeployment()
+	unclassified.Apps[0].Variables[0].Class = resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
+	requireAccepted(t, "a variable declared with no class", unclassified)
+
+	uncommitted := validDeployment()
+	uncommitted.Source = &consolev1.Source{Branch: "main"}
+	requireAccepted(t, "a repository with no commits names only its branch", uncommitted)
+
+	unframed := validDeployment()
+	unframed.Apps[0].Framework = ""
+	requireAccepted(t, "an app with no framework", unframed)
+
+	for _, framework := range buildoutput.Frameworks() {
+		d := validDeployment()
+		d.Apps[0].Framework = framework
+		requireAccepted(t, "an app built with "+framework, d)
+	}
+
+	for encoded := range bindingsv1.BindingType_name {
+		kind, known := provider.BindingTypeFromProto(bindingsv1.BindingType(encoded))
+		if !known {
+			continue
+		}
+		d := validDeployment()
+		d.Resources[0].Type = string(kind)
+		requireAccepted(t, "a resource bound as "+string(kind), d)
+	}
+}
+
+func TestProtovalidateRefusesADeploymentThatBreaksARule(t *testing.T) {
+	requireRefusals(t, validDeployment, []refusal[*consolev1.Deployment]{
 		{
-			name: "a succeeded rollback names the promotion it made active",
+			name: "a succeeded rollback names the promotion it made live",
 			mutate: func(d *consolev1.Deployment) {
 				d.Kind = consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK
 				d.Promotion = nil
@@ -147,16 +193,16 @@ func TestDeploymentValidation(t *testing.T) {
 			rule: "deployment.promotion_on_success",
 		},
 		{
-			name: "a succeeded preview up names the promotion it made active",
+			name: "a succeeded preview up names the promotion it made live",
 			mutate: func(d *consolev1.Deployment) {
 				d.Kind = consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP
-				d.Environment = &consolev1.ReportedEnvironment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}
+				d.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}
 				d.Promotion = nil
 			},
 			rule: "deployment.promotion_on_success",
 		},
 		{
-			name:   "a failed deployment has no promotion",
+			name:   "a failed deployment made nothing live, so it names no promotion",
 			start:  failedDeployment,
 			mutate: func(d *consolev1.Deployment) { d.Promotion = &consolev1.Promotion{Id: "p_01", Seq: 3} },
 			rule:   "deployment.no_promotion_on_failure",
@@ -170,7 +216,11 @@ func TestDeploymentValidation(t *testing.T) {
 		{name: "an all zero trace id is invalid", mutate: func(d *consolev1.Deployment) { d.Id = strings.Repeat("0", 32) }},
 		{name: "the slug is required", mutate: func(d *consolev1.Deployment) { d.Slug = "" }},
 		{name: "the environment is required", mutate: func(d *consolev1.Deployment) { d.Environment = nil }},
-		{name: "the environment tier is required", mutate: func(d *consolev1.Deployment) { d.Environment.Tier = environmentv1.Tier_TIER_UNSPECIFIED }},
+		{
+			name:   "the environment names its tier",
+			mutate: func(d *consolev1.Deployment) { d.Environment.Tier = environmentv1.Tier_TIER_UNSPECIFIED },
+			rule:   "deployment.environment_tier",
+		},
 		{
 			name:   "a preview up deploys to the preview tier",
 			mutate: func(d *consolev1.Deployment) { d.Kind = consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP },
@@ -183,12 +233,14 @@ func TestDeploymentValidation(t *testing.T) {
 		{name: "the start time is required", mutate: func(d *consolev1.Deployment) { d.StartedAt = nil }},
 		{name: "the finish time is required", mutate: func(d *consolev1.Deployment) { d.FinishedAt = nil }},
 		{
-			name:   "a deployment finishes after it starts",
+			name:   "a deployment finishes at or after it starts",
 			mutate: func(d *consolev1.Deployment) { d.FinishedAt = timestamppb.New(started.Add(-time.Second)) },
 			rule:   "deployment.finished_after_started",
 		},
 		{name: "an app is named", mutate: func(d *consolev1.Deployment) { d.Apps[0].Name = "" }},
 		{name: "an app outcome is required", mutate: func(d *consolev1.Deployment) { d.Apps[0].Outcome = consolev1.AppOutcome_APP_OUTCOME_UNSPECIFIED }},
+		{name: "an app compute is required", mutate: func(d *consolev1.Deployment) { d.Apps[0].Compute = consolev1.ComputeKind_COMPUTE_KIND_UNSPECIFIED }},
+		{name: "an app framework is one the CLI builds", mutate: func(d *consolev1.Deployment) { d.Apps[0].Framework = "nextjs" }},
 		{name: "an app url is a url", mutate: func(d *consolev1.Deployment) { d.Apps[0].Urls = []string{"not a url"} }},
 		{
 			name:   "a succeeded app names its build",
@@ -205,10 +257,14 @@ func TestDeploymentValidation(t *testing.T) {
 			mutate: func(d *consolev1.Deployment) { d.Apps = append(d.Apps, proto.Clone(d.Apps[0]).(*consolev1.App)) },
 			rule:   "deployment.unique_app_names",
 		},
-		{name: "a variable class is required", mutate: func(d *consolev1.Deployment) {
-			d.Apps[0].Variables[0].Class = resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
-		}},
 		{name: "a variable is named", mutate: func(d *consolev1.Deployment) { d.Apps[0].Variables[0].Key = "" }},
+		{name: "a variable key has no control character", mutate: func(d *consolev1.Deployment) { d.Apps[0].Variables[0].Key = "STRIPE\nKEY" }},
+		{
+			name:   "a variable description is one line of at most 120 bytes",
+			mutate: func(d *consolev1.Deployment) { d.Apps[0].Variables[0].Description = strings.Repeat("x", 121) },
+			rule:   "variables.definition.description",
+		},
+		{name: "a variable folder is an absolute path", mutate: func(d *consolev1.Deployment) { d.Apps[0].Variables[0].Folders = []string{"apps/web"} }},
 		{
 			name:   "a variable names a group the project defines",
 			mutate: func(d *consolev1.Deployment) { d.Apps[0].Variables[0].Group = "unknown" },
@@ -220,7 +276,7 @@ func TestDeploymentValidation(t *testing.T) {
 			rule:   "deployment.unique_variable_groups",
 		},
 		{name: "a resource is named", mutate: func(d *consolev1.Deployment) { d.Resources[0].Name = "" }},
-		{name: "a resource has a type", mutate: func(d *consolev1.Deployment) { d.Resources[0].Type = "" }},
+		{name: "a resource type is one the CLI binds", mutate: func(d *consolev1.Deployment) { d.Resources[0].Type = "container" }},
 		{
 			name: "resource names are unique",
 			mutate: func(d *consolev1.Deployment) {
@@ -248,67 +304,48 @@ func TestDeploymentValidation(t *testing.T) {
 			mutate: func(d *consolev1.Deployment) { d.Usages[0].Resource = "ghost" },
 			rule:   "deployment.usages_reference_known",
 		},
-		{name: "a source names its commit", mutate: func(d *consolev1.Deployment) { d.Source.Commit = "" }},
 		{name: "a commit is at least seven characters", mutate: func(d *consolev1.Deployment) { d.Source.Commit = "abc12" }},
-		{name: "a ci run names its provider", mutate: func(d *consolev1.Deployment) { d.Ci.Provider = "" }},
+		{name: "a commit is lowercase hex", mutate: func(d *consolev1.Deployment) { d.Source.Commit = "not-a-commit" }},
+		{name: "a ci run names its ci", mutate: func(d *consolev1.Deployment) { d.Ci.Name = "" }},
 		{name: "a ci run url is a url", mutate: func(d *consolev1.Deployment) { d.Ci.RunUrl = "nope" }},
 		{name: "a trigger kind is required", mutate: func(d *consolev1.Deployment) { d.Trigger.Kind = consolev1.TriggerKind_TRIGGER_KIND_UNSPECIFIED }},
 		{name: "a failure message is bounded", mutate: func(d *consolev1.Deployment) { d.Error = strings.Repeat("x", 4001) }},
-	}
-	for _, tc := range invalid {
-		t.Run(tc.name, func(t *testing.T) {
-			start := tc.start
-			if start == nil {
-				start = validDeployment
-			}
-			deployment := start()
-			tc.mutate(deployment)
-			err := validator.Validate(deployment)
-			if err == nil {
-				t.Fatal("expected the deployment to be rejected")
-			}
-			if tc.rule != "" {
-				requireRule(t, err, tc.rule)
-			}
-		})
-	}
+	})
 }
 
-func TestEnvironmentEventValidation(t *testing.T) {
-	validator, err := protovalidate.New()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestProtovalidateAcceptsEveryEnvironmentEventTheCLICanRecord(t *testing.T) {
+	requireAccepted(t, "a removed preview", validEnvironmentEvent())
 
-	t.Run("a removed preview is valid", func(t *testing.T) {
-		if err := validator.Validate(validEnvironmentEvent()); err != nil {
-			t.Fatalf("expected a valid event, got %v", err)
-		}
-	})
-	t.Run("a destroyed production environment is valid", func(t *testing.T) {
-		event := validEnvironmentEvent()
-		event.Kind = consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED
-		event.Environment = &consolev1.ReportedEnvironment{Tier: environmentv1.Tier_TIER_PRODUCTION}
-		if err := validator.Validate(event); err != nil {
-			t.Fatalf("expected a valid event, got %v", err)
-		}
-	})
+	destroyed := validEnvironmentEvent()
+	destroyed.Kind = consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED
+	destroyed.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+	requireAccepted(t, "a destroyed production environment", destroyed)
 
-	invalid := []struct {
-		name   string
-		mutate func(*consolev1.EnvironmentEvent)
-		rule   string
-	}{
+	uncommitted := validEnvironmentEvent()
+	uncommitted.Source = &consolev1.Source{Branch: "main"}
+	requireAccepted(t, "a repository with no commits names only its branch", uncommitted)
+}
+
+func TestProtovalidateRefusesAnEnvironmentEventThatBreaksARule(t *testing.T) {
+	requireRefusals(t, validEnvironmentEvent, []refusal[*consolev1.EnvironmentEvent]{
 		{name: "the kind is required", mutate: func(e *consolev1.EnvironmentEvent) {
 			e.Kind = consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_UNSPECIFIED
 		}},
 		{name: "the slug is required", mutate: func(e *consolev1.EnvironmentEvent) { e.Slug = "" }},
 		{name: "the environment is required", mutate: func(e *consolev1.EnvironmentEvent) { e.Environment = nil }},
+		{
+			name: "the environment names its tier",
+			mutate: func(e *consolev1.EnvironmentEvent) {
+				e.Kind = consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED
+				e.Environment.Tier = environmentv1.Tier_TIER_UNSPECIFIED
+			},
+			rule: "environment_event.environment_tier",
+		},
 		{name: "the time is required", mutate: func(e *consolev1.EnvironmentEvent) { e.At = nil }},
 		{
 			name: "a removed preview is in the preview tier",
 			mutate: func(e *consolev1.EnvironmentEvent) {
-				e.Environment = &consolev1.ReportedEnvironment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+				e.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 			},
 			rule: "environment_event.preview_removed_in_preview",
 		},
@@ -317,22 +354,9 @@ func TestEnvironmentEventValidation(t *testing.T) {
 			mutate: func(e *consolev1.EnvironmentEvent) { e.Environment.Identity = "" },
 			rule:   "environment_event.preview_removed_names_preview",
 		},
-		{name: "a source names its commit", mutate: func(e *consolev1.EnvironmentEvent) { e.Source = &consolev1.Source{} }},
-		{name: "a ci run names its provider", mutate: func(e *consolev1.EnvironmentEvent) { e.Ci = &consolev1.CI{} }},
-	}
-	for _, tc := range invalid {
-		t.Run(tc.name, func(t *testing.T) {
-			event := validEnvironmentEvent()
-			tc.mutate(event)
-			err := validator.Validate(event)
-			if err == nil {
-				t.Fatal("expected the event to be rejected")
-			}
-			if tc.rule != "" {
-				requireRule(t, err, tc.rule)
-			}
-		})
-	}
+		{name: "a commit is at least seven characters", mutate: func(e *consolev1.EnvironmentEvent) { e.Source = &consolev1.Source{Commit: "abc12"} }},
+		{name: "a ci run names its ci", mutate: func(e *consolev1.EnvironmentEvent) { e.Ci = &consolev1.CI{} }},
+	})
 }
 
 type recorder struct {
@@ -351,7 +375,7 @@ func (r *recorder) RecordEnvironmentEvent(_ context.Context, req *consolev1.Reco
 	return &consolev1.RecordEnvironmentEventResponse{}, nil
 }
 
-func TestDeploymentServiceRoundTrip(t *testing.T) {
+func TestTheDeploymentServiceReceivesValidRecordsAndRefusesInvalidOnes(t *testing.T) {
 	handler := &recorder{}
 	mux := http.NewServeMux()
 	mux.Handle(consolev1connect.NewDeploymentServiceHandler(handler, connect.WithInterceptors(connectvalidate.NewInterceptor())))
