@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -25,7 +24,6 @@ func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheB
 	}}
 
 	forwards, err := over(machine).Hooks().ForwardPorts(context.Background(), provider.PortForwardRequest{
-		Tier: environment.TierProduction, Slug: "shop", Env: "production",
 		Bindings: []provider.Binding{
 			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-infra-orders-postgres", provider.PropertyPort: "5432"}},
 			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-infra-cache-kv", provider.PropertyPort: "6379"}},

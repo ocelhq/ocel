@@ -47,7 +47,7 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	}
 	forwarded := stream.Msg()
 
-	if asked.Slug != "shop" || len(asked.Bindings) != 1 || asked.Bindings[0].Properties[provider.PropertyHost] != "fake-host" {
+	if len(asked.Bindings) != 1 || asked.Bindings[0].Properties[provider.PropertyHost] != "fake-host" {
 		t.Errorf("the hook was asked for %+v, want the published orders binding of shop", asked)
 	}
 	if len(forwarded.GetBindings()) != 1 {

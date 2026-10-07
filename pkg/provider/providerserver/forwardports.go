@@ -42,7 +42,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	})
 	var forwards []provider.PortForward
 	if len(reachable) > 0 {
-		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Slug: spec.Slug, Env: env, Bindings: reachable})
+		forwards, err = forward(ctx, provider.PortForwardRequest{Bindings: reachable})
 		if err != nil {
 			return provider.RefusalError(err)
 		}
