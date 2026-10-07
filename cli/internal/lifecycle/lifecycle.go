@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -65,7 +64,7 @@ func Run(ctx context.Context, c Command) (err error) {
 		env[processenv.LiveDirEnvVar] = dir
 	}
 
-	cmd := shellCommand(runCtx, c.Shell)
+	cmd := newShellCommand(runCtx, c.Shell)
 	cmd.Dir = c.Dir
 	cmd.Env = environment(os.Environ(), env)
 	cmd.Stdout = c.Stdout
@@ -89,13 +88,6 @@ func Run(ctx context.Context, c Command) (err error) {
 		return &FailedError{Command: c.Shell, ExitCode: childprocess.ExitCode(exited)}
 	}
 	return waitErr
-}
-
-func shellCommand(ctx context.Context, command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "cmd", "/C", command)
-	}
-	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 func environment(base []string, overrides map[string]string) []string {
