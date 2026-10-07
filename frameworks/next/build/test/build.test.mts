@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -218,6 +218,24 @@ describe("buildNext", () => {
       await expect(envOf(app({ env: { OCEL_LIVE_DIR: "" } }))).resolves.toBeDefined();
     });
   });
+
+  it.skipIf(process.platform === "win32")(
+    "asks the node a workspace's node_modules/.bin puts first on the build script's PATH, not the shell's",
+    async () => {
+      const root = nextApp();
+      const bin = path.join(root, "node_modules", ".bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(path.join(bin, "node"), '#!/bin/sh\necho "22.3.0 function"\n', {
+        mode: 0o755,
+      });
+      const cwd = path.join(root, "apps", "web");
+      mkdirSync(cwd, { recursive: true });
+
+      const node = await buildProcess.node(cwd, { PATH: process.env.PATH ?? "" });
+
+      expect(node).toEqual({ version: "22.3.0", readsLiveDir: true });
+    },
+  );
 
   it("builds an app handed a live dir on a node whose process.getBuiltinModule the SDK reads it with", async () => {
     const nodeOf = buildProcess.node;

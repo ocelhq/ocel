@@ -34,10 +34,19 @@ async function nodeOf(cwd: string, env: Record<string, string>): Promise<BuildNo
   const { stdout } = await promisify(execFile)(
     "node",
     ["-p", 'process.versions.node + " " + typeof process.getBuiltinModule'],
-    { cwd, env },
+    { cwd, env: { ...env, PATH: scriptPath(cwd, env.PATH) } },
   );
   const [version = "", builtin] = stdout.trim().split(" ");
   return { version, readsLiveDir: builtin === "function" };
+}
+
+function scriptPath(cwd: string, inherited = ""): string {
+  const bins: string[] = [];
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    bins.push(path.join(dir, "node_modules", ".bin"));
+    if (path.dirname(dir) === dir) break;
+  }
+  return [...bins, inherited].filter(Boolean).join(path.delimiter);
 }
 
 export async function buildNext(app: NextBuild, adapterPath: string): Promise<void> {
