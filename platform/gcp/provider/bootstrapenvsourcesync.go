@@ -201,7 +201,7 @@ func (b bootstrap) servicePresence(ctx context.Context, tier environment.Tier, n
 	if err != nil {
 		return presence{}, err
 	}
-	if !sameService(current, desired) {
+	if !sameService(current, desired) || !servesLatest(current) {
 		return presence{present: true, mends: reasonServiceChanged}, nil
 	}
 	callable, err := b.onlySyncCalls(ctx, tier, name)
@@ -215,14 +215,14 @@ func (b bootstrap) servicePresence(ctx context.Context, tier environment.Tier, n
 }
 
 func (b bootstrap) makeService(ctx context.Context, tier environment.Tier, name string) error {
-	if b.pushBinary == nil || b.deployService == nil {
+	if b.pushBinary == nil || b.deployAndRoute == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s service runs an image, and this bootstrap was opened with nowhere to push one or nothing to deploy it with", name)
 	}
 	if err := b.pushBinary(ctx, tier, syncImageName, syncImageRef(b.clients, tier), payloads.EnvSourceSync(), syncImagePath); err != nil {
 		return err
 	}
-	if _, err := b.deployService(ctx, b.syncServing(tier), nil); err != nil {
+	if _, err := b.deployAndRoute(ctx, b.syncServing(tier), nil); err != nil {
 		return err
 	}
 	return b.letSyncCall(ctx, tier, name)

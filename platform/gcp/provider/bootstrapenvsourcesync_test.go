@@ -284,6 +284,53 @@ func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 	}
 }
 
+func TestAMendedSyncServiceServesTheRevisionTheMendMade(t *testing.T) {
+	t.Parallel()
+	server := newSyncServer()
+	b := server.open(t)
+	ctx := context.Background()
+	tier := environment.TierPreview
+	name := b.clients.EnvSourceSync(tier)
+	path := b.clients.servicePath(name)
+	if err := b.makeService(ctx, tier, name); err != nil {
+		t.Fatal(err)
+	}
+	server.change(func() { server.services[path].Template.Containers[0].Image += "0" })
+
+	if err := b.mend(ctx, survey{Tier: tier, Names: b.clients.Names}, item{Kind: KindService, Name: name}); err != nil {
+		t.Fatalf("mend() = %v", err)
+	}
+
+	var served, latest string
+	server.change(func() {
+		served, latest = servedRevision(server.services[path]), revisionName(server.services[path].LatestReadyRevision)
+	})
+	if served != latest {
+		t.Errorf("the sync service serves %q, want %q, the revision the mend made: the sync a new provider embeds otherwise never runs", served, latest)
+	}
+}
+
+func TestASyncServiceWhoseLatestRevisionServesNoTrafficIsMended(t *testing.T) {
+	t.Parallel()
+	server := newSyncServer()
+	b := server.open(t)
+	ctx := context.Background()
+	tier := environment.TierPreview
+	name := b.clients.EnvSourceSync(tier)
+	path := b.clients.servicePath(name)
+	if err := b.makeService(ctx, tier, name); err != nil {
+		t.Fatal(err)
+	}
+	server.change(func() {
+		server.services[path].Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	})
+
+	found, err := b.servicePresence(ctx, tier, name)
+	if err != nil || found.mends != reasonServiceChanged {
+		t.Errorf("servicePresence() = %+v, %v, want it mended: the revision that serves is not the one this bootstrap deployed", found, err)
+	}
+}
+
 func TestASyncServiceCloudRunReadsBackInAnotherNotationForTheSameCPUAndMemoryIsCurrent(t *testing.T) {
 	t.Parallel()
 	for _, limits := range []map[string]string{

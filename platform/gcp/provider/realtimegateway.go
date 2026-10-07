@@ -131,10 +131,10 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		if err != nil {
 			return "", err
 		}
-		if current != nil && sameGateway(current, wanted) {
+		if current != nil && sameGateway(current, wanted) && servesLatest(current) {
 			return host, nil
 		}
-		ran, err := r.deployService(ctx, desired, progress)
+		ran, err := r.deployAndRoute(ctx, desired, progress)
 		if err != nil {
 			return "", err
 		}

@@ -79,13 +79,13 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 		return bootstrap{}, err
 	}
 	return bootstrap{
-		clients:       opened,
-		fronts:        g.p.Edges(),
-		stores:        g.p.memorystore(),
-		records:       g.p.KeyValues(),
-		pushBinary:    g.p.pushBinary,
-		deployService: g.p.deployService,
-		tearDown:      g.p.tearDown,
+		clients:        opened,
+		fronts:         g.p.Edges(),
+		stores:         g.p.memorystore(),
+		records:        g.p.KeyValues(),
+		pushBinary:     g.p.pushBinary,
+		deployAndRoute: g.p.deployAndRoute,
+		tearDown:       g.p.tearDown,
 	}, nil
 }
 
@@ -135,9 +135,9 @@ type bootstrap struct {
 	stores  memorystore
 	records keyvalue.Store
 
-	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
-	tearDown      func(ctx context.Context, service string, progress progress.Log) error
+	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
+	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	tearDown       func(ctx context.Context, service string, progress progress.Log) error
 }
 
 func (b bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
