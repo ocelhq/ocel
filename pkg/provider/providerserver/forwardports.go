@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"net"
-	"net/url"
 	"slices"
 
 	connect "connectrpc.com/connect"
@@ -38,7 +37,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	}
 	forward := p.Hooks().ForwardPorts
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
-		return forward == nil || (binding.Type != provider.BindingPostgres && binding.Type != provider.BindingKV)
+		return forward == nil || !reachesByPort(binding)
 	})
 	var forwards []provider.PortForward
 	if len(reachable) > 0 {
@@ -60,6 +59,16 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	}
 	<-ctx.Done()
 	return nil
+}
+
+func reachesByPort(binding provider.Binding) bool {
+	switch binding.Type {
+	case provider.BindingKV:
+		return true
+	case provider.BindingPostgres:
+		return binding.Properties[provider.PropertyURL] == ""
+	}
+	return false
 }
 
 func closeForwards(forwards []provider.PortForward) {
@@ -121,14 +130,6 @@ func forwardedBinding(binding provider.Binding, localAddress string) (provider.B
 	properties := maps.Clone(binding.Properties)
 	properties[provider.PropertyTLSServerName] = cmp.Or(properties[provider.PropertyTLSServerName], properties[provider.PropertyHost])
 	properties[provider.PropertyHost], properties[provider.PropertyPort] = host, port
-	if raw := properties[provider.PropertyURL]; raw != "" && binding.Type == provider.BindingPostgres {
-		parsed, err := url.Parse(raw)
-		if err != nil {
-			return provider.Binding{}, fmt.Errorf("the url of %s does not parse, so it cannot be pointed at its forward", binding.Name)
-		}
-		parsed.Host = localAddress
-		properties[provider.PropertyURL] = parsed.String()
-	}
 	binding.Properties = properties
 	return binding, nil
 }
