@@ -22,8 +22,8 @@ whether a runtime runs on a target at all, and its apps under `fixtures/deploy/`
 resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
 usable, from `fixtures/sdk/`; `build-variables` asks whether a Next build that reads a
-sensitive and a secret value at import deploys, leaving neither in `.ocel/output` or a live
-dir, from `fixtures/build-variables/`; `kv` asks whether a kv store behaves as the map in #1474 says on
+sensitive and a secret value at import deploys, leaving neither in `.ocel/output`, `.next`
+or a live dir, from `fixtures/build-variables/`; `kv` asks whether a kv store behaves as the map in #1474 says on
 a target, from `fixtures/kv/`, restarting what the app declared and, where the target keeps
 releases, redeploying it to see its data survive; `tasks` asks whether topics, tasks and
 workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `realtime` asks
