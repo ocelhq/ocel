@@ -39,10 +39,11 @@ type Environment struct {
 }
 
 type App struct {
-	Name         string   `json:"name"`
-	BuildID      string   `json:"buildId,omitempty"`
-	ServeBuildID string   `json:"serveBuildId,omitempty"`
-	URLs         []string `json:"urls"`
+	Name          string   `json:"name"`
+	BuildID       string   `json:"buildId,omitempty"`
+	ServeBuildID  string   `json:"serveBuildId,omitempty"`
+	StoragePrefix string   `json:"storagePrefix,omitempty"`
+	URLs          []string `json:"urls"`
 }
 
 func New(cfg *project.Project, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
@@ -53,10 +54,11 @@ func New(cfg *project.Project, manifest *contractv1.Manifest, env *environmentv1
 			return Record{}, err
 		}
 		apps = append(apps, App{
-			Name:         a.GetName(),
-			BuildID:      a.GetBuildId(),
-			ServeBuildID: serveBuildID,
-			URLs:         appURLs(results, a.GetName()),
+			Name:          a.GetName(),
+			BuildID:       a.GetBuildId(),
+			ServeBuildID:  serveBuildID,
+			StoragePrefix: findAppResult(results, a.GetName()).GetStoragePrefix(),
+			URLs:          findAppResult(results, a.GetName()).GetUrls(),
 		})
 	}
 	return Record{
@@ -76,10 +78,10 @@ func providerOf(cfg *project.Project) Provider {
 	return Provider{Name: cfg.Provider.ID}
 }
 
-func appURLs(results []*progressv1.AppResult, name string) []string {
+func findAppResult(results []*progressv1.AppResult, name string) *progressv1.AppResult {
 	for _, result := range results {
 		if result.GetApp() == name {
-			return result.GetUrls()
+			return result
 		}
 	}
 	return nil

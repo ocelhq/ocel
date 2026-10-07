@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APP_NAME,
-  appAssetPrefix,
   BASELINE_INCLUDE_PATTERN,
   BYTECODE_EMBED_ENV,
   BYTECODE_EMBEDDED_MARKER,
@@ -23,7 +22,6 @@ import {
   deployURL,
   embeddedArtifactPairs,
   embeddedBytecodePath,
-  envSegment,
   GOLDEN_MARKER,
   GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
@@ -58,6 +56,7 @@ import {
   selectRunSlugs,
   selectStrandedAppSlugs,
   selectStrandedSlugs,
+  storageCoordinate,
   strandedProjectSlugs,
   strongestCoverage,
   suiteResultFromJest,
@@ -528,40 +527,21 @@ describe("lambdaFunctionNames", () => {
   });
 });
 
-describe("envSegment", () => {
-  it("names a preview by its identity", () => {
-    expect(envSegment({ class: "preview", identity: "e2e-42-abcd1234" })).toBe(
-      "preview-e2e-42-abcd1234",
-    );
+describe("storageCoordinate", () => {
+  it("reads the env, project, app and release token from the prefix the deploy recorded", () => {
+    expect(storageCoordinate("pr-7/e2e-42/app/r0123abcd/")).toEqual({
+      prefix: "pr-7/e2e-42/app/r0123abcd",
+      env: "pr-7",
+      project: "e2e-42",
+      app: "app",
+      release: "r0123abcd",
+    });
   });
 
-  it("names production the fixed token, regardless of identity", () => {
-    expect(envSegment({ class: "production", identity: "" })).toBe("prod");
-    expect(envSegment({ class: "production" })).toBe("prod");
-  });
-
-  it("treats a missing or unrecognized class as production", () => {
-    expect(envSegment(undefined)).toBe("prod");
-    expect(envSegment({ class: "development" })).toBe("prod");
-  });
-});
-
-describe("appAssetPrefix", () => {
-  it("joins env/slug/app/buildId in that order", () => {
-    expect(
-      appAssetPrefix({
-        environment: { class: "preview", identity: "e2e-42-abcd1234" },
-        slug: "e2e-42-abcd1234",
-        app: "app",
-        buildId: "bld123",
-      }),
-    ).toBe("preview-e2e-42-abcd1234/e2e-42-abcd1234/app/bld123");
-  });
-
-  it("uses the fixed prod segment for a production deploy", () => {
-    expect(
-      appAssetPrefix({ environment: { class: "production" }, slug: "s", app: "app", buildId: "b" }),
-    ).toBe("prod/s/app/b");
+  it("refuses a missing or partial prefix rather than guessing one", () => {
+    expect(storageCoordinate(undefined)).toBeNull();
+    expect(storageCoordinate("")).toBeNull();
+    expect(storageCoordinate("prod/s/app/")).toBeNull();
   });
 });
 
@@ -569,10 +549,10 @@ describe("bytecodeCacheKeyPrefix", () => {
   it("joins prefix/bytecode/functionName with a trailing slash", () => {
     expect(
       bytecodeCacheKeyPrefix({
-        prefix: "preview-e2e-42/e2e-42/app/bld123",
+        prefix: "pr-7/e2e-42/app/r0123abcd",
         functionName: "proj--web-abc123",
       }),
-    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/");
+    ).toBe("pr-7/e2e-42/app/r0123abcd/bytecode/proj--web-abc123/");
   });
 });
 

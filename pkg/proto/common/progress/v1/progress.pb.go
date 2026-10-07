@@ -918,6 +918,7 @@ type AppResult struct {
 	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
 	Urls          []string               `protobuf:"bytes,4,rep,name=urls,proto3" json:"urls,omitempty"`
 	DeploymentUrl string                 `protobuf:"bytes,5,opt,name=deployment_url,json=deploymentUrl,proto3" json:"deployment_url,omitempty"`
+	StoragePrefix string                 `protobuf:"bytes,6,opt,name=storage_prefix,json=storagePrefix,proto3" json:"storage_prefix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -983,6 +984,13 @@ func (x *AppResult) GetUrls() []string {
 func (x *AppResult) GetDeploymentUrl() string {
 	if x != nil {
 		return x.DeploymentUrl
+	}
+	return ""
+}
+
+func (x *AppResult) GetStoragePrefix() string {
+	if x != nil {
+		return x.StoragePrefix
 	}
 	return ""
 }
@@ -1243,13 +1251,14 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x15DnsManualRecordsEvent\x12\x1a\n" +
 	"\bheadline\x18\x01 \x01(\tR\bheadline\x127\n" +
 	"\arecords\x18\x02 \x03(\v2\x1d.common.progress.v1.DnsRecordR\arecords\x12\x14\n" +
-	"\x05notes\x18\x03 \x03(\tR\x05notes\"\xa8\x01\n" +
+	"\x05notes\x18\x03 \x03(\tR\x05notes\"\xcf\x01\n" +
 	"\tAppResult\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
 	"\x04urls\x18\x04 \x03(\tR\x04urls\x12%\n" +
-	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\"\xd7\x02\n" +
+	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\x12%\n" +
+	"\x0estorage_prefix\x18\x06 \x01(\tR\rstoragePrefix\"\xd7\x02\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +

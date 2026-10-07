@@ -1678,6 +1678,7 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 		}
 	}
 	for slot, entry := range r.spec.Apps {
+		r.outcomes[slot].StoragePrefix = appCoordinate(r.spec, entry.App, entry.Release.Token()).StoragePrefix()
 		if len(r.outcomes[slot].Urls) == 0 && r.addressesItself(entry.App) {
 			if address := r.readAddress(entry.App); address != "" {
 				r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, address)

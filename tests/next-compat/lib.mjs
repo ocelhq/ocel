@@ -425,15 +425,13 @@ export function lambdaFunctionNames(response) {
     .map((match) => match[1]);
 }
 
-export function envSegment(environment) {
-  if (environment?.class === "preview") {
-    return `preview-${environment?.identity ?? ""}`;
+export function storageCoordinate(storagePrefix) {
+  const segments = (storagePrefix ?? "").replace(/\/$/, "").split("/");
+  if (segments.length !== 4 || segments.some((segment) => segment === "")) {
+    return null;
   }
-  return "prod";
-}
-
-export function appAssetPrefix({ environment, slug, app, buildId }) {
-  return [envSegment(environment), slug, app, buildId].join("/");
+  const [env, project, app, release] = segments;
+  return { prefix: segments.join("/"), env, project, app, release };
 }
 
 export function bytecodeCacheKeyPrefix({ prefix, functionName }) {

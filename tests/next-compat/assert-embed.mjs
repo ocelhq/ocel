@@ -21,7 +21,6 @@ import {
   sleep,
 } from "./aws.mjs";
 import {
-  appAssetPrefix,
   BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   bytecodeCacheKeyName,
@@ -32,6 +31,7 @@ import {
   embeddedArtifactPairs,
   embeddedBytecodePath,
   logWindowVerdict,
+  storageCoordinate,
   summarizeOutcomes,
   TAG_PROBE_ROUTE,
   tagProbeTag,
@@ -68,9 +68,9 @@ if (!existsSync(resultPath)) {
   fail(`${resultPath} not found — run this from the deployed app's directory, after a deploy`);
 }
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
-const app = result.apps?.[0];
-if (!result.slug || !app?.name || !app?.serveBuildId) {
-  fail(`${resultPath} is missing slug/app name/build id: ${JSON.stringify(result)}`);
+const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
+if (!coordinate) {
+  fail(`${resultPath} records no storage prefix for its app: ${JSON.stringify(result)}`);
 }
 
 const assetBucket =
@@ -79,17 +79,9 @@ const assetBucket =
 const artifactBucket =
   process.env.OCEL_ARTIFACT_BUCKET ||
   resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
-const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
+const functionName = resolveFunctionName(coordinate, fail);
 
-const keyPrefix = bytecodeCacheKeyPrefix({
-  prefix: appAssetPrefix({
-    environment: result.environment,
-    slug: result.slug,
-    app: app.name,
-    buildId: app.serveBuildId,
-  }),
-  functionName,
-});
+const keyPrefix = bytecodeCacheKeyPrefix({ prefix: coordinate.prefix, functionName });
 const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) =>
   full.slice(keyPrefix.length),
 );
@@ -113,7 +105,7 @@ log(
   `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must contain ${entryName}`,
 );
 
-const artifactPrefix = `${result.slug}/`;
+const artifactPrefix = `${coordinate.prefix}/`;
 const artifactKeys = await listRetrying(artifactBucket, artifactPrefix);
 const pairs = embeddedArtifactPairs(artifactKeys);
 if (pairs.length !== 1) {

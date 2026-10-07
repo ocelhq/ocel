@@ -614,6 +614,10 @@
         "^(deployment_url)$": {
           "default": "",
           "type": "string"
+        },
+        "^(storage_prefix)$": {
+          "default": "",
+          "type": "string"
         }
       },
       "properties": {
@@ -651,6 +655,10 @@
           ],
           "default": 0,
           "title": "App Outcome"
+        },
+        "storagePrefix": {
+          "default": "",
+          "type": "string"
         },
         "urls": {
           "items": {
