@@ -78,8 +78,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	if entry[routingManifestEnv] != routingManifestInTask {
 		t.Errorf("%s = %q, want the routing manifest the spec passed", routingManifestEnv, entry[routingManifestEnv])
 	}
-	if entry[buildIDEnv] != "d1" {
-		t.Errorf("%s = %q, want the build the spec named", buildIDEnv, entry[buildIDEnv])
+	if entry["OCEL_BUILD_ID"] != "d1" {
+		t.Errorf("OCEL_BUILD_ID = %q, want the build the spec named", entry["OCEL_BUILD_ID"])
 	}
 	if entry["OCEL_ISR_PREFIX"] != spec.App.ISR.Prefix {
 		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec passed", entry["OCEL_ISR_PREFIX"])
