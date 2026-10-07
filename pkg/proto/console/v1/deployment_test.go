@@ -25,7 +25,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+const (
+	traceID   = "4bf92f3577b34da6a3ce929d0e0e4736"
+	projectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
+)
 
 var started = time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 
@@ -34,7 +37,6 @@ func validDeployment() *consolev1.Deployment {
 		Id:      traceID,
 		Kind:    consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
 		Outcome: consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED,
-		Slug:    "shop",
 		Environment: &environmentv1.Environment{
 			Tier: environmentv1.Tier_TIER_PRODUCTION,
 		},
@@ -87,11 +89,19 @@ func validDeployment() *consolev1.Deployment {
 
 func validEnvironmentEvent() *consolev1.EnvironmentEvent {
 	return &consolev1.EnvironmentEvent{
+		Id:          traceID,
 		Kind:        consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
-		Slug:        "shop",
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"},
 		At:          timestamppb.New(started),
 	}
+}
+
+func validReportRequest() *consolev1.ReportRequest {
+	return &consolev1.ReportRequest{ProjectId: projectID, Deployment: validDeployment()}
+}
+
+func validRecordEnvironmentEventRequest() *consolev1.RecordEnvironmentEventRequest {
+	return &consolev1.RecordEnvironmentEventRequest{ProjectId: projectID, Event: validEnvironmentEvent()}
 }
 
 func failedDeployment() *consolev1.Deployment {
@@ -214,7 +224,6 @@ func TestProtovalidateRefusesADeploymentThatBreaksARule(t *testing.T) {
 		{name: "the outcome is required", mutate: func(d *consolev1.Deployment) { d.Outcome = consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_UNSPECIFIED }},
 		{name: "the id is a 32 digit lowercase hex trace id", mutate: func(d *consolev1.Deployment) { d.Id = "4BF92F3577B34DA6A3CE929D0E0E4736" }},
 		{name: "an all zero trace id is invalid", mutate: func(d *consolev1.Deployment) { d.Id = strings.Repeat("0", 32) }},
-		{name: "the slug is required", mutate: func(d *consolev1.Deployment) { d.Slug = "" }},
 		{name: "the environment is required", mutate: func(d *consolev1.Deployment) { d.Environment = nil }},
 		{
 			name:   "the environment names its tier",
@@ -331,7 +340,9 @@ func TestProtovalidateRefusesAnEnvironmentEventThatBreaksARule(t *testing.T) {
 		{name: "the kind is required", mutate: func(e *consolev1.EnvironmentEvent) {
 			e.Kind = consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_UNSPECIFIED
 		}},
-		{name: "the slug is required", mutate: func(e *consolev1.EnvironmentEvent) { e.Slug = "" }},
+		{name: "the id is a 32 digit lowercase hex trace id", mutate: func(e *consolev1.EnvironmentEvent) { e.Id = "4BF92F3577B34DA6A3CE929D0E0E4736" }},
+		{name: "the id is required", mutate: func(e *consolev1.EnvironmentEvent) { e.Id = "" }},
+		{name: "an all zero trace id is invalid", mutate: func(e *consolev1.EnvironmentEvent) { e.Id = strings.Repeat("0", 32) }},
 		{name: "the environment is required", mutate: func(e *consolev1.EnvironmentEvent) { e.Environment = nil }},
 		{
 			name: "the environment names its tier",
@@ -359,6 +370,27 @@ func TestProtovalidateRefusesAnEnvironmentEventThatBreaksARule(t *testing.T) {
 	})
 }
 
+func TestProtovalidateAcceptsARequestThatNamesItsProject(t *testing.T) {
+	requireAccepted(t, "a report", validReportRequest())
+	requireAccepted(t, "an environment event", validRecordEnvironmentEventRequest())
+}
+
+func TestProtovalidateRefusesAReportThatDoesNotNameItsProject(t *testing.T) {
+	requireRefusals(t, validReportRequest, []refusal[*consolev1.ReportRequest]{
+		{name: "the project id is required", mutate: func(r *consolev1.ReportRequest) { r.ProjectId = "" }},
+		{name: "the project id is a uuid", mutate: func(r *consolev1.ReportRequest) { r.ProjectId = "shop" }},
+		{name: "the deployment is required", mutate: func(r *consolev1.ReportRequest) { r.Deployment = nil }},
+	})
+}
+
+func TestProtovalidateRefusesAnEnvironmentEventRequestThatDoesNotNameItsProject(t *testing.T) {
+	requireRefusals(t, validRecordEnvironmentEventRequest, []refusal[*consolev1.RecordEnvironmentEventRequest]{
+		{name: "the project id is required", mutate: func(r *consolev1.RecordEnvironmentEventRequest) { r.ProjectId = "" }},
+		{name: "the project id is a uuid", mutate: func(r *consolev1.RecordEnvironmentEventRequest) { r.ProjectId = "shop" }},
+		{name: "the event is required", mutate: func(r *consolev1.RecordEnvironmentEventRequest) { r.Event = nil }},
+	})
+}
+
 type recorder struct {
 	consolev1connect.UnimplementedDeploymentServiceHandler
 	deployments []*consolev1.Deployment
@@ -383,14 +415,14 @@ func TestTheDeploymentServiceReceivesValidRecordsAndRefusesInvalidOnes(t *testin
 	t.Cleanup(server.Close)
 	client := consolev1connect.NewDeploymentServiceClient(server.Client(), server.URL)
 
-	if _, err := client.Report(t.Context(), &consolev1.ReportRequest{Deployment: validDeployment()}); err != nil {
+	if _, err := client.Report(t.Context(), validReportRequest()); err != nil {
 		t.Fatalf("reporting a valid deployment: %v", err)
 	}
 	if len(handler.deployments) != 1 || !proto.Equal(handler.deployments[0], validDeployment()) {
 		t.Fatalf("the service received %v, want the reported deployment", handler.deployments)
 	}
 
-	_, err := client.Report(t.Context(), &consolev1.ReportRequest{Deployment: &consolev1.Deployment{}})
+	_, err := client.Report(t.Context(), &consolev1.ReportRequest{ProjectId: projectID, Deployment: &consolev1.Deployment{}})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("reporting an empty deployment: got %v, want invalid_argument", err)
 	}
@@ -398,14 +430,14 @@ func TestTheDeploymentServiceReceivesValidRecordsAndRefusesInvalidOnes(t *testin
 		t.Fatal("an invalid deployment reached the handler")
 	}
 
-	if _, err := client.RecordEnvironmentEvent(t.Context(), &consolev1.RecordEnvironmentEventRequest{Event: validEnvironmentEvent()}); err != nil {
+	if _, err := client.RecordEnvironmentEvent(t.Context(), validRecordEnvironmentEventRequest()); err != nil {
 		t.Fatalf("recording a valid event: %v", err)
 	}
 	if len(handler.events) != 1 {
 		t.Fatal("the event did not reach the handler")
 	}
 
-	_, err = client.RecordEnvironmentEvent(t.Context(), &consolev1.RecordEnvironmentEventRequest{})
+	_, err = client.RecordEnvironmentEvent(t.Context(), &consolev1.RecordEnvironmentEventRequest{ProjectId: projectID})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("recording a missing event: got %v, want invalid_argument", err)
 	}

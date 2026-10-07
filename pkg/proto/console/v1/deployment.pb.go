@@ -1154,25 +1154,24 @@ type Deployment struct {
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Kind           DeploymentKind         `protobuf:"varint,2,opt,name=kind,proto3,enum=console.v1.DeploymentKind" json:"kind,omitempty"`
 	Outcome        DeploymentOutcome      `protobuf:"varint,3,opt,name=outcome,proto3,enum=console.v1.DeploymentOutcome" json:"outcome,omitempty"`
-	Slug           string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	Environment    *v11.Environment       `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
-	Provider       *Provider              `protobuf:"bytes,6,opt,name=provider,proto3" json:"provider,omitempty"`
-	Target         string                 `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
-	StartedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	FinishedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
-	CliVersion     string                 `protobuf:"bytes,10,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"`
-	Promotion      *Promotion             `protobuf:"bytes,11,opt,name=promotion,proto3" json:"promotion,omitempty"`
-	Error          string                 `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
-	Edge           *Edge                  `protobuf:"bytes,13,opt,name=edge,proto3" json:"edge,omitempty"`
-	Apps           []*App                 `protobuf:"bytes,14,rep,name=apps,proto3" json:"apps,omitempty"`
-	Resources      []*Resource            `protobuf:"bytes,15,rep,name=resources,proto3" json:"resources,omitempty"`
-	Links          []*Link                `protobuf:"bytes,16,rep,name=links,proto3" json:"links,omitempty"`
-	Usages         []*Usage               `protobuf:"bytes,17,rep,name=usages,proto3" json:"usages,omitempty"`
-	VariableGroups []*v1.GroupDefinition  `protobuf:"bytes,18,rep,name=variable_groups,json=variableGroups,proto3" json:"variable_groups,omitempty"`
-	Source         *Source                `protobuf:"bytes,19,opt,name=source,proto3" json:"source,omitempty"`
-	Ci             *CI                    `protobuf:"bytes,20,opt,name=ci,proto3" json:"ci,omitempty"`
-	Trigger        *Trigger               `protobuf:"bytes,21,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	Spans          []*v12.Span            `protobuf:"bytes,22,rep,name=spans,proto3" json:"spans,omitempty"`
+	Environment    *v11.Environment       `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	Provider       *Provider              `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider,omitempty"`
+	Target         string                 `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	StartedAt      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	FinishedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	CliVersion     string                 `protobuf:"bytes,9,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"`
+	Promotion      *Promotion             `protobuf:"bytes,10,opt,name=promotion,proto3" json:"promotion,omitempty"`
+	Error          string                 `protobuf:"bytes,11,opt,name=error,proto3" json:"error,omitempty"`
+	Edge           *Edge                  `protobuf:"bytes,12,opt,name=edge,proto3" json:"edge,omitempty"`
+	Apps           []*App                 `protobuf:"bytes,13,rep,name=apps,proto3" json:"apps,omitempty"`
+	Resources      []*Resource            `protobuf:"bytes,14,rep,name=resources,proto3" json:"resources,omitempty"`
+	Links          []*Link                `protobuf:"bytes,15,rep,name=links,proto3" json:"links,omitempty"`
+	Usages         []*Usage               `protobuf:"bytes,16,rep,name=usages,proto3" json:"usages,omitempty"`
+	VariableGroups []*v1.GroupDefinition  `protobuf:"bytes,17,rep,name=variable_groups,json=variableGroups,proto3" json:"variable_groups,omitempty"`
+	Source         *Source                `protobuf:"bytes,18,opt,name=source,proto3" json:"source,omitempty"`
+	Ci             *CI                    `protobuf:"bytes,19,opt,name=ci,proto3" json:"ci,omitempty"`
+	Trigger        *Trigger               `protobuf:"bytes,20,opt,name=trigger,proto3" json:"trigger,omitempty"`
+	Spans          []*v12.Span            `protobuf:"bytes,21,rep,name=spans,proto3" json:"spans,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1226,13 +1225,6 @@ func (x *Deployment) GetOutcome() DeploymentOutcome {
 		return x.Outcome
 	}
 	return DeploymentOutcome_DEPLOYMENT_OUTCOME_UNSPECIFIED
-}
-
-func (x *Deployment) GetSlug() string {
-	if x != nil {
-		return x.Slug
-	}
-	return ""
 }
 
 func (x *Deployment) GetEnvironment() *v11.Environment {
@@ -1363,8 +1355,8 @@ func (x *Deployment) GetSpans() []*v12.Span {
 
 type EnvironmentEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          EnvironmentEventKind   `protobuf:"varint,1,opt,name=kind,proto3,enum=console.v1.EnvironmentEventKind" json:"kind,omitempty"`
-	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          EnvironmentEventKind   `protobuf:"varint,2,opt,name=kind,proto3,enum=console.v1.EnvironmentEventKind" json:"kind,omitempty"`
 	Environment   *v11.Environment       `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=at,proto3" json:"at,omitempty"`
 	Source        *Source                `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
@@ -1403,18 +1395,18 @@ func (*EnvironmentEvent) Descriptor() ([]byte, []int) {
 	return file_console_v1_deployment_proto_rawDescGZIP(), []int{14}
 }
 
+func (x *EnvironmentEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 func (x *EnvironmentEvent) GetKind() EnvironmentEventKind {
 	if x != nil {
 		return x.Kind
 	}
 	return EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_UNSPECIFIED
-}
-
-func (x *EnvironmentEvent) GetSlug() string {
-	if x != nil {
-		return x.Slug
-	}
-	return ""
 }
 
 func (x *EnvironmentEvent) GetEnvironment() *v11.Environment {
@@ -1447,7 +1439,8 @@ func (x *EnvironmentEvent) GetCi() *CI {
 
 type ReportRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Deployment    *Deployment            `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Deployment    *Deployment            `protobuf:"bytes,2,opt,name=deployment,proto3" json:"deployment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1480,6 +1473,13 @@ func (x *ReportRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReportRequest.ProtoReflect.Descriptor instead.
 func (*ReportRequest) Descriptor() ([]byte, []int) {
 	return file_console_v1_deployment_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ReportRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
 }
 
 func (x *ReportRequest) GetDeployment() *Deployment {
@@ -1527,7 +1527,8 @@ func (*ReportResponse) Descriptor() ([]byte, []int) {
 
 type RecordEnvironmentEventRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         *EnvironmentEvent      `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Event         *EnvironmentEvent      `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1560,6 +1561,13 @@ func (x *RecordEnvironmentEventRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RecordEnvironmentEventRequest.ProtoReflect.Descriptor instead.
 func (*RecordEnvironmentEventRequest) Descriptor() ([]byte, []int) {
 	return file_console_v1_deployment_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RecordEnvironmentEventRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
 }
 
 func (x *RecordEnvironmentEventRequest) GetEvent() *EnvironmentEvent {
@@ -1680,7 +1688,7 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\bresource\x12&\n" +
 	"\x05files\x18\x03 \x03(\tB\x10\xbaH\r\x92\x01\n" +
-	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xc7\x18\n" +
+	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xa7\x18\n" +
 	"\n" +
 	"Deployment\x12\x9b\x01\n" +
 	"\x02id\x18\x01 \x01(\tB\x8a\x01\xbaH\x86\x01\xba\x01q\n" +
@@ -1688,31 +1696,29 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1a.console.v1.DeploymentKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12C\n" +
 	"\aoutcome\x18\x03 \x01(\x0e2\x1d.console.v1.DeploymentOutcomeB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aoutcome\x12\x1e\n" +
-	"\x04slug\x18\x04 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12L\n" +
-	"\venvironment\x18\x05 \x01(\v2\".common.environment.v1.EnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x128\n" +
-	"\bprovider\x18\x06 \x01(\v2\x14.console.v1.ProviderB\x06\xbaH\x03\xc8\x01\x01R\bprovider\x12:\n" +
-	"\x06target\x18\a \x01(\tB\"\xbaH\x1fr\x1d\x10\x01\x18\x80\x022\x16^[^/\\s]+(?:/[^/\\s]+)+$R\x06target\x12A\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aoutcome\x12L\n" +
+	"\venvironment\x18\x04 \x01(\v2\".common.environment.v1.EnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x128\n" +
+	"\bprovider\x18\x05 \x01(\v2\x14.console.v1.ProviderB\x06\xbaH\x03\xc8\x01\x01R\bprovider\x12:\n" +
+	"\x06target\x18\x06 \x01(\tB\"\xbaH\x1fr\x1d\x10\x01\x18\x80\x022\x16^[^/\\s]+(?:/[^/\\s]+)+$R\x06target\x12A\n" +
 	"\n" +
-	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tstartedAt\x12C\n" +
-	"\vfinished_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"started_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tstartedAt\x12C\n" +
+	"\vfinished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"finishedAt\x12(\n" +
-	"\vcli_version\x18\n" +
-	" \x01(\tB\a\xbaH\x04r\x02\x18@R\n" +
+	"\vcli_version\x18\t \x01(\tB\a\xbaH\x04r\x02\x18@R\n" +
 	"cliVersion\x123\n" +
-	"\tpromotion\x18\v \x01(\v2\x15.console.v1.PromotionR\tpromotion\x12\x1e\n" +
-	"\x05error\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xa0\x1fR\x05error\x12$\n" +
-	"\x04edge\x18\r \x01(\v2\x10.console.v1.EdgeR\x04edge\x12-\n" +
-	"\x04apps\x18\x0e \x03(\v2\x0f.console.v1.AppB\b\xbaH\x05\x92\x01\x02\x10dR\x04apps\x12=\n" +
-	"\tresources\x18\x0f \x03(\v2\x14.console.v1.ResourceB\t\xbaH\x06\x92\x01\x03\x10\xc8\x01R\tresources\x121\n" +
-	"\x05links\x18\x10 \x03(\v2\x10.console.v1.LinkB\t\xbaH\x06\x92\x01\x03\x10\xd0\x0fR\x05links\x124\n" +
-	"\x06usages\x18\x11 \x03(\v2\x11.console.v1.UsageB\t\xbaH\x06\x92\x01\x03\x10\xd0\x0fR\x06usages\x12U\n" +
-	"\x0fvariable_groups\x18\x12 \x03(\v2!.app.resources.v1.GroupDefinitionB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x0evariableGroups\x12*\n" +
-	"\x06source\x18\x13 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
-	"\x02ci\x18\x14 \x01(\v2\x0e.console.v1.CIR\x02ci\x125\n" +
-	"\atrigger\x18\x15 \x01(\v2\x13.console.v1.TriggerB\x06\xbaH\x03\xc8\x01\x01R\atrigger\x12C\n" +
-	"\x05spans\x18\x16 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans:\x92\x0e\xbaH\x8e\x0e\x1a\xbc\x01\n" +
+	"\tpromotion\x18\n" +
+	" \x01(\v2\x15.console.v1.PromotionR\tpromotion\x12\x1e\n" +
+	"\x05error\x18\v \x01(\tB\b\xbaH\x05r\x03\x18\xa0\x1fR\x05error\x12$\n" +
+	"\x04edge\x18\f \x01(\v2\x10.console.v1.EdgeR\x04edge\x12-\n" +
+	"\x04apps\x18\r \x03(\v2\x0f.console.v1.AppB\b\xbaH\x05\x92\x01\x02\x10dR\x04apps\x12=\n" +
+	"\tresources\x18\x0e \x03(\v2\x14.console.v1.ResourceB\t\xbaH\x06\x92\x01\x03\x10\xc8\x01R\tresources\x121\n" +
+	"\x05links\x18\x0f \x03(\v2\x10.console.v1.LinkB\t\xbaH\x06\x92\x01\x03\x10\xd0\x0fR\x05links\x124\n" +
+	"\x06usages\x18\x10 \x03(\v2\x11.console.v1.UsageB\t\xbaH\x06\x92\x01\x03\x10\xd0\x0fR\x06usages\x12U\n" +
+	"\x0fvariable_groups\x18\x11 \x03(\v2!.app.resources.v1.GroupDefinitionB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x0evariableGroups\x12*\n" +
+	"\x06source\x18\x12 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
+	"\x02ci\x18\x13 \x01(\v2\x0e.console.v1.CIR\x02ci\x125\n" +
+	"\atrigger\x18\x14 \x01(\v2\x13.console.v1.TriggerB\x06\xbaH\x03\xc8\x01\x01R\atrigger\x12C\n" +
+	"\x05spans\x18\x15 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans:\x92\x0e\xbaH\x8e\x0e\x1a\xbc\x01\n" +
 	"\x1fdeployment.promotion_on_success\x127a succeeded deployment names the promotion it made live\x1a`this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_SUCCEEDED || has(this.promotion)\x1a\xc5\x01\n" +
 	"\"deployment.no_promotion_on_failure\x12?a failed deployment made nothing live, so it names no promotion\x1a^this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_FAILED || !has(this.promotion)\x1a\x9d\x01\n" +
 	"\x1bdeployment.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\x1a\xd4\x01\n" +
@@ -1723,26 +1729,30 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"!deployment.unique_variable_groups\x12#each variable group is defined once\x1a+this.variable_groups.map(g, g.key).unique()\x1a\xbb\x01\n" +
 	"\"deployment.variable_groups_defined\x12,a variable names a group the project defines\x1agthis.apps.all(a, a.variables.all(v, v.group == '' || this.variable_groups.exists(g, g.key == v.group)))\x1a\xc9\x01\n" +
 	" deployment.links_reference_known\x12:a link names an app and a resource this deployment reports\x1aithis.links.all(l, this.apps.exists(a, a.name == l.app) && this.resources.exists(r, r.name == l.resource))\x1a\xcc\x01\n" +
-	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\"\xb6\a\n" +
-	"\x10EnvironmentEvent\x12@\n" +
-	"\x04kind\x18\x01 \x01(\x0e2 .console.v1.EnvironmentEventKindB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12\x1e\n" +
-	"\x04slug\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04slug\x12L\n" +
+	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\"\xbb\b\n" +
+	"\x10EnvironmentEvent\x12\xa2\x01\n" +
+	"\x02id\x18\x01 \x01(\tB\x91\x01\xbaH\x8d\x01\xba\x01x\n" +
+	"\"environment_event.id_is_a_trace_id\x12&an all zero id is not a valid trace id\x1a*this != '00000000000000000000000000000000'r\x102\x0e^[0-9a-f]{32}$R\x02id\x12@\n" +
+	"\x04kind\x18\x02 \x01(\x0e2 .console.v1.EnvironmentEventKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12L\n" +
 	"\venvironment\x18\x03 \x01(\v2\".common.environment.v1.EnvironmentB\x06\xbaH\x03\xc8\x01\x01R\venvironment\x122\n" +
 	"\x02at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x02at\x12*\n" +
 	"\x06source\x18\x05 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
 	"\x02ci\x18\x06 \x01(\v2\x0e.console.v1.CIR\x02ci:\xf1\x04\xbaH\xed\x04\x1a\xf2\x01\n" +
 	",environment_event.preview_removed_in_preview\x12(a removed preview is in the preview tier\x1a\x97\x01this.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW\x1a\xce\x01\n" +
 	"/environment_event.preview_removed_names_preview\x12#a removed preview names the preview\x1avthis.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.identity != ''\x1a\xa4\x01\n" +
-	"\"environment_event.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\"O\n" +
-	"\rReportRequest\x12>\n" +
+	"\"environment_event.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\"x\n" +
+	"\rReportRequest\x12'\n" +
 	"\n" +
-	"deployment\x18\x01 \x01(\v2\x16.console.v1.DeploymentB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"project_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tprojectId\x12>\n" +
+	"\n" +
+	"deployment\x18\x02 \x01(\v2\x16.console.v1.DeploymentB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"deployment\"\x10\n" +
-	"\x0eReportResponse\"[\n" +
-	"\x1dRecordEnvironmentEventRequest\x12:\n" +
-	"\x05event\x18\x01 \x01(\v2\x1c.console.v1.EnvironmentEventB\x06\xbaH\x03\xc8\x01\x01R\x05event\" \n" +
+	"\x0eReportResponse\"\x84\x01\n" +
+	"\x1dRecordEnvironmentEventRequest\x12'\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tprojectId\x12:\n" +
+	"\x05event\x18\x02 \x01(\v2\x1c.console.v1.EnvironmentEventB\x06\xbaH\x03\xc8\x01\x01R\x05event\" \n" +
 	"\x1eRecordEnvironmentEventResponse*\x8b\x01\n" +
 	"\x0eDeploymentKind\x12\x1f\n" +
 	"\x1bDEPLOYMENT_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
