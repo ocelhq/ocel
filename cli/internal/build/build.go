@@ -49,7 +49,7 @@ func (l Log) App(name string) (io.Writer, func(error)) {
 	hiding := l.hidden.Writer(w)
 	return hiding, func(err error) {
 		_ = hiding.Flush()
-		ended(err)
+		ended(l.hidden.HideError(err))
 	}
 }
 
@@ -206,7 +206,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			}
 			appLog, ended := log.App(a.Name)
 			err = compile(ctx, cfg, a, outputDir, env, appLog)
-			ended(log.hidden.HideError(err))
+			ended(err)
 			if err != nil {
 				return err
 			}

@@ -146,6 +146,30 @@ process.exitCode = 1;
 	}
 }
 
+func TestAJavaScriptAppWhoseBuildFailsWithALiveValueEndsItsSpanWithTheValueHidden(t *testing.T) {
+	t.Parallel()
+	cfg := nodeBuilder(t, `
+const app = req.apps[0].name;
+emit({type: "span_start", id: "1", stage: "build", app});
+emit({type: "error", stage: "build", app, message: "Error: could not reach postgres://u:hunter2@127.0.0.1/db"});
+emit({type: "span_end", id: "1", ok: false});
+process.exitCode = 1;
+`)
+
+	var spans appSpans
+	err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, map[string]AppVariables{
+		"web": {Live: map[string]string{"OCEL_SECRET_DB": "postgres://u:hunter2@127.0.0.1/db"}},
+	}, spans.output())
+	if err == nil {
+		t.Fatal("Build succeeded, want the builder's failure")
+	}
+
+	ended, ok := spans.ended["web"]
+	if !ok || ended == nil || strings.Contains(ended.Error(), "hunter2") {
+		t.Errorf("web ended with %v (ended %t), want the failure with the value hidden, since the terminal prints it as the span ends", ended, ok)
+	}
+}
+
 func TestAJavaScriptAppsSpanStillEndsWhenTheBuilderDiesMidBuild(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
