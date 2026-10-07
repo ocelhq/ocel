@@ -53,6 +53,13 @@ func docker(t *testing.T, args ...string) string {
 	return string(out)
 }
 
+func runInImage(t *testing.T, ref, entrypoint string, args ...string) string {
+	t.Helper()
+	run := append([]string{"run", "--rm", "--network", "none"}, enginetest.RunLabelArgs(t)...)
+	run = append(run, "--entrypoint", entrypoint, ref)
+	return docker(t, append(run, args...)...)
+}
+
 func bindingValue(t *testing.T, port int) string {
 	t.Helper()
 	random := make([]byte, 12)
@@ -83,7 +90,7 @@ func holdsNowhere(t *testing.T, ref, value string) {
 
 func leavesNoLiveFiles(t *testing.T, ref string) {
 	t.Helper()
-	listed := docker(t, "run", "--rm", "--network", "none", "--entrypoint", "sh", ref, "-c", "ls -d /run/ocel-live /secrets-hash /used-secrets-hash 2>/dev/null; true")
+	listed := runInImage(t, ref, "sh", "-c", "ls -d /run/ocel-live /secrets-hash /used-secrets-hash 2>/dev/null; true")
 	if strings.TrimSpace(listed) != "" {
 		t.Errorf("the image keeps what the build step read its live values through:\n%s", listed)
 	}
@@ -128,7 +135,6 @@ func holdsInside(blob []byte, value string) bool {
 
 func builtWithBinding(t *testing.T, name, fixture string) (image.Image, string) {
 	t.Helper()
-	enginetest.RunLabelArgs(t)
 	value := bindingValue(t, answeringOnTheHost(t))
 	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: name, Workspace: located(t, fixture)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, []byte("the integration test machine")), os.Stderr)
 	if err != nil {
@@ -142,7 +148,7 @@ func proves(t *testing.T, built image.Image, value string, files ...string) {
 	t.Helper()
 	sum := sha256.Sum256([]byte(value))
 	read := func(path string) string {
-		return strings.TrimSpace(docker(t, "run", "--rm", "--network", "none", "--entrypoint", "cat", built.Ref, path))
+		return strings.TrimSpace(runInImage(t, built.Ref, "cat", path))
 	}
 	if got := read(files[0]); got != hex.EncodeToString(sum[:]) {
 		t.Errorf("the build step read %q from the file mounted for the binding, want the digest of its value", got)
@@ -164,7 +170,7 @@ func TestARailpackBuildReadsABindingFromTheLiveDirAndLeavesItInNoLayer(t *testin
 	built, value := builtWithBinding(t, "Railpack Secrets", "testdata/secretrailpack")
 
 	proves(t, built, value, "/app/dist/proof", "/app/dist/reached")
-	if got := strings.TrimSpace(docker(t, "run", "--rm", "--network", "none", "--entrypoint", "cat", built.Ref, "/app/dist/in-environment")); got != "false" {
+	if got := strings.TrimSpace(runInImage(t, built.Ref, "cat", "/app/dist/in-environment")); got != "false" {
 		t.Errorf("the build saw the binding in its environment (%s), want it only in the live dir", got)
 	}
 	holdsNowhere(t, built.Ref, value)
