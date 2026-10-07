@@ -92,7 +92,7 @@ export interface AppConfig {
 
 /** How the app is built. */
 export interface BuildConfig {
-  /** Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Left off, true. Set false to build as if no resource were provisioned. */
+  /** Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Only a serverless Next app's build gets them, and only on a provider that forwards ports; any other build goes without. Left off, true. Set false to build as if no resource were provisioned. */
   bindings?: boolean;
   /** The command that builds the app inside the image. Left off, the app's own build script runs. */
   command?: string;

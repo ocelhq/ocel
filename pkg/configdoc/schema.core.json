@@ -38,7 +38,7 @@
             "description": "How the app is built.",
             "properties": {
               "bindings": {
-                "description": "Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Left off, true. Set false to build as if no resource were provisioned.",
+                "description": "Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Only a serverless Next app's build gets them, and only on a provider that forwards ports; any other build goes without. Left off, true. Set false to build as if no resource were provisioned.",
                 "type": "boolean"
               },
               "command": {
