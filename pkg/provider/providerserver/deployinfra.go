@@ -102,7 +102,12 @@ func (r *deployRun) refuseUnprovisionedInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !found || recorded.ResourceDigest != declared {
+	if !found {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s was never provisioned, so this deploy has no infra to ship its apps over: deploy again, and the infra is provisioned before the build",
+			r.spec.Infra)
+	}
+	if recorded.ResourceDigest != declared {
 		return refusal.Refuse(refusal.CodeBusy,
 			"%s holds other resources than this deploy declares, so another deploy provisioned it after this one did: deploy again once that deploy ends",
 			r.spec.Infra)

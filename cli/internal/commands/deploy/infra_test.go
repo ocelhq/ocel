@@ -103,7 +103,7 @@ func TestAPersistentPreviewProvisionsItsInfraBeforeItBuilds(t *testing.T) {
 
 	infra := sentProvisionInfras(t, fixture)
 	if len(infra) != 1 || infra[0].GetEnvironment().GetIdentity() != "staging" {
-		t.Fatalf("the CLI sent %v, want one ProvisionInfra for preview staging", infra)
+		t.Fatalf("the CLI sent %d ProvisionInfra requests, want one for preview staging", len(infra))
 	}
 	if !sentDeploy(t, fixture).GetInfraProvisioned() {
 		t.Error("the preview deploy did not say its infra was provisioned")

@@ -129,7 +129,7 @@ func TestADeployRefusesInfraProvisionedWhenNoneWas(t *testing.T) {
 	req := deployRequest()
 	req.InfraProvisioned = true
 	result, _ := deploy(t, client, req)
-	if result.GetSuccess() || !strings.Contains(result.GetError(), "another deploy provisioned it") {
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "was never provisioned") {
 		t.Fatalf("Deploy() = %q, want it refused: no infra stack was provisioned for it", result.GetError())
 	}
 	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {

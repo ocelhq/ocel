@@ -52,7 +52,8 @@ func TestTheInfraManifestDeclaresTheResourcesAndWorkersOfTheDeployManifestAndNoA
 	infraHalf := &contractv1.Manifest{Slug: infra.GetSlug(), Resources: infra.GetResources(), Domains: infra.GetDomains(), Workers: infra.GetWorkers()}
 	deployHalf := &contractv1.Manifest{Slug: deployed.GetSlug(), Resources: deployed.GetResources(), Domains: deployed.GetDomains(), Workers: deployed.GetWorkers()}
 	if !proto.Equal(infraHalf, deployHalf) {
-		t.Errorf("the infra manifest declares\n%v\nwant what the deploy manifest declares, which the provider checks the provisioned infra against\n%v", infraHalf, deployHalf)
+		t.Errorf("the infra manifest declares resources %v and workers %v, want what the deploy manifest declares, %v and %v: the provider checks the provisioned infra against it",
+			logicalNames(infra.GetResources()), workerNames(infra), logicalNames(deployed.GetResources()), workerNames(deployed))
 	}
 }
 
@@ -75,4 +76,12 @@ func TestTheInfraManifestOfAContainerAppIsAssembledBeforeItsImageIsBuilt(t *test
 	if len(infra.GetResources()) != 1 {
 		t.Errorf("the infra manifest declares %d resources, want orders", len(infra.GetResources()))
 	}
+}
+
+func logicalNames(resources []*contractv1.ManifestResource) []string {
+	names := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		names = append(names, resource.GetLogicalName())
+	}
+	return names
 }
