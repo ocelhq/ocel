@@ -49,14 +49,14 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 
 func (p *Provider) openBastion(c *clients) bastion {
 	return bastion{
-		clients:       c,
-		deployService: p.deployService,
-		pushBinary:    p.pushBinary,
-		tearDown:      p.tearDown,
-		grantInvoker:  p.grantInvoker,
-		prove:         ports.ProveIdentity,
-		open:          relay.OpenForward,
-		waited:        waited,
+		clients:        c,
+		deployAndRoute: p.deployAndRoute,
+		pushBinary:     p.pushBinary,
+		tearDown:       p.tearDown,
+		grantInvoker:   p.grantInvoker,
+		prove:          ports.ProveIdentity,
+		open:           relay.OpenForward,
+		waited:         waited,
 	}
 }
 

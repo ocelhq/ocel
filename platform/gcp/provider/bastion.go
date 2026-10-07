@@ -39,14 +39,14 @@ var bastionImageTag = sync.OnceValue(func() string {
 })
 
 type bastion struct {
-	clients       *clients
-	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
-	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	tearDown      func(ctx context.Context, service string, progress progress.Log) error
-	grantInvoker  func(ctx context.Context, c *clients, service, member string) error
-	prove         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
-	open          func(ctx context.Context, link relay.Link) (*relay.Forward, error)
-	waited        func(ctx context.Context, attempt int) bool
+	clients        *clients
+	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
+	tearDown       func(ctx context.Context, service string, progress progress.Log) error
+	grantInvoker   func(ctx context.Context, c *clients, service, member string) error
+	prove          func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+	open           func(ctx context.Context, link relay.Link) (*relay.Forward, error)
+	waited         func(ctx context.Context, attempt int) bool
 }
 
 func (b bastion) imageRef(tier environment.Tier) string {
@@ -136,7 +136,7 @@ func (b bastion) ensureService(ctx context.Context, tier environment.Tier, targe
 	if err != nil {
 		return "", err
 	}
-	if current != nil && sameBastion(current, wanted) {
+	if current != nil && sameBastion(current, wanted) && servesLatest(current) {
 		return current.Uri, nil
 	}
 	if err := b.ensureAccount(ctx, tier); err != nil {
@@ -147,7 +147,7 @@ func (b bastion) ensureService(ctx context.Context, tier environment.Tier, targe
 			return "", err
 		}
 	}
-	ran, err := b.deployService(ctx, desired, progress)
+	ran, err := b.deployAndRoute(ctx, desired, progress)
 	return ran.url, err
 }
 
