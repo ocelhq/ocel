@@ -80,7 +80,7 @@ func TestAWriteThatFailsPartWayLeavesNoValueOnDisk(t *testing.T) {
 	}
 }
 
-func TestRemoveAllRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
+func TestRemoveRecordedRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
 	parent := t.TempDir()
 	kept, err := Write(parent, "ocel-live-", map[string]string{"KEY": "value"})
 	if err != nil {
@@ -94,7 +94,7 @@ func TestRemoveAllRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	RemoveAll()
+	RemoveRecorded()
 
 	for _, dir := range []string{kept, removed} {
 		if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
@@ -104,7 +104,7 @@ func TestRemoveAllRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
 }
 
 func TestRemovingADirRemovesTheDirsWrittenInsideIt(t *testing.T) {
-	root, err := Write(t.TempDir(), "ocel-dev-live-", nil)
+	root, err := Create(t.TempDir(), "ocel-dev-live-")
 	if err != nil {
 		t.Fatal(err)
 	}

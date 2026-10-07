@@ -29,16 +29,24 @@ func Write(parent, pattern string, values map[string]string) (string, error) {
 	if err := RefuseUnnamableKeys(values); err != nil {
 		return "", err
 	}
-	dir, err := os.MkdirTemp(parent, pattern)
+	dir, err := Create(parent, pattern)
 	if err != nil {
-		return "", fmt.Errorf("create a live dir: %w", err)
+		return "", err
 	}
-	record(dir)
 	for _, key := range slices.Sorted(maps.Keys(values)) {
 		if err := os.WriteFile(filepath.Join(dir, key), []byte(values[key]), 0o600); err != nil {
 			return "", errors.Join(fmt.Errorf("write %s into a live dir: %w", key, err), Remove(dir))
 		}
 	}
+	return dir, nil
+}
+
+func Create(parent, pattern string) (string, error) {
+	dir, err := os.MkdirTemp(parent, pattern)
+	if err != nil {
+		return "", fmt.Errorf("create a live dir: %w", err)
+	}
+	record(dir)
 	return dir, nil
 }
 
@@ -56,7 +64,7 @@ func Remove(dir string) error {
 	return nil
 }
 
-func RemoveAll() {
+func RemoveRecorded() {
 	written.mu.Lock()
 	dirs := slices.Collect(maps.Keys(written.dirs))
 	written.mu.Unlock()

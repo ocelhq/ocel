@@ -16,7 +16,7 @@ func compiledFromSource(framework string) bool {
 	return framework == buildoutput.FrameworkGo || framework == buildoutput.FrameworkPython || framework == buildoutput.FrameworkRust
 }
 
-func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, env map[string]string, unset []string, log io.Writer) error {
+func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, env environment, log io.Writer) error {
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	roots, err := discoveryRootsFor(cfg, a.Framework())
 	if err != nil {
@@ -36,8 +36,8 @@ func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir
 		FunctionDir:    filepath.Join(appDir, functionsDirName, entryFunctionDirName),
 		AppDir:         appDir,
 		DiscoveryRoots: roots,
-		Env:            env,
-		Unset:          unset,
+		Env:            env.set,
+		Unset:          env.unset,
 		Log:            log,
 	})
 }

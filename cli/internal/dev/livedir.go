@@ -16,7 +16,7 @@ type liveDir struct {
 }
 
 func newLiveDir() (*liveDir, error) {
-	root, err := livedir.Write("", "ocel-dev-live-", nil)
+	root, err := livedir.Create("", "ocel-dev-live-")
 	if err != nil {
 		return nil, err
 	}
