@@ -18,7 +18,8 @@ function fakeBucket(total: number) {
     },
     async delete(batch: string[]) {
       deleted.push(batch);
-      keys = keys.filter((key) => !batch.includes(key));
+      const gone = new Set(batch);
+      keys = keys.filter((key) => !gone.has(key));
     },
   } as unknown as R2Bucket;
   return { bucket, deleted, listed };
