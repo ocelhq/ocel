@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -15,19 +17,26 @@ import (
 )
 
 type infraProvisioning struct {
-	provider       *providerprocess.Provider
-	cfg            *project.Project
-	env            *environmentv1.Environment
-	workerCeilings []provider.WorkerCeiling
+	providerProcess *providerprocess.Provider
+	cfg             *project.Project
+	env             *environmentv1.Environment
+	aliasToken      string
+	workerCeilings  []provider.WorkerCeiling
 
-	provisioned bool
+	sent *contractv1.ProvisionInfraRequest
 }
 
-func newInfraProvisioning(p *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, workerCeilings []provider.WorkerCeiling, dry, prebuilt bool) *infraProvisioning {
+func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, dry, prebuilt bool) *infraProvisioning {
 	if dry || prebuilt || env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		return nil
 	}
-	return &infraProvisioning{provider: p, cfg: cfg, env: env, workerCeilings: workerCeilings}
+	return &infraProvisioning{
+		providerProcess: providerProcess,
+		cfg:             facts.project,
+		env:             env,
+		aliasToken:      facts.builtAlias,
+		workerCeilings:  facts.workerCeilings,
+	}
 }
 
 func (i *infraProvisioning) provision(ctx context.Context, resources []declaration.Resource, inline []*bindingsv1.Binding) error {
@@ -43,18 +52,23 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 	if err != nil {
 		return err
 	}
-	if _, err := providerprocess.Stream(ctx, i.provider, "ProvisionInfra", &contractv1.ProvisionInfraRequest{
+	req := &contractv1.ProvisionInfraRequest{
 		Manifest:       assembled,
 		Environment:    i.env,
 		Edge:           i.cfg.EdgeSelection(),
 		InlineBindings: inline,
-	}, contractv1connect.ProviderServiceClient.ProvisionInfra); err != nil {
+		AliasToken:     i.aliasToken,
+	}
+	if proto.Equal(req, i.sent) {
+		return nil
+	}
+	if _, err := providerprocess.Stream(ctx, i.providerProcess, "ProvisionInfra", req, contractv1connect.ProviderServiceClient.ProvisionInfra); err != nil {
 		return err
 	}
-	i.provisioned = true
+	i.sent = req
 	return nil
 }
 
 func (i *infraProvisioning) isProvisioned() bool {
-	return i != nil && i.provisioned
+	return i != nil && i.sent != nil
 }
