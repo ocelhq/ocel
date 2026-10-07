@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { detect, resolveCommand } from "package-manager-detector";
 
 export interface NextBuild {
@@ -22,7 +23,22 @@ const ADAPTER_PATH_ENV = "NEXT_ADAPTER_PATH";
 const DEPLOYMENT_ID_ENV = "NEXT_DEPLOYMENT_ID";
 const LIVE_DIR_ENV = "OCEL_LIVE_DIR";
 
-export const buildProcess = { spawn: spawnBuild };
+export interface BuildNode {
+  version: string;
+  readsLiveDir: boolean;
+}
+
+export const buildProcess = { spawn: spawnBuild, node: nodeOf };
+
+async function nodeOf(cwd: string, env: Record<string, string>): Promise<BuildNode> {
+  const { stdout } = await promisify(execFile)(
+    "node",
+    ["-p", 'process.versions.node + " " + typeof process.getBuiltinModule'],
+    { cwd, env },
+  );
+  const [version = "", builtin] = stdout.trim().split(" ");
+  return { version, readsLiveDir: builtin === "function" };
+}
 
 export async function buildNext(app: NextBuild, adapterPath: string): Promise<void> {
   const owned: Record<string, string> = {
@@ -46,12 +62,6 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     }
   }
 
-  if (app.env?.[LIVE_DIR_ENV] && !process.getBuiltinModule) {
-    throw new Error(
-      `ocel: app "${app.name}" builds with values it reads from ${LIVE_DIR_ENV}, and the SDK reads them on node 22.3 or newer; this build runs on node ${process.versions.node}`,
-    );
-  }
-
   const pkg = JSON.parse(readFileSync(path.join(app.cwd, "package.json"), "utf8"));
   if (!pkg.scripts?.build) {
     throw new Error(`ocel: app "${app.name}" has no "build" script in package.json`);
@@ -67,11 +77,16 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
         entry[1] !== undefined && !(app.unset ?? []).includes(entry[0]),
     ),
   );
-  await buildProcess.spawn(cmd.command, cmd.args, app.cwd, {
-    ...inherited,
-    ...app.env,
-    ...owned,
-  });
+  const env = { ...inherited, ...app.env, ...owned };
+  if (app.env?.[LIVE_DIR_ENV]) {
+    const node = await buildProcess.node(app.cwd, env);
+    if (!node.readsLiveDir) {
+      throw new Error(
+        `ocel: app "${app.name}" builds with values it reads from ${LIVE_DIR_ENV}, and the SDK reads them on Node 20.16+ or 22.3+; the node its build runs in ${app.cwd} is ${node.version}`,
+      );
+    }
+  }
+  await buildProcess.spawn(cmd.command, cmd.args, app.cwd, env);
   process.stderr.write(`ocel: Next app "${app.name}" built\n`);
 }
 

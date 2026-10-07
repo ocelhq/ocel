@@ -187,28 +187,47 @@ describe("buildNext", () => {
     }
   });
 
-  describe("on a node with no process.getBuiltinModule, which the SDK reads a live dir with", () => {
-    const getBuiltinModule = process.getBuiltinModule;
+  describe("when the node the app's build runs on has no process.getBuiltinModule, which the SDK reads a live dir with", () => {
+    const nodeOf = buildProcess.node;
     afterEach(() => {
-      process.getBuiltinModule = getBuiltinModule;
+      buildProcess.node = nodeOf;
     });
 
-    it("refuses a build handed a live dir before anything runs, naming the node it needs", async () => {
-      // @ts-expect-error node before 22.3 has no getBuiltinModule
-      process.getBuiltinModule = undefined;
+    it("refuses a build handed a live dir before anything runs, naming the node it found and the ones it needs", async () => {
+      const asked: { cwd: string; path?: string }[] = [];
+      buildProcess.node = async (cwd, env) => {
+        asked.push({ cwd, path: env.PATH });
+        return { version: "20.11.0", readsLiveDir: false };
+      };
       let ran = false;
       buildProcess.spawn = async () => void (ran = true);
+      const build = app({ env: { OCEL_LIVE_DIR: "/tmp/ocel-live-1", PATH: "/app/bin" } });
 
-      await expect(
-        buildNext(app({ env: { OCEL_LIVE_DIR: "/tmp/ocel-live-1" } }), ADAPTER),
-      ).rejects.toThrow(/node 22\.3 or newer/);
+      const refused = buildNext(build, ADAPTER);
+
+      await expect(refused).rejects.toThrow(/Node 20\.16\+ or 22\.3\+/);
+      await expect(refused).rejects.toThrow(/20\.11\.0/);
       expect(ran).toBe(false);
+      expect(asked).toEqual([{ cwd: build.cwd, path: "/app/bin" }]);
     });
 
-    it("builds an app handed no live dir", async () => {
-      // @ts-expect-error node before 22.3 has no getBuiltinModule
-      process.getBuiltinModule = undefined;
+    it("builds an app handed no live dir without asking which node it runs on", async () => {
+      buildProcess.node = async () => {
+        throw new Error("asked which node builds an app with no live dir");
+      };
       await expect(envOf(app({ env: { OCEL_LIVE_DIR: "" } }))).resolves.toBeDefined();
     });
+  });
+
+  it("builds an app handed a live dir on a node whose process.getBuiltinModule the SDK reads it with", async () => {
+    const nodeOf = buildProcess.node;
+    buildProcess.node = async () => ({ version: "22.3.0", readsLiveDir: true });
+    try {
+      await expect(
+        envOf(app({ env: { OCEL_LIVE_DIR: "/tmp/ocel-live-1" } })),
+      ).resolves.toBeDefined();
+    } finally {
+      buildProcess.node = nodeOf;
+    }
   });
 });

@@ -19,7 +19,7 @@ function fileSystem(on: Host): FileSystem | undefined {
   if (loaded) return loaded as FileSystem;
   if (!on.versions?.node) return undefined;
   throw new Error(
-    `${LIVE_DIR} is set, and reading the bindings it projects needs node 22.3 or newer. This app runs on node ${on.versions.node}.`,
+    `${LIVE_DIR} is set, and reading the bindings it projects needs Node 20.16+ or 22.3+. This app runs on node ${on.versions.node}.`,
   );
 }
 
