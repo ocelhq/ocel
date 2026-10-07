@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type PointerRecordResult,
   RECORD_CACHE_MAX,
+  type ReleaseLookup,
   type ReleaseRecord,
   type ReleasesBinding,
-  type ReleasesDeps,
   resolveRelease,
 } from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
@@ -69,24 +69,24 @@ function createCountingBinding(opts: {
   return binding;
 }
 
-function deps(
+function lookupOf(
   binding: ReleasesBinding,
   clock: { ms: number },
   app = "web",
   host = `${app}.acme.com`,
-): ReleasesDeps {
+): ReleaseLookup {
   return { binding, slug: "acme-web", host, app, now: () => clock.ms };
 }
 
 describe("resolveRelease", () => {
-  it("resolves and returns the active Deployment record", async () => {
+  it("resolves and returns the active release record", async () => {
     const binding = createCountingBinding({
       pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
 
-    const resolution = await resolveRelease(deps(binding, clock));
+    const resolution = await resolveRelease(lookupOf(binding, clock));
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
@@ -95,7 +95,7 @@ describe("resolveRelease", () => {
     const binding = createCountingBinding({ pointerRelease: {}, records: {} });
     const clock = { ms: 0 };
 
-    const resolution = await resolveRelease(deps(binding, clock));
+    const resolution = await resolveRelease(lookupOf(binding, clock));
 
     expect(resolution).toEqual({ kind: "not-found" });
   });
@@ -105,7 +105,7 @@ describe("resolveRelease", () => {
       return { kind: "unchanged", release: "deploy-1" };
     });
 
-    expect(await resolveRelease(deps(binding, { ms: 0 }))).toEqual({ kind: "unavailable" });
+    expect(await resolveRelease(lookupOf(binding, { ms: 0 }))).toEqual({ kind: "unavailable" });
   });
 
   it("serves the cached record within the TTL without calling the store", async () => {
@@ -114,10 +114,10 @@ describe("resolveRelease", () => {
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
+    const lookup = lookupOf(binding, clock);
 
-    await resolveRelease(d);
-    await resolveRelease(d);
+    await resolveRelease(lookup);
+    await resolveRelease(lookup);
 
     expect(binding.pointerRecordCalls).toBe(1);
   });
@@ -128,15 +128,15 @@ describe("resolveRelease", () => {
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
+    const lookup = lookupOf(binding, clock);
 
-    await resolveRelease(d);
+    await resolveRelease(lookup);
     clock.ms = 4_000; // still within the 5s TTL
-    await resolveRelease(d);
+    await resolveRelease(lookup);
     expect(binding.pointerRecordCalls).toBe(1);
 
     clock.ms = 5_001; // TTL elapsed
-    const resolution = await resolveRelease(d);
+    const resolution = await resolveRelease(lookup);
     expect(binding.pointerRecordCalls).toBe(2);
     expect(binding.lastReturnedRecord).toBe(false);
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
@@ -152,14 +152,14 @@ describe("resolveRelease", () => {
       },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
+    const lookup = lookupOf(binding, clock);
 
-    const first = await resolveRelease(d);
+    const first = await resolveRelease(lookup);
     expect(first).toEqual({ kind: "found", record: makeRecord() });
 
     pointerRelease["web/"] = "deploy-2";
     clock.ms = 5_001;
-    const second = await resolveRelease(d);
+    const second = await resolveRelease(lookup);
 
     expect(second).toEqual({
       kind: "found",
@@ -174,13 +174,13 @@ describe("resolveRelease", () => {
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
+    const lookup = lookupOf(binding, clock);
 
-    await resolveRelease(d); // warms the record cache
+    await resolveRelease(lookup); // warms the record cache
 
     clock.ms = 5_001; // TTL elapsed, so the next call revalidates
     binding.down = true;
-    const resolution = await resolveRelease(d);
+    const resolution = await resolveRelease(lookup);
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
@@ -190,7 +190,7 @@ describe("resolveRelease", () => {
     binding.down = true;
     const clock = { ms: 0 };
 
-    const resolution = await resolveRelease(deps(binding, clock));
+    const resolution = await resolveRelease(lookupOf(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
   });
@@ -203,7 +203,7 @@ describe("resolveRelease", () => {
     binding.down = true;
     const clock = { ms: 0 };
 
-    const resolution = await resolveRelease(deps(binding, clock));
+    const resolution = await resolveRelease(lookupOf(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
     expect(errors).toHaveBeenCalledTimes(1);
@@ -219,12 +219,12 @@ describe("resolveRelease", () => {
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
-    await resolveRelease(d);
+    const lookup = lookupOf(binding, clock);
+    await resolveRelease(lookup);
 
     clock.ms = 5_001;
     binding.down = true;
-    const resolution = await resolveRelease(d);
+    const resolution = await resolveRelease(lookup);
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
     expect(errors).toHaveBeenCalledTimes(1);
@@ -239,10 +239,10 @@ describe("resolveRelease", () => {
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
-    const d = deps(binding, clock);
-    await resolveRelease(d);
+    const lookup = lookupOf(binding, clock);
+    await resolveRelease(lookup);
     clock.ms = 5_001;
-    await resolveRelease(d);
+    await resolveRelease(lookup);
 
     expect(errors).not.toHaveBeenCalled();
   });
@@ -254,7 +254,7 @@ describe("resolveRelease", () => {
     });
     const clock = { ms: 0 };
 
-    const resolution = await resolveRelease(deps(binding, clock));
+    const resolution = await resolveRelease(lookupOf(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
   });
@@ -269,8 +269,8 @@ describe("resolveRelease", () => {
     });
     const clock = { ms: 0 };
 
-    const web = await resolveRelease(deps(binding, clock, "web"));
-    const admin = await resolveRelease(deps(binding, clock, "admin"));
+    const web = await resolveRelease(lookupOf(binding, clock, "web"));
+    const admin = await resolveRelease(lookupOf(binding, clock, "admin"));
 
     expect(web).toEqual({ kind: "found", record: makeRecord() });
     expect(admin).toEqual({
@@ -293,7 +293,7 @@ describe("resolveRelease", () => {
     });
     const clock = { ms: 0 };
 
-    const production = await resolveRelease(deps(binding, clock));
+    const production = await resolveRelease(lookupOf(binding, clock));
     const preview = await resolveRelease({
       binding,
       slug: "acme-web",
@@ -346,15 +346,15 @@ describe("resolveRelease", () => {
       return { kind: "record", release: "deploy-1", record: makeRecord() };
     });
     const clock = { ms: 0 };
-    const d: ReleasesDeps = {
+    const lookup: ReleaseLookup = {
       binding,
       slug: "acme",
       host: "acme.example.com",
       now: () => clock.ms,
     };
 
-    await resolveRelease(d);
-    await resolveRelease(d);
+    await resolveRelease(lookup);
+    await resolveRelease(lookup);
 
     expect(calls).toBe(1);
   });

@@ -1782,8 +1782,8 @@ describe("the variables a deployment declares", () => {
     expect(reads.filter((key) => key.endsWith("/sealed.bin"))).toEqual([]);
   });
 
-  it("reloads the isolate when only the build changed", async () => {
-    const deployment = (releaseFingerprint: string) =>
+  it("reloads the isolate when only the release fingerprint changed", async () => {
+    const release = (releaseFingerprint: string) =>
       variablesInvoker({
         handler: COUNTER,
         id: "shared-bundle-variables",
@@ -1792,8 +1792,8 @@ describe("the variables a deployment declares", () => {
       }).edge;
     const served = async (edge: EdgeInvoker) => (await edge("e", new Request("https://x/"))).text();
 
-    expect(await served(deployment("fp-1"))).toBe("1");
-    expect(await served(deployment("fp-1"))).toBe("2");
-    expect(await served(deployment("fp-2"))).toBe("1");
+    expect(await served(release("fp-1"))).toBe("1");
+    expect(await served(release("fp-1"))).toBe("2");
+    expect(await served(release("fp-2"))).toBe("1");
   });
 });

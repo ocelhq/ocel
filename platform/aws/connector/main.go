@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -28,7 +27,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -118,8 +116,6 @@ func variableStore(cfg aws.Config, bootstraps *bootstrapCache) variablestoreserv
 	}
 }
 
-const bootstrapTTL = 5 * time.Minute
-
 type keyReader interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 }
@@ -165,50 +161,4 @@ func invoked(spec connectorserver.Spec, serve proxy) func(context.Context, json.
 func woken(raw []byte) bool {
 	var wake awsconnector.Wake
 	return json.Unmarshal(raw, &wake) == nil && wake.Ocel == awsconnector.WakeHeartbeat
-}
-
-type bootstrapCache struct {
-	namespace bootstrap.Namespace
-	stacks    cfn.StacksAPI
-	now       func() time.Time
-
-	mu   sync.Mutex
-	read map[environment.Tier]cachedBootstrap
-}
-
-type cachedBootstrap struct {
-	deployed bootstrap.Deployed
-	at       time.Time
-}
-
-func (d *bootstrapCache) resolve(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
-	d.mu.Lock()
-	memo, known := d.read[tier]
-	d.mu.Unlock()
-	if known && d.now().Sub(memo.at) < bootstrapTTL {
-		return memo.deployed, nil
-	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, tier)
-	if err != nil {
-		return bootstrap.Deployed{}, err
-	}
-	d.mu.Lock()
-	d.read[tier] = cachedBootstrap{deployed: deployed, at: d.now()}
-	d.mu.Unlock()
-	return deployed, nil
-}
-
-func (d *bootstrapCache) Table(ctx context.Context, tier environment.Tier) (string, error) {
-	deployed, err := d.resolve(ctx, tier)
-	return deployed.StateTable, err
-}
-
-func (d *bootstrapCache) ValuesTable(ctx context.Context, tier environment.Tier) (string, error) {
-	deployed, err := d.resolve(ctx, tier)
-	return deployed.VariablesTable, err
-}
-
-func (d *bootstrapCache) Key(ctx context.Context, tier environment.Tier) (string, error) {
-	deployed, err := d.resolve(ctx, tier)
-	return deployed.VariablesKeyARN, err
 }

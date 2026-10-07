@@ -40,7 +40,7 @@ export interface ReleasesBinding {
   }): Promise<PointerRecordResult>;
 }
 
-export interface ReleasesDeps {
+export interface ReleaseLookup {
   binding: ReleasesBinding;
   slug: string;
   host: string;
@@ -71,20 +71,20 @@ function cacheMap(binding: ReleasesBinding): Map<string, CacheEntry> {
   return map;
 }
 
-function cacheKey(deps: ReleasesDeps): string {
-  return deps.host;
+function cacheKey(lookup: ReleaseLookup): string {
+  return lookup.host;
 }
 
-function describeDeployScope(deps: ReleasesDeps): string {
-  if (deps.label !== undefined) return `${deps.slug}/${deps.label}`;
-  if (deps.app) return `${deps.slug}/${deps.app}`;
-  return deps.slug;
+function describeLookupScope(lookup: ReleaseLookup): string {
+  if (lookup.label !== undefined) return `${lookup.slug}/${lookup.label}`;
+  if (lookup.app) return `${lookup.slug}/${lookup.app}`;
+  return lookup.slug;
 }
 
-export async function resolveRelease(deps: ReleasesDeps): Promise<ReleaseResolution> {
-  const now = (deps.now ?? Date.now)();
-  const cache = cacheMap(deps.binding);
-  const key = cacheKey(deps);
+export async function resolveRelease(lookup: ReleaseLookup): Promise<ReleaseResolution> {
+  const now = (lookup.now ?? Date.now)();
+  const cache = cacheMap(lookup.binding);
+  const key = cacheKey(lookup);
   const cached = cache.get(key);
   if (cached) lruSet(cache, key, cached, RECORD_CACHE_MAX);
 
@@ -96,11 +96,19 @@ export async function resolveRelease(deps: ReleasesDeps): Promise<ReleaseResolut
   try {
     const knownRelease = cached?.release;
     result =
-      deps.label === undefined
-        ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownRelease })
-        : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownRelease });
+      lookup.label === undefined
+        ? await lookup.binding.readPointerRecord({
+            slug: lookup.slug,
+            app: lookup.app,
+            knownRelease,
+          })
+        : await lookup.binding.readLabelRecord({
+            slug: lookup.slug,
+            label: lookup.label,
+            knownRelease,
+          });
   } catch (error) {
-    const scope = describeDeployScope(deps);
+    const scope = describeLookupScope(lookup);
     if (cached) {
       const ageSeconds = Math.round((now - cached.at) / 1000);
       console.error(
