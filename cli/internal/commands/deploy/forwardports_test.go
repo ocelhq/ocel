@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -180,5 +181,42 @@ func TestAProviderThatForwardsNoPortIsNotAskedToAndOpensNoForwardingStep(t *test
 	}
 	if _, ok := built.Live[forwardedPostgresKey]; ok {
 		t.Errorf("the build was handed %s, want no bindings when nothing was forwarded", forwardedPostgresKey)
+	}
+}
+
+func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "storage.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const files = declareBucket("files");
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "index.ts"), `
+export * from "./db.js";
+export * from "./storage.js";
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), `
+import { db, files } from "../../../shared/index.js";
+
+export function handler() {
+  return db.name + files.name;
+}
+`)
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
+	if len(sent) != 1 || len(sent[0].GetBindings()) != 2 {
+		t.Fatalf("the CLI asked to forward %v, want every binding the built app uses, left to the provider to forward or not", sent)
+	}
+	if _, ok := built.Live[forwardedPostgresKey]; !ok {
+		t.Error("the build was not handed main, which the provider forwarded")
+	}
+	if !strings.Contains(said, "goes without the bindings of") {
+		t.Errorf("the deploy said %q, want it to say the build goes without the bucket the provider forwards no port to", said)
 	}
 }
