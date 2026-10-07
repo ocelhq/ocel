@@ -104,3 +104,19 @@ func TestARecordUnderVerifyFullTrustsItsOwnCA(t *testing.T) {
 		t.Errorf("pool tls = %+v, want the hostname verified against the record's CA", tls)
 	}
 }
+
+func TestAForwardedRecordVerifiesItsTLSServerNameNotTheForward(t *testing.T) {
+	postgresRecord(t, map[string]any{
+		"host": "127.0.0.1", "port": 41234, "database": "d", "username": "u", "password": "p",
+		"tlsMode": "POSTGRES_TLS_MODE_VERIFY_FULL", "tlsServerName": "orders.cluster.internal",
+	})
+	pool, err := ocel.Postgres("main").Pool(t.Context())
+	if err != nil {
+		t.Fatalf("Pool() error = %v", err)
+	}
+	defer pool.Close()
+	config := pool.Config().ConnConfig
+	if config.Host != "127.0.0.1" || config.TLSConfig == nil || config.TLSConfig.ServerName != "orders.cluster.internal" {
+		t.Errorf("pool connects to %q verifying %+v, want 127.0.0.1 verified as orders.cluster.internal", config.Host, config.TLSConfig)
+	}
+}

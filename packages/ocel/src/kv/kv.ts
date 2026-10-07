@@ -163,13 +163,13 @@ function refuseEntries(store: string, entries: [string, DeclaredEntry][]) {
 }
 
 function clientOptions(store: string, properties: KvProperties) {
-  const { host, port, username, password, tls, caPem } = properties;
+  const { host, port, username, password, tls, caPem, tlsServerName } = properties;
   return {
     host,
     port,
     username: username || undefined,
     password: password || undefined,
-    tls: tls ? tlsOptions(store, host, caPem) : undefined,
+    tls: tls ? tlsOptions(store, tlsServerName || host, caPem) : undefined,
   };
 }
 

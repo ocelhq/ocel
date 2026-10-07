@@ -441,6 +441,38 @@ async fn a_binding_that_requires_tls_is_reached_over_tls() {
     assert!(matches!(err, Error::Kv(_)), "{err}");
 }
 
+#[tokio::test]
+async fn a_forwarded_binding_is_verified_under_its_tls_server_name_and_reached_through_the_forward()
+{
+    let forward = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = forward.local_addr().unwrap().port();
+    std::env::remove_var("OCEL_PHASE");
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_forwarded",
+        format!(
+            r#"{{"name":"kv--forwarded","kv":{{"host":"127.0.0.1","port":{port},"password":"pw","tls":true,"tlsServerName":"cache.invalid"}}}}"#
+        ),
+    );
+    let cache = Kv::new("forwarded");
+
+    assert_eq!(
+        cache
+            .client()
+            .unwrap()
+            .get_connection_info()
+            .addr()
+            .to_string(),
+        format!("cache.invalid:{port}")
+    );
+    let opening = tokio::spawn(async move { cache.connection().await.map(|_| ()) });
+    let accepted = tokio::time::timeout(Duration::from_secs(5), forward.accept()).await;
+    opening.abort();
+    assert!(
+        matches!(accepted, Ok(Ok(_))),
+        "the connection never reached the forward at 127.0.0.1:{port}: {accepted:?}"
+    );
+}
+
 #[test]
 fn a_client_over_a_port_that_is_no_tcp_port_is_refused() {
     std::env::remove_var("OCEL_PHASE");

@@ -139,6 +139,32 @@ describe("postgres()", () => {
     expect(new URL(pool.connectionString).searchParams.get("sslmode")).toBe("verify-full");
   });
 
+  it("verifies the host a forwarded record names as its tls server name, not the forward it connects to", () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: {
+          host: "127.0.0.1",
+          port: 41234,
+          database: "d",
+          username: "u",
+          password: "p",
+          tlsMode: "POSTGRES_TLS_MODE_VERIFY_FULL",
+          tlsServerName: "orders.cluster.internal",
+        },
+      }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(pool.options).toMatchObject({
+      host: "127.0.0.1",
+      port: 41234,
+      ssl: { rejectUnauthorized: true, servername: "orders.cluster.internal" },
+    });
+  });
+
   it("leaves tls to the driver when the record names no mode", () => {
     vi.stubEnv(
       "OCEL_RESOURCE_POSTGRES_orders",

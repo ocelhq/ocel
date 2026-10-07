@@ -100,7 +100,9 @@ func connectionString(properties *bindingsv1.PostgresProperties) string {
 }
 
 // Pool is the connection pool over the delivered binding. A record under
-// verify-full that names a CA trusts that CA for the server's certificate. The pool
+// verify-full that names a CA trusts that CA for the server's certificate, and a
+// record that names a TLS server name, as one pointing at a port forward does,
+// verifies the certificate against that name instead of the host. The pool
 // is opened on the first call and the same pool is returned on every one after. It
 // fails when no binding was delivered for the name, and during discovery.
 func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
@@ -123,6 +125,7 @@ func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	if err := trustCA(config, properties.GetTlsCa()); err != nil {
 		return nil, err
 	}
+	verifyServerName(config, properties.GetTlsServerName())
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, err
@@ -146,6 +149,20 @@ func trustCA(config *pgxpool.Config, ca string) error {
 		}
 	}
 	return nil
+}
+
+func verifyServerName(config *pgxpool.Config, name string) {
+	if name == "" {
+		return
+	}
+	if config.ConnConfig.TLSConfig != nil {
+		config.ConnConfig.TLSConfig.ServerName = name
+	}
+	for _, fallback := range config.ConnConfig.Fallbacks {
+		if fallback.TLSConfig != nil {
+			fallback.TLSConfig.ServerName = name
+		}
+	}
 }
 
 func (p *PostgresDB) properties(access string) (*bindingsv1.PostgresProperties, error) {

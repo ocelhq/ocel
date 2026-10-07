@@ -19,7 +19,7 @@ def _name(common: str) -> x509.Name:
     return x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common)])
 
 
-def _issue(subject: str, issuer=None, *, authority: bool):
+def _issue(subject: str, issuer=None, *, authority: bool, names=None):
     key = ec.generate_private_key(ec.SECP256R1())
     now = datetime.datetime.now(datetime.UTC)
     signer_name, signer_key = issuer if issuer else (_name(subject), key)
@@ -55,7 +55,9 @@ def _issue(subject: str, issuer=None, *, authority: bool):
         )
     else:
         builder = builder.add_extension(
-            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+            x509.SubjectAlternativeName(
+                names or [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+            ),
             critical=False,
         )
     certificate = builder.sign(signer_key, hashes.SHA256())
@@ -70,9 +72,11 @@ _REPLIES = {b"HELLO": b"%1\r\n$5\r\nproto\r\n:3\r\n", b"PING": b"+PONG\r\n"}
 
 
 class _Store:
-    def __init__(self, tmp_path):
+    def __init__(self, tmp_path, names=None):
         self.authority, authority_key = _issue("store authority", authority=True)
-        certificate, key = _issue("store", (self.authority.subject, authority_key), authority=False)
+        certificate, key = _issue(
+            "store", (self.authority.subject, authority_key), authority=False, names=names
+        )
         chain = tmp_path / "store.pem"
         chain.write_bytes(
             _pem(certificate).encode()
@@ -130,16 +134,75 @@ def system_trust(tmp_path, monkeypatch):
     return trusted
 
 
-def _deliver(monkeypatch, name: str, port: int, ca_pem: str):
+@pytest.fixture
+def named_store(tmp_path):
+    served = _Store(tmp_path, names=[x509.DNSName("cache.internal")])
+    yield served
+    served.close()
+
+
+def _deliver(monkeypatch, name: str, port: int, ca_pem: str, **properties):
     monkeypatch.setenv(
         f"OCEL_RESOURCE_KV_{name}",
         json.dumps(
             {
                 "name": f"kv--{name}",
-                "kv": {"host": "127.0.0.1", "port": port, "tls": True, "caPem": ca_pem},
+                "kv": {
+                    "host": "127.0.0.1",
+                    "port": port,
+                    "tls": True,
+                    "caPem": ca_pem,
+                    **properties,
+                },
             }
         ),
     )
+
+
+def test_a_forwarded_store_is_verified_under_the_tls_server_name_it_carries(
+    monkeypatch, named_store
+):
+    _deliver(
+        monkeypatch,
+        "forwarded",
+        named_store.port,
+        _pem(named_store.authority),
+        tlsServerName="cache.internal",
+    )
+
+    assert kv("forwarded").sync_client().ping() is True
+
+
+@pytest.mark.asyncio
+async def test_an_async_client_verifies_a_forwarded_store_under_its_tls_server_name(
+    monkeypatch, named_store
+):
+    _deliver(
+        monkeypatch,
+        "forwarded",
+        named_store.port,
+        _pem(named_store.authority),
+        tlsServerName="cache.internal",
+    )
+    client = kv("forwarded").client()
+
+    assert await client.ping() is True
+    await client.aclose()
+
+
+def test_a_forwarded_store_whose_certificate_names_another_host_is_refused(
+    monkeypatch, named_store
+):
+    _deliver(
+        monkeypatch,
+        "elsewhere",
+        named_store.port,
+        _pem(named_store.authority),
+        tlsServerName="other.internal",
+    )
+
+    with pytest.raises(redis.ConnectionError, match="certificate verify failed"):
+        kv("elsewhere").sync_client().ping()
 
 
 def test_a_store_whose_certificate_chains_to_the_delivered_authority_is_reached(monkeypatch, store):

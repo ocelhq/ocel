@@ -51,7 +51,9 @@ class Postgres:
     async def pool(self):
         """The asyncpg pool over the delivered binding, opened on the first call and returned
         unchanged on every one after. A record under verify-full that names a CA trusts
-        that CA for the server's certificate."""
+        that CA for the server's certificate, and one that names a TLS server name, as a
+        record pointing at a port forward does, verifies the certificate against that name
+        instead of the host."""
         if self._pool is None:
             async with self._opening:
                 if self._pool is None:
@@ -59,10 +61,10 @@ class Postgres:
 
                     options = {}
                     properties = read_postgres_binding(self.name)
-                    if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and properties.tls_ca:
-                        context = ssl.create_default_context()
-                        context.load_verify_locations(cadata=properties.tls_ca)
-                        options["ssl"] = context
+                    if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and (
+                        properties.tls_ca or properties.tls_server_name
+                    ):
+                        options["ssl"] = _verifying_context(properties)
                     self._pool = await asyncpg.create_pool(self.connection_string, **options)
         return self._pool
 
@@ -70,6 +72,24 @@ class Postgres:
         """Run a query on the pool and return the rows it selected."""
         pool = await self.pool()
         return await pool.fetch(query, *args)
+
+
+class _ServerNamedContext(ssl.SSLContext):
+    server_name = ""
+
+    def wrap_bio(self, incoming, outgoing, server_side=False, server_hostname=None, session=None):
+        return super().wrap_bio(
+            incoming, outgoing, server_side, self.server_name or server_hostname, session
+        )
+
+
+def _verifying_context(properties) -> ssl.SSLContext:
+    context = _ServerNamedContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_default_certs()
+    if properties.tls_ca:
+        context.load_verify_locations(cadata=properties.tls_ca)
+    context.server_name = properties.tls_server_name
+    return context
 
 
 class _Unprovisioned(Postgres):
