@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -21,14 +22,18 @@ type Values struct {
 func NewValues(values []string) Values {
 	var forms []string
 	for _, value := range values {
+		if !isHideableValue(value) {
+			continue
+		}
 		forms = append(forms, value, jsonForm(value, true), jsonForm(value, false), javaScriptForm(value))
 		if strings.Contains(value, "\n") {
 			for line := range strings.SplitSeq(value, "\n") {
-				forms = append(forms, strings.TrimSpace(line))
+				if line = strings.TrimSpace(line); isHideableLine(line) {
+					forms = append(forms, line)
+				}
 			}
 		}
 	}
-	forms = slices.DeleteFunc(forms, func(form string) bool { return form == "" })
 	slices.SortFunc(forms, func(a, b string) int { return len(b) - len(a) })
 	forms = slices.Compact(forms)
 	v := Values{forms: forms}
@@ -37,6 +42,19 @@ func NewValues(values []string) Values {
 		v.starts[form[0]] = true
 	}
 	return v
+}
+
+const (
+	minValueBytes = 4
+	minLineBytes  = 6
+)
+
+func isHideableValue(value string) bool {
+	return len(value) >= minValueBytes && strings.TrimSpace(value) != ""
+}
+
+func isHideableLine(line string) bool {
+	return len(line) >= minLineBytes && strings.ContainsFunc(line, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
 }
 
 func jsonForm(value string, escapeHTML bool) string {

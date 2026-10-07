@@ -53,6 +53,26 @@ func TestHideReplacesAValueAsGoAndJavaScriptEachWriteItInJSON(t *testing.T) {
 	}
 }
 
+func TestHideLeavesALineOfAMultilineValueAloneWhenItIsUnderSixBytesOrHasNoLetterOrDigit(t *testing.T) {
+	values := NewValues([]string{"{\n  7,\n  \"key\": \"abcdefgh\"\n  -----\n}"})
+
+	if got := values.Hide(`if (ok) { return 7, } -----`); got != `if (ok) { return 7, } -----` {
+		t.Errorf("Hide = %q, want the text unchanged", got)
+	}
+	if got := values.Hide(`"key": "abcdefgh"`); got != "[secret]" {
+		t.Errorf("Hide = %q, want a line of six bytes or more hidden", got)
+	}
+}
+
+func TestHideLeavesAValueUnderFourBytesOrOfOnlySpacesAloneAndHidesOneOfFour(t *testing.T) {
+	if got := NewValues([]string{"ab", "   \t"}).Hide("a tab and   \tspaces"); got != "a tab and   \tspaces" {
+		t.Errorf("Hide = %q, want the text unchanged", got)
+	}
+	if got := NewValues([]string{"1234"}).Hide("pin 1234"); got != "pin [secret]" {
+		t.Errorf("Hide = %q, want a four-byte value hidden", got)
+	}
+}
+
 func TestHideLeavesTextAloneWhenThereIsNothingToHide(t *testing.T) {
 	if got := (Values{}).Hide("plain build output"); got != "plain build output" {
 		t.Errorf("Hide = %q, want the text unchanged", got)
