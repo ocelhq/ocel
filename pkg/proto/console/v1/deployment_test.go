@@ -250,6 +250,8 @@ func TestProtovalidateRefusesADeploymentThatBreaksARule(t *testing.T) {
 		{name: "an app outcome is required", mutate: func(d *consolev1.Deployment) { d.Apps[0].Outcome = consolev1.AppOutcome_APP_OUTCOME_UNSPECIFIED }},
 		{name: "an app compute is required", mutate: func(d *consolev1.Deployment) { d.Apps[0].Compute = consolev1.ComputeKind_COMPUTE_KIND_UNSPECIFIED }},
 		{name: "an app framework is one the CLI builds", mutate: func(d *consolev1.Deployment) { d.Apps[0].Framework = "nextjs" }},
+		{name: "an app storage prefix fits the key a store accepts", mutate: func(d *consolev1.Deployment) { d.Apps[0].StoragePrefix = strings.Repeat("x", 513) }},
+		{name: "an app framework build id is at most 256 characters", mutate: func(d *consolev1.Deployment) { d.Apps[0].FrameworkBuildId = strings.Repeat("x", 257) }},
 		{name: "an app url is a url", mutate: func(d *consolev1.Deployment) { d.Apps[0].Urls = []string{"not a url"} }},
 		{
 			name:   "a succeeded app names its build",
