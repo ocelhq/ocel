@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
@@ -76,7 +77,9 @@ type Processor struct {
 	Span     *run.Span
 	Forward  io.Writer
 	AppBuild func(app string) (ended func(error))
-	Hide     func(text string) string
+	Hide     redaction.Values
+
+	forwarding *redaction.Writer
 
 	mu        sync.Mutex
 	spans     map[string]openSpan
@@ -99,6 +102,7 @@ var errStageFailed = errors.New("the node builder reported this stage failed")
 var errStageAbandoned = errors.New("the node builder never ended this stage")
 
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
+	defer func() { _ = p.forwarded().Flush() }()
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes+64*1024)
 	scanner.Split(splitLines)
@@ -109,13 +113,13 @@ func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 		p.mu.Lock()
 		p.unread = fmt.Errorf("could not read the node builder's output: %w", err)
 		p.mu.Unlock()
-		_, _ = io.Copy(hidingWriter{p}, r)
+		_, _ = io.Copy(p.forwarded(), r)
 	}
 }
 
 func splitLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if i := bytes.IndexByte(data, '\n'); i >= 0 {
-		return i + 1, data[:i], nil
+		return i + 1, data[:i+1], nil
 	}
 	if atEOF {
 		if len(data) == 0 {
@@ -130,21 +134,27 @@ func splitLines(data []byte, atEOF bool) (advance int, token []byte, err error) 
 }
 
 func (p *Processor) hide(text string) string {
-	if p.Hide == nil {
-		return text
-	}
-	return p.Hide(text)
+	return p.Hide.Hide(text)
 }
 
-func (p *Processor) forwardWriter() io.Writer {
-	if p.Forward == nil {
-		return io.Discard
+func (p *Processor) forwarded() *redaction.Writer {
+	if p.forwarding == nil {
+		forward := p.Forward
+		if forward == nil {
+			forward = io.Discard
+		}
+		p.forwarding = p.Hide.Writer(forward)
 	}
-	return p.Forward
+	return p.forwarding
 }
 
-func (p *Processor) line(line string) {
+func (p *Processor) line(token string) {
+	line, terminated := strings.CutSuffix(token, "\n")
 	if len(line) >= maxLineBytes {
+		if !terminated {
+			_, _ = io.WriteString(p.forwarded(), line)
+			return
+		}
 		p.forward(line)
 		return
 	}
@@ -170,24 +180,12 @@ func (p *Processor) line(line string) {
 }
 
 func (p *Processor) forward(line string) {
-	// TODO: this re-emits a trailing \n on every token, so CRLF fidelity
+	// TODO: this re-emits a trailing \n on every line it holds whole, so CRLF fidelity
 	// and byte-for-byte streaming are lost (a bare-\r spinner now flushes
 	// only at the next real newline), and a final partial line gets a \n
 	// the source never wrote. Fixing it needs Scan to thread raw bytes
 	// rather than bufio.Scanner tokens.
-	if p.Forward == nil {
-		return
-	}
-	_, _ = io.WriteString(p.Forward, p.hide(line)+"\n")
-}
-
-type hidingWriter struct{ p *Processor }
-
-func (h hidingWriter) Write(b []byte) (int, error) {
-	if _, err := io.WriteString(h.p.forwardWriter(), h.p.hide(string(b))); err != nil {
-		return 0, err
-	}
-	return len(b), nil
+	_, _ = io.WriteString(p.forwarded(), line+"\n")
 }
 
 func (p *Processor) apply(rec record) {

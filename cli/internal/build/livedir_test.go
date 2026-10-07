@@ -212,6 +212,36 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		}
 	})
 
+	t.Run("hides a value the build says across two writes, and passes on what it held once the build ends", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		var shared, app bytes.Buffer
+		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, _ []byte, log Log) error {
+			appLog, ended := log.App("web")
+			_, _ = io.WriteString(log.Shared, "booting with sk_live_sen")
+			_, _ = io.WriteString(log.Shared, "sitive, ready")
+			_, _ = io.WriteString(appLog, "signing with ss_live_")
+			_, _ = io.WriteString(appLog, "secret, ready")
+			ended(nil)
+			return nil
+		}}
+
+		if err := builder.Build(context.Background(), cfg, values, log); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if shared.String() != "booting with [secret], ready" {
+			t.Errorf("shared log = %q, want the value hidden whole", shared.String())
+		}
+		if app.String() != "signing with [secret], ready" {
+			t.Errorf("app log = %q, want the value hidden whole", app.String())
+		}
+	})
+
 	t.Run("builds an app whose own build gets no live dir, whatever its keys", func(t *testing.T) {
 		t.Parallel()
 

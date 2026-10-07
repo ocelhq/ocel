@@ -61,6 +61,50 @@ func TestAWriterHidesEachWriteBeforePassingItOn(t *testing.T) {
 	}
 }
 
+func TestAWriterHidesAValueSplitAcrossWrites(t *testing.T) {
+	var out bytes.Buffer
+	w := NewValues([]string{"sk_live_123"}).Writer(&out)
+
+	for _, chunk := range []string{"key sk_li", "ve_1", "23 used\nnext sk_live", "_123"} {
+		if _, err := w.Write([]byte(chunk)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "key [secret] used\nnext [secret]"; out.String() != want {
+		t.Errorf("wrote %q, want %q", out.String(), want)
+	}
+}
+
+func TestAWriterPassesEachFinishedLineOnAtOnce(t *testing.T) {
+	var out bytes.Buffer
+	w := NewValues([]string{"sk_live_123"}).Writer(&out)
+
+	if _, err := w.Write([]byte("compiled\nlinking")); err != nil {
+		t.Fatal(err)
+	}
+
+	if out.String() != "compiled\n" {
+		t.Errorf("wrote %q before Flush, want the finished line", out.String())
+	}
+}
+
+func TestAWriterWithNothingToHidePassesEveryWriteOn(t *testing.T) {
+	var out bytes.Buffer
+	w := Values{}.Writer(&out)
+
+	if _, err := w.Write([]byte("linking")); err != nil {
+		t.Fatal(err)
+	}
+
+	if out.String() != "linking" {
+		t.Errorf("wrote %q, want the write passed on", out.String())
+	}
+}
+
 func TestHideErrorHidesTheMessageAndKeepsTheChain(t *testing.T) {
 	cause := errors.New("next build failed: ss_live")
 
