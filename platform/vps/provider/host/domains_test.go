@@ -358,12 +358,12 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 
-	rel := Release{
-		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
+	rollout := Rollout{
+		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}
-	if err := box.host().Release(context.Background(), rel, nil); err != nil {
+	if err := box.host().RollOut(context.Background(), rollout, nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
@@ -412,8 +412,8 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 
 	box := claimingBox(t, twoProjects())
 	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
-	if err := box.host().Release(context.Background(), Release{
-		Apps:          []AppRelease{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
+	if err := box.host().RollOut(context.Background(), Rollout{
+		Apps:          []AppRollout{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}, nil); err != nil {

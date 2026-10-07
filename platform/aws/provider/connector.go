@@ -62,7 +62,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	installation, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
+	installation, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Bundle{
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,

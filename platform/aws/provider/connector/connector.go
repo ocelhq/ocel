@@ -113,7 +113,7 @@ type Installation struct {
 	PublicKey string
 }
 
-type Release struct {
+type Bundle struct {
 	Binary    []byte
 	Version   string
 	Config    []byte
@@ -159,7 +159,7 @@ func variablesKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespac
 	return keys, nil
 }
 
-func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
+func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, bundle Bundle,
 	writer provider.WrittenBy, progress progress.Log) (Installation, error) {
 	keys, err := variablesKeys(ctx, apis.CFN, ns)
 	if err != nil {
@@ -171,7 +171,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 		return Installation{}, err
 	}
 
-	archived, err := zipped(release.Binary)
+	archived, err := zipped(bundle.Binary)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -179,14 +179,14 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	if err != nil {
 		return Installation{}, err
 	}
-	progress.Say(fmt.Sprintf("Staged connector %s at s3://%s/%s", release.Version, bucket, at.Key))
+	progress.Say(fmt.Sprintf("Staged connector %s at s3://%s/%s", bundle.Version, bucket, at.Key))
 
-	if release.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
+	if bundle.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
 		return Installation{}, err
 	}
 	progress.Say(fmt.Sprintf("Stored the connector's key in parameter %s", KeyParameter(ns)))
 
-	template, err := templateFor(ns, at, release, keys)
+	template, err := templateFor(ns, at, bundle, keys)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -323,8 +323,8 @@ func codeTemplate() string {
 	return string(rendered)
 }
 
-func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release, keys []string) (string, error) {
-	if len(release.Config) == 0 {
+func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, keys []string) (string, error) {
+	if len(bundle.Config) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install ships no connector config, so nothing would name the console the function trusts")
 	}
@@ -332,7 +332,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install names no key variables are sealed under, so the connector would reach every key in the account")
 	}
-	if release.PublicKey == "" {
+	if bundle.PublicKey == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install names no public key for the connector, and the console verifies every heartbeat against one")
 	}
@@ -377,7 +377,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 					"Environment": map[string]any{"Variables": map[string]any{
 						provider.NamespaceEnvVar:       string(ns),
 						edge.AWSRegionVar:              map[string]any{"Ref": "AWS::Region"},
-						provider.ConnectorConfigEnvVar: string(release.Config),
+						provider.ConnectorConfigEnvVar: string(bundle.Config),
 						KeyParameterEnvVar:             KeyParameter(ns),
 					}},
 					"Handler":                      handler,
@@ -442,12 +442,12 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 				"Value":       map[string]any{"Fn::GetAtt": []string{"ConnectorUrl", "FunctionUrl"}},
 			},
 			outputVersion: map[string]any{
-				"Description": "The connector release this stack deploys.",
-				"Value":       release.Version,
+				"Description": "The connector bundle this stack deploys.",
+				"Value":       bundle.Version,
 			},
 			outputPublicKey: map[string]any{
 				"Description": "The public half of the key the connector signs its heartbeats with. The private half is the SecureString parameter the function reads.",
-				"Value":       release.PublicKey,
+				"Value":       bundle.PublicKey,
 			},
 		},
 	}, "", "  ")

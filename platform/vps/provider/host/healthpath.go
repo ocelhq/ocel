@@ -95,7 +95,7 @@ func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict str
 func (h *Host) abandon(ctx context.Context, search HealthPathSearch, elevation string) string {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	return h.discard(ctx, Release{Apps: []AppRelease{{Target: search.Target}}}, elevation)
+	return h.discard(ctx, Rollout{Apps: []AppRollout{{Target: search.Target}}}, elevation)
 }
 
 func readPathAnswers(said string) []pathAnswer {

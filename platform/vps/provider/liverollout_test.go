@@ -86,9 +86,9 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	return release{physical: started[0].Physical, address: started[0].Physical + ":" + containerimage.PortText}
 }
 
-func releasing(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
-	return p.Host().Release(context.Background(), host.Release{
-		Apps: []host.AppRelease{{
+func rollingOut(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
+	return p.Host().RollOut(context.Background(), host.Rollout{
+		Apps: []host.AppRollout{{
 			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
 			Target:     next.address,
 			HealthPath: healthPath,
@@ -131,7 +131,7 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := releasing(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheSlowRequest
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := releasing(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")
@@ -213,7 +213,7 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheSlowRequest
 	inFlightAgainst(t, vm, one, 1)
 	told := &said{}
 	began := time.Now()
-	if err := releasing(p, two, 30*time.Second, told); err != nil {
+	if err := rollingOut(p, two, 30*time.Second, told); err != nil {
 		stop()
 		t.Fatalf("Release() over a box under load = %v", err)
 	}
@@ -277,7 +277,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := releasing(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")
@@ -292,7 +292,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	inFlightAgainst(t, vm, one, 1)
 
 	warned := &said{}
-	if err := releasing(p, two, 3*time.Second, warned); err != nil {
+	if err := rollingOut(p, two, 3*time.Second, warned); err != nil {
 		group.Wait()
 		t.Fatalf("Release() whose drain expired = %v, want the new release serving and a warning", err)
 	}
@@ -318,7 +318,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := releasing(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	routed := vm.drives(t, "config apps/http/servers/ocel/routes")
@@ -326,7 +326,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	refusals := map[string]string{}
 	for _, tag := range []string{"sick", "hung", "crasher"} {
 		broken := provisioned(t, p, tag)
-		err := releasing(p, broken, 5*time.Second, nil)
+		err := rollingOut(p, broken, 5*time.Second, nil)
 		if err == nil {
 			t.Fatalf("a release of the %s fixture passed its gate", tag)
 		}
@@ -376,7 +376,7 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := releasing(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")
@@ -423,7 +423,7 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 
 	warned := &said{}
 	began := time.Now()
-	if err := releasing(p, two, window, warned); err != nil {
+	if err := rollingOut(p, two, window, warned); err != nil {
 		stop()
 		t.Fatalf("Release() with hijacked connections open = %v", err)
 	}

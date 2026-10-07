@@ -163,7 +163,7 @@ func TestAProgramThatRanAndFailedNeverHasItsOutputReadAsTheReason(t *testing.T) 
 func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontProxy(t *testing.T) {
 	t.Parallel()
 
-	box, err := released(t, aRelease(), session.Result{}, session.Result{}, nil)
+	box, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, nil)
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -196,7 +196,7 @@ func TestAReleaseOverAConfigTheFrontProxyWasNeverReloadedOntoReloadsItOntoTheOne
 		}
 		return answer(command)
 	}
-	if err := box.host().Release(context.Background(), aRelease(), nil); err != nil {
+	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 	if reloads := box.count(reloadsFront); reloads != 1 {
@@ -225,7 +225,7 @@ func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverCutsOve
 		}
 		return answer(command)
 	}
-	err := box.host().Release(context.Background(), aRelease(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
 	if err == nil || !strings.Contains(err.Error(), "boom") || !unserved(err) {
 		t.Fatalf("Release() under a front proxy that refused the reload = %v, want its refusal with the release left unserved", err)
 	}

@@ -91,7 +91,7 @@ func TestAGateWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStart(t *tes
 func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 	t.Parallel()
 
-	box, err := released(t, bothApps(), session.Result{}, session.Result{}, nil)
+	box, err := rolledOut(t, bothApps(), session.Result{}, session.Result{}, nil)
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
