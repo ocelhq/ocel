@@ -45,6 +45,9 @@ const stackVersion = "1"
 
 func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
+		if err := refuseInfraProvisionedDeploy(req); err != nil {
+			return nil, err
+		}
 		run, err := h.openDeploy(ctx, req, sender)
 		if err != nil {
 			return nil, err
@@ -182,6 +185,8 @@ type deployRun struct {
 
 	replaces string
 
+	infraProvisioned bool
+
 	dry           bool
 	dryRunPlan    dryRunPlan
 	allowDegraded []string
@@ -276,6 +281,8 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		provisioning:   map[string]bool{},
 		inline:         inline,
 
+		infraProvisioned: req.GetInfraProvisioned(),
+
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
@@ -336,6 +343,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
+	if err := r.refuseUnprovisionedInfra(ctx); err != nil {
+		return err
+	}
 	if err := r.refuseOtherLifecycle(ctx); err != nil {
 		return err
 	}
@@ -925,8 +935,10 @@ func boundName(resource provider.Resource) string {
 }
 
 func (r *deployRun) provision(ctx context.Context) error {
-	if err := r.provisionInfra(ctx); err != nil {
-		return err
+	if !r.infraProvisioned {
+		if err := r.provisionInfra(ctx); err != nil {
+			return err
+		}
 	}
 	return r.provisionApps(ctx)
 }
@@ -1008,10 +1020,15 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
+			digest, err := readResourceDigest(r.manifest)
+			if err != nil {
+				return err
+			}
 			return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
-				Kind:      provider.StackInfra,
-				Bindings:  result.Bindings,
-				WrittenBy: provider.WrittenByVersion(""),
+				Kind:           provider.StackInfra,
+				Bindings:       result.Bindings,
+				ResourceDigest: digest,
+				WrittenBy:      provider.WrittenByVersion(""),
 			})
 		})
 	})

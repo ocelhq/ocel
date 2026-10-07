@@ -39,6 +39,9 @@ const (
 	// ProviderServiceConfigureProcedure is the fully-qualified name of the ProviderService's Configure
 	// RPC.
 	ProviderServiceConfigureProcedure = "/provider.contract.v1.ProviderService/Configure"
+	// ProviderServiceProvisionInfraProcedure is the fully-qualified name of the ProviderService's
+	// ProvisionInfra RPC.
+	ProviderServiceProvisionInfraProcedure = "/provider.contract.v1.ProviderService/ProvisionInfra"
 	// ProviderServiceDeployProcedure is the fully-qualified name of the ProviderService's Deploy RPC.
 	ProviderServiceDeployProcedure = "/provider.contract.v1.ProviderService/Deploy"
 	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
@@ -131,6 +134,7 @@ const (
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
 type ProviderServiceClient interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
+	ProvisionInfra(context.Context, *v1.ProvisionInfraRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -178,6 +182,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ProviderServiceConfigureProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Configure")),
+			connect.WithClientOptions(opts...),
+		),
+		provisionInfra: connect.NewClient[v1.ProvisionInfraRequest, v11.OperationEvent](
+			httpClient,
+			baseURL+ProviderServiceProvisionInfraProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ProvisionInfra")),
 			connect.WithClientOptions(opts...),
 		),
 		deploy: connect.NewClient[v1.DeployRequest, v11.OperationEvent](
@@ -366,6 +376,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 // providerServiceClient implements ProviderServiceClient.
 type providerServiceClient struct {
 	configure                 *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
+	provisionInfra            *connect.Client[v1.ProvisionInfraRequest, v11.OperationEvent]
 	deploy                    *connect.Client[v1.DeployRequest, v11.OperationEvent]
 	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
 	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
@@ -405,6 +416,11 @@ func (c *providerServiceClient) Configure(ctx context.Context, req *v1.Configure
 		return response.Msg, err
 	}
 	return nil, err
+}
+
+// ProvisionInfra calls provider.contract.v1.ProviderService.ProvisionInfra.
+func (c *providerServiceClient) ProvisionInfra(ctx context.Context, req *v1.ProvisionInfraRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.provisionInfra.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // Deploy calls provider.contract.v1.ProviderService.Deploy.
@@ -624,6 +640,7 @@ func (c *providerServiceClient) ReadLogs(ctx context.Context, req *v1.ReadLogsRe
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
+	ProvisionInfra(context.Context, *v1.ProvisionInfraRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -667,6 +684,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		ProviderServiceConfigureProcedure,
 		svc.Configure,
 		connect.WithSchema(providerServiceMethods.ByName("Configure")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceProvisionInfraHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceProvisionInfraProcedure,
+		svc.ProvisionInfra,
+		connect.WithSchema(providerServiceMethods.ByName("ProvisionInfra")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceDeployHandler := connect.NewServerStreamHandlerSimple(
@@ -853,6 +876,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
 			providerServiceConfigureHandler.ServeHTTP(w, r)
+		case ProviderServiceProvisionInfraProcedure:
+			providerServiceProvisionInfraHandler.ServeHTTP(w, r)
 		case ProviderServiceDeployProcedure:
 			providerServiceDeployHandler.ServeHTTP(w, r)
 		case ProviderServiceBootstrapProcedure:
@@ -924,6 +949,10 @@ type UnimplementedProviderServiceHandler struct{}
 
 func (UnimplementedProviderServiceHandler) Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Configure is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ProvisionInfra(context.Context, *v1.ProvisionInfraRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ProvisionInfra is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error {

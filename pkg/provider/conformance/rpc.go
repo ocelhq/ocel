@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const unknownOption = "an-option-no-provider-accepts"
@@ -149,7 +150,28 @@ func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.Prov
 	if _, refused := provider.RefusedCode(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && !refused {
 		t.Errorf("an RPC after Configure: %v, want the session to be past its precondition", err)
 	}
+	refusesAppsToProvisionInfra(t, providerClient)
 	return configured.GetFacts()
+}
+
+func refusesAppsToProvisionInfra(t *testing.T, client contractv1connect.ProviderServiceClient) {
+	t.Helper()
+	stream, err := client.ProvisionInfra(context.Background(), &contractv1.ProvisionInfraRequest{
+		Manifest: &contractv1.Manifest{Slug: "conformance", Apps: []*contractv1.ManifestApp{{
+			Name:     "web",
+			Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
+		}}},
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("ProvisionInfra() error = %v", err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+	}
+	if code, refused := provider.RefusedCode(stream.Err()); !refused || code != refusal.CodeInvalid {
+		t.Errorf("ProvisionInfra() of a manifest declaring apps: %v, want it refused as invalid: apps ship through Deploy once built", stream.Err())
+	}
 }
 
 func saysWhatItWouldChange(t *testing.T, client contractv1connect.ProviderServiceClient) {
