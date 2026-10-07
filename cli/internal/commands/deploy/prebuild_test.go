@@ -23,6 +23,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type preBuildProject struct {
@@ -247,6 +248,57 @@ func TestAPreBuildOfAProviderThatForwardsNoPortRunsWithoutBindingsAndSaysSo(t *t
 	}
 	if !strings.Contains(out, "forwards no port") {
 		t.Errorf("the deploy said %q, want it to say the command goes without bindings", out)
+	}
+}
+
+func TestAPreBuildWhoseForwardIsRefusedStopsTheDeployBeforeItRunsAndNamesTheResource(t *testing.T) {
+	p := setUpPreBuildProject(t, `"true"`)
+	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf(`"touch %s"`, p.marker))
+	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
+		}
+	})
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+
+	if err == nil || !strings.Contains(err.Error(), "lifecycle.preBuild") || !strings.Contains(err.Error(), "main") || !strings.Contains(err.Error(), "is not running") {
+		t.Fatalf("runDeploy err = %v, want the preBuild refused, naming main and why; out=%s", err, out)
+	}
+	if p.ran(t) {
+		t.Error("the preBuild ran without the bindings it was refused")
+	}
+	if *p.built {
+		t.Error("the apps were built after the preBuild was refused its bindings")
+	}
+	if slices.Contains(p.procedures(), contractv1connect.ProviderServiceDeployProcedure) {
+		t.Errorf("the provider was called %v, want nothing promoted", p.procedures())
+	}
+}
+
+func TestAPreBuildRunsWithoutTheBindingsOfResourcesNoPortReachesAndSaysItIsThePreBuildThatGoesWithout(t *testing.T) {
+	p := setUpPreBuildProject(t, `"true"`)
+	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf(`"touch %s"`, p.marker))
+	clitest.WriteFile(t, filepath.Join(p.fixture.Root, "shared", "storage.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const files = declareBucket("files");
+`)
+	clitest.WriteFile(t, filepath.Join(p.fixture.Root, "shared", "index.ts"), `
+export * from "./db.js";
+export * from "./storage.js";
+`)
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+	if !p.ran(t) {
+		t.Error("the preBuild did not run, though the provider forwarded every port it can")
+	}
+	if !strings.Contains(out, "lifecycle.preBuild goes without the bindings of files,") || strings.Contains(out, "The build goes without") {
+		t.Errorf("the deploy said %q, want it to say the preBuild, which no app's build shares, goes without files", out)
 	}
 }
 

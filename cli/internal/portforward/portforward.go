@@ -11,14 +11,16 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const Project = ""
+const WholeProject = ""
 
 type Use struct {
 	App      string
@@ -67,21 +69,29 @@ func (f *Forwards) Unforwarded() []string {
 	return f.unforwarded
 }
 
-func Names(uses []Use) (bound, declared []string) {
+func ListDeclared(uses []Use) []string {
+	var declared []string
 	for _, use := range uses {
-		if !slices.Contains(bound, use.Bound) {
-			bound = append(bound, use.Bound)
-		}
 		if !slices.Contains(declared, use.Declared) {
 			declared = append(declared, use.Declared)
 		}
 	}
-	slices.Sort(bound)
 	slices.Sort(declared)
-	return bound, declared
+	return declared
 }
 
-func Provisioned(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
+func listBound(uses []Use) []string {
+	var bound []string
+	for _, use := range uses {
+		if !slices.Contains(bound, use.Bound) {
+			bound = append(bound, use.Bound)
+		}
+	}
+	slices.Sort(bound)
+	return bound
+}
+
+func FindBound(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
 	for _, resource := range infra.GetResources() {
 		declared := resource.GetResource()
 		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() == "" {
@@ -91,19 +101,31 @@ func Provisioned(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name
 	return "", false
 }
 
-func ProjectUses(infra *contractv1.Manifest) []Use {
+func ListWholeProjectUses(infra *contractv1.Manifest) []Use {
 	var uses []Use
 	for _, resource := range infra.GetResources() {
 		declared := resource.GetResource()
 		if _, bindable := naming.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
 			continue
 		}
-		uses = append(uses, Use{App: Project, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
+		uses = append(uses, Use{App: WholeProject, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
 	}
 	return uses
 }
 
-func RefusalMessage(err error) string {
+func RefuseUnforwarded(subject string, declared []string, err error) error {
+	return fmt.Errorf("%s needs the bindings of %s, and the provider forwards no port to them: %s", subject, english.And(declared), readRefusalMessage(err))
+}
+
+func DescribeUnforwarded(subject string, unforwarded []string) string {
+	return fmt.Sprintf("%s goes without the bindings of %s, since the provider forwards no port to them", subject, english.And(unforwarded))
+}
+
+func DescribeRefused(subject string, declared []string, err error) string {
+	return fmt.Sprintf("%s goes without the bindings of %s: %s", subject, english.And(declared), readRefusalMessage(err))
+}
+
+func readRefusalMessage(err error) string {
 	var rpcErr *connect.Error
 	if errors.As(err, &rpcErr) {
 		return rpcErr.Message()
@@ -111,7 +133,8 @@ func RefusalMessage(err error) string {
 	return err.Error()
 }
 
-func Open(ctx context.Context, p *providerprocess.Provider, uses []Use, req *contractv1.ForwardPortsRequest) (*Forwards, error) {
+func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *environmentv1.Environment, uses []Use) (*Forwards, error) {
+	req := &contractv1.ForwardPortsRequest{Slug: slug, Environment: env, Bindings: listBound(uses)}
 	streamCtx, stop := context.WithCancel(ctx)
 	answered := make(chan *contractv1.ForwardPortsResponse, 1)
 	ended := make(chan error, 1)
