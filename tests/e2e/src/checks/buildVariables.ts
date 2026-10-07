@@ -27,16 +27,40 @@ async function filesUnder(dir: string): Promise<string[]> {
     .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
-async function filesHoldingAValue(files: string[]): Promise<string[]> {
+function removed(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+async function filesHoldingAValue(files: string[], allowRemoved = false): Promise<string[]> {
   const values = Object.values(BUILD_VARIABLES).map((value) => Buffer.from(value, "utf8"));
   const holding: string[] = [];
   for (const file of files) {
-    const body = await readFile(file);
+    const body = await readFile(file).catch((error: unknown) => {
+      if (allowRemoved && removed(error)) return Buffer.alloc(0);
+      throw error;
+    });
     if (values.some((value) => body.includes(value))) {
       holding.push(file);
     }
   }
   return holding;
+}
+
+export async function liveDirsHoldingAValue(dirs: string[]): Promise<string[]> {
+  const left: string[] = [];
+  for (const dir of dirs) {
+    let files: string[];
+    try {
+      files = await filesUnder(dir);
+    } catch (error) {
+      if (removed(error)) continue;
+      assert.fail(`cannot look inside ${path.basename(dir)}: ${String(error)}`);
+    }
+    if ((await filesHoldingAValue(files, true)).length > 0) {
+      left.push(path.basename(dir));
+    }
+  }
+  return left;
 }
 
 export const buildVariablesChecks: Check[] = [
@@ -90,16 +114,11 @@ export const buildVariablesChecks: Check[] = [
       const liveDirs = (await readdir(ctx.tempDir, { withFileTypes: true }))
         .filter((entry) => entry.isDirectory() && entry.name.startsWith(LIVE_DIR_PREFIX))
         .map((entry) => path.join(ctx.tempDir, entry.name));
-      const left: string[] = [];
-      for (const dir of liveDirs) {
-        const files = await filesUnder(dir).catch((error: unknown) =>
-          assert.fail(`cannot look inside ${path.basename(dir)}: ${String(error)}`),
-        );
-        if ((await filesHoldingAValue(files)).length > 0) {
-          left.push(path.basename(dir));
-        }
-      }
-      assert.deepEqual(left, [], "the build left these live dirs behind, holding its values");
+      assert.deepEqual(
+        await liveDirsHoldingAValue(liveDirs),
+        [],
+        "the build left these live dirs behind, holding its values",
+      );
     },
   },
 ];

@@ -7,6 +7,7 @@ import {
   BUILD_SECRET_VALUE,
   BUILD_SENSITIVE_VALUE,
   buildVariablesChecks,
+  liveDirsHoldingAValue,
   setsBuildVariables,
 } from "./buildVariables";
 import type { Check, CheckContext, Fetch } from "./context";
@@ -147,6 +148,11 @@ describe("the build-variables checks", () => {
         BUILD_SENSITIVE_VALUE,
       );
       await expect(check().run(context())).rejects.toThrow(/ocel-live-123/);
+    });
+
+    it("passes over a live dir another build removed after the listing named it", async () => {
+      const removed = path.join(tempDir, "ocel-live-789");
+      expect(await liveDirsHoldingAValue([removed])).toEqual([]);
     });
 
     it("fails when it cannot look inside a live dir", async () => {
