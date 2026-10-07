@@ -189,6 +189,15 @@ func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
 	return nil
 }
 
+func (r *deployRun) forgetInfraDigest(ctx context.Context, holds []byte) error {
+	recorded, found, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
+	if err != nil || !found {
+		return err
+	}
+	recorded.Resources, recorded.ResourceDigest = holds, ""
+	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, recorded)
+}
+
 func (r *deployRun) listUndeclaredResources(recorded stackrecords.Stack) ([]*contractv1.ManifestResource, error) {
 	var held contractv1.Manifest
 	if err := proto.Unmarshal(recorded.Resources, &held); err != nil {
