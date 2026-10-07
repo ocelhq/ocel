@@ -14,8 +14,15 @@ func FunctionApps(apps []project.App) []project.App {
 	return appsOn(apps, provider.ComputeServerless)
 }
 
-func IsNextFunction(a project.App) bool {
-	return a.RunsOn(provider.ComputeServerless) && a.Framework() == buildoutput.FrameworkNext
+func CanReadVariablesAtBuild(a project.App) bool {
+	if !a.RunsOn(provider.ComputeServerless) {
+		return false
+	}
+	switch a.Framework() {
+	case buildoutput.FrameworkNext, buildoutput.FrameworkRust:
+		return true
+	}
+	return false
 }
 
 func appsOn(apps []project.App, compute provider.Compute) []project.App {

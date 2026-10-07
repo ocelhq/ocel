@@ -20,6 +20,8 @@ const ResourceEnvVarPrefix = "OCEL_RESOURCE_"
 
 const LiveDirEnvVar = "OCEL_LIVE_DIR"
 
+const DeliveredVariablePrefix = "OCEL_VAR_"
+
 const ClientURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
 func IsInjected(clientBundle bool, key string) bool {

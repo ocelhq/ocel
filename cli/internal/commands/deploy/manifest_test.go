@@ -32,7 +32,9 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
@@ -1749,7 +1751,9 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 ]`)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", framework: "next" }, { name: "api", path: "apps/api", framework: "node" }`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "Cargo.toml"), "[package]\nname = \"jobs\"\nversion = \"0.1.0\"\n\n[workspace]\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "src", "main.rs"), "fn main() {}\n")
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", framework: "next" }, { name: "api", path: "apps/api", framework: "node" }, { name: "jobs", path: "apps/jobs", framework: "rust" }`)
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 
@@ -1760,15 +1764,36 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
 
-	if (*got)["web"].Live["SESSION_SECRET"] != "ss_live_secret" {
-		t.Errorf("web's build live values = %v, want the secret a Next build reads", (*got)["web"].Live)
+	for _, app := range []string{"web", "jobs"} {
+		if (*got)[app].Live["SESSION_SECRET"] != "ss_live_secret" {
+			t.Errorf("%s's build live values = %v, want the secret a build that runs the app's code reads", app, (*got)[app].Live)
+		}
 	}
 	if secret, ok := (*got)["api"].Live["SESSION_SECRET"]; ok {
-		t.Errorf("api's build was handed SESSION_SECRET = %q, want a secret revealed only for a Next build that reads the live dir", secret)
+		t.Errorf("api's build was handed SESSION_SECRET = %q, want a secret revealed only for a build that runs the app's code", secret)
 	}
 }
 
-func TestADeployWarnsThatANextImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *testing.T) {
+func TestADeployThatCannotRevealASecretStopsBeforeItProvisionsAnything(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[{"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}]`)
+	writeRootApp(t, fixture.Root)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", framework: "next" }`)
+	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
+	fixture.Provider.Cipher().(*fake.Cipher).RefuseOpening(errors.New("the deployer may not decrypt"))
+
+	dependencies := newTestDependencies()
+	captureBuildVariables(&dependencies)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatalf("runDeploy err = nil, want a secret it cannot reveal to stop the deploy; output=%s", out)
+	}
+	if slices.Contains(fixture.Requests.Procedures(), contractv1connect.ProviderServiceProvisionInfraProcedure) {
+		t.Error("ProvisionInfra ran before the deploy found it cannot reveal the build's secrets, want the deploy to stop before it changes the cloud")
+	}
+}
+
+func TestADeployWarnsThatAnImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[
   {"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true},
   {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
@@ -1776,23 +1801,26 @@ func TestADeployWarnsThatANextImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *
 ]`)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "next.config.mjs"), "export default {}\n")
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: "container" }`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: "container" }, { name: "api", path: "apps/api", compute: "container" }`)
 	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 
 	dependencies := newTestDependencies()
 	captureBuildVariables(&dependencies)
-	stubAppImages(&dependencies, "web")
+	stubAppImages(&dependencies, "web", "api")
 	clitest.ServeImageDaemon(t, "amd64")
 
 	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
-	want := `app "web" builds as an image, and an image build gets none of its sensitive or secret values yet: SESSION_SECRET, STRIPE_API_KEY`
-	if !strings.Contains(out, want) {
-		t.Errorf("output lacks %q:\n%s", want, out)
+	for _, app := range []string{"web", "api"} {
+		want := `app "` + app + `" builds as an image, and an image build gets none of its sensitive or secret values yet: SESSION_SECRET, STRIPE_API_KEY`
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
 	}
 	if strings.Contains(out, "PAGE_ID,") || strings.Contains(out, "STRIPE_API_KEY, PAGE_ID") {
 		t.Errorf("the warning names a plaintext value, want only the encrypted classes:\n%s", out)

@@ -91,10 +91,13 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 
 func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
 	for _, a := range cfg.Apps {
-		if !IsNextFunction(a) {
+		if !CanReadVariablesAtBuild(a) {
 			continue
 		}
 		if err := checkVariableNames(variables[a.Name].Env); err != nil {
+			return err
+		}
+		if err := checkVariableNames(variables[a.Name].Live); err != nil {
 			return err
 		}
 		if err := livedir.RefuseUnnamableKeys(variables[a.Name].Live); err != nil {
@@ -130,6 +133,21 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			err = errors.Join(err, livedir.Remove(dir))
 		}
 	}()
+	environment := func(a project.App) (env map[string]string, unset []string, err error) {
+		if !CanReadVariablesAtBuild(a) {
+			return nil, nil, nil
+		}
+		var liveDir string
+		if live := variables[a.Name].Live; len(live) > 0 {
+			liveDir, err = livedir.Write("", "ocel-live-", live)
+			if err != nil {
+				return nil, nil, err
+			}
+			liveDirs = append(liveDirs, liveDir)
+		}
+		env, unset = environmentOf(variables[a.Name], liveDir)
+		return env, unset, nil
+	}
 
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
@@ -138,25 +156,24 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework(); {
 		case compiledFromSource(name):
+			env, unset, err := environment(a)
+			if err != nil {
+				return err
+			}
 			appLog, ended := log.App(a.Name)
-			err := compile(ctx, cfg, a, outputDir, appLog)
+			err = compile(ctx, cfg, a, outputDir, env, unset, appLog)
 			ended(err)
 			if err != nil {
 				return err
 			}
 		case name == buildoutput.FrameworkNext:
 			nextApps = append(nextApps, a)
-			var liveDir string
-			if live := variables[a.Name].Live; len(live) > 0 {
-				dir, err := livedir.Write("", "ocel-live-", live)
-				if err != nil {
-					return err
-				}
-				liveDirs = append(liveDirs, dir)
-				liveDir = dir
+			env, unset, err := environment(a)
+			if err != nil {
+				return err
 			}
-			env := withLiveDir(variables[a.Name].Env, liveDir)
 			req.Apps = append(req.Apps, nodeAppBuild{
+				Unset:         unset,
 				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
 				Cwd:           filepath.Join(cfg.Dir, a.Path),

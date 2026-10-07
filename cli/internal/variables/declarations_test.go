@@ -18,6 +18,7 @@ type fakeValues struct {
 	overrides []variables.ValueMetadata
 	values    map[variables.Coordinate]string
 	revealed  []variables.Coordinate
+	reveals   int
 	copied    map[variables.Cell]string
 }
 
@@ -59,6 +60,7 @@ func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
 
 func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.revealed = append(v.revealed, rows...)
+	v.reveals++
 	found := map[variables.Coordinate]string{}
 	for _, row := range rows {
 		if value, ok := v.values[row]; ok {

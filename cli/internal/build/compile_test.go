@@ -251,3 +251,67 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}
 }
+
+const buildScriptReadingEveryValue = `use std::{env, fs, path::Path};
+
+fn main() {
+    assert_eq!(env::var("POSTHOG_ID").as_deref(), Ok("ph-api"), "plaintext POSTHOG_ID");
+    let dir = env::var("OCEL_LIVE_DIR").expect("OCEL_LIVE_DIR");
+    assert_eq!(fs::read_to_string(Path::new(&dir).join("SESSION_SECRET")).unwrap(), "ss_live", "secret SESSION_SECRET");
+    assert_eq!(fs::read_to_string(Path::new(&dir).join("STRIPE_API_KEY")).unwrap(), "sk_live", "sensitive STRIPE_API_KEY");
+    for shadow in ["SESSION_SECRET", "STRIPE_API_KEY", "OCEL_VAR_SESSION_SECRET", "OCEL_VAR_POSTHOG_ID"] {
+        assert!(env::var(shadow).is_err(), "{shadow} is inherited from the deployer's shell");
+    }
+}
+`
+
+func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShellHolds(t *testing.T) {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on PATH")
+	}
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("SESSION_SECRET", "stale-from-the-shell")
+	t.Setenv("STRIPE_API_KEY", "stale-from-the-shell")
+	t.Setenv("OCEL_VAR_SESSION_SECRET", "stale-from-the-shell")
+	t.Setenv("OCEL_VAR_POSTHOG_ID", "stale-from-the-shell")
+
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	dir := filepath.Join(root, "apps", "api")
+	for name, body := range map[string]string{
+		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+		"build.rs":    buildScriptReadingEveryValue,
+		"src/main.rs": "fn main() {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := &project.Project{
+		Dir:  root,
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
+	}
+	values := map[string]AppVariables{"api": {
+		Env:  map[string]string{"POSTHOG_ID": "ph-api"},
+		Live: map[string]string{"SESSION_SECRET": "ss_live", "STRIPE_API_KEY": "sk_live"},
+	}}
+
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	if err := builder.Build(context.Background(), cfg, values, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "ocel-live-") {
+			t.Errorf("%s is left in the temp dir after the build, want every live dir removed", entry.Name())
+		}
+	}
+}

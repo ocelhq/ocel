@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	connect "connectrpc.com/connect"
+
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -50,25 +52,49 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 	return resolved, nil
 }
 
-func (d *Declarations) RevealSecrets(ctx context.Context, app string) (map[string]string, error) {
-	cells, _, err := d.cellsOf(app)
-	if err != nil {
-		return nil, err
-	}
-	var secrets []Cell
-	for _, c := range cells {
-		if c.live {
-			secrets = append(secrets, c.cell)
+func (d *Declarations) RevealSecrets(ctx context.Context, apps []string) (map[string]map[string]string, error) {
+	secretsOf := make(map[string][]Cell, len(apps))
+	for _, app := range apps {
+		cells, _, err := d.cellsOf(app)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cells {
+			if c.live {
+				secretsOf[app] = append(secretsOf[app], c.cell)
+			}
 		}
 	}
-	plaintext, err := d.reveal(ctx, secrets)
-	if err != nil {
-		return nil, err
+
+	d.mu.Lock()
+	var wanted []Coordinate
+	at := map[Cell]Coordinate{}
+	for _, cells := range secretsOf {
+		for _, cell := range cells {
+			if _, seen := at[cell]; seen {
+				continue
+			}
+			at[cell] = Coordinate{Cell: cell, Environment: d.resolvedEnvironment(cell)}
+			wanted = append(wanted, at[cell])
+		}
 	}
-	revealed := make(map[string]string, len(secrets))
-	for _, cell := range secrets {
-		if plaintext[cell].found {
-			revealed[cell.Key] = plaintext[cell].value
+	d.mu.Unlock()
+
+	var found map[Coordinate]string
+	if len(wanted) > 0 {
+		var err error
+		found, err = d.values.Reveal(ctx, wanted)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeOf(err), fmt.Errorf("read %s: %w", describeAll(wanted), err))
+		}
+	}
+	revealed := make(map[string]map[string]string, len(apps))
+	for _, app := range apps {
+		revealed[app] = map[string]string{}
+		for _, cell := range secretsOf[app] {
+			if value, ok := found[at[cell]]; ok {
+				revealed[app][cell.Key] = value
+			}
 		}
 	}
 	return revealed, nil

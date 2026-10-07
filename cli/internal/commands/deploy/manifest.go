@@ -120,8 +120,12 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 		span.End(nil)
 		return built, nil
 	}
-	for _, warning := range findNextImagesWithoutEncryptedValues(cfg, clients) {
+	for _, warning := range findImagesWithoutEncryptedValues(cfg, clients) {
 		span.Warn(warning)
+	}
+	secrets, err := revealSecrets(ctx, a.declarations, cfg)
+	if err != nil {
+		return build.Output{}, err
 	}
 	if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 		return build.Output{}, err
@@ -133,10 +137,6 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	}
 	span.End(nil)
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
-		return build.Output{}, err
-	}
-	secrets, err := revealSecrets(ctx, a.declarations, cfg)
-	if err != nil {
 		return build.Output{}, err
 	}
 	var built build.Output
@@ -303,16 +303,13 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 	return values, nil
 }
 
-func findNextImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.App) []string {
+func findImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.App) []string {
 	variablesOf := make(map[string][]variables.Variable, len(clients))
 	for _, client := range clients {
 		variablesOf[client.Name] = client.Variables
 	}
 	var warnings []string
 	for _, app := range build.ImageApps(cfg.Apps) {
-		if app.Framework() != buildoutput.FrameworkNext {
-			continue
-		}
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
 			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE || v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
@@ -329,18 +326,16 @@ func findNextImagesWithoutEncryptedValues(cfg *project.Project, clients []client
 }
 
 func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string]map[string]string, error) {
-	secrets := make(map[string]map[string]string, len(cfg.Apps))
+	var apps []string
 	for _, app := range cfg.Apps {
-		if !build.IsNextFunction(app) {
-			continue
+		if build.CanReadVariablesAtBuild(app) {
+			apps = append(apps, app.Name)
 		}
-		revealed, err := declarations.RevealSecrets(ctx, app.Name)
-		if err != nil {
-			return nil, err
-		}
-		secrets[app.Name] = revealed
 	}
-	return secrets, nil
+	if len(apps) == 0 {
+		return nil, nil
+	}
+	return declarations.RevealSecrets(ctx, apps)
 }
 
 func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.ResolvedValue) []variables.Variable {
