@@ -25,6 +25,8 @@ const (
 	installStep = "install"
 	buildStep   = "build"
 
+	railpackAllSecrets = "*"
+
 	nodeProvider   = "node"
 	goProvider     = "golang"
 	pythonProvider = "python"
@@ -71,6 +73,7 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if err := scope(result.Plan, loc, commands, outside); err != nil {
 		return nil, err
 	}
+	limitSecretsToBuildStep(result.Plan)
 	plan, err := json.Marshal(result.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("serialize the railpack plan for %s: %w", loc.Root, err)
@@ -215,4 +218,13 @@ func refusal(result *core.BuildResult) string {
 		return "  railpack recognised nothing to build in it"
 	}
 	return strings.Join(said, "\n")
+}
+
+func limitSecretsToBuildStep(built *railpackplan.BuildPlan) {
+	for i := range built.Steps {
+		built.Steps[i].Secrets = nil
+		if built.Steps[i].Name == buildStep {
+			built.Steps[i].Secrets = []string{railpackAllSecrets}
+		}
+	}
 }

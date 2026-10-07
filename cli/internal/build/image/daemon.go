@@ -196,3 +196,28 @@ func RefuseUnusableDaemon(ctx context.Context, arches ...string) error {
 	defer func() { _ = buildkit.Close() }()
 	return d.usable(ctx, buildkit, arches...)
 }
+
+func (d daemon) isOnAnotherMachine() bool {
+	if d.Network != "tcp" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(d.Target)
+	if err != nil {
+		host = d.Target
+	}
+	if host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
+}
+
+func (d daemon) explainFailedBuild(app string, live LiveValues, err error) error {
+	switch {
+	case live.hasValues() && strings.Contains(err.Error(), networkHostEntitlement):
+		return fmt.Errorf("build %s: the docker daemon at %s refuses the %s entitlement a build with bindings asks for, so its steps cannot reach the forwards on this machine: allow it (docker engine: \"builder\": {\"entitlements\": {\"network-host\": true}} in /etc/docker/daemon.json), or set %s to a daemon that does\n    %w", app, d.Address, networkHostEntitlement, images.DockerHostEnv, err)
+	case live.hasValues() && d.isOnAnotherMachine():
+		return fmt.Errorf("build %s: the docker daemon at %s runs on another machine, and a build step reaches the bindings ocel forwards on this machine's 127.0.0.1 only from a daemon on this machine: unset %s, or point it at a daemon here\n    %w", app, d.Address, images.DockerHostEnv, err)
+	}
+	return fmt.Errorf("build %s: %w", app, err)
+}

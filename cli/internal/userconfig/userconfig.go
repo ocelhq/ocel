@@ -1,6 +1,8 @@
 package userconfig
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,6 +19,9 @@ const (
 	lockFileName     = "settings.lock"
 	installIDKey     = "install_id"
 	deployedKey      = "deployed"
+
+	liveHashKeySetting = "live_hash_key"
+	liveHashKeyBytes   = 32
 )
 
 type Settings map[string]json.RawMessage
@@ -86,6 +91,38 @@ func EnsureInstallID() (string, error) {
 		return "", err
 	}
 	return id, nil
+}
+
+func EnsureLiveHashKey() ([]byte, error) {
+	if key, ok := readLiveHashKey(Read()); ok {
+		return key, nil
+	}
+	var key []byte
+	err := Update(func(s Settings) {
+		if stored, ok := readLiveHashKey(s); ok {
+			key = stored
+			return
+		}
+		key = make([]byte, liveHashKeyBytes)
+		_, _ = rand.Read(key)
+		s[liveHashKeySetting], _ = json.Marshal(base64.StdEncoding.EncodeToString(key))
+	})
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func readLiveHashKey(s Settings) ([]byte, bool) {
+	var encoded string
+	if err := json.Unmarshal(s[liveHashKeySetting], &encoded); err != nil {
+		return nil, false
+	}
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != liveHashKeyBytes {
+		return nil, false
+	}
+	return key, true
 }
 
 func HasDeployed() bool {

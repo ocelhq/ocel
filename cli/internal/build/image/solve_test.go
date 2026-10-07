@@ -111,7 +111,7 @@ func dockerfileSolveFor(t *testing.T, arch string) client.SolveOpt {
 	if err != nil {
 		t.Fatalf("ChooseRecipe() = %v", err)
 	}
-	opt, done, err := recipe.solve(arch)
+	opt, done, err := recipe.solve(arch, LiveValues{})
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestEitherBuilderIsPinnedToTheArchitectureTheTargetRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChooseRecipe() = %v", err)
 	}
-	railpacked, done, err := planned.solve("arm64")
+	railpacked, done, err := planned.solve("arm64", LiveValues{})
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}
