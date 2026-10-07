@@ -31,7 +31,12 @@ func decodeOps(t *testing.T, def *pb.Definition) map[string]*pb.Op {
 
 func defineRailpackBuild(t *testing.T, secretsHash string) (*pb.Definition, *railpackplan.BuildPlan) {
 	t.Helper()
-	raw, err := Plan(at(t, "testdata/nextworkspace/apps/web"))
+	return defineRailpackBuildOf(t, "testdata/nextworkspace/apps/web", secretsHash)
+}
+
+func defineRailpackBuildOf(t *testing.T, dir, secretsHash string) (*pb.Definition, *railpackplan.BuildPlan) {
+	t.Helper()
+	raw, err := Plan(at(t, dir))
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -197,5 +202,36 @@ func TestABuildWithNoLiveValuesIsHandedBackUntouched(t *testing.T) {
 
 	if rewritten != original {
 		t.Error("a definition railpack gave no secrets hash was rewritten, which would break its cache")
+	}
+}
+
+func TestASecretTheAppsRailpackFileDeclaresUnderALiveKeyReachesNoCommandsEnvironment(t *testing.T) {
+	original, plan := defineRailpackBuildOf(t, "testdata/declaredsecrets", "a live hash")
+	if !slices.Contains(plan.Secrets, hyphenatedKey) {
+		t.Fatalf("the plan names the secrets %v, want the %s the app's railpack.json declares, or this test proves nothing", plan.Secrets, hyphenatedKey)
+	}
+
+	rewritten, err := mountLiveValues(original, []string{hyphenatedKey})
+	if err != nil {
+		t.Fatalf("mountLiveValues() = %v", err)
+	}
+
+	others := 0
+	for _, op := range decodeOps(t, rewritten) {
+		exec := op.GetExec()
+		if exec == nil {
+			continue
+		}
+		for _, env := range exec.Secretenv {
+			switch env.ID {
+			case hyphenatedKey:
+				t.Errorf("%q has the live value %s in its environment, where every step railpack runs can read it", joinArgs(exec), env.ID)
+			case "NPM_TOKEN":
+				others++
+			}
+		}
+	}
+	if others == 0 {
+		t.Error("a secret the app declares that is no live value was dropped, so its build no longer asks for it")
 	}
 }

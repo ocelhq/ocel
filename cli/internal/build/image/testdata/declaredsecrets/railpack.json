@@ -1,0 +1,3 @@
+{
+  "secrets": ["OCEL_RESOURCE_POSTGRES_my-db", "NPM_TOKEN"]
+}

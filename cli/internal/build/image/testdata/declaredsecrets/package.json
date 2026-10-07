@@ -1,0 +1,8 @@
+{
+  "name": "declaredsecrets",
+  "private": true,
+  "scripts": {
+    "build": "node server.js",
+    "start": "node server.js"
+  }
+}

@@ -36,6 +36,10 @@ func isBuildStepCommand(op *pb.Op) bool {
 	return slices.ContainsFunc(exec.Mounts, func(m *pb.Mount) bool { return m.Dest == railpackSecretsHashMount })
 }
 
+func hasLiveSecretEnv(exec *pb.ExecOp, keys []string) bool {
+	return slices.ContainsFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
+}
+
 func giveLiveValues(exec *pb.ExecOp, keys []string) {
 	exec.Network = pb.NetMode_HOST
 	exec.Meta.Env = append(exec.Meta.Env, liveDirEnv+"="+buildLiveDir)
@@ -68,6 +72,10 @@ func mountLiveValues(def *pb.Definition, keys []string) (*pb.Definition, error) 
 				input.Digest = next
 				touched = true
 			}
+		}
+		if exec := op.GetExec(); exec != nil && hasLiveSecretEnv(exec, keys) {
+			exec.Secretenv = slices.DeleteFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
+			touched = true
 		}
 		if isBuildStepCommand(&op) {
 			giveLiveValues(op.GetExec(), keys)
