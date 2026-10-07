@@ -63,8 +63,8 @@ func TestTheBastionIsReachableFromAnywhereYetOnlyByAnIdentityHoldingTheInvokerRo
 	if desired.InvokerIamDisabled || desired.IapEnabled {
 		t.Errorf("the bastion skips Cloud Run's invoker check (invoker disabled %v, IAP %v), and anyone could then reach a private address", desired.InvokerIamDisabled, desired.IapEnabled)
 	}
-	if want := []string{bastionNames().Bastion(environment.TierProduction)}; !slices.Equal(desired.CustomAudiences, want) {
-		t.Errorf("CustomAudiences = %v, want %v, the audience an identity token is minted for before the service has a URL", desired.CustomAudiences, want)
+	if want := []string{"acme-prod/" + bastionNames().Bastion(environment.TierProduction)}; !slices.Equal(desired.CustomAudiences, want) {
+		t.Errorf("CustomAudiences = %v, want %v, the audience an identity token is minted for before the service has a URL, unique to this project's bastion", desired.CustomAudiences, want)
 	}
 }
 

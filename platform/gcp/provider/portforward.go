@@ -61,7 +61,7 @@ func (p *Provider) newBastion(c *clients) bastion {
 }
 
 func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) ([]*relay.Forward, error) {
-	tokens := &identityTokens{prove: b.prove, audience: b.clients.Bastion(tier), now: time.Now}
+	tokens := &identityTokens{prove: b.prove, audience: b.audience(tier), now: time.Now}
 	if _, err := tokens.mintOrReuse(ctx); err != nil {
 		return nil, err
 	}

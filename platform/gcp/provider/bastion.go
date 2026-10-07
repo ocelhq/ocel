@@ -44,6 +44,10 @@ func (b bastion) imageRef(tier environment.Tier) string {
 	return b.clients.RepositoryPath(b.clients.region, tier) + "/" + bastionImageName + ":" + bastionImageTag()
 }
 
+func (b bastion) audience(tier environment.Tier) string {
+	return b.clients.project + "/" + b.clients.Bastion(tier)
+}
+
 func bastionDestinations() []relay.Destination {
 	network := netip.MustParsePrefix(networkSubnetRange)
 	return []relay.Destination{{Network: network, Port: postgresPort}, {Network: network, Port: defaultValkeyPort}}
@@ -60,7 +64,7 @@ func (b bastion) serving(tier environment.Tier, image string) serving {
 		instances:   provider.Instances{Max: bastionMaxInstances},
 		timeout:     maxRequestTimeout,
 		egress:      &privateEgress{network: b.clients.NetworkPath(tier), subnetwork: b.clients.SubnetworkPath(b.clients.region, tier)},
-		audiences:   []string{b.clients.Bastion(tier)},
+		audiences:   []string{b.audience(tier)},
 		env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations())},
 	}
 }
