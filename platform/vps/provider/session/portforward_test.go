@@ -3,7 +3,6 @@ package session
 import (
 	"bufio"
 	"context"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -67,19 +66,8 @@ func TestAForwardedPortListensOnLoopbackAndReachesTheRemoteAddressUntilItsContex
 	}
 }
 
-func TestAForwardSshCannotOpenIsRefusedWithWhatSshSaid(t *testing.T) {
+func TestAForwardsPortIsHeldByTheProviderFromBeforeItIsHandedBackSoNoOtherProcessCanTakeIt(t *testing.T) {
 	session := sshStandingIn(t)
-	t.Setenv(standInEnv, "refuse")
-
-	_, _, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
-	if err == nil || !strings.Contains(err.Error(), "Address already in use") {
-		t.Errorf("ForwardPort() over a port already taken = %v, want a refusal saying what ssh said", err)
-	}
-}
-
-func TestStoppingAForwardReturnsOnceSshHasExitedAndTheMasterHasDroppedIt(t *testing.T) {
-	session := sshStandingIn(t)
-	session.control = filepath.Join(t.TempDir(), "control")
 	log := filepath.Join(t.TempDir(), "said")
 	t.Setenv(standInLogEnv, log)
 
@@ -87,43 +75,44 @@ func TestStoppingAForwardReturnsOnceSshHasExitedAndTheMasterHasDroppedIt(t *test
 	if err != nil {
 		t.Fatalf("ForwardPort() error = %v", err)
 	}
-	stop()
-
-	if _, err := readForwarded(t, local); err == nil {
-		t.Error("the forward still answered once stopped, want it gone before stop returns")
-	}
-	said, _ := os.ReadFile(log)
-	if !strings.Contains(string(said), "-O cancel -L "+local+":172.18.0.5:5432") {
-		t.Errorf("the master was told %q before stop returned, want the forward cancelled there: a forward the master keeps outlives the call that asked for it", said)
-	}
-}
-
-func TestAForwardWhoseLoopbackPortWasTakenFirstTriesAnother(t *testing.T) {
-	session := sshStandingIn(t)
-	t.Setenv(standInEnv, "refuse-first")
-	t.Setenv(standInLogEnv, filepath.Join(t.TempDir(), "refused"))
-
-	local, stop, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
-	if err != nil {
-		t.Fatalf("ForwardPort() after its first port was taken = %v, want it forwarded from another", err)
-	}
 	defer stop()
+
+	if said, _ := os.ReadFile(log); len(said) > 0 {
+		t.Errorf("ssh ran as %q before anything connected, want the port held by the provider itself: a port ssh binds after the provider let it go can be taken first, and handed the database's password", said)
+	}
+	if squatter, err := net.Listen("tcp", local); err == nil {
+		squatter.Close()
+		t.Fatalf("another listener took %s while the forward held it", local)
+	}
 	if reached, err := readForwarded(t, local); err != nil || reached != "172.18.0.5:5432" {
 		t.Errorf("a connection to %s reached %q, %v, want the remote address 172.18.0.5:5432", local, reached, err)
 	}
 }
 
-func TestSomethingElseAnsweringOnAForwardsPortIsNotTakenForTheForward(t *testing.T) {
-	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+func TestStoppingAForwardCutsEveryConnectionItCarriesAndStopsListening(t *testing.T) {
+	session := sshStandingIn(t)
+
+	local, stop, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
+	if err != nil {
+		t.Fatalf("ForwardPort() error = %v", err)
+	}
+	conn, err := net.DialTimeout("tcp", local, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer squatter.Close()
-	exited := make(chan struct{})
-	close(exited)
-	waitErr := errors.New("exit status 255")
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("the forward carried nothing: %v", err)
+	}
 
-	if err := awaitListening(context.Background(), squatter.Addr().String(), exited, &waitErr); err == nil {
-		t.Error("awaitListening() trusted a port another process answered on after ssh exited, want it refused: the build would hand that process the database's password")
+	stop()
+
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, err := reader.ReadByte(); err == nil || os.IsTimeout(err) {
+		t.Errorf("a connection the forward carried read %v once it stopped, want it cut before stop returns", err)
+	}
+	if _, err := readForwarded(t, local); err == nil {
+		t.Error("the forward still answered once stopped")
 	}
 }
