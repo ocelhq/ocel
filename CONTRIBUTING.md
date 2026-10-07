@@ -58,7 +58,7 @@ contract paths are:
 - `pkg/edge/`, `pkg/environment/`, `pkg/progress/`, `pkg/router/` and `platform/edge/contract/`;
 - `proto/`;
 - `packages/`, `sdk/`, `python/` and `crates/`;
-- `AGENTS.md`, `CLAUDE.md`, `.greptile/rules.md` and this file.
+- `AGENTS.md`, `CLAUDE.md`, `GLOSSARY.md`, `.greptile/rules.md` and this file.
 
 A contract change updates every implementer in the same pull request
 ([Clean break](.greptile/rules.md#clean-break)), and the conformance suites in
@@ -117,21 +117,21 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 
 ## Fix what you find
 
-An issue found mid-task gets one of two dispositions: a fix, or a filed follow-up issue.
-"Out of scope" is not one. An issue is observed incorrectness (a bug, a broken invariant,
-a security gap), not a style preference. Pick by measure, in order:
+A finding is observed incorrectness or a broken gate in `.greptile/rules.md`; a preference is
+not one. State only an unreleased build could have written is never a finding (Clean break).
+Each finding gets one disposition:
 
-1. The issue is in a file this change already modifies: fix it now, and add a regression
-   test.
-2. It is elsewhere, and the fix is 50 changed lines or fewer (insertions plus deletions of
-   the fix itself, tests excluded): fix it now, in its own commit.
-3. Anything larger: before the task ends, file a GitHub issue unless one exists, saying
-   what you observed, where (`file:line`) and why it is wrong, and link it from the pull
-   request or your report. A fix begun under 1 or 2 that grows past 50 lines is reverted
-   and filed under 3.
+1. **Fix it** when it is in a file this change modifies, or the fix is 50 changed lines or
+   fewer (tests excluded) and touches no contract path this change does not. A fix elsewhere
+   is its own commit. A behaviour fix adds a regression test that fails without it.
+2. **File it** only if it is a verified Trust issue (correctness, security, reliability) too
+   large to fix. Verified means a failing test or a concrete `file:line` trace to the wrong
+   result. Search open issues first; comment on a match instead of filing.
+3. **Call it out** otherwise: unverified, too large and not about Trust, or needing a
+   maintainer ruling. One line with `file:line` under **Found, not fixed** in the pull
+   request, or in the report when there is no pull request. Never filed.
 
-A name that breaks the naming rules is an issue, not a style preference. In a file you
-already change, rename it; elsewhere the ≤50-line rule applies; beyond that, file it.
+A fix that grows past 50 lines is reverted and goes to 2 or 3.
 
 ## Commits
 

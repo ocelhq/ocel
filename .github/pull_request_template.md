@@ -8,4 +8,6 @@
 
 ## Verification (the commands you ran)
 
+## Found, not fixed (or "nothing")
+
 ## Changelog entry (none before the first release)
