@@ -2,7 +2,7 @@ import { type ChildProcess, execFile } from "node:child_process";
 import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { setsEnv, setsSecret } from "../../checks";
+import { BUILD_VARIABLES, setsBuildVariables, setsEnv, setsSecret } from "../../checks";
 import {
   INITIAL_GREETING,
   JOURNEY_NONCE_ENV,
@@ -307,6 +307,11 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
         ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
         env,
       );
+    }
+    if (setsBuildVariables(cell.fixture.checks)) {
+      for (const [key, value] of Object.entries(BUILD_VARIABLES)) {
+        await this.run(cell, dir, "deploy", `env-${key}`, ["env", "set", `${key}=${value}`], env);
+      }
     }
     if (setsJourneyNonce(cell.fixture.checks)) {
       await this.run(

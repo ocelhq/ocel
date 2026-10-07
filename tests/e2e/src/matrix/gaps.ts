@@ -36,7 +36,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { deploy, iac, kv, lifecycle, realtime, sdk, tasks } from "./fixtures";
+import { buildVariables, deploy, iac, kv, lifecycle, realtime, sdk, tasks } from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
@@ -331,7 +331,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: EVERY_NEXT_BEARING,
+        fixtures: [...EVERY_NEXT_BEARING, buildVariables.next],
         variants: [defaults],
         fails: [step.deploy],
         skipsCell: true,

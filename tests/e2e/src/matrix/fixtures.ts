@@ -1,5 +1,6 @@
 import {
   bindingChecks,
+  buildVariablesChecks,
   envChecks,
   healthChecks,
   httpProbeChecks,
@@ -197,6 +198,17 @@ export const sdk = {
   }),
 };
 
+export const buildVariables = {
+  next: fixture("build-variables/next", {
+    apps: ["web"],
+    checks: [...healthChecks, ...buildVariablesChecks],
+    on: {
+      aws: [defaults],
+      gcp: [defaults],
+    },
+  }),
+};
+
 export const kv = {
   node: fixture("kv/node", {
     apps: ["web"],
@@ -274,6 +286,7 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
+  ...Object.values(buildVariables),
   ...Object.values(kv),
   ...Object.values(tasks),
   ...Object.values(realtime),

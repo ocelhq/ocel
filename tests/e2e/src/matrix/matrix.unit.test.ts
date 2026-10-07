@@ -524,6 +524,33 @@ describe("the kv concern", () => {
   });
 });
 
+describe("the build-variables concern", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const cellsOn = (lane: Lane, filter: RunFilter = EVERY_CELL) =>
+    planOn(lane, {}, filter).cells.map((cell) => cell.name);
+
+  it("builds its Next app as functions on aws and on gcp, floci's among them", () => {
+    for (const lane of ["aws", "gcp", "gcp.floci"] as const) {
+      expect(cellsOn(lane)).toContain("build-variables/next");
+    }
+    expect(cellsOn("gcp.floci", NO_FILTER)).toContain("build-variables/next");
+  });
+
+  it("builds nothing as an image, whose build gets none of the values yet", () => {
+    for (const lane of LANES) {
+      expect(cellsOn(lane).filter((name) => name.startsWith("build-variables/"))).toEqual(
+        ["aws", "aws.floci", "gcp", "gcp.floci"].includes(lane) ? ["build-variables/next"] : [],
+      );
+    }
+  });
+
+  it("skips the cell on floci's aws, whose CloudFront serves no Next app", () => {
+    expect(planOn("aws.floci").skipped["build-variables/next"]?.map((gap) => gap.issue)).toEqual([
+      852,
+    ]);
+  });
+});
+
 describe("the tasks concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
 

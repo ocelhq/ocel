@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import {
   type CheckContext,
   INITIAL_GREETING,
@@ -17,6 +18,7 @@ import {
 import type { Evidence } from "../evidence";
 import { projectSlug } from "../identity";
 import type { Cell, Fixture, Phase, Refusal, Variant } from "../matrix/types";
+import { configTree } from "../ocel";
 import { fixtureDir } from "../paths";
 import type { StackCheck } from "../stacks";
 import { namespaceOfSlug } from "../targets/aws/namespace";
@@ -239,6 +241,8 @@ export class CellRun {
       reach: this.deployment.reach ?? (async (url) => url),
       readExposed: () => this.readExposed(),
       journeyNonce: this.journeyNonce,
+      projectDir: configTree(this, this.target.name),
+      tempDir: tmpdir(),
     }).then(
       () => undefined,
       (error: unknown) => ({ error }),

@@ -28,6 +28,8 @@ export type CheckContext = {
   reach: (url: string) => Promise<string>;
   readExposed: () => Promise<string>;
   journeyNonce: string;
+  projectDir: string;
+  tempDir: string;
 };
 
 export type Check = {

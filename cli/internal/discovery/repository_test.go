@@ -160,6 +160,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 	repo := fixturetest.RepoDir(t)
 	ignored := gitIgnoredDirs(t, repo)
 	fixtureRoots := []string{
+		"tests/fixtures/build-variables/next",
 		"tests/fixtures/iac/with-pulumi",
 		"tests/fixtures/iac/with-sst",
 		"tests/fixtures/kv/node",
