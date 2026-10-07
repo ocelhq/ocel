@@ -26,7 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type boundUse struct {
+type appBinding struct {
 	app      string
 	resource resourcesv1.ResourceType
 	declared string
@@ -103,7 +103,7 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	return forwards, err
 }
 
-func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Project, resources []declaration.Resource) ([]boundUse, error) {
+func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Project, resources []declaration.Resource) ([]appBinding, error) {
 	built := map[string]bool{}
 	for _, app := range build.FunctionApps(cfg.Apps) {
 		if app.BuildsWithBindings && app.Framework() == buildoutput.FrameworkNext {
@@ -123,7 +123,7 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 			return nil, err
 		}
 	}
-	var uses []boundUse
+	var uses []appBinding
 	for _, usage := range usages {
 		_, bindable := naming.BindableAs(usage.Type)
 		if !built[usage.App] || !bindable {
@@ -133,7 +133,7 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 		if !provisioned {
 			continue
 		}
-		uses = append(uses, boundUse{app: usage.App, resource: usage.Type, declared: usage.Name, bound: bound})
+		uses = append(uses, appBinding{app: usage.App, resource: usage.Type, declared: usage.Name, bound: bound})
 	}
 	return uses, nil
 }
@@ -148,12 +148,12 @@ func provisionedBinding(infra *contractv1.Manifest, kind resourcesv1.ResourceTyp
 	return "", false
 }
 
-func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSteps, uses []boundUse, req *contractv1.ForwardPortsRequest) (*portForwards, error) {
-	held, stop := context.WithCancel(ctx)
+func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSteps, uses []appBinding, req *contractv1.ForwardPortsRequest) (*portForwards, error) {
+	streamCtx, stop := context.WithCancel(ctx)
 	answered := make(chan *contractv1.ForwardPortsResponse, 1)
 	ended := make(chan error, 1)
 	go func() {
-		ended <- providerprocess.ForwardPorts(held, i.providerProcess, req, func(resp *contractv1.ForwardPortsResponse) {
+		ended <- providerprocess.ForwardPorts(streamCtx, i.providerProcess, req, func(resp *contractv1.ForwardPortsResponse) {
 			select {
 			case answered <- resp:
 			default:
@@ -195,7 +195,7 @@ func awaitForwardsAnswer(answered <-chan *contractv1.ForwardPortsResponse, ended
 	}
 }
 
-func liveBindings(uses []boundUse, forwarded []*bindingsv1.Binding) (map[string]map[string]string, error) {
+func liveBindings(uses []appBinding, forwarded []*bindingsv1.Binding) (map[string]map[string]string, error) {
 	byApp := map[string]map[string]string{}
 	for _, use := range uses {
 		at := slices.IndexFunc(forwarded, func(binding *bindingsv1.Binding) bool { return binding.GetName() == use.bound })
