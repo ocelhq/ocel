@@ -1,0 +1,47 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+
+message Project {
+  string id = 1;
+
+  string organization_id = 2;
+
+  string name = 3;
+
+  string slug = 4;
+
+  optional string description = 5;
+}
+
+message CreateProjectRequest {
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 100}];
+
+  string slug = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+  }];
+
+  optional string description = 3 [(buf.validate.field).string.max_len = 4000];
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+}
+
+message ListProjectsRequest {
+}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+}
+
+service ProjectService {
+  rpc Create(CreateProjectRequest) returns (CreateProjectResponse);
+
+  rpc List(ListProjectsRequest) returns (ListProjectsResponse);
+}
