@@ -248,6 +248,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
 			infra:          newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt),
+			env:            env,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
 		}
@@ -281,7 +282,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 
 		if opts.dry {
-			return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
+			return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity(), preBuildPlanNote(cfg, env, opts.prebuilt))
 		}
 
 		out, err := streamDeploy(ctx, provider, req)

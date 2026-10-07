@@ -31,11 +31,11 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 	}
 }
 
-func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage) (*portforward.Forwards, error) {
+func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, wholeProject bool) (*portforward.Forwards, error) {
 	if i == nil || !i.providerProcess.Facts().GetForwardsPorts() {
 		return nil, nil
 	}
-	uses, err := i.findBoundUses(cfg, resources, usages)
+	uses, err := i.findBoundUses(cfg, resources, usages, wholeProject)
 	if err != nil || len(uses) == 0 {
 		return nil, err
 	}
@@ -60,14 +60,14 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	return forwards, err
 }
 
-func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage) ([]portforward.Use, error) {
+func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, wholeProject bool) ([]portforward.Use, error) {
 	built := map[string]bool{}
 	for _, app := range build.FunctionApps(cfg.Apps) {
 		if app.BuildsWithBindings && app.Framework() == buildoutput.FrameworkNext {
 			built[app.Name] = true
 		}
 	}
-	if len(built) == 0 {
+	if len(built) == 0 && !wholeProject {
 		return nil, nil
 	}
 	infra := i.sent.GetManifest()
@@ -89,5 +89,20 @@ func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []decl
 		}
 		uses = append(uses, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: bound})
 	}
+	if wholeProject {
+		uses = append(uses, provisionedUses(infra)...)
+	}
 	return uses, nil
+}
+
+func provisionedUses(infra *contractv1.Manifest) []portforward.Use {
+	var uses []portforward.Use
+	for _, resource := range infra.GetResources() {
+		declared := resource.GetResource()
+		if _, bindable := naming.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
+			continue
+		}
+		uses = append(uses, portforward.Use{App: portforward.Project, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
+	}
+	return uses
 }

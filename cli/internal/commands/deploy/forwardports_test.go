@@ -43,6 +43,12 @@ type forwardsSeen struct {
 	openAtDeploy []int
 }
 
+func (s *forwardsSeen) openNow() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.open
+}
+
 func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	t.Helper()
 	seen := &forwardsSeen{}

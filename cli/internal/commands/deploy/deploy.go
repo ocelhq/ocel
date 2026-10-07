@@ -140,6 +140,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
 			infra:          infra,
+			env:            env,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
 		}
@@ -173,7 +174,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 
 		if opts.dry {
-			return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production")
+			return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production", preBuildPlanNote(cfg, env, opts.prebuilt))
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
