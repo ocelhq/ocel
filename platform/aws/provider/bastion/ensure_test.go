@@ -2,6 +2,7 @@ package bastion_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"slices"
 	"strconv"
@@ -131,6 +132,28 @@ func TestEnsureClosesAnIngressAndAnEgressRuleASecurityGroupHasGrownSinceItWasCre
 		if len(group.ingress) != 0 || len(group.egress) != 3 {
 			t.Errorf("the security group holds ingress %v and egress %v, want no ingress and the three egress rules", group.ingress, group.egress)
 		}
+	}
+}
+
+func TestEnsureLetsOnlyTheECSTasksOfTheBoundarysAccountAssumeTheTaskRole(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Ensure() = %v", err)
+	}
+
+	var trust struct {
+		Statement []struct {
+			Condition map[string]map[string]string
+		}
+	}
+	if err := json.Unmarshal([]byte(account.roles["ocel-bastion-production"].trust), &trust); err != nil || len(trust.Statement) != 1 {
+		t.Fatalf("the task role trust %s = %v, want one statement", account.roles["ocel-bastion-production"].trust, err)
+	}
+	condition := trust.Statement[0].Condition
+	if condition["StringEquals"]["aws:SourceAccount"] != "123456789012" || condition["ArnLike"]["aws:SourceArn"] != "arn:aws:ecs:*:123456789012:*" {
+		t.Errorf("the task role trust is conditioned on %v, want ECS in account 123456789012 alone: without it any account's ECS is a confused deputy for the role", condition)
 	}
 }
 
