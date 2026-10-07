@@ -131,11 +131,11 @@ func TestAPromotionNamesTheReleasesItMadeOnTheWire(t *testing.T) {
 func TestAPruneNamesTheReleasesItRemovedOnTheWire(t *testing.T) {
 	t.Parallel()
 
-	raw, err := json.Marshal(PruneResult{ReleaseRemovals: []PointerRemoval{{Pointer: "main@p1"}}})
+	raw, err := json.Marshal(PruneResult{DeploymentRemovals: []PointerRemoval{{Pointer: "main@p1"}}})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if want := `"releaseRemovals":[{"pointer":"main@p1"}]`; !strings.Contains(string(raw), want) {
+	if want := `"deploymentRemovals":[{"pointer":"main@p1"}]`; !strings.Contains(string(raw), want) {
 		t.Errorf("prune = %s, want %s", raw, want)
 	}
 }

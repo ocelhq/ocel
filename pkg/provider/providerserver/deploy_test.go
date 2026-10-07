@@ -2107,7 +2107,7 @@ func TestAProductionReleaseOnARouterThatAddressesItselfAnnouncesItsOwnURL(t *tes
 	}
 }
 
-func TestAPreviewOnARouterThatAddressesItselfServesEachDeploymentOnTheURLItsReleaseRecordedUntilAPruneDropsIt(t *testing.T) {
+func TestAPreviewOnARouterThatAddressesItselfServesEachDeploymentOnItsOwnURLUntilAPruneDropsIt(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
@@ -2122,7 +2122,7 @@ func TestAPreviewOnARouterThatAddressesItselfServesEachDeploymentOnTheURLItsRele
 	}
 	firstDeployment, secondDeployment := findDeploymentURL(first, "web"), findDeploymentURL(second, "web")
 	if !strings.Contains(firstDeployment, fake.DeploymentURLMarker) || firstDeployment == secondDeployment {
-		t.Fatalf("the deploys announced deployment urls %q and %q, want each the url its own release recorded", firstDeployment, secondDeployment)
+		t.Fatalf("the deploys announced deployment urls %q and %q, want each deploy its own url", firstDeployment, secondDeployment)
 	}
 	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 	want := router.FormatDeploymentPointer("pr-7", first.GetPromotionId())
