@@ -149,4 +149,49 @@ describe("buildNext", () => {
   it("binds an app that declares no folder to the project root", async () => {
     expect((await envOf(app())).OCEL_APP_FOLDER).toBe("");
   });
+
+  it("builds with none of the names the request unsets, whatever the shell holds", async () => {
+    process.env.SESSION_SECRET = "stale-from-the-shell";
+    process.env.OCEL_VAR_POSTHOG_ID = "stale-from-the-shell";
+    try {
+      const env = await envOf(
+        app({
+          env: { POSTHOG_ID: "ph-web" },
+          unset: ["OCEL_VAR_POSTHOG_ID", "SESSION_SECRET"],
+        }),
+      );
+      expect(env).not.toHaveProperty("SESSION_SECRET");
+      expect(env).not.toHaveProperty("OCEL_VAR_POSTHOG_ID");
+      expect(env.POSTHOG_ID).toBe("ph-web");
+      expect(env.PATH).toBe(process.env.PATH);
+    } finally {
+      delete process.env.SESSION_SECRET;
+      delete process.env.OCEL_VAR_POSTHOG_ID;
+    }
+  });
+
+  describe("on a node with no process.getBuiltinModule, which the SDK reads a live dir with", () => {
+    const getBuiltinModule = process.getBuiltinModule;
+    afterEach(() => {
+      process.getBuiltinModule = getBuiltinModule;
+    });
+
+    it("refuses a build handed a live dir before anything runs, naming the node it needs", async () => {
+      // @ts-expect-error node before 22.3 has no getBuiltinModule
+      process.getBuiltinModule = undefined;
+      let ran = false;
+      buildProcess.spawn = async () => void (ran = true);
+
+      await expect(
+        buildNext(app({ env: { OCEL_LIVE_DIR: "/tmp/ocel-live-1" } }), ADAPTER),
+      ).rejects.toThrow(/node 22\.3 or newer/);
+      expect(ran).toBe(false);
+    });
+
+    it("builds an app handed no live dir", async () => {
+      // @ts-expect-error node before 22.3 has no getBuiltinModule
+      process.getBuiltinModule = undefined;
+      await expect(envOf(app({ env: { OCEL_LIVE_DIR: "" } }))).resolves.toBeDefined();
+    });
+  });
 });

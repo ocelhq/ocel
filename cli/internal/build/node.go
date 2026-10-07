@@ -28,6 +28,7 @@ type nodeAppBuild struct {
 	DeploymentID  string            `json:"deploymentId,omitempty"`
 	Folder        string            `json:"folder,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
+	Unset         []string          `json:"unset,omitempty"`
 	EdgeKind      string            `json:"edgeKind,omitempty"`
 	AllowDegraded []string          `json:"allowDegraded,omitempty"`
 	Entrypoint    string            `json:"entrypoint,omitempty"`

@@ -194,11 +194,12 @@ func TestABuildIsHandedTheSecretValuesItsAppResolves(t *testing.T) {
 			def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 		)
 
+		revealed, err := g.RevealSecrets(context.Background(), []string{"web", "api"})
+		if err != nil {
+			t.Fatalf("RevealSecrets: %v", err)
+		}
 		for app, want := range map[string]string{"web": "ss_web", "api": "ss_root"} {
-			got, err := g.RevealSecrets(context.Background(), app)
-			if err != nil {
-				t.Fatalf("RevealSecrets(%s): %v", app, err)
-			}
+			got := revealed[app]
 			if got["SESSION_SECRET"] != want {
 				t.Errorf("%s SESSION_SECRET = %q, want %q", app, got["SESSION_SECRET"], want)
 			}
@@ -216,7 +217,7 @@ func TestABuildIsHandedTheSecretValuesItsAppResolves(t *testing.T) {
 		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-		if _, err := g.RevealSecrets(context.Background(), "api"); err != nil {
+		if _, err := g.RevealSecrets(context.Background(), []string{"api"}); err != nil {
 			t.Fatalf("RevealSecrets: %v", err)
 		}
 		if got := resolve(t, g, "api")["SESSION_SECRET"]; got.Value != "" {
@@ -234,12 +235,50 @@ func TestABuildIsHandedTheSecretValuesItsAppResolves(t *testing.T) {
 		secret.Folders = []string{"/web"}
 		declare(t, g, secret)
 
-		got, err := g.RevealSecrets(context.Background(), "api")
+		got, err := g.RevealSecrets(context.Background(), []string{"api"})
 		if err != nil {
 			t.Fatalf("RevealSecrets: %v", err)
 		}
-		if _, ok := got["SESSION_SECRET"]; ok {
+		if _, ok := got["api"]["SESSION_SECRET"]; ok {
 			t.Error("api was handed SESSION_SECRET, want a key outside an app's scope never revealed for its build")
+		}
+	})
+
+	t.Run("reads every app's secrets from the store in one request", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("SESSION_SECRET", "", "ss_root")
+		values.set("SESSION_SECRET", "/web", "ss_web")
+
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}, {Name: "jobs"}}})
+		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		if _, err := g.RevealSecrets(context.Background(), []string{"web", "api", "jobs"}); err != nil {
+			t.Fatalf("RevealSecrets: %v", err)
+		}
+		if values.reveals != 1 {
+			t.Errorf("the store was asked %d times, want one request for every app's secrets", values.reveals)
+		}
+		if len(values.revealed) != 2 {
+			t.Errorf("the store was asked for %v, want each cell once however many apps resolve it", values.revealed)
+		}
+	})
+
+	t.Run("keeps no secret's plaintext once it is handed over, so a later reveal reads the store again", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("SESSION_SECRET", "", "ss_root")
+
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
+		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		for range 2 {
+			if _, err := g.RevealSecrets(context.Background(), []string{"api"}); err != nil {
+				t.Fatalf("RevealSecrets: %v", err)
+			}
+		}
+		if values.reveals != 2 {
+			t.Errorf("the store was asked %d times for two reveals, want the plaintext held nowhere between them", values.reveals)
 		}
 	})
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -20,7 +22,21 @@ type Compilation struct {
 	FunctionDir    string
 	AppDir         string
 	DiscoveryRoots []string
+	Env            map[string]string
+	Unset          []string
 	Log            io.Writer
+}
+
+func (c Compilation) environ(own ...string) []string {
+	environ := slices.DeleteFunc(os.Environ(), func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		_, overridden := c.Env[name]
+		return overridden || slices.Contains(c.Unset, name)
+	})
+	for _, name := range slices.Sorted(maps.Keys(c.Env)) {
+		environ = append(environ, name+"="+c.Env[name])
+	}
+	return append(environ, own...)
 }
 
 func (c Compilation) pkg() string {

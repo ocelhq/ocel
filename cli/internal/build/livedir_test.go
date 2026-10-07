@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -156,6 +157,24 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		}
 		if ran {
 			t.Error("the node build script ran, want the refusal before anything is built")
+		}
+	})
+
+	t.Run("names every form of a delivered key the deployer's shell could shadow its value with, for the build to drop", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		var got nodeBuildRequest
+		builder := nodeOnly{host: servingNext, node: requestOf(&got)}
+		if err := builder.Build(context.Background(), cfg, values, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		want := []string{"OCEL_VAR_POSTHOG_ID", "OCEL_VAR_SESSION_SECRET", "OCEL_VAR_STRIPE_API_KEY", "SESSION_SECRET", "STRIPE_API_KEY"}
+		if !slices.Equal(got.Apps[0].Unset, want) {
+			t.Errorf("Unset = %v, want %v", got.Apps[0].Unset, want)
 		}
 	})
 

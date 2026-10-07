@@ -51,7 +51,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "cargo", "build", "--release",
 		"--manifest-path", crate.ManifestPath, "--bin", bins[0].Name, "--target", target)
 	cmd.Dir = workspace.Root
-	cmd.Env = append(os.Environ(), "CARGO_PROFILE_RELEASE_STRIP=symbols")
+	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")
 	linker := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"
 	if _, set := os.LookupEnv(linker); !set && !cargoConfigNamesLinker(workspace.Root, target) {
 		cmd.Env = append(cmd.Env, linker+"="+rustLinker)
