@@ -1767,3 +1767,34 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 		t.Errorf("api's build was handed SESSION_SECRET = %q, want a secret revealed only for a Next build that reads the live dir", secret)
 	}
 }
+
+func TestADeployWarnsThatANextImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[
+  {"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true},
+  {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
+  {"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}
+]`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "next.config.mjs"), "export default {}\n")
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: "container" }`)
+	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
+	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
+	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
+
+	dependencies := newTestDependencies()
+	captureBuildVariables(&dependencies)
+	stubAppImages(&dependencies, "web")
+	clitest.ServeImageDaemon(t, "amd64")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	want := `app "web" builds as an image, and an image build gets none of its sensitive or secret values yet: SESSION_SECRET, STRIPE_API_KEY`
+	if !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+	if strings.Contains(out, "PAGE_ID,") || strings.Contains(out, "STRIPE_API_KEY, PAGE_ID") {
+		t.Errorf("the warning names a plaintext value, want only the encrypted classes:\n%s", out)
+	}
+}
