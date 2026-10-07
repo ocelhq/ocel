@@ -312,7 +312,7 @@ func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
 			t.Errorf("PAGE_ID = %+v, want its class and its resolved value", got[0])
 		}
 		if got[1].Value != "" {
-			t.Errorf("WEBHOOK_SECRET = %+v, want no value: a live value never reaches a build host", got[1])
+			t.Errorf("WEBHOOK_SECRET = %+v, want no value: a secret's plaintext never enters the manifest", got[1])
 		}
 	})
 
@@ -1700,4 +1700,43 @@ func productionHostnames(app *contractv1.ManifestApp) []string {
 		}
 	}
 	return nil
+}
+
+func TestADeployBuildsWithItsSensitiveAndSecretValuesOutsideTheBuildEnvironment(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[
+  {"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true},
+  {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
+  {"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}
+]`)
+	writeRootApp(t, fixture.Root)
+	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
+	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
+	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
+
+	dependencies := newTestDependencies()
+	got := captureBuildVariables(&dependencies)
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+
+	built := (*got)[clitest.FixtureSlug]
+	if built.Env["PAGE_ID"] != "page-123" {
+		t.Errorf("build env = %v, want the plaintext PAGE_ID in it", built.Env)
+	}
+	for key, want := range map[string]string{"STRIPE_API_KEY": "sk_live_sensitive", "SESSION_SECRET": "ss_live_secret"} {
+		if built.Live[key] != want {
+			t.Errorf("build live values hold %s = %q, want %q", key, built.Live[key], want)
+		}
+		if _, ok := built.Env[key]; ok {
+			t.Errorf("build env holds %s, want an encrypted class only in the live dir", key)
+		}
+	}
+	sent, err := proto.Marshal(sentDeploy(t, fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(sent, []byte("ss_live_secret")) {
+		t.Error("the deploy request holds the secret's plaintext, want a secret revealed for the build only")
+	}
 }

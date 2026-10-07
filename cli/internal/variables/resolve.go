@@ -15,32 +15,20 @@ type ResolvedValue struct {
 	Version int64
 }
 
+type resolvedCell struct {
+	cell Cell
+	live bool
+}
+
 func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]ResolvedValue, error) {
-	binding, known := d.binding(app)
-	if !known {
-		return nil, fmt.Errorf("app %q is not declared in this project's config, so it has no folder to resolve from", app)
+	cells, present, err := d.cellsOf(app)
+	if err != nil {
+		return nil, err
 	}
-
-	d.mu.Lock()
-	present := d.resolvedCells()
-	definitions := slices.Clone(d.definitions)
-	d.mu.Unlock()
-
-	type resolvedCell struct {
-		cell Cell
-		live bool
-	}
-	cells := make([]resolvedCell, 0, len(definitions))
 	var wanted []Cell
-	for _, definition := range definitions {
-		cell, ok := resolveCell(definition, binding, present)
-		if !ok {
-			continue
-		}
-		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
-		cells = append(cells, resolvedCell{cell: cell, live: live})
-		if !live {
-			wanted = append(wanted, cell)
+	for _, c := range cells {
+		if !c.live {
+			wanted = append(wanted, c.cell)
 		}
 	}
 	plaintext, err := d.reveal(ctx, wanted)
@@ -60,6 +48,52 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 		resolved[c.cell.Key] = from
 	}
 	return resolved, nil
+}
+
+func (d *Declarations) RevealSecrets(ctx context.Context, app string) (map[string]string, error) {
+	cells, _, err := d.cellsOf(app)
+	if err != nil {
+		return nil, err
+	}
+	var secrets []Cell
+	for _, c := range cells {
+		if c.live {
+			secrets = append(secrets, c.cell)
+		}
+	}
+	plaintext, err := d.reveal(ctx, secrets)
+	if err != nil {
+		return nil, err
+	}
+	revealed := make(map[string]string, len(secrets))
+	for _, cell := range secrets {
+		if plaintext[cell].found {
+			revealed[cell.Key] = plaintext[cell].value
+		}
+	}
+	return revealed, nil
+}
+
+func (d *Declarations) cellsOf(app string) ([]resolvedCell, presentCells, error) {
+	binding, known := d.binding(app)
+	if !known {
+		return nil, nil, fmt.Errorf("app %q is not declared in this project's config, so it has no folder to resolve from", app)
+	}
+
+	d.mu.Lock()
+	present := d.resolvedCells()
+	definitions := slices.Clone(d.definitions)
+	d.mu.Unlock()
+
+	cells := make([]resolvedCell, 0, len(definitions))
+	for _, definition := range definitions {
+		cell, ok := resolveCell(definition, binding, present)
+		if !ok {
+			continue
+		}
+		cells = append(cells, resolvedCell{cell: cell, live: definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET})
+	}
+	return cells, present, nil
 }
 
 func resolveCell(definition *resourcesv1.VariableDefinition, binding string, present presentCells) (Cell, bool) {

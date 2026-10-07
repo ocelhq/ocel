@@ -131,9 +131,13 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
 	}
+	secrets, err := revealSecrets(ctx, a.declarations, cfg)
+	if err != nil {
+		return build.Output{}, err
+	}
 	var built build.Output
 	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, build.VariablesOf(clients), a.containerArchs, workers, a.host, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, build.VariablesOf(clients, secrets), a.containerArchs, workers, a.host, steps.log())
 		if err != nil {
 			return err
 		}
@@ -293,6 +297,18 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 		values[app.Name] = appVariables(definitions, resolved)
 	}
 	return values, nil
+}
+
+func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string]map[string]string, error) {
+	secrets := make(map[string]map[string]string, len(cfg.Apps))
+	for _, app := range variablescope.Apps(cfg) {
+		revealed, err := declarations.RevealSecrets(ctx, app.Name)
+		if err != nil {
+			return nil, err
+		}
+		secrets[app.Name] = revealed
+	}
+	return secrets, nil
 }
 
 func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.ResolvedValue) []variables.Variable {

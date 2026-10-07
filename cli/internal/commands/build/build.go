@@ -96,7 +96,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
-	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.VariablesOf(clients), declaredArchs(cfg), workers, host, appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.VariablesOf(clients, nil), declaredArchs(cfg), workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,8 @@
 package build
 
 import (
+	"maps"
+
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -10,7 +12,7 @@ type AppVariables struct {
 	Live map[string]string
 }
 
-func VariablesOf(apps []clientenv.App) map[string]AppVariables {
+func VariablesOf(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
 	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
 		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}}
@@ -22,6 +24,7 @@ func VariablesOf(apps []clientenv.App) map[string]AppVariables {
 				values.Live[v.Key] = v.Value
 			}
 		}
+		maps.Copy(values.Live, secrets[app.Name])
 		byApp[app.Name] = values
 	}
 	return byApp

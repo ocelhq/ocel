@@ -177,3 +177,69 @@ func TestAnAppResolvesEachKeyFromItsOwnFolderOrTheRoot(t *testing.T) {
 		}
 	})
 }
+
+func TestABuildIsHandedTheSecretValuesItsAppResolves(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reveals each secret from the cell its app resolves", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("SESSION_SECRET", "", "ss_root")
+		values.set("SESSION_SECRET", "/web", "ss_web")
+		values.set("STRIPE_API_KEY", "", "sk_sensitive")
+
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
+		declare(t, g,
+			def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+			def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+		)
+
+		for app, want := range map[string]string{"web": "ss_web", "api": "ss_root"} {
+			got, err := g.RevealSecrets(context.Background(), app)
+			if err != nil {
+				t.Fatalf("RevealSecrets(%s): %v", app, err)
+			}
+			if got["SESSION_SECRET"] != want {
+				t.Errorf("%s SESSION_SECRET = %q, want %q", app, got["SESSION_SECRET"], want)
+			}
+			if _, ok := got["STRIPE_API_KEY"]; ok {
+				t.Errorf("%s revealed STRIPE_API_KEY, want only the secret class: Resolve already holds a sensitive value", app)
+			}
+		}
+	})
+
+	t.Run("revealing for the build leaves the resolved address without plaintext", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("SESSION_SECRET", "", "ss_root")
+
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "api"}}})
+		declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		if _, err := g.RevealSecrets(context.Background(), "api"); err != nil {
+			t.Fatalf("RevealSecrets: %v", err)
+		}
+		if got := resolve(t, g, "api")["SESSION_SECRET"]; got.Value != "" {
+			t.Errorf("SESSION_SECRET value = %q after a build revealed it, want the deployed app to keep reading it live", got.Value)
+		}
+	})
+
+	t.Run("a secret scoped away from an app is not revealed for it", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("SESSION_SECRET", "/web", "ss_web")
+
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
+		secret := def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)
+		secret.Folders = []string{"/web"}
+		declare(t, g, secret)
+
+		got, err := g.RevealSecrets(context.Background(), "api")
+		if err != nil {
+			t.Fatalf("RevealSecrets: %v", err)
+		}
+		if _, ok := got["SESSION_SECRET"]; ok {
+			t.Error("api was handed SESSION_SECRET, want a key outside an app's scope never revealed for its build")
+		}
+	})
+}

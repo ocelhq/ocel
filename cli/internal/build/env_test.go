@@ -13,7 +13,7 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-	}}})["storefront"]
+	}}}, nil)["storefront"]
 
 	if got, want := built.Env["NEXT_PUBLIC_SITE_URL"], "https://example.com"; got != want {
 		t.Errorf("NEXT_PUBLIC_SITE_URL = %q, want %q", got, want)
@@ -30,7 +30,7 @@ func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
 	built := VariablesOf([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
-	}}})["storefront"]
+	}}}, nil)["storefront"]
 
 	if got, want := built.Live["STRIPE_API_KEY"], "sk-live"; got != want {
 		t.Errorf("live STRIPE_API_KEY = %q, want %q", got, want)
@@ -44,7 +44,7 @@ func TestEachAppIsBuiltWithItsOwnValueForADivergedKey(t *testing.T) {
 	built := VariablesOf([]clientenv.App{
 		{Name: "storefront", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
 		{Name: "admin", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
-	})
+	}, nil)
 
 	if got, want := built["storefront"].Env["POSTHOG_ID"], "ph-store"; got != want {
 		t.Errorf("storefront POSTHOG_ID = %q, want %q", got, want)
