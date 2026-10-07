@@ -123,7 +123,7 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 		assetPrefixEnv:            appAssetPrefix(coord),
 		slugEnv:                   "shop",
 		appNameEnv:                "web",
-		buildIDEnv:                "d1",
+		"OCEL_BUILD_ID":           "d1",
 		edge.ImageOptimizerURLVar: "https://optimizer.lambda-url.us-east-1.on.aws/",
 	}
 	for key, value := range want {
