@@ -1,16 +1,20 @@
 package redaction
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"slices"
 	"strings"
+	"sync"
 )
 
-const Placeholder = "[secret]"
+const placeholder = "[secret]"
 
 type Values struct {
-	forms []string
+	forms   []string
+	longest int
+	starts  [256]bool
 }
 
 func NewValues(values []string) Values {
@@ -28,21 +32,53 @@ func NewValues(values []string) Values {
 	}
 	forms = slices.DeleteFunc(forms, func(form string) bool { return form == "" })
 	slices.SortFunc(forms, func(a, b string) int { return len(b) - len(a) })
-	return Values{forms: slices.Compact(forms)}
+	forms = slices.Compact(forms)
+	v := Values{forms: forms}
+	for _, form := range forms {
+		v.longest = max(v.longest, len(form))
+		v.starts[form[0]] = true
+	}
+	return v
 }
 
 func (v Values) Hide(text string) string {
-	for _, form := range v.forms {
-		text = strings.ReplaceAll(text, form, Placeholder)
+	if len(v.forms) == 0 {
+		return text
 	}
-	return text
+	hidden, _ := v.hide([]byte(text), len(text))
+	return string(hidden)
 }
 
-func (v Values) Writer(w io.Writer) io.Writer {
-	if len(v.forms) == 0 {
-		return w
+func (v Values) hide(text []byte, settled int) (hidden []byte, held []byte) {
+	var out bytes.Buffer
+	i := 0
+	for i < settled {
+		if form, found := v.formAt(text[i:]); found {
+			out.WriteString(placeholder)
+			i += len(form)
+			continue
+		}
+		out.WriteByte(text[i])
+		i++
 	}
-	return hidingWriter{w: w, values: v}
+	i = max(i, settled)
+	return out.Bytes(), text[i:]
+}
+
+func (v Values) formAt(text []byte) (string, bool) {
+	if !v.starts[text[0]] {
+		return "", false
+	}
+	for _, form := range v.forms {
+		if len(form) <= len(text) && string(text[:len(form)]) == form {
+			return form, true
+		}
+	}
+	return "", false
+}
+
+func (v Values) Writer(w io.Writer) *Writer {
+	return &Writer{w: w, values: v}
 }
 
 func (v Values) HideError(err error) error {
@@ -52,16 +88,40 @@ func (v Values) HideError(err error) error {
 	return hiddenError{err: err, values: v}
 }
 
-type hidingWriter struct {
+type Writer struct {
 	w      io.Writer
 	values Values
+
+	mu      sync.Mutex
+	pending []byte
 }
 
-func (h hidingWriter) Write(p []byte) (int, error) {
-	if _, err := io.WriteString(h.w, h.values.Hide(string(p))); err != nil {
+func (h *Writer) Write(p []byte) (int, error) {
+	if len(h.values.forms) == 0 {
+		return h.w.Write(p)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	text := slices.Concat(h.pending, p)
+	settled := max(len(text)-(h.values.longest-1), bytes.LastIndexByte(text, '\n')+1)
+	hidden, held := h.values.hide(text, settled)
+	h.pending = held
+	if _, err := h.w.Write(hidden); err != nil {
 		return 0, err
 	}
 	return len(p), nil
+}
+
+func (h *Writer) Flush() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.pending) == 0 {
+		return nil
+	}
+	hidden, _ := h.values.hide(h.pending, len(h.pending))
+	h.pending = nil
+	_, err := h.w.Write(hidden)
+	return err
 }
 
 type hiddenError struct {

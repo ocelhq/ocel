@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -438,8 +439,7 @@ func TestANodeBuildLogRecordWithNoOpenSpanIsDebugDetailOfTheProcessorsSpan(t *te
 func TestProcessorHidesWhatItIsToldToInEveryLineRecordAndFailure(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
-	hide := func(text string) string { return strings.ReplaceAll(text, "ss_live", "[secret]") }
-	p := &Processor{Span: run.build, Forward: &out, Hide: hide}
+	p := &Processor{Span: run.build, Forward: &out, Hide: redaction.NewValues([]string{"ss_live"})}
 
 	logged, _ := json.Marshal(record{Type: typeLog, App: "api", Stage: "build", Message: "read ss_live"})
 	failed, _ := json.Marshal(record{Type: typeError, App: "api", Stage: "build", Message: "rejected ss_live"})
@@ -455,6 +455,20 @@ func TestProcessorHidesWhatItIsToldToInEveryLineRecordAndFailure(t *testing.T) {
 	}
 	if out.String() != "printed [secret]\n" {
 		t.Errorf("forwarded output = %q, want the line with the value hidden", out.String())
+	}
+}
+
+func TestProcessorHidesAValueALineTooLongToHoldWholeCutsInTwo(t *testing.T) {
+	t.Parallel()
+
+	line := strings.Repeat("sk_live_123 ", 2*maxLineBytes/12+1) + "\n"
+	var out strings.Builder
+	p := &Processor{Forward: &out, Hide: redaction.NewValues([]string{"sk_live_123"})}
+
+	p.Scan(context.Background(), strings.NewReader(line))
+
+	if rest := strings.Trim(strings.ReplaceAll(out.String(), "[secret]", ""), " \n"); rest != "" {
+		t.Errorf("the forwarded output holds %d bytes besides hidden values and spaces, starting %q", len(rest), rest[:min(len(rest), 40)])
 	}
 }
 

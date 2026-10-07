@@ -29,7 +29,8 @@ type Log struct {
 	Shared io.Writer
 	AppLog func(app string) (log io.Writer, ended func(error))
 
-	hidden redaction.Values
+	hidden       redaction.Values
+	sharedHidden *redaction.Writer
 }
 
 func (l Log) shared() io.Writer {
@@ -44,15 +45,26 @@ func (l Log) App(name string) (io.Writer, func(error)) {
 		return l.shared(), func(error) {}
 	}
 	w, ended := l.AppLog(name)
-	return l.hidden.Writer(w), ended
+	hiding := l.hidden.Writer(w)
+	return hiding, func(err error) {
+		_ = hiding.Flush()
+		ended(err)
+	}
 }
 
 func (l Log) hiding(values redaction.Values) Log {
 	l.hidden = values
 	if l.Shared != nil {
-		l.Shared = values.Writer(l.Shared)
+		l.sharedHidden = values.Writer(l.Shared)
+		l.Shared = l.sharedHidden
 	}
 	return l
+}
+
+func (l Log) flushShared() {
+	if l.sharedHidden != nil {
+		_ = l.sharedHidden.Flush()
+	}
 }
 
 type Output struct {
@@ -122,6 +134,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	}
 	hidden := redaction.NewValues(readable)
 	log = log.hiding(hidden)
+	defer log.flushShared()
 	defer func() { err = hidden.HideError(err) }()
 
 	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
