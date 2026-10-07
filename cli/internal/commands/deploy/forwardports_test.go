@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -20,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -31,33 +33,47 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-const forwardedPostgresKey = "OCEL_RESOURCE_POSTGRES_main"
+const (
+	forwardedPostgresKey = "OCEL_RESOURCE_POSTGRES_main"
+	forwardTeardown      = 200 * time.Millisecond
+)
 
 type forwardsSeen struct {
 	mutex        sync.Mutex
 	asked        []provider.PortForwardRequest
-	closedBefore []string
+	open         int
+	openAtDeploy []int
 }
 
 func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	t.Helper()
 	seen := &forwardsSeen{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
 			seen.mutex.Lock()
+			defer seen.mutex.Unlock()
 			seen.asked = append(seen.asked, req)
-			seen.mutex.Unlock()
-			go func() {
-				<-ctx.Done()
-				seen.mutex.Lock()
-				defer seen.mutex.Unlock()
-				seen.closedBefore = fixture.Requests.Procedures()
-			}()
 			forwards := make([]provider.PortForward, 0, len(req.Bindings))
 			for _, binding := range req.Bindings {
-				forwards = append(forwards, provider.PortForward{Binding: binding.Name, LocalAddress: "127.0.0.1:41234"})
+				seen.open++
+				forwards = append(forwards, provider.PortForward{Binding: binding.Name, LocalAddress: "127.0.0.1:41234", Close: func() {
+					time.Sleep(forwardTeardown)
+					seen.mutex.Lock()
+					defer seen.mutex.Unlock()
+					seen.open--
+				}})
 			}
 			return forwards, nil
+		}
+		preflight := h.PreflightDeploy
+		h.PreflightDeploy = func(ctx context.Context, pre provider.DeployPreflight) error {
+			seen.mutex.Lock()
+			seen.openAtDeploy = append(seen.openAtDeploy, seen.open)
+			seen.mutex.Unlock()
+			if preflight == nil {
+				return nil
+			}
+			return preflight(ctx, pre)
 		}
 	})
 	return seen
@@ -115,10 +131,10 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 		t.Errorf("the CLI asked to forward %v, want the one binding the built app uses", sent)
 	}
 	seen.mutex.Lock()
-	closedBefore := slices.Clone(seen.closedBefore)
+	deployedWith := slices.Clone(seen.openAtDeploy)
 	seen.mutex.Unlock()
-	if closedBefore == nil || slices.Contains(closedBefore, contractv1connect.ProviderServiceDeployProcedure) {
-		t.Errorf("the forwards closed after %v, want them closed once the build ended and before the deploy", closedBefore)
+	if !slices.Equal(deployedWith, []int{0}) {
+		t.Errorf("the deploy began with %v forwards still open, want it to begin once, after every forward the build used was closed", deployedWith)
 	}
 }
 
@@ -403,16 +419,17 @@ func TestANextAppBuiltAsAnImageForwardsNoPort(t *testing.T) {
 	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
 `)
 	forwardingPorts(t, fixture)
+	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
 	built := false
 	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, errors.New("the image is not built in this test")
 	}
 
-	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
+	deployErr := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
 
 	if !built {
-		t.Fatal("the deploy never reached the build, so it never decided whether to forward")
+		t.Fatalf("the deploy never reached the build, so it never decided whether to forward: %v", deployErr)
 	}
 	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
 		t.Errorf("the CLI forwarded ports for %v, want none for an image build, which never reads the live directory", sent)
