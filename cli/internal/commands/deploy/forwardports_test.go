@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const forwardedPostgresKey = "OCEL_RESOURCE_POSTGRES_main"
@@ -313,5 +315,37 @@ func TestADryDeployOfResourcesNotYetDeployedBuildsWithoutBindingsAndSaysSo(t *te
 	}
 	if !strings.Contains(said, "The build goes without the bindings of main, since it is not deployed yet") {
 		t.Errorf("the dry run said %q, want it to say the build goes without main's binding", said)
+	}
+}
+
+func TestADeployLeavesNoForwardedBindingsPasswordInTheProjectsOcelDirectory(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	var delivered bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(built.Live[forwardedPostgresKey]), &delivered); err != nil || delivered.GetPostgres().GetPassword() == "" {
+		t.Fatalf("the build was handed %q, want main's binding with its password", built.Live[forwardedPostgresKey])
+	}
+	password := delivered.GetPostgres().GetPassword()
+	err := filepath.WalkDir(filepath.Join(fixture.Root, statedir.Name), func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(raw), password) {
+			t.Errorf("%s holds main's password, want it only in the live directory the build read", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
