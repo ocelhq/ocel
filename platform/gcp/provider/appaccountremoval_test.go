@@ -298,7 +298,7 @@ func TestDestroyingTheContainerAppOfTheLastEnvironmentRunningItRevokesItsAccount
 func topicBinding(declared string) provider.Binding {
 	return provider.Binding{
 		Type: provider.BindingTopic, Name: "topic--" + declared, Resource: declared,
-		Properties: map[string]string{topicPathProperty: declared, topicDeclaredProperty: declared, topicSpecProperty: "{}"},
+		Properties: map[string]string{stackrecords.PropertyDeclared: declared, stackrecords.PropertyTopicSpec: "{}"},
 	}
 }
 

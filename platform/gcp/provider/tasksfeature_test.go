@@ -39,7 +39,7 @@ func TestDroppingTasksWhileAnEnvironmentDeclaresATopicIsRefusedNamingIt(t *testi
 
 	b := bootstrap{records: recordingTopics(t, environment.TierProduction,
 		provider.Binding{Type: provider.BindingBucket, Name: "uploads"},
-		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{topicDeclaredProperty: "resize"}},
+		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{stackrecords.PropertyDeclared: "resize"}},
 	)}
 
 	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{tasksFeature}}
@@ -57,7 +57,7 @@ func TestDroppingTasksIgnoresATopicOnAnotherTier(t *testing.T) {
 	t.Parallel()
 
 	b := bootstrap{clients: grantedIAM().open(t), records: recordingTopics(t, environment.TierPreview,
-		provider.Binding{Type: provider.BindingTopic, Name: "topic--orders", Properties: map[string]string{topicDeclaredProperty: "orders"}},
+		provider.Binding{Type: provider.BindingTopic, Name: "topic--orders", Properties: map[string]string{stackrecords.PropertyDeclared: "orders"}},
 	)}
 	if err := b.tasksFree(context.Background(), environment.TierProduction, []string{tasksFeature}); err != nil {
 		t.Errorf("tasksFree() with a topic only on another tier = %v, want the feature free", err)

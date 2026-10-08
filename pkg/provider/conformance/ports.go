@@ -1044,6 +1044,15 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			if err := provider.VerifyProperties(binding); err != nil {
 				t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 			}
+			if binding.Type == provider.BindingCustom {
+				continue
+			}
+			declared := append(stackrecords.ListRecordedProperties(binding.Type), listRedactedProperties(binding.Type)...)
+			for name := range binding.Properties {
+				if !slices.Contains(declared, name) {
+					t.Errorf("Provision() returned binding %s with %q, which bindings.proto does not declare and the stack record does not keep, so no app and no later deploy ever reads it", binding.Name, name)
+				}
+			}
 		}
 
 		if store != nil {

@@ -16,12 +16,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
-const (
-	topicPathProperty     = "topic"
-	topicDeclaredProperty = "declared"
-	topicSpecProperty     = "spec"
-)
-
 type declaredTopic struct {
 	declared string
 	spec     *provider.TopicSpec
@@ -39,7 +33,7 @@ func readDeclaredTopic(binding provider.Binding) (declaredTopic, bool, error) {
 	if binding.Type != provider.BindingTopic && binding.Type != provider.BindingTask {
 		return declaredTopic{}, false, nil
 	}
-	raw, recorded := binding.Properties[topicSpecProperty]
+	raw, recorded := binding.Properties[stackrecords.PropertyTopicSpec]
 	if !recorded {
 		return declaredTopic{}, false, nil
 	}
@@ -47,7 +41,7 @@ func readDeclaredTopic(binding provider.Binding) (declaredTopic, bool, error) {
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		return declaredTopic{}, false, fmt.Errorf("read the %s %s's recorded config: %w", binding.Type, binding.Name, err)
 	}
-	return declaredTopic{declared: cmp.Or(binding.Properties[topicDeclaredProperty], binding.Name), spec: &spec}, true, nil
+	return declaredTopic{declared: cmp.Or(binding.Properties[stackrecords.PropertyDeclared], binding.Name), spec: &spec}, true, nil
 }
 
 func taskNames(names Names, ref provider.StackRef) topics.Names {
@@ -103,9 +97,8 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 		Name:     in.Resource.Name,
 		Resource: topic.declared,
 		Properties: map[string]string{
-			topicPathProperty:     path,
-			topicDeclaredProperty: topic.declared,
-			topicSpecProperty:     string(spec),
+			stackrecords.PropertyDeclared:  topic.declared,
+			stackrecords.PropertyTopicSpec: string(spec),
 		},
 	}, nil
 }
