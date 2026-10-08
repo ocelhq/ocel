@@ -207,7 +207,7 @@ func TestForgettingDeletesTheImagesAStackRanThatNoRecordedReleaseRuns(t *testing
 	api := aLoggedInECR()
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-shared", "sha256-other"}}
 
-	removed, err := Forget(context.Background(), api,
+	removed, err := Forget(context.Background(), api, anECRTarget(),
 		[]string{ref("sha256-one"), ref("sha256-shared"), "ghcr.io/acme/shop.web:sha256-elsewhere"},
 		recordedAs(map[string]bool{ref("sha256-shared"): true}), now)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestForgettingTheLastImagesOfARepositoryDeletesTheRepository(t *testing.T) 
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-leaked")
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(nil), now)
+	removed, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one")}, recordedAs(nil), now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -249,7 +249,7 @@ func TestForgettingKeepsARepositoryAnotherStackStillRunsAnImageFrom(t *testing.T
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-kept", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-kept", "sha256-leaked")
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
+	removed, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one")}, recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -271,7 +271,7 @@ func TestForgettingStillDeletesOneRepositoryWhenAnotherRefusesItsDeletes(t *test
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-two")
 	api.refusedIn = shopAPI
 
-	_, err := Forget(context.Background(), api, []string{ref("sha256-one"), registryAt + "/" + shopAPI + ":sha256-two"}, recordedAs(nil), now)
+	_, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), registryAt + "/" + shopAPI + ":sha256-two"}, recordedAs(nil), now)
 	if err == nil {
 		t.Fatal("Forget() = nil for a repository whose deletes ECR refused")
 	}
@@ -288,7 +288,7 @@ func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *tes
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-just-pushed"}}
 	api.pushedAt = map[string]time.Time{"sha256-one": longAgo, "sha256-just-pushed": now.Add(5 * time.Minute)}
 
-	if _, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(nil), now); err != nil {
+	if _, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one")}, recordedAs(nil), now); err != nil {
 		t.Fatalf("Forget() = %v, want nothing: ECR refusing to delete a repository that still holds an image is the repository staying", err)
 	}
 
@@ -311,7 +311,7 @@ func TestForgettingRemovesAnImageItNamesHoweverRecentlyItWasPushed(t *testing.T)
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-old"}}
 	api.pushedAt = map[string]time.Time{"sha256-one": now.Add(-10 * time.Second), "sha256-old": longAgo}
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old"), ref("sha256-gone")}, recordedAs(nil), now.Add(-time.Hour))
+	removed, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-old"), ref("sha256-gone")}, recordedAs(nil), now.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -336,7 +336,7 @@ func TestARemovalLeavesAnImageARecordNamesByTheTimeItDeletes(t *testing.T) {
 		return map[string]bool{ref("sha256-one"): true}, nil
 	}
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old")}, recorded, now)
+	removed, err := Forget(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-old")}, recorded, now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}

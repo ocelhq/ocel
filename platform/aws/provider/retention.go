@@ -32,29 +32,38 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if err != nil || !found {
 		return err
 	}
-	if registry.HoldsImagesOf(images) {
-		images = nil
-	}
 	keptNow := otherStacksImages(store, ref)
 	kept, err := keptNow(ctx)
 	if err != nil {
 		return err
 	}
-	var pushed, ours []string
+	var unkept []string
 	for _, image := range recorded.Images() {
+		if !kept[image] {
+			unkept = append(unkept, image)
+		}
+	}
+	if len(unkept) == 0 {
+		return nil
+	}
+	target, err := registry.Resolve(ctx, api)
+	if err != nil {
+		return err
+	}
+	var pushed, ours []string
+	for _, image := range unkept {
 		switch {
-		case kept[image]:
+		case registry.IsInRegistry(target, image):
+			ours = append(ours, image)
 		case images != nil && strings.HasPrefix(image, images.Destination()+"/"):
 			pushed = append(pushed, image)
-		default:
-			ours = append(ours, image)
 		}
 	}
 	resources.RemovePushedImages(ctx, images, app, pushed, keptNow, log)
 	if len(ours) == 0 {
 		return nil
 	}
-	removed, err := registry.Forget(ctx, api, ours, keptNow, time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Forget(ctx, api, target, ours, keptNow, time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }

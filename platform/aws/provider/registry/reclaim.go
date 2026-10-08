@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -123,7 +122,7 @@ func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded Record
 	if err != nil {
 		return nil, err
 	}
-	if !strings.HasPrefix(imageRef, target.Server+"/") {
+	if !IsInRegistry(target, imageRef) {
 		return nil, nil
 	}
 	repository, err := repositoryOf(target, imageRef)
@@ -149,14 +148,10 @@ func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded Record
 	return sweepRepository(ctx, api, target, repository, kept, keptWithOwn, pushedBefore)
 }
 
-func Forget(ctx context.Context, api ECRAPI, imageRefs []string, recorded Recorded, sweptBefore time.Time) ([]string, error) {
-	target, err := Resolve(ctx, api)
-	if err != nil {
-		return nil, err
-	}
+func Forget(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRefs []string, recorded Recorded, sweptBefore time.Time) ([]string, error) {
 	var ours []string
 	for _, imageRef := range imageRefs {
-		if strings.HasPrefix(imageRef, target.Server+"/") {
+		if IsInRegistry(target, imageRef) {
 			ours = append(ours, imageRef)
 		}
 	}

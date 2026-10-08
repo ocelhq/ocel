@@ -86,9 +86,8 @@ func Images(target provider.RegistryTarget, api ECRAPI) provider.ImageStore {
 	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target)}
 }
 
-func HoldsImagesOf(store provider.ImageStore) bool {
-	_, ecr := store.(ecrImages)
-	return ecr
+func IsInRegistry(target provider.RegistryTarget, imageRef string) bool {
+	return strings.HasPrefix(imageRef, target.Server+"/")
 }
 
 func (i ecrImages) String() string {
