@@ -106,7 +106,7 @@ func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier envir
 		}
 		if current.Token == "" {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
-				"the lease this deploy held on %s ran out and was freed, so another deploy may have changed %s since: deploy again",
+				"this deploy holds no lease on %s: it ran out and was freed, or was never taken, so another deploy may have changed %s since: deploy again",
 				env, env)
 		}
 		if current.Token != token {

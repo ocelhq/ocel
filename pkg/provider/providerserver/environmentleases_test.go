@@ -278,3 +278,28 @@ func TestADryDeployNeverWaitsOnTheDeployHoldingTheEnvironment(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want a dry deploy planned beside the deploy that holds the environment: it writes nothing", result.GetError())
 	}
 }
+
+func TestADeployWhoseLeaseAnotherDeployTookOverAndFreedIsRefusedRatherThanTakingItBack(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+	takeLeaseOver(t, vendor.KeyValues(), otherEnvironmentLease)
+	if err := stackrecords.ForgetEnvironmentLease(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv, otherEnvironmentLease); err != nil {
+		t.Fatal(err)
+	}
+	provisioned := len(vendor.FakeStacks().Provisioned())
+
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "holds no lease on prod") {
+		t.Fatalf("Deploy() = %q, want it refused: the lease that provisioned its infra was taken over and freed, so the infra may not be what it provisioned", result.GetError())
+	}
+	if specs := vendor.FakeStacks().Provisioned(); len(specs) != provisioned {
+		t.Errorf("the refused deploy provisioned %d more stacks, want none", len(specs)-provisioned)
+	}
+	if readEnvironmentLease(t, vendor) {
+		t.Error("the refused deploy took the freed lease back, want the environment left free")
+	}
+}

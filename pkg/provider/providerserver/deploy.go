@@ -56,12 +56,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		}
 		var token string
 		if !req.GetDry() {
-			if token = req.GetLeaseToken(); token == "" {
-				if token, err = stackrecords.NewEnvironmentLeaseToken(); err != nil {
-					return nil, err
-				}
-			}
-			if _, err := h.holdEnvironment(ctx, spec, token); err != nil {
+			if token, err = h.claimEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
 				return nil, err
 			}
 			defer h.releaseEnvironment(ctx, spec, token)
@@ -73,6 +68,18 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		run.leases, run.leaseToken = h.leases, token
 		return run.execute(ctx)
 	})
+}
+
+func (h *handlers) claimEnvironment(ctx context.Context, spec provider.DeploySpec, provisionedUnder string) (string, error) {
+	if provisionedUnder != "" {
+		return provisionedUnder, h.keepEnvironment(ctx, spec, provisionedUnder)
+	}
+	token, err := stackrecords.NewEnvironmentLeaseToken()
+	if err != nil {
+		return "", err
+	}
+	_, err = h.holdEnvironment(ctx, spec, token)
+	return token, err
 }
 
 type deploySpans struct {
