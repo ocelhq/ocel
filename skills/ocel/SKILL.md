@@ -53,9 +53,9 @@ Pass `--json` (or set `OCEL_JSON=1` once) on every command you run.
   holding `success`, the apps and URLs, `error` on failure, and `assumed`.
 - `ocel schema <command>` prints the JSON Schema of a command's output.
 
-An `error` has a stable `code`, a `message`, often a `hint` and a `docs_url`. Act on the
+An `error` has a stable `code`, a `message`, often a `hint` and a `docsUrl`. Act on the
 `hint` first: it is the exact command or flag that resolves the error. When the hint is not
-enough, fetch the `docs_url` with `.md` appended for that error's page as markdown.
+enough, fetch the `docsUrl` with `.md` appended for that error's page as markdown.
 `input_required` names the flag that supplies the missing answer; supply it, or ask the
 human for the value when it is theirs to choose. `assumed` lists confirmations Ocel took on
 the human's behalf because nobody could be asked (such as creating a new project); report
