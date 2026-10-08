@@ -186,6 +186,7 @@ func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
 		return err
 	}
 	r.infraHoldsUndeclared = len(undeclared) > 0
+	r.bindings = recorded.Bindings
 	return nil
 }
 
