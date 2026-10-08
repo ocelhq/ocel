@@ -52,10 +52,10 @@ func readEnvironmentLease(t *testing.T, vendor *fake.Provider) (held bool) {
 	return err == nil
 }
 
-func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
+func recordLease(t *testing.T, store keyvalue.Store, tier environment.Tier, env, token string) {
 	t.Helper()
 	ctx := context.Background()
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(tier, "shop", env))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +63,28 @@ func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
 		t.Fatal(err)
 	}
 	if _, err := store.Write(ctx, recorded); err != nil {
-		t.Errorf("taking the lease over = %v", err)
+		t.Errorf("recording a lease = %v", err)
 	}
+}
+
+func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
+	t.Helper()
+	recordLease(t, store, environment.TierProduction, stackrecords.ProductionEnv, token)
+}
+
+func takeLeaseAsDeploy(store keyvalue.Store, tier environment.Tier, env string) error {
+	_, err := stackrecords.TakeEnvironmentLease(context.Background(), store, tier, "shop", env,
+		otherEnvironmentLease, stackrecords.LeaseDeploy, stackrecords.LeaseTerms{TTL: time.Minute, Now: time.Now})
+	return err
+}
+
+func isLeaseHeld(t *testing.T, store keyvalue.Store, tier environment.Tier, env string) bool {
+	t.Helper()
+	_, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(tier, "shop", env))
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Fatalf("reading the lease on %s = %v", env, err)
+	}
+	return err == nil
 }
 
 func TestProvisionInfraRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.T) {

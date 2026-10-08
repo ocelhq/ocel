@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	connect "connectrpc.com/connect"
@@ -231,9 +232,38 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return err
 		}
+		removed, err := removal.listRemovedEnvironments(ctx)
+		if err != nil {
+			return err
+		}
+		holds, err := h.leases.takeEach(ctx, removal.provider.KeyValues(), removed, stackrecords.LeaseRemoval)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = holds.release(ctx) }()
 		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
-		return removal.run(ctx, progress)
+		return holds.explain(removal.run(holds.context(ctx), progress))
 	})
+}
+
+func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]environmentScope, error) {
+	envs := r.environments()
+	leased, err := stackrecords.ListEnvironmentLeases(ctx, r.provider.KeyValues(), r.tier, r.slug)
+	if err != nil {
+		return nil, err
+	}
+	envs = append(envs, leased...)
+	metas, err := stackrecords.EnvironmentMetas(ctx, r.provider.KeyValues(), r.tier, r.slug)
+	if err != nil {
+		return nil, err
+	}
+	envs = append(envs, slices.Collect(maps.Keys(metas))...)
+	slices.Sort(envs)
+	scopes := make([]environmentScope, 0, len(envs))
+	for _, env := range slices.Compact(envs) {
+		scopes = append(scopes, environmentScope{tier: r.tier, slug: r.slug, env: env})
+	}
+	return scopes, nil
 }
 
 func removalTitle(env *environmentv1.Environment) progress.Title {

@@ -140,38 +140,48 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
-		if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
-			return err
-		}
-		removal, err := readPreviewRemoval(ctx, session.provider.KeyValues(), req.GetSlug(), pointer)
+		preview := environmentScope{tier: environment.TierPreview, slug: req.GetSlug(), env: pointer}
+		holds, err := h.leases.takeEach(ctx, session.provider.KeyValues(), []environmentScope{preview}, stackrecords.LeaseRemoval)
 		if err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
-		removed, err := session.removePointer(ctx, removal, progress)
-		if err != nil {
-			return err
-		}
-		if err := session.releasePointerHostnames(ctx, pointer, progress); err != nil {
-			return err
-		}
-		if err := session.checkpoint(ctx); err != nil {
-			return err
-		}
-		if err := ReclaimPreview(ctx, session.provider, removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), req.GetSlug(), pointer, removed, progress); err != nil {
-			return err
-		}
-		if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
-			return err
-		}
-		if err := keyvalue.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
-			return err
-		}
-		for _, line := range pruneLines(removed) {
-			progress.Say(line)
-		}
-		return nil
+		defer func() { _ = holds.release(ctx) }()
+		return holds.explain(removePreview(holds.context(ctx), session, req, pointer, progress))
 	})
+}
+
+func removePreview(ctx context.Context, session *edgeSession, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
+	if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
+		return err
+	}
+	removal, err := readPreviewRemoval(ctx, session.provider.KeyValues(), req.GetSlug(), pointer)
+	if err != nil {
+		return err
+	}
+	progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
+	removed, err := session.removePointer(ctx, removal, progress)
+	if err != nil {
+		return err
+	}
+	if err := session.releasePointerHostnames(ctx, pointer, progress); err != nil {
+		return err
+	}
+	if err := session.checkpoint(ctx); err != nil {
+		return err
+	}
+	if err := ReclaimPreview(ctx, session.provider, removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), req.GetSlug(), pointer, removed, progress); err != nil {
+		return err
+	}
+	if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+		return err
+	}
+	if err := keyvalue.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
+		return err
+	}
+	for _, line := range pruneLines(removed) {
+		progress.Say(line)
+	}
+	return nil
 }
 
 func refuseUnconfirmedLifecycle(ctx context.Context, store keyvalue.Store, slug, preview string, confirmed environmentv1.Lifecycle) error {

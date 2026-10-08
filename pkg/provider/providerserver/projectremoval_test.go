@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -115,6 +116,66 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("the project still records %v, want every stack forgotten", entries)
+	}
+}
+
+func removeProject(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.ProjectRequest) *progressv1.OperationResult {
+	t.Helper()
+	stream, err := client.RemoveProject(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestRemoveProjectIsRefusedWhileADeployHoldsProduction(t *testing.T) {
+	client, vendor := deployedProject(t)
+	takeLeaseOver(t, vendor.KeyValues(), otherEnvironmentLease)
+
+	result := removeProject(t, client, projectRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "a deploy to prod is running: remove it again once it ends") {
+		t.Fatalf("RemoveProject() = %q, want it refused while a deploy holds production", result.GetError())
+	}
+	if entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop"); err != nil || len(entries) == 0 {
+		t.Errorf("the refused removal left %d stacks recorded (%v), want every stack kept", len(entries), err)
+	}
+}
+
+func TestRemovingEveryPreviewIsRefusedWhileAFirstDeployToOneHoldsItsLease(t *testing.T) {
+	client, vendor := deployedProject(t)
+	recordLease(t, vendor.KeyValues(), environment.TierPreview, "pr-9", otherEnvironmentLease)
+
+	result := removeProject(t, client, &contractv1.ProjectRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+	})
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "a deploy to pr-9 is running") {
+		t.Fatalf("RemoveProject() of every preview = %q, want it refused while a deploy holds pr-9, though pr-9 records no stack yet", result.GetError())
+	}
+}
+
+func TestRemoveProjectHoldsProductionWhileItRemovesItAndLeavesNoLeaseBehind(t *testing.T) {
+	client, vendor := deployedProject(t)
+	var during error
+	relayPlane(vendor).BeforeNextPointerRemoval(func() {
+		during = takeLeaseAsDeploy(vendor.KeyValues(), environment.TierProduction, stackrecords.ProductionEnv)
+	})
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+
+	if during == nil || !strings.Contains(during.Error(), "a removal of prod is running") {
+		t.Errorf("a deploy taking production while it was removed = %v, want it refused because the removal holds production", during)
+	}
+	if isLeaseHeld(t, vendor.KeyValues(), environment.TierProduction, stackrecords.ProductionEnv) {
+		t.Error("production still records a lease after the project was removed, want nothing left behind")
 	}
 }
 

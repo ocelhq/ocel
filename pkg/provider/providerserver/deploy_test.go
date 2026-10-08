@@ -2039,7 +2039,25 @@ func TestADeployPassesOnAWarningTheEdgeRaisesWhileItReconciles(t *testing.T) {
 	}
 }
 
-func TestADeploymentHostnameIsNotServedWhenThePreviewIsRemovedBeforeItIsRouted(t *testing.T) {
+func removePersistentPr7(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
+	t.Helper()
+	removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop", Environment: &environmentv1.Environment{
+			Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Error(err)
+		return nil
+	}
+	removed, err := drain(removing)
+	if err != nil {
+		t.Error(err)
+	}
+	return removed
+}
+
+func TestRemovingAPreviewWhileItsDeployPromotesIsRefusedAndTheDeployLands(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
@@ -2051,83 +2069,48 @@ func TestADeploymentHostnameIsNotServedWhenThePreviewIsRemovedBeforeItIsRouted(t
 	var removed *progressv1.OperationResult
 	plane.BeforeNextPointerMove(func() {
 		plane.BeforeNextPointerMove(func() {
-			removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
-				Slug: "shop", Environment: &environmentv1.Environment{
-					Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
-				},
-			})
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if removed, err = drain(removing); err != nil {
-				t.Error(err)
-			}
+			removed = removePersistentPr7(t, client)
 		})
 	})
-	deploy(t, client, previewRequest())
+	result, _ := deploy(t, client, previewRequest())
 
-	if !removed.GetSuccess() {
-		t.Fatalf("RemoveEnvironment() between the promote and the deployment hostname's move = %q, want it to succeed", removed.GetError())
+	if removed.GetSuccess() || !strings.Contains(removed.GetError(), "a deploy to pr-7 is running: remove it again once it ends") {
+		t.Errorf("RemoveEnvironment() between the promote and the deployment hostname's move = %q, want it refused while the deploy holds pr-7", removed.GetError())
 	}
-	if served := plane.ListServedHostnames(); len(served) != 0 {
-		t.Errorf("after the preview was removed between its promote and its deployment hostname's move %v are served, want none: nothing records a deployment hostname routed after rm, so nothing would withdraw it", served)
+	if !result.GetSuccess() {
+		t.Errorf("Deploy() = %q, want it to land: the removal never ran", result.GetError())
 	}
 }
 
-func removePreviewWhileItProvisions(t *testing.T, client contractv1connect.ProviderServiceClient, vendor *fake.Provider) {
-	t.Helper()
-	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
-		if spec.App == nil {
-			return nil
-		}
-		removing, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
-			Slug: "shop", Environment: &environmentv1.Environment{
-				Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
-			},
-		})
-		if err != nil {
-			t.Error(err)
-			return nil
-		}
-		if removed, err := drain(removing); err != nil || !removed.GetSuccess() {
-			t.Errorf("RemoveEnvironment() while pr-7 provisioned = %q, %v", removed.GetError(), err)
-		}
-		return nil
-	})
-}
-
-func TestAPreviewRemovedAfterItsDeployClaimedItStaysRemoved(t *testing.T) {
+func TestRemovingAPreviewWhileItsDeployProvisionsIsRefusedAndTheDeployLands(t *testing.T) {
 	for name, existing := range map[string]bool{"on its first deploy": false, "on a deploy of an existing preview": true} {
 		t.Run(name, func(t *testing.T) {
 			builtProject(t)
 			client, vendor := deployServed(t)
 			previewBootstrapped(t, client)
-			plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 			if existing {
 				if first, _ := deploy(t, client, previewRequest()); !first.GetSuccess() {
 					t.Fatalf("Deploy() = %q", first.GetError())
 				}
 			}
-			removePreviewWhileItProvisions(t, client, vendor)
-			before := len(vendor.FakeStacks().Provisioned())
+			var removed *progressv1.OperationResult
+			vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+				if spec.App != nil && removed == nil {
+					removed = removePersistentPr7(t, client)
+				}
+				return nil
+			})
 
 			result, _ := deploy(t, client, previewRequest())
 
-			for _, spec := range vendor.FakeStacks().Provisioned()[before:] {
-				if vendor.FakeStacks().Inspect(spec.Ref).Present {
-					t.Errorf("stack %s provisioned for pr-7 is still up after pr-7 was removed, want it reclaimed", spec.Ref.Name)
-				}
+			if removed.GetSuccess() || !strings.Contains(removed.GetError(), "a deploy to pr-7 is running") {
+				t.Errorf("RemoveEnvironment() while pr-7 provisioned = %q, want it refused while the deploy holds pr-7", removed.GetError())
 			}
-			if result.GetSuccess() || !strings.Contains(result.GetError(), "pr-7 was removed") {
-				t.Errorf("Deploy() of a preview removed after its deploy claimed it = %q, want it refused as removed", result.GetError())
+			if !result.GetSuccess() {
+				t.Errorf("Deploy() = %q, want it to land: the removal never ran", result.GetError())
 			}
-			if isPreviewRecorded(t, vendor) {
-				meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), vendor.KeyValues(), environment.TierPreview, "shop", "pr-7")
-				t.Errorf("pr-7 records %+v (%v) after it was removed, want no record: a removed preview stays removed", meta, err)
-			}
-			if served := plane.ListServedHostnames(); len(served) != 0 {
-				t.Errorf("after pr-7 was removed its deploy serves %v, want nothing served", served)
+			if !isPreviewRecorded(t, vendor) {
+				t.Error("pr-7 is not recorded after its deploy landed")
 			}
 		})
 	}

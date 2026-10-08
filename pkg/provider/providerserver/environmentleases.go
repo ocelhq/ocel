@@ -221,6 +221,49 @@ func (h *environmentHold) release(ctx context.Context) error {
 	return stackrecords.ForgetEnvironmentLease(ctx, h.store, h.scope.tier, h.scope.slug, h.scope.env, h.token)
 }
 
+type environmentHolds []*environmentHold
+
+func (l *environmentLeases) takeEach(ctx context.Context, store keyvalue.Store, scopes []environmentScope, holder stackrecords.LeaseHolder) (environmentHolds, error) {
+	token, err := stackrecords.NewEnvironmentLeaseToken()
+	if err != nil {
+		return nil, err
+	}
+	var holds environmentHolds
+	for _, scope := range scopes {
+		hold, err := l.take(holds.context(ctx), store, scope, token, holder)
+		if err != nil {
+			_ = holds.release(ctx)
+			return nil, err
+		}
+		holds = append(holds, hold)
+	}
+	return holds, nil
+}
+
+func (hs environmentHolds) context(ctx context.Context) context.Context {
+	if len(hs) == 0 {
+		return ctx
+	}
+	return hs[len(hs)-1].leased
+}
+
+func (hs environmentHolds) explain(err error) error {
+	for _, hold := range hs {
+		if explained := hold.explain(err); explained != err {
+			return explained
+		}
+	}
+	return err
+}
+
+func (hs environmentHolds) release(ctx context.Context) error {
+	var errs []error
+	for i := len(hs) - 1; i >= 0; i-- {
+		errs = append(errs, hs[i].release(ctx))
+	}
+	return errors.Join(errs...)
+}
+
 func (h *handlers) takeEnvironment(ctx context.Context, spec provider.DeploySpec, token string) (*environmentHold, error) {
 	p, err := h.session.use()
 	if err != nil {

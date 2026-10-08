@@ -73,6 +73,7 @@ type DataPlane struct {
 	failure    error
 	unremoved  error
 	before     func()
+	beforeGone func()
 	says       string
 	progress   progress.Log
 	propagates *router.Propagation
@@ -129,6 +130,12 @@ func (d *DataPlane) BeforeNextPointerMove(before func()) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.before = before
+}
+
+func (d *DataPlane) BeforeNextPointerRemoval(before func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.beforeGone = before
 }
 
 func (d *DataPlane) SayOnPointerMove(said string) {
@@ -197,6 +204,13 @@ func (d *DataPlane) unrouteHosts(at projectPointer, hosts []edge.PreviewHost) {
 }
 
 func (d *DataPlane) remove(at projectPointer, hosts []edge.PreviewHost) error {
+	d.mu.Lock()
+	before := d.beforeGone
+	d.beforeGone = nil
+	d.mu.Unlock()
+	if before != nil {
+		before()
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if failure := d.unremoved; failure != nil {

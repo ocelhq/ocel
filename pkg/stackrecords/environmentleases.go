@@ -154,6 +154,18 @@ func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier envir
 	})
 }
 
+func ListEnvironmentLeases(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]string, error) {
+	recorded, err := store.List(ctx, EnvironmentLeasesPartition(tier, slug))
+	if err != nil {
+		return nil, fmt.Errorf("read %s's environment leases: %w", slug, err)
+	}
+	envs := make([]string, 0, len(recorded))
+	for _, entry := range recorded {
+		envs = append(envs, entry.Key.Path[0])
+	}
+	return envs, nil
+}
+
 func ForgetEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) error {
 	name := EnvironmentLeaseKey(tier, slug, env)
 	return keyvalue.ForgetMatching(ctx, store, name, func(recorded keyvalue.Entry) (bool, error) {
