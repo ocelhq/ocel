@@ -79,8 +79,58 @@ func EnvironmentLeaseKey(tier environment.Tier, slug, env string) keyvalue.Key {
 
 const leaseWriteAttempts = 5
 
+func ProjectLeaseKey(tier environment.Tier, slug string) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootProjectLeases}.Key(slug)
+}
+
+func describeProject(tier environment.Tier, slug string) string {
+	return fmt.Sprintf("%s in %s", slug, tier)
+}
+
 func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, holder LeaseHolder, terms LeaseTerms) (held bool, err error) {
 	name := EnvironmentLeaseKey(tier, slug, env)
+	held, err = takeLease(ctx, store, name, env, token, holder, terms)
+	if err != nil {
+		return false, err
+	}
+	if err := refuseHeldProject(ctx, store, tier, slug, token, holder, terms); err != nil {
+		if !held {
+			err = errors.Join(err, forgetLease(ctx, store, name, token))
+		}
+		return false, err
+	}
+	return held, nil
+}
+
+func refuseHeldProject(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder, terms LeaseTerms) error {
+	name := ProjectLeaseKey(tier, slug)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", name, err)
+	}
+	current, err := decodeEnvironmentLease(name, recorded)
+	if err != nil {
+		return err
+	}
+	if current.Token == "" || current.Token == token || !terms.Now().Before(time.Unix(current.ExpiresAt, 0)) {
+		return nil
+	}
+	return refuseHeldLease(describeProject(tier, slug), current, holder)
+}
+
+func TakeProjectLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder, terms LeaseTerms) (held bool, err error) {
+	return takeLease(ctx, store, ProjectLeaseKey(tier, slug), describeProject(tier, slug), token, holder, terms)
+}
+
+func RenewProjectLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder, terms LeaseTerms) error {
+	return renewLease(ctx, store, ProjectLeaseKey(tier, slug), describeProject(tier, slug), token, holder, terms)
+}
+
+func ForgetProjectLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string) error {
+	return forgetLease(ctx, store, ProjectLeaseKey(tier, slug), token)
+}
+
+func takeLease(ctx context.Context, store keyvalue.Store, name keyvalue.Key, env, token string, holder LeaseHolder, terms LeaseTerms) (held bool, err error) {
 	var (
 		watching     bool
 		watched      keyvalue.Revision
@@ -133,7 +183,10 @@ func refuseHeldLease(env string, held EnvironmentLease, taker LeaseHolder) error
 }
 
 func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, holder LeaseHolder, terms LeaseTerms) error {
-	name := EnvironmentLeaseKey(tier, slug, env)
+	return renewLease(ctx, store, EnvironmentLeaseKey(tier, slug, env), env, token, holder, terms)
+}
+
+func renewLease(ctx context.Context, store keyvalue.Store, name keyvalue.Key, env, token string, holder LeaseHolder, terms LeaseTerms) error {
 	return keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		current, err := decodeEnvironmentLease(name, recorded)
 		if err != nil {
@@ -167,7 +220,10 @@ func ListEnvironmentLeases(ctx context.Context, store keyvalue.Store, tier envir
 }
 
 func ForgetEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) error {
-	name := EnvironmentLeaseKey(tier, slug, env)
+	return forgetLease(ctx, store, EnvironmentLeaseKey(tier, slug, env), token)
+}
+
+func forgetLease(ctx context.Context, store keyvalue.Store, name keyvalue.Key, token string) error {
 	return keyvalue.ForgetMatching(ctx, store, name, func(recorded keyvalue.Entry) (bool, error) {
 		held, err := decodeEnvironmentLease(name, recorded)
 		return held.Token == token, err

@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -51,7 +50,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		return nil, err
 	}
 	if req.GetSlug() == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and a removal plan is drawn for one")
+		return nil, errUnnamedProject
 	}
 	tier, err := decodeTier(req.GetEnvironment().GetTier())
 	if err != nil {
@@ -225,28 +224,49 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(naming.SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
-		removal, err := h.openRemoval(ctx, req)
+		if req.GetSlug() == "" {
+			return errUnnamedProject
+		}
+		vendor, err := h.session.use()
 		if err != nil {
 			return err
+		}
+		tier, err := decodeTier(req.GetEnvironment().GetTier())
+		if err != nil {
+			return err
+		}
+		token, err := stackrecords.NewEnvironmentLeaseToken()
+		if err != nil {
+			return err
+		}
+		project, err := h.leases.takeEach(ctx, vendor.KeyValues(), token, []leaseSubject{projectScope{tier: tier, slug: req.GetSlug()}}, stackrecords.LeaseRemoval)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = project.release(ctx) }()
+		removal, err := h.openRemoval(project.context(ctx), req)
+		if err != nil {
+			return project.explain(err)
 		}
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return err
 		}
-		removed, err := removal.listRemovedEnvironments(ctx)
+		removed, err := removal.listRemovedEnvironments(project.context(ctx))
 		if err != nil {
-			return err
+			return project.explain(err)
 		}
-		holds, err := h.leases.takeEach(ctx, removal.provider.KeyValues(), removed, stackrecords.LeaseRemoval)
+		environments, err := h.leases.takeEach(project.context(ctx), vendor.KeyValues(), token, removed, stackrecords.LeaseRemoval)
 		if err != nil {
-			return err
+			return project.explain(err)
 		}
-		defer func() { _ = holds.release(ctx) }()
+		defer func() { _ = environments.release(ctx) }()
+		holds := append(slices.Clone(project), environments...)
 		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
-		return holds.explain(removal.run(holds.context(ctx), progress))
+		return holds.explain(removal.run(environments.context(project.context(ctx)), progress))
 	})
 }
 
-func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]environmentScope, error) {
+func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]leaseSubject, error) {
 	envs := r.environments()
 	leased, err := stackrecords.ListEnvironmentLeases(ctx, r.provider.KeyValues(), r.tier, r.slug)
 	if err != nil {
@@ -259,7 +279,7 @@ func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]environ
 	}
 	envs = append(envs, slices.Collect(maps.Keys(metas))...)
 	slices.Sort(envs)
-	scopes := make([]environmentScope, 0, len(envs))
+	scopes := make([]leaseSubject, 0, len(envs))
 	for _, env := range slices.Compact(envs) {
 		scopes = append(scopes, environmentScope{tier: r.tier, slug: r.slug, env: env})
 	}
