@@ -36,7 +36,11 @@ type fakeGitHub struct {
 	pkgDeleted  bool
 	deletedRefs []int
 
-	pushedOnRefusal *packageVersion
+	pushedOnRefusal    *packageVersion
+	pushedAfterListing *packageVersion
+	goneOnRefusal      bool
+	refuseVersions     bool
+	refusal            string
 }
 
 func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +97,10 @@ func (f *fakeGitHub) listVersions(w http.ResponseWriter, r *http.Request) {
 			"metadata": map[string]any{"package_type": "container", "container": map[string]any{"tags": version.tags}},
 		})
 	}
+	if f.pushedAfterListing != nil {
+		f.versions = append(f.versions, *f.pushedAfterListing)
+		f.pushedAfterListing = nil
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(listed)
 }
@@ -107,12 +115,20 @@ func (f *fakeGitHub) deleteVersion(w http.ResponseWriter, id string) {
 		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
 		return
 	}
-	if len(f.versions) == 1 {
+	if len(f.versions) == 1 || f.goneOnRefusal || f.refuseVersions {
 		if f.pushedOnRefusal != nil {
 			f.versions = append(f.versions, *f.pushedOnRefusal)
 			f.pushedOnRefusal = nil
 		}
-		http.Error(w, `{"message":"You cannot delete the last tagged version of a package. You must delete the package instead."}`, http.StatusBadRequest)
+		if f.goneOnRefusal {
+			f.versions = slices.DeleteFunc(f.versions, func(version packageVersion) bool { return strconv.Itoa(version.id) != id })
+			f.goneOnRefusal = false
+		}
+		refusal := f.refusal
+		if refusal == "" {
+			refusal = "You cannot delete the last tagged version of a package. You must delete the package instead."
+		}
+		http.Error(w, `{"message":"`+refusal+`"}`, http.StatusBadRequest)
 		return
 	}
 	f.deletedRefs = append(f.deletedRefs, f.versions[at].id)
@@ -205,34 +221,60 @@ func TestRemovingAnImageFromGHCRPagesThroughTheVersions(t *testing.T) {
 	}
 }
 
-func TestRemovingTheLastVersionFromGHCRDeletesThePackage(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: []packageVersion{
-		{id: 2, name: "sha256:" + strings.Repeat("2", 64), tags: []string{"sha256-going"}},
-	}}
+func onlyGoingVersion() []packageVersion {
+	return []packageVersion{{id: 2, name: "sha256:" + strings.Repeat("2", 64), tags: []string{"sha256-going"}}}
+}
+
+func TestRemovingThePackagesOnlyVersionFromGHCRDeletesThePackageWithoutAskingForTheVersion(t *testing.T) {
+	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: onlyGoingVersion()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	if !f.pkgDeleted {
-		t.Errorf("Remove() asked %v and left the package: GitHub refuses to delete a package's last version, and the package itself is what goes", f.deletes())
+	if want := []string{"DELETE /orgs/acme/packages/container/shop.web"}; !slices.Equal(f.deletes(), want) {
+		t.Errorf("Remove() deleted %v, want %v: the listing shows the version is the package's only one, and GitHub deletes a package's last version only with the package", f.deletes(), want)
 	}
 }
 
-func TestRemovingTheLastVersionFromGHCRKeepsThePackageAnotherDeployPushedToMeanwhile(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: []packageVersion{
-		{id: 2, name: "sha256:" + strings.Repeat("2", 64), tags: []string{"sha256-going"}},
-	}, pushedOnRefusal: &packageVersion{id: 4, name: "sha256:" + strings.Repeat("4", 64), tags: []string{"sha256-just-pushed"}}}
+func TestRemovingTheOnlyVersionFromGHCRKeepsThePackageAnotherDeployPushedToBeforeTheDelete(t *testing.T) {
+	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: onlyGoingVersion(),
+		pushedAfterListing: &packageVersion{id: 4, name: "sha256:" + strings.Repeat("4", 64), tags: []string{"sha256-just-pushed"}}}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
 	if f.pkgDeleted {
-		t.Fatal("Remove() deleted the package, and with it the version another deploy pushed after GitHub refused to delete the last one")
+		t.Fatal("Remove() deleted the package, and with it the version another deploy pushed after the version going was listed")
 	}
 	if want := []int{2}; !slices.Equal(f.deletedRefs, want) {
 		t.Errorf("Remove() deleted the versions %v, want %v: once the package holds another version, the one going is no longer its last", f.deletedRefs, want)
+	}
+}
+
+func TestRemovingAVersionGHCRRefusesDecidesFromTheListingAndNotFromGitHubsWording(t *testing.T) {
+	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions()[1:], goneOnRefusal: true, refusal: "Bad request"}
+
+	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+
+	if !f.pkgDeleted {
+		t.Errorf("Remove() asked %v and left the package: once the listing shows the version going is the only one left, the package is what goes, whatever GitHub's refusal said", f.deletes())
+	}
+}
+
+func TestRemovingAVersionGHCRRefusesWhileTheListingShowsOthersFailsAndNamesTheRefusal(t *testing.T) {
+	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions(), refuseVersions: true, refusal: "Bad request"}
+
+	err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing)
+
+	if err == nil || !strings.Contains(err.Error(), "Bad request") {
+		t.Errorf("Remove() = %v, want the refusal named: the package still lists other versions, so deleting it would take them", err)
+	}
+	if f.pkgDeleted {
+		t.Error("Remove() deleted a package that lists other versions")
 	}
 }
 
