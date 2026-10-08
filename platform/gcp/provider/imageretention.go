@@ -16,6 +16,7 @@ import (
 	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -151,33 +152,42 @@ func isImageMissing(err error, image string) bool {
 	return err != nil && strings.Contains(err.Error(), "Image '"+image+"' not found")
 }
 
-func (p *Provider) ensureImageTag(ctx context.Context, c *clients, image string) error {
+func (p *Provider) ensureImageTag(ctx context.Context, c *clients, image, version string) (string, error) {
 	name, tagged := artifactTag(image)
 	if !tagged {
-		return nil
+		return "", nil
 	}
 	at := strings.LastIndex(name, "/tags/")
 	packageName, tag := name[:at], name[at+len("/tags/"):]
 	digest, isDigestTag := strings.CutPrefix(tag, digestTagPrefix)
 	if !isDigestTag {
-		return nil
+		return "", nil
 	}
 	repositories, err := c.Repositories()
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
+	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
 		return repositories.Projects.Locations.Repositories.Packages.Tags.Get(name).Context(ctx).Do(call...)
 	})
+	if err == nil {
+		return held.Version, nil
+	}
 	if !absent(err) {
-		return err
+		return "", err
+	}
+	if version == "" {
+		if strings.Contains(digest, naming.WordSeparator) {
+			return "", fmt.Errorf("%s was untagged by a prune since it was pushed, and its tag names no version to tag again: deploy again to push it", image)
+		}
+		version = packageName + "/versions/sha256:" + digest
 	}
 	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
 		return repositories.Projects.Locations.Repositories.Packages.Tags.
-			Create(packageName, &artifactregistry.Tag{Version: packageName + "/versions/sha256:" + digest}).TagId(tag).Context(ctx).Do(call...)
+			Create(packageName, &artifactregistry.Tag{Version: version}).TagId(tag).Context(ctx).Do(call...)
 	})
 	if err != nil {
-		return fmt.Errorf("tag %s again, which a prune untagged after this deploy found it pushed: %w", image, err)
+		return "", fmt.Errorf("tag %s again, which a prune untagged after this deploy found it pushed: %w", image, err)
 	}
-	return nil
+	return version, nil
 }

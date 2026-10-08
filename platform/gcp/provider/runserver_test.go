@@ -52,6 +52,7 @@ type runServer struct {
 	asked     []string
 	missing   []string
 	retagged  []string
+	versions  map[string]string
 
 	untagAtRelease    string
 	untagEveryRelease bool
@@ -320,7 +321,7 @@ func (s *runServer) getTag(w http.ResponseWriter, name string) {
 		w.Write([]byte(`{"error":{"code":404,"message":"tag not found"}}`))
 		return
 	}
-	writeBody(w, map[string]any{"name": unescaped})
+	writeBody(w, map[string]any{"name": unescaped, "version": s.versions[unescaped]})
 }
 
 func (s *runServer) createTag(w http.ResponseWriter, r *http.Request) {
