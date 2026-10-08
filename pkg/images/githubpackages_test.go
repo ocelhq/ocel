@@ -25,16 +25,16 @@ type packageVersion struct {
 type fakeGitHub struct {
 	mu sync.Mutex
 
-	scope    string
-	pkg      string
-	versions []packageVersion
+	scope       string
+	packageName string
+	versions    []packageVersion
 
-	throttled   int
-	scopeless   bool
-	asked       []string
-	tokens      []string
-	pkgDeleted  bool
-	deletedRefs []int
+	throttled      int
+	scopeless      bool
+	asked          []string
+	tokens         []string
+	packageDeleted bool
+	deletedRefs    []int
 
 	pushedOnRefusal    *packageVersion
 	pushedAfterListing *packageVersion
@@ -54,10 +54,10 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message":"You have exceeded a secondary rate limit"}`, http.StatusTooManyRequests)
 		return
 	}
-	root := "/" + f.scope + "/packages/container/" + strings.ReplaceAll(f.pkg, "/", "%2F")
+	root := "/" + f.scope + "/packages/container/" + strings.ReplaceAll(f.packageName, "/", "%2F")
 	path := r.URL.EscapedPath()
 	rest, ours := strings.CutPrefix(path, root)
-	if !ours || f.pkgDeleted {
+	if !ours || f.packageDeleted {
 		http.Error(w, `{"message":"Package not found."}`, http.StatusNotFound)
 		return
 	}
@@ -71,7 +71,7 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"message":"You need at least delete:packages scope"}`, http.StatusForbidden)
 			return
 		}
-		f.pkgDeleted = true
+		f.packageDeleted = true
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "unexpected", http.StatusTeapot)
@@ -167,7 +167,7 @@ func shopWebVersions() []packageVersion {
 const ghcrGoing = "ghcr.io/acme/shop.web:sha256-going"
 
 func TestRemovingAnImageFromGHCRDeletesTheOrganizationPackageVersionItsTagNames(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions()}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -182,7 +182,7 @@ func TestRemovingAnImageFromGHCRDeletesTheOrganizationPackageVersionItsTagNames(
 }
 
 func TestRemovingAnImageFromGHCRFindsAPackageAUserOwns(t *testing.T) {
-	f := &fakeGitHub{scope: "users/acme", pkg: "shop.web", versions: shopWebVersions()}
+	f := &fakeGitHub{scope: "users/acme", packageName: "shop.web", versions: shopWebVersions()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -194,7 +194,7 @@ func TestRemovingAnImageFromGHCRFindsAPackageAUserOwns(t *testing.T) {
 }
 
 func TestRemovingAnImageFromGHCREscapesTheSlashesOfANestedPackage(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "ocel/shop.web", versions: shopWebVersions()}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "ocel/shop.web", versions: shopWebVersions()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), "ghcr.io/acme/ocel/shop.web:sha256-going"); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -210,7 +210,7 @@ func TestRemovingAnImageFromGHCRPagesThroughTheVersions(t *testing.T) {
 	for id := 1; id <= 150; id++ {
 		versions = append(versions, packageVersion{id: id, name: fmt.Sprintf("sha256:%064d", id), tags: []string{fmt.Sprintf("sha256-%d", id)}})
 	}
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: versions}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: versions}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), "ghcr.io/acme/shop.web:sha256-140"); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -226,7 +226,7 @@ func onlyGoingVersion() []packageVersion {
 }
 
 func TestRemovingThePackagesOnlyVersionFromGHCRDeletesThePackageWithoutAskingForTheVersion(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: onlyGoingVersion()}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: onlyGoingVersion()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -238,14 +238,14 @@ func TestRemovingThePackagesOnlyVersionFromGHCRDeletesThePackageWithoutAskingFor
 }
 
 func TestRemovingTheOnlyVersionFromGHCRKeepsThePackageAnotherDeployPushedToBeforeTheDelete(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: onlyGoingVersion(),
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: onlyGoingVersion(),
 		pushedAfterListing: &packageVersion{id: 4, name: "sha256:" + strings.Repeat("4", 64), tags: []string{"sha256-just-pushed"}}}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	if f.pkgDeleted {
+	if f.packageDeleted {
 		t.Fatal("Remove() deleted the package, and with it the version another deploy pushed after the version going was listed")
 	}
 	if want := []int{2}; !slices.Equal(f.deletedRefs, want) {
@@ -254,32 +254,32 @@ func TestRemovingTheOnlyVersionFromGHCRKeepsThePackageAnotherDeployPushedToBefor
 }
 
 func TestRemovingAVersionGHCRRefusesDecidesFromTheListingAndNotFromGitHubsWording(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions()[1:], goneOnRefusal: true, refusal: "Bad request"}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions()[1:], goneOnRefusal: true, refusal: "Bad request"}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	if !f.pkgDeleted {
+	if !f.packageDeleted {
 		t.Errorf("Remove() asked %v and left the package: once the listing shows the version going is the only one left, the package is what goes, whatever GitHub's refusal said", f.deletes())
 	}
 }
 
 func TestRemovingAVersionGHCRRefusesWhileTheListingShowsOthersFailsAndNamesTheRefusal(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions(), refuseVersions: true, refusal: "Bad request"}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions(), refuseVersions: true, refusal: "Bad request"}
 
 	err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing)
 
 	if err == nil || !strings.Contains(err.Error(), "Bad request") {
 		t.Errorf("Remove() = %v, want the refusal named: the package still lists other versions, so deleting it would take them", err)
 	}
-	if f.pkgDeleted {
+	if f.packageDeleted {
 		t.Error("Remove() deleted a package that lists other versions")
 	}
 }
 
 func TestRemovingAnImageFromGHCRWithATokenThatMayNotDeleteNamesTheScopeItLacks(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions(), scopeless: true}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions(), scopeless: true}
 
 	err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing)
 
@@ -289,7 +289,7 @@ func TestRemovingAnImageFromGHCRWithATokenThatMayNotDeleteNamesTheScopeItLacks(t
 }
 
 func TestRemovingAnImageGHCRDoesNotHaveIsDone(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "blog.web", versions: shopWebVersions()}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "blog.web", versions: shopWebVersions()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Errorf("Remove() = %v, want nothing: a package that is already gone is reclaimed", err)
@@ -300,7 +300,7 @@ func TestRemovingAnImageGHCRDoesNotHaveIsDone(t *testing.T) {
 }
 
 func TestRemovingATagGHCRNoLongerListsIsDone(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions()}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions()}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), "ghcr.io/acme/shop.web:sha256-gone"); err != nil {
 		t.Errorf("Remove() = %v, want nothing", err)
@@ -313,7 +313,7 @@ func TestRemovingATagGHCRNoLongerListsIsDone(t *testing.T) {
 func TestRemovingAnImageFromGHCRLeavesAVersionAnotherTagStillNames(t *testing.T) {
 	versions := shopWebVersions()
 	versions[1].tags = []string{"sha256-going", "sha256-kept-too"}
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: versions}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: versions}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -324,7 +324,7 @@ func TestRemovingAnImageFromGHCRLeavesAVersionAnotherTagStillNames(t *testing.T)
 }
 
 func TestRemovingAnImageFromGHCRRetriesAThrottledRequest(t *testing.T) {
-	f := &fakeGitHub{scope: "orgs/acme", pkg: "shop.web", versions: shopWebVersions(), throttled: 2}
+	f := &fakeGitHub{scope: "orgs/acme", packageName: "shop.web", versions: shopWebVersions(), throttled: 2}
 
 	if err := gitHubServing(t, f).Remove(context.Background(), ghcrGoing); err != nil {
 		t.Fatalf("Remove() = %v, want the throttled requests retried", err)

@@ -448,9 +448,9 @@ func TestPruningPromotionsSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItRecl
 		t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 	}
 
-	reqs := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
-	if len(reqs) != 1 || !isTheProjectsRegistry(reqs[0].GetProjectRegistry()) {
-		t.Errorf("the prune sent %d requests, want one naming the project's registry with its secret resolved", len(reqs))
+	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(requests) != 1 || !isTheProjectsRegistry(requests[0].GetProjectRegistry()) {
+		t.Errorf("the prune sent %d requests, want one naming the project's registry with its secret resolved", len(requests))
 	}
 }
 
@@ -466,9 +466,9 @@ func TestPruningPromotionsWhoseRegistryVariableIsUnsetStillPrunesAndSaysWhatItLe
 		t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 	}
 
-	reqs := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
-	if len(reqs) != 1 || reqs[0].GetProjectRegistry() != nil {
-		t.Errorf("the prune sent %d requests, want one naming no registry: a token that is gone must not keep promotions from being reclaimed", len(reqs))
+	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(requests) != 1 || requests[0].GetProjectRegistry() != nil {
+		t.Errorf("the prune sent %d requests, want one naming no registry: a token that is gone must not keep promotions from being reclaimed", len(requests))
 	}
 	if out := stdout.String(); !strings.Contains(out, "OCEL_TEST_REGISTRY_TOKEN") {
 		t.Errorf("stdout = %q, want it to say the images stay and name the unset variable", out)
