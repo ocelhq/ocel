@@ -57,6 +57,8 @@ pub struct SessionKey { pub id: String }
 pub sessions: ocel::Kv,
 ```
 
+In TypeScript, `ioredis` is a peer dependency the app installs itself.
+
 ## Behaviour
 
 - **Eviction:** `noeviction` is the default, so a full store refuses writes. A cache wants `allkeys-lru`.
