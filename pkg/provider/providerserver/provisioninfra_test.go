@@ -393,6 +393,51 @@ func TestProvisionInfraKeepsAResourceNoLongerDeclaredUntilTheDeployOverItRemoves
 	}
 }
 
+func lastInfraBindingTypes(vendor *fake.Provider) map[string][]provider.BindingType {
+	var held map[string][]provider.BindingType
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind != provider.StackInfra {
+			continue
+		}
+		held = map[string][]provider.BindingType{}
+		for _, resource := range spec.Resources {
+			held[resource.Name] = append(held[resource.Name], resource.Type)
+		}
+	}
+	return held
+}
+
+func TestProvisionInfraKeepsAResourceDeclaredAsAnotherTypeUntilTheDeployOverItReplacesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	before := deployRequest()
+	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
+	provisionedInfra(t, client, infraRequest(before))
+	before.InfraProvisioned = true
+	if result, _ := deploy(t, client, before); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	after := deployRequest()
+	after.Manifest.Resources = append(after.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "legacy",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "legacy"},
+	})
+	provisionedInfra(t, client, infraRequest(after))
+
+	if held := lastInfraBindingTypes(vendor)["legacy"]; !slices.Equal(held, []provider.BindingType{provider.BindingPostgres}) {
+		t.Errorf("ProvisionInfra() left the infra stack holding legacy as %v, want the postgres kept: a build that fails next leaves the live release reading it", held)
+	}
+
+	after.InfraProvisioned = true
+	if result, _ := deploy(t, client, after); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if held := lastInfraBindingTypes(vendor)["legacy"]; !slices.Equal(held, []provider.BindingType{provider.BindingBucket}) {
+		t.Errorf("the deploy over the infra left it holding legacy as %v, want the bucket it declares", held)
+	}
+}
+
 func TestADeployOverInfraHoldingOnlyWhatItDeclaresProvisionsNoInfra(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

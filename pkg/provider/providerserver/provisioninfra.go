@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -227,13 +228,22 @@ func (r *deployRun) listUndeclaredResources(recorded stackrecords.Stack) ([]*con
 	if err := proto.Unmarshal(recorded.Resources, &held); err != nil {
 		return nil, fmt.Errorf("read the resources %s holds: %w", r.spec.Infra, err)
 	}
-	declared := map[string]bool{}
+	declared := map[typedResourceName]bool{}
 	for _, resource := range r.manifest.GetResources() {
-		declared[resourceName(resource)] = true
+		declared[newTypedResourceName(resource)] = true
 	}
 	return slices.DeleteFunc(held.GetResources(), func(resource *contractv1.ManifestResource) bool {
-		return declared[resourceName(resource)]
+		return declared[newTypedResourceName(resource)]
 	}), nil
+}
+
+type typedResourceName struct {
+	resourceType resourcesv1.ResourceType
+	name         string
+}
+
+func newTypedResourceName(resource *contractv1.ManifestResource) typedResourceName {
+	return typedResourceName{resource.GetResource().GetType(), resourceName(resource)}
 }
 
 func resourceName(resource *contractv1.ManifestResource) string {
