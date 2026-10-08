@@ -48,8 +48,6 @@ func (n Namespace) paramRoot() string { return "/" + string(n) }
 
 func (n Namespace) PassphraseParamName() string { return n.paramRoot() + "/pulumi/passphrase" }
 
-func (n Namespace) stackRecordRoot() string { return n.paramRoot() + "/rootstack" }
-
 func (n Namespace) KVTokenRoot() string { return n.paramRoot() + "/kv" }
 
 func (n Namespace) SigningKeyRoot() string { return string(n) + "/realtime" }

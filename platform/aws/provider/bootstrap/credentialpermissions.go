@@ -113,19 +113,16 @@ type ScopedARNs struct {
 	runtimeChangeSet     string
 	runtimeLayers        []string
 	runtimeLayerVersions []string
-	bootstrapRole        string
+	bootstrapRoles       []string
 	bootstrapFunction    string
 	bootstrapLogGroups   []string
-	bootstrapQueue       string
+	bootstrapQueues      []string
 	scheduleGroup        string
 	schedule             string
 	edgeUser             string
 	passphraseParam      string
-	edgeParam            string
+	edgeParams           []string
 	originParam          string
-	stackRecordTree      string
-	stackRecord          string
-	anyParam             string
 	kvToken              string
 	signingKey           string
 }
@@ -140,6 +137,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 	runtime := n.runtimeStackName(tier)
 	group := n.envSourceSyncScheduleGroupName(tier)
 	edgeUser, _ := n.EdgeUserNameFor(tier)
+	origin, _ := n.OriginSecretParamFor(tier)
 	a := ScopedARNs{
 		tier:              tier,
 		variablesKeyAlias: n.variablesKeyAliasFor(tier),
@@ -147,17 +145,13 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		appBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
 		runtimeStack:      "arn:aws:cloudformation:*:*:stack/" + runtime + "/*",
 		runtimeChangeSet:  "arn:aws:cloudformation:*:*:changeSet/" + runtime + "-*/*",
-		bootstrapRole:     "arn:aws:iam::*:role/" + n.CoreStackName() + "*",
+		bootstrapRoles:    []string{"arn:aws:iam::*:role/" + n.CoreStackName() + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
 		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
-		bootstrapQueue:    "arn:aws:sqs:*:*:" + string(n) + "-*",
 		scheduleGroup:     "arn:aws:scheduler:*:*:schedule-group/" + group,
 		schedule:          "arn:aws:scheduler:*:*:schedule/" + group + "/*",
 		edgeUser:          "arn:aws:iam::*:user/" + edgeUser,
 		passphraseParam:   parameterARNPrefix + n.PassphraseParamName(),
-		edgeParam:         parameterARNPrefix + n.paramRoot() + "/edge/*",
-		originParam:       parameterARNPrefix + n.paramRoot() + "/origin/*",
-		stackRecordTree:   parameterARNPrefix + n.stackRecordRoot() + "*",
-		anyParam:          parameterARNPrefix + n.paramRoot() + "/*",
+		originParam:       parameterARNPrefix + origin,
 		kvToken:           parameterARNPrefix + n.KVTokenRoot() + "/*",
 		signingKey:        "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
 	}
@@ -170,11 +164,14 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		named := "arn:aws:dynamodb:*:*:table/" + core + "-" + table + "-*"
 		a.BootstrapTables = append(a.BootstrapTables, named, named+"/*")
 	}
+	queue, deadLetters := n.revalidateQueueNames(tier)
+	a.bootstrapQueues = []string{"arn:aws:sqs:*:*:" + queue, "arn:aws:sqs:*:*:" + deadLetters}
 	stacks := []string{core, runtime}
 	for _, f := range featureRegistry {
 		stack := f.stackName(n, tier)
 		stacks = append(stacks, stack)
 		a.bootstrapLogGroups = append(a.bootstrapLogGroups, "arn:aws:logs:*:*:log-group:/aws/lambda/"+stack+"-*")
+		a.bootstrapQueues = append(a.bootstrapQueues, "arn:aws:sqs:*:*:"+stack+"-*")
 	}
 	for _, stack := range stacks {
 		a.BootstrapStacks = append(a.BootstrapStacks, "arn:aws:cloudformation:*:*:stack/"+stack+"/*")
@@ -185,7 +182,10 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		a.runtimeLayers = append(a.runtimeLayers, layer)
 		a.runtimeLayerVersions = append(a.runtimeLayerVersions, layer+":*")
 	}
-	a.stackRecord = a.stackRecordTree + "/*"
+	for _, kind := range edgeKinds() {
+		prefix, _ := n.EdgeParamPrefix(tier, kind)
+		a.edgeParams = append(a.edgeParams, parameterARNPrefix+prefix+"/*")
+	}
 	return a
 }
 
@@ -216,6 +216,18 @@ func (r ScopedARNs) taggedOnlyAsItsTier() map[string]any {
 		"aws:ResourceTag/" + naming.EnvTierTagKey: string(r.tier),
 		"aws:RequestTag/" + naming.EnvTierTagKey:  string(r.tier),
 	}}
+}
+
+func (r ScopedARNs) taggedOnCreateForItsTier() map[string]any {
+	return mergeConditions(taggedOnCreate(), r.madeForItsTier())
+}
+
+func (r ScopedARNs) taggedByOcelForItsTier() map[string]any {
+	return mergeConditions(taggedByOcel(), r.madeByItsStacks())
+}
+
+func (r ScopedARNs) retaggedByOcelOnlyAsItsTier() map[string]any {
+	return mergeConditions(r.taggedByOcelForItsTier(), r.retaggedOnlyAsItsTier())
 }
 
 func policyARN(name string) string { return "arn:aws:iam::*:policy/" + name }
@@ -390,11 +402,7 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
-			Resources: []string{r.passphraseParam, r.edgeParam, r.originParam, r.stackRecord},
-		},
-		{
-			Actions:   []string{"ssm:DeleteParameter", "ssm:PutParameter"},
-			Resources: []string{r.stackRecord},
+			Resources: slices.Concat([]string{r.passphraseParam, r.originParam}, r.edgeParams),
 		},
 		{
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
@@ -427,7 +435,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"lambda:CreateFunction"},
 			Resources: []string{appFunctionARN},
-			Condition: taggedOnCreate(),
+			Condition: r.taggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -443,19 +451,23 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"lambda:ListTags",
 				"lambda:PublishVersion",
 				"lambda:RemovePermission",
-				"lambda:TagResource",
 				"lambda:UntagResource",
 				"lambda:UpdateFunctionCode",
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			Resources: []string{appFunctionARN},
-			Condition: taggedByOcel(),
+			Condition: r.taggedByOcelForItsTier(),
+		},
+		{
+			Actions:   []string{"lambda:TagResource"},
+			Resources: []string{appFunctionARN},
+			Condition: r.retaggedByOcelOnlyAsItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedOnCreate(), r.withinAppBoundary()),
+			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions: []string{
@@ -466,12 +478,16 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"iam:ListInstanceProfilesForRole",
 				"iam:ListRolePolicies",
 				"iam:ListRoleTags",
-				"iam:TagRole",
 				"iam:UntagRole",
 				"iam:UpdateRole",
 			},
 			Resources: []string{appRoleARN},
-			Condition: taggedByOcel(),
+			Condition: r.taggedByOcelForItsTier(),
+		},
+		{
+			Actions:   []string{"iam:TagRole"},
+			Resources: []string{appRoleARN},
+			Condition: r.retaggedByOcelOnlyAsItsTier(),
 		},
 		{
 			Actions: []string{
@@ -480,27 +496,27 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"iam:PutRolePolicy",
 			},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedByOcel(), r.withinAppBoundary()),
+			Condition: mergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), r.withinAppBoundary()),
+			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), r.withinAppBoundary(), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{appRoleARN},
-			Condition: passedToLambda(true),
+			Condition: mergeConditions(passedToLambda(true), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{appRoleARN},
-			Condition: passedToECSTasks(),
+			Condition: mergeConditions(passedToECSTasks(), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{appRoleARN},
-			Condition: passedTo(schedulerServicePrincipal, true),
+			Condition: mergeConditions(passedTo(schedulerServicePrincipal, true), r.madeByItsStacks()),
 		},
 		{
 			Actions: []string{
@@ -534,7 +550,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"lambda:CreateEventSourceMapping"},
 			Resources: []string{UnscopedResource},
-			Condition: mergeConditions(taggedOnCreate(), ofAppWorker()),
+			Condition: mergeConditions(r.taggedOnCreateForItsTier(), ofAppWorker()),
 		},
 		{
 			Actions: []string{
@@ -543,16 +559,17 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{bootstrapEventSourceARN},
-			Condition: mergeConditions(taggedByOcel(), ofAppWorker()),
+			Condition: mergeConditions(r.taggedByOcelForItsTier(), ofAppWorker()),
 		},
 		{
-			Actions: []string{
-				"lambda:ListTags",
-				"lambda:TagResource",
-				"lambda:UntagResource",
-			},
+			Actions:   []string{"lambda:ListTags", "lambda:UntagResource"},
 			Resources: []string{bootstrapEventSourceARN},
-			Condition: taggedByOcel(),
+			Condition: r.taggedByOcelForItsTier(),
+		},
+		{
+			Actions:   []string{"lambda:TagResource"},
+			Resources: []string{bootstrapEventSourceARN},
+			Condition: r.retaggedByOcelOnlyAsItsTier(),
 		},
 		{
 			Actions: []string{
@@ -1198,16 +1215,16 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
 			Resources: []string{appRoleARN},
-			Condition: taggedByOcel(),
+			Condition: r.taggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: r.madeForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:TagRole"},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: r.taggedOnlyAsItsTier(),
 		},
 		{
@@ -1218,7 +1235,7 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 				"iam:ListRolePolicies",
 				"iam:ListRoleTags",
 			},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 		},
 		{
 			Actions: []string{
@@ -1229,22 +1246,22 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 				"iam:UpdateAssumeRolePolicy",
 				"iam:UpdateRole",
 			},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: r.madeByItsStacks(),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: mergeConditions(attachedPolicyIsAServiceRole(false), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: mergeConditions(passedToLambda(false), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
-			Resources: []string{r.bootstrapRole},
+			Resources: r.bootstrapRoles,
 			Condition: mergeConditions(passedTo(schedulerServicePrincipal, false), r.madeByItsStacks()),
 		},
 		{
@@ -1346,23 +1363,19 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 				"sqs:TagQueue",
 				"sqs:UntagQueue",
 			},
-			Resources: []string{r.bootstrapQueue},
+			Resources: r.bootstrapQueues,
 		},
 		{
 			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},
-			Resources: []string{r.anyParam},
+			Resources: slices.Concat([]string{r.passphraseParam, r.originParam}, r.edgeParams),
 		},
 		{
 			Actions:   []string{"ssm:DeleteParameter", "ssm:DeleteParameters"},
-			Resources: []string{r.edgeParam, r.originParam, r.stackRecord},
+			Resources: slices.Concat([]string{r.originParam}, r.edgeParams),
 		},
 		{
 			Actions:   []string{"ssm:DeleteParameter"},
 			Resources: []string{r.passphraseParam},
-		},
-		{
-			Actions:   []string{"ssm:GetParametersByPath"},
-			Resources: []string{r.stackRecordTree, r.stackRecord},
 		},
 	}
 }

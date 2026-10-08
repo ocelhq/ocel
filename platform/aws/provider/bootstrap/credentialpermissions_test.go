@@ -237,7 +237,7 @@ func TestNoCredentialMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					continue
 				}
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					if resource == defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRole {
+					if slices.Contains(defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRoles, resource) || slices.Contains(defaultNamespace.ScopedARNs(environment.TierPreview).bootstrapRoles, resource) {
 						continue
 					}
 					if !boundaryScopes(statement.Condition) {
@@ -674,26 +674,28 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 }
 
 func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
-	r := defaultNamespace.ScopedARNs(environment.TierProduction)
 	ofAppWorkers := map[string]any{"lambda:FunctionArn": "arn:aws:lambda:*:*:function:ocel-app-*"}
-	allowed := map[string]bool{
-		conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}}): true,
-		conditionJSON(t, map[string]any{
-			"StringEquals": map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
-			"ArnLike":      ofAppWorkers,
-		}): true,
-		conditionJSON(t, map[string]any{
-			"StringEquals": map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel"},
-			"ArnLike":      ofAppWorkers,
-		}): true,
-	}
-	for purpose, document := range bothCredentials(t) {
-		for g := range grantsOf(t, document) {
-			if !strings.HasSuffix(g.action, "EventSourceMapping") {
-				continue
-			}
-			if !allowed[g.condition] {
-				t.Errorf("the %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to Ocel-tagged mappings of app worker functions", purpose, g.action, g.resource, g.condition)
+	for _, tier := range bothTiers {
+		r := defaultNamespace.ScopedARNs(tier)
+		allowed := map[string]bool{
+			conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}}): true,
+			conditionJSON(t, map[string]any{
+				"StringEquals": map[string]any{"aws:RequestTag/ocel:managed-by": "ocel", "aws:RequestTag/ocel:env-tier": string(tier)},
+				"ArnLike":      ofAppWorkers,
+			}): true,
+			conditionJSON(t, map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel", "aws:ResourceTag/ocel:env-tier": string(tier)},
+				"ArnLike":      ofAppWorkers,
+			}): true,
+		}
+		for purpose, document := range credentialsOfTier(t, tier) {
+			for g := range grantsOf(t, document) {
+				if !strings.HasSuffix(g.action, "EventSourceMapping") {
+					continue
+				}
+				if !allowed[g.condition] {
+					t.Errorf("the %s %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to its own tier's Ocel-tagged mappings of app worker functions", tier, purpose, g.action, g.resource, g.condition)
+				}
 			}
 		}
 	}
@@ -748,7 +750,7 @@ func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPa
 		}
 	}
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
-	for _, resource := range []string{r.edgeParam, r.originParam, r.stackRecord, r.passphraseParam} {
+	for _, resource := range slices.Concat([]string{r.originParam, r.passphraseParam}, r.edgeParams) {
 		if !bootstrapGrants[grant{action: "ssm:DeleteParameter", resource: resource, condition: conditionJSON(t, nil)}] {
 			t.Errorf("the bootstrap credential cannot delete %s, which a teardown reclaims", resource)
 		}
@@ -1486,6 +1488,172 @@ func TestABootstrapCredentialReachesTheNamedBootstrapResourcesOfOnlyItsOwnTier(t
 			if tier == environment.TierPreview && allows(t, bootstrapDoc, action, other[action], nil) {
 				t.Errorf("the preview bootstrap credential can %s on %s, the production tier's", action, other[action])
 			}
+		}
+	}
+}
+
+func appResourceOf(tier environment.Tier, also requestContext) requestContext {
+	request := taggedWithTier(tier, requestContext{"aws:ResourceTag/" + managedByTagKey: managedByTagValue})
+	maps.Copy(request, also)
+	return request
+}
+
+func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T) {
+	const (
+		function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-app-shop-pr-7-web-a1b2c3"
+		role     = "arn:aws:iam::111122223333:role/ocel-app-shop-pr-7-web-role-a1b2c3"
+		mapping  = "arn:aws:lambda:us-east-1:111122223333:event-source-mapping:0a1b2c3d-4e5f-6789-abcd-ef0123456789"
+	)
+	worker := requestContext{"lambda:FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:ocel-app-shop-pr-7-worker-a1b2c3"}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		for purpose, document := range credentialsOfTier(t, tier) {
+			for _, c := range []struct {
+				action, arn string
+				also        requestContext
+			}{
+				{"lambda:UpdateFunctionCode", function, nil},
+				{"lambda:UpdateFunctionConfiguration", function, nil},
+				{"lambda:InvokeFunction", function, nil},
+				{"lambda:AddPermission", function, nil},
+				{"lambda:DeleteFunction", function, nil},
+				{"lambda:TagResource", function, nil},
+				{"iam:PassRole", role, requestContext{"iam:PassedToService": LambdaServicePrincipal}},
+				{"iam:PassRole", role, requestContext{"iam:PassedToService": ecsTasksPrincipal}},
+				{"iam:PassRole", role, requestContext{"iam:PassedToService": schedulerServicePrincipal}},
+				{"iam:DeleteRole", role, nil},
+				{"iam:UpdateRole", role, nil},
+				{"iam:TagRole", role, nil},
+				{"lambda:UpdateEventSourceMapping", mapping, worker},
+				{"lambda:DeleteEventSourceMapping", mapping, worker},
+				{"lambda:TagResource", mapping, nil},
+			} {
+				if !allows(t, document, c.action, c.arn, appResourceOf(tier, c.also)) {
+					t.Errorf("the %s %s credential cannot %s on %s, which its own tier's deploys made", tier, purpose, c.action, c.arn)
+				}
+				if allows(t, document, c.action, c.arn, appResourceOf(sibling, c.also)) {
+					t.Errorf("the %s %s credential can %s on %s, which the %s tier's deploys made", tier, purpose, c.action, c.arn, sibling)
+				}
+			}
+			creating := func(of environment.Tier, also requestContext) requestContext {
+				request := requestContext{
+					"aws:RequestTag/" + managedByTagKey:      managedByTagValue,
+					"aws:RequestTag/" + naming.EnvTierTagKey: string(of),
+				}
+				maps.Copy(request, also)
+				return request
+			}
+			for _, c := range []struct {
+				action, arn string
+				also        requestContext
+			}{
+				{"lambda:CreateFunction", function, nil},
+				{"iam:CreateRole", role, requestContext{
+					"aws:PrincipalAccount":    "111122223333",
+					"iam:PermissionsBoundary": "arn:aws:iam::111122223333:policy/" + defaultNamespace.AppBoundaryNameFor(tier),
+				}},
+				{"lambda:CreateEventSourceMapping", UnscopedResource, worker},
+			} {
+				if !allows(t, document, c.action, c.arn, creating(tier, c.also)) {
+					t.Errorf("the %s %s credential cannot %s tagged for its own tier", tier, purpose, c.action)
+				}
+				if allows(t, document, c.action, c.arn, creating(sibling, c.also)) {
+					t.Errorf("the %s %s credential can %s tagged for the %s tier", tier, purpose, c.action, sibling)
+				}
+			}
+			retag := appResourceOf(tier, requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(sibling)})
+			for _, c := range []struct{ action, arn string }{{"lambda:TagResource", function}, {"iam:TagRole", role}, {"lambda:TagResource", mapping}} {
+				if allows(t, document, c.action, c.arn, retag) {
+					t.Errorf("the %s %s credential can %s on %s as the %s tier's", tier, purpose, c.action, c.arn, sibling)
+				}
+			}
+		}
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		if !allows(t, bootstrapDoc, "iam:DeleteRolePermissionsBoundary", role, appResourceOf(tier, nil)) {
+			t.Errorf("the %s bootstrap credential cannot lift the boundary of its own tier's app role", tier)
+		}
+		if allows(t, bootstrapDoc, "iam:DeleteRolePermissionsBoundary", role, appResourceOf(sibling, nil)) {
+			t.Errorf("the %s bootstrap credential can lift the boundary of the %s tier's app role", tier, sibling)
+		}
+	}
+}
+
+func TestACredentialReachesTheParametersOfOnlyItsOwnTier(t *testing.T) {
+	const account = "arn:aws:ssm:us-east-1:111122223333:parameter"
+	named := func(tier environment.Tier) []string {
+		origin, _ := defaultNamespace.OriginSecretParamFor(tier)
+		names := []string{origin}
+		for _, kind := range edgeKinds() {
+			prefix, _ := defaultNamespace.EdgeParamPrefix(tier, kind)
+			names = append(names, prefix+"/credentials")
+		}
+		return names
+	}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		for _, c := range []struct{ purpose, document, action string }{
+			{"bootstrap", bootstrapDoc, "ssm:PutParameter"},
+			{"bootstrap", bootstrapDoc, "ssm:DeleteParameter"},
+			{"bootstrap", bootstrapDoc, "ssm:GetParameter"},
+			{"deploy", deployDoc, "ssm:GetParameter"},
+		} {
+			for _, name := range named(tier) {
+				if !allows(t, c.document, c.action, account+name, nil) {
+					t.Errorf("the %s %s credential cannot %s on %s, its own", tier, c.purpose, c.action, name)
+				}
+			}
+			for _, name := range named(sibling) {
+				if allows(t, c.document, c.action, account+name, nil) {
+					t.Errorf("the %s %s credential can %s on %s, the %s tier's", tier, c.purpose, c.action, name, sibling)
+				}
+			}
+		}
+	}
+}
+
+func TestABootstrapCredentialReachesTheQueuesOfOnlyItsOwnTier(t *testing.T) {
+	const account = "arn:aws:sqs:us-east-1:111122223333:"
+	named := func(tier environment.Tier) []string {
+		queue, dlq := defaultNamespace.revalidateQueueNames(tier)
+		return []string{queue, dlq, defaultNamespace.featureStackName(FeatureISR, tier) + "-TagInvalidatorDeadLetterQueue-A1B2C3D4E5F6"}
+	}
+	for _, tier := range bothTiers {
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		for _, name := range named(tier) {
+			if !allows(t, bootstrapDoc, "sqs:SetQueueAttributes", account+name, nil) {
+				t.Errorf("the %s bootstrap credential cannot sqs:SetQueueAttributes on %s, its own", tier, name)
+			}
+		}
+		if tier != environment.TierPreview {
+			continue
+		}
+		for _, name := range named(tier.Sibling()) {
+			if allows(t, bootstrapDoc, "sqs:SetQueueAttributes", account+name, nil) {
+				t.Errorf("the preview bootstrap credential can sqs:SetQueueAttributes on %s, the production tier's", name)
+			}
+		}
+	}
+}
+
+func TestABootstrapCredentialMakesTheEdgeInvokeRoleOfOnlyItsOwnTier(t *testing.T) {
+	role := func(tier environment.Tier) string {
+		return "arn:aws:iam::111122223333:role/" + defaultNamespace.EdgeInvokeRoleName(tier)
+	}
+	creating := func(tier environment.Tier) requestContext {
+		return requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
+	}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		if !allows(t, bootstrapDoc, "iam:CreateRole", role(tier), creating(tier)) {
+			t.Errorf("the %s bootstrap credential cannot create %s, which the %s stack declares", tier, role(tier), FeatureAPIGatewayEdge)
+		}
+		if !allows(t, bootstrapDoc, "iam:PutRolePolicy", role(tier), taggedWithTier(tier, nil)) {
+			t.Errorf("the %s bootstrap credential cannot write the policy of %s", tier, role(tier))
+		}
+		if allows(t, bootstrapDoc, "iam:PutRolePolicy", role(sibling), taggedWithTier(sibling, nil)) {
+			t.Errorf("the %s bootstrap credential can write the policy of %s, the %s tier's", tier, role(sibling), sibling)
 		}
 	}
 }
