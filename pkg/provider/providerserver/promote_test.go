@@ -119,6 +119,30 @@ func TestAPromoteMovesEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
 	}
 }
 
+func TestAPromoteWhoseLeaseWasLostRecordsNothingAndMovesNoRouter(t *testing.T) {
+	w := newPromoteWorld(t)
+	if err := w.promotes(t, "p1"); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+	lost := refusal.Refuse(refusal.CodeBusy, "another deploy took the lease over")
+
+	_, err := promote(context.Background(), w.ledger, promoteRequest{
+		replaces:  w.active(t),
+		promotion: w.staged(t, "p2"),
+		confirm:   func(context.Context) error { return lost },
+	}, w.appRouters(), progress.Discard())
+
+	if !errors.Is(err, lost) {
+		t.Fatalf("promote(p2) whose lease was lost = %v, want the loss reported", err)
+	}
+	if active := w.active(t); active != "p1" {
+		t.Errorf("the ledger names %q, want p1: a promote that lost its lease records nothing", active)
+	}
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
+		t.Errorf("the relay router serves web %q, want web-p1: a promote that lost its lease moves no router", served)
+	}
+}
+
 func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatMovedServeWhatItDisplaced(t *testing.T) {
 	w := newPromoteWorld(t)
 	if err := w.promotes(t, "p1"); err != nil {
