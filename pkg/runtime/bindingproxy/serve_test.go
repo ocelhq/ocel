@@ -123,3 +123,21 @@ func TestServeNamesItsAddressAndTokenForACallerThatDeliversThemItself(t *testing
 		t.Errorf("Token = %q, want the token the env delivers", served.Token)
 	}
 }
+
+func TestAProxyServedReportingReportsNothingWhenItIsClosedOnPurpose(t *testing.T) {
+	t.Parallel()
+
+	var reported []error
+	served, err := bindingproxy.ServeReporting(bindingproxy.Services{Buckets: &silentBuckets{}}, func(err error) { reported = append(reported, err) })
+	if err != nil {
+		t.Fatalf("ServeReporting: %v", err)
+	}
+
+	if err := served.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if len(reported) != 0 {
+		t.Errorf("a deliberate Close reported %v, want nothing: it is no failure", reported)
+	}
+}

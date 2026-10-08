@@ -16,7 +16,7 @@ import (
 const buildSessions = "build"
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
-	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (bindingproxy.Services, func(), error) {
+	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (provider.BindingProxy, error) {
 		var buckets []string
 		for _, binding := range bindings {
 			if name := binding.Properties[provider.PropertyBucket]; !slices.Contains(buckets, name) {
@@ -33,11 +33,11 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			return p.storeCredential(ctx, ref, container.Name)
 		})
 		if err != nil {
-			return bindingproxy.Services{}, nil, err
+			return provider.BindingProxy{}, err
 		}
 		local, stopForward, err := p.host.ForwardToContainer(ctx, container.Name, storePort)
 		if err != nil {
-			return bindingproxy.Services{}, nil, err
+			return provider.BindingProxy{}, err
 		}
 		store := s3store.Store{
 			Endpoint:        "http://" + local,
@@ -46,7 +46,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			SecretAccessKey: root.secret,
 			PathStyle:       true,
 		}
-		return bindingproxy.Services{Buckets: s3store.New(s3store.Config{
+		served, err := bindingproxy.ServeReporting(bindingproxy.Services{Buckets: s3store.New(s3store.Config{
 			Objects:      store.Client(),
 			Internal:     store.Presigner(),
 			External:     func(context.Context) (s3store.PresignAPI, string) { return store.Presigner(), store.Endpoint },
@@ -54,6 +54,14 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			PostPolicies: true,
 			Sessions:     s3store.SessionsBucket() + "/" + storeRef(ref).Name.String() + "/" + buildSessions,
 			Granted:      buckets,
-		})}, stopForward, nil
+		})}, req.ReportFailure)
+		if err != nil {
+			stopForward()
+			return provider.BindingProxy{}, err
+		}
+		return provider.BindingProxy{Address: served.Address, SessionToken: served.Token, Close: func() {
+			_ = served.Close()
+			stopForward()
+		}}, nil
 	})
 }

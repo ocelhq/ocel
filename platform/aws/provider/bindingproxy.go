@@ -16,13 +16,13 @@ import (
 )
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
-	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (bindingproxy.Services, func(), error) {
+	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (provider.BindingProxy, error) {
 		deployed, err := p.bootstrapped(ctx, req.Tier)
 		if err != nil {
-			return bindingproxy.Services{}, nil, err
+			return provider.BindingProxy{}, err
 		}
 		if err := p.requireBootstrapped(deployed, req.Tier); err != nil {
-			return bindingproxy.Services{}, nil, err
+			return provider.BindingProxy{}, err
 		}
 		var buckets []string
 		for _, binding := range bindings {
@@ -31,13 +31,17 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			}
 		}
 		objects := s3.NewFromConfig(p.aws)
-		return bindingproxy.Services{Buckets: bucket.New(bucket.Config{
+		served, err := bindingproxy.ServeReporting(bindingproxy.Services{Buckets: bucket.New(bucket.Config{
 			DDB:              dynamodb.NewFromConfig(p.aws),
 			Presigner:        s3.NewPresignClient(objects),
 			Objects:          objects,
 			Table:            deployed.StateTable,
 			SessionKeyPrefix: naming.SessionKeyPrefix(req.Slug, req.Env),
 			Granted:          func() []string { return slices.Clone(buckets) },
-		})}, func() {}, nil
+		})}, req.ReportFailure)
+		if err != nil {
+			return provider.BindingProxy{}, err
+		}
+		return provider.BindingProxy{Address: served.Address, SessionToken: served.Token, Close: func() { _ = served.Close() }}, nil
 	})
 }
