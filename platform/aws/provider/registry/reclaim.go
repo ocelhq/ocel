@@ -141,20 +141,17 @@ func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string
 		}
 	}
 	removed, err := removeImages(ctx, api, target, ours, kept)
-	if err != nil {
-		return removed, err
-	}
+	errs := []error{err}
 	for _, repository := range unkeptRepositories(target, ours, kept) {
 		swept, err := sweepRepository(ctx, api, target, repository, kept, pushedBefore)
 		removed = append(removed, swept...)
 		if err != nil {
-			return removed, err
+			errs = append(errs, err)
+			continue
 		}
-		if err := deleteEmptyRepository(ctx, api, repository); err != nil {
-			return removed, err
-		}
+		errs = append(errs, deleteEmptyRepository(ctx, api, repository))
 	}
-	return removed, nil
+	return removed, errors.Join(errs...)
 }
 
 func unkeptRepositories(target provider.RegistryTarget, imageRefs []string, kept map[string]bool) []string {

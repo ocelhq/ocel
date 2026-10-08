@@ -270,6 +270,25 @@ func TestForgettingKeepsARepositoryAnotherStackStillRunsAnImageFrom(t *testing.T
 	}
 }
 
+func TestForgettingStillDeletesOneRepositoryWhenAnotherRefusesItsDeletes(t *testing.T) {
+	t.Parallel()
+
+	const shopAPI = "ocel/shop.api"
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one"}, shopAPI: {"sha256-two"}}
+	api.pushedAt = pushedLongAgo("sha256-one", "sha256-two")
+	api.refusedIn = shopAPI
+
+	_, err := Forget(context.Background(), api, []string{ref("sha256-one"), registryAt + "/" + shopAPI + ":sha256-two"}, nil, now)
+	if err == nil {
+		t.Fatal("Forget() = nil for a repository whose deletes ECR refused")
+	}
+
+	if want := []string{shopWeb}; !slices.Equal(api.deletedRepositories, want) {
+		t.Errorf("Forget() deleted the repositories %v, want %v: one repository refusing its deletes must not leave every other one behind", api.deletedRepositories, want)
+	}
+}
+
 func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *testing.T) {
 	t.Parallel()
 

@@ -27,6 +27,7 @@ type fakeECR struct {
 	pushedAt    map[string]time.Time
 	pageSize    int
 	deleteErr   error
+	refusedIn   string
 	describeErr error
 	deleteCalls int
 	described   int
@@ -154,6 +155,9 @@ func (f *fakeECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageIn
 		return nil, errors.New("InvalidParameterException: imageIds can hold at most 100 images")
 	}
 	repository := aws.ToString(in.RepositoryName)
+	if repository == f.refusedIn {
+		return nil, errors.New("AccessDeniedException: not authorized to perform ecr:BatchDeleteImage on " + repository)
+	}
 	var out ecr.BatchDeleteImageOutput
 	for _, id := range in.ImageIds {
 		tag := aws.ToString(id.ImageTag)
