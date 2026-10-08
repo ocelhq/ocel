@@ -205,3 +205,24 @@ func TestReconcileOpensTheEgressAnotherForwardOfTheSameTierOpenedFirstWithoutFai
 		}
 	}
 }
+
+func TestReconcileRestoresASessionPolicyThatLostAnActionTheExecAgentNeeds(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+	account.roles["ocel-bastion-production"].policies["session-channels"] = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ssmmessages:CreateControlChannel"],"Resource":"*"}]}`
+
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+
+	document := account.roles["ocel-bastion-production"].policies["session-channels"]
+	for _, action := range []string{"ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"} {
+		if !strings.Contains(document, action) {
+			t.Errorf("the session policy after Reconcile() is %s, which lacks %s, so the ECS Exec agent could never open its channels", document, action)
+		}
+	}
+}

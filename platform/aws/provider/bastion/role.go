@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"reflect"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -89,20 +91,22 @@ func (c Clients) createTaskRole(ctx context.Context, spec Spec, name string) (st
 }
 
 func (c Clients) ensureSessionPolicy(ctx context.Context, role string) error {
-	_, err := c.IAM.GetRolePolicy(ctx, &iam.GetRolePolicyInput{RoleName: aws.String(role), PolicyName: aws.String(sessionPolicyName)})
-	var missing *iamtypes.NoSuchEntityException
-	if err == nil {
-		return nil
-	}
-	if !errors.As(err, &missing) {
-		return fmt.Errorf("look up the session policy of role %s: %w", role, err)
-	}
 	document, err := json.Marshal(map[string]any{
 		"Version":   "2012-10-17",
 		"Statement": []map[string]any{{"Effect": "Allow", "Action": sessionChannelActions, "Resource": "*"}},
 	})
 	if err != nil {
 		return err
+	}
+	got, err := c.IAM.GetRolePolicy(ctx, &iam.GetRolePolicyInput{RoleName: aws.String(role), PolicyName: aws.String(sessionPolicyName)})
+	var missing *iamtypes.NoSuchEntityException
+	switch {
+	case err == nil:
+		if isSamePolicy(aws.ToString(got.PolicyDocument), document) {
+			return nil
+		}
+	case !errors.As(err, &missing):
+		return fmt.Errorf("look up the session policy of role %s: %w", role, err)
 	}
 	if _, err := c.IAM.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
 		RoleName:       aws.String(role),
@@ -112,4 +116,16 @@ func (c Clients) ensureSessionPolicy(ctx context.Context, role string) error {
 		return fmt.Errorf("put the session policy on role %s: %w", role, err)
 	}
 	return nil
+}
+
+func isSamePolicy(encoded string, want []byte) bool {
+	decoded, err := url.QueryUnescape(encoded)
+	if err != nil {
+		return false
+	}
+	var current, wanted any
+	if json.Unmarshal([]byte(decoded), &current) != nil || json.Unmarshal(want, &wanted) != nil {
+		return false
+	}
+	return reflect.DeepEqual(current, wanted)
 }
