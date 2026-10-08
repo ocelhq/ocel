@@ -477,7 +477,7 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 	t.Parallel()
 
 	landed := containerimage.RuntimePath
-	for _, root := range []string{images.FunctionImageRoot, images.RuntimeRoot} {
+	for _, root := range []string{images.FunctionImageRoot, containerimage.RuntimeRoot} {
 		if landed == root || strings.HasPrefix(landed, root+"/") {
 			t.Errorf("the container runtime lands at %s, inside %s: a node function's image has a directory there, and a file appended over a directory cannot be loaded", containerimage.RuntimePath, root)
 		}

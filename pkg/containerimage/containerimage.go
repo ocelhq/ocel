@@ -33,8 +33,3 @@ const (
 	RuntimePath = "/ocel/bin/runtime"
 	LivePath    = "/ocel/live"
 )
-
-const (
-	NextServerAdapterFile = "server-adapter.mjs"
-	NextAdapterPathVar    = "NEXT_ADAPTER_PATH"
-)

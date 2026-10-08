@@ -26,7 +26,7 @@ var (
 	nextRuntime       = loadNextRuntime()
 )
 
-var nextServerRuntimeFiles = []string{containerimage.NextServerAdapterFile}
+var nextServerRuntimeFiles = []string{containerimage.NextServerPreloadFile}
 
 func NodeRuntime() []byte { return nodeRuntime }
 
@@ -70,7 +70,7 @@ func loadNextRuntime() map[string][]byte {
 			return err
 		}
 		rel := strings.TrimPrefix(name, "dist/next/")
-		if rel == containerimage.NextServerAdapterFile {
+		if rel == containerimage.NextServerPreloadFile {
 			return nil
 		}
 		files[rel] = load(name)

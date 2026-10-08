@@ -17,7 +17,7 @@
     "./origin-tags": "./src/origin-tags.mts",
     "./project-manifest": "./src/project-manifest.mts",
     "./refresh": "./src/refresh.mts",
-    "./server-adapter": "./src/server-adapter.mts",
+    "./server-preload": "./src/server-preload.mts",
     "./revalidation-signal": "./src/revalidation-signal.mts",
     "./tag-clock": "./src/tag-clock.mts",
     "./tags-manifest": "./src/tags-manifest.mts",

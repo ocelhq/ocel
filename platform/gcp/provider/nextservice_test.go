@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -636,31 +635,6 @@ func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service on container compute reads %s=%q", name, got)
 		}
-	}
-}
-
-func TestANextContainerCarriesOcelsServerAdapterPath(t *testing.T) {
-	service, _ := releasedNextContainer(t, nextContainerSpec())
-
-	want := "/ocel/runtime/next/" + containerimage.NextServerAdapterFile
-	if got := envOf(service.Template.Containers[0])[containerimage.NextAdapterPathVar]; got != want {
-		t.Errorf("a Next container is told %s = %q, want %q", containerimage.NextAdapterPathVar, got, want)
-	}
-}
-
-func TestANextContainerRefusesAUserValueForTheAdapterPath(t *testing.T) {
-	spec := nextContainerSpec()
-	spec.App.Values.ContainerEnv = map[string]string{containerimage.NextAdapterPathVar: "/app/mine.mjs"}
-	server := &runServer{}
-	p := server.open(t)
-
-	_, err := p.ProvisionContainers(context.Background(), spec, nil)
-
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Fatalf("ProvisionContainers() = %v, want a refusal of code %v", err, refusal.CodeInvalid)
-	}
-	if len(server.created) != 0 {
-		t.Errorf("released %d services before refusing, want none", len(server.created))
 	}
 }
 

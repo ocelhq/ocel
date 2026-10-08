@@ -198,7 +198,7 @@ func nextServerRuntime(files map[string][]byte) *images.NextServerRuntime {
 
 func nextFiles() map[string][]byte {
 	return map[string][]byte{
-		containerimage.NextServerAdapterFile: []byte("an adapter"),
+		containerimage.NextServerPreloadFile: []byte("a preload"),
 		"server-chunk.mjs":                   []byte("a server chunk"),
 	}
 }
@@ -212,7 +212,7 @@ func digestOf(t *testing.T, image v1.Image) string {
 	return digest.String()
 }
 
-func TestANextContainerFindsItsAdapterInTheNextRuntimeDirectory(t *testing.T) {
+func TestAWrappedNextContainerShipsTheServerPreloadInTheNextRuntimeDirectory(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
@@ -239,18 +239,18 @@ func TestANextContainerFindsItsAdapterInTheNextRuntimeDirectory(t *testing.T) {
 	}
 }
 
-func TestWrapContainerPointsNextsServerAtTheShippedAdapter(t *testing.T) {
+func TestAWrappedNextContainerKeepsTheEnvironmentItsImageSet(t *testing.T) {
 	t.Parallel()
 
-	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}, Env: []string{"PATH=/usr/bin"}})
+	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}, Env: []string{"PATH=/usr/bin", "NODE_OPTIONS=--max-old-space-size=512"}})
 	wrapped, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(nextFiles()))
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
 
-	want := []string{"PATH=/usr/bin", containerimage.NextAdapterPathVar + "=/ocel/runtime/next/" + containerimage.NextServerAdapterFile}
+	want := []string{"PATH=/usr/bin", "NODE_OPTIONS=--max-old-space-size=512"}
 	if got := configOf(t, wrapped).Env; !slices.Equal(got, want) {
-		t.Errorf("the wrapped image has env %v, want %v", got, want)
+		t.Errorf("the wrapped image has env %v, want %v, with the preload left to the container runtime", got, want)
 	}
 }
 
@@ -277,28 +277,28 @@ func TestWrapContainerLeavesAnImageThatServesNoNextAsItWas(t *testing.T) {
 	}
 }
 
-func TestWrapContainerRefusesAnImageThatNamesItsOwnNextAdapter(t *testing.T) {
+func TestAWrappedNextContainerLeavesNextAdapterPathToTheApp(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}, Env: []string{"NEXT_ADAPTER_PATH=/app/mine.js"}})
-	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(nextFiles()))
-	if err == nil {
-		t.Fatal("WrapContainer() overrode the adapter the image named")
+	wrapped, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(nextFiles()))
+	if err != nil {
+		t.Fatalf("WrapContainer() = %v", err)
 	}
-	for _, want := range []string{"NEXT_ADAPTER_PATH", "/app/mine.js"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("WrapContainer() = %v, want it to name %s", err, want)
-		}
+
+	want := []string{"NEXT_ADAPTER_PATH=/app/mine.js"}
+	if got := configOf(t, wrapped).Env; !slices.Equal(got, want) {
+		t.Errorf("the wrapped image has env %v, want %v", got, want)
 	}
 }
 
-func TestWrapContainerRefusesANextServerRuntimeWithoutItsAdapter(t *testing.T) {
+func TestWrapContainerRefusesANextServerRuntimeWithoutItsPreload(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
 	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(map[string][]byte{"server-chunk.mjs": []byte("x")}))
-	if err == nil || !strings.Contains(err.Error(), containerimage.NextServerAdapterFile) {
-		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, containerimage.NextServerAdapterFile)
+	if err == nil || !strings.Contains(err.Error(), containerimage.NextServerPreloadFile) {
+		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, containerimage.NextServerPreloadFile)
 	}
 }
 

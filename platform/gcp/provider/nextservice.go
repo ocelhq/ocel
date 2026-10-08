@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -209,7 +208,6 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 func newNextContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
 	env := newNextCacheEnv(spec.App.ISR, cache)
 	env[memoryEnvVar] = strconv.Itoa(memory)
-	env[containerimage.NextAdapterPathVar] = images.NextServerAdapterPath
 	return env
 }
 

@@ -72,8 +72,8 @@ func runHooks(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("ReadNextServerRuntime() error = %v", err)
 		}
-		if _, ok := files[containerimage.NextServerAdapterFile]; !ok {
-			t.Errorf("ReadNextServerRuntime() has no %s, which next start loads as its adapter", containerimage.NextServerAdapterFile)
+		if _, ok := files[containerimage.NextServerPreloadFile]; !ok {
+			t.Errorf("ReadNextServerRuntime() has no %s, which a Next container runs in front of next start", containerimage.NextServerPreloadFile)
 		}
 	})
 }

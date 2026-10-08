@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { isBuiltin } from "node:module";
 import net from "node:net";
@@ -64,9 +64,9 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime directory holds the entrypoint and the server adapter, with the cache handlers inside them", async () => {
+test("the runtime directory holds the entrypoint and the server preload, with the cache handlers inside them", async () => {
   const own = (await shippedFiles()).filter((file) => !file.startsWith("node_modules/"));
-  expect(own).toEqual(["entrypoint.mjs", "server-adapter.mjs"]);
+  expect(own).toEqual(["entrypoint.mjs", "server-preload.mjs"]);
 });
 
 test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
@@ -78,51 +78,99 @@ test("the entrypoint imports nothing but Node's own modules and the sharp the di
   expect([...new Set(bare)]).toEqual(["sharp"]);
 });
 
-test("the server adapter imports nothing but Node's own modules", async () => {
+test("the server preload imports nothing but Node's own modules", async () => {
   await init;
-  const [imports] = parse(await readFile(join(dir, "server-adapter.mjs"), "utf8"));
+  const [imports] = parse(await readFile(join(dir, "server-preload.mjs"), "utf8"));
   const bare = imports
     .flatMap((found) => (found.n === undefined ? [] : [found.n]))
     .filter((specifier) => !isBuiltin(specifier));
   expect(bare).toEqual([]);
 });
 
-test("the server adapter installs the Cloud Run host and the cache handlers, and names no handler in Next's config", async () => {
+const cacheEnv = {
+  PORT: "8080",
+  OCEL_ISR_BUCKET: "bucket",
+  OCEL_ISR_OBJECT_PREFIX: "cache/app",
+  OCEL_ISR_PREFIX: "app",
+  OCEL_TAG_DATABASE: "database",
+};
+
+test("the server preload installs the cache handlers and a Cloud Run host it builds only when the cache first reads it", async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     [
       "--input-type=module",
       "-e",
-      `const { default: adapter } = await import(${JSON.stringify(join(dir, "server-adapter.mjs"))});
-const config = adapter.modifyConfig({}, { phase: "phase-production-server" });
-const host = globalThis[Symbol.for("ocel.next.host.v1")];
+      `process.env.OCEL_REFRESH_SECRET = "s1";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+const slot = globalThis[Symbol.for("ocel.next.host.v1")];
 const handlers = globalThis[Symbol.for("@next/cache-handlers")];
+const secretBefore = process.env.OCEL_REFRESH_SECRET;
+const host = slot();
 process.stdout.write(JSON.stringify({
-  config,
-  store: typeof host?.newCacheStore,
+  slot: typeof slot,
+  secretBefore,
+  secretAfter: process.env.OCEL_REFRESH_SECRET ?? null,
+  store: typeof host.newCacheStore,
   handlers: Object.fromEntries(Object.entries(handlers ?? {}).map(([name, handler]) => [name, typeof handler])),
 }));`,
     ],
-    {
-      env: {
-        PATH: process.env.PATH,
-        PORT: "8080",
-        OCEL_ISR_BUCKET: "bucket",
-        OCEL_ISR_OBJECT_PREFIX: "cache/app",
-        OCEL_ISR_PREFIX: "app",
-        OCEL_TAG_DATABASE: "database",
-      },
-    },
+    { env: { PATH: process.env.PATH, ...cacheEnv } },
   );
 
-  const { config, store, handlers } = JSON.parse(stdout);
-  expect(config).toEqual({ cacheMaxMemorySize: 0 });
-  expect(handlers).toEqual({
-    FetchCache: "function",
-    DefaultCache: "object",
-    RemoteCache: "object",
+  expect(JSON.parse(stdout)).toEqual({
+    slot: "function",
+    secretBefore: "s1",
+    secretAfter: null,
+    store: "function",
+    handlers: { FetchCache: "function", DefaultCache: "object", RemoteCache: "object" },
   });
-  expect(store).toBe("function");
+});
+
+test("the server preload withholds a response's shared-cache lifetime from Cloud CDN", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import http from "node:http";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+const server = http.createServer((req, res) => {
+  res.setHeader("cache-control", "s-maxage=60, stale-while-revalidate");
+  res.end("x");
+});
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+const res = await fetch("http://127.0.0.1:" + server.address().port);
+process.stdout.write(res.headers.get("cache-control") ?? "");
+server.close();`,
+    ],
+    { env: { PATH: process.env.PATH }, cwd: await projectNaming({}) },
+  );
+
+  expect(stdout).not.toContain("s-maxage");
+});
+
+async function projectNaming(config: Record<string, unknown>): Promise<string> {
+  const projectDir = await mkdtemp(join(dist, "preload-"));
+  await mkdir(join(projectDir, ".next"));
+  await writeFile(join(projectDir, ".next/required-server-files.json"), JSON.stringify({ config }));
+  return projectDir;
+}
+
+test("a process running the server preload refuses to listen when its app names its own cache handler", async () => {
+  const run = execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import net from "node:net";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+net.createServer().listen(0);`,
+    ],
+    { env: { PATH: process.env.PATH }, cwd: await projectNaming({ cacheHandler: "../mine.cjs" }) },
+  );
+
+  await expect(run).rejects.toThrow("cacheHandler");
 });
 
 test("the runtime directory ships sharp built for the Linux x64 Cloud Run runs", async () => {

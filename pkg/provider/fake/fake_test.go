@@ -67,8 +67,8 @@ func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsAdapter(t *testin
 	if err != nil {
 		t.Fatalf("ReadNextServerRuntime() error = %v", err)
 	}
-	if got := string(files[containerimage.NextServerAdapterFile]); got != fake.NextServerAdapter {
-		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerAdapterFile, got, fake.NextServerAdapter)
+	if got := string(files[containerimage.NextServerPreloadFile]); got != fake.NextServerPreload {
+		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerPreloadFile, got, fake.NextServerPreload)
 	}
 	if fake.NewProvider(fake.Options{}).Hooks().ReadNextServerRuntime != nil {
 		t.Error("a bare fake provider ships a Next server runtime")
