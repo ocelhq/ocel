@@ -24,11 +24,12 @@ import (
 )
 
 type registryStore struct {
-	target provider.RegistryTarget
+	target      provider.RegistryTarget
+	packagesAPI string
 }
 
 func RegistryStore(target provider.RegistryTarget) provider.ImageStore {
-	return registryStore{target: target}
+	return registryStore{target: target, packagesAPI: gitHubAPI}
 }
 
 func (r registryStore) String() string {
