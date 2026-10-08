@@ -413,8 +413,8 @@ export interface DNSOptions {
 export interface GcpProviderOptions {
   /** Who may open a preview deployed with no edge in front, which Identity-Aware Proxy serves: IAM members such as user:ana@example.com, group:team@example.com or domain:example.com. */
   previewViewers?: string[];
-  /** The Google Cloud project to deploy into. */
-  project: string;
+  /** The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. */
+  project?: string;
   /** The region to deploy into. A project spans them all, so this names the one. */
   region: string;
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */

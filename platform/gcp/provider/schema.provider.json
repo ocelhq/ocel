@@ -18,7 +18,7 @@
         "type": "array"
       },
       "project": {
-        "description": "The Google Cloud project to deploy into.",
+        "description": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config.",
         "type": "string"
       },
       "region": {
@@ -27,7 +27,6 @@
       }
     },
     "required": [
-      "project",
       "region"
     ],
     "title": "GcpProviderOptions",
