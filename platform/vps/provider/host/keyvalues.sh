@@ -117,6 +117,7 @@ stage() {
 prune() {
 	d=$(dirname "$1")
 	while [ "$d" != "$dir" ]; do
+		rm -f "$d"/*.json.staged
 		rmdir "$d" 2>/dev/null || break
 		d=$(dirname "$d")
 	done
