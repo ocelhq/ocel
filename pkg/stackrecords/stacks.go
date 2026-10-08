@@ -58,6 +58,10 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
+	recorded.Bindings = slices.Clone(recorded.Bindings)
+	for i, binding := range recorded.Bindings {
+		recorded.Bindings[i] = binding.WithoutSecrets()
+	}
 	recorded.UpdatedAt = time.Now().Unix()
 	if row.Value, err = json.Marshal(recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
