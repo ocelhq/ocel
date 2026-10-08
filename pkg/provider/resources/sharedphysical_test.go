@@ -63,6 +63,7 @@ type serviceEveryReleaseRevises struct {
 	removed          []string
 	removedRevisions []string
 	functionRemovals [][]string
+	revisionsFrom    []provider.ImageStore
 }
 
 func (s *serviceEveryReleaseRevises) provision(spec provider.StackSpec) (string, error) {
@@ -144,7 +145,10 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			},
 			Shared: &resources.SharedHooks[provider.Function]{
 				Name: s.nameFunctions,
-				RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) ([]provider.Function, error) {
+				RemoveRevisions: func(_ context.Context, _ provider.StackRef, functions []provider.Function, images provider.ImageStore, _ progress.Log) ([]provider.Function, error) {
+					s.mu.Lock()
+					s.revisionsFrom = append(s.revisionsFrom, images)
+					s.mu.Unlock()
 					var kept []provider.Function
 					for _, function := range functions {
 						if !s.removeRevision(function.Revision) {
@@ -173,7 +177,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			},
 			Shared: &resources.SharedHooks[provider.AppContainer]{
 				Name: s.nameContainers,
-				RemoveRevisions: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) ([]provider.AppContainer, error) {
+				RemoveRevisions: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, _ progress.Log) ([]provider.AppContainer, error) {
 					var kept []provider.AppContainer
 					for _, container := range containers {
 						if !s.removeRevision(container.Revision) {
@@ -266,6 +270,29 @@ func TestDestroyOfOneReleaseTakesOnlyItsRevisionFromAFunctionAnotherReleaseServe
 	}
 	if want := []string{"shop-prod-web-api-00001"}; !slices.Equal(revisions, want) {
 		t.Errorf("Destroy() took the revisions %v, want %v: only the revision the dropped release deployed", revisions, want)
+	}
+}
+
+func TestDestroyOfOneReleaseRemovesItsRevisionThroughTheImageStoreTheDestroyWasHanded(t *testing.T) {
+	t.Parallel()
+
+	service := &serviceEveryReleaseRevises{}
+	released := newReleases(t, fake.NewKeyValues(), service.hooks())
+	dropped, surviving := releaseRef("d1"), releaseRef("d2")
+	service.revision = "shop-prod-web-api-00001"
+	released.provision(dropped, functionApp())
+	service.revision = "shop-prod-web-api-00002"
+	released.provision(surviving, functionApp())
+	pushed := fake.NewImages()
+
+	if err := released.stacks.Destroy(context.Background(), dropped, pushed, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if len(service.revisionsFrom) != 1 || service.revisionsFrom[0] != provider.ImageStore(pushed) {
+		t.Errorf("the revision was removed with %v, want the store the destroy was handed: the image the revision ran lives there", service.revisionsFrom)
 	}
 }
 

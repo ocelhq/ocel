@@ -204,7 +204,7 @@ func prunable(t *testing.T) (*Provider, *routedHosts, []provider.Function) {
 func TestPruningARevisionUnroutesItsOriginHostname(t *testing.T) {
 	p, routing, deployed := prunable(t)
 
-	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[:1]), nil)
+	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[:1]), nil, nil)
 	if err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
@@ -217,7 +217,7 @@ func TestPruningARevisionUnroutesItsOriginHostname(t *testing.T) {
 func TestARevisionThatStaysKeepsItsOriginHostname(t *testing.T) {
 	p, routing, deployed := prunable(t)
 
-	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[2:]), nil)
+	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[2:]), nil, nil)
 	if err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}

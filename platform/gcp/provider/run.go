@@ -607,7 +607,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress progre
 	if err != nil {
 		return err
 	}
-	p.untagUnusedImages(ctx, images, progress)
+	p.removeUnrunImages(ctx, "", images, nil, nil, time.Now(), progress)
 	return nil
 }
 

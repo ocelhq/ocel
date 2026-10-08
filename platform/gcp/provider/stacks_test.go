@@ -494,7 +494,7 @@ func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testin
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
-	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one, two}, nil); err != nil {
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one, two}, nil, nil); err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 
@@ -549,7 +549,7 @@ func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
-	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil); err != nil {
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil, nil); err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 
