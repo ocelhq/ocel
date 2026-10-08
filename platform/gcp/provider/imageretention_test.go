@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,5 +57,38 @@ func TestAReleaseWhoseImageIsStillMissingAfterTaggingAgainFails(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("deployService() = %v, want Cloud Run's answer that the image is gone: the release retries once, never in a loop", err)
+	}
+}
+
+const wrappedPackage = "projects/acme/locations/europe-west1/repositories/ocel/packages/app"
+
+var wrappedTag = "sha256-" + strings.Repeat("c", 64) + "-ocel-0123456789ab"
+
+func TestAWrappedImageAPruneUntaggedMidwayIsTaggedAgainAtTheVersionItsTagNamed(t *testing.T) {
+	tag := wrappedPackage + "/tags/" + wrappedTag
+	pushed := wrappedPackage + "/versions/sha256:" + strings.Repeat("d", 64)
+	server := &runServer{untagAtRelease: tag, versions: map[string]string{tag: pushed}}
+	app := serves("ocel-shop-prod-app")
+	app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
+
+	released(t, server, app)
+
+	if got, want := server.retags(), []string{tag + " -> " + pushed}; !slices.Equal(got, want) {
+		t.Errorf("the release tagged %v, want %v: a wrapped image's tag names the content it was built from, never the version the registry holds", got, want)
+	}
+}
+
+func TestAWrappedImageWhoseTagIsGoneBeforeTheReleaseIsRefusedRatherThanTaggedAtAVersionItNeverHad(t *testing.T) {
+	server := &runServer{missing: []string{wrappedPackage + "/tags/" + wrappedTag}}
+	app := serves("ocel-shop-prod-app")
+	app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
+
+	_, err := server.open(t).deployService(t.Context(), app, nil)
+
+	if err == nil || !strings.Contains(err.Error(), app.image) {
+		t.Errorf("deployService() = %v, want a refusal naming %s", err, app.image)
+	}
+	if got := server.retags(); len(got) != 0 {
+		t.Errorf("the release tagged %v, want nothing: the tag names no version the registry holds", got)
 	}
 }
