@@ -142,3 +142,46 @@ func TestAProjectNothingRecordsKeepsNoImage(t *testing.T) {
 		t.Errorf("reconciledKeptImages() = %v, %v, want none", kept, err)
 	}
 }
+
+func recordReleaseAboutToRun(t *testing.T, store keyvalue.Store, tier environment.Tier, project string, name naming.StackName, image string) {
+	t.Helper()
+	recorded := stackrecords.Stack{Kind: provider.StackApp, App: name.App, Image: image}
+	if err := stackrecords.Write(context.Background(), store, tier, project, name, recorded); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestForgettingAStackWhoseReleaseFailedRemovesTheImageItPushed(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, projectRegistryImage("sha256-failed"))
+	pushed := fake.NewImages()
+
+	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", pushed, progress.Discard())
+	if err != nil {
+		t.Fatalf("forgetImages() = %v", err)
+	}
+
+	if want := []string{projectRegistryImage("sha256-failed")}; !slices.Equal(pushed.Removed(), want) {
+		t.Errorf("forgetImages() removed %v, want %v: a release that pushed its image and failed before running it leaves no other record of the image", pushed.Removed(), want)
+	}
+}
+
+func TestAReconcileKeepsTheImageADeployInFlightIsAboutToRun(t *testing.T) {
+	t.Parallel()
+
+	store, own := shopStacks(t)
+	starting := naming.AppStack("prod", "web", naming.NewReleaseToken("b4", ""))
+	recordReleaseAboutToRun(t, store, environment.TierProduction, "shop", starting, "ecr/ocel/shop.web:sha256-starting")
+
+	kept, err := reconciledKeptImages(context.Background(), store, own)
+	if err != nil {
+		t.Fatalf("reconciledKeptImages() = %v", err)
+	}
+
+	if !kept["ecr/ocel/shop.web:sha256-starting"] {
+		t.Errorf("reconciledKeptImages() = %v, want the image a stack records before it runs it", kept)
+	}
+}

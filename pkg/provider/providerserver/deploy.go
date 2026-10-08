@@ -1165,14 +1165,14 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				return nil
 			}
 			r.recordProvisioning(entry.App)
-			if err := r.recordAppStack(ctx, entry, provider.StackResult{}); err != nil {
+			if err := r.recordAppStack(ctx, entry, images, provider.StackResult{}); err != nil {
 				return err
 			}
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
 			if err != nil {
 				return err
 			}
-			if err := r.recordAppStack(ctx, entry, result); err != nil {
+			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
 				return err
 			}
 			address, deployment := findOwnAddresses(entry, facts, result)
@@ -1189,7 +1189,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 	})
 }
 
-func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, result provider.StackResult) error {
+func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, images provider.ImagePushes, result provider.StackResult) error {
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
 		Kind:         provider.StackApp,
 		App:          entry.App,
@@ -1197,6 +1197,7 @@ func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry,
 		Release:      entry.Release.String(),
 		Functions:    result.Functions,
 		Containers:   result.Containers,
+		Image:        images.ImageRef(entry.App),
 		WrittenBy:    provider.WrittenByVersion(""),
 	})
 }
