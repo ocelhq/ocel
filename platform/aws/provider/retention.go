@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"time"
 
@@ -44,7 +43,7 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 		return err
 	}
 	var pushed, ours []string
-	for _, image := range imagesOf(recorded) {
+	for _, image := range recorded.Images() {
 		switch {
 		case kept[image]:
 		case images != nil && strings.HasPrefix(image, images.Destination()+"/"):
@@ -63,43 +62,11 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 }
 
 func reconciledKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return recordedImages(ctx, store, ref.Project, func(environment.Tier, naming.StackName) bool { return true })
+	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, func(environment.Tier, naming.StackName) bool { return true })
 }
 
 func forgottenKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return recordedImages(ctx, store, ref.Project, func(tier environment.Tier, name naming.StackName) bool {
+	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, func(tier environment.Tier, name naming.StackName) bool {
 		return tier != ref.Tier || name != ref.Name
 	})
-}
-
-func recordedImages(ctx context.Context, store keyvalue.Store, project string, counted func(environment.Tier, naming.StackName) bool) (map[string]bool, error) {
-	recorded := map[string]bool{}
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		stacks, err := stackrecords.List(ctx, store, tier, project)
-		if err != nil {
-			return nil, err
-		}
-		for _, stack := range stacks {
-			if !counted(tier, stack.Name) {
-				continue
-			}
-			for _, image := range imagesOf(stack.Stack) {
-				recorded[image] = true
-			}
-		}
-	}
-	return recorded, nil
-}
-
-func imagesOf(recorded stackrecords.Stack) []string {
-	var images []string
-	if recorded.Image != "" {
-		images = append(images, recorded.Image)
-	}
-	for _, container := range recorded.Containers {
-		if container.Image != "" && !slices.Contains(images, container.Image) {
-			images = append(images, container.Image)
-		}
-	}
-	return images
 }
