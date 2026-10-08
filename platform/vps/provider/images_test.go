@@ -514,16 +514,12 @@ func TestAnImagePulledOntoTheMachineIsRemovedFromTheRegistryItWasPushedTo(t *tes
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	digest, err := push.Built.Digest()
+	tag, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pinned, err := name.NewDigest(server+"/shop/web@"+digest.String(), name.Insecure)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := remote.Head(pinned); err == nil {
-		t.Errorf("the registry still answers for %s after Remove()", pinned)
+	if _, err := remote.Head(tag); err == nil {
+		t.Errorf("the registry still answers for %s after Remove()", tag)
 	}
 }
 
@@ -536,5 +532,53 @@ func TestAnImageLoadedOntoTheMachineHasNothingInARegistryToRemove(t *testing.T) 
 	}
 	if ran := machine.commands(); len(ran) != 0 {
 		t.Errorf("Remove() ran %v on the machine, and the window sweeps it", ran)
+	}
+}
+
+func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAgain(t *testing.T) {
+	t.Parallel()
+
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	built := wrapped(t)
+	ref := server + "/shop/web:sha256-abc-ocel-0123"
+	tag, err := name.NewTag(ref, name.Insecure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.Write(tag, built); err != nil {
+		t.Fatal(err)
+	}
+	pulls := 0
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "docker pull") {
+			return session.Result{}, false
+		}
+		pulls++
+		if pulls == 1 {
+			if err := remote.Delete(tag); err != nil {
+				t.Errorf("remove the tag as another box's reconcile would: %v", err)
+			}
+		}
+		if _, err := remote.Head(tag); err != nil {
+			return session.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"}, true
+		}
+		return session.Result{}, false
+	}}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: built}, nil); err != nil {
+		t.Fatalf("Push() = %v, want the image pushed again: a box's reconcile removes from the shared registry what that box dropped, and another box of the project may be about to pull it", err)
+	}
+	if _, err := remote.Head(tag); err != nil {
+		t.Errorf("the registry does not hold %s after the push: %v", ref, err)
 	}
 }
