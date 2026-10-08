@@ -920,7 +920,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames
 	}
 
 	asked := vendor.ImageStore().Asked()
-	if len(asked) != 1 {
+	if len(asked) == 0 || slices.ContainsFunc(asked, func(push provider.ImagePush) bool { return push.ImageRef != asked[0].ImageRef }) {
 		t.Fatalf("the deploy asked the registry about %v, want the one image its container app runs", asked)
 	}
 	if asked[0].ImageRef != wrappedCoordinate() {
@@ -1278,5 +1278,46 @@ func TestADeployThatReclaimsADroppedBuildHandsTheDestroyTheStoreItPushedTo(t *te
 		if store != provider.ImageStore(vendor.ImageStore()) {
 			t.Errorf("a dropped build was destroyed with %v, want the store the deploy pushed to: it is where that build's image lives", store)
 		}
+	}
+}
+
+type imageRemovingStacks struct {
+	provider.Stacks
+	images *fake.Images
+	image  string
+}
+
+func (s imageRemovingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	if err == nil && spec.Kind == provider.StackApp {
+		err = s.images.Remove(ctx, s.image)
+	}
+	return result, err
+}
+
+func TestAnImageRemovedWhileItsReleaseProvisionedIsPushedAgainAndSaidSo(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	stacks := imageRemovingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, events := deploy(t, client, registryDeployRequest())
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the release to land with its image pushed again", result.GetError())
+	}
+	if !vendor.ImageStore().Stored(pushedCoordinate) {
+		t.Errorf("the registry no longer holds %s after the deploy: the release's next task start or cold pull fails with nothing said", pushedCoordinate)
+	}
+	said := false
+	for _, event := range events {
+		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the deploy said nothing about %s leaving the registry while it provisioned", pushedCoordinate)
 	}
 }

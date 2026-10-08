@@ -162,3 +162,23 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, fu
 	}
 	return provider.ImagePushes{Store: r.images, Pushes: []provider.ImagePush{push}}, nil
 }
+
+func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log progress.Log) error {
+	if images.Store == nil {
+		return nil
+	}
+	var removed []provider.ImagePush
+	for _, push := range images.Pushes {
+		present, err := images.Store.Has(ctx, push)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Could not confirm %s still holds %s after its release provisioned, so a removal that ran meanwhile would go unnoticed: %v",
+				images.Store.Destination(), push.ImageRef, err))
+			continue
+		}
+		if !present {
+			log.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start new tasks", push.ImageRef, images.Store.Destination()))
+			removed = append(removed, push)
+		}
+	}
+	return provider.ImagePushes{Store: images.Store, Pushes: removed}.PushMissing(ctx, log)
+}
