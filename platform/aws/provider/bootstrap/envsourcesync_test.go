@@ -271,7 +271,7 @@ func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherF
 		}
 	}
 	for g := range bootstrapGrants {
-		if slices.Contains(actions, g.action) && g.resource != defaultNamespace.ScopedARNs().bootstrapFunction {
+		if slices.Contains(actions, g.action) && g.resource != defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapFunction {
 			t.Errorf("the bootstrap credential grants %s on %s, beyond the functions a bootstrap names", g.action, g.resource)
 		}
 	}
@@ -324,15 +324,17 @@ func TestTheEnvSourceSyncReachesOnlyTheVariablesTableTheKeyAndItsLogs(t *testing
 
 func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothingElse(t *testing.T) {
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
-	reaches := func(action, arn string) bool {
-		for g := range bootstrapGrants {
-			if g.action == action && matchesIAMPattern(g.resource, arn) {
-				return true
-			}
-		}
-		return false
-	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		ofTier := grantsOf(t, bootstrapDoc)
+		reaches := func(action, arn string) bool {
+			for g := range ofTier {
+				if g.action == action && matchesIAMPattern(g.resource, arn) {
+					return true
+				}
+			}
+			return false
+		}
 		group := defaultNamespace.envSourceSyncScheduleGroupName(tier)
 		groupARN := "arn:aws:scheduler:us-east-1:111122223333:schedule-group/" + group
 		for _, action := range []string{
@@ -368,7 +370,7 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 			if g.resource == appRoleARN && strings.Contains(g.condition, `"aws:ResourceTag/ocel:managed-by":"ocel"`) {
 				continue
 			}
-			passed = g.resource == defaultNamespace.ScopedARNs().bootstrapRole
+			passed = g.resource == defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRole
 			if !passed {
 				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes or an app role Ocel tagged", g.resource)
 			}

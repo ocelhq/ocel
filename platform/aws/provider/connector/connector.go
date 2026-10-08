@@ -487,7 +487,7 @@ func codeBucketResource() map[string]any {
 }
 
 func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
-	r := ns.ScopedARNs()
+	production, preview := ns.ScopedARNs(environment.TierProduction), ns.ScopedARNs(environment.TierPreview)
 	return []bootstrap.GrantStatement{
 		{
 			Actions: []string{
@@ -497,7 +497,7 @@ func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 				"dynamodb:Query",
 				"dynamodb:TransactWriteItems",
 			},
-			Resources: []string{r.BootstrapTable, r.BootstrapTablePart},
+			Resources: slices.Concat(production.BootstrapTables, preview.BootstrapTables),
 		},
 		{
 			Actions:   []string{"kms:Decrypt", "kms:Encrypt"},
@@ -512,7 +512,7 @@ func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudformation:DescribeStacks"},
-			Resources: []string{r.BootstrapStack},
+			Resources: slices.Concat(production.BootstrapStacks, preview.BootstrapStacks),
 		},
 		{
 			Actions:   []string{"sts:GetCallerIdentity"},

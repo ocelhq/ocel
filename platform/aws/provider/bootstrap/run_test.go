@@ -246,7 +246,7 @@ func (f *fakeCFN) fallBehind(stackName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.templates[stackName] = behindTemplate
-	f.tags[stackName] = stampTags(defaultNamespace, Stamp{Digest: cfn.TemplateDigest(behindTemplate), WrittenBy: "1.0.0"})
+	f.tags[stackName] = stampTags(defaultNamespace, environment.TierProduction, Stamp{Digest: cfn.TemplateDigest(behindTemplate), WrittenBy: "1.0.0"})
 }
 
 func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {

@@ -338,7 +338,7 @@ type stubStack struct {
 }
 
 func (s stubStack) stamped(stamp Stamp) stubStack {
-	s.tags = stampTags(defaultNamespace, stamp)
+	s.tags = stampTags(defaultNamespace, environment.TierProduction, stamp)
 	return s
 }
 

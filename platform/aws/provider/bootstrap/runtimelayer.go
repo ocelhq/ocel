@@ -49,7 +49,11 @@ func runtimeLayerOutputKey(architecture, digest string) string {
 }
 
 func runtimeLayerName(ns Namespace, tier environment.Tier, architecture, digest string) string {
-	return suffixed(tier, string(ns)+"-runtime") + "-" + runtimeArchTokens[architecture] + "-" + shortRuntimeDigest(digest)
+	return runtimeLayerPrefix(ns, tier, runtimeArchTokens[architecture]) + shortRuntimeDigest(digest)
+}
+
+func runtimeLayerPrefix(ns Namespace, tier environment.Tier, archToken string) string {
+	return suffixed(tier, string(ns)+"-runtime") + "-" + archToken + "-"
 }
 
 func runtimeLayerArches() map[string]string {
@@ -148,7 +152,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	}
 	stackName := target.ns.runtimeStackName(target.tier)
 	body := runtimeLayerTemplate(target.ns, target.tier, code)
-	tags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
+	tags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
 	}
@@ -247,7 +251,7 @@ func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Re
 		group.Action, group.Reason = provider.ActionKeep, "already current"
 	default:
 		group.Action = provider.ActionUpdate
-		group = planUpdate(ctx, stacks, read.ns, group, featureStack{body: body}, req.Writer)
+		group = planUpdate(ctx, stacks, read.ns, read.tier, group, featureStack{body: body}, req.Writer)
 	}
 	return group
 }

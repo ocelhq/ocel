@@ -10,6 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -72,7 +73,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 		case group.Action == provider.ActionDelete:
 			plan(func() { planned[i] = planDelete(ctx, stacks, group, stack.body) })
 		case group.Action == provider.ActionUpdate:
-			plan(func() { planned[i] = planUpdate(ctx, stacks, read.ns, group, stack, req.Writer) })
+			plan(func() { planned[i] = planUpdate(ctx, stacks, read.ns, read.tier, group, stack, req.Writer) })
 		default:
 			planned[i] = group
 		}
@@ -209,8 +210,8 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	return f.planned(in), true
 }
 
-func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provider.ChangeGroup, stack featureStack, writer provider.WrittenBy) provider.ChangeGroup {
-	tags := stampTags(ns, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
+func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environment.Tier, group provider.ChangeGroup, stack featureStack, writer provider.WrittenBy) provider.ChangeGroup {
+	tags := stampTags(ns, tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {

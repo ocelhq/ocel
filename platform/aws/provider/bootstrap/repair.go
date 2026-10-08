@@ -203,7 +203,7 @@ func repairStack(ctx context.Context, apis APIs, ns Namespace, tier environment.
 	if err != nil {
 		return false, err
 	}
-	tags := stampTags(ns, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
+	tags := stampTags(ns, tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	if err := cfn.Update(ctx, apis.CFN, ns.ChangeSetNameFor, stale.Name, stack.body, stack.params, capabilities, tags, repairable(ns)); err != nil {
 		return false, err
