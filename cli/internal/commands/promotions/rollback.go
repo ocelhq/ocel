@@ -115,7 +115,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return nil
 		}
 
-		attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), productionEnvironment(), "")
+		attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, "")
 
 		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
 		rolled, err := promote(ctx, promoting, provider, cfg, target)
@@ -127,7 +127,9 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return err
 		}
 		promoted := rolled.GetPromoted()
-		if succeeded, err = reportRolledBack(attempt, promoted); err != nil {
+		apps, unparsed := deployreport.AppsRolledBack(attempt.Project, promoted.GetReleases())
+		promotion := &consolev1.Promotion{Id: promoted.GetPromotionId(), Seq: promoted.GetTs(), Tag: promoted.GetTag()}
+		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, promotion, unparsed); err != nil {
 			return err
 		}
 		tagSuffix := ""
@@ -264,4 +266,11 @@ func elided(values []string) string {
 		return strings.Join(values, ", ")
 	}
 	return fmt.Sprintf("%s and %d more", strings.Join(values[:rollbackListCap], ", "), len(values)-rollbackListCap)
+}
+
+func resolvedProject(p commands.ProviderRun, cfg *project.Project) *project.Project {
+	if p.Preflight.Project != nil {
+		return p.Preflight.Project
+	}
+	return cfg
 }

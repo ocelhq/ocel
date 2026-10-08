@@ -145,11 +145,20 @@ func TestARolledBackPromotionRecordsEachAppAtTheReleaseItWentLiveWith(t *testing
 	}
 }
 
-func TestARollbackToAReleaseNoBuildNamesIsRefused(t *testing.T) {
+func TestARolledBackReleaseThatNamesNoBuildIsLeftOutAndNamedInTheError(t *testing.T) {
 	t.Parallel()
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "next"}},
+		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
+	}}
 
-	if _, err := AppsRolledBack(&project.Project{}, map[string]string{"web": "no-separator"}); err == nil {
-		t.Fatal("AppsRolledBack() = nil, want an error for a release that names no build")
+	apps, err := AppsRolledBack(cfg, map[string]string{"web": "no-separator", "api": "a1b2c3d4e5f60718~0123456789ab"})
+
+	if err == nil || !strings.Contains(err.Error(), "web") {
+		t.Errorf("AppsRolledBack() error = %v, want one naming web", err)
+	}
+	if len(apps) != 1 || apps[0].GetName() != "api" {
+		t.Errorf("apps = %v, want api, which names its build", apps)
 	}
 }
 
@@ -162,12 +171,21 @@ func mustAppsDeployed(t *testing.T, manifest *contractv1.Manifest, results []*pr
 	return apps
 }
 
-func TestAnAppWhoseFrameworkBuildIDCannotBeReadFailsTheRecord(t *testing.T) {
+func TestAnAppWhoseFrameworkBuildIDCannotBeReadIsRecordedWithoutItAndNamedInTheError(t *testing.T) {
 	t.Parallel()
+	results := []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Release: webRelease}}
 
-	_, err := AppsDeployed(deployedManifest(), nil, environmentv1.Tier_TIER_PRODUCTION, func(app string) (string, error) { return "", errors.New("no serve descriptor") })
+	apps, err := AppsDeployed(deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(app string) (string, error) {
+		if app == "web" {
+			return "", errors.New("unparseable serve descriptor")
+		}
+		return "fw-" + app, nil
+	})
 
 	if err == nil || !strings.Contains(err.Error(), "web") {
-		t.Fatalf("AppsDeployed() error = %v, want one naming the app", err)
+		t.Errorf("AppsDeployed() error = %v, want one naming the app", err)
+	}
+	if len(apps) != 2 || apps[0].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED || apps[0].GetFrameworkBuildId() != "" || apps[1].GetFrameworkBuildId() != "fw-api" {
+		t.Errorf("apps = %v, want both apps, web live without a framework build id", apps)
 	}
 }

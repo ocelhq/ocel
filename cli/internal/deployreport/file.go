@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -46,6 +47,14 @@ func Write(projectDir string, deployment *consolev1.Deployment) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func WriteSucceeded(attempt *Attempt, apps []*consolev1.App, promotion *consolev1.Promotion, incomplete error) (*consolev1.Deployment, error) {
+	deployment := attempt.Succeeded(time.Now(), apps, promotion)
+	if err := errors.Join(incomplete, Write(attempt.Project.Dir, deployment)); err != nil {
+		return deployment, fmt.Errorf("promotion %s is live, but its deploy report is incomplete: %w", promotion.GetId(), err)
+	}
+	return deployment, nil
 }
 
 func Clear(projectDir string) error {

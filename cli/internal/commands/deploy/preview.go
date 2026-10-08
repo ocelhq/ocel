@@ -271,7 +271,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
-		apps = appsDeployed(cfg, manifest, nil, env)
+		apps, _ = appsDeployed(cfg, manifest, nil, env)
 
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
@@ -295,14 +295,15 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
-		apps = appsDeployed(cfg, manifest, out.apps, env)
+		var unread error
+		apps, unread = appsDeployed(cfg, manifest, out.apps, env)
 		if err != nil {
 			return err
 		}
 		deployed = true
 		deployTelemetry.noteDeployed()
 
-		if succeeded, err = reportDeployed(cfg, manifest, env, attempt, out, ""); err != nil {
+		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, out.promotion(""), unread); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))

@@ -5,12 +5,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -77,6 +79,25 @@ func TestWriteReplacesTheReportOfAnEarlierDeployment(t *testing.T) {
 	leftovers, _ := filepath.Glob(filepath.Join(dir, statedir.Name, "deploy-report.json.*"))
 	if len(leftovers) != 0 {
 		t.Errorf("temporary files left behind: %v", leftovers)
+	}
+}
+
+func TestASucceededDeploymentWhoseReportCannotBeWrittenIsStillTheSucceededRecord(t *testing.T) {
+	t.Parallel()
+	notADirectory := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADirectory, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	attempt := productionAttempt()
+	attempt.Project = &project.Project{Dir: notADirectory}
+
+	deployment, err := WriteSucceeded(&attempt, liveApps(), livePromotion(), nil)
+
+	if err == nil || !strings.Contains(err.Error(), "p_01 is live") {
+		t.Errorf("WriteSucceeded() error = %v, want one saying promotion p_01 is live", err)
+	}
+	if deployment.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED || deployment.GetPromotion().GetId() != "p_01" {
+		t.Errorf("deployment = %v, want the succeeded record of p_01", deployment)
 	}
 }
 

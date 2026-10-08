@@ -162,7 +162,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
-		apps = appsDeployed(cfg, manifest, nil, env)
+		apps, _ = appsDeployed(cfg, manifest, nil, env)
 
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
@@ -186,13 +186,14 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
-		apps = appsDeployed(cfg, manifest, out.apps, env)
+		var unread error
+		apps, unread = appsDeployed(cfg, manifest, out.apps, env)
 		if err != nil {
 			return err
 		}
 		deployTelemetry.noteDeployed()
 
-		if succeeded, err = reportDeployed(cfg, manifest, env, attempt, out, opts.tag); err != nil {
+		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, out.promotion(opts.tag), unread); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
