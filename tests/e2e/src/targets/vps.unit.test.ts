@@ -112,11 +112,27 @@ describe("heldProbe", () => {
 });
 
 describe("projectLeftovers", () => {
-  it("names every container and volume still labelled with the project", () => {
+  it("names every container, volume, key-value partition, release window and empty release directory the project left", () => {
     expect(projectLeftovers("j-kv")).toBe(
-      "sudo docker ps -a --filter label=ocel.project=j-kv --format 'the container {{.Names}}'; " +
-        "sudo docker volume ls --filter label=ocel.project=j-kv --format 'the volume {{.Name}}'",
+      "sudo docker ps -a --filter label=ocel.project=j-kv --format 'the container {{.Names}}' && " +
+        "sudo docker volume ls --filter label=ocel.project=j-kv --format 'the volume {{.Name}}' && " +
+        "sudo sh -c 'for found in /var/lib/ocel/*/keyvalues/*+j-kv /var/lib/ocel/*/keyvalues/*+j-kv+*; do " +
+        `if [ -e "$found" ]; then echo "the key-value partition $found"; fi; done' && ` +
+        "{ sudo test ! -e '/var/lib/ocel/releases/j-kv' || sudo find '/var/lib/ocel/releases/j-kv' " +
+        "\\( -type f ! -name .dropped -o -type d -empty \\) -printf 'the release entry %p\\n'; }",
     );
+  });
+
+  it("matches the partitions of a slug by the name the box gives its directory", () => {
+    expect(projectLeftovers("j-kv/x")).toContain(
+      "/var/lib/ocel/*/keyvalues/*+j-kv%2Fx /var/lib/ocel/*/keyvalues/*+j-kv%2Fx+*",
+    );
+  });
+
+  it("fails rather than reads a search it could not run as nothing left", () => {
+    const check = projectLeftovers("j-kv");
+    expect(check).not.toContain("|| true");
+    expect(check).not.toContain("2>/dev/null");
   });
 });
 
