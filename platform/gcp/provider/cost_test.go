@@ -538,6 +538,26 @@ func TestShapeOfANextPreviewBehindIdentityAwareProxyListsNoRefreshQueueAndKeepsI
 	}
 }
 
+func TestAServerlessNextAppIsPricedForEveryHourItsInstanceLivesAtTheInstanceRate(t *testing.T) {
+	client, costs := costServed(t)
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    nextManifest(false),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+
+	service := estimateOfType(t, est, set, "google_cloud_run_v2_service", "project:shop/environment:prod/app:web")
+	if got := componentNamed(t, est, service.GetResource(), "CPU, always allocated").GetMonthlyCost(); got != "47.30" {
+		t.Errorf("the service's CPU costs %s, want 47.30 (one vCPU for 730 h at 0.000018): an instance that keeps its CPU bills while it idles", got)
+	}
+}
+
 func TestANextAppIsPricedAtTheMemoryItsServicesRunWith(t *testing.T) {
 	client, _ := costServed(t)
 	image := "europe-west1-docker.pkg.dev/acme-prod/ocel/web@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
