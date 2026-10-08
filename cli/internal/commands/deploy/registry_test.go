@@ -365,7 +365,7 @@ func TestRemovingAPreviewSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWit
 
 	registries := removedWithRegistry(t, fixture)
 	if len(registries) != 1 || registries[0].GetServer() != "registry.example.com" || registries[0].GetUsername() != "acme-bot" || registries[0].GetPassword() != "hunter2" {
-		t.Errorf("the removal named %v, want the project's registry with its secret resolved: it is how the images the preview pushed there are deleted", registries)
+		t.Errorf("the removal named %d registries, want the project's registry with its secret resolved: it is how the images the preview pushed there are deleted", len(registries))
 	}
 }
 
@@ -378,7 +378,7 @@ func TestRemovingAPreviewWhoseRegistryVariableIsUnsetStillRemovesItAndSaysWhatIt
 	out := previewRemove(t, fixture, dependencies, previewRemoveOptions{})
 
 	if registries := removedWithRegistry(t, fixture); len(registries) != 1 || registries[0] != nil {
-		t.Fatalf("the removal named %v, want none: a token that is gone must not keep a preview from being torn down", registries)
+		t.Fatalf("the removal named %d registries, want one removal naming none: a token that is gone must not keep a preview from being torn down", len(registries))
 	}
 	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
 		if !strings.Contains(out, want) {
