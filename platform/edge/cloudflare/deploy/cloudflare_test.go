@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -393,6 +394,55 @@ func TestBuildAssetBatch(t *testing.T) {
 		data, _ := io.ReadAll(part)
 		if string(data) != base64.StdEncoding.EncodeToString([]byte("<svg/>")) {
 			t.Errorf("part body must be the base64-encoded contents, got %q", data)
+		}
+	})
+
+	t.Run("each file part is typed as the AWS asset upload types the same file", func(t *testing.T) {
+		t.Parallel()
+
+		want := map[string]string{
+			"/_next/static/chunk.js":    "text/javascript; charset=utf-8",
+			"/_next/static/css/app.css": "text/css; charset=utf-8",
+			"/next.svg":                 "image/svg+xml",
+			"/chunk.js.map":             "application/json; charset=utf-8",
+			"/favicon.ico":              "image/x-icon",
+			"/robots.txt":               "text/plain",
+			"/manifest.json":            "application/manifest+json",
+			"/index.html":               "text/html; charset=utf-8",
+			"/font.woff2":               "font/woff2",
+			"/LICENSE":                  "application/octet-stream",
+		}
+		assets := map[string]edge.StaticAsset{}
+		var bucket []string
+		for p := range want {
+			assets[p] = edge.StaticAsset{Path: p, Content: []byte("x")}
+			bucket = append(bucket, p)
+		}
+		body, contentType, err := buildAssetBatch(bucket, assets)
+		if err != nil {
+			t.Fatalf("buildAssetBatch: %v", err)
+		}
+		_, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			t.Fatalf("parse content type: %v", err)
+		}
+		mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+		parts := 0
+		for {
+			part, err := mr.NextPart()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatalf("read part: %v", err)
+			}
+			parts++
+			if got := part.Header.Get("Content-Type"); got != want[part.FormName()] {
+				t.Errorf("%s part Content-Type = %q, want %q", part.FormName(), got, want[part.FormName()])
+			}
+		}
+		if parts != len(want) {
+			t.Errorf("parts = %d, want %d", parts, len(want))
 		}
 	})
 }
