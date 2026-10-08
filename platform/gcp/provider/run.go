@@ -607,7 +607,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress progre
 	if err != nil {
 		return err
 	}
-	p.removeUnrunImages(ctx, "", images, nil, nil, time.Now(), progress)
+	p.removeUnrunImages(ctx, "", images, nil, func(context.Context) (map[string]bool, error) { return nil, nil }, progress)
 	return nil
 }
 

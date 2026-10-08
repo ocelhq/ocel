@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -286,19 +285,29 @@ func TestAReconcileOfAFailedReleaseRemovesTheImageItsOwnRecordNames(t *testing.T
 	}
 }
 
-func TestAReconcileLeavesTaggedAnImagePushedSinceItReadTheRecords(t *testing.T) {
-	server := &runServer{updated: map[string]time.Time{shopWebPackage + "/tags/sha256-new": time.Now().Add(time.Hour)}}
-	said := &fake.Log{}
+func TestARemovalReadsTheRecordsAgainBeforeEachImageItTakes(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	server.onUntag = func(string) { recordStartingImage(t, p, aPreviewOfTheSameApp(), shopWebImage+"two") }
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, said); err != nil {
+	p.removeUnusedImages(context.Background(), aContainerStack(), []string{shopWebImage + "one", shopWebImage + "two"}, nil, nil)
+
+	if got, want := server.untags(), []string{shopWebPackage + "/tags/sha256-one"}; !slices.Equal(got, want) {
+		t.Errorf("the removal untagged %v, want %v: a deploy that recorded sha256-two while the removal ran found it tagged and will release it", got, want)
+	}
+}
+
+func TestARemovalUntagsAnImageOnlyItsOwnStackRecordsHoweverRecentlyItWasPushed(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	recordStartingImage(t, p, aContainerStack(), shopWebImage+"new")
+
+	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
-	if got := server.untags(); len(got) != 0 {
-		t.Errorf("the reconcile untagged %v, want nothing: a tag pushed after the records were read may belong to a deploy those records could not show yet", got)
-	}
-	if !strings.Contains(strings.Join(said.Lines(), "\n"), "sha256-new") {
-		t.Errorf("the reconcile said %v, want a line naming the tag it left", said.Lines())
+	if got, want := server.untags(), []string{shopWebPackage + "/tags/sha256-new"}; !slices.Equal(got, want) {
+		t.Errorf("the reconcile untagged %v, want %v: a release that failed seconds after its push reclaims the image no revision runs", got, want)
 	}
 }
 

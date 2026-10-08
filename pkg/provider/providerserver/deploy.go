@@ -1170,12 +1170,18 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			}
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
 			if err != nil {
-				return err
+				resent, pushErr := pushRemovedImages(ctx, images, progress)
+				if pushErr != nil || !resent {
+					return errors.Join(err, pushErr)
+				}
+				if result, err = r.provider.Stacks().Provision(ctx, spec, progress); err != nil {
+					return err
+				}
 			}
 			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
 				return err
 			}
-			if err := pushRemovedImages(ctx, images, progress); err != nil {
+			if _, err := pushRemovedImages(ctx, images, progress); err != nil {
 				return err
 			}
 			address, deployment := findOwnAddresses(entry, facts, result)

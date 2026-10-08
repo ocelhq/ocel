@@ -18,15 +18,11 @@ import (
 
 const batchDeleteImages = 100
 
-func sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRef string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
-	repository, err := repositoryOf(target, imageRef)
-	if err != nil {
-		return nil, err
-	}
-	return sweepRepository(ctx, api, target, repository, kept, pushedBefore)
-}
+type Recorded func(ctx context.Context) (map[string]bool, error)
 
-func sweepRepository(ctx context.Context, api ECRAPI, target provider.RegistryTarget, repository string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
+func noneRecorded(context.Context) (map[string]bool, error) { return nil, nil }
+
+func sweepRepository(ctx context.Context, api ECRAPI, target provider.RegistryTarget, repository string, kept map[string]bool, recorded Recorded, pushedBefore time.Time) ([]string, error) {
 	var unkept []string
 	var token *string
 	for {
@@ -56,10 +52,10 @@ func sweepRepository(ctx context.Context, api ECRAPI, target provider.RegistryTa
 			break
 		}
 	}
-	return deleteTags(ctx, api, target, repository, unkept)
+	return deleteTags(ctx, api, target, repository, unkept, recorded)
 }
 
-func removeImages(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRefs []string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
+func removeImages(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRefs []string, kept map[string]bool, recorded Recorded) ([]string, error) {
 	tagged := map[string][]string{}
 	for _, imageRef := range imageRefs {
 		if kept[imageRef] {
@@ -78,54 +74,28 @@ func removeImages(ctx context.Context, api ECRAPI, target provider.RegistryTarge
 	var removed []string
 	var errs []error
 	for _, repository := range slices.Sorted(maps.Keys(tagged)) {
-		tags, err := pushedTagsBefore(ctx, api, repository, tagged[repository], pushedBefore)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		gone, err := deleteTags(ctx, api, target, repository, tags)
+		gone, err := deleteTags(ctx, api, target, repository, tagged[repository], recorded)
 		removed = append(removed, gone...)
 		errs = append(errs, err)
 	}
 	return removed, errors.Join(errs...)
 }
 
-func pushedTagsBefore(ctx context.Context, api ECRAPI, repository string, tags []string, pushedBefore time.Time) ([]string, error) {
-	if pushedBefore.IsZero() {
-		return tags, nil
-	}
-	var before []string
-	for _, tag := range tags {
-		described, err := api.DescribeImages(ctx, &ecr.DescribeImagesInput{
-			RepositoryName: aws.String(repository),
-			ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(tag)}},
-		})
-		var gone *ecrtypes.RepositoryNotFoundException
-		var untagged *ecrtypes.ImageNotFoundException
-		switch {
-		case errors.As(err, &gone):
-			return nil, nil
-		case errors.As(err, &untagged):
-			continue
-		case err != nil:
-			return nil, fmt.Errorf("read when %s:%s was pushed to this account's ECR: %w", repository, tag, err)
-		}
-		if slices.ContainsFunc(described.ImageDetails, func(detail ecrtypes.ImageDetail) bool {
-			return detail.ImagePushedAt == nil || detail.ImagePushedAt.After(pushedBefore)
-		}) {
-			continue
-		}
-		before = append(before, tag)
-	}
-	return before, nil
-}
-
-func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget, repository string, tags []string) ([]string, error) {
+func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget, repository string, tags []string, recorded Recorded) ([]string, error) {
 	var removed []string
 	for batch := range slices.Chunk(tags, batchDeleteImages) {
+		kept, err := recorded(ctx)
+		if err != nil {
+			return removed, fmt.Errorf("read the images the project's stacks record again before removing any from %s: %w", repository, err)
+		}
 		ids := make([]ecrtypes.ImageIdentifier, 0, len(batch))
 		for _, tag := range batch {
-			ids = append(ids, ecrtypes.ImageIdentifier{ImageTag: aws.String(tag)})
+			if !kept[target.Server+"/"+repository+":"+tag] {
+				ids = append(ids, ecrtypes.ImageIdentifier{ImageTag: aws.String(tag)})
+			}
+		}
+		if len(ids) == 0 {
+			continue
 		}
 		out, err := api.BatchDeleteImage(ctx, &ecr.BatchDeleteImageInput{RepositoryName: aws.String(repository), ImageIds: ids})
 		var gone *ecrtypes.RepositoryNotFoundException
@@ -148,7 +118,7 @@ func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget,
 	return removed, nil
 }
 
-func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded map[string]bool, pushedBefore time.Time) ([]string, error) {
+func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded Recorded, pushedBefore time.Time) ([]string, error) {
 	target, err := Resolve(ctx, api)
 	if err != nil {
 		return nil, err
@@ -156,15 +126,30 @@ func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded map[st
 	if !strings.HasPrefix(imageRef, target.Server+"/") {
 		return nil, nil
 	}
-	kept := maps.Clone(recorded)
-	if kept == nil {
-		kept = map[string]bool{}
+	repository, err := repositoryOf(target, imageRef)
+	if err != nil {
+		return nil, err
 	}
-	kept[imageRef] = true
-	return sweep(ctx, api, target, imageRef, kept, pushedBefore)
+	keptWithOwn := func(ctx context.Context) (map[string]bool, error) {
+		kept, err := recorded(ctx)
+		if err != nil {
+			return nil, err
+		}
+		kept = maps.Clone(kept)
+		if kept == nil {
+			kept = map[string]bool{}
+		}
+		kept[imageRef] = true
+		return kept, nil
+	}
+	kept, err := keptWithOwn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sweepRepository(ctx, api, target, repository, kept, keptWithOwn, pushedBefore)
 }
 
-func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
+func Forget(ctx context.Context, api ECRAPI, imageRefs []string, recorded Recorded, sweptBefore time.Time) ([]string, error) {
 	target, err := Resolve(ctx, api)
 	if err != nil {
 		return nil, err
@@ -175,10 +160,14 @@ func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string
 			ours = append(ours, imageRef)
 		}
 	}
-	removed, err := removeImages(ctx, api, target, ours, kept, pushedBefore)
+	kept, err := recorded(ctx)
+	if err != nil {
+		return nil, err
+	}
+	removed, err := removeImages(ctx, api, target, ours, kept, recorded)
 	errs := []error{err}
 	for _, repository := range unkeptRepositories(target, ours, kept) {
-		swept, err := sweepRepository(ctx, api, target, repository, kept, pushedBefore)
+		swept, err := sweepRepository(ctx, api, target, repository, kept, recorded, sweptBefore)
 		removed = append(removed, swept...)
 		if err != nil {
 			errs = append(errs, err)

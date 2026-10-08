@@ -41,19 +41,6 @@ func (f *fakeECR) DescribeImages(_ context.Context, in *ecr.DescribeImagesInput,
 		return nil, &ecrtypes.RepositoryNotFoundException{Message: aws.String(repository + " is gone")}
 	}
 	f.described++
-	if len(in.ImageIds) > 0 {
-		out := &ecr.DescribeImagesOutput{}
-		for _, id := range in.ImageIds {
-			if !slices.Contains(tags, aws.ToString(id.ImageTag)) {
-				return nil, &ecrtypes.ImageNotFoundException{Message: aws.String(aws.ToString(id.ImageTag) + " is not in " + repository)}
-			}
-			out.ImageDetails = append(out.ImageDetails, ecrtypes.ImageDetail{
-				ImageTags:     []string{aws.ToString(id.ImageTag)},
-				ImagePushedAt: aws.Time(f.pushedAt[aws.ToString(id.ImageTag)]),
-			})
-		}
-		return out, nil
-	}
 	start := 0
 	if in.NextToken != nil {
 		start, _ = strconv.Atoi(*in.NextToken)
@@ -89,13 +76,13 @@ func TestASweepDeletesEveryImageOfTheRepositoryNothingKeeps(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-old", "sha256-kept", "sha256-older"}}, pushedAt: pushedLongAgo("sha256-old", "sha256-kept", "sha256-older")}
 
-	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-kept"), map[string]bool{ref("sha256-kept"): true}, now)
+	removed, err := sweepRepository(context.Background(), api, anECRTarget(), shopWeb, map[string]bool{ref("sha256-kept"): true}, recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
 	if err != nil {
-		t.Fatalf("sweep() = %v", err)
+		t.Fatalf("sweepRepository() = %v", err)
 	}
 
 	if want := []string{ref("sha256-old"), ref("sha256-older")}; !slices.Equal(removed, want) {
-		t.Errorf("sweep() removed %v, want %v", removed, want)
+		t.Errorf("sweepRepository() removed %v, want %v", removed, want)
 	}
 	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-kept"}) {
 		t.Errorf("the repository holds %v, want only the image a kept release pins", got)
@@ -110,13 +97,13 @@ func TestASweepLeavesAnImagePushedMoreRecentlyThanThePushedBefore(t *testing.T) 
 		pushedAt: map[string]time.Time{"sha256-old": longAgo, "sha256-just-pushed": now.Add(-5 * time.Minute)},
 	}
 
-	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now.Add(-time.Hour))
+	removed, err := sweepRepository(context.Background(), api, anECRTarget(), shopWeb, nil, recordedAs(nil), now.Add(-time.Hour))
 	if err != nil {
-		t.Fatalf("sweep() = %v", err)
+		t.Fatalf("sweepRepository() = %v", err)
 	}
 
 	if want := []string{ref("sha256-old")}; !slices.Equal(removed, want) {
-		t.Errorf("sweep() removed %v, want %v: another deploy pushes an image before it records the release that runs it, and deleting that image fails the deploy", removed, want)
+		t.Errorf("sweepRepository() removed %v, want %v: another deploy pushes an image before it records the release that runs it, and deleting that image fails the deploy", removed, want)
 	}
 }
 
@@ -129,25 +116,25 @@ func TestASweepReadsEveryPageAndDeletesInBatchesECRAccepts(t *testing.T) {
 	}
 	api := &fakeECR{tagged: map[string][]string{shopWeb: slices.Clone(tags)}, pushedAt: pushedLongAgo(tags...), pageSize: 100}
 
-	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-000"), nil, now)
+	removed, err := sweepRepository(context.Background(), api, anECRTarget(), shopWeb, nil, recordedAs(nil), now)
 	if err != nil {
-		t.Fatalf("sweep() = %v", err)
+		t.Fatalf("sweepRepository() = %v", err)
 	}
 
 	if len(removed) != 250 || len(api.tagged[shopWeb]) != 0 {
-		t.Errorf("sweep() removed %d images and left %v, want all 250 of a repository that spans three pages", len(removed), api.tagged[shopWeb])
+		t.Errorf("sweepRepository() removed %d images and left %v, want all 250 of a repository that spans three pages", len(removed), api.tagged[shopWeb])
 	}
 	if api.deleteCalls != 3 {
-		t.Errorf("sweep() called BatchDeleteImage %d times, want 3: it takes 100 image ids a call", api.deleteCalls)
+		t.Errorf("sweepRepository() called BatchDeleteImage %d times, want 3: it takes 100 image ids a call", api.deleteCalls)
 	}
 }
 
 func TestASweepOfARepositoryThatIsGoneIsDone(t *testing.T) {
 	t.Parallel()
 
-	removed, err := sweep(context.Background(), &fakeECR{}, anECRTarget(), ref("sha256-new"), nil, now)
+	removed, err := sweepRepository(context.Background(), &fakeECR{}, anECRTarget(), shopWeb, nil, recordedAs(nil), now)
 	if err != nil || len(removed) != 0 {
-		t.Errorf("sweep() = %v, %v, want nothing removed and no error: the repository a first deploy has not created yet holds nothing to reclaim", removed, err)
+		t.Errorf("sweepRepository() = %v, %v, want nothing removed and no error: the repository a first deploy has not created yet holds nothing to reclaim", removed, err)
 	}
 }
 
@@ -156,17 +143,9 @@ func TestASweepECRRefusesSaysWhichRepository(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-old"}}, describeErr: errors.New("AccessDeniedException: not authorized to perform ecr:DescribeImages")}
 
-	_, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now)
+	_, err := sweepRepository(context.Background(), api, anECRTarget(), shopWeb, nil, recordedAs(nil), now)
 	if err == nil {
-		t.Fatal("sweep() = nil for a listing ECR refused")
-	}
-}
-
-func TestASweepOfAnImageUnderAnotherRegistryIsRefused(t *testing.T) {
-	t.Parallel()
-
-	if _, err := sweep(context.Background(), &fakeECR{}, anECRTarget(), "ghcr.io/acme/web:sha256-new", nil, now); err == nil {
-		t.Error("sweep() accepted a coordinate under another registry, which no repository of this account's holds")
+		t.Fatal("sweepRepository() = nil for a listing ECR refused")
 	}
 }
 
@@ -175,7 +154,7 @@ func TestRemovingImagesDeletesTheOnesNoRecordedReleaseKeeps(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-one", "sha256-two", "sha256-three"}}}
 
-	removed, err := removeImages(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true}, now)
+	removed, err := removeImages(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true}, recordedAs(map[string]bool{ref("sha256-two"): true}))
 	if err != nil {
 		t.Fatalf("removeImages() = %v", err)
 	}
@@ -199,7 +178,7 @@ func TestReconcilingKeepsTheImageTheReleaseRunsAndEveryOneARecordedReleaseRuns(t
 	api.tagged = map[string][]string{shopWeb: {"sha256-new", "sha256-kept", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-new", "sha256-kept", "sha256-leaked")
 
-	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), map[string]bool{ref("sha256-kept"): true}, now)
+	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
@@ -216,7 +195,7 @@ func TestReconcilingAnImageOfAnotherRegistryTouchesNothing(t *testing.T) {
 	api.tagged = map[string][]string{shopWeb: {"sha256-old"}}
 	api.pushedAt = pushedLongAgo("sha256-old")
 
-	removed, err := Reconcile(context.Background(), api, "ghcr.io/acme/shop.web:sha256-new", nil, now)
+	removed, err := Reconcile(context.Background(), api, "ghcr.io/acme/shop.web:sha256-new", recordedAs(nil), now)
 	if err != nil || len(removed) != 0 || api.deleteCalls != 0 {
 		t.Errorf("Reconcile() = %v, %v with %d deletes, want nothing: the project's own registry is not this account's to prune", removed, err, api.deleteCalls)
 	}
@@ -230,7 +209,7 @@ func TestForgettingDeletesTheImagesAStackRanThatNoRecordedReleaseRuns(t *testing
 
 	removed, err := Forget(context.Background(), api,
 		[]string{ref("sha256-one"), ref("sha256-shared"), "ghcr.io/acme/shop.web:sha256-elsewhere"},
-		map[string]bool{ref("sha256-shared"): true}, now)
+		recordedAs(map[string]bool{ref("sha256-shared"): true}), now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -250,7 +229,7 @@ func TestForgettingTheLastImagesOfARepositoryDeletesTheRepository(t *testing.T) 
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-leaked")
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, nil, now)
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(nil), now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -270,7 +249,7 @@ func TestForgettingKeepsARepositoryAnotherStackStillRunsAnImageFrom(t *testing.T
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-kept", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-kept", "sha256-leaked")
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, map[string]bool{ref("sha256-kept"): true}, now)
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -292,7 +271,7 @@ func TestForgettingStillDeletesOneRepositoryWhenAnotherRefusesItsDeletes(t *test
 	api.pushedAt = pushedLongAgo("sha256-one", "sha256-two")
 	api.refusedIn = shopAPI
 
-	_, err := Forget(context.Background(), api, []string{ref("sha256-one"), registryAt + "/" + shopAPI + ":sha256-two"}, nil, now)
+	_, err := Forget(context.Background(), api, []string{ref("sha256-one"), registryAt + "/" + shopAPI + ":sha256-two"}, recordedAs(nil), now)
 	if err == nil {
 		t.Fatal("Forget() = nil for a repository whose deletes ECR refused")
 	}
@@ -309,7 +288,7 @@ func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *tes
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-just-pushed"}}
 	api.pushedAt = map[string]time.Time{"sha256-one": longAgo, "sha256-just-pushed": now.Add(5 * time.Minute)}
 
-	if _, err := Forget(context.Background(), api, []string{ref("sha256-one")}, nil, now); err != nil {
+	if _, err := Forget(context.Background(), api, []string{ref("sha256-one")}, recordedAs(nil), now); err != nil {
 		t.Fatalf("Forget() = %v, want nothing: ECR refusing to delete a repository that still holds an image is the repository staying", err)
 	}
 
@@ -321,22 +300,72 @@ func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *tes
 	}
 }
 
-func TestForgettingLeavesAnImageItNamesThatWasPushedAfterTheRecordsWereRead(t *testing.T) {
+func recordedAs(kept map[string]bool) Recorded {
+	return func(context.Context) (map[string]bool, error) { return kept, nil }
+}
+
+func TestForgettingRemovesAnImageItNamesHoweverRecentlyItWasPushed(t *testing.T) {
 	t.Parallel()
 
 	api := aLoggedInECR()
 	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-old"}}
-	api.pushedAt = map[string]time.Time{"sha256-one": now.Add(time.Minute), "sha256-old": longAgo}
+	api.pushedAt = map[string]time.Time{"sha256-one": now.Add(-10 * time.Second), "sha256-old": longAgo}
 
-	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old"), ref("sha256-gone")}, nil, now)
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old"), ref("sha256-gone")}, recordedAs(nil), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("Forget() = %v", err)
+	}
+
+	if want := []string{ref("sha256-one"), ref("sha256-old")}; !slices.Equal(removed, want) {
+		t.Errorf("Forget() removed %v, want %v: a deploy that failed seconds after pushing reclaims the image only its own record names", removed, want)
+	}
+}
+
+func TestARemovalLeavesAnImageARecordNamesByTheTimeItDeletes(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-old"}}
+	api.pushedAt = pushedLongAgo("sha256-one", "sha256-old")
+	reads := 0
+	recorded := func(context.Context) (map[string]bool, error) {
+		reads++
+		if reads == 1 {
+			return nil, nil
+		}
+		return map[string]bool{ref("sha256-one"): true}, nil
+	}
+
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old")}, recorded, now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
 
 	if want := []string{ref("sha256-old")}; !slices.Equal(removed, want) {
-		t.Errorf("Forget() removed %v, want %v: a tag pushed after the records were read may be one a deploy recorded since", removed, want)
+		t.Errorf("Forget() removed %v, want %v: a deploy that recorded sha256-one after the first read found it pushed and will pull it", removed, want)
 	}
 	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-one"}) {
-		t.Errorf("the repository holds %v, want the tag pushed after the read", got)
+		t.Errorf("the repository holds %v, want the image a deploy recorded since the first read", got)
+	}
+}
+
+func TestAReconcileLeavesAnImageARecordNamesByTheTimeItDeletes(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-new", "sha256-recorded-since"}}
+	api.pushedAt = pushedLongAgo("sha256-new", "sha256-recorded-since")
+	reads := 0
+	recorded := func(context.Context) (map[string]bool, error) {
+		reads++
+		if reads == 1 {
+			return nil, nil
+		}
+		return map[string]bool{ref("sha256-recorded-since"): true}, nil
+	}
+
+	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), recorded, now)
+	if err != nil || len(removed) != 0 {
+		t.Errorf("Reconcile() = %v, %v, want nothing removed: the image a record names by the time of the delete stays", removed, err)
 	}
 }

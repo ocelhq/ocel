@@ -15,7 +15,7 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 	}
 	resources.SayRemovedImages(log, app, removed)
 	if images != nil {
-		resources.RemovePushedImages(ctx, images, app, removed, log)
+		resources.RemovePushedImages(ctx, images, app, removed, nil, log)
 	}
 	return nil
 }

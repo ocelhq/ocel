@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"time"
 
 	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/googleapi"
@@ -112,22 +111,17 @@ func imageLabelValue(image string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-const recordsClockSkew = time.Minute
-
 func (p *Provider) removeUnusedImages(ctx context.Context, ref provider.StackRef, ran []string, images provider.ImageStore, progress progress.Log) {
 	if len(ran) == 0 {
 		return
 	}
-	readAt := time.Now()
-	recorded, err := stackrecords.ListRecordedAppImages(ctx, p.KeyValues(), ref.Project, ref.Name.App, ref)
-	if err != nil {
-		ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as the images the project's other stacks record could not be read: %v", strings.Join(ran, ", "), err))
-		return
+	recorded := func(ctx context.Context) (map[string]bool, error) {
+		return stackrecords.ListRecordedAppImages(ctx, p.KeyValues(), ref.Project, ref.Name.App, ref)
 	}
-	p.removeUnrunImages(ctx, ref.Name.App, ran, images, recorded, readAt, progress)
+	p.removeUnrunImages(ctx, ref.Name.App, ran, images, recorded, progress)
 }
 
-func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []string, images provider.ImageStore, recorded map[string]bool, readAt time.Time, progress progress.Log) {
+func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []string, images provider.ImageStore, recorded func(context.Context) (map[string]bool, error), progress progress.Log) {
 	tagged := map[string]string{}
 	var pushed []string
 	for _, image := range ran {
@@ -154,7 +148,12 @@ func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []stri
 		return
 	}
 	unused := func(image string) bool {
-		if recorded[image] {
+		kept, err := recorded(ctx)
+		if err != nil {
+			ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as the images the project's other stacks record could not be read: %v", image, err))
+			return false
+		}
+		if kept[image] {
 			return false
 		}
 		running, err := isRunByARevision(ctx, revisions, clients.project, image)
@@ -166,7 +165,7 @@ func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []stri
 	}
 	for _, image := range pushed {
 		if unused(image) {
-			resources.RemovePushedImages(ctx, images, app, []string{image}, progress)
+			resources.RemovePushedImages(ctx, images, app, []string{image}, recorded, progress)
 		}
 	}
 	if len(tagged) == 0 {
@@ -178,26 +177,14 @@ func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []stri
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(tagged)) {
-		if !unused(tagged[name]) {
-			continue
+		if unused(tagged[name]) {
+			untag(ctx, repositories, name, progress)
 		}
-		untagUnlessPushedSince(ctx, repositories, name, readAt.Add(-recordsClockSkew), progress)
 	}
 }
 
-func untagUnlessPushedSince(ctx context.Context, repositories *artifactregistry.Service, name string, since time.Time, progress progress.Log) {
-	pushedAt, err := readTagPushTime(ctx, repositories, name)
-	switch {
-	case absent(err):
-		return
-	case err != nil:
-		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as when it was pushed could not be read: %v", name, err))
-		return
-	case pushedAt.After(since):
-		ensureProgress(progress).Say(fmt.Sprintf("Left %s tagged, as it was pushed after the stacks that could run it were read", name))
-		return
-	}
-	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
+func untag(ctx context.Context, repositories *artifactregistry.Service, name string, progress progress.Log) {
+	_, err := attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
 		_, err := repositories.Projects.Locations.Repositories.Packages.Tags.Delete(name).Context(ctx).Do(call...)
 		return nil, err
 	})
@@ -209,22 +196,6 @@ func untagUnlessPushedSince(ctx context.Context, repositories *artifactregistry.
 	default:
 		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged after no revision ran it, so the repository keeps the image until it is untagged: %v", name, err))
 	}
-}
-
-func readTagPushTime(ctx context.Context, repositories *artifactregistry.Service, name string) (time.Time, error) {
-	tag, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
-		return repositories.Projects.Locations.Repositories.Packages.Tags.Get(name).Context(ctx).Do(call...)
-	})
-	if err != nil {
-		return time.Time{}, err
-	}
-	version, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Version, error) {
-		return repositories.Projects.Locations.Repositories.Packages.Versions.Get(tag.Version).Context(ctx).Do(call...)
-	})
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Parse(time.RFC3339Nano, version.UpdateTime)
 }
 
 const digestTagPrefix = "sha256-"

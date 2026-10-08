@@ -163,9 +163,9 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, fu
 	return provider.ImagePushes{Store: r.images, Pushes: []provider.ImagePush{push}}, nil
 }
 
-func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log progress.Log) error {
+func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log progress.Log) (bool, error) {
 	if images.Store == nil {
-		return nil
+		return false, nil
 	}
 	var removed []provider.ImagePush
 	for _, push := range images.Pushes {
@@ -176,9 +176,12 @@ func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log pro
 			continue
 		}
 		if !present {
-			log.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start new tasks", push.ImageRef, images.Store.Destination()))
+			log.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start tasks from it", push.ImageRef, images.Store.Destination()))
 			removed = append(removed, push)
 		}
 	}
-	return provider.ImagePushes{Store: images.Store, Pushes: removed}.PushMissing(ctx, log)
+	if len(removed) == 0 {
+		return false, nil
+	}
+	return true, provider.ImagePushes{Store: images.Store, Pushes: removed}.PushMissing(ctx, log)
 }

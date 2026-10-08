@@ -1321,3 +1321,80 @@ func TestAnImageRemovedWhileItsReleaseProvisionedIsPushedAgainAndSaidSo(t *testi
 		t.Errorf("the deploy said nothing about %s leaving the registry while it provisioned", pushedCoordinate)
 	}
 }
+
+type pullingStacks struct {
+	provider.Stacks
+	images      *fake.Images
+	image       string
+	removeFirst bool
+	provisions  *int
+}
+
+func (s pullingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	if err != nil || spec.Kind != provider.StackApp {
+		return result, err
+	}
+	*s.provisions++
+	if *s.provisions == 1 {
+		if s.removeFirst {
+			if err := s.images.Remove(ctx, s.image); err != nil {
+				return result, err
+			}
+		}
+		if s.images.Stored(s.image) {
+			return provider.StackResult{}, errors.New("the service never became stable")
+		}
+	}
+	if !s.images.Stored(s.image) {
+		return provider.StackResult{}, errors.New("CannotPullContainerError: " + s.image + " not found")
+	}
+	return result, nil
+}
+
+func TestARemovalThatTakesTheImageBeforeItsReleasePullsItIsPushedAgainAndTheReleaseRetried(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	provisions := 0
+	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, removeFirst: true, provisions: &provisions}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, events := deploy(t, client, registryDeployRequest())
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the release retried once with its image pushed again: a removal that read the records before this deploy wrote its own took the image between the push check and the pull", result.GetError())
+	}
+	if !vendor.ImageStore().Stored(pushedCoordinate) {
+		t.Errorf("the registry no longer holds %s after the deploy", pushedCoordinate)
+	}
+	said := false
+	for _, event := range events {
+		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the deploy said nothing about %s leaving the registry before its release pulled it", pushedCoordinate)
+	}
+}
+
+func TestAReleaseThatFailsWithItsImageInPlaceIsNotRetried(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	provisions := 0
+	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, provisions: &provisions}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "never became stable") {
+		t.Errorf("Deploy() = %t, %q, want the release's own failure: only an image that left the registry earns a second attempt", result.GetSuccess(), result.GetError())
+	}
+	if provisions != 1 {
+		t.Errorf("the app stack provisioned %d times, want once", provisions)
+	}
+}
