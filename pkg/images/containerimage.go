@@ -32,8 +32,6 @@ type NextServerRuntime struct {
 	Files map[string][]byte
 }
 
-var NextServerAdapterPath = path.Join(FrameworkRuntimeDir(buildoutput.FrameworkNext), containerimage.NextServerAdapterFile)
-
 func ContainerPlatform(arch string) string { return "linux/" + arch }
 
 func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.Image, error) {
@@ -51,7 +49,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 	}
 	config := file.Config
 	if next != nil {
-		if err := checkNextServerRuntime(next, config.Env); err != nil {
+		if err := checkNextServerRuntime(next); err != nil {
 			return nil, err
 		}
 	}
@@ -75,7 +73,6 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 			return nil, err
 		}
 		addenda = append(addenda, mutate.Addendum{Layer: nextLayer})
-		config.Env = append(append([]string{}, config.Env...), containerimage.NextAdapterPathVar+"="+NextServerAdapterPath)
 	}
 	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
@@ -92,17 +89,10 @@ func newBytesLayer(packed []byte) (v1.Layer, error) {
 	})
 }
 
-func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
-	if _, ok := next.Files[containerimage.NextServerAdapterFile]; !ok {
+func checkNextServerRuntime(next *NextServerRuntime) error {
+	if _, ok := next.Files[containerimage.NextServerPreloadFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the provider's Next server runtime holds no %s, so next start has no adapter to load", containerimage.NextServerAdapterFile)
-	}
-	for _, entry := range env {
-		if name, value, _ := strings.Cut(entry, "="); name == containerimage.NextAdapterPathVar {
-			return refusal.Refuse(refusal.CodeInvalid,
-				"the image sets %s=%s and ocel sets it to load the server adapter its provider ships: remove it from the image",
-				containerimage.NextAdapterPathVar, value)
-		}
+			"the provider's Next server runtime holds no %s, so next start has no preload to run in front of it", containerimage.NextServerPreloadFile)
 	}
 	return nil
 }

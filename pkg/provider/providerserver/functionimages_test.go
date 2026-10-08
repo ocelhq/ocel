@@ -454,8 +454,8 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 			t.Errorf("the image contains %v and nothing at /%s", files, want)
 		}
 	}
-	if slices.Contains(files, strings.TrimPrefix(images.RuntimeRoot, "/")) {
-		t.Errorf("the image contains a file at %s, where the runtimes' directories belong, and a file over a directory cannot be loaded", images.RuntimeRoot)
+	if slices.Contains(files, strings.TrimPrefix(containerimage.RuntimeRoot, "/")) {
+		t.Errorf("the image contains a file at %s, where the runtimes' directories belong, and a file over a directory cannot be loaded", containerimage.RuntimeRoot)
 	}
 	if asked := vendor.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)

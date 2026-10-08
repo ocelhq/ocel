@@ -1034,7 +1034,7 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	client, vendor := wrappingServed(t)
 	vendor.WithHooks(func(h *provider.Hooks) {
 		h.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) {
-			return map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}, nil
+			return map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}, nil
 		}
 	})
 
@@ -1047,12 +1047,13 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
 	}
-	want := containerimage.NextAdapterPathVar + "=/ocel/runtime/next/" + containerimage.NextServerAdapterFile
-	if env := configOf(t, pushed[0].Built).Env; !slices.Contains(env, want) {
-		t.Errorf("the pushed image has env %v, want it to hold %s", env, want)
+	if env := configOf(t, pushed[0].Built).Env; slices.ContainsFunc(env, func(entry string) bool {
+		return strings.HasPrefix(entry, "NEXT_ADAPTER_PATH=") || strings.HasPrefix(entry, "NODE_OPTIONS=")
+	}) {
+		t.Errorf("the pushed image has env %v, want the Next adapter path and node options left to the app and the container runtime", env)
 	}
 	_, digest, _ := strings.Cut(containerTestImage, "@")
-	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}}
+	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}}
 	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
 		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
 	}
@@ -1074,10 +1075,5 @@ func TestANextContainerOnAProviderWithoutANextServerRuntimeIsWrappedAsBefore(t *
 	}
 	if pushed[0].ImageRef != wrappedCoordinate() {
 		t.Errorf("the image is pushed as %q, want today's %q", pushed[0].ImageRef, wrappedCoordinate())
-	}
-	for _, entry := range configOf(t, pushed[0].Built).Env {
-		if strings.HasPrefix(entry, containerimage.NextAdapterPathVar+"=") {
-			t.Errorf("the pushed image sets %s though its provider ships no Next server runtime", entry)
-		}
 	}
 }

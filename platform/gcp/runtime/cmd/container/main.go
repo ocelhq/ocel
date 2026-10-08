@@ -93,6 +93,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
+	env = containerimage.AppendNextServerPreload(fileExists, env)
 
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {

@@ -21,15 +21,15 @@ func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
 	}
 }
 
-func TestTheNextRuntimeShipsItsEntrypointAndSharpButNotTheServerAdapter(t *testing.T) {
+func TestTheNextRuntimeShipsItsEntrypointAndSharpButNotTheServerPreload(t *testing.T) {
 	files := NextRuntime()
 	for _, name := range []string{"entrypoint.mjs", "node_modules/sharp/package.json"} {
 		if len(files[name]) == 0 {
 			t.Errorf("NextRuntime() holds no bytes for %s", name)
 		}
 	}
-	if _, shipped := files[containerimage.NextServerAdapterFile]; shipped {
-		t.Errorf("NextRuntime() holds %s, which only a Next container loads", containerimage.NextServerAdapterFile)
+	if _, shipped := files[containerimage.NextServerPreloadFile]; shipped {
+		t.Errorf("NextRuntime() holds %s, which only a Next container loads", containerimage.NextServerPreloadFile)
 	}
 	for name := range files {
 		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
@@ -38,13 +38,13 @@ func TestTheNextRuntimeShipsItsEntrypointAndSharpButNotTheServerAdapter(t *testi
 	}
 }
 
-func TestTheNextServerRuntimeHoldsTheAdapterAlone(t *testing.T) {
+func TestTheNextServerRuntimeHoldsThePreloadAlone(t *testing.T) {
 	files := NextServerRuntime()
-	if len(files[containerimage.NextServerAdapterFile]) == 0 {
-		t.Errorf("NextServerRuntime() holds no bytes for %s, and next start loads it from the image", containerimage.NextServerAdapterFile)
+	if len(files[containerimage.NextServerPreloadFile]) == 0 {
+		t.Errorf("NextServerRuntime() holds no bytes for %s, and a Next container runs it from the image", containerimage.NextServerPreloadFile)
 	}
 	if len(files) != 1 {
-		t.Errorf("NextServerRuntime() holds %d files, want the adapter alone: the cache handlers are bundled into the entrypoint and the adapter", len(files))
+		t.Errorf("NextServerRuntime() holds %d files, want the preload alone: the cache handlers are bundled into the entrypoint and the preload", len(files))
 	}
 }
 

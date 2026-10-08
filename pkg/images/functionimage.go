@@ -93,12 +93,10 @@ func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
 	return staged, nil
 }
 
-const RuntimeRoot = "/ocel/runtime"
-
 const RuntimeEntrypointFile = "entrypoint.mjs"
 
 func FrameworkRuntimeDir(framework string) string {
-	return path.Join(RuntimeRoot, framework)
+	return path.Join(containerimage.RuntimeRoot, framework)
 }
 
 const HandlerName = "OCEL_HANDLER"
