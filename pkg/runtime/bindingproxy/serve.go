@@ -3,6 +3,7 @@ package bindingproxy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -24,6 +25,17 @@ func (s Served) Close() error {
 		return nil
 	}
 	return s.server.Close()
+}
+
+func (s Served) Watch(report func(error)) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := <-s.Errs; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			report(err)
+		}
+	}()
+	return done
 }
 
 func Serve(services Services) (Served, error) {
