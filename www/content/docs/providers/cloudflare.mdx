@@ -5,9 +5,22 @@ description: Put an edge in front of any origin.
 
 Cloudflare is an edge, not an origin: it fronts whichever provider runs your app.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  edge: cloudflare(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "edge": "cloudflare",
@@ -70,9 +83,24 @@ providers refuse `tunnel`.
 Hostname records go into the origin provider's own DNS unless you say otherwise. Write
 them into Cloudflare instead:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  edge: cloudflare(),
+  dns: cloudflareDns(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "edge": "cloudflare",
@@ -94,9 +122,22 @@ On [Google Cloud](/docs/providers/gcp), Cloudflare runs a worker in front of ser
 The worker routes each request, serves cached pages from R2, and reaches every deployment
 of an app on its own hostname under an origin domain you name:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflare } from "ocel/edge";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
+  edge: cloudflare({ originDomain: "origin.example.com" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": { "project": "my-project", "region": "europe-west1" }

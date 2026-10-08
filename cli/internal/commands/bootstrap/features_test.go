@@ -193,7 +193,7 @@ func TestTheRequiredListingNamesTheFeatureTheProjectsEdgeNeeds(t *testing.T) {
 	for _, want := range []string{
 		"Required by this project:",
 		"✓ " + featureDirectEdge + "   a direct front",
-		"Your edge is direct. Change it in ocel.json.",
+		"Your edge is direct. Change it in the project's config.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("printRequired = %q, want it to contain %q", got, want)

@@ -10,11 +10,11 @@ pnpm add @ocel/sst
 ```
 
 `ocel` is a peer dependency, and it is resolved from the ocel project — the
-directory containing `ocel.json` — not from the SST app.
+directory containing `ocel.config.ts` or `ocel.json` — not from the SST app.
 
 ## Use
 
-`ocel.json` beside `sst.config.ts` in the same package is the supported
+`ocel.config.ts` beside `sst.config.ts` in the same package is the supported
 layout. Declare the binding in `sst.config.ts`:
 
 ```ts
@@ -32,16 +32,18 @@ export default $config({
 });
 ```
 
-Name it in `ocel.json`:
+Name it in `ocel.config.ts`:
 
-```json
-{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
-  "slug": "shop",
-  "provider": "aws",
-  "bindings": { "postgres": { "orders": "@orders" } },
-  "apps": [{ "name": "api", "path": "." }]
-}
+```ts
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "shop",
+  provider: awsProvider(),
+  bindings: { postgres: { orders: "@orders" } },
+  apps: [{ name: "api", path: "." }],
+});
 ```
 
 Then read it in the app:
@@ -77,7 +79,7 @@ bind.postgres("orders", {
 | ------------- | -------------------- | ----------------------------------------------------------- |
 | `tier`        | `"production"`       | The ocel tier the binding is published to.                     |
 | `environment` | none                 | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview. |
-| `project`     | the SST config root  | The directory containing `ocel.json`.                      |
+| `project`     | the SST config root  | The directory containing `ocel.config.ts` or `ocel.json`.                      |
 
 One call is one resource. Remove the call and the published binding goes with it.
 A name belongs to whoever published it, so two stacks publishing `orders` into

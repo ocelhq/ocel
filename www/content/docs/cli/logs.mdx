@@ -14,7 +14,7 @@ ocel logs --preview --grep timeout
 account. It works the same on every provider, so you don't look up which Lambda, Cloud Run
 revision or container belongs to which app and release.
 
-It needs a project, because `ocel.json` says which provider, account and region your apps run
+It needs a project, because its config says which provider, account and region your apps run
 in. Credentials come from your shell, as each [provider's page](/docs/providers/aws) describes.
 From outside the project directory, point it at the config with `-c`/`--config`.
 
@@ -66,7 +66,7 @@ Every `ocel` command takes these.
 
 | Flag | What it does |
 | --- | --- |
-| `-c, --config <file>` | Use this project config. Default `$OCEL_CONFIG`, else the nearest `ocel.json`, `ocel.yaml`, `ocel.yml` or [TypeScript config](/docs/typescript-config). |
+| `-c, --config <file>` | Use this project config. Default `$OCEL_CONFIG`, else the nearest `ocel.config.ts`, `ocel.json`, `ocel.yaml` or `ocel.yml`. |
 | `--json` | Print machine output: `ocel logs` writes one JSON object per line, as [Agents and CI](#agents-and-ci) describes. Setting `OCEL_JSON=1` does the same. |
 | `-v, --verbose` | Expand every entry on a terminal and show full field values. Setting `OCEL_DEBUG=1` does the same. |
 

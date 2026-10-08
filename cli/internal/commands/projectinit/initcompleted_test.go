@@ -28,17 +28,22 @@ func TestASuccessfulInitRecordsTheLanguagePackageManagerProviderAndConfigFormat(
 		"a node project with a pnpm lockfile and the default config": {
 			files: []string{"package.json", "pnpm-lock.yaml"},
 			opts:  initOptions{provider: "fake"},
+			want:  telemetry.InitCompletion{Language: "node", PackageManager: "pnpm", Provider: "fake", ConfigFormat: "ts"},
+		},
+		"a node project asked for json writes json": {
+			files: []string{"package.json", "pnpm-lock.yaml"},
+			opts:  initOptions{provider: "fake", format: "json"},
 			want:  telemetry.InitCompletion{Language: "node", PackageManager: "pnpm", Provider: "fake", ConfigFormat: "json"},
 		},
 		"a node project with no lockfile falls back to npm and writes yaml": {
 			files: []string{"package.json"},
-			opts:  initOptions{provider: "fake", yaml: true},
+			opts:  initOptions{provider: "fake", format: "yaml"},
 			want:  telemetry.InitCompletion{Language: "node", PackageManager: "npm", Provider: "fake", ConfigFormat: "yaml"},
 		},
-		"a go module writes a typescript config": {
+		"a go module writes a json config": {
 			files: []string{"go.mod"},
-			opts:  initOptions{provider: "fake", ts: true},
-			want:  telemetry.InitCompletion{Language: "go", PackageManager: "go", Provider: "fake", ConfigFormat: "ts"},
+			opts:  initOptions{provider: "fake"},
+			want:  telemetry.InitCompletion{Language: "go", PackageManager: "go", Provider: "fake", ConfigFormat: "json"},
 		},
 		"a language named by flag wins over the manifests": {
 			files: []string{"package.json"},

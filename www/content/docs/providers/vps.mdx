@@ -10,9 +10,20 @@ ocel init --provider vps
 Name the machine ocel deploys onto — a `Host` alias from your `ssh_config`, or the
 destination spelled out:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: { host: "${DEPLOY_HOST}", user: "deploy" } }),
+  apps: [{ name: "web", path: ".", compute: "container" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "vps": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
@@ -29,7 +40,7 @@ ocel deploy
 
 In a terminal, a first deploy that finds no Ocel infrastructure in the account offers to run
 `ocel bootstrap production`, and carries on once it has. A VPS serves apps on a hostname you
-own, so a project that declares none is shown the line to add to `ocel.json` and the deploy
+own, so a project that declares none is shown the line to add to its config and the deploy
 waits while you save it:
 
 ```json
@@ -86,9 +97,24 @@ from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). P
 forwarded the same way, on a project's own `domains.preview` wildcard or the one
 `ocel domain use --preview` names; see [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: "my-box" }),
+  edge: cloudflare(),
+  dns: cloudflareDns(),
+  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "vps": { "ssh": "my-box" } },
   "edge": "cloudflare",
@@ -122,9 +148,24 @@ only redirects to https.
 Set `tunnel`, an option of the Cloudflare edge alone, and Cloudflare reaches the box through
 a tunnel the box opens to it, instead of at the box's address:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: "my-box" }),
+  edge: cloudflare({ tunnel: true }),
+  dns: cloudflareDns(),
+  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "vps": { "ssh": "my-box" } },
   "edge": { "cloudflare": { "tunnel": true } },
@@ -158,9 +199,20 @@ Account · Cloudflare Tunnel · Edit.
 If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of
 running its own:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: "prod", proxy: "manual" }),
+  apps: [{ name: "web", path: ".", compute: "container" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "vps": { "ssh": "prod", "proxy": "manual" }
@@ -572,7 +624,7 @@ path, set `health.path`.
 
 ## Images
 
-With no `registry` in `ocel.json`, a deploy sends each app's image straight to the box over
+With no `registry` in the config, a deploy sends each app's image straight to the box over
 SSH. That needs nothing else to run, but it sends the whole image every time the app
 changes, base layers included. When a transfer is slow or large, the deploy warns and
 links here.
@@ -581,9 +633,18 @@ Name a registry and the deploy pushes the image there instead, and the box pulls
 digest. The push and the pull each skip the layers already there, so a deploy moves only
 what changed:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  registry: { server: "ghcr.io/acme", username: "acme-bot", password: "${REGISTRY_TOKEN}" },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "registry": {
     "server": "ghcr.io/acme",

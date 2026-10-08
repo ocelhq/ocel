@@ -9,9 +9,20 @@ ocel init --provider gcp
 
 Name the project and the region:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": { "project": "my-project", "region": "europe-west1" }
@@ -52,7 +63,7 @@ A serverless Next app runs as Cloud Run services billed per request (per instanc
 A Next app deployed as functions (serverless compute, billed per request) cannot turn on
 `experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
 the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
-Turn the setting off, or set `"compute": "container"` on the app in `ocel.json`: a Next app on
+Turn the setting off, or set `compute` to `container` on the app: a Next app on
 container compute is not affected.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
@@ -90,9 +101,24 @@ Each deploy of the preview is also answered on a URL of its own, the `run.app` U
 revision tag its release gave it, behind the same proxy; the deploy prints it, and it keeps
 serving that deploy after later ones until a prune drops it.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    previewViewers: ["group:team@example.com", "user:ana@example.com"],
+  }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": {
@@ -131,9 +157,22 @@ Cloud CDN passes the `Cache-Tag` response header through to clients, so the tag 
 stamps on its pages, including the release, are visible to visitors: never put a user or tenant id
 in a tag.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+import { alb } from "ocel/providers/gcp/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
+  edge: alb(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": { "project": "my-project", "region": "europe-west1" }
@@ -180,9 +219,24 @@ name, as
 [serverless apps on Google Cloud](/docs/providers/cloudflare#serverless-apps-on-google-cloud)
 describes.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
+  edge: cloudflare(),
+  dns: cloudflareDns(),
+  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": { "project": "my-project", "region": "europe-west1" }

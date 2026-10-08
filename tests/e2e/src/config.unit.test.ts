@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   awsSweepOverlay,
-  DEFAULT_BASE,
-  GCP_BASE,
   JOURNEY_JSON,
   JOURNEY_TS,
   journeyConfigIn,
@@ -13,12 +11,11 @@ import {
   overlayFor,
   renderConfig,
   renderJsonConfig,
-  VPS_BASE,
   vpsZoneOf,
   writeJourneyConfig,
 } from "./config";
 import { evidence } from "./evidence";
-import { deploy, sdk } from "./matrix/fixtures";
+import { deploy, realtime, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
 import {
   alb,
@@ -35,6 +32,14 @@ import {
 import type { CellUnderTest } from "./run/cellRun";
 
 const TS_BASE = "./ocel.config.ts";
+
+const BOX_SSH = {
+  ssh: {
+    host: `\${OCEL_VPS_HOST}`,
+    user: `\${OCEL_VPS_USER}`,
+    identityFile: `\${OCEL_VPS_IDENTITY_FILE}`,
+  },
+};
 
 function cell(fixture: Fixture, variant: Variant = defaults): CellUnderTest {
   return {
@@ -75,7 +80,7 @@ describe("vpsZoneOf", () => {
 describe("awsSweepOverlay", () => {
   it("destroys a cell through the edge its variant deployed it behind", () => {
     expect(awsSweepOverlay(cell(sdk.workspace, cloudflare), "j-9-sdk-workspace", {})).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-9-sdk-workspace",
       edge: "cloudflare",
     });
@@ -83,7 +88,7 @@ describe("awsSweepOverlay", () => {
 
   it("names no edge for a default cell", () => {
     expect(awsSweepOverlay(cell(deploy.node), "j-9-deploy-node", {})).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-9-deploy-node",
     });
   });
@@ -96,7 +101,7 @@ describe("awsSweepOverlay", () => {
         OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-9-deploy-node",
       dns: "cloudflare",
     });
@@ -111,7 +116,7 @@ describe("overlayFor", () => {
         OCEL_E2E_DNS: "cloudflare",
       }),
     ).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-1-sdk-workspace",
       edge: "cloudflare",
       dns: "cloudflare",
@@ -124,7 +129,7 @@ describe("overlayFor", () => {
 
   it("takes the compute a container variant names", () => {
     expect(overlayFor(cell(deploy.node, container), "aws", {})).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-1-deploy-node",
       compute: "container",
     });
@@ -132,7 +137,7 @@ describe("overlayFor", () => {
 
   it("leaves the fixture's config alone for a default cell, and dns alone off a real zone", () => {
     expect(overlayFor(cell(deploy.node), "aws", { OCEL_E2E_ZONE: "j.example" })).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.j.example" },
     });
@@ -142,7 +147,7 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node), "aws", { OCEL_AWS_VARIABLES_KEY: " arn:aws:kms:key/k " }),
     ).toEqual({
-      base: DEFAULT_BASE,
+      target: "aws",
       slug: "j-1-deploy-node",
       variablesKey: "arn:aws:kms:key/k",
     });
@@ -152,7 +157,7 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node), "vps", { OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k" }),
     ).toEqual({
-      base: VPS_BASE,
+      target: "vps",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
     });
@@ -160,7 +165,7 @@ describe("overlayFor", () => {
 
   it("keeps a vps cell nothing fronts off the run's zone, since no record would reach it there", () => {
     expect(overlayFor(cell(deploy.node), "vps", { OCEL_E2E_ZONE: "j.example" })).toEqual({
-      base: VPS_BASE,
+      target: "vps",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
     });
@@ -173,7 +178,7 @@ describe("overlayFor", () => {
         OCEL_E2E_REGISTRY_TOKEN: "ghs_never-written",
       }),
     ).toEqual({
-      base: VPS_BASE,
+      target: "vps",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
       registry: {
@@ -186,7 +191,7 @@ describe("overlayFor", () => {
 
   it("puts a vps cell behind the proxy the run's front names", () => {
     expect(overlayFor(cell(deploy.node), "vps", { OCEL_VPS_FRONT: "nginx" })).toEqual({
-      base: VPS_BASE,
+      target: "vps",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
       proxy: "manual",
@@ -212,7 +217,7 @@ describe("overlayFor", () => {
         OCEL_E2E_DNS: "cloudflare",
       }),
     ).toEqual({
-      base: VPS_BASE,
+      target: "vps",
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.j.example" },
       edge: "cloudflare",
@@ -225,9 +230,7 @@ describe("overlayFor", () => {
       OCEL_E2E_ZONE: "j.example",
     });
     expect(overlay).toMatchObject({ edge: "cloudflare", tunnel: true, dns: "cloudflare" });
-    expect(renderConfig({ ...overlay, base: TS_BASE })).toContain(
-      "  edge: cloudflare({ tunnel: true }),",
-    );
+    expect(renderConfig(TS_BASE, overlay)).toContain("  edge: cloudflare({ tunnel: true }),");
     expect(JSON.parse(renderJsonConfig("{}", overlay)).edge).toEqual({
       cloudflare: { tunnel: true },
     });
@@ -243,7 +246,7 @@ describe("overlayFor", () => {
     const overlay = overlayFor(cell(deploy.next, alb), "gcp", { OCEL_E2E_ZONE: "j.example" });
 
     expect(overlay.previewDomain).toBe("*.pv-j-1-deploy-next.j.example");
-    expect(renderConfig(overlay)).toContain(
+    expect(renderConfig(TS_BASE, overlay)).toContain(
       '  domains: { ...base.domains, preview: "*.pv-j-1-deploy-next.j.example" },',
     );
     expect(JSON.parse(renderJsonConfig("{}", overlay)).domains).toEqual({
@@ -261,6 +264,7 @@ describe("overlayFor", () => {
 
   it("renders the alb edge from the gcp edge module", () => {
     const rendered = renderConfig(
+      TS_BASE,
       overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" }),
     );
 
@@ -280,7 +284,7 @@ describe("overlayFor", () => {
   it("names hostnames and Cloudflare DNS for an alb cell when a zone is set", () => {
     expect(overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" })).toMatchObject(
       {
-        base: GCP_BASE,
+        target: "gcp",
         edge: "alb",
         dns: "cloudflare",
         hostnames: { web: expect.stringMatching(/\.j\.example$/) },
@@ -311,7 +315,7 @@ describe("overlayFor", () => {
         OCEL_E2E_DNS: "cloudflare",
       }),
     ).toMatchObject({
-      base: GCP_BASE,
+      target: "gcp",
       edge: "cloudflare",
       dns: "cloudflare",
       hostnames: { web: expect.stringMatching(/\.j\.example$/) },
@@ -324,7 +328,7 @@ describe("overlayFor", () => {
         OCEL_E2E_ZONE: "j.example",
       }),
     ).toMatchObject({
-      base: DEFAULT_BASE,
+      target: "aws",
       edge: "cloudflare",
       compute: "container",
       dns: "cloudflare",
@@ -361,7 +365,7 @@ describe("overlayFor", () => {
         OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
-      base: DEFAULT_BASE,
+      target: "dev",
       slug: "j-1-deploy-node",
     });
   });
@@ -376,25 +380,25 @@ const ARCHED_JSON_BASE = `{
 
 describe("a container cell", () => {
   it("sets no framework on any target, because a container runs the image it is given", () => {
-    for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
-      expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
-        "framework: undefined,",
-      );
+    for (const target of ["aws", "gcp", "vps"] as const) {
+      expect(
+        renderConfig(TS_BASE, { target, slug: "j-1-deploy-node", compute: "container" }),
+      ).toContain("framework: undefined,");
     }
   });
 
   it("sets no arch either, because the image names the platform it is built for", () => {
-    for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
-      expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
-        "arch: undefined,",
-      );
+    for (const target of ["aws", "gcp", "vps"] as const) {
+      expect(
+        renderConfig(TS_BASE, { target, slug: "j-1-deploy-node", compute: "container" }),
+      ).toContain("arch: undefined,");
     }
   });
 
   it("writes neither key as data, whatever the fixture declared", () => {
     const written = JSON.parse(
       renderJsonConfig(ARCHED_JSON_BASE, {
-        base: "./ocel.json",
+        target: "aws",
         slug: "j-1-go",
         compute: "container",
       }),
@@ -404,8 +408,8 @@ describe("a container cell", () => {
   });
 
   it("runs only the apps a mixed cell names as containers, with no framework or arch", () => {
-    const rendered = renderConfig({
-      base: TS_BASE,
+    const rendered = renderConfig(TS_BASE, {
+      target: "aws",
       slug: "j-1-workspace",
       computes: { express: "container" },
     });
@@ -415,7 +419,7 @@ describe("a container cell", () => {
     expect(rendered).not.toContain("    compute:");
     const written = JSON.parse(
       renderJsonConfig(ARCHED_JSON_BASE, {
-        base: "./ocel.json",
+        target: "aws",
         slug: "j-1-go",
         computes: { web: "container" },
       }),
@@ -426,14 +430,14 @@ describe("a container cell", () => {
 
   it("leaves the framework the fixture declares where the cell runs serverless", () => {
     expect(
-      renderConfig({ base: GCP_BASE, slug: "j-1-deploy-node", compute: "serverless" }),
+      renderConfig(TS_BASE, { target: "gcp", slug: "j-1-deploy-node", compute: "serverless" }),
     ).not.toContain("framework:");
   });
 });
 
 describe("renderConfig", () => {
   it("spreads the fixture's own config under the cell's slug", () => {
-    expect(renderConfig({ base: TS_BASE, slug: "j-1-node" })).toBe(
+    expect(renderConfig(TS_BASE, { target: "aws", slug: "j-1-node" })).toBe(
       `import { defineConfig } from "ocel/config";
 import base from "./ocel.config.ts";
 
@@ -446,27 +450,86 @@ export default defineConfig({
   });
 
   it("leaves the provider alone when no key is brought", () => {
-    expect(renderConfig({ base: TS_BASE, slug: "j-1-node" })).not.toContain("provider:");
+    expect(renderConfig(TS_BASE, { target: "aws", slug: "j-1-node" })).not.toContain("provider:");
   });
 
   it("keeps the fixture's own provider options under the key it seals variables with", () => {
     expect(
-      renderConfig({ base: TS_BASE, slug: "j-1-node", variablesKey: "arn:aws:kms:key/k" }),
+      renderConfig(TS_BASE, { target: "aws", slug: "j-1-node", variablesKey: "arn:aws:kms:key/k" }),
     ).toContain(
       `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
-  it("keeps the fixture's own vps options under the proxy its box runs behind", () => {
-    expect(renderConfig({ base: TS_BASE, slug: "j-1-node", proxy: "manual" })).toContain(
-      `  provider: { vps: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.vps : {}), proxy: "manual" } },`,
+  it("deploys a vps cell onto the box buildEnv reads from the run's environment, every app a container answering on /health", () => {
+    expect(renderConfig(TS_BASE, { target: "vps", slug: "j-1-node", proxy: "manual" })).toBe(
+      `import { buildEnv, defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+import { z } from "zod";
+import base from "./ocel.config.ts";
+
+const ssh = buildEnv({
+  OCEL_VPS_HOST: z.string().min(1),
+  OCEL_VPS_USER: z.string().min(1),
+  OCEL_VPS_IDENTITY_FILE: z.string().min(1),
+});
+
+export default defineConfig({
+  ...base,
+  slug: "j-1-node",
+  provider: vpsProvider({
+    ssh: { host: ssh.OCEL_VPS_HOST, user: ssh.OCEL_VPS_USER, identityFile: ssh.OCEL_VPS_IDENTITY_FILE },
+    proxy: "manual",
+  }),
+  apps: base.apps?.map((app) => ({
+    ...app,
+    compute: "container",
+    health: { path: "/health" },
+  })),
+});
+`,
+    );
+  });
+
+  it("deploys a gcp cell into the project and region buildEnv reads from the run's environment", () => {
+    expect(renderConfig(TS_BASE, { target: "gcp", slug: "j-1-node" })).toBe(
+      `import { buildEnv, defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+import { z } from "zod";
+import base from "./ocel.config.ts";
+
+const gcp = buildEnv({
+  OCEL_GCP_PROJECT: z.string().min(1),
+  OCEL_GCP_REGION: z.string().min(1),
+});
+
+export default defineConfig({
+  ...base,
+  slug: "j-1-node",
+  provider: gcpProvider({ project: gcp.OCEL_GCP_PROJECT, region: gcp.OCEL_GCP_REGION }),
+});
+`,
+    );
+  });
+
+  it("writes the needs a target waives and the app fields it changes", () => {
+    const rendered = renderConfig(TS_BASE, {
+      target: "vps",
+      slug: "j-1-go",
+      allowDegraded: ["edge-cache"],
+      apps: { web: { path: "./server", entrypoint: undefined } },
+    });
+
+    expect(rendered).toContain(`  allowDegraded: ["edge-cache"],`);
+    expect(rendered).toContain(
+      `    ...(app.name === "web" ? { path: "./server", entrypoint: undefined } : {}),`,
     );
   });
 
   it("pushes to the registry the cell names", () => {
     expect(
-      renderConfig({
-        base: TS_BASE,
+      renderConfig(TS_BASE, {
+        target: "aws",
         slug: "s",
         registry: { server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" },
       }),
@@ -476,21 +539,21 @@ export default defineConfig({
   });
 
   it("imports each edge from where the product ships it", () => {
-    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "api-gateway" })).toContain(
+    expect(renderConfig(TS_BASE, { target: "aws", slug: "s", edge: "api-gateway" })).toContain(
       'import { apiGateway } from "ocel/providers/aws/edge";',
     );
-    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "cloudfront" })).toContain(
+    expect(renderConfig(TS_BASE, { target: "aws", slug: "s", edge: "cloudfront" })).toContain(
       'import { cloudfront } from "ocel/providers/aws/edge";',
     );
-    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "cloudflare" })).toContain(
+    expect(renderConfig(TS_BASE, { target: "aws", slug: "s", edge: "cloudflare" })).toContain(
       'import { cloudflare } from "ocel/edge";',
     );
   });
 
   it("writes every dimension of a full cell", () => {
     expect(
-      renderConfig({
-        base: TS_BASE,
+      renderConfig(TS_BASE, {
+        target: "aws",
         slug: "j-1-node",
         compute: "container",
         edge: "cloudflare",
@@ -524,7 +587,7 @@ export default defineConfig({
 });
 
 const COMMENTED_JSON_BASE = `{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "go",
   "provider": "aws",
   "apps": [
@@ -542,9 +605,9 @@ const COMMENTED_JSON_BASE = `{
 describe("renderJsonConfig", () => {
   it("overlays a base containing the comments no bundler would read", () => {
     expect(
-      JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { base: "./ocel.json", slug: "j-1-go" })),
+      JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { target: "aws", slug: "j-1-go" })),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/ocel.schema.json",
       slug: "j-1-go",
       provider: "aws",
       apps: [{ name: "web", path: "./server", framework: "go" }],
@@ -555,7 +618,7 @@ describe("renderJsonConfig", () => {
     expect(
       JSON.parse(
         renderJsonConfig(COMMENTED_JSON_BASE, {
-          base: "./ocel.json",
+          target: "aws",
           slug: "j-1-go",
           compute: "container",
           edge: "api-gateway",
@@ -565,7 +628,7 @@ describe("renderJsonConfig", () => {
         }),
       ),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/ocel.schema.json",
       slug: "j-1-go",
       provider: { aws: { variablesKey: "arn:aws:kms:key/k" } },
       edge: "api-gateway",
@@ -585,7 +648,7 @@ describe("renderJsonConfig", () => {
     expect(
       JSON.parse(
         renderJsonConfig(COMMENTED_JSON_BASE, {
-          base: "./ocel.json",
+          target: "aws",
           slug: "j-1-go",
           registry: { server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" },
         }),
@@ -597,7 +660,7 @@ describe("renderJsonConfig", () => {
     expect(
       JSON.parse(
         renderJsonConfig(`{"slug":"go","provider":{"aws":{"region":"eu-west-1"}}}`, {
-          base: "./ocel.json",
+          target: "aws",
           slug: "j-1-go",
           variablesKey: "arn:aws:kms:key/k",
         }),
@@ -605,23 +668,93 @@ describe("renderJsonConfig", () => {
     ).toEqual({ aws: { region: "eu-west-1", variablesKey: "arn:aws:kms:key/k" } });
   });
 
-  it("keeps the box the fixture's vps provider reaches under the proxy it runs behind", () => {
+  it("keeps the box the run's environment names under the proxy it runs behind", () => {
     expect(
       JSON.parse(
-        renderJsonConfig(`{"slug":"go","provider":{"vps":{"ssh":{"host":"box"}}}}`, {
-          base: "./ocel.vps.json",
+        renderJsonConfig(COMMENTED_JSON_BASE, {
+          target: "vps",
           slug: "j-1-go",
           proxy: { manual: { port: 9000 } },
         }),
       ).provider,
-    ).toEqual({ vps: { ssh: { host: "box" }, proxy: { manual: { port: 9000 } } } });
+    ).toEqual({ vps: { ...BOX_SSH, proxy: { manual: { port: 9000 } } } });
+  });
+
+  it("deploys a gcp cell into the project and region the run's environment names", () => {
+    expect(
+      JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { target: "gcp", slug: "j-1-go" })).provider,
+    ).toEqual({
+      gcp: { project: `\${OCEL_GCP_PROJECT}`, region: `\${OCEL_GCP_REGION}` },
+    });
+  });
+
+  it("deploys a vps cell onto the box the run's environment names, every app a container answering on /health", () => {
+    const written = JSON.parse(
+      renderJsonConfig(COMMENTED_JSON_BASE, { target: "vps", slug: "j-1-go" }),
+    );
+
+    expect(written.provider).toEqual({ vps: BOX_SSH });
+    expect(written.apps).toEqual([
+      {
+        name: "web",
+        path: "./server",
+        framework: "go",
+        compute: "container",
+        health: { path: "/health" },
+      },
+    ]);
+  });
+
+  it("keeps the fixture's own provider on aws and dev", () => {
+    for (const target of ["aws", "dev"] as const) {
+      expect(
+        JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { target, slug: "j-1-go" })).provider,
+      ).toBe("aws");
+    }
+  });
+
+  it("waives the needs the fixture's registry entry names for the target", () => {
+    const overlay = overlayFor(cell(deploy.next), "gcp", {});
+
+    expect(overlay.allowDegraded).toEqual(["edge-runtime", "edge-cache"]);
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).allowDegraded).toEqual([
+      "edge-runtime",
+      "edge-cache",
+    ]);
+    expect(overlayFor(cell(deploy.next), "aws", {}).allowDegraded).toBeUndefined();
+  });
+
+  it("moves a go app on vps to its server directory, since a container takes no entrypoint", () => {
+    const base = `{"slug":"go","provider":"aws","apps":[{"name":"web","path":".","entrypoint":"./server"}]}`;
+    const written = JSON.parse(renderJsonConfig(base, overlayFor(cell(realtime.go), "vps", {})));
+
+    expect(written.apps[0]).toMatchObject({
+      name: "web",
+      path: "./server",
+      compute: "container",
+      health: { path: "/health" },
+    });
+    expect(written.apps[0]).not.toHaveProperty("entrypoint");
+    expect(overlayFor(cell(realtime.go), "gcp", {}).apps).toBeUndefined();
+  });
+
+  it("still runs a vps app on the compute its cell names", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(COMMENTED_JSON_BASE, {
+          target: "vps",
+          slug: "j-1-go",
+          compute: "serverless",
+        }),
+      ).apps[0].compute,
+    ).toBe("serverless");
   });
 
   it("seals variables under aws when the fixture's provider is null", () => {
     expect(
       JSON.parse(
         renderJsonConfig(`{"slug":"go","provider":null}`, {
-          base: "./ocel.json",
+          target: "aws",
           slug: "j-1-go",
           variablesKey: "arn:aws:kms:key/k",
         }),
@@ -641,7 +774,7 @@ describe("writeJourneyConfig", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
     dirs.push(dir);
     await writeFile(path.join(dir, "ocel.json"), COMMENTED_JSON_BASE, "utf8");
-    const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-go" });
+    const file = await writeJourneyConfig(dir, { target: "aws", slug: "j-1-go" });
 
     expect(file).toBe(path.join(dir, JOURNEY_JSON));
     expect(journeyConfigIn(dir)).toBe(JOURNEY_JSON);
@@ -652,7 +785,7 @@ describe("writeJourneyConfig", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
     dirs.push(dir);
     await writeFile(path.join(dir, "ocel.config.ts"), "export default {};\n", "utf8");
-    const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-node" });
+    const file = await writeJourneyConfig(dir, { target: "aws", slug: "j-1-node" });
 
     expect(file).toBe(path.join(dir, JOURNEY_TS));
     expect(journeyConfigIn(dir)).toBe(JOURNEY_TS);

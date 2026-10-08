@@ -3,27 +3,101 @@ title: Configuration
 description: The one file ocel reads.
 ---
 
-Every option lives in `ocel.json`, at the root of your project. `ocel init` writes it.
+Every option lives in one config at the root of your project. `ocel init` writes it as
+`ocel.config.ts` in a project built with node, and as `ocel.json` in any other.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
 
-The `$schema` line is what your editor completes and validates against. It names the
-version of the schema the CLI that wrote the file ships; `ocel init` fills it in.
+Both are the same document, and every field, default and error on this page is the same in
+either.
 
 `slug` is the project's identity in your provider account. Every stack and resource ocel
 creates is keyed on it, so changing it forks a new project.
 
-`provider`, `edge` and `dns` each name one choice: an object keyed by its identifier and
-containing its options, such as `{ "aws": { "region": "us-east-1" } }`, or the identifier alone
-when it needs none, as `"aws"` is above. Each edge takes options of its own: `tunnel` is the
-Cloudflare edge's, and CloudFront, API Gateway and the load balancer take none.
+`provider`, `edge` and `dns` each name one choice. In `ocel.config.ts` it is a function that
+takes the choice's options, such as `awsProvider({ region: "us-east-1" })`. In `ocel.json` it
+is an object keyed by its identifier and containing its options, such as
+`{ "aws": { "region": "us-east-1" } }`, or the identifier alone when it needs none, as `"aws"`
+is above. Each edge takes options of its own: `tunnel` is the Cloudflare edge's, and
+CloudFront, API Gateway and the load balancer take none.
+
+One project reads one config: a directory containing two of `ocel.config.ts`, `ocel.json`,
+`ocel.yaml` and `ocel.yml` is refused, and so is one containing two forms of the same target,
+such as `ocel.vps.config.ts` and `ocel.vps.json`.
+
+## TypeScript
+
+`ocel.config.ts` compiles to the same document as `ocel.json`, so nothing else in ocel knows
+which form you chose. `defineConfig` comes from `ocel/config`, each provider from
+`ocel/providers/<name>`, the Cloudflare edge from `ocel/edge` and Cloudflare DNS from
+`ocel/dns`. An edge or DNS that belongs to one provider comes from beside it, such as
+`cloudfront` from `ocel/providers/aws/edge`.
+
+### What it costs
+
+Reading it needs `node` on `PATH`, and the `ocel` package as a dependency. Every command that
+reads the config — `ocel deploy`, `ocel dev`, `ocel env`, `ocel destroy` — bundles and runs the
+file first, on every machine and in every CI job. A go, rust or python project would pay for
+a node toolchain it otherwise does not have, which is why `ocel init` writes `ocel.json` for a
+project not built with node.
+
+### What it buys
+
+The provider, edge, dns and [env source](/docs/env-sources) descriptors are functions, so your
+editor knows which options each one takes as you type them.
+
+Values may be computed, and `buildEnv` reads what the config itself needs while it is
+evaluated — from the shell or from a `.env` beside the config — through a schema of your own,
+so a missing or malformed variable is named before anything is provisioned:
+
+```ts title="ocel.config.ts"
+import { buildEnv, defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+import { z } from "zod";
+
+const ssh = buildEnv({
+  DEPLOY_HOST: z.string().min(1),
+  DEPLOY_PORT: z.coerce.number().default(22),
+});
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: { host: ssh.DEPLOY_HOST, port: ssh.DEPLOY_PORT } }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+`ocel.json` reaches the same variables with `${DEPLOY_HOST}`, unchecked and as a string.
+
+A [transform](/docs/transforms) is a module path, not a value the config imports, so it
+works the same from either form.
+
+## JSON
+
+`ocel.json` needs no node: the CLI reads it on its own. `ocel init --format json` writes it in
+a project built with node too.
+
+The `$schema` line is what your editor completes and validates against. It is one URL, and
+it always describes the latest release. A key the CLI you run does not know is refused with
+an error that names it.
 
 The file is JSON with comments and trailing commas allowed, so a variant you are not using
 can sit beside the one you are.
@@ -31,10 +105,10 @@ can sit beside the one you are.
 ## YAML
 
 The same document can be written as YAML, in `ocel.yaml` or `ocel.yml`. Every field,
-default and error is the one this page describes. `ocel init --yaml` writes it.
+default and error is the one this page describes. `ocel init --format yaml` writes it.
 
 ```yaml title="ocel.yaml"
-# yaml-language-server: $schema=https://ocel.dev/schema/0.0.1/ocel.schema.json
+# yaml-language-server: $schema=https://ocel.dev/schema/ocel.schema.json
 slug: my-app
 provider: aws
 apps:
@@ -45,19 +119,25 @@ apps:
 The first line is what your editor completes and validates against. Anchors and merge keys
 expand before ocel reads the document, so apps that share settings can share them once.
 
-One project reads one config: a directory containing two of `ocel.json`, `ocel.yaml`,
-`ocel.yml` and a [TypeScript config](/docs/typescript-config) is refused, and so is one
-containing two forms of the same target, such as `ocel.vps.json` and `ocel.vps.yaml`.
-
 ## Variables
 
 Any string may interpolate an environment variable with `${NAME}`. The value comes from
 your shell, or from a `.env` beside the config. A name nothing sets refuses the deploy
 rather than deploying a config with a hole in it. Write `$${` where a literal `${` belongs.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: { host: "${DEPLOY_HOST}", user: "deploy" } }),
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "vps": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
@@ -72,17 +152,25 @@ The one secret the CLI itself needs, the password `registry` pushes with, is wri
 the placeholder alone and read from your shell, then the project's `.env`, when the push
 authenticates, so the config says where the secret comes from and never contains it:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  registry: { server: "ghcr.io/acme", password: "${REGISTRY_TOKEN}" },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "registry": { "server": "ghcr.io/acme", "password": "${REGISTRY_TOKEN}" }
 }
 ```
 
 Anything else there is refused: the secret itself, a bare `REGISTRY_TOKEN`, text around the
-placeholder, or in a [TypeScript config](/docs/typescript-config) a value read with
-`buildEnv`.
+placeholder, or in `ocel.config.ts` a value read with `buildEnv`.
 
 ## ocel.lock
 
@@ -99,9 +187,18 @@ providers for that run alone.
 
 The folders discovery runs to collect your resource declarations.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  discovery: { paths: ["packages/*/infra"] },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "discovery": { "paths": ["packages/*/infra"] }
 }
@@ -120,9 +217,18 @@ manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, 
 
 What an app is built with, when ocel is not to read it off the app's own directory.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", framework: "next" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "apps": [{ "name": "web", "path": ".", "framework": "next" }]
 }
@@ -159,9 +265,18 @@ neither names a linker for the target.
 
 The processor architecture an app's functions or container image are built for.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", arch: "arm64" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "apps": [{ "name": "web", "path": ".", "arch": "arm64" }]
 }
@@ -175,9 +290,20 @@ that cannot run the one you name refuses the deploy before anything is built.
 How many instances of a container app run: at least `minInstances`, however quiet it is, and
 at most `maxInstances`, however busy.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [
+    { name: "api", path: "api", compute: "container", minInstances: 2, maxInstances: 10 },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "apps": [
     { "name": "api", "path": "api", "compute": "container", "minInstances": 2, "maxInstances": 10 }
@@ -210,9 +336,18 @@ whose provider runs it on functions because it names no `compute`.
 The path a container app is checked on before a release of it serves traffic. Any 2xx
 answer means it is up.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "api", path: "api", compute: "container", health: { path: "/health" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "apps": [
     { "name": "api", "path": "api", "compute": "container", "health": { "path": "/health" } }
@@ -239,9 +374,18 @@ binds to instead. Keyed by resource type, then by the name the code declares.
 A record your own infrastructure published, with `ocel bindings set` or the SST and Pulumi
 packages, is written `"@"` and the name it was published under:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  bindings: { postgres: { analytics: "@warehouse" } },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "bindings": { "postgres": { "analytics": "@warehouse" } }
 }
@@ -250,9 +394,18 @@ packages, is written `"@"` and the name it was published under:
 Or write the record itself. A postgres takes its connection string whole, which keeps the
 `sslmode`, `options` and pooler parameters a hosted database needs:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  bindings: { postgres: { orders: { url: { $env: "ORDERS_DATABASE_URL" } } } },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "bindings": { "postgres": { "orders": { "url": { "$env": "ORDERS_DATABASE_URL" } } } }
 }
@@ -260,9 +413,30 @@ Or write the record itself. A postgres takes its connection string whole, which 
 
 or its parts, keyed by the tier it serves:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  bindings: {
+    postgres: {
+      orders: {
+        production: {
+          host: "db.abcdefghijkl.supabase.co",
+          database: "postgres",
+          username: "postgres",
+          password: { $env: "SUPABASE_DB_PASSWORD" },
+          tls: { mode: "verify-full", ca: { $env: "SUPABASE_CA" } },
+        },
+      },
+    },
+  },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "bindings": {
     "postgres": {
@@ -300,9 +474,18 @@ before anything is built.
 A preview per pull request can bind a database branch of its own. Bind the database to a
 published record instead of writing it inline:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  bindings: { postgres: { orders: "@orders" } },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "bindings": { "postgres": { "orders": "@orders" } }
 }
@@ -334,9 +517,18 @@ Commands `ocel deploy` runs on your machine at points of a deploy. `preBuild` is
 command that runs once per deploy, after your infrastructure is provisioned and before any app is
 built. It is where a database migration goes.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  lifecycle: { preBuild: "pnpm drizzle-kit migrate" },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "lifecycle": { "preBuild": "pnpm drizzle-kit migrate" }
 }
@@ -344,9 +536,26 @@ built. It is where a database migration goes.
 
 Written as an object, it takes four fields:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: "web" }],
+  lifecycle: {
+    preBuild: {
+      command: "pnpm migrate",
+      app: "web",
+      previews: "persistent",
+      timeout: "15m",
+    },
+  },
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "apps": [{ "name": "web", "path": "web" }],
   "lifecycle": {
@@ -414,15 +623,10 @@ environment and runs a command of your choosing with its bindings. See [`ocel ru
 
 ## Another config per target
 
-A file named `ocel.<target>.json` is the same project deployed somewhere else — a box of
-your own beside the cloud you ship to. Point any command at one with `--config` or
-`OCEL_CONFIG`:
+A file named `ocel.<target>.config.ts`, or `ocel.<target>.json`, is the same project deployed
+somewhere else — a box of your own beside the cloud you ship to. Point any command at one with
+`--config` or `OCEL_CONFIG`:
 
 ```bash
-ocel deploy --config ocel.vps.json
+ocel deploy --config ocel.vps.config.ts
 ```
-
-## Writing it in TypeScript
-
-A project that already builds with node can write the same document as a program instead.
-See [TypeScript config](/docs/typescript-config).

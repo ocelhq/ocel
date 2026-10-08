@@ -10,13 +10,7 @@ import {
   setsJourneyNonce,
   UNCAPPED_BODY_BYTES,
 } from "../../checks/context";
-import {
-  GCP_BASE,
-  journeyConfigIn,
-  type Overlay,
-  overlayFor,
-  writeJourneyConfig,
-} from "../../config";
+import { journeyConfigIn, type Overlay, overlayFor, writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Lane, Phase } from "../../matrix/types";
@@ -243,7 +237,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
         await switchOn(emulator, project());
       }
       await writeJourneyConfig(dir, {
-        base: GCP_BASE,
+        target: "gcp",
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
       const features = laneFeatures(process.env, emulator !== undefined);

@@ -12,7 +12,6 @@ ocel dev
 
 ```bash
 ocel deploy
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.config.ts
 ```
 
 `ocel destroy` takes it all down again.

@@ -36,12 +36,8 @@
           },
           "build": {
             "additionalProperties": false,
-            "description": "How the app is built.",
+            "description": "How a container app's image is built.",
             "properties": {
-              "bindings": {
-                "description": "Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Only a serverless Next app's build gets them, and only on a provider that forwards ports; any other build goes without. Left off, true. Set false to build as if no resource were provisioned.",
-                "type": "boolean"
-              },
               "command": {
                 "description": "The command that builds the app inside the image. Left off, the app's own build script runs.",
                 "type": "string"
@@ -1444,10 +1440,6 @@
               "additionalProperties": false,
               "description": "Options for the Cloudflare edge. The token and account id are read from the environment.",
               "properties": {
-                "originDomain": {
-                  "description": "A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.<domain>. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it.",
-                  "type": "string"
-                },
                 "tunnel": {
                   "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
                   "type": "boolean"
@@ -2127,54 +2119,6 @@
       "title": "EnvSourceConfig",
       "type": "object"
     },
-    "lifecycle": {
-      "additionalProperties": false,
-      "description": "Commands ocel runs on this machine at points of a deploy.",
-      "properties": {
-        "preBuild": {
-          "description": "Runs once per deploy, after the project's infrastructure is provisioned and before any app is built, with the bindings of the deployed environment. A non-zero exit or a timeout stops the deploy before it builds anything, and nothing is promoted. Written as the command alone, or as an object.",
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "additionalProperties": false,
-              "description": "A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs.",
-              "properties": {
-                "app": {
-                  "description": "The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory.",
-                  "type": "string"
-                },
-                "command": {
-                  "description": "The shell command to run, from the project directory, or from the app's directory when app is set.",
-                  "type": "string"
-                },
-                "previews": {
-                  "description": "Which previews run the command: persistent previews, which have infrastructure of their own, all previews, or none. Production always runs it. Left off, persistent: an ephemeral preview gets no infrastructure of its own and shares the preview tier's databases, so a migration there would change what every other ephemeral preview reads.",
-                  "enum": [
-                    "persistent",
-                    "all",
-                    "none"
-                  ],
-                  "type": "string"
-                },
-                "timeout": {
-                  "description": "How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "command"
-              ],
-              "title": "LifecycleCommand",
-              "type": "object"
-            }
-          ]
-        }
-      },
-      "title": "LifecycleConfig",
-      "type": "object"
-    },
     "provider": {
       "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone.",
       "oneOf": [
@@ -2200,18 +2144,6 @@
                   "description": "Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again.",
                   "type": "object"
                 },
-                "logs": {
-                  "additionalProperties": false,
-                  "description": "How ocel logs --tail reads this account's logs.",
-                  "properties": {
-                    "liveTail": {
-                      "description": "Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents.",
-                      "type": "boolean"
-                    }
-                  },
-                  "title": "AwsLogOptions",
-                  "type": "object"
-                },
                 "region": {
                   "description": "The AWS region to deploy into.",
                   "type": "string"
@@ -2235,13 +2167,6 @@
             "gcp": {
               "additionalProperties": false,
               "properties": {
-                "previewViewers": {
-                  "description": "Who may open a preview deployed with no edge in front, which Identity-Aware Proxy serves: IAM members such as user:ana@example.com, group:team@example.com or domain:example.com.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
                 "project": {
                   "description": "The Google Cloud project to deploy into.",
                   "type": "string"

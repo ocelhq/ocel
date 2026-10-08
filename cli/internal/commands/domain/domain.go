@@ -54,8 +54,8 @@ func requirePreviewTier(command string, preview bool) error {
 	if preview {
 		return nil
 	}
-	return fmt.Errorf("`%s` needs --preview: a global domain is preview-only — a production hostname belongs to one project and is declared in that project's %s, so there is no global production domain to manage",
-		command, project.DefaultFileName)
+	return fmt.Errorf("`%s` needs --preview: a global domain is preview-only — a production hostname belongs to one project and is declared in that project's config, so there is no global production domain to manage",
+		command)
 }
 
 func globalPreviewBaseDomain(wildcard string) (string, error) {

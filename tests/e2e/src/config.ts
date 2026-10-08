@@ -3,7 +3,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
-import type { Cell, Compute, Edge, RegistryConfig, TargetName } from "./matrix/types";
+import type {
+  Cell,
+  Compute,
+  Edge,
+  RegistryConfig,
+  TargetConfigDelta,
+  TargetName,
+} from "./matrix/types";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
 
@@ -15,9 +22,8 @@ import { gcpSlug } from "./targets/gcp/names";
 export const JOURNEY_TS = "ocel.journey.config.ts";
 export const JOURNEY_JSON = "ocel.journey.json";
 
-export const DEFAULT_BASE = "./ocel.json";
-export const VPS_BASE = "./ocel.vps.json";
-export const GCP_BASE = "./ocel.gcp.json";
+export const JSON_BASE = "ocel.json";
+export const PROGRAM_BASE = "ocel.config.ts";
 
 export const BOX_ZONE = "localhost";
 
@@ -29,8 +35,8 @@ export function vpsZoneOf(cell: Pick<Cell, "variant">, env: NodeJS.ProcessEnv): 
   return cell.variant.config.edge === "cloudflare" ? journeyZone(env) : BOX_ZONE;
 }
 
-export type Overlay = {
-  base: string;
+export type Overlay = TargetConfigDelta & {
+  target: TargetName;
   slug: string;
   compute?: Compute;
   computes?: Record<string, Compute>;
@@ -87,7 +93,7 @@ export function awsSweepOverlay(
   slug: string,
   env: NodeJS.ProcessEnv,
 ): Overlay {
-  return { base: DEFAULT_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
+  return { target: "aws", slug, ...cell?.variant?.config, ...dnsOf(env) };
 }
 
 export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
@@ -100,8 +106,9 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         cell.variant.config.edge === "cloudflare" &&
         (compute === "container" || Object.values(computes ?? {}).includes("container"));
       return {
-        base: DEFAULT_BASE,
+        target,
         slug: cell.slug,
+        ...cell.fixture.configOn?.aws,
         ...cell.variant.config,
         ...dnsOf(env),
         ...(forwarded && zone ? { dns: "cloudflare" as const } : {}),
@@ -117,8 +124,9 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         zone &&
         (cell.fixture.previews?.gcp ?? []).some((one) => one.name === cell.variant.name);
       return {
-        base: GCP_BASE,
+        target,
         slug: gcpSlug(cell, env),
+        ...cell.fixture.configOn?.gcp,
         ...cell.variant.config,
         ...(hostnamed ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
         ...(previewing ? { previewDomain: `*.${appHostname("pv", cell.slug, zone)}` } : {}),
@@ -128,8 +136,9 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
       const front = frontNamed(env);
       const { edge, tunnel } = cell.variant.config;
       return {
-        base: VPS_BASE,
+        target,
         slug: cell.slug,
+        ...cell.fixture.configOn?.vps,
         hostnames: hostnamesOf(cell, vpsZoneOf(cell, env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
@@ -139,12 +148,48 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
       };
     }
     case "dev":
-      return { base: DEFAULT_BASE, slug: cell.slug };
+      return { target, slug: cell.slug, ...cell.fixture.configOn?.dev };
   }
+}
+
+const VPS_SSH_ENV = {
+  host: "OCEL_VPS_HOST",
+  user: "OCEL_VPS_USER",
+  identityFile: "OCEL_VPS_IDENTITY_FILE",
+};
+
+const GCP_ENV = { project: "OCEL_GCP_PROJECT", region: "OCEL_GCP_REGION" };
+
+const CONTAINER_HEALTH = { path: "/health" };
+
+function buildEnvOf(name: string, vars: Record<string, string>): string {
+  const fields = Object.values(vars).map((variable) => `  ${variable}: z.string().min(1),`);
+  return `const ${name} = buildEnv({\n${fields.join("\n")}\n});\n`;
+}
+
+function readsOf(name: string, vars: Record<string, string>): string {
+  const fields = Object.entries(vars).map(([key, variable]) => `${key}: ${name}.${variable}`);
+  return `{ ${fields.join(", ")} }`;
+}
+
+function expressionOf(fields: Record<string, unknown>): string {
+  const written = Object.entries(fields).map(
+    ([key, value]) => `${key}: ${value === undefined ? "undefined" : JSON.stringify(value)}`,
+  );
+  return `{ ${written.join(", ")} }`;
 }
 
 function appOverlay(overlay: Overlay): string {
   const lines: string[] = [];
+  if (overlay.target === "vps") {
+    if (!overlay.compute) {
+      lines.push(`    compute: "container",`);
+    }
+    lines.push(`    health: { path: ${JSON.stringify(CONTAINER_HEALTH.path)} },`);
+  }
+  for (const [app, fields] of Object.entries(overlay.apps ?? {})) {
+    lines.push(`    ...(app.name === ${JSON.stringify(app)} ? ${expressionOf(fields)} : {}),`);
+  }
   if (overlay.compute) {
     lines.push(`    compute: ${JSON.stringify(overlay.compute)},`);
   }
@@ -166,8 +211,41 @@ function appOverlay(overlay: Overlay): string {
   return lines.join("\n");
 }
 
-export function renderConfig(overlay: Overlay): string {
-  const imports = [`import { defineConfig } from "ocel/config";`];
+export function renderConfig(base: string, overlay: Overlay): string {
+  const imports: string[] = [];
+  const env: string[] = [];
+  const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
+  if (overlay.target === "gcp") {
+    imports.push(
+      `import { buildEnv, defineConfig } from "ocel/config";`,
+      `import gcpProvider from "ocel/providers/gcp";`,
+      `import { z } from "zod";`,
+    );
+    env.push(buildEnvOf("gcp", GCP_ENV));
+    fields.push(`  provider: gcpProvider(${readsOf("gcp", GCP_ENV)}),`);
+  } else if (overlay.target === "vps") {
+    imports.push(
+      `import { buildEnv, defineConfig } from "ocel/config";`,
+      `import vpsProvider from "ocel/providers/vps";`,
+      `import { z } from "zod";`,
+    );
+    env.push(buildEnvOf("ssh", VPS_SSH_ENV));
+    const proxy =
+      overlay.proxy === undefined ? [] : [`    proxy: ${JSON.stringify(overlay.proxy)},`];
+    fields.push(
+      `  provider: vpsProvider({`,
+      `    ssh: ${readsOf("ssh", VPS_SSH_ENV)},`,
+      ...proxy,
+      `  }),`,
+    );
+  } else {
+    imports.push(`import { defineConfig } from "ocel/config";`);
+    if (overlay.variablesKey) {
+      fields.push(
+        `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: ${JSON.stringify(overlay.variablesKey)} } },`,
+      );
+    }
+  }
   if (overlay.edge) {
     const { name, from } = EDGE_IMPORTS[overlay.edge];
     imports.push(`import { ${name} } from ${JSON.stringify(from)};`);
@@ -175,18 +253,10 @@ export function renderConfig(overlay: Overlay): string {
   if (overlay.dns) {
     imports.push(`import { cloudflareDns } from "ocel/dns";`);
   }
-  imports.push(`import base from ${JSON.stringify(overlay.base)};`);
+  imports.push(`import base from ${JSON.stringify(base)};`);
 
-  const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
-  if (overlay.variablesKey) {
-    fields.push(
-      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: ${JSON.stringify(overlay.variablesKey)} } },`,
-    );
-  }
-  if (overlay.proxy !== undefined) {
-    fields.push(
-      `  provider: { vps: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.vps : {}), proxy: ${JSON.stringify(overlay.proxy)} } },`,
-    );
+  if (overlay.allowDegraded) {
+    fields.push(`  allowDegraded: ${JSON.stringify(overlay.allowDegraded)},`);
   }
   if (overlay.edge) {
     const options = overlay.tunnel ? "{ tunnel: true }" : "";
@@ -208,11 +278,12 @@ export function renderConfig(overlay: Overlay): string {
     fields.push(`  apps: base.apps?.map((app) => ({`, `    ...app,`, perApp, `  })),`);
   }
 
-  const hostnames = overlay.hostnames
-    ? `\nconst hostnames: Record<string, string> = ${JSON.stringify(overlay.hostnames)};\n`
-    : "";
+  if (overlay.hostnames) {
+    env.push(`const hostnames: Record<string, string> = ${JSON.stringify(overlay.hostnames)};\n`);
+  }
+  const preamble = env.map((one) => `\n${one}`).join("");
 
-  return `${imports.join("\n")}\n${hostnames}\nexport default defineConfig({\n${fields.join("\n")}\n});\n`;
+  return `${imports.join("\n")}\n${preamble}\nexport default defineConfig({\n${fields.join("\n")}\n});\n`;
 }
 
 type App = Record<string, unknown> & { name?: string };
@@ -223,7 +294,11 @@ type Document = Record<string, unknown> & {
 };
 
 function appDocument(app: App, overlay: Overlay): App {
-  const written: App = { ...app };
+  const written: App = {
+    ...app,
+    ...(overlay.target === "vps" ? { compute: "container", health: CONTAINER_HEALTH } : {}),
+    ...(app.name === undefined ? {} : overlay.apps?.[app.name]),
+  };
   const compute =
     (app.name === undefined ? undefined : overlay.computes?.[app.name]) ?? overlay.compute;
   if (compute) {
@@ -240,6 +315,12 @@ function appDocument(app: App, overlay: Overlay): App {
   return written;
 }
 
+function placeholdersOf(vars: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, variable]) => [key, `\${${variable}}`]),
+  );
+}
+
 export function renderJsonConfig(base: string, overlay: Overlay): string {
   const read = JSON.parse(stripJsonComments(base)) as Document;
   const written: Document = { ...read, slug: overlay.slug };
@@ -248,10 +329,15 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
       read.provider !== null && typeof read.provider === "object" ? read.provider.aws : undefined;
     written.provider = { aws: { ...options, variablesKey: overlay.variablesKey } };
   }
-  if (overlay.proxy !== undefined) {
-    const options =
-      read.provider !== null && typeof read.provider === "object" ? read.provider.vps : undefined;
-    written.provider = { vps: { ...options, proxy: overlay.proxy } };
+  if (overlay.target === "gcp") {
+    written.provider = { gcp: placeholdersOf(GCP_ENV) };
+  }
+  if (overlay.target === "vps") {
+    const proxy = overlay.proxy === undefined ? {} : { proxy: overlay.proxy };
+    written.provider = { vps: { ssh: placeholdersOf(VPS_SSH_ENV), ...proxy } };
+  }
+  if (overlay.allowDegraded) {
+    written.allowDegraded = overlay.allowDegraded;
   }
   if (overlay.edge) {
     written.edge = overlay.tunnel ? { [overlay.edge]: { tunnel: true } } : overlay.edge;
@@ -271,16 +357,10 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
   return `${JSON.stringify(written, null, 2)}\n`;
 }
 
-export function baseIn(dir: string, base: string): string {
-  const asProgram = base.replace(/\.json$/, ".config.ts");
-  if (
-    asProgram !== base &&
-    !existsSync(path.join(dir, base)) &&
-    existsSync(path.join(dir, asProgram))
-  ) {
-    return asProgram;
-  }
-  return base;
+function baseIn(dir: string): string {
+  return existsSync(path.join(dir, JSON_BASE)) || !existsSync(path.join(dir, PROGRAM_BASE))
+    ? JSON_BASE
+    : PROGRAM_BASE;
 }
 
 export function journeyConfigIn(dir: string): string {
@@ -288,14 +368,14 @@ export function journeyConfigIn(dir: string): string {
 }
 
 export async function writeJourneyConfig(dir: string, overlay: Overlay): Promise<string> {
-  const base = baseIn(dir, overlay.base);
-  if (!base.endsWith(".json")) {
+  const base = baseIn(dir);
+  if (base === PROGRAM_BASE) {
     const file = path.join(dir, JOURNEY_TS);
-    await writeFile(file, renderConfig({ ...overlay, base }), "utf8");
+    await writeFile(file, renderConfig(`./${base}`, overlay), "utf8");
     return file;
   }
   const file = path.join(dir, JOURNEY_JSON);
   const read = await readFile(path.join(dir, base), "utf8");
-  await writeFile(file, renderJsonConfig(read, { ...overlay, base }), "utf8");
+  await writeFile(file, renderJsonConfig(read, overlay), "utf8");
   return file;
 }
