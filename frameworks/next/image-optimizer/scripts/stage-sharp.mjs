@@ -24,6 +24,10 @@ const pnpmMetadata = [
 
 const manifestOf = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 
+const libvipsReleases = "https://github.com/lovell/sharp-libvips/releases/tag";
+
+const licenseTexts = ["LGPL-3.0.txt", "GPL-3.0.txt"];
+
 export function stageSharp(out, cpu) {
   const sharpDir = realpathSync(join(pkgDir, "node_modules", "sharp"));
   const sharpManifest = manifestOf(sharpDir);
@@ -76,5 +80,26 @@ export function stageSharp(out, cpu) {
     if (!statSync(join(out, "node_modules", "@img", built), { throwIfNoEntry: false })) {
       throw new Error(`cross-install produced no @img/${built}`);
     }
+  }
+  writeLibvipsNotice(out, cpu);
+}
+
+export function writeLibvipsNotice(out, cpu) {
+  const packagePath = `node_modules/@img/sharp-libvips-linux-${cpu}`;
+  const libvips = join(out, packagePath);
+  const { version } = manifestOf(libvips);
+  const { vips } = JSON.parse(readFileSync(join(libvips, "versions.json"), "utf8"));
+  writeFileSync(
+    join(out, "THIRD_PARTY_NOTICES"),
+    [
+      `This directory contains libvips ${vips} and the libraries it bundles, as built by sharp-libvips v${version}, in ${packagePath}.`,
+      "They are licensed under the GNU Lesser General Public License, version 3 or any later version (LGPL-3.0-or-later).",
+      "The LGPL-3.0 and the GNU General Public License, version 3, which it incorporates, are in LGPL-3.0.txt and GPL-3.0.txt beside this file.",
+      `The corresponding source is published at ${libvipsReleases}/v${version}.`,
+      "",
+    ].join("\n"),
+  );
+  for (const text of licenseTexts) {
+    cpSync(join(pkgDir, "licenses", text), join(out, text));
   }
 }
