@@ -58,7 +58,8 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init [slug]",
 		Short: "Make this directory deployable",
-		Long: "Writes ocel.json and adds the ocel SDK with your language's own package manager.\n\n" +
+		Long: "Writes the project config, ocel.config.ts in a project built with node and ocel.json in any other, " +
+			"and adds the ocel SDK with your language's own package manager.\n\n" +
 			"Runs entirely offline: it neither signs you in nor contacts the Ocel console.\n\n" +
 			"The slug is the project's deployment identity — every stack and resource\n" +
 			"ocel creates in your own provider account is keyed on it, so changing it later\n" +
