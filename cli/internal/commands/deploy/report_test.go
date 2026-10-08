@@ -225,6 +225,32 @@ func TestADryDeployReportsNothing(t *testing.T) {
 	}
 }
 
+func TestAPreviewUpFromALinkedTreeReportsOnePreviewDeploymentToTheConsole(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	fixture.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fixtureTarget})
+	dependencies := previewDependencies("feature/login", "")
+	console := clitest.ServeConsole(t)
+	console.Link(t, fixture.Root)
+	dependencies.Console = clitest.SignedInTo(console.URL)
+
+	previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
+
+	reports := console.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("the console received %d reports, want 1", len(reports))
+	}
+	got := reports[0].GetDeployment()
+	if got.GetKind() != consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP || got.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED {
+		t.Errorf("deployment is %v %v, want a succeeded preview up", got.GetKind(), got.GetOutcome())
+	}
+	if got.GetEnvironment().GetIdentity() != "release-v2" || got.GetPromotion().GetId() == "" {
+		t.Errorf("environment %v promotion %v, want preview release-v2 and the promotion it made live", got.GetEnvironment(), got.GetPromotion())
+	}
+	if file := readDeployReport(t, fixture.Root); file.GetId() != got.GetId() {
+		t.Errorf("the report file holds deployment %q, want the %q the console received", file.GetId(), got.GetId())
+	}
+}
+
 func removeWithConsole(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewRemoveOptions) (stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
