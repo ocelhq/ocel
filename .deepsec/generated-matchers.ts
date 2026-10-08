@@ -94,7 +94,7 @@ const specs = [
     "noiseTier": "precise",
     "filePatterns": [
       "packages/ocel/src/bucket/route.ts",
-      "platform/aws/runtime/bucket/uploadcompleter.go"
+      "platform/aws/provider/bucket/uploadcompleter.go"
     ],
     "patterns": [
       {
@@ -123,7 +123,7 @@ const specs = [
     "description": "Session-authenticated Connect RPC service registrations and generated handler implementations.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/runtime/bucket/service.go",
+      "platform/aws/provider/bucket/service.go",
       "platform/aws/provider/cmd/deploy/main.go",
       "platform/aws/runtime/cmd/runtime/proxyserver.go",
       "pkg/localrpc/localrpc.go"
@@ -546,7 +546,7 @@ const specs = [
     "description": "Go runtime BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/runtime/bucket/*.go"
+      "platform/aws/provider/bucket/*.go"
     ],
     "patterns": [
       {
@@ -573,7 +573,7 @@ const specs = [
     "description": "HMAC-SHA256 signing and constant-time verification of canonical upload payloads that authenticate bucket upload completions in the runtime.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/runtime/bucket/*.go"
+      "platform/aws/provider/bucket/*.go"
     ],
     "patterns": [
       {
@@ -604,7 +604,7 @@ const specs = [
     "description": "S3 object-created Lambda listener that resolves the upload session by object tag and posts an HMAC-signed completion to the session's callback origin, gated by an allow-list.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/runtime/bucket/*.go"
+      "platform/aws/provider/bucket/*.go"
     ],
     "patterns": [
       {
@@ -635,7 +635,7 @@ const specs = [
     "description": "DynamoDB upload-session store for the runtime bucket service, including the conditional UpdateItem that guards the idempotent pending-to-succeeded file transition.",
     "noiseTier": "normal",
     "filePatterns": [
-      "platform/aws/runtime/bucket/*.go"
+      "platform/aws/provider/bucket/*.go"
     ],
     "patterns": [
       {

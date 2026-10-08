@@ -74,7 +74,7 @@ smoke_vps:
   - "scripts/ec2.sh"
 smoke_dev:
   - *smoke
-  - "platform/aws/runtime/bucket/**"
+  - "platform/aws/provider/bucket/**"
   - "platform/realtime/**"
   - "python/**"
   - "crates/**"
