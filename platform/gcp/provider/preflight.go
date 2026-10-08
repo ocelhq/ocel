@@ -71,7 +71,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		}
 		if refreshesByTask(framework, compute, facts, proxied) {
 			needs = append(needs, featureNeed{feature: tasksFeature, declares: "Next app " + entry.App,
-				reason: "a Next app billed per request on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
+				reason: "a serverless Next app on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
 		}
 	}
 	if len(needs) == 0 && !proxied {
