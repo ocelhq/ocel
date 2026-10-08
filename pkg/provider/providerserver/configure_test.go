@@ -131,38 +131,6 @@ func TestConfigureSaysWhetherTheProvidersNextFunctionsRefreshByRequest(t *testin
 	}
 }
 
-func TestConfigureSaysTheProviderShipsANextServerRuntimeWhenItsHookIsSet(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		set  func(*provider.Hooks)
-		want bool
-	}{
-		{"hook set", func(hooks *provider.Hooks) {
-			hooks.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) { return nil, nil }
-		}, true},
-		{"hook absent", func(*provider.Hooks) {}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
-				Version: "test",
-				New: func(context.Context, provider.Settings) (provider.Provider, error) {
-					return fake.NewProvider(fake.Options{}).WithHooks(tc.set), nil
-				},
-			}))
-			t.Cleanup(server.Close)
-			client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-
-			configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
-			if err != nil {
-				t.Fatalf("Configure() error = %v", err)
-			}
-			if got := configured.GetFacts().GetShipsNextServerRuntime(); got != tc.want {
-				t.Errorf("Configure() facts ship a Next server runtime = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 	for _, testCase := range []struct {
 		name string
