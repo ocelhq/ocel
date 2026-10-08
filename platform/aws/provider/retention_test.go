@@ -2,12 +2,16 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"maps"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -81,6 +85,50 @@ func TestTheImagesAForgetKeepsAreWhatEveryOtherStackOfTheProjectRecords(t *testi
 	want := map[string]bool{"ecr/ocel/shop.web:sha256-previous": true, "ecr/ocel/shop.web:sha256-preview": true}
 	if !maps.Equal(kept, want) {
 		t.Errorf("forgottenKeptImages() = %v, want %v: the stack being destroyed runs nothing once it is gone", kept, want)
+	}
+}
+
+func projectRegistryImage(tag string) string {
+	return fake.RegistryServer + "/acme/shop.web:" + tag
+}
+
+func TestForgettingAStackRemovesTheImagesItRanFromTheProjectsRegistryThatNoOtherStackRuns(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	own := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
+	other := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	recordImage(t, store, environment.TierProduction, "shop", own, projectRegistryImage("sha256-own"), projectRegistryImage("sha256-shared"))
+	recordImage(t, store, environment.TierPreview, "shop", other, projectRegistryImage("sha256-shared"))
+	pushed := fake.NewImages()
+
+	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", pushed, progress.Discard())
+	if err != nil {
+		t.Fatalf("forgetImages() = %v", err)
+	}
+
+	if want := []string{projectRegistryImage("sha256-own")}; !slices.Equal(pushed.Removed(), want) {
+		t.Errorf("forgetImages() removed %v, want %v: an image the project's registry holds is reclaimed through its store, and one a preview still runs stays", pushed.Removed(), want)
+	}
+}
+
+func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	own := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
+	recordImage(t, store, environment.TierProduction, "shop", own, projectRegistryImage("sha256-own"))
+	refused := fake.NewImages()
+	refused.FailRemovals(errors.New("UNSUPPORTED"))
+	said := &fake.Log{}
+
+	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", refused, said)
+
+	if err != nil {
+		t.Errorf("forgetImages() = %v, want the destroy to finish: a registry that never deletes would otherwise block every retry", err)
+	}
+	if !strings.Contains(strings.Join(said.Lines(), "\n"), projectRegistryImage("sha256-own")) {
+		t.Errorf("forgetImages() said %v, want a warning naming the image left behind", said.Lines())
 	}
 }
 

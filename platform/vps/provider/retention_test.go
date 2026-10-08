@@ -72,7 +72,7 @@ func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
 			return err
 		},
 		"forget": func(p *vps.Provider, ref provider.StackRef) error {
-			return p.ForgetReleases(context.Background(), ref, "web", nil)
+			return p.ForgetReleases(context.Background(), ref, "web", nil, nil)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -126,7 +126,7 @@ func TestATeardownDropsTheWindowBeforeAnythingSweepsAgainstIt(t *testing.T) {
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).ForgetReleases(context.Background(), ref, "web", nil); err != nil {
+	if err := over(machine).ForgetReleases(context.Background(), ref, "web", nil, nil); err != nil {
 		t.Fatalf("ForgetReleases() = %v", err)
 	}
 	called := helperCalls(machine, "forget")
@@ -244,6 +244,23 @@ func TestASweepRemovesFromTheRegistryEveryImageItDroppedFromTheBox(t *testing.T)
 	}
 	if got := store.Removed(); !slices.Equal(got, dropped) {
 		t.Errorf("the registry was asked to remove %v, want what the box dropped %v: a tag the box no longer holds is a tag nothing will ever pull again", got, dropped)
+	}
+}
+
+func TestASweepNamesEveryImageItDroppedFromTheBox(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff("ocel/shop-web:1111", "ocel/shop-web:2222")
+	log := &fake.Log{}
+
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", loadedImageRef, nil, log); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+	joined := strings.Join(log.Lines(), "\n")
+	for _, want := range []string{"Removed web's unused image ocel/shop-web:1111", "Removed web's unused image ocel/shop-web:2222"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep said %q, want %q", joined, want)
+		}
 	}
 }
 

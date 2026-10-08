@@ -137,7 +137,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 	)
 }
 
-func TestReconcilingAnAppsImagesNamesEveryImageItRemoved(t *testing.T) {
+func TestReconcilingAnAppsImagesReturnsEveryImageItRemoved(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
@@ -147,17 +147,11 @@ func TestReconcilingAnAppsImagesNamesEveryImageItRemoved(t *testing.T) {
 		}
 		return session.Result{Stdout: "ocel/shop-web:1111\nocel/shop-web:2222\n"}, true
 	}
-	progress := &fake.Log{}
-
-	removed, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333", progress)
+	removed, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
 	if want := []string{"ocel/shop-web:1111", "ocel/shop-web:2222"}; !slices.Equal(removed, want) {
 		t.Errorf("Reconcile() removed %v, want %v: they are the tags to delete from the registry the box pulled them from", removed, want)
 	}
-	heardAll(t, progress,
-		"INFO Removed web's unused image ocel/shop-web:1111",
-		"INFO Removed web's unused image ocel/shop-web:2222",
-	)
 }

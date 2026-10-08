@@ -579,7 +579,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	return spec, work, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, _ provider.ImageStore, progress progress.Log) error {
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
@@ -617,7 +617,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, _ provider.
 	if ref.Name.IsInfra() {
 		return nil
 	}
-	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, progress)
+	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, images, progress)
 }
 
 func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -164,6 +165,34 @@ func TestAReconcileOfAnImageOutsideArtifactRegistryTouchesNothing(t *testing.T) 
 
 	if got := server.untags(); len(got) != 0 {
 		t.Errorf("the reconcile untagged %v, want nothing: the project's own registry is not this provider's to prune", got)
+	}
+}
+
+const projectRegistryImage = fake.RegistryServer + "/acme/shop.web:sha256-old"
+
+func TestAReconcileRemovesAnImageFromTheProjectsRegistryThatNoRevisionRuns(t *testing.T) {
+	server := &runServer{}
+	pushed := fake.NewImages()
+
+	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got, want := pushed.Removed(), []string{projectRegistryImage}; !slices.Equal(got, want) {
+		t.Errorf("the reconcile removed %v, want %v: a destroyed stack's image stays in the project's registry forever otherwise", got, want)
+	}
+}
+
+func TestAReconcileKeepsAnImageInTheProjectsRegistryARevisionRuns(t *testing.T) {
+	server := &runServer{elsewhere: map[string]string{"ocel-shop-preview-web-00001": projectRegistryImage}}
+	pushed := fake.NewImages()
+
+	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got := pushed.Removed(); len(got) != 0 {
+		t.Errorf("the reconcile removed %v, want nothing: another environment's service still runs that image", got)
 	}
 }
 

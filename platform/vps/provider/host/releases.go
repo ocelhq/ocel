@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -39,7 +38,7 @@ func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app s
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Log) ([]string, error) {
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string) ([]string, error) {
 	repository, named := Repository(imageRef)
 	if !named {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
@@ -53,11 +52,6 @@ func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, pro
 	for line := range strings.Lines(said) {
 		if image := strings.TrimSpace(line); image != "" {
 			removed = append(removed, image)
-		}
-	}
-	for _, image := range removed {
-		if progress != nil {
-			progress.Say("Removed " + app + "'s unused image " + image)
 		}
 	}
 	return removed, nil

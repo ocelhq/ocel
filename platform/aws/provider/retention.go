@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -11,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
@@ -23,30 +25,39 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 		return err
 	}
 	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, kept, time.Now().Add(-imageReclaimGrace))
-	sayRemoved(log, app, removed)
+	resources.SayRemovedImages(log, app, removed)
 	return err
 }
 
-func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, log progress.Log) error {
-	recorded, found, err := stackrecords.Read(ctx, p.KeyValues(), ref.Tier, ref.Project, ref.Name)
+func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, images provider.ImageStore, log progress.Log) error {
+	return forgetImages(ctx, p.KeyValues(), ecr.NewFromConfig(p.aws), ref, app, images, log)
+}
+
+func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI, ref provider.StackRef, app string, images provider.ImageStore, log progress.Log) error {
+	recorded, found, err := stackrecords.Read(ctx, store, ref.Tier, ref.Project, ref.Name)
 	if err != nil || !found {
 		return err
 	}
-	var images []string
-	for _, container := range recorded.Containers {
-		if container.Image != "" {
-			images = append(images, container.Image)
-		}
-	}
-	if len(images) == 0 {
-		return nil
-	}
-	kept, err := forgottenKeptImages(ctx, p.KeyValues(), ref)
+	kept, err := forgottenKeptImages(ctx, store, ref)
 	if err != nil {
 		return err
 	}
-	removed, err := registry.Forget(ctx, ecr.NewFromConfig(p.aws), images, kept)
-	sayRemoved(log, app, removed)
+	var pushed, ours []string
+	for _, container := range recorded.Containers {
+		switch {
+		case container.Image == "" || kept[container.Image]:
+		case images != nil && strings.HasPrefix(container.Image, images.Destination()+"/"):
+			pushed = append(pushed, container.Image)
+		default:
+			ours = append(ours, container.Image)
+		}
+	}
+	resources.RemovePushedImages(ctx, images, app, pushed, log)
+	if len(ours) == 0 {
+		return nil
+	}
+	removed, err := registry.Forget(ctx, api, ours, kept)
+	resources.SayRemovedImages(log, app, removed)
 	return err
 }
 
@@ -79,13 +90,4 @@ func recordedImages(ctx context.Context, store keyvalue.Store, project string, c
 		}
 	}
 	return recorded, nil
-}
-
-func sayRemoved(log progress.Log, app string, removed []string) {
-	if log == nil {
-		return
-	}
-	for _, image := range removed {
-		log.Say("Removed " + app + "'s unused image " + image)
-	}
 }
