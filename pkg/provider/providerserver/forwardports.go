@@ -170,7 +170,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		}
 	}
 	if len(proxied) > 0 {
-		served, err := serve(ctx, provider.BindingProxyRequest{Tier: tier, Bindings: proxied, ReportFailure: reportFailure}, said)
+		served, err := serve(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Bindings: proxied, ReportFailure: reportFailure}, said)
 		if err != nil {
 			return provider.RefusalError(err)
 		}
