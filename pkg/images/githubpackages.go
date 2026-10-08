@@ -97,17 +97,45 @@ func (g gitHubPackages) findVersion(ctx context.Context, packagePath, tag string
 }
 
 func (g gitHubPackages) deleteVersion(ctx context.Context, packagePath string, version packageVersion, tag name.Tag) error {
-	answer, err := g.call(ctx, http.MethodDelete, packagePath+"/versions/"+strconv.FormatInt(version.ID, 10))
+	for range 2 {
+		answer, err := g.call(ctx, http.MethodDelete, packagePath+"/versions/"+strconv.FormatInt(version.ID, 10))
+		if err != nil {
+			return fmt.Errorf("remove %s from GitHub Packages: %w", tag, err)
+		}
+		switch {
+		case answer.status == http.StatusNoContent, answer.status == http.StatusNotFound:
+			return nil
+		case answer.status != http.StatusBadRequest || !strings.Contains(strings.ToLower(answer.message), "last"):
+			return fmt.Errorf("remove %s from GitHub Packages: %w", tag, answer.refusal("deleting a package version"))
+		}
+		sole, err := g.isSoleVersion(ctx, packagePath, version.ID)
+		if err != nil {
+			return fmt.Errorf("look for other versions of the package %s before deleting it: %w", tag.Repository, err)
+		}
+		if sole {
+			return g.deletePackage(ctx, packagePath, tag)
+		}
+	}
+	return fmt.Errorf("remove %s from GitHub Packages: GitHub refuses it as the package's last version while listing others", tag)
+}
+
+func (g gitHubPackages) isSoleVersion(ctx context.Context, packagePath string, id int64) (bool, error) {
+	answer, err := g.call(ctx, http.MethodGet, packagePath+"/versions?per_page=2&page=1")
 	if err != nil {
-		return fmt.Errorf("remove %s from GitHub Packages: %w", tag, err)
+		return false, err
 	}
-	switch {
-	case answer.status == http.StatusNoContent, answer.status == http.StatusNotFound:
-		return nil
-	case answer.status == http.StatusBadRequest && strings.Contains(strings.ToLower(answer.message), "last"):
-		return g.deletePackage(ctx, packagePath, tag)
+	switch answer.status {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, answer.refusal("listing package versions")
 	}
-	return fmt.Errorf("remove %s from GitHub Packages: %w", tag, answer.refusal("deleting a package version"))
+	var versions []packageVersion
+	if err := json.Unmarshal(answer.body, &versions); err != nil {
+		return false, fmt.Errorf("read the package versions GitHub listed: %w", err)
+	}
+	return len(versions) == 1 && versions[0].ID == id, nil
 }
 
 func (g gitHubPackages) deletePackage(ctx context.Context, packagePath string, tag name.Tag) error {
