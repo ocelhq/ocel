@@ -40,6 +40,10 @@ func (p pulled) ProbePush(ctx context.Context, repository string) error {
 	return p.from.ProbePush(ctx, repository)
 }
 
+func (p pulled) Remove(ctx context.Context, imageRef string) error {
+	return p.from.Remove(ctx, imageRef)
+}
+
 func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return p.host.HasImage(ctx, push.ImageRef)
 }

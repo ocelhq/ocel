@@ -33,6 +33,8 @@ func (l loaded) Destination() string { return l.at }
 
 func (loaded) ProbePush(context.Context, string) error { return nil }
 
+func (loaded) Remove(context.Context, string) error { return nil }
+
 func (l loaded) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return l.host.HasImage(ctx, push.ImageRef)
 }
