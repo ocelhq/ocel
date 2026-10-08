@@ -384,7 +384,8 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 
 	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.CanAsk(stdin), stdout, stdin)
 
-	return dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	var removed *consolev1.EnvironmentEvent
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
 		if err != nil {
@@ -419,9 +420,14 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 			return err
 		}
+		removed = p.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED, env)
 		run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 		return nil
 	})
+	if removed != nil {
+		dependencies.DeploymentReports.ReportEnvironmentEvent(ctx, cfg.Dir, removed, stderr)
+	}
+	return err
 }
 
 func readPreview(ctx context.Context, provider *providerprocess.Provider, slug string, env *environmentv1.Environment) (recorded *contractv1.PreviewEnvironment, err error) {

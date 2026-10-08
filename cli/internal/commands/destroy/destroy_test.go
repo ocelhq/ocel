@@ -69,7 +69,7 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -115,7 +115,7 @@ export default {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 		_, removed := removals(t, project)
@@ -130,7 +130,7 @@ export default {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, true, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), invocation, project.Root, true, true, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -155,7 +155,7 @@ export default {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyPreviewProject(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -172,7 +172,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
@@ -190,7 +190,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction --yes err = %v; stdout=%s", err, stdout.String())
 		}
 		if left := recordedStacks(t, project, environment.TierProduction); len(left) != 0 {
@@ -205,7 +205,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "needs a terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
@@ -224,7 +224,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -255,7 +255,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -280,7 +280,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, true, &stdout, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, false, true, &stdout, io.Discard, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -306,7 +306,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", consent.BypassEnv, stdout.String())
 		}
@@ -325,7 +325,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), consent.BypassEnv) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
@@ -342,7 +342,7 @@ func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanI
 
 	var stream, stdout bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
-	if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("test-app\n")); err != nil {
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader("test-app\n")); err != nil {
 		t.Fatalf("runDestroyProduction err = %v; stream=%s stdout=%s", err, stream.String(), stdout.String())
 	}
 
@@ -451,7 +451,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 
 			var stdout bytes.Buffer
 			clitest.AttachTerminalSink(invocation, &stdout)
-			if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, strings.NewReader("")); err != nil {
+			if err := runDestroyProduction(context.Background(), invocation, project.Root, false, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s", err, stdout.String())
 			}
 

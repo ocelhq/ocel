@@ -175,3 +175,53 @@ func TestADryDeployReportsNothing(t *testing.T) {
 		t.Errorf("the console received %d reports from a dry run, want none: it made nothing live", len(console.Reports()))
 	}
 }
+
+func removeWithConsole(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewRemoveOptions) (stderr string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
+	if err := runPreviewRemove(context.Background(), dependencies, fixture.Root, opts, &out, &errOut, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewRemove err = %v; stdout=%s stderr=%s", err, out.String(), errOut.String())
+	}
+	return errOut.String()
+}
+
+func TestRemovingAPreviewFromALinkedTreeRecordsOneEnvironmentEvent(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
+	console := clitest.ServeConsole(t)
+	console.Link(t, fixture.Root)
+	dependencies.DeploymentReports = clitest.SignedInTo(console.URL)
+
+	stderr := removeWithConsole(t, fixture, dependencies, previewRemoveOptions{name: "release-v2"})
+
+	events := console.Events()
+	if len(events) != 1 {
+		t.Fatalf("the console received %d environment events, want 1; stderr=%s", len(events), stderr)
+	}
+	got := events[0].GetEvent()
+	if got.GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || got.GetEnvironment().GetIdentity() != "release-v2" {
+		t.Errorf("event = %v, want release-v2 removed", got)
+	}
+	if events[0].GetProjectId() != clitest.FixtureConsoleProjectID || stderr != "" {
+		t.Errorf("project %q stderr %q, want the linked project and no output", events[0].GetProjectId(), stderr)
+	}
+}
+
+func TestRemovingAPreviewFromAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcelLink(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
+	console := clitest.ServeConsole(t)
+	dependencies.DeploymentReports = clitest.SignedInTo(console.URL)
+
+	stderr := removeWithConsole(t, fixture, dependencies, previewRemoveOptions{name: "release-v2"})
+
+	if len(console.Events()) != 0 {
+		t.Errorf("the console received %d events from an unlinked tree, want none", len(console.Events()))
+	}
+	if lines := strings.Split(strings.TrimSpace(stderr), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "`ocel link`") {
+		t.Errorf("stderr = %q, want one hint line naming `ocel link`", stderr)
+	}
+}
