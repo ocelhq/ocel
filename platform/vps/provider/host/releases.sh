@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>..." >&2
+	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>..." >&2
 	exit 2
 }
 
@@ -68,6 +68,17 @@ remove_emptied_scope() {
 		rmdir "$dir" 2>/dev/null || true
 		rmdir "$root/$project" 2>/dev/null || true
 	fi
+}
+
+read_desired() {
+	: >"$scratch".desired
+	find "$dir" -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
+
+	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
+	while IFS= read -r running; do
+		[ -n "$running" ] || abort "a container with ocel.project=$project and ocel.app=$app has no ocel.ref"
+		printf '%s\n' "$running" >>"$scratch".desired
+	done <"$scratch".running
 }
 
 coordinate() {
@@ -135,15 +146,7 @@ reconcile)
 	repository=$1
 	coordinate "$repository"
 	lock
-
-	: >"$scratch".desired
-	find "$dir" -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
-
-	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
-	while IFS= read -r running; do
-		[ -n "$running" ] || abort "a container with ocel.project=$project and ocel.app=$app has no ocel.ref"
-		printf '%s\n' "$running" >>"$scratch".desired
-	done <"$scratch".running
+	read_desired
 
 	docker images --filter "reference=$repository:*" --format '{{.Repository}}:{{.Tag}}' >"$scratch".actual
 	grep -F -x -v -f "$scratch".desired "$scratch".actual >"$scratch".going || true
@@ -183,6 +186,20 @@ settle)
 		mv -f "$scratch".kept "$dropped"
 		[ -s "$dropped" ] || rm -f "$dropped"
 	fi
+	remove_emptied_scope
+	;;
+claimed)
+	[ $# -ge 1 ] || usage
+	for ref in "$@"; do
+		coordinate "$ref"
+	done
+	lock
+	read_desired
+	for ref in "$@"; do
+		if grep -F -x -q -e "$ref" "$scratch".desired; then
+			printf '%s\n' "$ref"
+		fi
+	done
 	remove_emptied_scope
 	;;
 *)

@@ -775,3 +775,36 @@ func TestARefTheBoxRemovesIsReportedForTheRegistryUntilItIsSettled(t *testing.T)
 		t.Errorf("the second reconcile reported %q, want ocel/shop/web:orphan handed on again and nothing removed from the box: its registry copy was never settled", again)
 	}
 }
+
+func TestARefAReconcileReportedIsClaimedOnceADeployPromotesItAgain(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+	dock := fakeDocker(t, nil, nil)
+	if first, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); unused(first) != "ocel/shop/web:one" {
+		t.Fatalf("the reconcile reported %q", unused(first))
+	}
+
+	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	claimed, code := releases(t, root, dock.dir, "shop/web", "claimed", "ocel/shop/web:one")
+
+	if code != 0 || strings.TrimSpace(claimed) != "ocel/shop/web:one" {
+		t.Errorf("claimed answered %q and exited %d, want ocel/shop/web:one: a deploy promoted it after the reconcile reported it, and its registry copy is what a fresh box pulls", claimed, code)
+	}
+}
+
+func TestARefOnlyARunningContainerNamesIsClaimed(t *testing.T) {
+	root := releasesDir(t)
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:starting"}, nil)
+
+	claimed, code := releases(t, root, dock.dir, "shop/web", "claimed", "ocel/shop/web:starting", "ocel/shop/web:gone")
+
+	if code != 0 || strings.TrimSpace(claimed) != "ocel/shop/web:starting" {
+		t.Errorf("claimed answered %q and exited %d, want ocel/shop/web:starting alone: a release runs its container before it promotes the ref", claimed, code)
+	}
+	if _, err := os.Stat(filepath.Join(root, "shop")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("asking what is claimed left the scope behind: %v", err)
+	}
+}

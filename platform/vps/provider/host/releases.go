@@ -75,6 +75,14 @@ func (h *Host) Settle(ctx context.Context, project, app string, imageRefs []stri
 	return err
 }
 
+func (h *Host) IsClaimed(ctx context.Context, project, app, imageRef string) (bool, error) {
+	said, err := h.releases(ctx, "read whether a release of "+app+" still names "+imageRef, Scope(project, app), "claimed", imageRef)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(said) == imageRef, nil
+}
+
 func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {
 	acting, err := h.reachStateRoot(ctx)
 	if err != nil {
