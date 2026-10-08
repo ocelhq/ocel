@@ -22,6 +22,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -197,6 +198,60 @@ func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
 	}
 	if token := sentProvisionInfras(t, fixture)[0].GetLeaseToken(); sent[0].GetLeaseToken() != token {
 		t.Errorf("the CLI renewed the lease token %q, want %q, the one ProvisionInfra took", sent[0].GetLeaseToken(), token)
+	}
+}
+
+func TestStoppingLeaseRenewalCancelsARenewalTheProviderNeverAnswers(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	ctx := context.Background()
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
+	entered, unanswered := make(chan struct{}), make(chan struct{})
+	defer close(unanswered)
+	stopped := make(chan struct{})
+	var renewalStopped bool
+
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project}, false, false)
+		infra.renewal, infra.renewalTimeout = time.Millisecond, time.Hour
+		if err := infra.provision(ctx, []declaration.Resource{orders}, nil); err != nil {
+			return err
+		}
+		fixture.Provider.KeyValues().(*fake.KeyValues).BeforeNextWrite(
+			stackrecords.EnvironmentLeaseKey(environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv),
+			func() {
+				close(entered)
+				<-unanswered
+			})
+		select {
+		case <-entered:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the CLI never renewed its lease")
+		}
+		go func() {
+			infra.stopRenewing()
+			close(stopped)
+		}()
+		select {
+		case <-stopped:
+			renewalStopped = true
+		case <-time.After(5 * time.Second):
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("provision() error = %v; stdout=%s", err, stdout.String())
+	}
+
+	if !renewalStopped {
+		t.Error("stopping renewal still waits on a renewal the provider never answered, want that renewal cancelled so the deploy and its cleanup go on")
 	}
 }
 
