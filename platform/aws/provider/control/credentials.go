@@ -2,11 +2,15 @@ package control
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -17,6 +21,14 @@ import (
 const credentialHeading = "AWS credentials"
 
 const credentialHint = "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)"
+
+const regionHint = "set the region in the provider options, in AWS_REGION, or as the profile's region under a [profile <name>] header"
+
+const expiredHint = "the AWS session has expired: run `aws sso login`, or refresh the temporary credentials"
+
+const assumeRoleHint = "the profile's role could not be assumed: let the source principal call sts:AssumeRole on the role, and the role's trust policy admit it"
+
+const unreachableHint = "the AWS STS endpoint could not be reached: check the network and any proxy"
 
 type STSAPI interface {
 	GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
@@ -43,7 +55,7 @@ func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	out, err := c.STS.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return provider.Principal{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
+		return provider.Principal{}, refuseCallerIdentity(err)
 	}
 	arn := aws.ToString(out.Arn)
 	return provider.Principal{
@@ -72,6 +84,26 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 		return edge.CredentialDocument{}, err
 	}
 	return edge.CredentialDocument{Heading: credentialHeading, Document: document}, nil
+}
+
+func refuseCallerIdentity(err error) error {
+	var apiErr smithy.APIError
+	hasAPIError := errors.As(err, &apiErr)
+	var invalidToken *ssocreds.InvalidTokenError
+	var unsent *smithyhttp.RequestSendError
+	switch {
+	case strings.Contains(err.Error(), "Missing Region"):
+		return refusal.Refuse(refusal.CodeInvalid, "%s: %v", regionHint, err)
+	case errors.As(err, &invalidToken),
+		hasAPIError && (apiErr.ErrorCode() == "ExpiredToken" || apiErr.ErrorCode() == "ExpiredTokenException"):
+		return refusal.Refuse(refusal.CodeDenied, "%s: %v", expiredHint, err)
+	case hasAPIError && apiErr.ErrorCode() == "AccessDenied":
+		return refusal.Refuse(refusal.CodeDenied, "%s: %v", assumeRoleHint, err)
+	case errors.As(err, &unsent):
+		return refusal.Refuse(refusal.CodeNotReady, "%s: %v", unreachableHint, err)
+	default:
+		return refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
+	}
 }
 
 func principalOf(arn string) string {
