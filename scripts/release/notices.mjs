@@ -9,6 +9,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const GOOS = ["darwin", "linux", "windows"];
 const LICENSING = /^(licen[cs]e|copying|notice)(-[\w.-]+|\.(md|txt|markdown|rst))?$/i;
+const BUNDLED_DEV_DEPENDENCIES = new Set(["shadcn", "tailwindcss", "tw-animate-css"]);
 const DECLARED_BY_README = new Map([["github.com/mattn/go-localereader", "MIT"]]);
 const APACHE_TERMS =
   /^[ \t]*Apache License\s+Version 2\.0, January 2004[\s\S]*?additional liability\.(?:\s*END OF TERMS AND CONDITIONS)?/m;
@@ -18,8 +19,8 @@ const MAX_BUFFER = 256 * 1024 * 1024;
 
 const HEADER = `Third-party notices
 
-The ocel, provider and connector binaries of an Ocel release are built from
-the third-party software below. Each list of components ships under the
+The ocel, provider and connector binaries of an Ocel release include the
+third-party software below. Each list of components ships under the
 license text that follows it.
 `;
 
@@ -144,23 +145,28 @@ function jsComponents() {
     .filter((project) => embedsWithGo(project.path))
     .flatMap((project) => ["--filter", `${project.name}...`]);
   if (embedded.length === 0) throw new Error("no workspace package is embedded by Go");
-  const listed = JSON.parse(run("pnpm", ["licenses", "list", "--json", ...embedded]));
-  return Object.values(listed)
-    .flat()
-    .flatMap((pkg) =>
-      pkg.versions.map((version, index) => {
-        if (!pkg.license || pkg.license === "Unknown") {
-          throw new Error(`${pkg.name} ${version} declares no license`);
-        }
-        const files = licensing(pkg.paths[index]);
-        return {
-          name: pkg.name,
-          version,
-          license: pkg.license,
-          text: files.length ? read(files) : undeclared(pkg.name, pkg.license, "its package.json"),
-        };
-      }),
-    );
+  const listed = (args) =>
+    Object.values(
+      JSON.parse(run("pnpm", ["licenses", "list", "--json", ...args, ...embedded])),
+    ).flat();
+  const bundledDev = listed([]).filter((pkg) => BUNDLED_DEV_DEPENDENCIES.has(pkg.name));
+  if (bundledDev.length !== BUNDLED_DEV_DEPENDENCIES.size) {
+    throw new Error(`not every one of ${[...BUNDLED_DEV_DEPENDENCIES].join(", ")} is installed`);
+  }
+  return [...listed(["--prod"]), ...bundledDev].flatMap((pkg) =>
+    pkg.versions.map((version, index) => {
+      if (!pkg.license || pkg.license === "Unknown") {
+        throw new Error(`${pkg.name} ${version} declares no license`);
+      }
+      const files = licensing(pkg.paths[index]);
+      return {
+        name: pkg.name,
+        version,
+        license: pkg.license,
+        text: files.length ? read(files) : undeclared(pkg.name, pkg.license, "its package.json"),
+      };
+    }),
+  );
 }
 
 function main() {

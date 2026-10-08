@@ -79,4 +79,10 @@ describe("THIRD_PARTY_NOTICES", () => {
       .map((line) => line.split(" ")[0]);
     for (const module of modules) assert.ok(!named.includes(module), module);
   });
+
+  it("names no test runner, which no binary ships", () => {
+    const root = join(import.meta.dirname, "..", "..");
+    const notices = readFileSync(join(root, "THIRD_PARTY_NOTICES"), "utf8");
+    assert.doesNotMatch(notices, /^vitest /m);
+  });
 });
