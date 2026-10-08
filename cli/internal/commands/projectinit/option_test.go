@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -106,20 +107,26 @@ func TestAnOptionValueIsWrittenAsTheLiteralTheConfigFormatReadsBack(t *testing.T
 	}
 }
 
-func TestInitAsksOnATerminalForTheRequiredOptionsItWasNotGiven(t *testing.T) {
+func TestInitAsksOnATerminalForTheRequiredOptionsItWasNotGivenAndLeavesStdoutToTheResult(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 	dir := initTestDir(t, "proj")
 
-	var out bytes.Buffer
+	var prompts, stdout bytes.Buffer
 	opts := initOptions{provider: "vps"}
-	err := runInitCommand(context.Background(), dependencies, dir, "my-app", opts, strings.NewReader("203.0.113.7\n"), &out)
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", opts, strings.NewReader("203.0.113.7\n"), &prompts, &stdout)
 	if err != nil {
 		t.Fatalf("runInitCommand err = %v", err)
 	}
 	if got := readConfig(t, dir); !strings.Contains(got, `vpsProvider({ "ssh": "203.0.113.7" })`) {
 		t.Errorf("config = %s, want the ssh target typed", got)
+	}
+	if !strings.Contains(prompts.String(), "ssh") {
+		t.Errorf("prompts = %q, want the question for ssh", prompts.String())
+	}
+	if strings.Contains(stdout.String(), "ssh") {
+		t.Errorf("stdout = %q, want the question kept off it", stdout.String())
 	}
 }
 
@@ -129,13 +136,33 @@ func TestInitDoesNotAskForAnOptionAFlagAlreadyGave(t *testing.T) {
 	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
 	dir := initTestDir(t, "proj")
 
-	var out bytes.Buffer
+	var prompts bytes.Buffer
 	opts := initOptions{provider: "vps", settings: []providerSetting{{name: "ssh", value: "box"}}}
-	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", opts, strings.NewReader(""), &out); err != nil {
+	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", opts, strings.NewReader(""), &prompts, io.Discard); err != nil {
 		t.Fatalf("runInitCommand err = %v", err)
 	}
-	if strings.Contains(out.String(), "ssh") {
-		t.Errorf("asked %q, want no question", out.String())
+	if prompts.Len() > 0 {
+		t.Errorf("asked %q, want no question", prompts.String())
+	}
+}
+
+func TestInitRefusesAnExistingConfigBeforeAskingForAnOption(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	dir := initTestDir(t, "proj")
+	if err := os.WriteFile(filepath.Join(dir, project.DefaultFileName), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var prompts bytes.Buffer
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, strings.NewReader("box\n"), &prompts, io.Discard)
+
+	if code := clierror.NewRunError(err).GetCode(); code != clierror.CodeInitConfigExists {
+		t.Fatalf("code = %q (err %v), want %s", code, err, clierror.CodeInitConfigExists)
+	}
+	if prompts.Len() > 0 {
+		t.Errorf("asked %q before refusing, want no question", prompts.String())
 	}
 }
 
@@ -146,7 +173,7 @@ func TestInitUnderJSONFailsInsteadOfAskingForARequiredOption(t *testing.T) {
 	dependencies.IsJSON = func() bool { return true }
 	dir := initTestDir(t, "proj")
 
-	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, strings.NewReader("box\n"), io.Discard)
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, strings.NewReader("box\n"), io.Discard, io.Discard)
 
 	if err == nil || !strings.Contains(err.Error(), "--option") {
 		t.Fatalf("err = %v, want input_required naming --option", err)
