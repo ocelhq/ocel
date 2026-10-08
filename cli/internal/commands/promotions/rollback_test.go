@@ -495,8 +495,8 @@ func TestARollbackSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItDropsGoWithT
 		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	reqs := clitest.RequestsTo[*contractv1.RollbackRequest](t, project.Requests, contractv1connect.ProviderServiceRollbackProcedure)
-	if len(reqs) != 1 || !isTheProjectsRegistry(reqs[0].GetProjectRegistry()) {
-		t.Errorf("the rollback sent %d requests, want one naming the project's registry with its secret resolved", len(reqs))
+	requests := clitest.RequestsTo[*contractv1.RollbackRequest](t, project.Requests, contractv1connect.ProviderServiceRollbackProcedure)
+	if len(requests) != 1 || !isTheProjectsRegistry(requests[0].GetProjectRegistry()) {
+		t.Errorf("the rollback sent %d requests, want one naming the project's registry with its secret resolved", len(requests))
 	}
 }
