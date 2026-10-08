@@ -253,3 +253,37 @@ func TestInitStopsAsInterruptedWhenTheOptionQuestionIsCancelled(t *testing.T) {
 		t.Error("a cancelled init wrote a config")
 	}
 }
+
+type writesConfigWhenRead struct {
+	path    string
+	answer  io.Reader
+	written bool
+}
+
+func (r *writesConfigWhenRead) Read(p []byte) (int, error) {
+	if !r.written {
+		r.written = true
+		if err := os.WriteFile(r.path, []byte("theirs\n"), 0o644); err != nil {
+			return 0, err
+		}
+	}
+	return r.answer.Read(p)
+}
+
+func TestInitRefusesAConfigWrittenWhileItWasAskingForAnOption(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	dir := initTestDir(t, "proj")
+	configPath := filepath.Join(dir, project.TSFileName)
+	stdin := &writesConfigWhenRead{path: configPath, answer: strings.NewReader("box\n")}
+
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, stdin, io.Discard, io.Discard)
+
+	if code := clierror.NewRunError(err).GetCode(); code != clierror.CodeInitConfigExists {
+		t.Fatalf("code = %q (err %v), want %s", code, err, clierror.CodeInitConfigExists)
+	}
+	if got, _ := os.ReadFile(configPath); string(got) != "theirs\n" {
+		t.Errorf("config = %q, want the one written while init asked left as it was", got)
+	}
+}
