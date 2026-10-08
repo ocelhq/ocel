@@ -325,7 +325,7 @@ func (s *Service) signUpload(ctx context.Context, signer PresignAPI, granted sco
 }
 
 func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
-	sess, err := s.anySession(ctx, req.GetSessionId())
+	sess, _, err := s.readGrantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return &bucketv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
@@ -349,7 +349,7 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.Verif
 }
 
 func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
-	sess, err := s.anySession(ctx, req.GetSessionId())
+	sess, _, err := s.readGrantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
 	}

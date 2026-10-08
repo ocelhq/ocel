@@ -304,3 +304,57 @@ func TestGetUploadStatus(t *testing.T) {
 		}
 	})
 }
+
+func TestAnUploadSessionAnswersOnlyACallerGrantedItsBucket(t *testing.T) {
+	t.Parallel()
+	ddb := newFakeDDB()
+	owner := newTestService(ddb, &fakePresigner{})
+	other := New(Config{DDB: ddb, Presigner: &fakePresigner{}, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix,
+		Granted: func() []string { return []string{"elsewhere"} }})
+	ctx := context.Background()
+	const key = "k.png"
+	opened, err := owner.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
+		Bucket:   "storage",
+		Metadata: []byte("meta"),
+		Files:    []*bucketv1.PresignFile{{Key: key, Name: key, Size: 10, MimeType: "image/png"}},
+	})
+	if err != nil {
+		t.Fatalf("PresignUpload: %v", err)
+	}
+	id := opened.GetSessionId()
+
+	t.Run("the grantee reads its own session", func(t *testing.T) {
+		t.Parallel()
+		if _, err := owner.GetUploadStatus(ctx, &bucketv1.GetUploadStatusRequest{SessionId: id}); err != nil {
+			t.Fatalf("GetUploadStatus: %v", err)
+		}
+	})
+	t.Run("GetUploadStatus of another grant's session is not found", func(t *testing.T) {
+		t.Parallel()
+		_, err := other.GetUploadStatus(ctx, &bucketv1.GetUploadStatusRequest{SessionId: id})
+		if connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("GetUploadStatus = %v, want not found", err)
+		}
+	})
+	t.Run("CompleteUpload of another grant's session is not found", func(t *testing.T) {
+		t.Parallel()
+		_, err := other.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: id})
+		if connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("CompleteUpload = %v, want not found", err)
+		}
+	})
+	t.Run("VerifyUploadSignature of another grant's session is invalid and returns no metadata", func(t *testing.T) {
+		t.Parallel()
+		got, err := other.VerifyUploadSignature(ctx, &bucketv1.VerifyUploadSignatureRequest{
+			SessionId: id,
+			Signature: mustSign(t, "test-secret", id, SignedFile{Key: key, Name: key, Size: 10, MimeType: "image/png"}),
+			File:      &bucketv1.CompletedFile{Key: key, Name: key, Size: 10, MimeType: "image/png"},
+		})
+		if err != nil {
+			t.Fatalf("VerifyUploadSignature: %v", err)
+		}
+		if got.GetValid() || got.GetMetadata() != nil {
+			t.Fatalf("VerifyUploadSignature = %+v, want invalid with no metadata", got)
+		}
+	})
+}

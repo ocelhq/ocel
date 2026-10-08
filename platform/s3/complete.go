@@ -64,7 +64,7 @@ type callbackBody struct {
 }
 
 func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploadRequest) (*bucketv1.CompleteUploadResponse, error) {
-	sess, err := s.anySession(ctx, req.GetSessionId())
+	sess, granted, err := s.readGrantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
 	}
@@ -72,10 +72,6 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		return nil, err
 	}
 
-	granted, err := s.scopeOf(sess.Bucket)
-	if err != nil {
-		return nil, err
-	}
 	switch aggregate(sess.Files) {
 	case stateSucceeded:
 		return s.finish(ctx, sess)
