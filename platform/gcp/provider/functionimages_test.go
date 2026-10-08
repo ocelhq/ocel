@@ -138,10 +138,8 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirectoryItsFactsN
 	}
 	dir := strings.TrimPrefix(p.Facts().NextRuntimeDir, "/")
 	files := filesIn(t, base)
-	for _, want := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		if !slices.Contains(files, dir+"/"+want) {
-			t.Errorf("the Next base holds %v, want %s in %s, where the image boots the Next runtime from and the build points Next's cache handlers", files, want, dir)
-		}
+	if !slices.Contains(files, dir+"/entrypoint.mjs") {
+		t.Errorf("the Next base holds %v, want entrypoint.mjs in %s, where the image boots the Next runtime from", files, dir)
 	}
 	file, err := base.ConfigFile()
 	if err != nil {

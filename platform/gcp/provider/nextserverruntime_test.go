@@ -11,7 +11,7 @@ func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadNextServerRuntime() = %v", err)
 	}
-	allowed := []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
+	allowed := []string{"server-adapter.mjs"}
 	for name := range files {
 		if !slices.Contains(allowed, name) {
 			t.Errorf("ReadNextServerRuntime() ships %s, and next start loads only %v", name, allowed)

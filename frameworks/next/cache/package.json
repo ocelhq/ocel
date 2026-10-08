@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.mts",
+    "./app-cache-handlers": "./src/app-cache-handlers.mts",
     "./naming": "./src/naming.mts",
     "./cache-tags": "./src/cache-tags.mts",
     "./fixtures/*": "./fixtures/*"

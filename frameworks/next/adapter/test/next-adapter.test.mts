@@ -22,11 +22,8 @@ import { defaultImages } from "./fixtures.mts";
 
 let originalCwd: string;
 
-const nextRuntimeDir = "/var/host/next";
-
 beforeEach(() => {
   originalCwd = process.cwd();
-  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", nextRuntimeDir);
 });
 
 afterEach(() => {
@@ -1276,26 +1273,7 @@ async function readCacheEntry(projectDir: string, key: string) {
   );
 }
 
-test("copies the cache handler into the app tree and names it there", async () => {
-  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
-  const adapter = await loadAdapterIn(projectDir);
-
-  const config = await adapter.modifyConfig!({} as never, {
-    phase: PHASE_PRODUCTION_BUILD,
-    nextVersion: "16.2.10",
-  });
-
-  const dest = join(projectDir, ".ocel/cache-handler.cjs");
-  expect(config.cacheHandler).toBe(dest);
-  expect(await readFile(dest, "utf8")).toBe(
-    await readFile(
-      fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url)),
-      "utf8",
-    ),
-  );
-});
-
-test("names the singular handler only, never the 'use cache' map", async () => {
+test("the build names no cache handler in its config", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1304,8 +1282,57 @@ test("names the singular handler only, never the 'use cache' map", async () => {
     nextVersion: "16.2.10",
   });
 
+  expect(config.cacheHandler).toBeUndefined();
   expect(config.cacheHandlers).toBeUndefined();
   expect(config.cacheMaxMemorySize).toBe(0);
+});
+
+test.each([
+  [{ cacheHandler: "/app/cache-handler.cjs" }, "cacheHandler", "NEXT_CACHE_HANDLER_PATH"],
+  [
+    { cacheHandlers: { default: "/app/use-cache.cjs" } },
+    "cacheHandlers.default",
+    "NEXT_DEFAULT_CACHE_HANDLER_PATH",
+  ],
+  [
+    { cacheHandlers: { remote: "/app/use-cache.cjs" } },
+    "cacheHandlers.remote",
+    "NEXT_REMOTE_CACHE_HANDLER_PATH",
+  ],
+])(
+  "refuses an app that names its own cache handler in %j, naming the setting and its env var",
+  async (config, setting, envVar) => {
+    const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+    const adapter = await loadAdapterIn(projectDir);
+
+    const run = () =>
+      adapter.modifyConfig!(config as never, {
+        phase: PHASE_PRODUCTION_BUILD,
+        nextVersion: "16.2.10",
+      });
+
+    await expect(run()).rejects.toThrow(setting);
+    await expect(run()).rejects.toThrow(envVar);
+  },
+);
+
+test("builds an app whose cache handlers name only kinds Ocel does not install", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!(
+    {
+      cacheHandler: undefined,
+      cacheHandlers: { default: undefined, remote: undefined, static: "/app/static.cjs" },
+    } as never,
+    { phase: PHASE_PRODUCTION_BUILD, nextVersion: "16.2.10" },
+  );
+
+  expect(config.cacheHandlers).toEqual({
+    default: undefined,
+    remote: undefined,
+    static: "/app/static.cjs",
+  });
 });
 
 test("trusts the host header so a deployed res.revalidate can address itself", async () => {
@@ -1335,14 +1362,10 @@ async function modifyOnRefreshingHost(config: object, byRequest: boolean) {
 }
 
 test("refuses partial fallbacks on a host that refreshes by request, naming the setting", async () => {
-  const { projectDir, run } = await modifyOnRefreshingHost(
-    { experimental: { partialFallbacks: true } },
-    true,
-  );
+  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: true } }, true);
 
   await expect(run()).rejects.toThrow(/experimental\.partialFallbacks/);
   await expect(run()).rejects.toThrow(/"compute": "container"/);
-  await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 
 test("refuses partial prefetching on a host that refreshes by request, naming the setting", async () => {
@@ -1355,13 +1378,13 @@ test("refuses partial prefetching on a host that refreshes by request, naming th
 test("keeps partial fallbacks on a host that refreshes in the background", async () => {
   const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: true } }, false);
 
-  expect((await run()).cacheHandler).toBeDefined();
+  expect((await run()).cacheMaxMemorySize).toBe(0);
 });
 
 test("builds an app without partial fallbacks on a host that refreshes by request", async () => {
   const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: false } }, true);
 
-  expect((await run()).cacheHandler).toBeDefined();
+  expect((await run()).cacheMaxMemorySize).toBe(0);
 });
 
 test("leaves a non-build phase untouched and writes nothing", async () => {
@@ -1375,10 +1398,9 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
 
   expect(config.cacheHandler).toBeUndefined();
   expect(config.cacheMaxMemorySize).toBe(1);
-  await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 
-test("names the cache handler in the directory the host declares, by absolute path, in required-server-files", async () => {
+test("leaves the cache handlers in required-server-files as Next wrote them", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1387,33 +1409,7 @@ test("names the cache handler in the directory the host declares, by absolute pa
   const manifest = JSON.parse(
     await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
   );
-  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
-  expect(manifest.config.cacheMaxMemorySize).toBe(0);
-  expect(manifest.version).toBe(1);
-});
-
-test("registers the 'use cache' handlers from the host's directory alongside the ISR one", async () => {
-  const { projectDir, args } = await synthPrerenderProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await adapter.onBuildComplete(args as never);
-
-  const manifest = JSON.parse(
-    await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
-  );
-  expect(manifest.config.cacheHandlers).toEqual({
-    default: "/var/host/next/use-cache-default.cjs",
-    remote: "/var/host/next/use-cache-remote.cjs",
-  });
-  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
-});
-
-test("refuses a build whose host names no Next runtime directory", async () => {
-  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", "");
-  const { projectDir, args } = await synthPrerenderProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/OCEL_NEXT_RUNTIME_DIR/);
+  expect(manifest.config).toEqual({ cacheMaxMemorySize: 0, cacheHandlers: {} });
 });
 
 test("regroups a route's prerender outputs into one cache entry", async () => {

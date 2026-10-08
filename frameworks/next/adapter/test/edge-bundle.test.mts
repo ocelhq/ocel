@@ -606,6 +606,37 @@ test("hands the cache binding to the chunks on a global, before they evaluate", 
   expect(shim.indexOf("__OCEL_EDGE_CACHE")).toBeLessThan(shim.indexOf("await import"));
 });
 
+test("installs the edge cache handler as Next's fetch cache before any chunk evaluates", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  await adapter.onBuildComplete!(args as never);
+  const { shim } = await readBundle(projectDir);
+  await import(`data:text/javascript,${encodeURIComponent(shim)}`);
+
+  const installed = (globalThis as Record<symbol, any>)[Symbol.for("@next/cache-handlers")];
+  try {
+    const sets: unknown[][] = [];
+    (globalThis as any).__OCEL_EDGE_CACHE = {
+      scope: "prod/app/build",
+      rpc: { fetchSet: (...args: unknown[]) => void sets.push(args) },
+    };
+    const entry = { kind: "FETCH", data: { body: "x" }, revalidate: 60 };
+    await new installed.FetchCache().set("k", entry, { tags: ["t"] });
+
+    expect(sets).toEqual([
+      [
+        "prod/app/build",
+        "k",
+        { lastModified: expect.any(Number), value: { ...entry, tags: ["t"] } },
+        ["t"],
+      ],
+    ]);
+    expect(shim.indexOf("@next/cache-handlers")).toBeLessThan(shim.indexOf("await import"));
+  } finally {
+    delete (globalThis as Record<symbol, unknown>)[Symbol.for("@next/cache-handlers")];
+    delete (globalThis as any).__OCEL_EDGE_CACHE;
+  }
+});
+
 test("rebinds every request from the load-time env, never from a request's ctx", async () => {
   const { projectDir, args } = await synthEdgeProject();
   await adapter.onBuildComplete!(args as never);

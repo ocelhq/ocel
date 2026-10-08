@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
@@ -20,28 +22,23 @@ func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
 	}
 }
 
-func TestTheNextRuntimeShipsItsEntrypointAndEveryCacheHandler(t *testing.T) {
-	for _, name := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		body, err := fs.ReadFile(NextRuntime(), name)
-		if err != nil {
-			t.Errorf("NextRuntime() holds no %s: %v", name, err)
-			continue
-		}
-		if len(body) == 0 {
-			t.Errorf("NextRuntime()'s %s is empty", name)
-		}
+func TestTheNextRuntimeShipsItsEntrypoint(t *testing.T) {
+	body, err := fs.ReadFile(NextRuntime(), "entrypoint.mjs")
+	if err != nil {
+		t.Fatalf("NextRuntime() holds no entrypoint.mjs: %v", err)
+	}
+	if len(body) == 0 {
+		t.Error("NextRuntime()'s entrypoint.mjs is empty")
 	}
 }
 
-func TestTheNextServerRuntimeHoldsTheAdapterAndEveryCacheHandlerItNames(t *testing.T) {
+func TestTheNextServerRuntimeHoldsTheAdapterAlone(t *testing.T) {
 	files := NextServerRuntime()
-	for _, name := range []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		if len(files[name]) == 0 {
-			t.Errorf("NextServerRuntime() holds no bytes for %s, and next start loads it from the image", name)
-		}
+	if len(files[containerimage.NextServerAdapterFile]) == 0 {
+		t.Errorf("NextServerRuntime() holds no bytes for %s, and next start loads it from the image", containerimage.NextServerAdapterFile)
 	}
-	if len(files) != 4 {
-		t.Errorf("NextServerRuntime() holds %d files, want the adapter and the three cache handlers", len(files))
+	if len(files) != 1 {
+		t.Errorf("NextServerRuntime() holds %d files, want the adapter alone: the cache handlers are bundled into the entrypoint and the adapter", len(files))
 	}
 }
 

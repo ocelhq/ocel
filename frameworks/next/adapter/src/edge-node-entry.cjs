@@ -90,23 +90,10 @@ async function writeResponse(response, res) {
   await pipeline(Readable.fromWeb(response.body), res);
 }
 
-// TODO(#419): the origin function has no fetch-cache RPC, so a waived edge
-// route's cached fetches always miss and its writes are dropped. Until one
-// exists, missing beats the throw a compiled-in edge cache handler would raise.
-const originCacheBinding = {
-  scope: "",
-  rpc: {
-    fetchGet: async () => null,
-    fetchSet: async () => {},
-    revalidateTags: async () => {},
-  },
-};
-
 async function load(dir, spec) {
   globalThis.self ??= globalThis;
   globalThis.AsyncLocalStorage ??= AsyncLocalStorage;
   globalThis.NEXT_CLIENT_ASSET_SUFFIX = spec.clientAssetSuffix ?? "";
-  globalThis.__OCEL_EDGE_CACHE ??= originCacheBinding;
   globalThis.__OCEL_EDGE_ENTRY = spec.entryKey;
   for (const [name, value] of Object.entries(spec.env ?? {})) {
     process.env[name] ??= value;

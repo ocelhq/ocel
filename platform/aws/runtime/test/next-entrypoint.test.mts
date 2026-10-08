@@ -5,7 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { noteRevalidation } from "@framework/next-runtime/revalidation-signal";
 import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
+
+vi.mock("../src/next/tag-snapshot-store.mjs", () => ({ newAwsTagPublisher: async () => () => {} }));
+
+vi.mock("../src/next/cache-store.mjs", () => {
+  const entries = new Map<string, unknown>();
+  return {
+    newAwsCacheStore: () => ({
+      readEntry: async (key: string) => entries.get(`entry:${key}`) ?? null,
+      writeEntry: async (key: string, entry: unknown) => void entries.set(`entry:${key}`, entry),
+      readFetch: async (hash: string) => entries.get(`fetch:${hash}`) ?? null,
+      writeFetch: async (hash: string, entry: unknown) => void entries.set(`fetch:${hash}`, entry),
+      writeTags: async () => {},
+    }),
+  };
+});
 
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {

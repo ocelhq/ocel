@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { loadIncrementalCacheFactory } from "../src/incremental-cache.mjs";
+import { newIncrementalCacheFactory } from "../src/incremental-cache.mjs";
 import { loadProjectManifest } from "../src/project-manifest.mjs";
 import { previewModeId, writeNextProjectFixture } from "../test-support/next-project-fixture.mjs";
 
@@ -17,16 +17,16 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function factoryFor(projectDir: string) {
-  return loadIncrementalCacheFactory(projectDir, await loadProjectManifest(projectDir));
+async function factoryFor(projectDir: string, CacheHandler: unknown) {
+  return newIncrementalCacheFactory(await loadProjectManifest(projectDir), CacheHandler as never);
 }
 
 async function makeFixture(name: string, overrides: Record<string, unknown> = {}) {
   const projectDir = join(dir, name);
   await writeNextProjectFixture(projectDir, overrides);
-  const make = await factoryFor(projectDir);
   const requireFromApp = createRequire(join(projectDir, "package.json"));
   const StubCacheHandler = requireFromApp(join(projectDir, "stub-cache-handler.cjs")).default;
+  const make = await factoryFor(projectDir, StubCacheHandler);
   return { projectDir, make: make!, StubCacheHandler };
 }
 
@@ -85,7 +85,7 @@ test("only FETCH traffic passes through; other kinds read null and write nothing
   expect(await cache.get("wrong-kind", { kind: "FETCH" })).toBeNull();
 });
 
-test("revalidateTag reaches the manifest-named handler", async () => {
+test("revalidateTag reaches the installed handler", async () => {
   const { make, StubCacheHandler } = await makeFixture("revalidate-tag");
   const cache: any = make(fakeReq());
 
@@ -124,25 +124,5 @@ test("returns null when the bundle has no required-server-files manifest", async
   await writeNextProjectFixture(projectDir);
   await rm(join(projectDir, ".next/required-server-files.json"));
 
-  expect(await factoryFor(projectDir)).toBeNull();
-});
-
-test("returns null when the manifest names no cacheHandler", async () => {
-  const projectDir = join(dir, "no-handler");
-  await writeNextProjectFixture(projectDir, { cacheHandler: undefined });
-
-  expect(await factoryFor(projectDir)).toBeNull();
-});
-
-test("accepts a cache handler exported as plain module.exports", async () => {
-  const projectDir = join(dir, "cjs-handler");
-  await writeNextProjectFixture(projectDir);
-  await writeFile(
-    join(projectDir, "stub-cache-handler.cjs"),
-    "class PlainHandler { async get() { return null; } }\nmodule.exports = PlainHandler;\n",
-  );
-
-  const make = await factoryFor(projectDir);
-  const cache: any = make!(fakeReq());
-  expect(await cache.get("k", { kind: "FETCH" })).toBeNull();
+  expect(await factoryFor(projectDir, class {})).toBeNull();
 });

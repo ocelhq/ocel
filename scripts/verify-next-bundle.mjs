@@ -8,11 +8,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const providerBuilds = {
-  aws: {
-    OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
-    OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024),
-  },
-  gcp: { OCEL_NEXT_RUNTIME_DIR: "/ocel/next", OCEL_MAX_FUNCTION_BYTES: "" },
+  aws: { OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024) },
+  gcp: { OCEL_MAX_FUNCTION_BYTES: "" },
 };
 
 const opts = parseArgs(process.argv.slice(2));

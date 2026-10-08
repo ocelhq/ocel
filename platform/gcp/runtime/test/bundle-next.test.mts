@@ -64,16 +64,9 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime directory holds the entrypoint and every cache handler a Next build names", async () => {
-  expect(await shippedFiles()).toEqual(
-    expect.arrayContaining([
-      "cache-handler.cjs",
-      "entrypoint.mjs",
-      "server-adapter.mjs",
-      "use-cache-default.cjs",
-      "use-cache-remote.cjs",
-    ]),
-  );
+test("the runtime directory holds the entrypoint and the server adapter, with the cache handlers inside them", async () => {
+  const own = (await shippedFiles()).filter((file) => !file.startsWith("node_modules/"));
+  expect(own).toEqual(["entrypoint.mjs", "server-adapter.mjs"]);
 });
 
 test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
@@ -94,7 +87,7 @@ test("the server adapter imports nothing but Node's own modules", async () => {
   expect(bare).toEqual([]);
 });
 
-test("the server adapter installs the Cloud Run host and points Next's production server at the handlers beside it", async () => {
+test("the server adapter installs the Cloud Run host and the cache handlers, and names no handler in Next's config", async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     [
@@ -103,7 +96,12 @@ test("the server adapter installs the Cloud Run host and points Next's productio
       `const { default: adapter } = await import(${JSON.stringify(join(dir, "server-adapter.mjs"))});
 const config = adapter.modifyConfig({}, { phase: "phase-production-server" });
 const host = globalThis[Symbol.for("ocel.next.host.v1")];
-process.stdout.write(JSON.stringify({ config, store: typeof host?.newCacheStore }));`,
+const handlers = globalThis[Symbol.for("@next/cache-handlers")];
+process.stdout.write(JSON.stringify({
+  config,
+  store: typeof host?.newCacheStore,
+  handlers: Object.fromEntries(Object.entries(handlers ?? {}).map(([name, handler]) => [name, typeof handler])),
+}));`,
     ],
     {
       env: {
@@ -117,11 +115,12 @@ process.stdout.write(JSON.stringify({ config, store: typeof host?.newCacheStore 
     },
   );
 
-  const { config, store } = JSON.parse(stdout);
-  expect(config.cacheHandler).toBe(join(dir, "cache-handler.cjs"));
-  expect(config.cacheHandlers).toEqual({
-    default: join(dir, "use-cache-default.cjs"),
-    remote: join(dir, "use-cache-remote.cjs"),
+  const { config, store, handlers } = JSON.parse(stdout);
+  expect(config).toEqual({ cacheMaxMemorySize: 0 });
+  expect(handlers).toEqual({
+    FetchCache: "function",
+    DefaultCache: "object",
+    RemoteCache: "object",
   });
   expect(store).toBe("function");
 });
@@ -327,13 +326,8 @@ test("the entrypoint serves a Next app on the port Cloud Run names", async () =>
   expect(await answer(port)).toBe("rendered");
 });
 
-const handlerPath = (runtimeDir: string) => JSON.stringify(join(runtimeDir, "cache-handler.cjs"));
-
-const partiallyStaticLauncher = (
-  runtimeDir: string,
-  log: string,
-) => `const { appendFileSync } = require("node:fs");
-const Handler = require(${handlerPath(runtimeDir)});
+const partiallyStaticLauncher = (log: string) => `const { appendFileSync } = require("node:fs");
+const Handler = globalThis[Symbol.for("@next/cache-handlers")].FetchCache;
 const page = { kind: "APP_PAGE", html: "<p>old</p>", status: 200, headers: {} };
 module.exports = {
   async handler(req, res) {
@@ -369,7 +363,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
   const log = join(projectDir, "refreshes.log");
   await writeFile(log, "");
   const launcher = join(projectDir, "__next_launcher.cjs");
-  await writeFile(launcher, partiallyStaticLauncher(dir, log));
+  await writeFile(launcher, partiallyStaticLauncher(log));
   const manifest = join(projectDir, "routing-manifest.json");
   await writeFile(
     manifest,
