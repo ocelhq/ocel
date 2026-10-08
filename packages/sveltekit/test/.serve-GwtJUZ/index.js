@@ -1,6 +1,6 @@
-import app from "ENTRY";
 import http from "node:http";
 import { getRequest, setResponse } from "@sveltejs/kit/node";
+import app from "./app.js";
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -22,13 +22,7 @@ http
       res.end("Bad Request");
       return;
     }
-    try {
-      await setResponse(res, await app.fetch(request));
-    } catch (error) {
-      console.error(error);
-      if (!res.headersSent) res.statusCode = 500;
-      res.end();
-    }
+    await setResponse(res, await app.fetch(request));
   })
   .listen(port, host, () => {
     console.log(`Listening on http://${host}:${port}`);

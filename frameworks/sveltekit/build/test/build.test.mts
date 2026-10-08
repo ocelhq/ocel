@@ -24,7 +24,7 @@ describe("buildSvelteKit", () => {
     let env: Record<string, string> = {};
     buildProcess.spawn = async (_command, _args, _cwd, e) => {
       env = e;
-      writeFileSync(join(built.outputDir, "hosting.json"), '{"framework":"sveltekit"}');
+      writeFileSync(join(built.outputDir, "hosting.json"), '{"version":1,"framework":"sveltekit"}');
     };
 
     await buildSvelteKit(built);
@@ -49,5 +49,13 @@ describe("buildSvelteKit", () => {
       writeFileSync(join(built.outputDir, "hosting.json"), '{"framework":"node"}');
 
     await expect(buildSvelteKit(built)).rejects.toThrow(/names framework "node"/);
+  });
+
+  it("refuses hosting of a version this CLI does not read, naming the adapter release", async () => {
+    const built = app();
+    buildProcess.spawn = async () =>
+      writeFileSync(join(built.outputDir, "hosting.json"), '{"version":2,"framework":"sveltekit"}');
+
+    await expect(buildSvelteKit(built)).rejects.toThrow(/version 2.*@ocel\/sveltekit/);
   });
 });
