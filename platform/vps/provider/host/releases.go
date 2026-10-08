@@ -38,23 +38,41 @@ func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app s
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string) ([]string, error) {
+type Swept struct {
+	Removed []string
+	Unused  []string
+}
+
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string) (Swept, error) {
 	repository, named := Repository(imageRef)
 	if !named {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
+		return Swept{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
 	said, err := h.releases(ctx, "reconcile "+app+"'s images", Scope(project, app), "reconcile", repository)
 	if err != nil {
-		return nil, err
+		return Swept{}, err
 	}
-	var removed []string
+	var swept Swept
 	for line := range strings.Lines(said) {
-		if image := strings.TrimSpace(line); image != "" {
-			removed = append(removed, image)
+		kind, image, _ := strings.Cut(strings.TrimSpace(line), " ")
+		switch {
+		case image == "":
+		case kind == "removed":
+			swept.Removed = append(swept.Removed, image)
+		case kind == "unused":
+			swept.Unused = append(swept.Unused, image)
 		}
 	}
-	return removed, nil
+	return swept, nil
+}
+
+func (h *Host) Settle(ctx context.Context, project, app string, imageRefs []string) error {
+	if len(imageRefs) == 0 {
+		return nil
+	}
+	_, err := h.releases(ctx, "settle "+app+"'s removed images", Scope(project, app), append([]string{"settle"}, imageRefs...)...)
+	return err
 }
 
 func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {

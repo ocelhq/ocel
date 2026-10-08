@@ -137,7 +137,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 	)
 }
 
-func TestReconcilingAnAppsImagesReturnsEveryImageItRemoved(t *testing.T) {
+func TestReconcilingAnAppsImagesReturnsWhatItRemovedAndWhatTheRegistryStillHolds(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
@@ -145,13 +145,16 @@ func TestReconcilingAnAppsImagesReturnsEveryImageItRemoved(t *testing.T) {
 		if !strings.HasPrefix(command, quoted(releasesHelper)) || !strings.Contains(command, quoted("reconcile")) {
 			return session.Result{}, false
 		}
-		return session.Result{Stdout: "ocel/shop-web:1111\nocel/shop-web:2222\n"}, true
+		return session.Result{Stdout: "removed ocel/shop-web:1111\nunused ocel/shop-web:1111\nunused ocel/shop-web:2222\n"}, true
 	}
-	removed, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
+	swept, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
-	if want := []string{"ocel/shop-web:1111", "ocel/shop-web:2222"}; !slices.Equal(removed, want) {
-		t.Errorf("Reconcile() removed %v, want %v: they are the tags to delete from the registry the box pulled them from", removed, want)
+	if want := []string{"ocel/shop-web:1111"}; !slices.Equal(swept.Removed, want) {
+		t.Errorf("Reconcile() removed %v, want %v from the box", swept.Removed, want)
+	}
+	if want := []string{"ocel/shop-web:1111", "ocel/shop-web:2222"}; !slices.Equal(swept.Unused, want) {
+		t.Errorf("Reconcile() handed on %v, want %v: they are the tags to delete from the registry the box pulled them from", swept.Unused, want)
 	}
 }
