@@ -1130,7 +1130,7 @@ func TestAPersistentPreviewUpWhoseBuildFailsAfterItsInfraFreesThePreviewItHeld(t
 	if len(sentProvisionInfras(t, fixture)) != 1 {
 		t.Fatal("the build failed before ProvisionInfra ran, so this test holds no lease to free")
 	}
-	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
 	if !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("reading the lease of preview staging = %v, want none: a preview up whose build failed abandons the lease its infra took", err)
 	}

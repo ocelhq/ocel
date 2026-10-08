@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const otherDeployLease = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+const otherEnvironmentLease = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 func abandonDeploy(t *testing.T, client contractv1connect.ProviderServiceClient, token string) {
 	t.Helper()
@@ -42,9 +42,9 @@ func refusedBusy(t *testing.T, result *progressv1.OperationResult, what string) 
 	}
 }
 
-func readDeployLease(t *testing.T, vendor *fake.Provider) (held bool) {
+func readEnvironmentLease(t *testing.T, vendor *fake.Provider) (held bool) {
 	t.Helper()
-	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
+	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
 	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
@@ -57,7 +57,7 @@ func TestProvisionInfraRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *t
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 
 	req := infraRequest(deployRequest())
-	req.LeaseToken = otherDeployLease
+	req.LeaseToken = otherEnvironmentLease
 	result, _ := provisionInfraStream(t, client, req)
 
 	refusedBusy(t, result, "ProvisionInfra()")
@@ -88,11 +88,11 @@ func TestADeployOverTheInfraItsLeaseProvisionedFreesTheEnvironmentWhenItEnds(t *
 		t.Fatalf("Deploy() = %q, want it to succeed over the lease ProvisionInfra took", result.GetError())
 	}
 
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the environment still holds a deploy lease after the deploy ended, want it freed")
 	}
 	next := infraRequest(deployRequest())
-	next.LeaseToken = otherDeployLease
+	next.LeaseToken = otherEnvironmentLease
 	provisionedInfra(t, client, next)
 }
 
@@ -107,7 +107,7 @@ func TestARefusedDeployFreesTheEnvironmentItHeld(t *testing.T) {
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded over infra that was never provisioned, want it refused")
 	}
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the environment still holds the lease of a deploy that was refused, want it freed")
 	}
 }
@@ -120,7 +120,7 @@ func TestADeployWithNoLeaseHoldsTheEnvironmentOnlyForItsOwnRun(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the environment still holds a deploy lease after a deploy that brought none ended, want it freed")
 	}
 }
@@ -150,7 +150,7 @@ func TestProvisionInfraRefusesARequestWithNoLeaseToken(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("ProvisionInfra() = %v, want it rejected as invalid: nothing could name the lease that holds the environment", err)
 	}
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the rejected ProvisionInfra took a lease")
 	}
 }
@@ -162,7 +162,7 @@ func TestAbandonDeployFreesTheEnvironmentItsLeaseHeld(t *testing.T) {
 
 	abandonDeploy(t, client, infraLease)
 
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the environment still holds the abandoned deploy's lease, want it freed")
 	}
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
@@ -175,9 +175,9 @@ func TestAbandonDeployKeepsALeaseAnotherDeployHolds(t *testing.T) {
 	client, vendor := deployServed(t)
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 
-	abandonDeploy(t, client, otherDeployLease)
+	abandonDeploy(t, client, otherEnvironmentLease)
 
-	if !readDeployLease(t, vendor) {
+	if !readEnvironmentLease(t, vendor) {
 		t.Error("abandoning a lease it never held freed the lease of the deploy that holds the environment")
 	}
 }
@@ -198,7 +198,7 @@ func TestProvisionInfraFreesTheEnvironmentWhenItFails(t *testing.T) {
 	if result.GetSuccess() {
 		t.Fatal("ProvisionInfra() succeeded on a provider that was never bootstrapped, want it refused")
 	}
-	if readDeployLease(t, vendor) {
+	if readEnvironmentLease(t, vendor) {
 		t.Error("the environment still holds the lease of a ProvisionInfra that failed, want it freed")
 	}
 }
@@ -219,7 +219,7 @@ func TestAFailedProvisionInfraKeepsTheLeaseAnEarlierProvisionInfraOfItsDeployToo
 	if result.GetSuccess() {
 		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
 	}
-	if !readDeployLease(t, vendor) {
+	if !readEnvironmentLease(t, vendor) {
 		t.Error("the failed ProvisionInfra freed the lease its deploy took earlier, want it held until that deploy ends")
 	}
 }
@@ -235,8 +235,8 @@ func TestADeployWhoseLeaseAnotherDeployTookOverIsRefusedBeforeItPromotes(t *test
 			return nil
 		}
 		takeOver.Do(func() {
-			err := stackrecords.TakeDeployLease(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv,
-				otherDeployLease, time.Now().Add(time.Hour), time.Hour)
+			err := stackrecords.TakeEnvironmentLease(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv,
+				otherEnvironmentLease, time.Now().Add(time.Hour), time.Hour)
 			if err != nil {
 				t.Errorf("taking the lease over = %v", err)
 			}
