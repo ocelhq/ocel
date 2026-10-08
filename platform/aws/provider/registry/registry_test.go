@@ -256,6 +256,35 @@ func TestAPushWhoseRepositoryADestroyDeletedMidwayCreatesItAgainAndPushesAgain(t
 	}
 }
 
+type pushedOnceAnotherDeployRecreates struct {
+	provider.ImageStore
+	pushes int
+}
+
+func (p *pushedOnceAnotherDeployRecreates) Push(context.Context, provider.ImagePush, progress.Log) error {
+	p.pushes++
+	if p.pushes == 1 {
+		return errors.New("the registry refused the push: name unknown: The repository with name 'ocel/shop.web' does not exist in the registry with id '123456789012'")
+	}
+	return nil
+}
+
+func TestAPushWhoseRepositoryAnotherDeployRecreatedMidwayPushesAgain(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{existing: []string{"ocel/shop.web"}}
+	pushed := &pushedOnceAnotherDeployRecreates{}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	store := ecrImages{api: api, target: target, pushed: pushed}
+
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
+		t.Fatalf("Push() = %v, want the push to land: a destroy deleted the repository mid-push and another deploy created it again first", err)
+	}
+	if pushed.pushes != 2 || len(api.created) != 0 {
+		t.Errorf("Push() pushed %d times and created %v, want 2 pushes and nothing created", pushed.pushes, api.created)
+	}
+}
+
 func TestAPushThatFailsWhileItsRepositoryStandsIsNotRetried(t *testing.T) {
 	t.Parallel()
 
