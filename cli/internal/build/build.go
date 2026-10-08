@@ -190,7 +190,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
 	var traced []toolchain.Target
-	var nextApps []project.App
+	var scriptBuilt []project.App
 	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework(); {
 		case compiledFromSource(name):
@@ -205,7 +205,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				return err
 			}
 		case name == buildoutput.FrameworkNext:
-			nextApps = append(nextApps, a)
+			scriptBuilt = append(scriptBuilt, a)
 			env, err := deliverValues(a)
 			if err != nil {
 				return err
@@ -223,6 +223,22 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 
 				MaxFunctionBytes: host.MaxFunctionBytes,
+			})
+		case name == buildoutput.FrameworkSvelteKit:
+			scriptBuilt = append(scriptBuilt, a)
+			env, err := deliverValues(a)
+			if err != nil {
+				return err
+			}
+			req.Apps = append(req.Apps, nodeAppBuild{
+				Unset:     env.unset,
+				Framework: buildoutput.FrameworkSvelteKit,
+				Name:      a.Name,
+				Cwd:       filepath.Join(cfg.Dir, a.Path),
+				OutputDir: buildoutput.AppRoot(outputDir, a.Name),
+				BuildID:   buildIDs[a.Name],
+				Folder:    a.Folder,
+				Env:       env.set,
 			})
 		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)
@@ -278,15 +294,15 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			return err
 		}
 	}
-	for _, a := range nextApps {
-		if err := installNextPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
+	for _, a := range scriptBuilt {
+		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func installNextPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
+func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
 	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), functionsDirName, "*"+functionDirSuffix))
 	if err != nil {
 		return err

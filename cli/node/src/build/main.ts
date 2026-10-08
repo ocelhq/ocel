@@ -1,6 +1,7 @@
 import path from "node:path";
 import { buildNext } from "@framework/next-build";
 import { traceFunction } from "@framework/node-build/trace";
+import { buildSvelteKit } from "@framework/sveltekit-build";
 import { type AppBuild, buildApps } from "./apps.js";
 import { reportFailure } from "./protocol.js";
 
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   const req = await readRequest();
   await buildApps(req.apps, {
     next: (app) => buildNext(app, adapterPath),
+    sveltekit: buildSvelteKit,
     node: traceFunction,
   });
 }

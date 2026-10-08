@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { buildProcess } from "@framework/node-build/script";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { buildNext, buildProcess, type NextBuild } from "../src/build.mjs";
+import { buildNext, type NextBuild } from "../src/build.mjs";
 
 const roots: string[] = [];
 afterAll(() => {

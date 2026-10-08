@@ -24,6 +24,14 @@ const next: AppBuild = {
   buildId: "0123456789abcdef0123456789abcdef",
 };
 
+const sveltekit: AppBuild = {
+  framework: "sveltekit",
+  name: "shop",
+  cwd: "/p/shop",
+  outputDir: "/p/.ocel/output/apps/shop",
+  buildId: "fedcba9876543210fedcba9876543210",
+};
+
 const node: AppBuild = {
   framework: "node",
   name: "api",
@@ -37,6 +45,7 @@ function recording(): Adapters & { calls: string[] } {
   return {
     calls,
     next: async (app) => void calls.push(`next:${app.name}`),
+    sveltekit: async (app) => void calls.push(`sveltekit:${app.name}`),
     node: async (trace) => void calls.push(`node:${trace.functionDir}`),
   };
 }
@@ -46,9 +55,9 @@ describe("buildApps", () => {
     records();
     const adapters = recording();
 
-    await buildApps([next, node], adapters);
+    await buildApps([next, sveltekit, node], adapters);
 
-    expect(adapters.calls).toEqual(["next:web", `node:${node.functionDir}`]);
+    expect(adapters.calls).toEqual(["next:web", "sveltekit:shop", `node:${node.functionDir}`]);
   });
 
   it("opens and ends a build span named for each app", async () => {

@@ -164,6 +164,37 @@ func TestBuild(t *testing.T) {
 		})
 	})
 
+	t.Run("hands a sveltekit app to the node build script with what its build needs", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		shop := project.App{Name: "shop", Path: "apps/shop", Folder: "/shop", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkSvelteKit}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{shop}}
+
+		var got nodeBuildRequest
+		builder := nodeOnly{node: requestOf(&got)}
+		if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"shop": {Env: map[string]string{"PUBLIC_KEY": "pk"}}}, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		if len(got.Apps) != 1 {
+			t.Fatalf("request had %d apps, want 1", len(got.Apps))
+		}
+		app := got.Apps[0]
+		recorded, err := BuildID(root, "shop")
+		if err != nil {
+			t.Fatalf("BuildID: %v", err)
+		}
+		want := nodeAppBuild{Framework: "sveltekit", Name: "shop", Cwd: filepath.Join(root, "apps/shop"), OutputDir: buildoutput.AppRoot(outputRoot(t, root), "shop"), BuildID: recorded, Folder: "/shop"}
+		if app.Framework != want.Framework || app.Name != want.Name || app.Cwd != want.Cwd || app.OutputDir != want.OutputDir || app.BuildID != want.BuildID || app.Folder != want.Folder {
+			t.Errorf("app = %+v, want %+v", app, want)
+		}
+		if app.Env["PUBLIC_KEY"] != "pk" {
+			t.Errorf("the build reads PUBLIC_KEY=%q, want the value the app resolves", app.Env["PUBLIC_KEY"])
+		}
+	})
+
 	t.Run("hands each next app the size budget its host sets for one function", func(t *testing.T) {
 		t.Parallel()
 

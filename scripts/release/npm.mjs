@@ -20,6 +20,7 @@ export const ORDER = [
   "ocel-sst",
   "ocel-pulumi",
   "ocel-transforms",
+  "sveltekit",
 ];
 
 export const LICENSING = ["LICENSE", "NOTICE"];

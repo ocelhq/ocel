@@ -1,13 +1,16 @@
 import type { NextBuild } from "@framework/next-build";
 import type { TraceRequest } from "@framework/node-build/trace";
+import type { SvelteKitBuild } from "@framework/sveltekit-build";
 import { withSpan } from "./protocol.js";
 
 export type AppBuild =
   | ({ framework: "next" } & NextBuild)
+  | ({ framework: "sveltekit" } & SvelteKitBuild)
   | ({ framework: "node"; name: string } & TraceRequest);
 
 export interface Adapters {
   next(app: NextBuild): Promise<void>;
+  sveltekit(app: SvelteKitBuild): Promise<void>;
   node(trace: TraceRequest): Promise<void>;
 }
 
@@ -21,6 +24,8 @@ function buildApp(app: AppBuild, adapters: Adapters): Promise<void> {
   switch (app.framework) {
     case "next":
       return adapters.next(app);
+    case "sveltekit":
+      return adapters.sveltekit(app);
     case "node":
       return adapters.node(app);
     default: {

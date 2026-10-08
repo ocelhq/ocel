@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "the node side of the ocel cli — bundled by build.mjs and embedded in the Go binary",
+  "description": "the node side of the ocel cli \u2014 bundled by build.mjs and embedded in the Go binary",
   "scripts": {
     "build": "bun build.mjs",
     "live": "go test -C .. -race -count=1 -timeout 30m -tags integration -run '^TestLive' ./...",
@@ -15,6 +15,7 @@
     "@framework/next-adapter": "workspace:^",
     "@framework/next-build": "workspace:^",
     "@framework/node-build": "workspace:^",
+    "@framework/sveltekit-build": "workspace:^",
     "@ocelhq/theme": "0.1.0",
     "@ocelhq/variables-ui": "0.1.0",
     "typescript": "^5.9.3"

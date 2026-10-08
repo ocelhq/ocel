@@ -12,7 +12,7 @@ func GenerateProjectAccessors(cfg *project.Project, keys []Key) (named int, file
 	apps := make([]App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
-		apps = append(apps, App{Name: a.Name, Dir: dir, ClientBundle: language.HasClientBundle(a.Framework(), dir)})
+		apps = append(apps, App{Name: a.Name, Dir: dir, Framework: a.Framework(), ClientBundle: language.HasClientBundle(a.Framework(), dir)})
 	}
 	for _, app := range apps {
 		if err := GenerateKeys(cfg.Dir, app, keys); err != nil {

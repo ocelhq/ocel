@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -568,4 +569,33 @@ func TestRecord(t *testing.T) {
 			t.Errorf("record contains the value itself: %s", got)
 		}
 	})
+}
+
+func TestASvelteKitAppsTSConfigIsLeftToSvelteKit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tsconfig := `{ "extends": "./.svelte-kit/tsconfig.json" }` + "\n"
+	for path, body := range map[string]string{
+		"tsconfig.json":             tsconfig,
+		".svelte-kit/tsconfig.json": `{ "compilerOptions": { "paths": { "$lib": ["../src/lib"] } } }`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	written, err := MapAppEnvImport(dir, App{Name: "web", Dir: dir, Framework: buildoutput.FrameworkSvelteKit, ClientBundle: true})
+	if err != nil {
+		t.Fatalf("MapAppEnvImport refused a SvelteKit app: %v", err)
+	}
+	if written != "" {
+		t.Errorf("MapAppEnvImport wrote %s, the tsconfig SvelteKit generates the paths of", written)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "tsconfig.json")); string(got) != tsconfig {
+		t.Errorf("tsconfig.json = %s, want it untouched", got)
+	}
 }

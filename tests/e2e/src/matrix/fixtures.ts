@@ -21,6 +21,7 @@ import {
   prerenderChecks,
   realtimeChecks,
   staticChecks,
+  svelteKitChecks,
   tasksChecks,
   tasksWireChecks,
   todoAndDocumentChecks,
@@ -64,6 +65,13 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
   ...nextStateChecks,
   ...nextDataCacheChecks,
   ...nextOriginDataCacheChecks,
+];
+const SVELTEKIT_CHECKS = [
+  ...healthChecks,
+  ...staticChecks,
+  ...nativeModuleChecks,
+  ...nodeRuntimeChecks,
+  ...svelteKitChecks,
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
@@ -128,6 +136,16 @@ export const deploy = {
     },
     previews: { gcp: [defaults, alb] },
     configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+  }),
+  sveltekit: fixture("deploy/sveltekit", {
+    apps: ["web"],
+    checks: SVELTEKIT_CHECKS,
+    on: {
+      dev: [defaults],
+      aws: [defaults, container, apiGateway, cloudflare],
+      vps: [defaults],
+      gcp: [defaults, container],
+    },
   }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
