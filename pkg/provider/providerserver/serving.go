@@ -71,7 +71,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	return facts, nil
 }
 
-func guardFor(q AppServingInput, hosting edge.Hosting, present bool) *provider.OriginGuard {
+func guardFor(q AppServingInput, hosting buildoutput.Hosting, present bool) *provider.OriginGuard {
 	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || hosting.Entry == "" {
 		return nil
 	}
@@ -82,7 +82,7 @@ func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Bindi
 	return slices.ContainsFunc(grants, func(binding provider.Binding) bool { return proxied(binding.Type) })
 }
 
-func routingFor(q AppServingInput, hosting edge.Hosting, present bool) (*provider.RoutingSpec, error) {
+func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*provider.RoutingSpec, error) {
 	if !present || !hosting.EdgeRouting {
 		return nil, nil
 	}

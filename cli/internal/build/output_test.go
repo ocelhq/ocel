@@ -24,13 +24,13 @@ func TestFrameworkBuildID(t *testing.T) {
 		{
 			name:     "reads hosting.json every framework writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.HostingFile: `{"framework":"node","frameworkBuildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + buildoutput.HostingFile: `{"framework":"node","frameworkBuildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.HostingFile: `{"framework":"next","frameworkBuildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + buildoutput.HostingFile: `{"framework":"next","frameworkBuildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
@@ -68,7 +68,7 @@ func TestAnUnreadableHostingFailsTheFrameworkBuildIDRatherThanReadingAsNone(t *t
 	t.Parallel()
 
 	root := t.TempDir()
-	writeAppFile(t, root, "api/"+edge.HostingFile, []byte("not json"))
+	writeAppFile(t, root, "api/"+buildoutput.HostingFile, []byte("not json"))
 
 	if got, err := FrameworkBuildID(root, "api"); err == nil {
 		t.Errorf("FrameworkBuildID = %q, nil over a hosting.json that is not JSON, want the corruption reported rather than recorded as no build", got)
@@ -85,13 +85,13 @@ func TestEdgeApps(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeAppFile(t, root, "web/"+edge.HostingFile,
+		writeAppFile(t, root, "web/"+buildoutput.HostingFile,
 			[]byte(`{"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
-		writeAppFile(t, root, "admin/"+edge.HostingFile,
+		writeAppFile(t, root, "admin/"+buildoutput.HostingFile,
 			[]byte(`{"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
-		writeAppFile(t, root, "docs/"+edge.HostingFile,
+		writeAppFile(t, root, "docs/"+buildoutput.HostingFile,
 			[]byte(`{"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
-		writeAppFile(t, root, "api/"+edge.HostingFile, []byte(`{"framework":"node","needs":{}}`))
+		writeAppFile(t, root, "api/"+buildoutput.HostingFile, []byte(`{"framework":"node","needs":{}}`))
 
 		apps, err := EdgeApps(root)
 		if err != nil {
@@ -107,7 +107,7 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "web/"+edge.HostingFile, []byte(`{"framework":"next","needs":{}}`))
+		writeAppFile(t, root, "web/"+buildoutput.HostingFile, []byte(`{"framework":"next","needs":{}}`))
 
 		if apps, err := EdgeApps(root); err != nil || len(apps) != 0 {
 			t.Errorf("EdgeApps = %v, want the needs to decide, not the bundle", apps)

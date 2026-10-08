@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func pythonApp(t *testing.T, files map[string]string) string {
@@ -105,8 +104,8 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 		t.Errorf("app = %q, want %q", config.App, "web")
 	}
 
-	var hosting edge.Hosting
-	readJSON(t, filepath.Join(appDir, edge.HostingFile), &hosting)
+	var hosting buildoutput.Hosting
+	readJSON(t, filepath.Join(appDir, buildoutput.HostingFile), &hosting)
 	if hosting.Framework != "python" {
 		t.Errorf("hosting.json names runtime %q, want %q", hosting.Framework, "python")
 	}

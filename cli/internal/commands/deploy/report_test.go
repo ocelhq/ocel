@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -188,7 +188,7 @@ func TestADeployWhoseReportCannotBeCompletedStillReportsItsLivePromotion(t *test
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)
 	corrupt := func() {
-		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", edge.HostingFile), "{")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", buildoutput.HostingFile), "{")
 	}
 	for _, kind := range []router.Kind{fake.RouterDirect, fake.RouterRelay} {
 		fixture.Provider.Routers().(*fake.Routers).DataPlane(kind).BeforeNextPointerMove(corrupt)

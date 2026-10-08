@@ -11,12 +11,14 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -632,7 +634,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.HostingFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, buildoutput.HostingFile),
 		`{"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
 }
 

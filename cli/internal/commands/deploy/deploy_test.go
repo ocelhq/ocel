@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -242,7 +242,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 
 func writeHosting(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.HostingFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, buildoutput.HostingFile),
 		`{"framework":"node","frameworkBuildId":"`+buildID+`"}`)
 }
 

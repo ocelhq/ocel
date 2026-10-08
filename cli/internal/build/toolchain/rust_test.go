@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const rustCrateManifest = "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
@@ -227,8 +226,8 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Framework)
 	}
 
-	var hosting edge.Hosting
-	readJSON(t, filepath.Join(appDir, edge.HostingFile), &hosting)
+	var hosting buildoutput.Hosting
+	readJSON(t, filepath.Join(appDir, buildoutput.HostingFile), &hosting)
 	if hosting.Framework != "rust" {
 		t.Errorf("hosting.json names runtime %q, want %q", hosting.Framework, "rust")
 	}
