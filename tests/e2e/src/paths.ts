@@ -26,6 +26,10 @@ export const ocelBin = process.env.OCEL_BIN ?? snapshotCli();
 
 export const providersDir = process.env.OCEL_PROVIDERS_DIR ?? path.join(snapshotDir, "providers");
 
+export type OcelBuild = { bin: string; providersDir: string };
+
+export const headBuild: OcelBuild = { bin: ocelBin, providersDir };
+
 export function fixtureMember(dir: string): string {
   return path.posix.join("tests", "fixtures", dir);
 }

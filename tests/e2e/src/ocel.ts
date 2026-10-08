@@ -3,7 +3,7 @@ import path from "node:path";
 import { REDACTED, redact } from "./checks/context";
 import { overlayFor, writeJourneyConfig } from "./config";
 import type { Phase, TargetName } from "./matrix/types";
-import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
+import { fixtureMember, headBuild, type OcelBuild, treeDir } from "./paths";
 import { type Log, progress, relay } from "./progress";
 import type { CellUnderTest } from "./run/cellRun";
 import { writeTree } from "./tree";
@@ -42,11 +42,12 @@ export async function spawnOcel(
   args: string[],
   env: NodeJS.ProcessEnv,
   log: Log = progress("ocel |"),
+  build: OcelBuild = headBuild,
 ): Promise<Ran> {
   return new Promise<Ran>((resolve, reject) => {
-    const child = spawn(ocelBin, args, {
+    const child = spawn(build.bin, args, {
       cwd: dir,
-      env: { OCEL_PROVIDERS_DIR: providersDir, ...env },
+      env: { ...env, OCEL_PROVIDERS_DIR: build.providersDir },
     });
     let stdout = "";
     let stderr = "";
@@ -95,9 +96,9 @@ export async function ocel(
   dir: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  log?: Log,
+  build: OcelBuild = headBuild,
 ): Promise<Ran> {
-  const result = await spawnOcel(dir, args, env, log);
+  const result = await spawnOcel(dir, args, env, undefined, build);
   if (result.code !== 0) {
     throw new NonzeroExitError(args, result);
   }
@@ -111,9 +112,16 @@ export async function runOcel(
   name: string,
   args: string[],
   env: NodeJS.ProcessEnv,
+  build: OcelBuild = headBuild,
 ): Promise<Ran> {
   const began = Date.now();
-  const result = await spawnOcel(dir, args, env, progress(`${cell.name} ${phase}/${name} |`));
+  const result = await spawnOcel(
+    dir,
+    args,
+    env,
+    progress(`${cell.name} ${phase}/${name} |`),
+    build,
+  );
   await cell.evidence.append(
     COMMAND_LOG,
     JSON.stringify({ phase, name, ms: Date.now() - began, code: result.code }),

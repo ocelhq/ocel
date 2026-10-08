@@ -205,7 +205,7 @@ func TestEnsureReadyRepairsAStaleBootstrapWithoutAcceptingReplacements(t *testin
 	}
 }
 
-func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoRepair(t *testing.T) {
+func TestEnsureReadyRefusesAStaleBootstrapTheAccountNeverOptedIntoRepairing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -214,15 +214,24 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoRepair
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 	bootstrap.MarkStale(fake.FeatureCache)
 
-	progress := &recorder{}
-	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v", err)
-	}
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, &recorder{})
+	refusedBehind(t, err, "fake-production-"+fake.FeatureCache, "ocel bootstrap production")
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want only the bootstrap that installed it", got)
 	}
-	if !strings.Contains(progress.warnings(), "its content is behind") {
-		t.Errorf("EnsureReady() warned %q, want a warning about the drift it left state", progress.warnings())
+}
+
+func refusedBehind(t *testing.T, err error, wants ...string) {
+	t.Helper()
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("EnsureReady() error = %v, want a not-ready refusal before the deploy changes anything", err)
+	}
+	for _, want := range wants {
+		if !strings.Contains(refused.Message, want) {
+			t.Errorf("EnsureReady() refused with %q, want it to name %q", refused.Message, want)
+		}
 	}
 }
 
@@ -238,23 +247,14 @@ func TestEnsureReadyAsksForNoRepairAndGetsNone(t *testing.T) {
 	}
 	bootstrap.MarkStale(fake.FeatureCache)
 
-	progress := &recorder{}
-	status, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, false, progress)
-	if err != nil {
-		t.Fatalf("EnsureReady() error = %v", err)
-	}
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, false, &recorder{})
+	refusedBehind(t, err, "fake-production-"+fake.FeatureCache)
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a caller that asked for no repairing to get none though the account opted in", got)
 	}
-	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
-		t.Errorf("EnsureReady() reports %v behind, want the drift it was told to leave state", stale)
-	}
-	if !strings.Contains(progress.warnings(), "its content is behind") {
-		t.Errorf("EnsureReady() warned %q, want a warning about the drift it left state", progress.warnings())
-	}
 }
 
-func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
+func TestEnsureReadyRefusesRatherThanRepairFromADevelopmentBuild(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -267,9 +267,8 @@ func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v", err)
-	}
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	refusedBehind(t, err, "fake-production-"+fake.FeatureCache)
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a development build to leave the account unchanged", got)
 	}
@@ -278,7 +277,7 @@ func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
 	}
 }
 
-func TestEnsureReadyReportsARepairTheCredentialsCannotDo(t *testing.T) {
+func TestEnsureReadyRefusesWithTheReasonTheCredentialsCannotRepair(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -293,9 +292,8 @@ func TestEnsureReadyReportsARepairTheCredentialsCannotDo(t *testing.T) {
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	progress := &recorder{}
-	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
-	}
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	refusedBehind(t, err, "fake-production-"+fake.FeatureCache)
 	if !strings.Contains(progress.warnings(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
 		t.Errorf("EnsureReady() warned %q, want a warning with the provider's own account of why the repair was denied", progress.warnings())
 	}
@@ -333,15 +331,14 @@ func TestADeniedRepairWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied, ""))
 
 	progress := &recorder{}
-	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
-	}
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	refusedBehind(t, err)
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
 		t.Errorf("providerserver wrote %q, want no colon introducing a reason the provider never gave", line)
 	}
 }
 
-func TestEnsureReadyWarnsThatARepairFailedAndCarriesOnWithTheBootstrapInPlace(t *testing.T) {
+func TestEnsureReadyRefusesWhenARepairFailsAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -355,10 +352,9 @@ func TestEnsureReadyWarnsThatARepairFailedAndCarriesOnWithTheBootstrapInPlace(t 
 	bootstrap.RefuseApply(errors.New("the stack update timed out"))
 
 	progress := &recorder{}
-	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("EnsureReady() error = %v, want a failed repair to leave the run standing", err)
-	}
-	want := "Could not refresh the production bootstrap, so this run continues against the one in place: the stack update timed out"
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	refusedBehind(t, err, "fake-production-"+fake.FeatureCache)
+	want := "Could not refresh the production bootstrap: the stack update timed out"
 	if !strings.Contains(progress.warnings(), want) {
 		t.Errorf("EnsureReady() warned %q, want %q", progress.warnings(), want)
 	}
@@ -383,6 +379,39 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 	handed := providerserver.BootstrapStatusProto(status, "2.0.0", environmentv1.Tier_TIER_PRODUCTION, status.Features)
 	if !handed.GetUnfinished() {
 		t.Error("the status the CLI is handed says nothing about the apply that never finished")
+	}
+}
+
+func TestEnsureReadyTellsAnOlderBuildToUpgradeRatherThanRewriteANewerBootstrap(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, vendor := gated(t, "1.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
+		t.Fatal(err)
+	}
+	bootstrap.SetWriter("2.0.0")
+	bootstrap.MarkStale(fake.FeatureCache)
+
+	_, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, &recorder{})
+	refusedBehind(t, err, "2.0.0", "Upgrade ocel")
+	if got := len(bootstrap.Applied()); got != 1 {
+		t.Errorf("Apply() ran %d times, want an older build to leave a newer bootstrap as it is", got)
+	}
+}
+
+func TestEnsureReadyLetsAnOlderBuildDeployOntoANewerBootstrapItStillMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, vendor := gated(t, "1.0.0")
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	vendor.FakeBootstrap().SetWriter("2.0.0")
+
+	if _, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, &recorder{}); err != nil {
+		t.Errorf("EnsureReady() error = %v, want a bootstrap identical to this build's to serve it whoever wrote it", err)
 	}
 }
 

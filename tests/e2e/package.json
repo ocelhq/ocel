@@ -9,6 +9,7 @@
     "test": "bun test ./src",
     "e2e": "bun src/run/journey.ts",
     "e2e:aws": "OCEL_TARGET=aws bun src/run/journey.ts",
+    "e2e:aws-upgrade": "OCEL_TARGET=aws bun src/run/journey.ts",
     "e2e:vps": "OCEL_TARGET=vps bun src/run/journey.ts",
     "e2e:vps-engine": "OCEL_TARGET=vps bun src/run/journey.ts",
     "e2e:dev": "OCEL_TARGET=dev bun src/run/journey.ts",

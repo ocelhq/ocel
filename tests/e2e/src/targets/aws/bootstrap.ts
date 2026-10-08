@@ -4,12 +4,13 @@ import { setTimeout as pause } from "node:timers/promises";
 import { writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import { ocel, runOcel } from "../../ocel";
-import { fixtureDir, treeDir } from "../../paths";
+import { ocel, type Ran, runOcel } from "../../ocel";
+import { fixtureDir, headBuild, treeDir } from "../../paths";
 import { fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
+import { bootstrapBuild } from "../upgrade";
 import { namespaceFor, ocelEnvIn } from "./namespace";
 import { cliAt, said } from "./store";
 import type { AwsWorld } from "./world";
@@ -25,6 +26,13 @@ const FLOCI_FEATURES = [
   "variables-key",
 ];
 
+const LANE_BOOTSTRAP_ARGS = [
+  "bootstrap",
+  "production",
+  "--yes",
+  "--features",
+  FLOCI_FEATURES.join(","),
+];
 const CELL_BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
 export const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
 export const BOOTSTRAP_REFRESH_ARGS = ["bootstrap", "production", "--yes"];
@@ -78,8 +86,9 @@ export class AwsBootstrap {
       await writeJourneyConfig(dir, { target: "aws", slug });
       await ocel(
         dir,
-        ["bootstrap", "production", "--yes", "--features", FLOCI_FEATURES.join(",")],
+        LANE_BOOTSTRAP_ARGS,
         ocelEnvIn(dir),
+        bootstrapBuild(process.env) ?? headBuild,
       );
     } catch (error) {
       return { lane: error instanceof Error ? error.message : String(error) };
@@ -103,8 +112,21 @@ export class AwsBootstrap {
         "bootstrap",
         CELL_BOOTSTRAP_ARGS,
         ocelEnvIn(dir, namespace),
+        bootstrapBuild(process.env) ?? headBuild,
       );
     }
+  }
+
+  async rebootstrapCell(cell: CellUnderTest, dir: string): Promise<Ran> {
+    const namespace = await this.namespaceOf(cell);
+    return runOcel(
+      cell,
+      dir,
+      "deploy",
+      "bootstrap-with-this-build",
+      namespace ? CELL_BOOTSTRAP_ARGS : LANE_BOOTSTRAP_ARGS,
+      ocelEnvIn(dir, namespace),
+    );
   }
 
   async destroyCellBootstrap(cell: CellUnderTest, dir: string, namespace: string): Promise<void> {
