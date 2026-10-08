@@ -1,5 +1,5 @@
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "sdk-rust-workspace",
   "provider": "aws",
   "apps": [

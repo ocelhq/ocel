@@ -8,52 +8,106 @@ icon: BookOpenIcon
 
 ## Zero infrastructure code
 
-You write one config. It names a target, a cloud or a server, and nothing about how to build there. Your app does not know or care which, nor should it have to. Swapping targets is one line:
+You write one config. It names a target, a cloud or a server, and nothing about how to build there. Your app does not know or care which, nor should it have to. Swapping targets changes the provider and nothing else:
 
 <Compare>
+<div>
 
-```json title="ocel.json" lineNumbers
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts" lineNumbers
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws"; // [!code --]
+
+export default defineConfig({
+  slug: "acme",
+  provider: awsProvider(), // [!code --]
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": "aws", // [!code --]
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
 
-```json title="ocel.json" lineNumbers
+</div>
+<div>
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts" lineNumbers
+import { defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps"; // [!code ++]
+
+export default defineConfig({
+  slug: "acme",
+  provider: vpsProvider({ ssh: "my-vps" }), // [!code ++]
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": { "vps": { "ssh": "my-vps" } }, // [!code ++]
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
 
+</div>
 </Compare>
 
 Compute is a setting too. On providers that support it, the same app runs as functions or as one container:
 
 <Compare>
+<div>
 
-```json title="ocel.json" lineNumbers
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts" lineNumbers
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "acme",
+  provider: awsProvider(),
+  apps: [{ name: "web", path: ".", compute: "serverless" }], // [!code --]
+});
+```
+
+```json tab="JSON" title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": "aws",
   "apps": [{ "name": "web", "path": ".", "compute": "serverless" }] // [!code --]
 }
 ```
 
-```json title="ocel.json" lineNumbers
+</div>
+<div>
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts" lineNumbers
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "acme",
+  provider: awsProvider(),
+  apps: [{ name: "web", path: ".", compute: "container" }], // [!code ++]
+});
+```
+
+```json tab="JSON" title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": "aws",
   "apps": [{ "name": "web", "path": ".", "compute": "container" }] // [!code ++]
 }
 ```
 
+</div>
 </Compare>
 
 <CompareChips />

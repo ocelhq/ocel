@@ -6,7 +6,7 @@ import (
 )
 
 type Document struct {
-	Schema        string               `json:"$schema,omitempty" doc:"The JSON Schema this config is written against. ocel init writes the schema shipped with the CLI that created it."`
+	Schema        string               `json:"$schema,omitempty" doc:"The JSON Schema editors complete and validate this config against. ocel init writes it."`
 	Slug          string               `json:"slug" doc:"The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project."`
 	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is \"@\" followed by the name a record your own infrastructure published, such as \"@warehouse\", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves."`
 	Transforms    StringList           `json:"transforms,omitempty" doc:"Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches."`

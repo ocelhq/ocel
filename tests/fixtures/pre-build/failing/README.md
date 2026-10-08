@@ -11,5 +11,7 @@ ocel dev -- pnpm dev
 ```
 
 ```bash
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
+ocel deploy
 ```
+
+The e2e harness deploys it to a box, from a config it writes over `ocel.json`.

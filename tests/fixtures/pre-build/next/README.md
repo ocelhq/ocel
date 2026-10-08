@@ -9,7 +9,9 @@ prerendered page lists the notes, only if the command ran against the deployed d
 ## Run it
 
 ```bash
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
+ocel deploy
 ```
 
-`ocel destroy --config ocel.vps.json` takes the database and its data down with the app.
+The e2e harness deploys it to a box, from a config it writes over `ocel.json`.
+
+`ocel destroy` takes the database and its data down with the app.

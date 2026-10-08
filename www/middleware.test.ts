@@ -14,7 +14,7 @@ describe("the go vanity import", () => {
   it("leaves every other request to the site", () => {
     expect(matches("/docs/quick-start")).toBe(false);
     expect(matches("/docs?go-get=0")).toBe(false);
-    expect(matches("/schema/0.0.0/ocel.schema.json")).toBe(false);
+    expect(matches("/schema/ocel.schema.json")).toBe(false);
   });
 
   it("points ocel.dev at the sdk directory of the repo", async () => {

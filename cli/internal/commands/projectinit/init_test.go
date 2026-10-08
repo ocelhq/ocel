@@ -97,9 +97,9 @@ func initTestDir(t *testing.T, name string) string {
 
 func readConfig(t *testing.T, dir string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, project.DefaultFileName))
+	data, err := os.ReadFile(filepath.Join(dir, project.TSFileName))
 	if err != nil {
-		t.Fatalf("read %s: %v", project.DefaultFileName, err)
+		t.Fatalf("read %s: %v", project.TSFileName, err)
 	}
 	return string(data)
 }
@@ -121,7 +121,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		}
 
 		content := readConfig(t, dir)
-		if !strings.Contains(content, `"slug": "my-cool-app"`) {
+		if !strings.Contains(content, `slug: "my-cool-app"`) {
 			t.Fatalf("config = %q, want slug derived from the directory name", content)
 		}
 	})
@@ -140,7 +140,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{`"slug": "my-app"`, `"provider": { "fake": {} }`, `"$schema"`} {
+		for _, want := range []string{`from "ocel/config"`, `slug: "my-app"`, `provider: fakeProvider({})`} {
 			if !strings.Contains(content, want) {
 				t.Errorf("config = %q, want it to contain %q", content, want)
 			}
@@ -162,7 +162,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
-				if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
+				if _, statErr := os.Stat(filepath.Join(dir, project.TSFileName)); statErr == nil {
 					t.Fatal("a config was written for an invalid slug")
 				}
 				if *argv != nil {
@@ -223,7 +223,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		}
 
 		content := readConfig(t, dir)
-		if !strings.Contains(content, fmt.Sprintf(`"provider": { %q: {} }`, keyed)) {
+		if !strings.Contains(content, fmt.Sprintf(`provider: %s({})`, providerIdentifier(keyed))) {
 			t.Fatalf("config = %q, want the provider asked for and options only the provider knows", content)
 		}
 	})
@@ -245,7 +245,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeInputRequired || got.GetHint() != "--provider <id>" {
 			t.Errorf("run error = %v, want input_required with the hint --provider <id>", got)
 		}
-		if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(dir, project.TSFileName)); statErr == nil {
 			t.Fatal("a config was written with no provider named")
 		}
 		if *argv != nil {
@@ -298,7 +298,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		if _, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
-		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
+		if !strings.Contains(readConfig(t, dir), `slug: "my-app"`) {
 			t.Fatal("config should still have been written")
 		}
 		if !strings.Contains(stdout.String(), "pnpm add "+sdkPackage) {
@@ -407,9 +407,9 @@ func TestInitAsJSONPrintsWhatItWrote(t *testing.T) {
 		wantFile   string
 		wantFormat resultv1.ConfigFormat
 	}{
-		"json":       {initOptions{provider: "fake"}, project.DefaultFileName, resultv1.ConfigFormat_CONFIG_FORMAT_JSON},
-		"yaml":       {initOptions{provider: "fake", yaml: true}, project.YAMLFileName, resultv1.ConfigFormat_CONFIG_FORMAT_YAML},
-		"typescript": {initOptions{provider: "fake", ts: true}, project.TSFileName, resultv1.ConfigFormat_CONFIG_FORMAT_TYPESCRIPT},
+		"typescript": {initOptions{provider: "fake"}, project.TSFileName, resultv1.ConfigFormat_CONFIG_FORMAT_TYPESCRIPT},
+		"json":       {initOptions{provider: "fake", format: "json"}, project.DefaultFileName, resultv1.ConfigFormat_CONFIG_FORMAT_JSON},
+		"yaml":       {initOptions{provider: "fake", format: "yaml"}, project.YAMLFileName, resultv1.ConfigFormat_CONFIG_FORMAT_YAML},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

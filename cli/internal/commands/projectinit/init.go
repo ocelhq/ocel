@@ -18,11 +18,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -38,8 +38,7 @@ const rustSDKCrate = "ocel-sdk"
 type initOptions struct {
 	provider   string
 	language   string
-	ts         bool
-	yaml       bool
+	format     string
 	configPath string
 	settings   []providerSetting
 }
@@ -80,9 +79,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
 	cmd.Flags().StringVar(&flags.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
-	cmd.Flags().BoolVar(&flags.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
-	cmd.Flags().BoolVar(&flags.yaml, "yaml", false, "Write ocel.yaml instead of ocel.json — the same document, written as YAML")
-	cmd.MarkFlagsMutuallyExclusive("ts", "yaml")
+	cmd.Flags().StringVar(&flags.format, "format", "", "Write the config as ts, json or yaml — the same document in each; ts needs node, and is the default only in a project built with it")
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
 
@@ -98,12 +95,17 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 }
 
 func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) (*resultv1.InitResult, error) {
+	if opts.format != "" && !slices.Contains(configFormats, opts.format) {
+		return nil, clierror.NewInputRequired(fmt.Errorf("--format names %q, and ocel writes a config as %s", opts.format, english.Or(configFormats)), "--format <ts|json|yaml>")
+	}
 	configPath, err := initConfigPath(cwd, opts)
 	if err != nil {
 		return nil, err
 	}
-	projectDir := filepath.Dir(configPath)
-	name := filepath.Base(configPath)
+	projectDir := cwd
+	if configPath != "" {
+		projectDir = filepath.Dir(configPath)
+	}
 
 	slug, err = resolveSlug(projectDir, slug)
 	if err != nil {
@@ -126,6 +128,10 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	if err != nil {
 		return nil, err
 	}
+	if configPath == "" {
+		configPath = filepath.Join(projectDir, configFileName(opts, lang))
+	}
+	name := filepath.Base(configPath)
 
 	if _, err := os.Stat(configPath); err == nil {
 		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
@@ -194,7 +200,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 
 func initConfigPath(cwd string, opts initOptions) (string, error) {
 	if opts.configPath == "" {
-		return filepath.Join(cwd, configFileName(opts)), nil
+		return "", nil
 	}
 	path := opts.configPath
 	if !filepath.IsAbs(path) {
@@ -204,20 +210,34 @@ func initConfigPath(cwd string, opts initOptions) (string, error) {
 	switch {
 	case !project.IsConfig(name):
 		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, project.DefaultFileName, project.YAMLFileName, project.TSFileName)
-	case opts.ts && !project.IsTypeScript(name):
-		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, project.TSFileName)
-	case opts.yaml && !project.IsYAML(name):
-		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, project.YAMLFileName)
+	case opts.format != "" && formatOfName(name) != opts.format:
+		return "", fmt.Errorf("--format %s writes %s, and %s (from --config / OCEL_CONFIG) is not one: name it that, or drop --format", opts.format, configFileName(opts, sdkLanguage{}), name)
 	}
 	return path, nil
 }
 
-func configFileName(opts initOptions) string {
+var configFormats = []string{"ts", "json", "yaml"}
+
+func formatOfName(name string) string {
 	switch {
-	case opts.ts:
+	case project.IsTypeScript(name):
+		return "ts"
+	case project.IsYAML(name):
+		return "yaml"
+	}
+	return "json"
+}
+
+func configFileName(opts initOptions, lang sdkLanguage) string {
+	switch {
+	case opts.format == "ts":
 		return project.TSFileName
-	case opts.yaml:
+	case opts.format == "json":
+		return project.DefaultFileName
+	case opts.format == "yaml":
 		return project.YAMLFileName
+	case lang.language == language.JS:
+		return project.TSFileName
 	}
 	return project.DefaultFileName
 }
@@ -271,7 +291,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
   "slug": %q,
   "provider": %s
 }
-`, docsurl.FormatSchema(version.Version), slug, selected)
+`, docsurl.Schema, slug, selected)
 }
 
 func yamlTemplate(slug, provider string, settings []providerSetting) string {
@@ -285,7 +305,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
 provider:%s
-`, docsurl.FormatSchema(version.Version), slug, selected)
+`, docsurl.Schema, slug, selected)
 }
 
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {

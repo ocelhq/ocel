@@ -336,9 +336,33 @@ Bind a declared bucket to one in an S3-compatible store of your own (R2, a Hetzn
 bucket, anything that speaks S3) and ocel reaches that bucket instead of provisioning one. The
 binding lives in `bindings`, on any provider:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  bindings: {
+    bucket: {
+      uploads: {
+        endpoint: "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        region: "auto",
+        bucket: { $env: "UPLOADS_BUCKET" },
+        prefix: "uploads/",
+        accessKeyId: { $env: "R2_ACCESS_KEY_ID" },
+        secretAccessKey: { $env: "R2_SECRET_ACCESS_KEY" },
+        publicBaseUrl: "https://cdn.acme.com/uploads",
+      },
+    },
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "bindings": {

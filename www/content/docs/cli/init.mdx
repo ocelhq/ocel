@@ -7,8 +7,9 @@ description: Make this directory deployable.
 ocel init --provider aws
 ```
 
-Writes `ocel.json` here, naming the provider you gave and a slug — this directory's name
-unless you pass one — and adds the ocel SDK with your language's own package manager. It
+Writes the [config](/docs/configuration) here, naming the provider you gave and a slug — this
+directory's name unless you pass one — and adds the ocel SDK with your language's own package
+manager. A project built with node gets `ocel.config.ts`, and any other gets `ocel.json`. It
 runs entirely offline: it neither signs you in nor contacts the console.
 
 ```bash
@@ -19,8 +20,7 @@ ocel init my-app --provider vps
 | --- | --- |
 | `--provider` | The provider this project deploys through: `aws`, `gcp` or `vps`. Required. |
 | `--lang` | The language of this project (`go`, `rust`, `python`, `node`), when no manifest here says. |
-| `--ts` | Write the config [as a TypeScript program](/docs/typescript-config) instead — it compiles to the same document and needs node. |
-| `--yaml` | Write the config [as YAML](/docs/configuration#yaml) instead — the same document, and no node needed. |
+| `--format` | Write the config as `ts`, `json` or [`yaml`](/docs/configuration#yaml) instead of the default — the same document in each. `ts` needs node. |
 
 Then pin the providers this CLI runs, and commit the result:
 

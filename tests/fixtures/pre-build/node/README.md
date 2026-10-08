@@ -14,8 +14,10 @@ ocel dev -- pnpm dev
 ```
 
 ```bash
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel run --env production --config ocel.vps.json -- pnpm migrate
+ocel deploy
+ocel run --env production -- pnpm migrate
 ```
+
+The e2e harness deploys it to a box, from a config it writes over `ocel.json`.
 
 `ocel destroy` takes the database and its data down with the app.

@@ -5,8 +5,8 @@ it scales. Every rung deploys with `ocel deploy`; what changes is how much of th
 provisioning you have taken back.
 
 **No config — [node](../node).** The reference composite: `ocel.json` names the
-slug, the provider and the app, and `ocel.vps.json` is the same project on a box of
-your own. Everything else Ocel provisions from what the app declares. A resource
+slug, the provider and the app, and the e2e harness deploys the same project to a box
+of your own from it. Everything else Ocel provisions from what the app declares. A resource
 in app code is the provisioning step, so there is nothing to keep in sync and nothing to
 configure. Most projects never need to leave this rung.
 
@@ -36,8 +36,8 @@ ocel deploy
 To see the effect, look at what landed in your AWS account: the Lambda behind each route,
 the Aurora cluster behind `main`, and the tags on both.
 
-`ocel --config ocel.vps.json deploy` is the same project on a box of your own, where the
-module's `vps` rule reshapes the postgres container instead: `docker inspect` it to see the
+Deployed to a box of your own, as the e2e harness does, the same project has the
+module's `vps` rule reshape the postgres container instead: `docker inspect` it to see the
 arguments, the shared memory and the label.
 
 `ocel deploy` targets production. Deploy a branch environment with `ocel preview up` to

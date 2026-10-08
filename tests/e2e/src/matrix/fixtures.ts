@@ -126,6 +126,7 @@ export const deploy = {
       gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
     },
     previews: { gcp: [defaults, alb] },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
@@ -137,6 +138,7 @@ export const deploy = {
       gcp: [defaults, container],
     },
     sample: { group: "node-http", representative: true },
+    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
   }),
 };
 
@@ -154,6 +156,7 @@ export const lifecycle = {
       vps: [defaults, cloudflareOnABox, cloudflareTunnel],
       gcp: [defaults, container],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
 };
 
@@ -182,6 +185,7 @@ export const sdk = {
       vps: [defaults],
       gcp: [defaults],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   workspace: fixture("sdk/workspace", {
     apps: ["next", "express"],
@@ -193,6 +197,7 @@ export const sdk = {
       gcp: [defaults],
     },
     sample: { group: "node-http", representative: true },
+    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
   }),
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],
@@ -210,6 +215,7 @@ export const buildVariables = {
       aws: [defaults],
       gcp: [defaults],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
 };
 
@@ -272,6 +278,7 @@ export const tasks = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: TASKS_GO_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
+    configOn: { vps: { apps: { web: { path: "./server", entrypoint: undefined } } } },
   }),
 };
 
@@ -286,6 +293,7 @@ export const realtime = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: REALTIME_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+    configOn: { vps: { apps: { web: { path: "./server", entrypoint: undefined } } } },
   }),
   python: fixture("realtime/python", {
     apps: ["web"],

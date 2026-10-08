@@ -39,14 +39,24 @@ ocel deploy
 
 The first deploy sets up what the project is missing, asks before each step, and then deploys:
 
-- **The project.** There is no `ocel.json` yet, so it asks where `my-app` should deploy, writes one, and adds the ocel SDK to your dependencies. The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once.
+- **The project.** There is no config yet, so it asks where `my-app` should deploy, writes `ocel.config.ts`, and adds the ocel SDK to your dependencies. The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once.
 - **The shared infrastructure.** Your account has none yet, so it offers to run `ocel bootstrap production`. Expect a few minutes for that one. Later deploys reuse it.
 
 Answer no to any of them and nothing changes; the deploy names the command to run when you're ready.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws"
 }
@@ -118,5 +128,5 @@ This removes everything the project created in your account and nothing else.
   <Card title="Variables and secrets" href="/docs/environments" description="Typed in code, stored in your account." />
   <Card title="Deploy to a VPS" href="/docs/providers/vps" description="The same config, pointed at a server over SSH." />
   <Card title="Ocel CLI" href="/docs/cli" description="Every command and flag." />
-  <Card title="Configuration" href="/docs/configuration" description="Every option ocel.json takes." />
+  <Card title="Configuration" href="/docs/configuration" description="Every option the config takes." />
 </Cards>

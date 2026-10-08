@@ -35,7 +35,7 @@ const configAws: Pane = {
     lang: "json",
     filename: "ocel.json",
     code: `{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws"
 }`,
@@ -47,7 +47,7 @@ const configVps: Pane = {
     lang: "json",
     filename: "ocel.json",
     code: `{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "vps": { "ssh": "my-vps" } }
 }`,
@@ -72,7 +72,7 @@ const boundPostgres: Pane = {
     lang: "json",
     filename: "ocel.json",
     code: `{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "shop",
   "provider": "aws",
   "bindings": { "postgres": { "orders": "@orders" } }

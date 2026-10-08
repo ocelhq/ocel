@@ -1,4 +1,4 @@
-import type { Compute, RegistryConfig } from "ocel/config";
+import type { AppConfig, Compute, Need, RegistryConfig } from "ocel/config";
 import type { Check } from "../checks/context";
 import type { ExternalStack } from "../stacks";
 import type { TestSelector } from "../steps";
@@ -95,6 +95,11 @@ export type ConfigDelta = {
   registry?: RegistryConfig;
 };
 
+export type TargetConfigDelta = {
+  allowDegraded?: Need[];
+  apps?: Record<string, Partial<AppConfig>>;
+};
+
 export type Variant = {
   name: string;
   offeredOn: TargetName[];
@@ -132,6 +137,7 @@ export type Fixture = {
   stack?: ExternalStack;
   on: Partial<Record<TargetName, Variant[]>>;
   previews?: Partial<Record<TargetName, Variant[]>>;
+  configOn?: Partial<Record<TargetName, TargetConfigDelta>>;
   sample?: Sample;
 };
 

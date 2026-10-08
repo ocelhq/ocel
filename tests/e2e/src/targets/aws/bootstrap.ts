@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
-import { DEFAULT_BASE, writeJourneyConfig } from "../../config";
+import { writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import { ocel, runOcel } from "../../ocel";
@@ -75,7 +75,7 @@ export class AwsBootstrap {
     const slug = projectSlug(path.posix.basename(first.name), runId);
     const dir = await copyTree(fixtureDir(first.name), treeDir(runId, "aws", "bootstrap"));
     try {
-      await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug });
+      await writeJourneyConfig(dir, { target: "aws", slug });
       await ocel(
         dir,
         ["bootstrap", "production", "--yes", "--features", FLOCI_FEATURES.join(",")],

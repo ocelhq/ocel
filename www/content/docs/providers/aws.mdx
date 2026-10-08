@@ -9,9 +9,20 @@ ocel init --provider aws
 
 Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ region: "eu-west-1" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "aws": { "region": "eu-west-1" } },
   "apps": [{ "name": "web", "path": "." }]
@@ -147,9 +158,22 @@ bought independently. On `api-gateway` a preview is served on its alias alone, w
 hostname per deployment: each hostname would take a REST API of its own, and a region holds
 at most 600.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+import { cloudfront } from "ocel/providers/aws/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  edge: cloudfront(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "edge": "cloudfront",

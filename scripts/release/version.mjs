@@ -12,8 +12,6 @@ const STABLE = new RegExp(`^${CORE}$`);
 const RC = new RegExp(`^${CORE}-rc\\.([1-9]\\d*)$`);
 const NIGHTLY = new RegExp(`^${CORE}-0\\.nightly\\.(\\d{8})\\.g([0-9a-f]{7})$`);
 
-const SCHEMA_URL = /https:\/\/ocel\.dev\/schema\/[0-9A-Za-z.+-]+\/ocel\.schema\.json/g;
-
 export function parse(version) {
   const stable = STABLE.exec(version);
   if (stable) return { channel: "stable", base: version };
@@ -45,10 +43,6 @@ export function pep440(version) {
   }
 }
 
-export function schemaURL(version) {
-  return `https://ocel.dev/schema/${version}/ocel.schema.json`;
-}
-
 export function withSection(text, header, edit) {
   const lines = text.split("\n");
   const start = lines.indexOf(header);
@@ -74,10 +68,6 @@ export function withSdkVersion(text, version) {
   const stamp = /^export const SDK_VERSION = "[^"]*";$/m;
   if (!stamp.test(text)) throw new Error("the module exports no SDK_VERSION");
   return text.replace(stamp, `export const SDK_VERSION = "${version}";`);
-}
-
-export function withSchemaURLs(text, version) {
-  return text.replace(SCHEMA_URL, schemaURL(version));
 }
 
 function edit(path, change) {
@@ -135,21 +125,6 @@ function stampCrates(version) {
   }
 }
 
-function stampSchemaURLs(version) {
-  for (const path of tracked(":!www/public/schema/")) {
-    const absolute = join(REPO_ROOT, path);
-    let text;
-    try {
-      text = readFileSync(absolute, "utf8");
-    } catch {
-      continue;
-    }
-    if (text.includes("https://ocel.dev/schema/")) {
-      edit(absolute, (current) => withSchemaURLs(current, version));
-    }
-  }
-}
-
 function refreshLockfiles() {
   run("pnpm", ["install", "--lockfile-only"]);
   run("uv", ["lock"], join(REPO_ROOT, "python"));
@@ -174,7 +149,6 @@ function main() {
   stampNpm(version);
   stampPython(version);
   stampCrates(version);
-  stampSchemaURLs(version);
   run("node", [join(REPO_ROOT, "scripts", "schema", "build.mjs")]);
   refreshLockfiles();
 }

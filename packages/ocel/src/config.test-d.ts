@@ -241,3 +241,13 @@ describe("a project's dns", () => {
     });
   });
 });
+
+describe("a config written as a program", () => {
+  it("names no JSON Schema, which only a document an editor reads needs", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error defineConfig's own types are what the editor checks against
+      $schema: "https://ocel.dev/schema.json",
+    });
+  });
+});

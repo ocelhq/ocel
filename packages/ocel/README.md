@@ -44,9 +44,9 @@ Every entry point is a subpath — there is no root export.
 `next`, `hono`, `express`, `pg` and `ioredis` are optional peer dependencies; install only the one
 your app uses.
 
-`ocel init` writes `ocel.json`, which needs none of this package. `ocel/config` is for a
-project that would rather write the same document as a program — `ocel init --provider aws
---ts` writes one:
+`ocel/config` writes the project's config as a program, `ocel.config.ts`. `ocel init` writes
+one in a project built with node, and `ocel.json`, which needs none of this package, in any
+other. `--format ts`, `json` or `yaml` picks the form instead.
 
 ```ts
 // ocel.config.ts

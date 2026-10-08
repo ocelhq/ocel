@@ -21,14 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func committedSchemaFile(t *testing.T, root string) string {
-	t.Helper()
-	version, err := os.ReadFile(filepath.Join(root, "VERSION"))
-	if err != nil {
-		t.Fatalf("read the release version: %v", err)
-	}
-	return filepath.Join("www", "public", "schema", strings.TrimSpace(string(version)), "ocel.schema.json")
-}
+var committedSchemaFile = filepath.Join("www", "public", "schema", "ocel.schema.json")
 
 const compareTable = "www/components/docs/compare/data.ts"
 
@@ -48,7 +41,7 @@ func schemaID(t *testing.T, root string) string {
 	var read struct {
 		ID string `json:"$id"`
 	}
-	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile(t, root)))
+	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)
 	}
@@ -60,7 +53,7 @@ func schemaID(t *testing.T, root string) string {
 
 func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 	t.Helper()
-	file := committedSchemaFile(t, root)
+	file := committedSchemaFile
 	data, err := os.ReadFile(filepath.Join(root, file))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)

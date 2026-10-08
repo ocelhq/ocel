@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/schema/:version/ocel.schema.json",
+        source: "/schema/:path*",
         headers: [
           { key: "content-type", value: "application/schema+json; charset=utf-8" },
           { key: "cache-control", value: "public, max-age=3600" },

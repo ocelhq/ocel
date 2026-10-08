@@ -27,7 +27,7 @@ func TestASuccessfulInitPrintsAnInitCompletedEventBeforeItsCommandCompletedEvent
 	}
 	t.Chdir(dir)
 
-	code, _, stderr := executeAndReportRoot(t, "init", "my-secret-slug", "--provider", "fake", "--yaml")
+	code, _, stderr := executeAndReportRoot(t, "init", "my-secret-slug", "--provider", "fake", "--format", "yaml")
 
 	events := telemetryEvents(t, stderr)
 	if code != 0 || len(events) != 2 || events[0].Name != "init_completed" || events[1].Name != "command_completed" {

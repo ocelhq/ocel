@@ -9,9 +9,21 @@ underlying cloud resources ocel is about to create, keyed by the provider that c
 List the modules at the root of the config, in the order they apply — a later module wins
 where two patch the same field:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  transforms: ["./transforms/defaults.transform.ts"],
+  provider: awsProvider(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "transforms": ["./transforms/defaults.transform.ts"],
   "provider": "aws",
@@ -156,7 +168,7 @@ export default defineTransform(({ bindings }) => ({
 ```
 
 `bindings.<type>.<name>` reads the record bound to a resource your config declares —
-`<type>.<name>` is the key under `bindings` in `ocel.json` — and `bindings.custom.<name>`
+`<type>.<name>` is the key under `bindings` in the config — and `bindings.custom.<name>`
 reads a record nothing declared, published by [`@ocel/sst`](/docs/sdk) or
 [`@ocel/pulumi`](/docs/sdk) with `bind.custom`.
 

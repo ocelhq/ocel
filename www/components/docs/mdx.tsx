@@ -41,7 +41,7 @@ function Compare(props: ComponentProps<"div">) {
   return (
     <div
       {...props}
-      className="not-prose my-6 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>figure]:my-0 [&>figure]:border-0 [&>figure]:shadow-none max-md:[&>figure+figure>div:first-child]:hidden md:[&>figure+figure>div:first-child>*]:invisible"
+      className="not-prose my-6 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>div]:min-w-0 [&>div>div]:my-0 [&>div>div]:rounded-none [&>div>div]:border-0 [&_figure]:mx-0 [&_figure]:mb-0 [&_figure]:rounded-none [&_figure]:border-x-0 [&_figure]:border-b-0 [&_figure]:shadow-none max-md:[&>div+div_[role=tablist]]:hidden md:[&>div+div_[role=tablist]>*]:invisible max-md:[&>div+div_figure>div:first-child]:hidden md:[&>div+div_figure>div:first-child>*]:invisible"
     />
   );
 }

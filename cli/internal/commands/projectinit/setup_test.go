@@ -48,11 +48,11 @@ func TestTheInitSetupAsksForTheProviderAndWhatItRequiresThenWritesTheConfig(t *t
 	if err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(context.Background()), missingConfigIn(t, dir)); err != nil {
 		t.Fatalf("Run err = %v, want the project initialized", err)
 	}
-	written, err := os.ReadFile(filepath.Join(dir, project.DefaultFileName))
+	written, err := os.ReadFile(filepath.Join(dir, project.TSFileName))
 	if err != nil {
 		t.Fatalf("read the config init wrote: %v", err)
 	}
-	if !strings.Contains(string(written), `"provider": { "vps": { "ssh": "203.0.113.7" } }`) {
+	if !strings.Contains(string(written), `provider: vpsProvider({ "ssh": "203.0.113.7" }),`) {
 		t.Errorf("config = %s, want the provider chosen with the ssh target typed", written)
 	}
 	if !strings.Contains(out.String(), "Where should shop deploy?") {
@@ -70,7 +70,7 @@ func TestAnInitSetupLeftUnansweredIsADecline(t *testing.T) {
 	if !prerequisite.IsDeclined(err) {
 		t.Errorf("Run err = %v, want a decline", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, project.TSFileName)); err == nil {
 		t.Error("an unanswered setup wrote a config")
 	}
 }
