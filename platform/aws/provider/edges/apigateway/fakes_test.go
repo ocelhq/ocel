@@ -326,6 +326,31 @@ func (f *fakeGateway) CreateResource(_ context.Context, in *apigateway.CreateRes
 	return &apigateway.CreateResourceOutput{Id: aws.String(id), Path: aws.String(path)}, nil
 }
 
+func (f *fakeGateway) DeleteResource(_ context.Context, in *apigateway.DeleteResourceInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteResourceOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	path, ok := api.resources[aws.ToString(in.ResourceId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no resource")}
+	}
+	f.record("DeleteResource " + path)
+	for id, under := range api.resources {
+		if under == path || strings.HasPrefix(under, path+"/") {
+			delete(api.resources, id)
+			for key := range api.methods {
+				if strings.HasPrefix(key, id+" ") {
+					delete(api.methods, key)
+				}
+			}
+		}
+	}
+	return &apigateway.DeleteResourceOutput{}, nil
+}
+
 func (f *fakeGateway) method(api *fakeAPI, resource, httpMethod string) *fakeMethod {
 	key := resource + " " + httpMethod
 	m, ok := api.methods[key]

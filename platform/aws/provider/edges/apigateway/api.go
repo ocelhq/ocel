@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -20,12 +21,10 @@ const (
 	anyMethod = "ANY"
 	getMethod = "GET"
 
-	rootPath       = "/"
-	proxyPathPart  = "{proxy+}"
-	staticParent   = "_next"
-	staticPathPart = "static"
-	probeParent    = ".well-known"
-	probePathPart  = "ocel-edge"
+	rootPath      = "/"
+	proxyPathPart = "{proxy+}"
+	probeParent   = ".well-known"
+	probePathPart = "ocel-edge"
 
 	routerHeaderParameter = "method.response.header." + router.HeaderRouter
 
@@ -129,24 +128,64 @@ func shapeAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
 	if err := putProbeRoute(ctx, c, id, resources[probe]); err != nil {
 		return err
 	}
-	if spec.assetBucket != "" {
-		next, err := ensureResource(ctx, c, id, resources, rootPath, staticParent)
-		if err != nil {
-			return err
-		}
-		static, err := ensureResource(ctx, c, id, resources, next, staticPathPart)
-		if err != nil {
-			return err
-		}
-		staticProxy, err := ensureResource(ctx, c, id, resources, static, proxyPathPart)
-		if err != nil {
-			return err
-		}
-		if err := putStaticRoute(ctx, c, spec, id, resources[staticProxy]); err != nil {
-			return err
+	return publish(ctx, c, id)
+}
+
+var pathPartPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+func staticSegments(prefix string) ([]string, bool) {
+	segments := strings.Split(strings.Trim(prefix, rootPath), rootPath)
+	for _, segment := range segments {
+		if !pathPartPattern.MatchString(segment) {
+			return nil, false
 		}
 	}
-	return publish(ctx, c, id)
+	return segments, true
+}
+
+func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefixes []string) (bool, error) {
+	resources, err := apiResources(ctx, c, id)
+	if err != nil {
+		return false, err
+	}
+	known := len(resources)
+	routed := map[string]bool{}
+	if spec.assetBucket != "" {
+		for _, prefix := range prefixes {
+			segments, ok := staticSegments(prefix)
+			if !ok {
+				continue
+			}
+			parent := rootPath
+			for _, segment := range segments {
+				if parent, err = ensureResource(ctx, c, id, resources, parent, segment); err != nil {
+					return false, err
+				}
+			}
+			leaf, err := ensureResource(ctx, c, id, resources, parent, proxyPathPart)
+			if err != nil {
+				return false, err
+			}
+			if err := putStaticRoute(ctx, c, spec, id, resources[leaf], rootPath+strings.Join(segments, rootPath)+rootPath); err != nil {
+				return false, err
+			}
+			routed[leaf] = true
+		}
+	}
+	changed := len(resources) != known
+	for _, path := range slices.Sorted(maps.Keys(resources)) {
+		if path == rootPath+proxyPathPart || !strings.HasSuffix(path, rootPath+proxyPathPart) || routed[path] {
+			continue
+		}
+		if _, err := c.APIGateway.DeleteResource(ctx, &apigateway.DeleteResourceInput{
+			RestApiId:  aws.String(id),
+			ResourceId: aws.String(resources[path]),
+		}); err != nil && !isNotFound(err) {
+			return false, fmt.Errorf("remove the static route %s, which the release no longer states, from REST API %s: %w", path, id, err)
+		}
+		changed = true
+	}
+	return changed, nil
 }
 
 func apiResources(ctx context.Context, c Clients, api string) (map[string]string, error) {
@@ -328,7 +367,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 	return nil
 }
 
-func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource string) error {
+func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource, prefix string) error {
 	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
@@ -345,7 +384,7 @@ func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource 
 		Type:                  agtypes.IntegrationTypeAws,
 		IntegrationHttpMethod: aws.String(getMethod),
 		Credentials:           aws.String(spec.role),
-		Uri:                   aws.String(staticURI(spec)),
+		Uri:                   aws.String(staticURI(spec, prefix)),
 		RequestParameters:     map[string]string{integrationProxyPathParameter: proxyPathParameter},
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the release's static assets: %w", api, err)
@@ -437,10 +476,10 @@ func entryURI(spec apiSpec) string {
 	)
 }
 
-func staticURI(spec apiSpec) string {
+func staticURI(spec apiSpec, prefix string) string {
 	return fmt.Sprintf(
-		"arn:aws:apigateway:%s:s3:path/%s/${stageVariables.%s}/%s/%s/{proxy}",
-		spec.region, spec.assetBucket, assetsVariable, staticParent, staticPathPart,
+		"arn:aws:apigateway:%s:s3:path/%s/${stageVariables.%s}%s{proxy}",
+		spec.region, spec.assetBucket, assetsVariable, prefix,
 	)
 }
 

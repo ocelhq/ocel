@@ -84,6 +84,15 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			return err
 		}
 		defer stop()
+		rerouted, err := routeStatic(bounded, c, s.spec(pointer), id, immutablePrefixes(move.Records))
+		if err != nil {
+			return err
+		}
+		if rerouted {
+			if err := publish(bounded, c, id); err != nil {
+				return err
+			}
+		}
 		if err := moveStage(bounded, c, id, move.Promotion.PromotionID, patch); err != nil {
 			return err
 		}
