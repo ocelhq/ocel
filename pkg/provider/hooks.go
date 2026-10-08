@@ -30,6 +30,7 @@ type Hooks struct {
 	ProveIdentity         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 	OpenTaskStore         func(ctx context.Context) (TaskStore, error)
 	ForwardPorts          func(ctx context.Context, req PortForwardRequest, progress progress.Log) ([]PortForward, error)
+	ServeBindingProxy     func(ctx context.Context, req BindingProxyRequest, progress progress.Log) (BindingProxy, error)
 	Cost                  *CostHooks
 	FunctionImages        *FunctionImageHooks
 }

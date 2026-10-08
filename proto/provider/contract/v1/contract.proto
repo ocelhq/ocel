@@ -973,4 +973,12 @@ message ForwardPortsResponse {
   repeated common.bindings.v1.Binding bindings = 1 [debug_redact = true];
 
   repeated string unforwarded = 2;
+
+  BindingProxy binding_proxy = 3 [debug_redact = true];
+}
+
+message BindingProxy {
+  string address = 1 [(buf.validate.field).string.min_len = 1];
+
+  string session_token = 2 [(buf.validate.field).string.min_len = 1];
 }

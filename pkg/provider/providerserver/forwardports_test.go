@@ -497,3 +497,78 @@ func (w *lateWriter) Flush() {
 }
 
 func (w *lateWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func TestForwardPortsServesTheBindingProxyForBindingsNoPortReachesAndHoldsItUntilTheCallerLeaves(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	var asked provider.BindingProxyRequest
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			asked = req
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", SessionToken: "token-1", Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	served := stream.Msg().GetResponse()
+
+	if len(asked.Bindings) != 1 || asked.Bindings[0].Name != "uploads" || asked.Bindings[0].Type != provider.BindingBucket {
+		t.Errorf("the hook was asked to proxy %+v, want the published uploads bucket", asked.Bindings)
+	}
+	if got := served.GetBindingProxy(); got.GetAddress() != "http://127.0.0.1:41999" || got.GetSessionToken() != "token-1" {
+		t.Errorf("ForwardPorts() answered the proxy %v, want the address and token the hook served", got)
+	}
+	if len(served.GetBindings()) != 1 || served.GetBindings()[0].GetName() != "uploads" || served.GetBindings()[0].GetBucket() == nil {
+		t.Errorf("ForwardPorts() handed back %v, want the uploads bucket binding as published", served.GetBindings())
+	}
+	if len(served.GetUnforwarded()) != 0 {
+		t.Errorf("ForwardPorts() left %v unforwarded, want none", served.GetUnforwarded())
+	}
+	field := served.ProtoReflect().Descriptor().Fields().ByName("binding_proxy")
+	if options, _ := field.Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
+		t.Error("the binding proxy is not marked debug_redact, want it redacted wherever it is printed: it holds the session token")
+	}
+
+	select {
+	case <-closed:
+		t.Fatal("the binding proxy closed while the caller still held the stream")
+	case <-time.After(50 * time.Millisecond):
+	}
+	leave()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the binding proxy stayed open after the caller left")
+	}
+}
+
+func TestForwardPortsOnAProviderThatServesNoBindingProxyLeavesProxiedBindingsUnforwarded(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	if len(responses) != 1 || responses[0].GetBindingProxy() != nil || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one naming uploads unforwarded with no proxy", len(responses))
+	}
+}
