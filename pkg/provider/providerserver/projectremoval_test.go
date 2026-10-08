@@ -277,6 +277,40 @@ func TestRemoveProjectLeavesNothingInTheProjectsValuesOrReferencesPartitions(t *
 	}
 }
 
+func TestRemoveProjectOnThePreviewTierForgetsEveryPreviewsEnvironmentRecord(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	if result, _ := deploy(t, client, previewRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	ctx := context.Background()
+	partition := stackrecords.EnvironmentsPartition(environment.TierPreview, "shop")
+	if kept, err := vendor.KeyValues().List(ctx, partition); err != nil || len(kept) == 0 {
+		t.Fatalf("the preview deploy recorded %d environments (%v), and a removal that forgets none proves nothing", len(kept), err)
+	}
+
+	stream, err := client.RemoveProject(ctx, &contractv1.ProjectRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	kept, err := vendor.KeyValues().List(ctx, partition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range kept {
+		t.Errorf("%s is still recorded after the project's previews were removed: a destroyed project leaves no bytes behind, and a later preview of that name would read its lifecycle and alias", entry.Key)
+	}
+}
+
 func TestRemoveProjectRetiresTheISRPrefixOfEveryReleaseBeforeSweepingTheProject(t *testing.T) {
 	client, vendor := deployedProject(t)
 
