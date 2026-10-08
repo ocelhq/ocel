@@ -109,20 +109,29 @@ func removeSecurityGroup(ctx context.Context, c Clients, tier environment.Tier) 
 
 func removeTaskDefinitions(ctx context.Context, c Clients, tier environment.Tier) error {
 	family := NameFor(tier)
-	active, err := c.listRevisions(ctx, family, ecstypes.TaskDefinitionStatusActive)
-	if err != nil {
-		return err
-	}
-	for _, arn := range active {
-		if _, err := c.ECS.DeregisterTaskDefinition(ctx, &ecs.DeregisterTaskDefinitionInput{TaskDefinition: aws.String(arn)}); err != nil {
-			return fmt.Errorf("deregister task definition %s: %w", arn, err)
+	var owned []string
+	for _, status := range []ecstypes.TaskDefinitionStatus{ecstypes.TaskDefinitionStatusInactive, ecstypes.TaskDefinitionStatusActive} {
+		revisions, err := c.listRevisions(ctx, family, status)
+		if err != nil {
+			return err
+		}
+		for _, arn := range revisions {
+			isOwned, err := c.isOwnedRevision(ctx, arn)
+			if err != nil {
+				return err
+			}
+			if !isOwned {
+				continue
+			}
+			if status == ecstypes.TaskDefinitionStatusActive {
+				if _, err := c.ECS.DeregisterTaskDefinition(ctx, &ecs.DeregisterTaskDefinitionInput{TaskDefinition: aws.String(arn)}); err != nil {
+					return fmt.Errorf("deregister task definition %s: %w", arn, err)
+				}
+			}
+			owned = append(owned, arn)
 		}
 	}
-	inactive, err := c.listRevisions(ctx, family, ecstypes.TaskDefinitionStatusInactive)
-	if err != nil {
-		return err
-	}
-	for batch := range slices.Chunk(inactive, deleteTaskDefinitionsBatch) {
+	for batch := range slices.Chunk(owned, deleteTaskDefinitionsBatch) {
 		deleted, err := c.ECS.DeleteTaskDefinitions(ctx, &ecs.DeleteTaskDefinitionsInput{TaskDefinitions: batch})
 		if err != nil {
 			return fmt.Errorf("delete the revisions of task definition %s: %w", family, err)
@@ -132,6 +141,17 @@ func removeTaskDefinitions(ctx context.Context, c Clients, tier environment.Tier
 		}
 	}
 	return nil
+}
+
+func (c Clients) isOwnedRevision(ctx context.Context, arn string) (bool, error) {
+	described, err := c.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: aws.String(arn),
+		Include:        []ecstypes.TaskDefinitionField{ecstypes.TaskDefinitionFieldTags},
+	})
+	if err != nil {
+		return false, fmt.Errorf("look up the tags of task definition %s: %w", arn, err)
+	}
+	return isManagedByOcel(described.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }), nil
 }
 
 func (c Clients) listRevisions(ctx context.Context, family string, status ecstypes.TaskDefinitionStatus) ([]string, error) {

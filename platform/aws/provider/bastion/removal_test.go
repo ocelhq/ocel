@@ -2,8 +2,13 @@ package bastion_test
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
@@ -106,5 +111,33 @@ func TestRemoveLeavesAClusterOcelDidNotTagAlone(t *testing.T) {
 	}
 	if _, kept := account.clusters["ocel-bastion-production"]; !kept {
 		t.Error("Remove() deleted a cluster Ocel did not tag")
+	}
+}
+
+func TestRemoveLeavesTheTaskDefinitionRevisionsOcelDidNotTagAlone(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	clients, _ := readyBastion(t, account)
+	untagged := map[int32]ecstypes.TaskDefinitionStatus{2: ecstypes.TaskDefinitionStatusActive, 3: ecstypes.TaskDefinitionStatusInactive}
+	for revision, status := range untagged {
+		account.definition["ocel-bastion-production"] = append(account.definition["ocel-bastion-production"], &ecstypes.TaskDefinition{
+			Family:            aws.String("ocel-bastion-production"),
+			Revision:          revision,
+			Status:            status,
+			TaskDefinitionArn: aws.String(fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-bastion-production:%d", revision)),
+		})
+	}
+
+	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+
+	kept := map[int32]ecstypes.TaskDefinitionStatus{}
+	for _, revision := range account.definition["ocel-bastion-production"] {
+		kept[revision.Revision] = revision.Status
+	}
+	if !maps.Equal(kept, untagged) {
+		t.Errorf("Remove() left revisions %v, want only the untagged %v, untouched", kept, untagged)
 	}
 }
