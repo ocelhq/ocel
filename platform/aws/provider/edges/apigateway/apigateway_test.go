@@ -1197,3 +1197,23 @@ func TestAPromotionSendsTheGetRequestsOfAResourceThatStoppedServingAPrefixToTheR
 		t.Errorf("deployments = %d, want one more than %d: the stage serves the routes it was last deployed with", got, deployments)
 	}
 }
+
+func TestAPrefixNestedUnderAnotherTheReleaseStatesIsServedByTheOuterStaticRoute(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/a/b/", "/a/", "/a/")
+
+	outer := methodOn(api, "/a/{proxy+}", getMethod)
+	if outer == nil {
+		t.Fatal("GET /a/ reaches no bucket: the nested /a/b/ took over the resource /a/ is served from")
+	}
+	if !strings.HasSuffix(outer.uri, "}/a/{proxy}") {
+		t.Errorf("/a/{proxy+} integrates with %q, want the bucket under /a/", outer.uri)
+	}
+	for _, path := range slices.Collect(maps.Values(api.resources)) {
+		if strings.HasPrefix(path, "/a/b") {
+			t.Errorf("%s exists, but /a/b/ is under /a/, whose static route already serves it", path)
+		}
+	}
+}

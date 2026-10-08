@@ -165,11 +165,7 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 	}
 	var served []string
 	if spec.assetBucket != "" {
-		for _, prefix := range prefixes {
-			segments, ok := splitStaticPrefix(prefix)
-			if !ok {
-				continue
-			}
+		for _, segments := range selectOutermostPrefixes(prefixes) {
 			parent := rootPath
 			for i, segment := range segments {
 				if parent, err = ensureResource(ctx, c, id, resources, parent, segment); err != nil {
@@ -223,6 +219,25 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 		reshaped = true
 	}
 	return staticRoutes{Reshaped: reshaped, Fingerprint: fingerprintRoutes(served)}, nil
+}
+
+func selectOutermostPrefixes(prefixes []string) [][]string {
+	routable := map[string][]string{}
+	for _, prefix := range prefixes {
+		if segments, ok := splitStaticPrefix(prefix); ok {
+			routable[rootPath+strings.Join(segments, rootPath)+rootPath] = segments
+		}
+	}
+	var outermost [][]string
+	var kept []string
+	for _, prefix := range slices.Sorted(maps.Keys(routable)) {
+		if slices.ContainsFunc(kept, func(outer string) bool { return strings.HasPrefix(prefix, outer) }) {
+			continue
+		}
+		kept = append(kept, prefix)
+		outermost = append(outermost, routable[prefix])
+	}
+	return outermost
 }
 
 func removeStaticMethod(ctx context.Context, c Clients, api, resource string) (bool, error) {
