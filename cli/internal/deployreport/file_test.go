@@ -18,7 +18,7 @@ import (
 func TestWriteLeavesTheDeploymentAsProtoJSONInTheProjectStateDir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	deployment := productionAttempt().Succeeded(finishedAt)
+	deployment := productionDeployment()
 
 	if err := Write(dir, deployment); err != nil {
 		t.Fatalf("Write() error = %v", err)
@@ -57,12 +57,8 @@ func TestTheGoldenReportIsADeploymentTheConsoleAccepts(t *testing.T) {
 func TestWriteReplacesTheReportOfAnEarlierDeployment(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	first := productionAttempt()
-	first.PromotionID = "p_first"
-	second := productionAttempt()
-	second.PromotionID = "p_second"
-	for _, attempt := range []Attempt{first, second} {
-		if err := Write(dir, attempt.Succeeded(finishedAt)); err != nil {
+	for _, promotion := range []string{"p_first", "p_second"} {
+		if err := Write(dir, productionAttempt().Succeeded(finishedAt, liveApps(), &consolev1.Promotion{Id: promotion, Seq: 1})); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 	}
@@ -87,7 +83,7 @@ func TestWriteReplacesTheReportOfAnEarlierDeployment(t *testing.T) {
 func TestClearRemovesTheReportAndIgnoresAMissingOne(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := Write(dir, productionAttempt().Succeeded(finishedAt)); err != nil {
+	if err := Write(dir, productionDeployment()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -96,7 +96,7 @@ func TestALinkedTreeReportsItsDeploymentOnceWithTheDeviceSession(t *testing.T) {
 	dir := linkedTree(t, apiURL)
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	if len(fake.reports) != 1 {
 		t.Fatalf("the console received %d reports, want 1 (stderr %q)", len(fake.reports), stderr.String())
@@ -118,7 +118,7 @@ func TestAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcelLink(t *testing.T) {
 	apiURL := serveConsole(t, fake)
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), t.TempDir(), productionAttempt().Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
 
 	if len(fake.reports) != 0 {
 		t.Fatalf("the console received %d reports from an unlinked tree, want none", len(fake.reports))
@@ -135,7 +135,7 @@ func TestATreeLinkedToAnotherConsoleCountsAsUnlinked(t *testing.T) {
 	dir := linkedTree(t, "https://other.example.com")
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	if len(fake.reports) != 0 || !strings.Contains(stderr.String(), "`ocel link`") {
 		t.Errorf("reports %d, stderr %q, want no call and the link hint", len(fake.reports), stderr.String())
@@ -150,7 +150,7 @@ func TestAnUnreachableConsoleLeavesOneWarningNamingTheDeployment(t *testing.T) {
 	dir := linkedTree(t, apiURL)
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
 	if len(lines) != 1 || !strings.Contains(lines[0], traceID) {
@@ -165,7 +165,7 @@ func TestAConsoleThatRefusesTheRecordLeavesOneWarningNamingTheDeployment(t *test
 	dir := linkedTree(t, apiURL)
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
 	if len(fake.reports) != 1 || len(lines) != 1 || !strings.Contains(lines[0], traceID) || !strings.Contains(lines[0], "session expired") {
@@ -184,7 +184,7 @@ func TestAConsoleThatNeverAnswersIsGivenUpOnAfterTheTimeout(t *testing.T) {
 	reporting.Timeout = 50 * time.Millisecond
 
 	started := time.Now()
-	reporting.ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	reporting.ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	if took := time.Since(started); took > 5*time.Second {
 		t.Errorf("reporting took %v, want it cut off at its timeout", took)
@@ -204,7 +204,7 @@ func TestALinkedTreeThatIsNotLoggedInLeavesOneWarningNamingTheDeployment(t *test
 		return console.Credentials{APIURL: apiURL}, console.ErrNotLoggedIn
 	}}
 
-	reporting.ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	reporting.ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	if len(fake.reports) != 0 || !strings.Contains(stderr.String(), traceID) || !strings.Contains(stderr.String(), "ocel login") {
 		t.Errorf("reports %d, stderr %q, want no call and a warning naming %s and `ocel login`", len(fake.reports), stderr.String(), traceID)
@@ -219,7 +219,7 @@ func TestACancelledRunStillReportsItsFailedDeployment(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	signedIn(apiURL).ReportDeployment(ctx, dir, productionAttempt().Failed(finishedAt, context.Canceled), &bytes.Buffer{})
+	signedIn(apiURL).ReportDeployment(ctx, dir, productionAttempt().Failed(finishedAt, liveApps(), context.Canceled), &bytes.Buffer{})
 
 	if len(fake.reports) != 1 {
 		t.Errorf("the console received %d reports, want the failed deployment of the cancelled run", len(fake.reports))
@@ -258,7 +258,7 @@ func TestADeploymentThatNamesNoTargetMakesNoCallAndLeavesOneWarningNamingIt(t *t
 	attempt.Target = ""
 	var stderr bytes.Buffer
 
-	signedIn(apiURL).ReportDeployment(context.Background(), dir, attempt.Succeeded(finishedAt), &stderr)
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, attempt.Succeeded(finishedAt, liveApps(), livePromotion()), &stderr)
 
 	if len(fake.reports) != 0 {
 		t.Errorf("the console received %d reports, want none for a record it would refuse", len(fake.reports))
@@ -279,7 +279,7 @@ func TestATreeLinkedToAnotherConsoleThatIsNotLoggedInIsToldToLogIn(t *testing.T)
 	}}
 	var stderr bytes.Buffer
 
-	reporting.ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+	reporting.ReportDeployment(context.Background(), dir, productionDeployment(), &stderr)
 
 	if len(fake.reports) != 0 || !strings.Contains(stderr.String(), "`ocel login`") || strings.Contains(stderr.String(), "`ocel link`") {
 		t.Errorf("reports %d, stderr %q, want no call and the login warning rather than the link hint", len(fake.reports), stderr.String())

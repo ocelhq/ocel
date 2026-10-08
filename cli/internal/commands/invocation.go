@@ -35,7 +35,7 @@ type Invocation struct {
 	Setups          prerequisite.Setups
 	RecordEvent     func(telemetry.Payload) bool
 
-	DeploymentReports deployreport.Console
+	Console deployreport.Console
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

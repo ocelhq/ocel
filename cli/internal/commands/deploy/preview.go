@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -207,7 +208,8 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, telemetry.DeployTargetPreview, opts.dry)
 	var attempt *deployreport.Attempt
-	var report *consolev1.Deployment
+	var apps []*consolev1.App
+	var succeeded *consolev1.Deployment
 	err = dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
@@ -228,8 +230,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}()
 		cfg = facts.project
 		if !opts.dry {
-			begun := p.BeginAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP, cfg, env, dependencies.DiscoverPRNumber())
-			attempt = &begun
+			attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP, cfg, env, dependencies.DiscoverPRNumber())
 		}
 
 		browser := dependencies.IsBrowserReachable(stdin)
@@ -269,9 +270,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
-		if attempt != nil {
-			attempt.Apps, _ = deployreport.AppsDeployed(manifest, nil, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
-		}
+		apps = appsDeployed(cfg, manifest, nil, env)
 
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
@@ -295,23 +294,21 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
-		if attempt != nil {
-			attempt.Apps, _ = deployreport.AppsDeployed(manifest, out.apps, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
-		}
+		apps = appsDeployed(cfg, manifest, out.apps, env)
 		if err != nil {
 			return err
 		}
 		deployed = true
 		deployTelemetry.noteDeployed()
 
-		if report, err = reportDeployed(cfg, manifest, env, *attempt, out); err != nil {
+		if succeeded, err = reportDeployed(cfg, manifest, env, attempt, out, ""); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
 		return nil
 	})
 	deployTelemetry.record(dependencies.RecordEvent, err)
-	fileReport(ctx, dependencies, cfg.Dir, attempt, report, err, stderr)
+	dependencies.Console.ReportAttempt(ctx, attempt, apps, succeeded, err, stderr)
 	return err
 }
 
@@ -419,12 +416,12 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 			return err
 		}
-		removed = p.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED, env)
+		removed = deployreport.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED, env, run.TraceID(), time.Now(), cfg.Dir, os.Getenv)
 		run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 		return nil
 	})
 	if removed != nil {
-		dependencies.DeploymentReports.ReportEnvironmentEvent(ctx, cfg.Dir, removed, stderr)
+		dependencies.Console.ReportEnvironmentEvent(ctx, cfg.Dir, removed, stderr)
 	}
 	return err
 }

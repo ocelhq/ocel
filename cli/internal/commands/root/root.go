@@ -253,6 +253,6 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 
-		DeploymentReports: deployreport.Console{LoadCredentials: console.LoadCredentials},
+		Console: deployreport.Console{LoadCredentials: console.LoadCredentials},
 	}
 }

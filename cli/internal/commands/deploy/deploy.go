@@ -100,7 +100,8 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, telemetry.DeployTargetProduction, opts.dry)
 	var attempt *deployreport.Attempt
-	var report *consolev1.Deployment
+	var apps []*consolev1.App
+	var succeeded *consolev1.Deployment
 	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
@@ -120,9 +121,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 		infra := newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt)
 		if !opts.dry {
-			begun := p.BeginAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY, cfg, env, dependencies.DiscoverPRNumber())
-			begun.Tag = opts.tag
-			attempt = &begun
+			attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY, cfg, env, dependencies.DiscoverPRNumber())
 		}
 
 		browser := dependencies.IsBrowserReachable(stdin)
@@ -162,9 +161,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
-		if attempt != nil {
-			attempt.Apps, _ = deployreport.AppsDeployed(manifest, nil, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
-		}
+		apps = appsDeployed(cfg, manifest, nil, env)
 
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
@@ -188,22 +185,19 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
-		if attempt != nil {
-			attempt.Apps, _ = deployreport.AppsDeployed(manifest, out.apps, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
-			attempt.PromotionID = out.promotionID
-		}
+		apps = appsDeployed(cfg, manifest, out.apps, env)
 		if err != nil {
 			return err
 		}
 		deployTelemetry.noteDeployed()
 
-		if report, err = reportDeployed(cfg, manifest, env, *attempt, out); err != nil {
+		if succeeded, err = reportDeployed(cfg, manifest, env, attempt, out, opts.tag); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
 		return nil
 	})
 	deployTelemetry.record(dependencies.RecordEvent, err)
-	fileReport(ctx, dependencies, cfg.Dir, attempt, report, err, stderr)
+	dependencies.Console.ReportAttempt(ctx, attempt, apps, succeeded, err, stderr)
 	return err
 }

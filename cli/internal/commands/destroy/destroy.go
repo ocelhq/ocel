@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -137,7 +139,7 @@ func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocatio
 func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string, stderr io.Writer) error {
 	destroyed, err := destroyTier(ctx, invocation, cfg, policy, tier, bypassNotice)
 	if destroyed != nil {
-		invocation.DeploymentReports.ReportEnvironmentEvent(ctx, cfg.Dir, destroyed, stderr)
+		invocation.Console.ReportEnvironmentEvent(ctx, cfg.Dir, destroyed, stderr)
 	}
 	return err
 }
@@ -222,7 +224,7 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 	if _, err := providerprocess.Stream(ctx, provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 		return nil, err
 	}
-	destroyed = commands.NewEnvironmentEvent(run, cfg.Dir, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: tier})
+	destroyed = deployreport.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: tier}, run.TraceID(), time.Now(), cfg.Dir, os.Getenv)
 	if preview {
 		run.Succeed(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
 		return destroyed, nil

@@ -79,7 +79,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 
 	var attempt *deployreport.Attempt
-	var report *consolev1.Deployment
+	var succeeded *consolev1.Deployment
 	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
@@ -115,8 +115,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return nil
 		}
 
-		begun := p.BeginAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), productionEnvironment(), "")
-		attempt = &begun
+		attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), productionEnvironment(), "")
 
 		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
 		rolled, err := promote(ctx, promoting, provider, cfg, target)
@@ -128,7 +127,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return err
 		}
 		promoted := rolled.GetPromoted()
-		if report, err = reportRolledBack(*attempt, promoted); err != nil {
+		if succeeded, err = reportRolledBack(attempt, promoted); err != nil {
 			return err
 		}
 		tagSuffix := ""
@@ -143,7 +142,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), noteSuffix))
 		return nil
 	})
-	fileReport(ctx, invocation, attempt, report, err, stderr)
+	invocation.Console.ReportAttempt(ctx, attempt, nil, succeeded, err, stderr)
 	return err
 }
 

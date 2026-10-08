@@ -30,6 +30,19 @@ func (c Console) ReportDeployment(ctx context.Context, projectDir string, deploy
 	})
 }
 
+func (c Console) ReportAttempt(ctx context.Context, attempt *Attempt, apps []*consolev1.App, succeeded *consolev1.Deployment, runErr error, stderr io.Writer) {
+	if attempt == nil {
+		return
+	}
+	deployment := succeeded
+	if deployment == nil && runErr != nil {
+		deployment = attempt.Failed(time.Now(), apps, runErr)
+	}
+	if deployment != nil {
+		c.ReportDeployment(ctx, attempt.Project.Dir, deployment, stderr)
+	}
+}
+
 func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, event *consolev1.EnvironmentEvent, stderr io.Writer) {
 	c.send(ctx, projectDir, "environment event "+event.GetId(), stderr, func(ctx context.Context, client *console.Client, accessToken, projectID string) error {
 		return client.RecordEnvironmentEvent(ctx, accessToken, projectID, event)
