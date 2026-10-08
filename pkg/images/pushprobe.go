@@ -19,7 +19,9 @@ func ProbePushAccess(ctx context.Context, target provider.RegistryTarget, reposi
 		return err
 	}
 	named := server + "/" + repo
-	client := &http.Client{Timeout: registryTimeout}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: registryTimeout}
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repo + "/blobs/uploads/"
 
 	resp, err := startUpload(ctx, client, endpoint, "")
