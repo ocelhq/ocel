@@ -118,6 +118,45 @@ func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublis
 	}
 }
 
+type declaringStacks struct {
+	provider.Stacks
+}
+
+func (s declaringStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	for i, binding := range result.Bindings {
+		at := slices.IndexFunc(spec.Resources, func(resource provider.Resource) bool { return resource.Name == binding.Name })
+		if at >= 0 {
+			result.Bindings[i].Resource = spec.Resources[at].Declared
+		}
+	}
+	return result, err
+}
+
+func TestADeployAfterProvisionInfraGrantsTheResourceItsBindingWasProvisionedFor(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	client := servedBy(t, refusingStacks{Provider: base, stacks: declaringStacks{Stacks: base.Stacks()}})
+	req := deployRequest()
+	req.Manifest.Resources[0].LogicalName = "postgres--orders"
+	req.Manifest.Usages[0].Resource = "postgres--orders"
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
+	}
+	specs := base.FakeStacks().Provisioned()
+	grants := specs[len(specs)-1].App.Grants
+	grant := slices.IndexFunc(grants, func(binding provider.Binding) bool { return binding.Name == "postgres--orders" })
+	if grant < 0 {
+		t.Fatalf("the app spec grants %v, want postgres--orders", grants)
+	}
+	if got := grants[grant].Resource; got != "orders" {
+		t.Errorf("the app is granted postgres--orders for resource %q, want orders, the resource the app reads it under", got)
+	}
+}
+
 func TestADeployRefusesInfraProvisionedFromOtherResources(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
