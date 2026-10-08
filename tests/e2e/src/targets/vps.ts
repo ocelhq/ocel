@@ -48,7 +48,9 @@ import type {
 
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
-const KEYVALUES_TIER = "/var/lib/ocel/production/keyvalues";
+const STATE_ROOT = "/var/lib/ocel";
+const RELEASES_ROOT = `${STATE_ROOT}/releases`;
+const KEYVALUES_TIER = `${STATE_ROOT}/production/keyvalues`;
 const PROJECT_ENTRIES = `${KEYVALUES_TIER}/projects`;
 const NO_KEYVALUES_TIER = "no-keyvalues-tier";
 const ENTRY_SUFFIX = ".json";
@@ -137,13 +139,16 @@ export function hostnamesWithoutUrl(said: string, hostnames: string[]): string[]
   );
 }
 
-export function entryFile(slug: string): string {
-  const encoded = Array.from(Buffer.from(slug, "utf8"), (byte, at) => {
+function encodeSegment(segment: string): string {
+  return Array.from(Buffer.from(segment, "utf8"), (byte, at) => {
     const char = String.fromCharCode(byte);
     const plain = /^[A-Za-z0-9\-_.]$/.test(char) && !(at === 0 && char === ".");
     return plain ? char : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
   }).join("");
-  return `${encoded}${ENTRY_SUFFIX}`;
+}
+
+export function entryFile(slug: string): string {
+  return `${encodeSegment(slug)}${ENTRY_SUFFIX}`;
 }
 
 export function heldProbe(held: string): string {
@@ -152,10 +157,16 @@ export function heldProbe(held: string): string {
 
 export function projectLeftovers(slug: string): string {
   const filter = `--filter label=ocel.project=${slug}`;
+  const partitions = `${STATE_ROOT}/*/keyvalues/*+${encodeSegment(slug)}`;
+  const releases = `${RELEASES_ROOT}/${slug}`;
   return [
     `sudo docker ps -a ${filter} --format 'the container {{.Names}}'`,
     `sudo docker volume ls ${filter} --format 'the volume {{.Name}}'`,
-  ].join("; ");
+    `sudo sh -c 'for found in ${partitions} ${partitions}+*; do ` +
+      `if [ -e "$found" ]; then echo "the key-value partition $found"; fi; done'`,
+    `{ sudo test ! -e '${releases}' || sudo find '${releases}' ` +
+      `\\( -type f ! -name .dropped -o -type d -empty \\) -printf 'the release entry %p\\n'; }`,
+  ].join(" && ");
 }
 
 export const maskedAuthorization = `sed -E 's/(Authorization: ).*/\\1${REDACTED}/'`;
