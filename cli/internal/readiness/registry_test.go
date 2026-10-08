@@ -168,6 +168,22 @@ func TestARemovalOfAProjectNamingNoRegistrySendsNone(t *testing.T) {
 	}
 }
 
+func TestARemovalWhoseDotenvCannotBeReadNamesThatFailureRatherThanAnUnsetVariable(t *testing.T) {
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	cfg.Dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(cfg.Dir, ".env"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, left := RemovalRegistry(cfg)
+	if registry != nil {
+		t.Errorf("RemovalRegistry() = %v, want none", registry)
+	}
+	if !strings.Contains(left, "read .env") || strings.Contains(left, "unset") {
+		t.Errorf("RemovalRegistry() left %q, want it to name the unreadable .env, not an unset variable", left)
+	}
+}
+
 func TestARemovalWhoseRegistryVariableIsUnsetSendsNoneAndNamesWhatStays(t *testing.T) {
 	registry, left := RemovalRegistry(registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"}))
 	if registry != nil {

@@ -20,8 +20,8 @@ func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, 
 	}
 	registry, err := authenticatedRegistry(cfg)
 	if err != nil {
-		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
-			"its password is read from %s, which is unset here", cfg.Registry.Server, cfg.Registry.Password)
+		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: %v",
+			cfg.Registry.Server, err)
 	}
 	return registry, ""
 }
