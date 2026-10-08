@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	deployLeaseTTL     = 5 * time.Minute
-	deployLeaseRenewal = 2 * time.Minute
-	deployLeaseRelease = 30 * time.Second
+	deployLeaseTTL            = 5 * time.Minute
+	deployLeaseRenewal        = 2 * time.Minute
+	deployLeaseReleaseTimeout = 30 * time.Second
 )
 
 type environmentScope struct {
@@ -36,7 +36,7 @@ type deployLeases struct {
 	ttl, renewal time.Duration
 
 	mu       sync.Mutex
-	renewing map[string]*leaseRenewal
+	renewing map[heldLease]*leaseRenewal
 }
 
 type leaseRenewal struct {
@@ -45,7 +45,7 @@ type leaseRenewal struct {
 }
 
 func newDeployLeases() *deployLeases {
-	return &deployLeases{ttl: deployLeaseTTL, renewal: deployLeaseRenewal, renewing: map[string]*leaseRenewal{}}
+	return &deployLeases{ttl: deployLeaseTTL, renewal: deployLeaseRenewal, renewing: map[heldLease]*leaseRenewal{}}
 }
 
 func newLeaseToken() (string, error) {
@@ -60,14 +60,14 @@ func (l *deployLeases) hold(ctx context.Context, store keyvalue.Store, scope env
 	if err := stackrecords.TakeDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl); err != nil {
 		return false, err
 	}
-	name := leaseName(scope, token)
+	held := heldLease{scope: scope, token: token}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if renewal := l.renewing[name]; renewal != nil && !renewal.ended() {
+	if renewal := l.renewing[held]; renewal != nil && !renewal.ended() {
 		return false, nil
 	}
 	renewal := &leaseRenewal{stop: make(chan struct{}), done: make(chan struct{})}
-	l.renewing[name] = renewal
+	l.renewing[held] = renewal
 	go l.renew(store, scope, token, renewal)
 	return true, nil
 }
@@ -106,22 +106,23 @@ func (l *deployLeases) confirm(ctx context.Context, store keyvalue.Store, scope 
 }
 
 func (l *deployLeases) release(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) {
-	name := leaseName(scope, token)
+	held := heldLease{scope: scope, token: token}
 	l.mu.Lock()
-	renewal := l.renewing[name]
-	delete(l.renewing, name)
+	renewal := l.renewing[held]
+	delete(l.renewing, held)
 	l.mu.Unlock()
 	if renewal != nil {
 		close(renewal.stop)
 		<-renewal.done
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deployLeaseRelease)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deployLeaseReleaseTimeout)
 	defer cancel()
 	_ = stackrecords.ForgetDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token)
 }
 
-func leaseName(scope environmentScope, token string) string {
-	return stackrecords.DeployLeaseKey(scope.tier, scope.slug, scope.env).String() + "|" + token
+type heldLease struct {
+	scope environmentScope
+	token string
 }
 
 func (h *handlers) holdEnvironment(ctx context.Context, spec provider.DeploySpec, token string) (taken bool, err error) {

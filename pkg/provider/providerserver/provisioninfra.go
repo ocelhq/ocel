@@ -38,7 +38,7 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 		if err != nil {
 			return nil, err
 		}
-		result, err := h.provisionInfraOver(ctx, req, spec, sender)
+		result, err := h.executeInfraRun(ctx, req, spec, sender)
 		if err != nil && taken {
 			h.releaseEnvironment(ctx, spec, req.GetLeaseToken())
 		}
@@ -46,7 +46,7 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 	})
 }
 
-func (h *handlers) provisionInfraOver(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*progressv1.OperationEvent, error) {
+func (h *handlers) executeInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*progressv1.OperationEvent, error) {
 	run, err := h.openDeploy(ctx, &contractv1.DeployRequest{
 		Manifest:       req.GetManifest(),
 		Environment:    req.GetEnvironment(),
@@ -93,7 +93,7 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 	}
 	if req.GetLeaseToken() == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"this deploy says its infra was provisioned, and names no lease token: the infra is shipped over under the lease that provisioned it")
+			"this deploy says its infra was provisioned but sends no lease token, and only the deploy whose lease token provisioned that infra may deploy over it")
 	}
 	return nil
 }

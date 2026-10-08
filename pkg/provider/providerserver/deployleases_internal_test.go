@@ -21,7 +21,7 @@ const (
 var shopProduction = environmentScope{tier: environment.TierProduction, slug: "shop", env: stackrecords.ProductionEnv}
 
 func quickLeases() *deployLeases {
-	return &deployLeases{ttl: 3 * time.Second, renewal: 20 * time.Millisecond, renewing: map[string]*leaseRenewal{}}
+	return &deployLeases{ttl: 3 * time.Second, renewal: 20 * time.Millisecond, renewing: map[heldLease]*leaseRenewal{}}
 }
 
 func takeAs(ctx context.Context, store keyvalue.Store, token string, now time.Time) error {
@@ -74,7 +74,7 @@ func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	leases.mu.Lock()
-	lost := leases.renewing[leaseName(shopProduction, renewedLease)]
+	lost := leases.renewing[heldLease{scope: shopProduction, token: renewedLease}]
 	leases.mu.Unlock()
 	<-lost.done
 	if err := stackrecords.ForgetDeployLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
@@ -108,7 +108,7 @@ func TestADeployThatLostItsLeaseDoesNotRenewItOverTheDeployThatTookItOver(t *tes
 		t.Fatal(err)
 	}
 	leases.mu.Lock()
-	renewal := leases.renewing[leaseName(shopProduction, renewedLease)]
+	renewal := leases.renewing[heldLease{scope: shopProduction, token: renewedLease}]
 	leases.mu.Unlock()
 	select {
 	case <-renewal.done:

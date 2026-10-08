@@ -135,7 +135,7 @@ func TestADeployOverProvisionedInfraRefusesToRunWithoutTheLeaseThatProvisionedIt
 	_, _, err := deployStream(t, client, req)
 
 	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid {
-		t.Fatalf("Deploy() = %v, want it refused as invalid: infra provisioned before the build is shipped under the lease that provisioned it", err)
+		t.Fatalf("Deploy() = %v, want it refused as invalid: only the deploy whose lease token provisioned the infra may deploy over it", err)
 	}
 }
 
