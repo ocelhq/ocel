@@ -54,32 +54,21 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
-		var token string
+		var hold *environmentHold
 		if !req.GetDry() {
-			if token, err = h.claimEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
+			if hold, err = h.claimEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
 				return nil, err
 			}
-			defer h.releaseEnvironment(ctx, spec, token)
+			defer func() { _ = hold.release(ctx) }()
 		}
 		run, err := h.openDeploy(ctx, req, spec, sender)
 		if err != nil {
 			return nil, err
 		}
-		run.leases, run.leaseToken = h.leases, token
-		return run.execute(ctx)
+		run.hold = hold
+		result, err := run.execute(ctx)
+		return result, hold.explain(err)
 	})
-}
-
-func (h *handlers) claimEnvironment(ctx context.Context, spec provider.DeploySpec, provisionedUnder string) (string, error) {
-	if provisionedUnder != "" {
-		return provisionedUnder, h.keepEnvironment(ctx, spec, provisionedUnder)
-	}
-	token, err := stackrecords.NewEnvironmentLeaseToken()
-	if err != nil {
-		return "", err
-	}
-	_, err = h.holdEnvironment(ctx, spec, token)
-	return token, err
 }
 
 type deploySpans struct {
@@ -214,8 +203,7 @@ type deployRun struct {
 	infraProvisioned     bool
 	infraHoldsUndeclared bool
 
-	leases     *environmentLeases
-	leaseToken string
+	hold *environmentHold
 
 	dry           bool
 	dryRunPlan    dryRunPlan
@@ -347,25 +335,26 @@ func (r *deployRun) reportApps(result *progressv1.OperationResult) {
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
+	leased := r.hold.context(ctx)
 	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
 		return env.phase(func(progress progress.Log) error {
-			return r.prepare(ctx, progress)
+			return r.prepare(leased, progress)
 		})
 	}); err != nil {
 		return nil, err
 	}
-	if err := r.reconcileEdgeSpan(ctx); err != nil {
+	if err := r.reconcileEdgeSpan(leased); err != nil {
 		return nil, err
 	}
-	if err := r.provision(ctx); err != nil {
+	if err := r.provision(leased); err != nil {
 		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
-	if err := r.attachHostnames(ctx); err != nil {
+	if err := r.attachHostnames(leased); err != nil {
 		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
-	if err := r.confirmLease(ctx); err != nil {
+	if err := r.hold.confirm(ctx); err != nil {
 		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
@@ -374,13 +363,6 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		r.reclaimOwnRelease(ctx)
 	}
 	return result, err
-}
-
-func (r *deployRun) confirmLease(ctx context.Context) error {
-	if r.leaseToken == "" {
-		return nil
-	}
-	return r.leases.confirm(ctx, r.provider.KeyValues(), newEnvironmentScope(r.spec), r.leaseToken)
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {

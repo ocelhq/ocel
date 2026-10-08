@@ -297,6 +297,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			return showDeployPlan(ctx, run, provider, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity(), describePlannedPreBuild(recovery.preBuild, opts.prebuilt))
 		}
 
+		recovery.infra.stopRenewing()
 		out, err := streamDeploy(ctx, provider, req)
 		var unread error
 		apps, unread = appsDeployed(cfg, manifest, out.apps, env)

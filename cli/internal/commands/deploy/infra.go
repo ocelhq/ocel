@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -26,10 +27,22 @@ type infraProvisioning struct {
 	provisions      bool
 	dry             bool
 	leaseToken      string
+	renewal         time.Duration
 
-	sent    *contractv1.ProvisionInfraRequest
-	shipped bool
+	sent     *contractv1.ProvisionInfraRequest
+	shipped  bool
+	renewing *leaseRenewal
 }
+
+type leaseRenewal struct {
+	stop chan struct{}
+	done chan struct{}
+}
+
+const (
+	leaseRenewalInterval = 2 * time.Minute
+	abandonTimeout       = 30 * time.Second
+)
 
 func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, dry, prebuilt bool) *infraProvisioning {
 	if prebuilt {
@@ -43,6 +56,7 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		workerCeilings:  facts.workerCeilings,
 		provisions:      !dry && env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		dry:             dry,
+		renewal:         leaseRenewalInterval,
 	}
 }
 
@@ -74,7 +88,48 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 		return err
 	}
 	i.sent = req
+	i.startRenewing()
 	return nil
+}
+
+func (i *infraProvisioning) startRenewing() {
+	if i.renewing != nil {
+		return
+	}
+	i.renewing = &leaseRenewal{stop: make(chan struct{}), done: make(chan struct{})}
+	go i.renew(i.renewing)
+}
+
+func (i *infraProvisioning) renew(renewing *leaseRenewal) {
+	defer close(renewing.done)
+	ticker := time.NewTicker(i.renewal)
+	defer ticker.Stop()
+	req := &contractv1.RenewDeployLeaseRequest{Slug: i.cfg.Slug, Environment: i.env, LeaseToken: i.leaseToken}
+	for {
+		select {
+		case <-renewing.stop:
+			return
+		case <-ticker.C:
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), i.renewal)
+		err := i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			_, err := client.RenewDeployLease(ctx, req)
+			return err
+		})
+		cancel()
+		if _, refused := provider.RefusedCode(err); refused {
+			return
+		}
+	}
+}
+
+func (i *infraProvisioning) stopRenewing() {
+	if i == nil || i.renewing == nil {
+		return
+	}
+	close(i.renewing.stop)
+	<-i.renewing.done
+	i.renewing = nil
 }
 
 func (i *infraProvisioning) assemble(resources []declaration.Resource) (*contractv1.Manifest, error) {
@@ -104,10 +159,12 @@ func (i *infraProvisioning) markShipped() {
 }
 
 func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
+	i.stopRenewing()
 	if !i.isProvisioned() || i.shipped {
 		return
 	}
-	ctx = context.WithoutCancel(ctx)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
+	defer cancel()
 	_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
 		return err

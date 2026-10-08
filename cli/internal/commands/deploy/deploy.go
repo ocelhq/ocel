@@ -187,6 +187,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			return showDeployPlan(ctx, run, provider, req, "Proposed changes to production", cfg.Slug, "production", describePlannedPreBuild(recovery.preBuild, opts.prebuilt))
 		}
 
+		infra.stopRenewing()
 		out, err := streamDeploy(ctx, provider, req)
 		var unread error
 		apps, unread = appsDeployed(cfg, manifest, out.apps, env)
