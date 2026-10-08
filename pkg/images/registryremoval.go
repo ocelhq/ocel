@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 )
@@ -36,6 +35,13 @@ func (r registryStore) Remove(ctx context.Context, imageRef string) error {
 	if r.target.Username != "" || r.target.Password != "" {
 		called = append(called, remote.WithAuth(&authn.Basic{Username: r.target.Username, Password: r.target.Password}))
 	}
+	err = remote.Delete(tag, called...)
+	switch {
+	case err == nil, isAbsent(err):
+		return nil
+	case !isTagDeleteRefused(err):
+		return fmt.Errorf("remove %s from %s: %w", imageRef, r.target.Server, err)
+	}
 	described, err := remote.Head(tag, called...)
 	if isAbsent(err) {
 		return nil
@@ -43,40 +49,15 @@ func (r registryStore) Remove(ctx context.Context, imageRef string) error {
 	if err != nil {
 		return fmt.Errorf("look for %s in %s before removing it: %w", imageRef, r.target.Server, err)
 	}
-	shared, err := isTaggedElsewhere(tag, described.Digest, called)
-	if err != nil {
-		return fmt.Errorf("look for other tags on %s in %s before removing it: %w", imageRef, r.target.Server, err)
-	}
-	if shared {
-		return nil
-	}
 	if err := remote.Delete(tag.Digest(described.Digest.String()), called...); err != nil && !isAbsent(err) {
 		return fmt.Errorf("remove %s from %s: %w", imageRef, r.target.Server, err)
 	}
 	return nil
 }
 
-func isTaggedElsewhere(tag name.Tag, digest v1.Hash, called []remote.Option) (bool, error) {
-	listed, err := remote.List(tag.Repository, called...)
-	if err != nil {
-		return false, err
-	}
-	for _, other := range listed {
-		if other == tag.TagStr() {
-			continue
-		}
-		described, err := remote.Head(tag.Tag(other), called...)
-		if isAbsent(err) {
-			continue
-		}
-		if err != nil {
-			return false, err
-		}
-		if described.Digest == digest {
-			return true, nil
-		}
-	}
-	return false, nil
+func isTagDeleteRefused(err error) bool {
+	var refused *transport.Error
+	return errors.As(err, &refused) && (refused.StatusCode == http.StatusMethodNotAllowed || refused.StatusCode == http.StatusBadRequest)
 }
 
 func isAbsent(err error) bool {

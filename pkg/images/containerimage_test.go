@@ -192,6 +192,30 @@ func TestTheRuntimeTagNamesTheImagesDigestAndTheRuntimeItIsWrappedIn(t *testing.
 	}
 }
 
+func TestImagesWrappedUnderDifferentRuntimeTagsNeverShareAManifest(t *testing.T) {
+	t.Parallel()
+
+	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}})
+	manifests := map[string]string{}
+	for _, runtime := range [][]byte{[]byte("a runtime binary"), []byte("a newer runtime binary")} {
+		for _, next := range []*images.NextServerRuntime{nil, nextServerRuntime(nextFiles())} {
+			wrapped, err := images.WrapContainer(base, runtime, next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifests[images.RuntimeTag(wrappedDigest, runtime, next)] = digestOf(t, wrapped)
+		}
+	}
+
+	distinct := map[string]bool{}
+	for _, manifest := range manifests {
+		distinct[manifest] = true
+	}
+	if len(manifests) != 4 || len(distinct) != len(manifests) {
+		t.Errorf("the runtime tags name the manifests %v, want every tag to name its own: a registry removes a manifest with every tag on it, so two tags on one manifest would let one release's removal take the other's image", manifests)
+	}
+}
+
 func nextServerRuntime(files map[string][]byte) *images.NextServerRuntime {
 	return &images.NextServerRuntime{Files: files}
 }
