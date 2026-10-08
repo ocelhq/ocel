@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -49,6 +50,21 @@ func readEnvironmentLease(t *testing.T, vendor *fake.Provider) (held bool) {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
 	return err == nil
+}
+
+func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
+	t.Helper()
+	ctx := context.Background()
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Write(ctx, recorded); err != nil {
+		t.Errorf("taking the lease over = %v", err)
+	}
 }
 
 func TestProvisionInfraRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.T) {
@@ -235,11 +251,7 @@ func TestADeployWhoseLeaseAnotherDeployTookOverIsRefusedBeforeItPromotes(t *test
 			return nil
 		}
 		takeOver.Do(func() {
-			err := stackrecords.TakeEnvironmentLease(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv,
-				otherEnvironmentLease, time.Now().Add(time.Hour), time.Hour)
-			if err != nil {
-				t.Errorf("taking the lease over = %v", err)
-			}
+			takeLeaseOver(t, vendor.KeyValues(), otherEnvironmentLease)
 		})
 		return nil
 	})
