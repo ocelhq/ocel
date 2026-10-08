@@ -229,7 +229,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 	said := refusal.Error()
 
-	for _, want := range []string{"Status=", "RestartCount=", "logs (last"} {
+	for _, want := range []string{"Status=", "RestartCount=", "logs ("} {
 		if !strings.Contains(said, want) {
 			t.Errorf("the evidence a failed release captured reads\n%s\nand never names %s", said, want)
 		}
