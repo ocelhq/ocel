@@ -100,7 +100,7 @@ const HandlerName = "OCEL_HANDLER"
 const nodeEnvName = "NODE_ENV"
 
 func BootsThroughRuntime(framework buildoutput.Framework) bool {
-	return framework.Name == buildoutput.FrameworkNode || framework.Name == buildoutput.FrameworkNext
+	return buildoutput.RunsOnNode(framework.Name)
 }
 
 func servedHandler(staged buildoutput.FunctionConfig) string {

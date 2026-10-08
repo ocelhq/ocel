@@ -96,7 +96,7 @@ export interface ServerlessCompute {
   /** The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect. */
   entrypoint?: string;
   /** What the app is built with, when ocel is not to read it off the app's own manifest. */
-  framework?: "node" | "next" | "go" | "python" | "rust";
+  framework?: "node" | "next" | "sveltekit" | "go" | "python" | "rust";
 }
 
 /** One container image serving every route. */

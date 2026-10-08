@@ -38,6 +38,7 @@ var frameworks = []struct {
 }{
 	{buildoutput.FrameworkNode, JS},
 	{buildoutput.FrameworkNext, JS},
+	{buildoutput.FrameworkSvelteKit, JS},
 	{buildoutput.FrameworkGo, Go},
 	{buildoutput.FrameworkPython, Python},
 	{buildoutput.FrameworkRust, Rust},
@@ -46,6 +47,8 @@ var frameworks = []struct {
 const nodeManifest = "package.json"
 
 const nextDependency = "next"
+
+const svelteKitDependency = "@sveltejs/kit"
 
 var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
 
@@ -101,6 +104,13 @@ func DetectFramework(dir string) (framework string, found bool, err error) {
 		if next {
 			return buildoutput.FrameworkNext, true, nil
 		}
+		svelteKit, err := dependsOn(dir, svelteKitDependency)
+		if err != nil {
+			return "", false, err
+		}
+		if svelteKit {
+			return buildoutput.FrameworkSvelteKit, true, nil
+		}
 	}
 	for _, f := range frameworks {
 		if f.language == written {
@@ -116,6 +126,10 @@ func isNextApp(dir string) (bool, error) {
 			return true, nil
 		}
 	}
+	return dependsOn(dir, nextDependency)
+}
+
+func dependsOn(dir, dependency string) (bool, error) {
 	path := filepath.Join(dir, nodeManifest)
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -128,9 +142,9 @@ func isNextApp(dir string) (bool, error) {
 	if err := json.Unmarshal(body, &manifest); err != nil {
 		return false, fmt.Errorf("%s is not JSON: %w", path, err)
 	}
-	_, dependency := manifest.Dependencies[nextDependency]
-	_, devDependency := manifest.DevDependencies[nextDependency]
-	return dependency || devDependency, nil
+	_, runtime := manifest.Dependencies[dependency]
+	_, development := manifest.DevDependencies[dependency]
+	return runtime || development, nil
 }
 
 func OfApp(framework, dir string) Language {

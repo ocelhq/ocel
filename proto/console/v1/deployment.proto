@@ -126,7 +126,7 @@ message App {
   string framework = 4 [(buf.validate.field) = {
     ignore: IGNORE_IF_ZERO_VALUE
     string: {
-      in: ["node", "next", "go", "python", "rust"]
+      in: ["node", "next", "sveltekit", "go", "python", "rust"]
     }
   }];
 
