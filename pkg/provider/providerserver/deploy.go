@@ -54,6 +54,18 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
+		if !req.GetDry() {
+			token := req.GetLeaseToken()
+			if token == "" {
+				if token, err = newLeaseToken(); err != nil {
+					return nil, err
+				}
+			}
+			if err := h.holdEnvironment(ctx, spec, token); err != nil {
+				return nil, err
+			}
+			defer h.releaseEnvironment(ctx, spec, token)
+		}
 		run, err := h.openDeploy(ctx, req, spec, sender)
 		if err != nil {
 			return nil, err

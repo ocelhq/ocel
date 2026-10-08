@@ -120,6 +120,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
 		infra := newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt)
+		defer infra.abandon(ctx, cfg.Slug)
 		if !opts.dry {
 			attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY, cfg, env, dependencies.DiscoverPRNumber())
 		}
@@ -179,6 +180,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			ProjectRegistry:  registry,
 			InlineBindings:   inline,
 			InfraProvisioned: infra.isProvisioned(),
+			LeaseToken:       infra.readLeaseToken(),
 		}
 
 		if opts.dry {
@@ -191,6 +193,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		if err != nil {
 			return err
 		}
+		infra.markShipped()
 		deployTelemetry.noteDeployed()
 
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, out.promotion(opts.tag), unread); err != nil {

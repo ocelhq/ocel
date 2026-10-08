@@ -1112,6 +1112,30 @@ func TestAFirstPreviewUpThatBuildsNothingToDeployLeavesNoPreviewBehind(t *testin
 	}
 }
 
+func TestAPersistentPreviewUpWhoseBuildFailsAfterItsInfraFreesThePreviewItHeld(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	dependencies := previewDependencies("feature/login", "")
+	stubBuild(&dependencies, apiFunction())
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		return build.Output{}, errors.New("simulated build failure")
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{name: "staging", persistent: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runPreviewUp succeeded through a failed build")
+	}
+
+	if len(sentProvisionInfras(t, fixture)) != 1 {
+		t.Fatal("the build failed before ProvisionInfra ran, so this test holds no lease to free")
+	}
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
+	if !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the lease of preview staging = %v, want none: a preview up whose build failed abandons the lease its infra took", err)
+	}
+}
+
 func TestAFirstPreviewUpWhoseBuildFailsAfterItsInfraIsProvisionedLeavesThePreviewRecorded(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 	addAppToFixtureConfig(t, fixture.Root)

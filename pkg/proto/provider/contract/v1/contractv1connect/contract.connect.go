@@ -42,6 +42,9 @@ const (
 	// ProviderServiceProvisionInfraProcedure is the fully-qualified name of the ProviderService's
 	// ProvisionInfra RPC.
 	ProviderServiceProvisionInfraProcedure = "/provider.contract.v1.ProviderService/ProvisionInfra"
+	// ProviderServiceAbandonDeployProcedure is the fully-qualified name of the ProviderService's
+	// AbandonDeploy RPC.
+	ProviderServiceAbandonDeployProcedure = "/provider.contract.v1.ProviderService/AbandonDeploy"
 	// ProviderServiceDeployProcedure is the fully-qualified name of the ProviderService's Deploy RPC.
 	ProviderServiceDeployProcedure = "/provider.contract.v1.ProviderService/Deploy"
 	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
@@ -138,6 +141,7 @@ const (
 type ProviderServiceClient interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	ProvisionInfra(context.Context, *v1.ProvisionInfraRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	AbandonDeploy(context.Context, *v1.AbandonDeployRequest) (*v1.AbandonDeployResponse, error)
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -192,6 +196,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ProviderServiceProvisionInfraProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("ProvisionInfra")),
+			connect.WithClientOptions(opts...),
+		),
+		abandonDeploy: connect.NewClient[v1.AbandonDeployRequest, v1.AbandonDeployResponse](
+			httpClient,
+			baseURL+ProviderServiceAbandonDeployProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("AbandonDeploy")),
 			connect.WithClientOptions(opts...),
 		),
 		deploy: connect.NewClient[v1.DeployRequest, v11.OperationEvent](
@@ -387,6 +397,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type providerServiceClient struct {
 	configure                 *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
 	provisionInfra            *connect.Client[v1.ProvisionInfraRequest, v11.OperationEvent]
+	abandonDeploy             *connect.Client[v1.AbandonDeployRequest, v1.AbandonDeployResponse]
 	deploy                    *connect.Client[v1.DeployRequest, v11.OperationEvent]
 	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
 	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
@@ -432,6 +443,15 @@ func (c *providerServiceClient) Configure(ctx context.Context, req *v1.Configure
 // ProvisionInfra calls provider.contract.v1.ProviderService.ProvisionInfra.
 func (c *providerServiceClient) ProvisionInfra(ctx context.Context, req *v1.ProvisionInfraRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.provisionInfra.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// AbandonDeploy calls provider.contract.v1.ProviderService.AbandonDeploy.
+func (c *providerServiceClient) AbandonDeploy(ctx context.Context, req *v1.AbandonDeployRequest) (*v1.AbandonDeployResponse, error) {
+	response, err := c.abandonDeploy.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // Deploy calls provider.contract.v1.ProviderService.Deploy.
@@ -653,6 +673,7 @@ func (c *providerServiceClient) ForwardPorts(ctx context.Context, req *v1.Forwar
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	ProvisionInfra(context.Context, *v1.ProvisionInfraRequest, *connect.ServerStream[v11.OperationEvent]) error
+	AbandonDeploy(context.Context, *v1.AbandonDeployRequest) (*v1.AbandonDeployResponse, error)
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -703,6 +724,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		ProviderServiceProvisionInfraProcedure,
 		svc.ProvisionInfra,
 		connect.WithSchema(providerServiceMethods.ByName("ProvisionInfra")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceAbandonDeployHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceAbandonDeployProcedure,
+		svc.AbandonDeploy,
+		connect.WithSchema(providerServiceMethods.ByName("AbandonDeploy")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceDeployHandler := connect.NewServerStreamHandlerSimple(
@@ -897,6 +924,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceConfigureHandler.ServeHTTP(w, r)
 		case ProviderServiceProvisionInfraProcedure:
 			providerServiceProvisionInfraHandler.ServeHTTP(w, r)
+		case ProviderServiceAbandonDeployProcedure:
+			providerServiceAbandonDeployHandler.ServeHTTP(w, r)
 		case ProviderServiceDeployProcedure:
 			providerServiceDeployHandler.ServeHTTP(w, r)
 		case ProviderServiceBootstrapProcedure:
@@ -974,6 +1003,10 @@ func (UnimplementedProviderServiceHandler) Configure(context.Context, *v1.Config
 
 func (UnimplementedProviderServiceHandler) ProvisionInfra(context.Context, *v1.ProvisionInfraRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ProvisionInfra is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) AbandonDeploy(context.Context, *v1.AbandonDeployRequest) (*v1.AbandonDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.AbandonDeploy is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error {

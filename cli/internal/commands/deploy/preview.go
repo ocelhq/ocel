@@ -236,6 +236,8 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		browser := dependencies.IsBrowserReachable(stdin)
 		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
 		scope.Browser = browser
+		infra := newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt)
+		defer infra.abandon(ctx, cfg.Slug)
 		recovery := variablesRecovery{
 			dependencies: dependencies,
 			cfg:          cfg,
@@ -255,7 +257,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			workerCeilings: facts.workerCeilings,
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
-			infra:          newInfraProvisioning(provider, env, facts, opts.dry, opts.prebuilt),
+			infra:          infra,
 			preBuild:       findPreBuild(cfg, env),
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
@@ -288,6 +290,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			InlineBindings:   inline,
 			AliasToken:       facts.builtAlias,
 			InfraProvisioned: recovery.infra.isProvisioned(),
+			LeaseToken:       recovery.infra.readLeaseToken(),
 		}
 
 		if opts.dry {
@@ -300,6 +303,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		if err != nil {
 			return err
 		}
+		recovery.infra.markShipped()
 		deployed = true
 		deployTelemetry.noteDeployed()
 

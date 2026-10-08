@@ -21,6 +21,8 @@ service ProviderService {
 
     rpc ProvisionInfra(ProvisionInfraRequest) returns (stream common.progress.v1.OperationEvent);
 
+    rpc AbandonDeploy(AbandonDeployRequest) returns (AbandonDeployResponse);
+
     rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
@@ -370,6 +372,8 @@ message DeployRequest {
   string alias_token = 8 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
 
   bool infra_provisioned = 9;
+
+  string lease_token = 10 [(buf.validate.field).string.pattern = "^([a-f0-9]{32})?$"];
 }
 
 message ProvisionInfraRequest {
@@ -382,7 +386,19 @@ message ProvisionInfraRequest {
   repeated common.bindings.v1.Binding inline_bindings = 4;
 
   string alias_token = 5 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
+
+  string lease_token = 6 [(buf.validate.field).string.pattern = "^[a-f0-9]{32}$"];
 }
+
+message AbandonDeployRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  string lease_token = 3 [(buf.validate.field).string.pattern = "^[a-f0-9]{32}$"];
+}
+
+message AbandonDeployResponse {}
 
 message ShapeRequest {
   Manifest manifest = 1 [(buf.validate.field).required = true];

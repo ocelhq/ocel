@@ -3,6 +3,8 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -12,10 +14,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func sentProvisionInfras(t *testing.T, fixture clitest.FakeProject) []*contractv1.ProvisionInfraRequest {
@@ -148,5 +153,98 @@ func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testi
 
 	if sent := sentProvisionInfras(t, fixture); len(sent) != 2 {
 		t.Errorf("the CLI sent %d ProvisionInfra requests, want 2: one for orders, none again for the same orders, one once uploads is declared", len(sent))
+	}
+}
+
+func TestADeployHoldsTheEnvironmentUnderOneLeaseFromItsInfraToItsApps(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	infra := sentProvisionInfras(t, fixture)
+	if len(infra) != 1 {
+		t.Fatalf("the CLI sent %d ProvisionInfra requests, want exactly 1", len(infra))
+	}
+	token := infra[0].GetLeaseToken()
+	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(token) {
+		t.Errorf("ProvisionInfra was sent the lease token %q, want 32 lowercase hex digits", token)
+	}
+	if got := sentDeploy(t, fixture).GetLeaseToken(); got != token {
+		t.Errorf("Deploy was sent the lease token %q, want %q, the one that provisioned the infra: the deploy ships under the lease it provisioned under", got, token)
+	}
+}
+
+func TestADeployNeverReusesALeaseTokenAcrossRuns(t *testing.T) {
+	seen := map[string]bool{}
+	for _, run := range []string{"first", "second"} {
+		t.Run(run, func(t *testing.T) {
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
+			fixture := setUpDeployProject(t)
+
+			deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+			seen[sentProvisionInfras(t, fixture)[0].GetLeaseToken()] = true
+		})
+	}
+	if len(seen) != 2 {
+		t.Errorf("two runs sent %d distinct lease tokens, want 2: a token shared between runs would let one run renew another's lease", len(seen))
+	}
+}
+
+func TestAPrebuiltDeploySendsNoLeaseTokenForTheProviderToMint(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true, prebuilt: true})
+
+	if got := sentDeploy(t, fixture).GetLeaseToken(); got != "" {
+		t.Errorf("a --prebuilt deploy was sent the lease token %q, want none: nothing provisioned infra under one", got)
+	}
+}
+
+func deployLeaseHeld(t *testing.T, fixture clitest.FakeProject) bool {
+	t.Helper()
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv))
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Fatalf("reading the deploy lease = %v", err)
+	}
+	return err == nil
+}
+
+func TestADeployWhoseBuildFailsAfterItsInfraFreesTheEnvironmentItHeld(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		return build.Output{}, errors.New("simulated build failure")
+	}
+	fixture := setUpDeployProject(t)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded through a failed build")
+	}
+
+	if len(sentProvisionInfras(t, fixture)) != 1 {
+		t.Fatal("the build failed before ProvisionInfra ran, so this test holds no lease to free")
+	}
+	if deployLeaseHeld(t, fixture) {
+		t.Error("the environment still holds the lease of a deploy whose build failed, want it abandoned so the next deploy is not refused until it expires")
+	}
+}
+
+func TestASucceededDeployLeavesNoLeaseBehind(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	if deployLeaseHeld(t, fixture) {
+		t.Error("the environment still holds a deploy lease after the deploy succeeded")
 	}
 }
