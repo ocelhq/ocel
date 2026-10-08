@@ -436,6 +436,8 @@ message InitResult {
   string language = 5;
 
   optional string sdk_package = 6;
+
+  bool skill_installed = 7;
 }
 
 message SchemaListResult {

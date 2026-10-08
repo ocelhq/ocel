@@ -171,3 +171,17 @@ func splitFrontmatter(t *testing.T, text string) (front, body string) {
 	}
 	return front, body
 }
+func TestIsInstalledInEitherProjectSkillDir(t *testing.T) {
+	for _, pick := range []int{0, 1} {
+		root := t.TempDir()
+		if IsInstalled(root) {
+			t.Fatal("IsInstalled is true for a root with no skill")
+		}
+		if err := Write(Dirs(root)[pick], "1.0.0"); err != nil {
+			t.Fatal(err)
+		}
+		if !IsInstalled(root) {
+			t.Errorf("IsInstalled is false with the skill in %s", Dirs(root)[pick])
+		}
+	}
+}

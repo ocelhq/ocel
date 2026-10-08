@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -38,6 +39,8 @@ const sdkPackage = "ocel"
 const goSDKModule = "ocel.dev"
 
 const rustSDKCrate = "ocel-sdk"
+
+const skillSuggestion = "Coding agent? `ocel skill install --yes` gives it the ocel skill."
 
 type initOptions struct {
 	provider   string
@@ -116,6 +119,9 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 	}
 	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, result)
+	}
+	if !result.GetSkillInstalled() {
+		fmt.Fprintln(prompts, skillSuggestion)
 	}
 	return nil
 }
@@ -222,11 +228,12 @@ func initProject(ctx context.Context, dependencies Dependencies, resolved resolv
 		return nil, err
 	}
 	result := &resultv1.InitResult{
-		ConfigPath: configPath,
-		Format:     configFormat(name),
-		Slug:       slug,
-		Provider:   provider,
-		Language:   lang.name,
+		ConfigPath:     configPath,
+		Format:         configFormat(name),
+		Slug:           slug,
+		Provider:       provider,
+		Language:       lang.name,
+		SkillInstalled: skill.IsInstalled(resolved.projectDir),
 	}
 	if added != "" {
 		result.SdkPackage = &added

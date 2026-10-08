@@ -10,6 +10,10 @@
         },
         "^(sdk_package)$": {
           "type": "string"
+        },
+        "^(skill_installed)$": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "properties": {
@@ -50,6 +54,10 @@
         },
         "sdkPackage": {
           "type": "string"
+        },
+        "skillInstalled": {
+          "default": false,
+          "type": "boolean"
         },
         "slug": {
           "default": "",

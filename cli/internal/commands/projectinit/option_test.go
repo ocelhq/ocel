@@ -146,8 +146,8 @@ func TestInitDoesNotAskForAnOptionAFlagAlreadyGave(t *testing.T) {
 	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", opts, strings.NewReader(""), &prompts, io.Discard); err != nil {
 		t.Fatalf("runInitCommand err = %v", err)
 	}
-	if prompts.Len() > 0 {
-		t.Errorf("asked %q, want no question", prompts.String())
+	if asked := strings.TrimSuffix(prompts.String(), skillSuggestion+"\n"); asked != "" {
+		t.Errorf("asked %q, want no question", asked)
 	}
 }
 
