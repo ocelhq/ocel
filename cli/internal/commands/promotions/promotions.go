@@ -145,6 +145,10 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		p.Check.End(nil)
 		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
 		plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))
+		registry, warning := readiness.RemovalRegistry(cfg)
+		if warning != "" {
+			plan.Warn(warning)
+		}
 		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Reclaim the older production promotions of %q?", cfg.Slug))
 		plan.End(err)
 		if err != nil {
@@ -156,9 +160,10 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		}
 
 		req := &contractv1.RemoveStalePromotionsRequest{
-			Slug:  cfg.Slug,
-			KeepN: int32(opts.keep),
-			Edge:  cfg.EdgeSelection(),
+			Slug:            cfg.Slug,
+			KeepN:           int32(opts.keep),
+			Edge:            cfg.EdgeSelection(),
+			ProjectRegistry: registry,
 		}
 		if _, err := providerprocess.Stream(ctx, p.Provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 			return err

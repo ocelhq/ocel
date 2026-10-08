@@ -787,6 +787,8 @@ message RollbackRequest {
   string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
+
+  ImageRegistry project_registry = 5;
 }
 
 message RollbackResponse {
@@ -802,6 +804,8 @@ message RemoveStalePromotionsRequest {
   common.environment.v1.Environment environment = 3;
 
   EdgeSelection edge = 4;
+
+  ImageRegistry project_registry = 5;
 }
 
 message Question {

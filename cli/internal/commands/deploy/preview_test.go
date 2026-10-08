@@ -665,7 +665,7 @@ func TestPreviewPruneTakesItsNameOnTheCommandLine(t *testing.T) {
 	}
 	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
 	if len(requests) != 1 || requests[0].GetEnvironment().GetIdentity() != "staging" || requests[0].GetKeepN() != 5 {
-		t.Errorf("the CLI pruned %v, want staging pruned down to 5", requests)
+		t.Errorf("the CLI pruned %d environments, want staging pruned down to 5", len(requests))
 	}
 }
 

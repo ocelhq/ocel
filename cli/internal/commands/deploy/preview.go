@@ -503,13 +503,18 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 	}
 
 	return dependencies.WithProvider(ctx, cfg, "ocel preview prune", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+		registry, warning := readiness.RemovalRegistry(cfg)
+		if warning != "" {
+			p.Check.Warn(warning)
+		}
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		req := &contractv1.RemoveStalePromotionsRequest{
-			Slug:        cfg.Slug,
-			KeepN:       int32(opts.keep),
-			Environment: env,
-			Edge:        cfg.EdgeSelection(),
+			Slug:            cfg.Slug,
+			KeepN:           int32(opts.keep),
+			Environment:     env,
+			Edge:            cfg.EdgeSelection(),
+			ProjectRegistry: registry,
 		}
 		if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 			return err
