@@ -59,6 +59,7 @@ var (
 	messagesBand = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
 	taskOpsBand  = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
 	socketsBand  = pricing.Band{Light: 180, Moderate: 730, Heavy: 730}
+	aliveBand    = pricing.Band{Light: 180, Moderate: 730, Heavy: 730}
 	thousand     = decimal.NewFromInt(1000)
 	kibPerGiB    = decimal.NewFromInt(1 << 20)
 )
@@ -111,6 +112,7 @@ func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estima
 		"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
 		"the forwarding rule is priced as the project's first five, which share one hourly charge",
 		"a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills",
+		"a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month",
 	)
 	return estimate, nil
 }
@@ -127,7 +129,8 @@ func cloudRunService(r *pricing.Subject) {
 	case !r.Bool(cpuIdle):
 		seconds := func() decimal.Decimal {
 			warm, _ := r.Number("template.scaling.min_instance_count").Mul(pricing.MonthlyHours).Float64()
-			return r.Usage(usageInstanceHours, pricing.Band{Light: warm, Moderate: warm, Heavy: warm}).Mul(decimal.NewFromInt(secondsPerHour))
+			alive := pricing.Band{Light: max(warm, aliveBand.Light), Moderate: max(warm, aliveBand.Moderate), Heavy: max(warm, aliveBand.Heavy)}
+			return r.Usage(usageInstanceHours, alive).Mul(decimal.NewFromInt(secondsPerHour))
 		}
 		r.Add(pricing.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds().Mul(cpu()), Needs: billing})
 		r.Add(pricing.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds().Mul(memoryGiB()), Needs: billing})
