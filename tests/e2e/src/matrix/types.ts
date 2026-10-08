@@ -161,6 +161,9 @@ export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
   if (variant.config.edge !== undefined) {
     return "edge";
   }
+  if (target === "gcp") {
+    return "origin";
+  }
   const compute = variant.config.compute ?? COMPUTE_WHEN_NONE_IS_NAMED[target];
   return compute === "container" ? "origin" : "edge";
 }

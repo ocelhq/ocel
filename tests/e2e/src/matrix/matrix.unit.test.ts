@@ -200,6 +200,16 @@ describe("the needs a Google Cloud origin does not serve", () => {
     }
   });
 
+  it("expects the edge runtime's stamp green on a Next container on gcp and floci-gcp, whose Next server runs edge routes itself", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const listed = planOn(lane).expectedFailures["deploy/next-container/web"] ?? {};
+
+      expect(
+        Object.keys(listed).filter((title) => title.includes("stamp themselves apart")),
+      ).toEqual([]);
+    }
+  });
+
   it("expects the edge runtime's stamp red on every Next deploy on gcp and floci-gcp, where edge routes run on node", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const listed = planOn(lane).expectedFailures["deploy/next/web"] ?? {};
@@ -296,17 +306,19 @@ describe("Next on gcp", () => {
     expect(gaps.find((gap) => gap.id === "next-on-cloud-run")).toBeUndefined();
   });
 
-  it("expects only floci's buffering and rewriting red on the Next deploys on floci-gcp", () => {
+  it("expects only floci's buffering and rewriting red on the Next deploys on floci-gcp, beyond what every gcp lane lists", () => {
     const planned = planOn("gcp.floci");
+    const onEveryGcpLane = planOn("gcp").expectedFailures;
     const apps = { "deploy/workspace": ["next", "express"] } as Record<string, string[]>;
+    const streamPage: Record<string, number> = { "deploy/next": 1, "deploy/next-container": 1 };
     for (const cell of NEXT_DEPLOYS) {
       for (const app of apps[cell.replace(/-container$/, "")] ?? ["web"]) {
         const listed = Object.fromEntries(
           Object.entries(planned.expectedFailures[`${cell}/${app}`] ?? {}).filter(
-            ([title]) => !title.includes("stamp themselves apart"),
+            ([title]) => !(title in (onEveryGcpLane[`${cell}/${app}`] ?? {})),
           ),
         );
-        expect(Object.keys(listed)).toHaveLength(6);
+        expect(Object.keys(listed)).toHaveLength(6 + (streamPage[cell] ?? 0));
         for (const gapsListed of Object.values(listed)) {
           expect(gapsListed.map((gap) => gap.id)).toEqual(["floci-cloud-run-buffers-and-rewrites"]);
         }
@@ -314,7 +326,7 @@ describe("Next on gcp", () => {
     }
   });
 
-  it("holds a serverless Next app on gcp to the cache in front of the Next server", () => {
+  it("holds a serverless Next app on gcp with no edge to the Next server's own cache, since nothing caches in front of it", () => {
     const edgeTitles = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
     const originTitles = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
       (one) => one.title,
@@ -323,12 +335,12 @@ describe("Next on gcp", () => {
     for (const cell of ["deploy/next", "lifecycle/next"]) {
       const titles =
         planned.cells.find((one) => one.name === cell)?.steps.map((one) => one.title) ?? [];
-      expect(
-        titles.filter((title) => edgeTitles.some((cache) => title.endsWith(cache))),
-      ).not.toEqual([]);
-      expect(titles.filter((title) => originTitles.some((cache) => title.endsWith(cache)))).toEqual(
+      expect(titles.filter((title) => edgeTitles.some((cache) => title.endsWith(cache)))).toEqual(
         [],
       );
+      expect(
+        titles.filter((title) => originTitles.some((cache) => title.endsWith(cache))),
+      ).not.toEqual([]);
     }
   });
 
