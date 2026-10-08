@@ -69,7 +69,16 @@ type streamLog struct {
 func (l *streamLog) send(event *contractv1.ForwardPortsEvent) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
+	if l.stream == nil {
+		return nil
+	}
 	return l.stream.Send(event)
+}
+
+func (l *streamLog) close() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.stream = nil
 }
 
 func (l *streamLog) say(event *progressv1.OperationEvent) {
@@ -139,6 +148,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		return forward == nil || !isReachableByPort(binding)
 	})
 	said := &streamLog{stream: stream}
+	defer said.close()
 	failed := make(chan error, 1)
 	reportFailure := func(err error) {
 		select {

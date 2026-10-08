@@ -345,3 +345,68 @@ func TestWhatTheProviderSaysWhileOpeningForwardsAndWhileTheyAreHeldReachesTheCal
 		t.Errorf("the caller heard %q, want %q", said, want)
 	}
 }
+
+func TestWhatTheProviderSaysOnceItsForwardsAreClosedGoesNowhere(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	opened := make(chan progress.Log, 1)
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+			opened <- progress
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	said := <-opened
+	leave()
+	stream.Close()
+	<-closed
+	for range 50 {
+		said.Warn("A connection to orders failed")
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestWhatTheProviderSaysWhileClosingForwardsThatFailedGoesNowhere(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+			req.ReportFailure(errors.New("the bastion task stopped: Task stopped by user"))
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() {
+				defer close(closed)
+				for range 50 {
+					progress.Warn("Closing the forward of orders")
+					time.Sleep(time.Millisecond)
+				}
+			}}}, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	for stream.Receive() {
+		if progress := stream.Msg().GetProgress(); progress != nil {
+			t.Errorf("ForwardPorts() sent %q while closing forwards that failed, want nothing once the failure ends the stream", progress.GetMessage())
+		}
+	}
+	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
+		t.Errorf("ForwardPorts() stream ended with %v, want the failure the provider reported", err)
+	}
+	stream.Close()
+	<-closed
+}
