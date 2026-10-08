@@ -81,7 +81,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 				return err
 			}
 
-			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.InOrStdin(), cmd.OutOrStdout())
+			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.InOrStdin(), commands.ChooseRunOutput(cmd), cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
@@ -91,17 +91,21 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
 
-func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdin io.Reader, stdout io.Writer) error {
-	if len(findMissingOptions(strings.TrimSpace(opts.provider), opts.settings)) > 0 && dependencies.CanAsk(stdin) {
+func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdin io.Reader, prompts, stdout io.Writer) error {
+	resolved, err := resolveInit(cwd, slug, opts)
+	if err != nil {
+		return err
+	}
+	if len(findMissingOptions(resolved.provider, resolved.settings)) > 0 && dependencies.CanAsk(stdin) {
 		err := dependencies.Events.Preamble(ctx).Ask(func() (err error) {
-			opts.settings, _, err = askMissingOptions(ctx, terminal.NewPrompt(stdout, stdin), strings.TrimSpace(opts.provider), opts.settings)
+			resolved.settings, _, err = askMissingOptions(ctx, terminal.NewPrompt(prompts, stdin), resolved.provider, resolved.settings)
 			return err
 		})
 		if err != nil {
 			return err
 		}
 	}
-	result, err := runInit(ctx, dependencies, cwd, slug, opts)
+	result, err := initProject(ctx, dependencies, resolved)
 	if err != nil {
 		return err
 	}
@@ -112,12 +116,30 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 }
 
 func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) (*resultv1.InitResult, error) {
+	resolved, err := resolveInit(cwd, slug, opts)
+	if err != nil {
+		return nil, err
+	}
+	return initProject(ctx, dependencies, resolved)
+}
+
+type resolvedInit struct {
+	configPath string
+	projectDir string
+	slug       string
+	provider   string
+	settings   []providerSetting
+	lang       sdkLanguage
+	detected   bool
+}
+
+func resolveInit(cwd, slug string, opts initOptions) (resolvedInit, error) {
 	if opts.format != "" && !slices.Contains(configFormats, opts.format) {
-		return nil, clierror.NewInputRequired(fmt.Errorf("--format names %q, and ocel writes a config as %s", opts.format, english.Or(configFormats)), "--format <ts|json|yaml>")
+		return resolvedInit{}, clierror.NewInputRequired(fmt.Errorf("--format names %q, and ocel writes a config as %s", opts.format, english.Or(configFormats)), "--format <ts|json|yaml>")
 	}
 	configPath, err := initConfigPath(cwd, opts)
 	if err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
 	projectDir := cwd
 	if configPath != "" {
@@ -126,31 +148,28 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 
 	slug, err = resolveSlug(projectDir, slug)
 	if err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
 
 	provider := strings.TrimSpace(opts.provider)
 	shipped := configdoc.ProviderIDs()
 	if provider == "" {
-		return nil, clierror.NewInputRequired(
+		return resolvedInit{}, clierror.NewInputRequired(
 			fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", ")),
 			"--provider <id>",
 		)
 	}
 	if !slices.Contains(shipped, provider) {
-		return nil, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
+		return resolvedInit{}, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
 	}
 
 	if err := refuseUnknownOptions(provider, opts.settings); err != nil {
-		return nil, err
-	}
-	if err := refuseMissingOptions(provider, opts.settings); err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
 	if err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
 	if configPath == "" {
 		configPath = filepath.Join(projectDir, configFileName(opts, lang))
@@ -158,20 +177,37 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	name := filepath.Base(configPath)
 
 	if _, err := os.Stat(configPath); err == nil {
-		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
+		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("check for existing %s: %w", name, err)
+		return resolvedInit{}, fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
-		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
+		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
+	return resolvedInit{
+		configPath: configPath,
+		projectDir: projectDir,
+		slug:       slug,
+		provider:   provider,
+		settings:   opts.settings,
+		lang:       lang,
+		detected:   detected,
+	}, nil
+}
 
-	completion := newInitCompletion(configPath, provider, projectDir, lang, detected)
+func initProject(ctx context.Context, dependencies Dependencies, resolved resolvedInit) (*resultv1.InitResult, error) {
+	if err := refuseMissingOptions(resolved.provider, resolved.settings); err != nil {
+		return nil, err
+	}
+	configPath, slug, provider, lang := resolved.configPath, resolved.slug, resolved.provider, resolved.lang
+	name := filepath.Base(configPath)
+
+	completion := newInitCompletion(configPath, provider, resolved.projectDir, lang, resolved.detected)
 	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")
 	if err != nil {
 		return nil, err
 	}
-	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
+	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, resolved.settings, lang, resolved.detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
 		dependencies.RecordEvent(completion)
