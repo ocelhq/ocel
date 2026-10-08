@@ -1,0 +1,62 @@
+---
+title: Using Ocel with coding agents
+description: Give a coding agent the ocel skill, and what it reads from the CLI.
+---
+
+A coding agent such as Claude Code, Codex or Cursor can declare resources, run `ocel dev` and ship previews for you. The ocel skill teaches it how, and every command prints JSON it can act on.
+
+## Install the skill
+
+From the project root, with the skills CLI:
+
+```bash
+npx skills add ocelhq/ocel --skill ocel
+```
+
+Or with the `ocel` binary, which carries the skill for its own version:
+
+```bash
+ocel skill install --yes
+```
+
+This writes the skill into `.claude/skills/ocel` and `.agents/skills/ocel` at the project root. Without `--yes` it lists the files and writes nothing. `--global` writes them under your home directory instead. Each install records the CLI version in the skill, and `ocel doctor` warns when the CLI has moved on; run the install again to update it.
+
+## JSON output
+
+Pass `--json`, or set `OCEL_JSON=1`, and nothing prompts. A command that returns data prints one line:
+
+```json
+{"ok":true,"data":{...}}
+```
+
+or, when it fails:
+
+```json
+{"ok":false,"error":{"code":"project.no_config","message":"...","hint":"ocel init --provider <id>","docsUrl":"https://ocel.dev/docs/errors/project.no_config"}}
+```
+
+A command that changes something, such as `ocel deploy`, prints one JSON event per line and ends with a `summary` event. To pull the error code out of a failure:
+
+```bash
+ocel env ls --json | jq -r 'if .ok then "ok" else .error.code end'
+```
+
+## Errors
+
+Every error carries a stable `code`, the `hint` that resolves it when there is one, and a `docsUrl` pointing at its page in the [error reference](/docs/errors). When a command needs a confirmation it cannot ask for, it fails with [`confirmation_required`](/docs/errors/confirmation_required) and changes nothing.
+
+## Finding commands
+
+The binary describes itself, so an agent never relies on a copied list:
+
+- `ocel help --json` prints every command, argument and flag, and whether each command changes anything.
+- `ocel help <command> --json` describes one command.
+- `ocel schema <command>` prints the JSON Schema of what that command prints under `--json`.
+
+## Reading the docs
+
+`https://ocel.dev/llms.txt` indexes these docs for agents. Any docs page is also served as markdown at its URL plus `.md`, such as `https://ocel.dev/docs/errors/project.no_config.md`.
+
+## What stays with you
+
+The skill tells the agent to bring you the plan and wait for production deploys, rollbacks, `ocel bootstrap`, `ocel destroy`, `--yes` on anything that changes your account, and anything that costs money. Nothing in the CLI enforces this: an agent with your credentials can run any command you can, so give it only the credentials you would trust it with.
