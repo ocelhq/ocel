@@ -195,6 +195,7 @@ type repositoryECR struct {
 	registry.ECRAPI
 	tags    []string
 	deleted []string
+	refusal error
 }
 
 func (e *repositoryECR) GetAuthorizationToken(context.Context, *ecr.GetAuthorizationTokenInput, ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error) {
@@ -205,6 +206,9 @@ func (e *repositoryECR) GetAuthorizationToken(context.Context, *ecr.GetAuthoriza
 }
 
 func (e *repositoryECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageInput, _ ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error) {
+	if e.refusal != nil {
+		return nil, e.refusal
+	}
 	out := &ecr.BatchDeleteImageOutput{}
 	for _, id := range in.ImageIds {
 		e.tags = slices.DeleteFunc(e.tags, func(tag string) bool { return tag == aws.ToString(id.ImageTag) })
@@ -272,5 +276,69 @@ func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *tes
 
 	if !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
 		t.Errorf("forgetImages() deleted the repositories %v, want ocel/shop.web: an image under this account's ECR is reclaimed as ECR's, whatever store carries it", api.deleted)
+	}
+}
+
+type interleavedEntries struct {
+	keyvalue.Store
+	tier    environment.Tier
+	between func()
+}
+
+func (i *interleavedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	entries, err := i.Store.List(ctx, in, under...)
+	if run := i.between; run != nil && in.Tier == i.tier {
+		i.between = nil
+		run()
+	}
+	return entries, err
+}
+
+func TestTwoPreviewsSharingAnImageDestroyedTogetherLeaveNeitherTheImageNorItsRepository(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	first := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))}
+	second := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-8", "web", naming.NewReleaseToken("b1", ""))}
+	recordImage(t, store, first.Tier, first.Project, first.Name, "ecr/ocel/shop.web:sha256-shared")
+	recordImage(t, store, second.Tier, second.Project, second.Name, "ecr/ocel/shop.web:sha256-shared")
+	api := &repositoryECR{tags: []string{"sha256-shared"}}
+	destroy := func(store keyvalue.Store, ref provider.StackRef) {
+		if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err != nil {
+			t.Errorf("forgetImages(%s) = %v", ref.Name, err)
+		}
+		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
+			t.Errorf("stackrecords.Forget(%s) = %v", ref.Name, err)
+		}
+	}
+	interleaved := &interleavedEntries{Store: store, tier: environment.TierPreview, between: func() { destroy(store, second) }}
+
+	destroy(interleaved, first)
+
+	if len(api.tags) != 0 || !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
+		t.Errorf("the two destroys left the tags %v and deleted the repositories %v, want no tag and ocel/shop.web deleted: each read the other's image while the other was going, and once both records are gone no stack is left to reclaim it", api.tags, api.deleted)
+	}
+}
+
+func TestAForgetThatFailsAfterDroppingItsImagesStillLeavesThemForARetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))}
+	recordImage(t, store, ref.Tier, ref.Project, ref.Name, "ecr/ocel/shop.web:sha256-own")
+	api := &repositoryECR{tags: []string{"sha256-own"}, refusal: errors.New("ecr:BatchDeleteImage is not granted")}
+
+	if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err == nil {
+		t.Fatal("forgetImages() = nil though ECR refused the delete")
+	}
+	api.refusal = nil
+	if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err != nil {
+		t.Fatalf("forgetImages() on the retry = %v", err)
+	}
+
+	if len(api.tags) != 0 {
+		t.Errorf("the retry left the tags %v, want none: the stack's record still names its image until the destroy finishes", api.tags)
 	}
 }

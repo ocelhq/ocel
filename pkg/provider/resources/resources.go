@@ -243,6 +243,11 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images 
 			return err
 		}
 	}
+	if len(recorded.Images()) > 0 {
+		if err := stackrecords.ForgetAppImages(ctx, f.keyValues, ref.Tier, ref.Project, ref.Name); err != nil {
+			return err
+		}
+	}
 	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, images, progress); err != nil {
 		return err
 	}
