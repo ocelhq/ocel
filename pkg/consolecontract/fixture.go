@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -38,7 +38,6 @@ type Response struct {
 
 type Binding struct {
 	Values map[string]string
-	Minted []string
 }
 
 var placeholder = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
@@ -96,9 +95,6 @@ func substitute(t testing.TB, name, text string, b Binding, inJSON bool) string 
 			encoded, _ := json.Marshal(value)
 			return string(encoded[1 : len(encoded)-1])
 		}
-		if !inJSON && slices.Contains(b.Minted, key) {
-			return match
-		}
 		t.Fatalf("fixture %s uses {{%s}}, which the binding does not hold", name, key)
 		return match
 	})
@@ -106,31 +102,17 @@ func substitute(t testing.TB, name, text string, b Binding, inJSON bool) string 
 
 type FixtureServer struct {
 	URL string
-
-	mu     sync.Mutex
-	minted map[string]string
-}
-
-func (s *FixtureServer) Minted(key string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.minted[key]
 }
 
 func ServeFixture(t testing.TB, f Fixture, b Binding) *FixtureServer {
 	t.Helper()
 	f = f.Resolve(t, b)
-	served := &FixtureServer{minted: map[string]string{}}
-	var requests int
+	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		served.mu.Lock()
-		requests++
-		seen := requests
-		served.mu.Unlock()
-		if seen > 1 {
+		if seen := requests.Add(1); seen > 1 {
 			t.Errorf("fixture %s: request %d arrived, want exactly one", f.Name, seen)
 		}
-		requireRequest(t, f, b, r, served)
+		requireRequest(t, f, r)
 		if !isNull(f.Response.Body) {
 			w.Header().Set("Content-Type", "application/json")
 		}
@@ -141,15 +123,14 @@ func ServeFixture(t testing.TB, f Fixture, b Binding) *FixtureServer {
 	}))
 	t.Cleanup(func() {
 		server.Close()
-		if requests != 1 {
-			t.Errorf("fixture %s: %d requests arrived, want exactly one", f.Name, requests)
+		if seen := requests.Load(); seen != 1 {
+			t.Errorf("fixture %s: %d requests arrived, want exactly one", f.Name, seen)
 		}
 	})
-	served.URL = server.URL
-	return served
+	return &FixtureServer{URL: server.URL}
 }
 
-func requireRequest(t testing.TB, f Fixture, b Binding, r *http.Request, served *FixtureServer) {
+func requireRequest(t testing.TB, f Fixture, r *http.Request) {
 	t.Helper()
 	if r.Method != f.Request.Method {
 		t.Errorf("fixture %s: method %s, want %s", f.Name, r.Method, f.Request.Method)
@@ -174,15 +155,9 @@ func requireRequest(t testing.TB, f Fixture, b Binding, r *http.Request, served 
 		case listed != sent:
 			t.Errorf("fixture %s: header %s is %q, want %q", f.Name, name, got, want)
 		case listed:
-			captured, matched := matchTemplate(want[0], r.Header.Get(name), b.Minted)
-			if !matched {
-				t.Errorf("fixture %s: header %s is %q, want %q", f.Name, name, r.Header.Get(name), want[0])
+			if got[0] != want[0] {
+				t.Errorf("fixture %s: header %s is %q, want %q", f.Name, name, got[0], want[0])
 			}
-			served.mu.Lock()
-			for key, value := range captured {
-				served.minted[key] = value
-			}
-			served.mu.Unlock()
 		}
 	}
 	body, err := io.ReadAll(r.Body)
@@ -208,35 +183,6 @@ func requireRequest(t testing.TB, f Fixture, b Binding, r *http.Request, served 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("fixture %s: request body %s, want %s", f.Name, body, f.Request.Body)
 	}
-}
-
-func matchTemplate(template, actual string, minted []string) (map[string]string, bool) {
-	var pattern strings.Builder
-	var keys []string
-	pattern.WriteString("^")
-	last := 0
-	for _, at := range placeholder.FindAllStringSubmatchIndex(template, -1) {
-		pattern.WriteString(regexp.QuoteMeta(template[last:at[0]]))
-		key := template[at[2]:at[3]]
-		if !slices.Contains(minted, key) {
-			pattern.WriteString(regexp.QuoteMeta(template[at[0]:at[1]]))
-		} else {
-			pattern.WriteString("(.+)")
-			keys = append(keys, key)
-		}
-		last = at[1]
-	}
-	pattern.WriteString(regexp.QuoteMeta(template[last:]))
-	pattern.WriteString("$")
-	found := regexp.MustCompile(pattern.String()).FindStringSubmatch(actual)
-	if found == nil {
-		return nil, false
-	}
-	captured := map[string]string{}
-	for i, key := range keys {
-		captured[key] = found[i+1]
-	}
-	return captured, true
 }
 
 func RequireDecodedBody(t testing.TB, f Fixture, b Binding, decoded any) {
