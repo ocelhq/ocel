@@ -17,7 +17,6 @@ import (
 	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -120,9 +119,7 @@ func (p *Provider) removeUnusedImages(ctx context.Context, ref provider.StackRef
 		return
 	}
 	readAt := time.Now()
-	recorded, err := stackrecords.ListRecordedAppImages(ctx, p.KeyValues(), ref.Project, ref.Name.App, func(tier environment.Tier, name naming.StackName) bool {
-		return tier != ref.Tier || name != ref.Name
-	})
+	recorded, err := stackrecords.ListRecordedAppImages(ctx, p.KeyValues(), ref.Project, ref.Name.App, ref)
 	if err != nil {
 		ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as the images the project's other stacks record could not be read: %v", strings.Join(ran, ", "), err))
 		return
