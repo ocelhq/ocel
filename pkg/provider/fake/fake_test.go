@@ -155,7 +155,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 	if _, err := stacks.Provision(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if err := stacks.Destroy(ctx, ref, progress); err != nil {
+	if err := stacks.Destroy(ctx, ref, nil, progress); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}, progress); err != nil {

@@ -108,16 +108,16 @@ func registryTargetOf(project *contractv1.ImageRegistry) provider.RegistryTarget
 	}
 }
 
-func withRemovalImages(ctx context.Context, p provider.Provider, project *contractv1.ImageRegistry, log progress.Log) context.Context {
+func removalImages(ctx context.Context, p provider.Provider, project *contractv1.ImageRegistry, log progress.Log) provider.ImageStore {
 	if project.GetServer() == "" {
-		return ctx
+		return nil
 	}
 	store, err := imageStoreFor(ctx, p, registryTargetOf(project))
 	if err != nil {
 		log.Warn(fmt.Sprintf("Left the images this project pushed to %s in place, as the registry could not be opened: %v", project.GetServer(), err))
-		return ctx
+		return nil
 	}
-	return provider.WithImageStore(ctx, store)
+	return store
 }
 
 func (r *deployRun) registryTarget(ctx context.Context, project *contractv1.ImageRegistry) (provider.RegistryTarget, error) {

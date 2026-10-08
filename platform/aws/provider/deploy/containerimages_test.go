@@ -130,7 +130,7 @@ func TestDestroyingAContainerStackForgetsItsApp(t *testing.T) {
 		t.Fatalf("Provision() = %v", err)
 	}
 
-	if err := stacks.Destroy(ctx, spec.Ref, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, spec.Ref, nil, progress.Discard()); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestDestroyingAStackThatCannotForgetItsImagesFailsSoARetryReclaimsThem(t *t
 	}
 	retained.refusal = errors.New("ecr:BatchDeleteImage is not granted")
 
-	if err := stacks.Destroy(ctx, spec.Ref, progress.Discard()); !errors.Is(err, retained.refusal) {
+	if err := stacks.Destroy(ctx, spec.Ref, nil, progress.Discard()); !errors.Is(err, retained.refusal) {
 		t.Errorf("Destroy() = %v, want the refusal: the record of the stack stays, and the next destroy reclaims what this one could not", err)
 	}
 }

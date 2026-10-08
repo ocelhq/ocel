@@ -172,13 +172,13 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 		t.Fatalf("the second container deploy ran %v, want the shared container infrastructure reused rather than provisioned again", ran)
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, nil, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if destroyed := engine.torn(); len(destroyed) != 1 {
 		t.Fatalf("destroying one of two container stacks tore down %v, want only its own: the other still answers behind the front", destroyed)
 	}
-	if err := stacks.Destroy(ctx, blog.Ref, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, blog.Ref, nil, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()

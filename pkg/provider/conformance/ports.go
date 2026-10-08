@@ -894,7 +894,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 	t.Run("Destroy of a stack that was never provisioned is a no-op", func(t *testing.T) {
 		absent := ref
 		absent.Name = naming.InfraStack("never-provisioned")
-		if err := stacks.Destroy(ctx, absent, nil); err != nil {
+		if err := stacks.Destroy(ctx, absent, nil, nil); err != nil {
 			t.Fatalf("Destroy() of an absent stack = %v, want nil so a rerun of a teardown is safe", err)
 		}
 	})
@@ -1091,7 +1091,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			}
 		}
 
-		if err := stacks.Destroy(ctx, ref, nil); err != nil {
+		if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
 			t.Fatalf("Destroy() of the stack just provisioned = %v", err)
 		}
 	})
@@ -1107,7 +1107,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			if len(result.Bindings) == 0 {
 				t.Fatal("Provision() of a primitive this provider does not serve provisioned nothing and refused nothing, so a release reads as done where nothing happened")
 			}
-			if derr := stacks.Destroy(ctx, ref, nil); derr != nil {
+			if derr := stacks.Destroy(ctx, ref, nil, nil); derr != nil {
 				t.Fatal(derr)
 			}
 			t.Skip("this provider provisions a resource of any type, so there is no unserved primitive to refuse")

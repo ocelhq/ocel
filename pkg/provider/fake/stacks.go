@@ -121,11 +121,11 @@ func (r *Stacks) DestroyedWith() []provider.ImageStore {
 	return slices.Clone(r.destroyedWith)
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.destroyedWith = append(r.destroyedWith, provider.ImageStoreFrom(ctx))
+	r.destroyedWith = append(r.destroyedWith, images)
 	if r.refusal != nil {
 		refused := r.refusal
 		r.refusal = nil

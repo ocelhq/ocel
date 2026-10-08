@@ -117,7 +117,7 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if spec.App != nil {
-		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress) }()
+		defer func() { _ = ReconcileImages(ctx, f.hooks.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress) }()
 	}
 	if err := f.refuseUnservedResources(spec); err != nil {
 		return provider.StackResult{}, err
@@ -231,7 +231,7 @@ func (f *hookStacks) provisionerFor(resource provider.Resource) (provisionFunc, 
 		resource.Name, resource.Type, served(ServedBindingTypes(f.hooks)))
 }
 
-func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err
@@ -249,27 +249,19 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 	}
 	var stopped error
 	for _, container := range recorded.Containers {
-		if err := f.forget(ctx, ref, container.Name, progress); err != nil && stopped == nil {
+		if err := ForgetReleases(ctx, f.hooks.Retention, ref, container.Name, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
 	for _, container := range recorded.Containers {
-		if err := f.reconcile(ctx, ref, container.Name, container.Image, provider.ImageStoreFrom(ctx), progress); err != nil && stopped == nil {
+		if err := ReconcileImages(ctx, f.hooks.Retention, ref, container.Name, container.Image, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
 	return stopped
 }
 
-func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
-	return f.hooks.Retention.ForgetReleases(ctx, ref, app, progress)
-}
-
-func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
-	return f.hooks.Retention.ReconcileImages(ctx, ref, app, imageRef, images, progress)
-}
-
-func (h *ImageRetentionHooks) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
+func ForgetReleases(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app string, progress progress.Log) error {
 	if h == nil || h.Forget == nil {
 		return nil
 	}
@@ -280,7 +272,7 @@ func (h *ImageRetentionHooks) ForgetReleases(ctx context.Context, ref provider.S
 	return err
 }
 
-func (h *ImageRetentionHooks) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+func ReconcileImages(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
 	if h == nil || h.Reconcile == nil || imageRef == "" {
 		return nil
 	}

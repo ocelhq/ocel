@@ -22,7 +22,7 @@ type Stacks interface {
 
 	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Log) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, progress progress.Log) error
+	Destroy(ctx context.Context, ref StackRef, images ImageStore, progress progress.Log) error
 }
 
 type StackRef struct {

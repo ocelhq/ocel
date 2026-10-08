@@ -122,7 +122,7 @@ func TestDestroyingAStackDeletesTheTokensOfItsStores(t *testing.T) {
 		"c-kv":     kvOutput("c-kv"),
 		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
 	}}
-	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil); err != nil {
+	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if !slices.Equal(params.deleted, []string{conformanceKVToken("c-kv")}) {
@@ -172,7 +172,7 @@ func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testi
 	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
-	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil); err != nil {
+	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	deleted := slices.Sorted(slices.Values(params.deleted))
