@@ -63,7 +63,7 @@ func (l *deployLeases) hold(ctx context.Context, store keyvalue.Store, scope env
 	name := leaseName(scope, token)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.renewing[name] != nil {
+	if renewal := l.renewing[name]; renewal != nil && !renewal.ended() {
 		return nil
 	}
 	renewal := &leaseRenewal{stop: make(chan struct{}), done: make(chan struct{})}
@@ -83,13 +83,26 @@ func (l *deployLeases) renew(store keyvalue.Store, scope environmentScope, token
 		case <-ticker.C:
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), l.renewal)
-		err := stackrecords.TakeDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl)
+		err := stackrecords.RenewDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl)
 		cancel()
 		var refused refusal.Refusal
 		if errors.As(err, &refused) && refused.Code == refusal.CodeBusy {
 			return
 		}
 	}
+}
+
+func (r *leaseRenewal) ended() bool {
+	select {
+	case <-r.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *deployLeases) confirm(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) error {
+	return stackrecords.RenewDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl)
 }
 
 func (l *deployLeases) release(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) {

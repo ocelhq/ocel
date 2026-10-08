@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -198,6 +200,35 @@ func TestProvisionInfraFreesTheEnvironmentWhenItFails(t *testing.T) {
 	}
 	if readDeployLease(t, vendor) {
 		t.Error("the environment still holds the lease of a ProvisionInfra that failed, want it freed")
+	}
+}
+
+func TestADeployWhoseLeaseAnotherDeployTookOverIsRefusedBeforeItPromotes(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+	var takeOver sync.Once
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind != provider.StackApp {
+			return nil
+		}
+		takeOver.Do(func() {
+			err := stackrecords.TakeDeployLease(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv,
+				otherDeployLease, time.Now().Add(time.Hour), time.Hour)
+			if err != nil {
+				t.Errorf("taking the lease over = %v", err)
+			}
+		})
+		return nil
+	})
+
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
+	result, events := deploy(t, client, req)
+
+	refusedBusy(t, result, "Deploy()")
+	if _, promoted := spanStatuses(events)[promotionSpan]; promoted {
+		t.Error("the deploy promoted after another deploy took its lease over, want it stopped before promotion")
 	}
 }
 
