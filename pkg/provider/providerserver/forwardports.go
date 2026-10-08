@@ -207,7 +207,9 @@ func isReachableByPort(binding provider.Binding) bool {
 
 func isReachableByProxy(binding provider.Binding) bool {
 	switch binding.Type {
-	case provider.BindingBucket, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime:
+	case provider.BindingBucket:
+		return binding.Properties[provider.PropertyEndpoint] == ""
+	case provider.BindingTopic, provider.BindingTask, provider.BindingRealtime:
 		return true
 	}
 	return false
