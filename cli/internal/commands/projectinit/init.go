@@ -92,8 +92,12 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdin io.Reader, stdout io.Writer) error {
-	if len(missingOptions(strings.TrimSpace(opts.provider), opts.settings)) > 0 && dependencies.CanAsk(stdin) {
-		if err := askForMissingOptions(ctx, dependencies, &opts, stdin, stdout); err != nil {
+	if len(findMissingOptions(strings.TrimSpace(opts.provider), opts.settings)) > 0 && dependencies.CanAsk(stdin) {
+		err := dependencies.Events.Preamble(ctx).Ask(func() (err error) {
+			opts.settings, _, err = askMissingOptions(ctx, terminal.NewPrompt(stdout, stdin), strings.TrimSpace(opts.provider), opts.settings)
+			return err
+		})
+		if err != nil {
 			return err
 		}
 	}
@@ -284,21 +288,21 @@ type providerSetting struct {
 func settingFields(settings []providerSetting, key func(string) string) []string {
 	fields := make([]string, 0, len(settings))
 	for _, setting := range settings {
-		fields = append(fields, key(setting.name)+": "+quoted(strings.ReplaceAll(setting.value, "${", "$${")))
+		fields = append(fields, key(setting.name)+": "+mustQuoteJSON(strings.ReplaceAll(setting.value, "${", "$${")))
 	}
 	return fields
 }
 
 var plainYAMLKey = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 
-func yamlKey(name string) string {
+func quoteYAMLKey(name string) string {
 	if plainYAMLKey.MatchString(name) {
 		return name
 	}
-	return quoted(name)
+	return mustQuoteJSON(name)
 }
 
-func quoted(text string) string {
+func mustQuoteJSON(text string) string {
 	var out bytes.Buffer
 	encoder := json.NewEncoder(&out)
 	encoder.SetEscapeHTML(false)
@@ -318,7 +322,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
 	selected := fmt.Sprintf("{ %q: {} }", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, quoted), ", "))
+		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, mustQuoteJSON), ", "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = strconv.Quote(provider)
 	}
@@ -334,7 +338,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, yamlKey), "\n    "))
+		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, quoteYAMLKey), "\n    "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = " " + provider
 	}
@@ -347,7 +351,7 @@ provider:%s
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {
 	options := "{}"
 	if len(settings) > 0 {
-		options = "{ " + strings.Join(settingFields(settings, quoted), ", ") + " }"
+		options = "{ " + strings.Join(settingFields(settings, mustQuoteJSON), ", ") + " }"
 	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";
