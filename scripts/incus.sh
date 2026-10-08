@@ -127,6 +127,7 @@ diagnose_no_ssh() {
     installed) echo "incus.sh: sshd is installed; the sshd section below says whether it listens." ;;
     *) echo "incus.sh: the guest did not answer whether sshd is installed." ;;
     esac
+    diagnose_docker_forward_drop
     echo "incus.sh: cloud-init reports:"
     incus exec "$name" -- cloud-init status --long 2>&1 | sed 's/^/    /' || true
     diagnose_section "host ssh to $addr, last attempt" \
@@ -147,6 +148,20 @@ diagnose_no_ssh() {
         sh -c "incus network show incusbr0; ip -4 -br addr show incusbr0"
     diagnose_section "host forwarding" \
         sudo -n sh -c 'sysctl net.ipv4.ip_forward; nft list ruleset; iptables-save'
+}
+
+diagnose_docker_forward_drop() {
+    local rules
+    rules=$(sudo -n iptables-save -t filter 2>/dev/null) || return 0
+    grep -q '^:FORWARD DROP' <<<"$rules" || return 0
+    grep -q '^:DOCKER-USER ' <<<"$rules" || return 0
+    if grep -q '^-A DOCKER-USER -i incusbr0 -j ACCEPT' <<<"$rules"; then
+        return 0
+    fi
+    echo "incus.sh: the host's FORWARD policy is DROP and Docker's DOCKER-USER chain accepts"
+    echo "incus.sh: nothing from incusbr0, so the VM has no IPv4 egress. Let the bridge through with:"
+    echo "    sudo iptables -I DOCKER-USER -i incusbr0 -j ACCEPT"
+    echo "    sudo iptables -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"
 }
 
 apt_mirror_config() {
