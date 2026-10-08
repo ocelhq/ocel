@@ -7,6 +7,17 @@ CONTRIBUTING.md is binding for agents; read it before any change.
 Write nothing to agent memory; the code is the source of truth. Only an explicit
 "remember this" from the user saves an entry.
 
+## Checks
+
+CI runs everything a change reaches, once, on the pull request. No agent runs it first.
+
+- Writing or fixing code, run only the tests of the packages you changed
+  (`go test ./cli/internal/discovery/`, or that workspace package's `test` script).
+- Reviewing, run nothing but a test that proves a finding. Read CI's result with
+  `gh pr checks`.
+- Never run `mise run check` or a module-wide `./...` sweep before a push. Run it only to
+  reproduce a failure CI reported.
+
 ## About Ocel
 
 **Ocel deploys apps to your own cloud.** Three pieces, each building on the one before —

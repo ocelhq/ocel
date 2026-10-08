@@ -32,21 +32,10 @@ for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider
 done
 ```
 
-While you change a Go package, test that package:
-
-```sh
-go test ./cli/internal/discovery/
-```
-
-Before you push, check what the change reaches:
-
-```sh
-mise run check
-```
-
-It tests and lints the Go modules the change touches and every module that requires them,
+CI on the pull request is the gate. To reproduce a failure it reports, `mise run check`
+tests and lints the Go modules the change touches and every module that requires them,
 runs biome on the changed files and the tests of the changed workspace packages, and runs
-the Python and Rust tests when `python/` or `crates/` changed. CI is the full gate.
+the Python and Rust tests when `python/` or `crates/` changed.
 
 ## Contract paths
 
