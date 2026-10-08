@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -26,6 +27,7 @@ import (
 
 const (
 	runtimeTagHexLen = 12
+	wrappedBaseLabel = "ocel.base"
 )
 
 type NextServerRuntime struct {
@@ -78,6 +80,15 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 	if err != nil {
 		return nil, err
 	}
+	digest, err := base.Digest()
+	if err != nil {
+		return nil, err
+	}
+	config.Labels = maps.Clone(config.Labels)
+	if config.Labels == nil {
+		config.Labels = map[string]string{}
+	}
+	config.Labels[wrappedBaseLabel] = digest.String()
 	config.Entrypoint = []string{containerimage.RuntimePath}
 	config.Cmd = command
 	return mutate.Config(appended, config)

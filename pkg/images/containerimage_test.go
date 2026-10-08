@@ -216,6 +216,33 @@ func TestImagesWrappedUnderDifferentRuntimeTagsNeverShareAManifest(t *testing.T)
 	}
 }
 
+func TestImagesWrappedFromBasesThatSplitTheirCommandDifferentlyNeverShareAManifest(t *testing.T) {
+	t.Parallel()
+
+	runtime := []byte("a runtime binary")
+	manifests := map[string]string{}
+	for _, config := range []v1.Config{
+		{Entrypoint: []string{"node"}, Cmd: []string{"server.js"}},
+		{Cmd: []string{"node", "server.js"}},
+		{Entrypoint: []string{"node", "server.js"}},
+	} {
+		base := baseContainer(t, config)
+		wrapped, err := images.WrapContainer(base, runtime, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifests[images.RuntimeTag(digestOf(t, base), runtime, nil)] = digestOf(t, wrapped)
+	}
+
+	distinct := map[string]bool{}
+	for _, manifest := range manifests {
+		distinct[manifest] = true
+	}
+	if len(manifests) != 3 || len(distinct) != len(manifests) {
+		t.Errorf("the runtime tags name the manifests %v, want every tag to name its own: the wrap folds ENTRYPOINT and CMD into one command, and a removal that falls back to deleting by digest would take every tag on a shared manifest", manifests)
+	}
+}
+
 func nextServerRuntime(files map[string][]byte) *images.NextServerRuntime {
 	return &images.NextServerRuntime{Files: files}
 }
