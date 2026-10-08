@@ -46,6 +46,18 @@ describe("render", () => {
     assert.equal(render(components), render([...components].reverse()));
   });
 
+  it("prints the Apache-2.0 terms once, and keeps each component's own copyright", () => {
+    const terms =
+      "Apache License\n   Version 2.0, January 2004\n\nTERMS and additional liability.\n\nEND OF TERMS AND CONDITIONS";
+    const out = render([
+      { name: "a", version: "1.0.0", license: "Apache-2.0", text: `${terms}\n\nCopyright A` },
+      { name: "b", version: "1.0.0", license: "Apache-2.0", text: `${terms}\n\nCopyright B` },
+    ]);
+    assert.equal(out.match(/^TERMS and/gm).length, 1);
+    assert.match(out, /Copyright A/);
+    assert.match(out, /Copyright B/);
+  });
+
   it("lists a component that appears twice once", () => {
     const out = render([
       { name: "a", version: "1.0.0", ...mit },

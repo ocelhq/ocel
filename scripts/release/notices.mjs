@@ -10,6 +10,10 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const GOOS = ["darwin", "linux", "windows"];
 const LICENSING = /^(licen[cs]e|copying|notice)(-[\w.-]+|\.(md|txt|markdown|rst))?$/i;
 const DECLARED_BY_README = new Map([["github.com/mattn/go-localereader", "MIT"]]);
+const APACHE_TERMS =
+  /^[ \t]*Apache License\s+Version 2\.0, January 2004[\s\S]*?additional liability\.(?:\s*END OF TERMS AND CONDITIONS)?/m;
+const APACHE_APPENDIX =
+  /^[ \t]*APPENDIX: How to apply the Apache License to your work\.[\s\S]*?third-party archives\.[ \t]*$/m;
 const MAX_BUFFER = 256 * 1024 * 1024;
 
 const HEADER = `Third-party notices
@@ -28,7 +32,21 @@ export function licensing(dir) {
 
 export function render(components) {
   const groups = new Map();
-  for (const { name, version, license, text } of components) {
+  const apache = new Map();
+  for (const { name, version, license, text: full } of components) {
+    const terms = APACHE_TERMS.exec(full)?.[0];
+    let text = full;
+    if (terms) {
+      apache.set(terms, (apache.get(terms) ?? 0) + 1);
+      text = full
+        .replace(
+          terms,
+          "Licensed under the Apache License, Version 2.0, printed at the end of this file.",
+        )
+        .replace(APACHE_APPENDIX, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
     const lines = groups.get(text) ?? new Set();
     lines.add(license ? `${name} ${version} (${license})` : `${name} ${version}`);
     groups.set(text, lines);
@@ -36,6 +54,10 @@ export function render(components) {
   const sections = [...groups]
     .map(([text, lines]) => ({ text, lines: [...lines].sort(byCodePoint) }))
     .sort((a, b) => byCodePoint(a.lines[0], b.lines[0]));
+  if (apache.size) {
+    const [terms] = [...apache].sort(([a, m], [b, n]) => n - m || byCodePoint(a, b))[0];
+    sections.push({ text: terms, lines: ["Apache License, Version 2.0"] });
+  }
   return [
     HEADER,
     ...sections.map(({ text, lines }) =>
