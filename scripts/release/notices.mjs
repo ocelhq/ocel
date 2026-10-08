@@ -81,15 +81,14 @@ function goComponents() {
         "list",
         "-deps",
         "-f",
-        "{{with .Module}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}",
+        "{{with .Module}}{{if not .Main}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}{{end}}",
         ...patterns,
       ],
       { ...process.env, GOOS: goos },
     );
     for (const line of listed.split("\n").filter(Boolean)) {
       const [name, version, dir] = line.split("\t");
-      if (!name.startsWith("github.com/ocelhq/ocel/"))
-        modules.set(`${name} ${version}`, { name, version, dir });
+      modules.set(`${name} ${version}`, { name, version, dir });
     }
   }
   const unlicensed = [...modules.values()]

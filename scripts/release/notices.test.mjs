@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -52,5 +52,19 @@ describe("render", () => {
       { name: "a", version: "1.0.0", ...mit },
     ]);
     assert.equal(out.match(/^a 1\.0\.0/gm).length, 1);
+  });
+});
+
+describe("THIRD_PARTY_NOTICES", () => {
+  it("names no module of this repository", () => {
+    const root = join(import.meta.dirname, "..", "..");
+    const work = readFileSync(join(root, "go.work"), "utf8");
+    const modules = [...work.matchAll(/^\s+(\.\/\S+)$/gm)].map(
+      ([, dir]) => /^module\s+(\S+)/m.exec(readFileSync(join(root, dir, "go.mod"), "utf8"))[1],
+    );
+    const named = readFileSync(join(root, "THIRD_PARTY_NOTICES"), "utf8")
+      .split("\n")
+      .map((line) => line.split(" ")[0]);
+    for (const module of modules) assert.ok(!named.includes(module), module);
   });
 });
