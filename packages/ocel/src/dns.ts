@@ -1,5 +1,3 @@
-import type { DNSDescriptor } from "./config.js";
-
 /** Options for Cloudflare DNS. */
 export interface CloudflareDnsOptions {
   /**
@@ -10,6 +8,8 @@ export interface CloudflareDnsOptions {
 }
 
 /** Declares Cloudflare as the DNS the project's records are written into. */
-export function cloudflareDns(options: CloudflareDnsOptions = {}): DNSDescriptor {
+export function cloudflareDns(options: CloudflareDnsOptions = {}): {
+  cloudflare: CloudflareDnsOptions;
+} {
   return { cloudflare: options };
 }

@@ -43,17 +43,13 @@ export interface OcelConfig {
   };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
-  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
-  dns?: DNSDescriptor;
   /** The hostnames this project is served on. */
   domains?: ProjectDomainConfig;
-  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
-  edge?: EdgeDescriptor;
   /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
   envSource?: EnvSourceConfig;
   /** Commands ocel runs on this machine at points of a deploy. */
   lifecycle?: LifecycleConfig;
-  /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
+  /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
   registry?: RegistryConfig;
@@ -66,34 +62,61 @@ export interface OcelConfig {
 export interface AppConfig {
   /** The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on. */
   arch?: "x86_64" | "arm64";
-  /** How the app is built. */
-  build?: BuildConfig;
-  /** What the app runs on: serverless functions packed per route, or one container image serving everything. */
-  compute?: "serverless" | "container";
+  /** Whether ocel deploy lets the app's build reach the resources it uses in the deployed environment, so a page prerendered at build time reads them. Only a Next app's build reaches them, on serverless or container compute: its postgres databases and kv stores over ports the provider forwards, and its buckets through the binding proxy the provider serves. Any other build goes without. Left off, true. Set false to build as if no resource were provisioned. */
+  buildWithResources?: boolean;
+  /** What the app runs on, keyed by the compute with its options as the value, or named alone. Left off, the first compute the provider runs. */
+  compute?: ComputeDescriptor;
   /** The hostnames this app is served on. */
   domains?: AppDomainConfig;
-  /** The file the app is served from, when it is not the one ocel would detect. */
-  entrypoint?: string;
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
-  /** What a serverless app is built with, when ocel is not to read it off the app's own manifest. */
-  framework?: "node" | "next" | "go" | "python" | "rust";
-  /** How a container app is checked before it is served. */
-  health?: HealthConfig;
-  /** The most instances of a container app run at once, however busy it is. Left off, as many as minInstances, or 1. A serverless app scales itself and takes no instance counts. */
-  maxInstances?: number;
-  /** The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts. */
-  minInstances?: number;
   /** The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label. */
   name: string;
   /** The app's directory, relative to the config. */
   path: string;
 }
 
-/** How the app is built. */
-export interface BuildConfig {
-  /** Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Only a serverless Next app's build gets them, and only on a provider that forwards ports; any other build goes without. Left off, true. Set false to build as if no resource were provisioned. */
-  bindings?: boolean;
+/** What the app runs on: serverless functions packed per route, or one container image serving everything. Named alone, or keyed by the compute with its options as the value. */
+export type ComputeDescriptor =
+  | "serverless"
+  | "container"
+  | {
+      /** Serverless functions packed per route, which scale themselves. */
+      serverless: ServerlessCompute;
+      container?: never;
+    }
+  | {
+      /** One container image serving every route. */
+      container: ContainerCompute;
+      serverless?: never;
+    };
+
+/** Serverless functions packed per route, which scale themselves. */
+export interface ServerlessCompute {
+  /** The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect. */
+  entrypoint?: string;
+  /** What the app is built with, when ocel is not to read it off the app's own manifest. */
+  framework?: "node" | "next" | "go" | "python" | "rust";
+}
+
+/** One container image serving every route. */
+export interface ContainerCompute {
+  /** How the app is checked before it is served. */
+  health?: HealthConfig;
+  /** How the app's image is built. */
+  image?: ImageConfig;
+  /** How many instances of the app run. */
+  instances?: InstancesConfig;
+}
+
+/** How the app is checked before it is served. */
+export interface HealthConfig {
+  /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /. */
+  path?: string;
+}
+
+/** How the app's image is built. */
+export interface ImageConfig {
   /** The command that builds the app inside the image. Left off, the app's own build script runs. */
   command?: string;
   /** The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to. */
@@ -102,16 +125,18 @@ export interface BuildConfig {
   dockerfile?: string;
 }
 
+/** How many instances of the app run. */
+export interface InstancesConfig {
+  /** The most instances run at once, however busy the app is. Left off, as many as min, or 1. */
+  max?: number;
+  /** The fewest instances kept running, however quiet the app is. Left off, 1. */
+  min?: number;
+}
+
 /** The hostnames this app is served on. */
 export interface AppDomainConfig {
   /** The hostnames production is served on. */
   production?: string | string[];
-}
-
-/** How a container app is checked before it is served. */
-export interface HealthConfig {
-  /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /. */
-  path?: string;
 }
 
 /** An existing S3-compatible bucket a tier binds rather than provisioning its own. */
@@ -177,24 +202,6 @@ export interface DiscoveryConfig {
   paths?: string[];
 }
 
-/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
-export type DNSDescriptor =
-  | "cloudflare"
-  | "route53"
-  | {
-      cloudflare: DNSOptions;
-      route53?: never;
-    }
-  | {
-      cloudflare?: never;
-      route53: DNSOptions;
-    };
-
-export interface DNSOptions {
-  /** The zone the records are written into. Omit it and ocel picks the zone that covers the hostname. */
-  zone?: string;
-}
-
 /** The hostnames this project is served on. */
 export interface ProjectDomainConfig {
   /** The wildcard hostname previews are served under, such as *.preview.example.com. */
@@ -202,54 +209,6 @@ export interface ProjectDomainConfig {
   /** The hostnames production is served on. */
   production?: string | string[];
 }
-
-/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
-export type EdgeDescriptor =
-  | "alb"
-  | "api-gateway"
-  | "cloudflare"
-  | "cloudfront"
-  | {
-      alb: AlbEdgeOptions;
-      "api-gateway"?: never;
-      cloudflare?: never;
-      cloudfront?: never;
-    }
-  | {
-      alb?: never;
-      "api-gateway": ApiGatewayEdgeOptions;
-      cloudflare?: never;
-      cloudfront?: never;
-    }
-  | {
-      alb?: never;
-      "api-gateway"?: never;
-      cloudflare: CloudflareEdgeOptions;
-      cloudfront?: never;
-    }
-  | {
-      alb?: never;
-      "api-gateway"?: never;
-      cloudflare?: never;
-      cloudfront: CloudFrontEdgeOptions;
-    };
-
-/** Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options. */
-export type AlbEdgeOptions = Record<string, never>;
-
-/** Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options. */
-export type ApiGatewayEdgeOptions = Record<string, never>;
-
-/** Options for the Cloudflare edge. The token and account id are read from the environment. */
-export interface CloudflareEdgeOptions {
-  /** A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.<domain>. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it. */
-  originDomain?: string;
-  /** Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one. */
-  tunnel?: boolean;
-}
-
-/** Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options. */
-export type CloudFrontEdgeOptions = Record<string, never>;
 
 /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
 export interface EnvSourceConfig {
@@ -358,7 +317,7 @@ export interface LifecycleCommand {
   timeout?: string;
 }
 
-/** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
+/** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
 export type ProviderDescriptor =
   | "aws"
   | {
@@ -386,12 +345,69 @@ export interface AwsProviderOptions {
   region?: string;
   /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns. */
   variablesKey?: string;
+  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  edge?: AwsEdgeDescriptor;
+  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  dns?: AwsDNSDescriptor;
 }
 
 /** How ocel logs --tail reads this account's logs. */
 export interface AwsLogOptions {
   /** Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents. */
   liveTail?: boolean;
+}
+
+/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+export type AwsEdgeDescriptor =
+  | "api-gateway"
+  | "cloudflare"
+  | "cloudfront"
+  | {
+      "api-gateway": ApiGatewayEdgeOptions;
+      cloudflare?: never;
+      cloudfront?: never;
+    }
+  | {
+      "api-gateway"?: never;
+      cloudflare: CloudflareEdgeOptions;
+      cloudfront?: never;
+    }
+  | {
+      "api-gateway"?: never;
+      cloudflare?: never;
+      cloudfront: CloudFrontEdgeOptions;
+    };
+
+/** Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options. */
+export type ApiGatewayEdgeOptions = Record<string, never>;
+
+/** Options for the Cloudflare edge. The token and account id are read from the environment. */
+export interface CloudflareEdgeOptions {
+  /** A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.<domain>. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it. */
+  originDomain?: string;
+  /** Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one. */
+  tunnel?: boolean;
+}
+
+/** Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options. */
+export type CloudFrontEdgeOptions = Record<string, never>;
+
+/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+export type AwsDNSDescriptor =
+  | "cloudflare"
+  | "route53"
+  | {
+      cloudflare: DNSOptions;
+      route53?: never;
+    }
+  | {
+      cloudflare?: never;
+      route53: DNSOptions;
+    };
+
+export interface DNSOptions {
+  /** The zone the records are written into. Omit it and ocel picks the zone that covers the hostname. */
+  zone?: string;
 }
 
 export interface GcpProviderOptions {
@@ -401,7 +417,34 @@ export interface GcpProviderOptions {
   project: string;
   /** The region to deploy into. A project spans them all, so this names the one. */
   region: string;
+  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  edge?: GcpEdgeDescriptor;
+  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  dns?: GcpDNSDescriptor;
 }
+
+/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+export type GcpEdgeDescriptor =
+  | "alb"
+  | "cloudflare"
+  | {
+      alb: AlbEdgeOptions;
+      cloudflare?: never;
+    }
+  | {
+      alb?: never;
+      cloudflare: CloudflareEdgeOptions;
+    };
+
+/** Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options. */
+export type AlbEdgeOptions = Record<string, never>;
+
+/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+export type GcpDNSDescriptor =
+  | "cloudflare"
+  | {
+      cloudflare: DNSOptions;
+    };
 
 export interface VpsProviderOptions {
   /** Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine. */
@@ -414,6 +457,10 @@ export interface VpsProviderOptions {
   proxy?: VpsProxy;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsTarget;
+  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  edge?: VpsEdgeDescriptor;
+  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  dns?: VpsDNSDescriptor;
 }
 
 /** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
@@ -536,6 +583,20 @@ export interface VpsTarget {
   /** The account to log in as. Omit it and ssh resolves the user itself. */
   user?: string;
 }
+
+/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+export type VpsEdgeDescriptor =
+  | "cloudflare"
+  | {
+      cloudflare: CloudflareEdgeOptions;
+    };
+
+/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+export type VpsDNSDescriptor =
+  | "cloudflare"
+  | {
+      cloudflare: DNSOptions;
+    };
 
 /** Where this project's container images are pushed. */
 export interface RegistryConfig {

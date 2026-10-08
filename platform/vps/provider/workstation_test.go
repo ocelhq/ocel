@@ -108,8 +108,7 @@ func (ws workstation) declaration(t *testing.T) string {
 	apps, err := json.Marshal([]map[string]any{{
 		"name":    workstationApp,
 		"path":    "app",
-		"compute": "container",
-		"health":  map[string]any{"path": "/"},
+		"compute": map[string]any{"container": map[string]any{"health": map[string]any{"path": "/"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)

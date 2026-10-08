@@ -2,27 +2,35 @@ export { type BuildEnv, BuildEnvError, buildEnv } from "./build-env.js";
 export type {
   AppConfig,
   AppDomainConfig,
+  AwsDNSDescriptor,
+  AwsEdgeDescriptor,
   AwsProviderOptions,
-  BuildConfig,
+  ComputeDescriptor,
+  ContainerCompute,
   DevEnvSourceDescriptor,
   DiscoveryConfig,
-  DNSDescriptor,
-  EdgeDescriptor,
   EnvSourceConfig,
   EnvSourceDescriptor,
   ExecOptions,
+  GcpDNSDescriptor,
+  GcpEdgeDescriptor,
   GcpProviderOptions,
   HealthConfig,
+  ImageConfig,
   InfisicalOptions,
+  InstancesConfig,
   OcelConfig,
   ProjectDomainConfig,
   ProviderDescriptor,
   RegistryConfig,
+  ServerlessCompute,
+  VpsDNSDescriptor,
+  VpsEdgeDescriptor,
   VpsProviderOptions,
   VpsTarget,
 } from "./generated/config.js";
 
-import type { OcelConfig } from "./generated/config.js";
+import type { ComputeDescriptor, OcelConfig, ServerlessCompute } from "./generated/config.js";
 
 /**
  * Something an app needs of wherever it is served. A need listed in
@@ -32,23 +40,11 @@ import type { OcelConfig } from "./generated/config.js";
  */
 export type Need = NonNullable<OcelConfig["allowDegraded"]>[number];
 
-/** What an app runs on. */
-export type Compute = NonNullable<AppComputeOf<OcelConfig>>;
-
-type AppComputeOf<T> = T extends { apps?: (infer A)[] }
-  ? A extends { compute?: infer C }
-    ? C
-    : never
-  : never;
+/** What an app runs on, named alone. */
+export type Compute = Extract<ComputeDescriptor, string>;
 
 /** What a serverless app is built with. */
-export type Framework = NonNullable<AppFrameworkOf<OcelConfig>>;
-
-type AppFrameworkOf<T> = T extends { apps?: (infer A)[] }
-  ? A extends { framework?: infer F }
-    ? F
-    : never
-  : never;
+export type Framework = NonNullable<ServerlessCompute["framework"]>;
 
 /**
  * Declares a project. The object it takes is the same document `ocel.json`

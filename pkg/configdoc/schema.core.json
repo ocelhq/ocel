@@ -33,37 +33,126 @@
             ],
             "type": "string"
           },
-          "build": {
-            "additionalProperties": false,
-            "description": "How the app is built.",
-            "properties": {
-              "bindings": {
-                "description": "Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Only a serverless Next app's build gets them, and only on a provider that forwards ports; any other build goes without. Left off, true. Set false to build as if no resource were provisioned.",
-                "type": "boolean"
-              },
-              "command": {
-                "description": "The command that builds the app inside the image. Left off, the app's own build script runs.",
-                "type": "string"
-              },
-              "context": {
-                "description": "The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to.",
-                "type": "string"
-              },
-              "dockerfile": {
-                "description": "The Dockerfile to build from. A relative path resolves against the app's directory.",
-                "type": "string"
-              }
-            },
-            "title": "BuildConfig",
-            "type": "object"
+          "buildWithResources": {
+            "description": "Whether ocel deploy lets the app's build reach the resources it uses in the deployed environment, so a page prerendered at build time reads them. Only a Next app's build reaches them, on serverless or container compute: its postgres databases and kv stores over ports the provider forwards, and its buckets through the binding proxy the provider serves. Any other build goes without. Left off, true. Set false to build as if no resource were provisioned.",
+            "type": "boolean"
           },
           "compute": {
-            "description": "What the app runs on: serverless functions packed per route, or one container image serving everything.",
-            "enum": [
-              "serverless",
-              "container"
+            "allOf": [
+              {
+                "description": "What the app runs on: serverless functions packed per route, or one container image serving everything. Named alone, or keyed by the compute with its options as the value.",
+                "oneOf": [
+                  {
+                    "enum": [
+                      "serverless",
+                      "container"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "serverless": {
+                        "additionalProperties": false,
+                        "description": "Serverless functions packed per route, which scale themselves.",
+                        "properties": {
+                          "entrypoint": {
+                            "description": "The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect.",
+                            "type": "string"
+                          },
+                          "framework": {
+                            "description": "What the app is built with, when ocel is not to read it off the app's own manifest.",
+                            "enum": [
+                              "node",
+                              "next",
+                              "go",
+                              "python",
+                              "rust"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "title": "ServerlessCompute",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "serverless"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "container": {
+                        "additionalProperties": false,
+                        "description": "One container image serving every route.",
+                        "properties": {
+                          "health": {
+                            "additionalProperties": false,
+                            "description": "How the app is checked before it is served.",
+                            "properties": {
+                              "path": {
+                                "description": "The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /.",
+                                "type": "string"
+                              }
+                            },
+                            "title": "HealthConfig",
+                            "type": "object"
+                          },
+                          "image": {
+                            "additionalProperties": false,
+                            "description": "How the app's image is built.",
+                            "properties": {
+                              "command": {
+                                "description": "The command that builds the app inside the image. Left off, the app's own build script runs.",
+                                "type": "string"
+                              },
+                              "context": {
+                                "description": "The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to.",
+                                "type": "string"
+                              },
+                              "dockerfile": {
+                                "description": "The Dockerfile to build from. A relative path resolves against the app's directory.",
+                                "type": "string"
+                              }
+                            },
+                            "title": "ImageConfig",
+                            "type": "object"
+                          },
+                          "instances": {
+                            "additionalProperties": false,
+                            "description": "How many instances of the app run.",
+                            "properties": {
+                              "max": {
+                                "description": "The most instances run at once, however busy the app is. Left off, as many as min, or 1.",
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "min": {
+                                "description": "The fewest instances kept running, however quiet the app is. Left off, 1.",
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "title": "InstancesConfig",
+                            "type": "object"
+                          }
+                        },
+                        "title": "ContainerCompute",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "container"
+                    ],
+                    "type": "object"
+                  }
+                ],
+                "title": "ComputeDescriptor"
+              }
             ],
-            "type": "string"
+            "description": "What the app runs on, keyed by the compute with its options as the value, or named alone. Left off, the first compute the provider runs."
           },
           "domains": {
             "additionalProperties": false,
@@ -87,46 +176,9 @@
             "title": "AppDomainConfig",
             "type": "object"
           },
-          "entrypoint": {
-            "description": "The file the app is served from, when it is not the one ocel would detect.",
-            "type": "string"
-          },
           "folder": {
             "description": "The variables folder this app reads, when it does not read the project's own.",
             "type": "string"
-          },
-          "framework": {
-            "description": "What a serverless app is built with, when ocel is not to read it off the app's own manifest.",
-            "enum": [
-              "node",
-              "next",
-              "go",
-              "python",
-              "rust"
-            ],
-            "type": "string"
-          },
-          "health": {
-            "additionalProperties": false,
-            "description": "How a container app is checked before it is served.",
-            "properties": {
-              "path": {
-                "description": "The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /.",
-                "type": "string"
-              }
-            },
-            "title": "HealthConfig",
-            "type": "object"
-          },
-          "maxInstances": {
-            "description": "The most instances of a container app run at once, however busy it is. Left off, as many as minInstances, or 1. A serverless app scales itself and takes no instance counts.",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "minInstances": {
-            "description": "The fewest instances of a container app kept running, however quiet it is. Left off, 1. A serverless app scales itself and takes no instance counts.",
-            "minimum": 0,
-            "type": "integer"
           },
           "name": {
             "description": "The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label.",
@@ -1338,31 +1390,6 @@
       "title": "DiscoveryConfig",
       "type": "object"
     },
-    "dns": {
-      "description": "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone.",
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "additionalProperties": {
-            "additionalProperties": false,
-            "properties": {
-              "zone": {
-                "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
-                "type": "string"
-              }
-            },
-            "title": "DNSOptions",
-            "type": "object"
-          },
-          "maxProperties": 1,
-          "minProperties": 1,
-          "type": "object"
-        }
-      ],
-      "title": "DNSDescriptor"
-    },
     "domains": {
       "additionalProperties": false,
       "description": "The hostnames this project is served on.",
@@ -1388,23 +1415,6 @@
       },
       "title": "ProjectDomainConfig",
       "type": "object"
-    },
-    "edge": {
-      "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS.",
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "additionalProperties": {
-            "type": "object"
-          },
-          "maxProperties": 1,
-          "minProperties": 1,
-          "type": "object"
-        }
-      ],
-      "title": "EdgeDescriptor"
     },
     "envSource": {
       "additionalProperties": false,
@@ -2114,13 +2124,57 @@
       "type": "object"
     },
     "provider": {
-      "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone.",
+      "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone.",
       "oneOf": [
         {
           "type": "string"
         },
         {
           "additionalProperties": {
+            "properties": {
+              "dns": {
+                "description": "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "zone": {
+                          "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
+                          "type": "string"
+                        }
+                      },
+                      "title": "DNSOptions",
+                      "type": "object"
+                    },
+                    "maxProperties": 1,
+                    "minProperties": 1,
+                    "type": "object"
+                  }
+                ],
+                "title": "DNSDescriptor"
+              },
+              "edge": {
+                "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "type": "object"
+                    },
+                    "maxProperties": 1,
+                    "minProperties": 1,
+                    "type": "object"
+                  }
+                ],
+                "title": "EdgeDescriptor"
+              }
+            },
             "type": "object"
           },
           "maxProperties": 1,

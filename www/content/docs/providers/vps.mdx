@@ -105,9 +105,7 @@ import vpsProvider from "ocel/providers/vps";
 
 export default defineConfig({
   slug: "my-app",
-  provider: vpsProvider({ ssh: "my-box" }),
-  edge: cloudflare(),
-  dns: cloudflareDns(),
+  provider: vpsProvider({ ssh: "my-box", edge: cloudflare(), dns: cloudflareDns() }),
   apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
 });
 ```
@@ -116,9 +114,7 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "vps": { "ssh": "my-box" } },
-  "edge": "cloudflare",
-  "dns": "cloudflare",
+  "provider": { "vps": { "ssh": "my-box", "edge": "cloudflare", "dns": "cloudflare" } },
   "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
 }
 ```
@@ -156,9 +152,11 @@ import vpsProvider from "ocel/providers/vps";
 
 export default defineConfig({
   slug: "my-app",
-  provider: vpsProvider({ ssh: "my-box" }),
-  edge: cloudflare({ tunnel: true }),
-  dns: cloudflareDns(),
+  provider: vpsProvider({
+    ssh: "my-box",
+    edge: cloudflare({ tunnel: true }),
+    dns: cloudflareDns(),
+  }),
   apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
 });
 ```
@@ -167,9 +165,13 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "vps": { "ssh": "my-box" } },
-  "edge": { "cloudflare": { "tunnel": true } },
-  "dns": "cloudflare",
+  "provider": {
+    "vps": {
+      "ssh": "my-box",
+      "edge": { "cloudflare": { "tunnel": true } },
+      "dns": "cloudflare"
+    }
+  },
   "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
 }
 ```
@@ -593,8 +595,8 @@ proxy it started from.
 ## Health checks
 
 Before a deploy switches the proxy to a new container, the container has to answer 2xx on
-its health path. Set the path with [`health.path`](/docs/configuration#health) and that
-path is the one checked.
+its health path. Set the path with [`health.path`](/docs/configuration#health) in the app's
+`compute.container` and that path is the one checked.
 
 With no `health.path`, the first deploy of an app finds one. Once the container starts, and
 before the proxy sends it any traffic, the deploy waits for the app to answer HTTP and then asks

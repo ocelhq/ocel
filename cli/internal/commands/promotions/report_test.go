@@ -36,7 +36,7 @@ func withWebApp(t *testing.T, project clitest.FakeProject) {
 export default {
   slug: "`+clitest.FixtureSlug+`",
   provider: { fake: {} },
-  apps: [{ name: "web", path: "apps/web", framework: "node" }],
+  apps: [{ name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } }],
 };
 `)
 	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "web", "src", "server.ts"), "export function handler() { return \"web\"; }\n")

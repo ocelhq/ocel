@@ -49,7 +49,7 @@ func (l Location) Rebase(context string) (Location, error) {
 	}
 	if !under(root, l.Root) {
 		return Location{}, fmt.Errorf(
-			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the install reads, so build.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
+			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the install reads, so image.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
 			root, l.Root,
 		)
 	}

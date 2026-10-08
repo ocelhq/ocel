@@ -85,17 +85,19 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	}
 
 	var provider *Provider
+	var front *Edge
+	var dns *configdoc.DNSDescriptor
 	if doc.Provider != nil {
 		provider = &Provider{ID: doc.Provider.ID, Options: doc.Provider.Options}
-	}
-
-	var front *Edge
-	if doc.Edge != nil {
-		options := &structpb.Struct{}
-		if err := protojson.Unmarshal(doc.Edge.Options, options); err != nil {
-			return nil, newInvalidConfigError(fmt.Errorf("%s configures edge %q with options that are not an object: %w", configPath, doc.Edge.ID, err), configdoc.JoinPath("edge", doc.Edge.ID))
+		dns = doc.Provider.DNS
+		if raw := doc.Provider.Edge; raw != nil {
+			options := &structpb.Struct{}
+			if err := protojson.Unmarshal(raw.Options, options); err != nil {
+				at := configdoc.JoinPath(configdoc.JoinPath(configdoc.JoinPath("provider", doc.Provider.ID), "edge"), raw.ID)
+				return nil, newInvalidConfigError(fmt.Errorf("%s configures edge %q with options that are not an object: %w", configPath, raw.ID, err), at)
+			}
+			front = &Edge{Kind: edge.Kind(raw.ID), Options: options}
 		}
-		front = &Edge{Kind: edge.Kind(doc.Edge.ID), Options: options}
 	}
 
 	allowDegraded, err := normalizeAllowDegraded(doc.AllowDegraded)
@@ -148,7 +150,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		DiscoveryPaths: discoveryPaths,
 		Provider:       provider,
 		Edge:           front,
-		DNS:            normalizeDNS(doc.DNS),
+		DNS:            normalizeDNS(dns),
 		AllowDegraded:  allowDegraded,
 		Apps:           apps,
 		Bindings:       bindings,

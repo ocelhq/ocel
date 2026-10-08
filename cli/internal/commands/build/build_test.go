@@ -34,7 +34,7 @@ func TestBuildBakesTheWorkersAnAppHostsIntoItsBuild(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+  apps: [{ name: "api", path: ".", compute: { serverless: { framework: "node" } } }],
 };
 `)
 	source := filepath.Join(root, discovery.DefaultRootDirName, "jobs.ts") + ":4"
@@ -67,7 +67,7 @@ func TestBuildNeedsNoLoginAndNoProvider(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+  apps: [{ name: "api", path: ".", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -109,7 +109,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "api", framework: "node", compute: "serverless" },
+    { name: "api", path: "api", compute: { serverless: { framework: "node" } } },
     { name: "web", path: "web", compute: "container", arch: "arm64" },
   ],
 };
@@ -229,7 +229,7 @@ func TestBuildBakesEachAppsPlaintextClientValuesAsADeployDoes(t *testing.T) {
 export default {
   slug: "`+clitest.FixtureSlug+`",
   provider: { fake: {} },
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless", domains: { production: ["shop.acme.com"] } }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } }, domains: { production: ["shop.acme.com"] } }],
 };
 `)
 
@@ -253,7 +253,7 @@ func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testin
 	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.MaxFunctionBytes = 200 << 20 })
 	fixture.Provider.Credentials().(*fake.Credentials).Ask("sign in to fake", provider.Question{Finding: "no session", Prompt: "Sign in?"})
 	root := fixture.Root
-	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", compute: { serverless: { framework: "next" } } }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
 
 	dependencies := newTestDependencies()
@@ -278,7 +278,7 @@ func TestBuildRefusesANextFunctionAppWhenNoProviderIsConfiguredToReadItsFactsFro
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless" }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }],
 };
 `)
 
@@ -305,7 +305,7 @@ func TestBuildRefusesAnAppNamingNoComputeWhenNoProviderCanChooseOne(t *testing.T
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "node" }],
+  apps: [{ name: "web", path: "." }],
 };
 `)
 

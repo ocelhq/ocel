@@ -29,11 +29,11 @@ func productionConfig(dns string, hosts ...string) string {
 	for _, host := range hosts {
 		quoted = append(quoted, `"`+host+`"`)
 	}
-	config := "export default {\n  slug: \"test-app\",\n  provider: { fake: {} },\n  domains: { production: [" + strings.Join(quoted, ", ") + "] },\n"
+	options := ""
 	if dns != "" {
-		config += "  dns: \"" + dns + "\",\n"
+		options = "dns: \"" + dns + "\""
 	}
-	return config + "};\n"
+	return "export default {\n  slug: \"test-app\",\n  provider: { fake: { " + options + " } },\n  domains: { production: [" + strings.Join(quoted, ", ") + "] },\n};\n"
 }
 
 func deployedProject(t *testing.T, config string) clitest.FakeProject {

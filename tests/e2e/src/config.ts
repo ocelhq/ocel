@@ -167,9 +167,29 @@ function buildEnvOf(name: string, vars: Record<string, string>): string {
   return `const ${name} = buildEnv({\n${fields.join("\n")}\n});\n`;
 }
 
-function readsOf(name: string, vars: Record<string, string>): string {
-  const fields = Object.entries(vars).map(([key, variable]) => `${key}: ${name}.${variable}`);
-  return `{ ${fields.join(", ")} }`;
+function readsOf(name: string, vars: Record<string, string>): string[] {
+  return Object.entries(vars).map(([key, variable]) => `${key}: ${name}.${variable}`);
+}
+
+function frontOf(overlay: Overlay): string[] {
+  const front: string[] = [];
+  if (overlay.edge) {
+    const options = overlay.tunnel ? "{ tunnel: true }" : "";
+    front.push(`edge: ${EDGE_IMPORTS[overlay.edge].name}(${options})`);
+  }
+  if (overlay.dns) {
+    front.push(`dns: cloudflareDns()`);
+  }
+  return front;
+}
+
+function computeExpressionOf(compute: Compute, target: TargetName): string {
+  if (compute === "serverless") {
+    return `{ serverless: { ...(typeof app.compute === "object" ? app.compute.serverless : {}) } }`;
+  }
+  return target === "vps"
+    ? `{ container: { health: { path: ${JSON.stringify(CONTAINER_HEALTH.path)} } } }`
+    : `"container"`;
 }
 
 function expressionOf(fields: Record<string, unknown>): string {
@@ -181,26 +201,22 @@ function expressionOf(fields: Record<string, unknown>): string {
 
 function appOverlay(overlay: Overlay): string {
   const lines: string[] = [];
-  if (overlay.target === "vps") {
-    if (!overlay.compute) {
-      lines.push(`    compute: "container",`);
-    }
-    lines.push(`    health: { path: ${JSON.stringify(CONTAINER_HEALTH.path)} },`);
+  if (overlay.target === "vps" && !overlay.compute) {
+    lines.push(`    compute: ${computeExpressionOf("container", overlay.target)},`);
   }
   for (const [app, fields] of Object.entries(overlay.apps ?? {})) {
     lines.push(`    ...(app.name === ${JSON.stringify(app)} ? ${expressionOf(fields)} : {}),`);
   }
   if (overlay.compute) {
-    lines.push(`    compute: ${JSON.stringify(overlay.compute)},`);
+    lines.push(`    compute: ${computeExpressionOf(overlay.compute, overlay.target)},`);
   }
   if (overlay.compute === "container") {
-    lines.push(`    framework: undefined,`);
     lines.push(`    arch: undefined,`);
   }
   for (const [app, compute] of Object.entries(overlay.computes ?? {})) {
-    const unset = compute === "container" ? ", framework: undefined, arch: undefined" : "";
+    const unset = compute === "container" ? ", arch: undefined" : "";
     lines.push(
-      `    ...(app.name === ${JSON.stringify(app)} ? { compute: ${JSON.stringify(compute)}${unset} } : {}),`,
+      `    ...(app.name === ${JSON.stringify(app)} ? { compute: ${computeExpressionOf(compute, overlay.target)}${unset} } : {}),`,
     );
   }
   if (overlay.hostnames) {
@@ -222,7 +238,8 @@ export function renderConfig(base: string, overlay: Overlay): string {
       `import { z } from "zod";`,
     );
     env.push(buildEnvOf("gcp", GCP_ENV));
-    fields.push(`  provider: gcpProvider(${readsOf("gcp", GCP_ENV)}),`);
+    const options = [...readsOf("gcp", GCP_ENV), ...frontOf(overlay)];
+    fields.push(`  provider: gcpProvider({ ${options.join(", ")} }),`);
   } else if (overlay.target === "vps") {
     imports.push(
       `import { buildEnv, defineConfig } from "ocel/config";`,
@@ -234,15 +251,20 @@ export function renderConfig(base: string, overlay: Overlay): string {
       overlay.proxy === undefined ? [] : [`    proxy: ${JSON.stringify(overlay.proxy)},`];
     fields.push(
       `  provider: vpsProvider({`,
-      `    ssh: ${readsOf("ssh", VPS_SSH_ENV)},`,
+      `    ssh: { ${readsOf("ssh", VPS_SSH_ENV).join(", ")} },`,
       ...proxy,
+      ...frontOf(overlay).map((one) => `    ${one},`),
       `  }),`,
     );
   } else {
     imports.push(`import { defineConfig } from "ocel/config";`);
-    if (overlay.variablesKey) {
+    const options = [
+      ...(overlay.variablesKey ? [`variablesKey: ${JSON.stringify(overlay.variablesKey)}`] : []),
+      ...frontOf(overlay),
+    ];
+    if (options.length > 0) {
       fields.push(
-        `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), variablesKey: ${JSON.stringify(overlay.variablesKey)} } },`,
+        `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), ${options.join(", ")} } },`,
       );
     }
   }
@@ -257,13 +279,6 @@ export function renderConfig(base: string, overlay: Overlay): string {
 
   if (overlay.allowDegraded) {
     fields.push(`  allowDegraded: ${JSON.stringify(overlay.allowDegraded)},`);
-  }
-  if (overlay.edge) {
-    const options = overlay.tunnel ? "{ tunnel: true }" : "";
-    fields.push(`  edge: ${EDGE_IMPORTS[overlay.edge].name}(${options}),`);
-  }
-  if (overlay.dns) {
-    fields.push(`  dns: cloudflareDns(),`);
   }
   if (overlay.previewDomain) {
     fields.push(
@@ -293,19 +308,31 @@ type Document = Record<string, unknown> & {
   apps?: App[];
 };
 
+function computeDocumentOf(compute: Compute, target: TargetName, declared: unknown): unknown {
+  if (compute === "container") {
+    return target === "vps" ? { container: { health: CONTAINER_HEALTH } } : compute;
+  }
+  const serverless =
+    declared !== null && typeof declared === "object"
+      ? (declared as { serverless?: unknown }).serverless
+      : undefined;
+  return serverless === undefined ? compute : { serverless };
+}
+
 function appDocument(app: App, overlay: Overlay): App {
   const written: App = {
     ...app,
-    ...(overlay.target === "vps" ? { compute: "container", health: CONTAINER_HEALTH } : {}),
+    ...(overlay.target === "vps"
+      ? { compute: computeDocumentOf("container", overlay.target, app.compute) }
+      : {}),
     ...(app.name === undefined ? {} : overlay.apps?.[app.name]),
   };
   const compute =
     (app.name === undefined ? undefined : overlay.computes?.[app.name]) ?? overlay.compute;
   if (compute) {
-    written.compute = compute;
+    written.compute = computeDocumentOf(compute, overlay.target, app.compute);
   }
   if (compute === "container") {
-    delete written.framework;
     delete written.arch;
   }
   const hostname = app.name === undefined ? undefined : overlay.hostnames?.[app.name];
@@ -313,6 +340,15 @@ function appDocument(app: App, overlay: Overlay): App {
     written.domains = { production: hostname };
   }
   return written;
+}
+
+function frontDocumentOf(overlay: Overlay): Record<string, unknown> {
+  return {
+    ...(overlay.edge
+      ? { edge: overlay.tunnel ? { [overlay.edge]: { tunnel: true } } : overlay.edge }
+      : {}),
+    ...(overlay.dns ? { dns: overlay.dns } : {}),
+  };
 }
 
 function placeholdersOf(vars: Record<string, string>): Record<string, string> {
@@ -330,20 +366,21 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
     written.provider = { aws: { ...options, variablesKey: overlay.variablesKey } };
   }
   if (overlay.target === "gcp") {
-    written.provider = { gcp: placeholdersOf(GCP_ENV) };
-  }
-  if (overlay.target === "vps") {
+    written.provider = { gcp: { ...placeholdersOf(GCP_ENV), ...frontDocumentOf(overlay) } };
+  } else if (overlay.target === "vps") {
     const proxy = overlay.proxy === undefined ? {} : { proxy: overlay.proxy };
-    written.provider = { vps: { ssh: placeholdersOf(VPS_SSH_ENV), ...proxy } };
+    written.provider = {
+      vps: { ssh: placeholdersOf(VPS_SSH_ENV), ...proxy, ...frontDocumentOf(overlay) },
+    };
+  } else if (overlay.edge || overlay.dns) {
+    const options =
+      written.provider !== null && typeof written.provider === "object"
+        ? written.provider.aws
+        : undefined;
+    written.provider = { aws: { ...options, ...frontDocumentOf(overlay) } };
   }
   if (overlay.allowDegraded) {
     written.allowDegraded = overlay.allowDegraded;
-  }
-  if (overlay.edge) {
-    written.edge = overlay.tunnel ? { [overlay.edge]: { tunnel: true } } : overlay.edge;
-  }
-  if (overlay.dns) {
-    written.dns = overlay.dns;
   }
   if (overlay.previewDomain) {
     written.domains = { ...(read.domains as object | undefined), preview: overlay.previewDomain };

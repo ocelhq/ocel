@@ -72,7 +72,7 @@ this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
-unless `minInstances` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
+unless `instances.min` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
 with a serverless Next app, so a revalidated tag reaches every instance, and it refreshes stale
 pages in the background. Cloud CDN does not store its pages: ocel marks every response that
 names `s-maxage` private, so a revalidated page is never served stale; its hashed static files are
@@ -84,12 +84,12 @@ loads names the app's own `cacheHandler`, `cacheHandlers.default` or `cacheHandl
 left alone.
 
 Each prerendered page renders on its first request after a deploy and is then served from the
-cache. With `minInstances: 0`, Cloud Run stops an idle instance after at most 15 minutes, so the
+cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
 next request starts cold. See [Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings).
 
 ## Edge
 
-Leave `edge` out and a deployment has no edge in front of it: each service is answered on
+Leave `edge` out of the provider's options and a deployment has no edge in front of it: each service is answered on
 the URL Cloud Run gives it, which costs nothing while it serves nothing and binds no
 hostname of your own.
 
@@ -172,8 +172,7 @@ import { alb } from "ocel/providers/gcp/edge";
 
 export default defineConfig({
   slug: "my-app",
-  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
-  edge: alb(),
+  provider: gcpProvider({ project: "my-project", region: "europe-west1", edge: alb() }),
   apps: [{ name: "web", path: "." }],
 });
 ```
@@ -183,9 +182,8 @@ export default defineConfig({
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
-    "gcp": { "project": "my-project", "region": "europe-west1" }
+    "gcp": { "project": "my-project", "region": "europe-west1", "edge": "alb" }
   },
-  "edge": "alb",
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
@@ -235,9 +233,12 @@ import gcpProvider from "ocel/providers/gcp";
 
 export default defineConfig({
   slug: "my-app",
-  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
-  edge: cloudflare(),
-  dns: cloudflareDns(),
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    edge: cloudflare(),
+    dns: cloudflareDns(),
+  }),
   apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
 });
 ```
@@ -247,10 +248,13 @@ export default defineConfig({
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
-    "gcp": { "project": "my-project", "region": "europe-west1" }
+    "gcp": {
+      "project": "my-project",
+      "region": "europe-west1",
+      "edge": "cloudflare",
+      "dns": "cloudflare"
+    }
   },
-  "edge": "cloudflare",
-  "dns": "cloudflare",
   "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
 }
 ```

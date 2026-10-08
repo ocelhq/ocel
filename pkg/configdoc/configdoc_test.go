@@ -1,9 +1,32 @@
 package configdoc
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
+
+func TestDecodeNamesTheComputeAnOptionUnderTheOtherComputeBelongsTo(t *testing.T) {
+	cases := []struct {
+		compute string
+		want    string
+	}{
+		{`{"serverless":{"health":{"path":"/up"}}}`, "health is an option of container compute"},
+		{`{"serverless":{"instances":{"min":1}}}`, "instances is an option of container compute"},
+		{`{"container":{"framework":"next"}}`, "framework is an option of serverless compute"},
+		{`{"container":{"entrypoint":"server.js"}}`, "entrypoint is an option of serverless compute"},
+	}
+	for _, c := range cases {
+		_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":`+c.compute+`}]}`), env(nil))
+		var unknown UnknownKeyError
+		if !errors.As(err, &unknown) {
+			t.Fatalf("decode %s err = %v, want an unknown key", c.compute, err)
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("error %q does not say %q", err, c.want)
+		}
+	}
+}
 
 func env(pairs map[string]string) Lookup {
 	return func(name string) (string, bool) {
@@ -45,43 +68,53 @@ func TestDecodeProviderShorthandTakesNoOptions(t *testing.T) {
 	}
 }
 
-func TestDecodeEdgeInEitherForm(t *testing.T) {
+func TestDecodeEdgeInEitherFormUnderTheProvider(t *testing.T) {
 	for _, spelled := range []string{`"cloudfront"`, `{"cloudfront":{}}`} {
-		doc, err := Decode([]byte(`{"slug":"acme","edge":`+spelled+`}`), env(nil))
+		doc, err := Decode([]byte(`{"slug":"acme","provider":{"aws":{"edge":`+spelled+`}}}`), env(nil))
 		if err != nil {
 			t.Fatalf("decode %s: %v", spelled, err)
 		}
-		if doc.Edge == nil || doc.Edge.ID != "cloudfront" {
-			t.Fatalf("edge from %s = %+v, want cloudfront", spelled, doc.Edge)
+		if doc.Provider.Edge == nil || doc.Provider.Edge.ID != "cloudfront" {
+			t.Fatalf("edge from %s = %+v, want cloudfront", spelled, doc.Provider.Edge)
 		}
 	}
 }
 
 func TestDecodeKeepsTheEdgesOptionsAsWrittenForTheEdgeToRead(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","edge":{"cloudflare":{"tunnel":true}}}`), env(nil))
+	doc, err := Decode([]byte(`{"slug":"acme","provider":{"vps":{"ssh":"box","edge":{"cloudflare":{"tunnel":true}}}}}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if doc.Edge == nil || doc.Edge.ID != "cloudflare" || string(doc.Edge.Options) != `{"tunnel":true}` {
-		t.Fatalf("edge = %+v, want cloudflare with its options as written", doc.Edge)
+	if doc.Provider.Edge == nil || doc.Provider.Edge.ID != "cloudflare" || string(doc.Provider.Edge.Options) != `{"tunnel":true}` {
+		t.Fatalf("edge = %+v, want cloudflare with its options as written", doc.Provider.Edge)
+	}
+}
+
+func TestDecodeHandsTheProviderItsOptionsWithoutTheEdgeAndDNS(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","provider":{"aws":{"region":"eu-west-2","edge":"cloudfront","dns":"route53"}}}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(doc.Provider.Options) != `{"region":"eu-west-2"}` {
+		t.Fatalf("options = %s, want the provider's own options alone", doc.Provider.Options)
 	}
 }
 
 func TestDecodeDNSKeepsItsZoneUnderItsIdentifier(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","dns":{"route53":{"zone":"example.com"}}}`), env(nil))
+	doc, err := Decode([]byte(`{"slug":"acme","provider":{"aws":{"dns":{"route53":{"zone":"example.com"}}}}}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if doc.DNS == nil || doc.DNS.ID != "route53" || doc.DNS.Options.Zone != "example.com" {
-		t.Fatalf("dns = %+v, want route53 in example.com", doc.DNS)
+	if doc.Provider.DNS == nil || doc.Provider.DNS.ID != "route53" || doc.Provider.DNS.Options.Zone != "example.com" {
+		t.Fatalf("dns = %+v, want route53 in example.com", doc.Provider.DNS)
 	}
 
-	doc, err = Decode([]byte(`{"slug":"acme","dns":"cloudflare"}`), env(nil))
+	doc, err = Decode([]byte(`{"slug":"acme","provider":{"aws":{"dns":"cloudflare"}}}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode shorthand: %v", err)
 	}
-	if doc.DNS == nil || doc.DNS.ID != "cloudflare" || doc.DNS.Options.Zone != "" {
-		t.Fatalf("dns = %+v, want cloudflare with no zone", doc.DNS)
+	if doc.Provider.DNS == nil || doc.Provider.DNS.ID != "cloudflare" || doc.Provider.DNS.Options.Zone != "" {
+		t.Fatalf("dns = %+v, want cloudflare with no zone", doc.Provider.DNS)
 	}
 }
 
@@ -98,17 +131,19 @@ func TestDecodeRefusesASelectorThatIsNotOneKnownIdentifier(t *testing.T) {
 		{"a provider whose options are required, as a string", `"provider":"gcp"`, []string{`"gcp"`, `{ "gcp": {`, "aws"}},
 		{"a provider whose options are required, set to null", `"provider":{"vps":null}`, []string{`"provider.vps" must be an object of options`}},
 		{"a provider that may be named alone, set to null", `"provider":{"aws":null}`, []string{`"provider.aws" must be an object of options`}},
-		{"an edge set to null", `"edge":{"cloudfront":null}`, []string{`"edge.cloudfront" must be an object of options`}},
+		{"an edge set to null", `"provider":{"aws":{"edge":{"cloudfront":null}}}`, []string{`"provider.aws.edge.cloudfront" must be an object of options`}},
 		{"a provider that is neither", `"provider":7`, []string{`"provider"`, "aws, gcp, vps"}},
-		{"an edge keyed twice", `"edge":{"cloudfront":{},"cloudflare":{}}`, []string{`"edge"`, "cloudflare", "cloudfront"}},
-		{"an edge nobody fronts with", `"edge":"fastly"`, []string{`"fastly"`, "alb, api-gateway, cloudflare, cloudfront"}},
-		{"the box, which is no edge", `"edge":"box"`, []string{`"box"`, "alb, api-gateway, cloudflare, cloudfront"}},
-		{"Cloud Run's own url, which is no edge", `"edge":{"direct":{}}`, []string{`"direct"`, "alb, api-gateway, cloudflare, cloudfront"}},
-		{"a dns nobody writes with", `"dns":{"gandi":{}}`, []string{`"gandi"`, "cloudflare, route53"}},
-		{"a dns turned on", `"dns":true`, []string{`"dns"`, "cloudflare, route53"}},
+		{"an edge keyed twice", `"provider":{"aws":{"edge":{"cloudfront":{},"cloudflare":{}}}}`, []string{`"provider.aws.edge"`, "cloudflare", "cloudfront"}},
+		{"an edge nobody fronts with", `"provider":{"aws":{"edge":"fastly"}}`, []string{`"fastly"`, "aws cannot front deployments with", "api-gateway, cloudflare, cloudfront"}},
+		{"an edge another provider fronts with", `"provider":{"gcp":{"project":"p","region":"r","edge":"cloudfront"}}`, []string{`"provider.gcp.edge"`, `"cloudfront"`, "gcp cannot front deployments with", "alb, cloudflare"}},
+		{"the box, which is no edge", `"provider":{"vps":{"ssh":"box","edge":"box"}}`, []string{`"box"`, "vps cannot front deployments with", "cloudflare"}},
+		{"Cloud Run's own url, which is no edge", `"provider":{"gcp":{"project":"p","region":"r","edge":{"direct":{}}}}`, []string{`"direct"`, "alb, cloudflare"}},
+		{"a dns nobody writes with", `"provider":{"aws":{"dns":{"gandi":{}}}}`, []string{`"gandi"`, "aws cannot write hostname records with", "cloudflare, route53"}},
+		{"a dns another provider writes with", `"provider":{"vps":{"ssh":"box","dns":"route53"}}`, []string{`"provider.vps.dns"`, `"route53"`, "vps cannot write hostname records with", "cloudflare"}},
+		{"a dns turned on", `"provider":{"aws":{"dns":true}}`, []string{`"provider.aws.dns"`, "cloudflare, route53"}},
 		{"provider options that are not an object", `"provider":{"aws":7}`, []string{`"provider.aws"`, "an object"}},
-		{"edge options that are not an object", `"edge":{"cloudfront":"on"}`, []string{`"edge.cloudfront"`, "an object"}},
-		{"dns options that are not an object", `"dns":{"route53":["example.com"]}`, []string{`"dns.route53"`, "an object"}},
+		{"edge options that are not an object", `"provider":{"aws":{"edge":{"cloudfront":"on"}}}`, []string{`"provider.aws.edge.cloudfront"`, "an object"}},
+		{"dns options that are not an object", `"provider":{"aws":{"dns":{"route53":["example.com"]}}}`, []string{`"provider.aws.dns.route53"`, "an object"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -135,7 +170,11 @@ func TestDecodeRejectsUnknownKeys(t *testing.T) {
 		{"nested object", `{"slug":"acme","discovery":{"path":["declarations"]}}`, "discovery.path"},
 		{"array element", `{"slug":"acme","apps":[{"name":"web","path":".","runtim":"go"}]}`, "apps[0].runtim"},
 		{"registry", `{"slug":"acme","registry":{"server":"ghcr.io","token":"X"}}`, "registry.token"},
-		{"dns options", `{"slug":"acme","dns":{"route53":{"zonee":"x"}}}`, "dns.route53.zonee"},
+		{"dns options", `{"slug":"acme","provider":{"aws":{"dns":{"route53":{"zonee":"x"}}}}}`, "provider.aws.dns.route53.zonee"},
+		{"an edge at the top level, where it no longer goes", `{"slug":"acme","edge":"cloudfront"}`, "edge"},
+		{"a framework under a container", `{"slug":"acme","apps":[{"name":"web","path":".","compute":{"container":{"framework":"next"}}}]}`, "apps[0].compute.container.framework"},
+		{"container options under serverless", `{"slug":"acme","apps":[{"name":"web","path":".","compute":{"serverless":{"health":{"path":"/up"}}}}]}`, "apps[0].compute.serverless.health"},
+		{"a container option on the app itself", `{"slug":"acme","apps":[{"name":"web","path":".","minInstances":1}]}`, "apps[0].minInstances"},
 		{"a key the app surface dropped", `{"slug":"acme","apps":[{"name":"web","path":".","runtime":"go"}]}`, "apps[0].runtime"},
 	}
 	for _, c := range cases {
@@ -194,15 +233,63 @@ func TestDecodeEscapesDoubleDollar(t *testing.T) {
 }
 
 func TestDecodeKeepsTheFrameworkAndArchitectureAnAppNames(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","framework":"go"},{"name":"b","path":".","framework":"node","arch":"arm64"}]}`), env(nil))
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":{"serverless":{"framework":"go","entrypoint":"cmd/server"}}},{"name":"b","path":".","compute":{"serverless":{"framework":"node"}},"arch":"arm64"}]}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if doc.Apps[0].Framework != "go" || doc.Apps[0].Arch != "" {
-		t.Fatalf("app a = %+v", doc.Apps[0])
+	if a := doc.Apps[0]; a.Compute.Serverless.Framework != "go" || a.Compute.Serverless.Entrypoint != "cmd/server" || a.Arch != "" {
+		t.Fatalf("app a = %+v", a.Compute.Serverless)
 	}
-	if doc.Apps[1].Framework != "node" || doc.Apps[1].Arch != "arm64" {
-		t.Fatalf("app b = %+v", doc.Apps[1])
+	if b := doc.Apps[1]; b.Compute.Serverless.Framework != "node" || b.Arch != "arm64" {
+		t.Fatalf("app b = %+v", b.Compute.Serverless)
+	}
+}
+
+func TestDecodeComputeNamedAloneOrKeyed(t *testing.T) {
+	cases := []struct {
+		spelled               string
+		serverless, container bool
+	}{
+		{`"serverless"`, true, false},
+		{`"container"`, false, true},
+		{`{"serverless":{}}`, true, false},
+		{`{"container":{}}`, false, true},
+		{`{"container":null}`, false, true},
+	}
+	for _, c := range cases {
+		doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":`+c.spelled+`}]}`), env(nil))
+		if err != nil {
+			t.Fatalf("decode %s: %v", c.spelled, err)
+		}
+		compute := doc.Apps[0].Compute
+		if (compute.Serverless != nil) != c.serverless || (compute.Container != nil) != c.container {
+			t.Errorf("compute from %s = %+v, want serverless %v container %v", c.spelled, compute, c.serverless, c.container)
+		}
+	}
+}
+
+func TestDecodeRefusesAComputeThatIsNotOneKnownCompute(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want []string
+	}{
+		{"a compute nobody runs", `"compute":"edge"`, []string{`"apps[0].compute"`, `"serverless", "container"`}},
+		{"a compute keyed twice", `"compute":{"serverless":{},"container":{}}`, []string{`"apps[0].compute"`, "exactly one"}},
+		{"a compute keyed by nothing", `"compute":{}`, []string{`"apps[0].compute"`, "exactly one"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".",`+c.json+`}]}`), env(nil))
+			if err == nil {
+				t.Fatalf("decoded %s without error", c.json)
+			}
+			for _, want := range c.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %q", err, want)
+				}
+			}
+		})
 	}
 }
 
@@ -300,15 +387,15 @@ func TestDecodeRefusesASecretFieldThatIsNotOnePlaceholder(t *testing.T) {
 }
 
 func TestAddedKnownIDsDecodeUntilRestored(t *testing.T) {
-	document := []byte(`{"slug":"acme","provider":{"reference":{}},"edge":"front","dns":"zone"}`)
+	document := []byte(`{"slug":"acme","provider":{"reference":{"edge":"front","dns":"zone"}}}`)
 
 	restore := AddKnownIDs("reference", []string{"front"}, []string{"zone"})
 	doc, err := Decode(document, env(nil))
 	if err != nil {
 		t.Fatalf("decode with the ids added: %v", err)
 	}
-	if doc.Provider.ID != "reference" || doc.Edge.ID != "front" || doc.DNS.ID != "zone" {
-		t.Errorf("decoded provider %q edge %q dns %q, want the added ids", doc.Provider.ID, doc.Edge.ID, doc.DNS.ID)
+	if doc.Provider.ID != "reference" || doc.Provider.Edge.ID != "front" || doc.Provider.DNS.ID != "zone" {
+		t.Errorf("decoded provider %q edge %q dns %q, want the added ids", doc.Provider.ID, doc.Provider.Edge.ID, doc.Provider.DNS.ID)
 	}
 
 	restore()
@@ -318,24 +405,25 @@ func TestAddedKnownIDsDecodeUntilRestored(t *testing.T) {
 }
 
 func TestDecodeKeepsTheInstanceCountsAContainerAppNames(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":"container","minInstances":0,"maxInstances":4},{"name":"b","path":"."}]}`), env(nil))
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":{"container":{"instances":{"min":0,"max":4}}}},{"name":"b","path":".","compute":"container"}]}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if doc.Apps[0].MinInstances == nil || *doc.Apps[0].MinInstances != 0 || doc.Apps[0].MaxInstances == nil || *doc.Apps[0].MaxInstances != 4 {
-		t.Fatalf("app a = %+v", doc.Apps[0])
+	instances := doc.Apps[0].Compute.Container.Instances
+	if instances == nil || instances.Min == nil || *instances.Min != 0 || instances.Max == nil || *instances.Max != 4 {
+		t.Fatalf("app a = %+v", instances)
 	}
-	if doc.Apps[1].MinInstances != nil || doc.Apps[1].MaxInstances != nil {
-		t.Fatalf("app b names no instance counts, and decoded %+v", doc.Apps[1])
+	if doc.Apps[1].Compute.Container.Instances != nil {
+		t.Fatalf("app b names no instance counts, and decoded %+v", doc.Apps[1].Compute.Container.Instances)
 	}
 }
 
 func TestDecodeRefusesAnInstanceCountThatIsNotAWholeNumber(t *testing.T) {
-	_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","maxInstances":2.5}]}`), env(nil))
+	_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":{"container":{"instances":{"max":2.5}}}}]}`), env(nil))
 	if err == nil {
 		t.Fatal("decoded 2.5 instances")
 	}
-	if !strings.Contains(err.Error(), `"apps[0].maxInstances" must be a whole number`) {
+	if !strings.Contains(err.Error(), `"apps[0].compute.container.instances.max" must be a whole number`) {
 		t.Fatalf("error %q does not name the key and a whole number", err)
 	}
 }

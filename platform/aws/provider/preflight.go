@@ -186,7 +186,7 @@ func refuseContainersScaledToZero(pre provider.DeployPreflight) error {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s asks for minInstances 0, and a container app on this provider scales on the requests its load balancer counts per task, which a service with no task never receives: give %s minInstances 1 or more",
+			"app %s asks for instances.min 0, and a container app on this provider scales on the requests its load balancer counts per task, which a service with no task never receives: give %s instances.min 1 or more",
 			app.App, app.App)
 	}
 	return nil

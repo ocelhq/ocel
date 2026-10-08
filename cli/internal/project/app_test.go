@@ -129,12 +129,21 @@ func TestASlugTakingTheInfrastructureStacksNameIsRefusedWhenItWouldNameTheRootAp
 	}
 }
 
-func TestAnAppDeclaringContainerComputeAndAFrameworkIsRefusedAtLoad(t *testing.T) {
+func TestAnAppDeclaringContainerComputeAndServerlessConfigIsRefusedAtLoad(t *testing.T) {
 	t.Parallel()
 
-	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","framework":"node"}]}`)
-	if err == nil || !strings.Contains(err.Error(), "`framework`") {
-		t.Fatalf("Load err = %v, want the framework refused on an app that runs the image it is given", err)
+	for name, config := range map[string]string{
+		"framework":  `"framework":"node"`,
+		"entrypoint": `"entrypoint":"server.js"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"container":{`+config+`}}}]}`)
+			if err == nil || !strings.Contains(err.Error(), `"apps[0].compute.container.`+name+`" is not a key`) {
+				t.Fatalf("Load err = %v, want the %s refused on an app that runs the image it is given", err, name)
+			}
+		})
 	}
 }
 
@@ -142,16 +151,15 @@ func TestAnAppDeclaringServerlessComputeAndContainerConfigIsRefusedAtLoad(t *tes
 	t.Parallel()
 
 	for name, config := range map[string]string{
-		"build":        `"build":{"dockerfile":"Dockerfile"}`,
-		"health":       `"health":{"path":"/healthz"}`,
-		"minInstances": `"minInstances":1`,
-		"maxInstances": `"maxInstances":3`,
+		"image":     `"image":{"dockerfile":"Dockerfile"}`,
+		"health":    `"health":{"path":"/healthz"}`,
+		"instances": `"instances":{"max":3}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"serverless","framework":"node",`+config+`}]}`)
-			if err == nil || !strings.Contains(err.Error(), "`"+name+"`") {
+			_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"serverless":{"framework":"node",`+config+`}}}]}`)
+			if err == nil || !strings.Contains(err.Error(), `"apps[0].compute.serverless.`+name+`" is not a key`) {
 				t.Fatalf("Load err = %v, want the %s refused on an app that runs as functions", err, name)
 			}
 		})
@@ -162,21 +170,60 @@ func TestAnAppDeclaringAComputeHasOnlyThatComputesShape(t *testing.T) {
 	t.Parallel()
 
 	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[
-		{"name":"api","path":"api","compute":"container","build":{"command":"make"}},
-		{"name":"web","path":"web","compute":"serverless","framework":"node"}
+		{"name":"api","path":"api","compute":{"container":{"image":{"command":"make"}}}},
+		{"name":"web","path":"web","compute":{"serverless":{"framework":"node","entrypoint":"server.js"}}}
 	]}`)
-	if api := cfg.Apps[0]; api.Serverless != nil || api.Container == nil || api.Container.Build.Command != "make" {
-		t.Errorf("api = %+v, want the container shape alone, carrying its build", api)
+	if api := cfg.Apps[0]; api.Compute != provider.ComputeContainer || api.Serverless != nil || api.Container == nil || api.Container.Build.Command != "make" {
+		t.Errorf("api = %+v, want the container shape alone, carrying its image", api)
 	}
-	if web := cfg.Apps[1]; web.Container != nil || web.Framework() != "node" {
-		t.Errorf("web = %+v, want the serverless shape alone", web)
+	if web := cfg.Apps[1]; web.Compute != provider.ComputeServerless || web.Container != nil || web.Framework() != "node" || web.Serverless.Entrypoint != "server.js" {
+		t.Errorf("web = %+v, want the serverless shape alone, carrying its entrypoint", web)
+	}
+}
+
+func TestAnAppNamingItsComputeAloneHasThatComputesShape(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop","apps":[
+		{"name":"api","path":"api","compute":"container"},
+		{"name":"web","path":"web","compute":"serverless"}
+	]}`)
+	write(t, filepath.Join(dir, "web", nodeManifest), `{"dependencies":{"express":"5"}}`)
+
+	cfg, err := Load(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if api := cfg.Apps[0]; api.Compute != provider.ComputeContainer || api.Serverless != nil || api.Container == nil {
+		t.Errorf("api = %+v, want the container shape alone", api)
+	}
+	if web := cfg.Apps[1]; web.Compute != provider.ComputeServerless || web.Container != nil || web.Framework() != buildoutput.FrameworkNode {
+		t.Errorf("web = %+v, want the serverless shape alone, built with the framework read off its manifest", web)
+	}
+}
+
+func TestAContainerAppInANextDirectoryIsBuiltWithNextWithoutNamingIt(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop","apps":[{"name":"web","path":"web","compute":"container"}]}`)
+	write(t, filepath.Join(dir, "web", nodeManifest), `{}`)
+	write(t, filepath.Join(dir, "web", "next.config.js"), "module.exports = {};\n")
+
+	cfg, err := Load(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if web := cfg.Apps[0]; web.Container == nil || web.Container.Framework != buildoutput.FrameworkNext || web.Framework() != buildoutput.FrameworkNext {
+		t.Errorf("web = %+v, want a container built with next", web)
 	}
 }
 
 func TestAContainerAppKeepsTheInstanceCountsItNames(t *testing.T) {
 	t.Parallel()
 
-	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","minInstances":0,"maxInstances":4}]}`)
+	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"container":{"instances":{"min":0,"max":4}}}}]}`)
 	if got, want := cfg.Apps[0].Container.Instances(), (provider.Instances{Min: 0, Max: 4}); got != want {
 		t.Errorf("Instances() = %+v, want %+v", got, want)
 	}
@@ -186,12 +233,13 @@ func TestAContainerAppLeftWithoutInstanceCountsRunsOneOrAsManyAsItsFloor(t *test
 	t.Parallel()
 
 	for config, want := range map[string]provider.Instances{
-		``:                  {Min: 1, Max: 1},
-		`,"minInstances":3`: {Min: 3, Max: 3},
-		`,"minInstances":0`: {Min: 0, Max: 1},
-		`,"maxInstances":5`: {Min: 1, Max: 5},
+		`{}`:                      {Min: 1, Max: 1},
+		`{"instances":{}}`:        {Min: 1, Max: 1},
+		`{"instances":{"min":3}}`: {Min: 3, Max: 3},
+		`{"instances":{"min":0}}`: {Min: 0, Max: 1},
+		`{"instances":{"max":5}}`: {Min: 1, Max: 5},
 	} {
-		cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container"`+config+`}]}`)
+		cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"container":`+config+`}}]}`)
 		if got := cfg.Apps[0].Container.Instances(); got != want {
 			t.Errorf("%s: Instances() = %+v, want %+v", config, got, want)
 		}
@@ -201,11 +249,11 @@ func TestAContainerAppLeftWithoutInstanceCountsRunsOneOrAsManyAsItsFloor(t *test
 func TestAContainerAppWhoseCeilingIsBelowItsFloorIsRefusedAtLoad(t *testing.T) {
 	t.Parallel()
 
-	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","minInstances":3,"maxInstances":2}]}`)
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"container":{"instances":{"min":3,"max":2}}}}]}`)
 	if err == nil {
 		t.Fatal("Load admitted an app that runs at least 3 instances and at most 2")
 	}
-	for _, want := range []string{`app "api"`, "minInstances 3", "maxInstances 2"} {
+	for _, want := range []string{`app "api"`, "instances.min 3", "instances.max 2"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Load err = %q, want it to name %s", err, want)
 		}
@@ -215,11 +263,11 @@ func TestAContainerAppWhoseCeilingIsBelowItsFloorIsRefusedAtLoad(t *testing.T) {
 func TestAnInstanceCountNoProviderCanHoldIsRefusedAtLoad(t *testing.T) {
 	t.Parallel()
 
-	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":"container","maxInstances":4294967297}]}`)
+	_, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","compute":{"container":{"instances":{"max":4294967297}}}}]}`)
 	if err == nil {
 		t.Fatal("Load admitted 4294967297 instances, which wraps to 1 on the wire")
 	}
-	for _, want := range []string{`app "api"`, "maxInstances", "2147483647"} {
+	for _, want := range []string{`app "api"`, "instances.max", "2147483647"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Load err = %q, want it to name %s", err, want)
 		}

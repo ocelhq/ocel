@@ -52,7 +52,7 @@ func TestAContainerAppWithAFloorOfZeroIsRefusedOnAws(t *testing.T) {
 	if err == nil {
 		t.Fatal("preflight let a container app scale to zero behind a load balancer that counts requests per task, and nothing would ever wake it")
 	}
-	for _, want := range []string{"admin", "minInstances", "1"} {
+	for _, want := range []string{"admin", "instances.min", "1"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("preflight = %q, want it to name %s", err, want)
 		}

@@ -75,7 +75,7 @@ func (r *recordedEvents) onlyDeployCompleted(t *testing.T) telemetry.Event {
 func setUpNamedAppProject(t *testing.T) (clitest.FakeProject, Dependencies) {
 	t.Helper()
 	fixture := setUpPreviewProject(t)
-	writeAppsConfig(t, fixture.Root, `{ name: "`+namedApp+`", path: "apps/`+namedApp+`", framework: "node" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "`+namedApp+`", path: "apps/`+namedApp+`", compute: { serverless: { framework: "node" } } }`)
 	writeAppSource(t, fixture.Root, namedApp)
 	dependencies := previewDependencies("feature/login", "")
 	stubBuild(&dependencies, []build.Function{

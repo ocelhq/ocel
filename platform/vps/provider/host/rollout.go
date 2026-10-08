@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	healthKey    = "health.path"
+	healthKey    = "compute.container.health.path"
 	appLogTail   = "200"
 	noLogOutput  = "(no output)"
 	drainCeiling = "open requests get 502 or a truncated response; websockets and server-sent-events reconnect"

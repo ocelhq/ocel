@@ -247,8 +247,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", framework: "node", entrypoint: "src/main.ts" },
-    { name: "web", path: "services/web", framework: "node" },
+    { name: "api", path: "services/api", compute: { serverless: { framework: "node", entrypoint: "src/main.ts" } } },
+    { name: "web", path: "services/web", compute: { serverless: { framework: "node" } } },
   ],
 };
 `,
@@ -371,7 +371,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "node" }],
+  apps: [{ name: "api", path: "services/api" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -395,16 +395,16 @@ export default {
 			},
 		},
 		{
-			name: "reads the dockerfile a container app's build names",
+			name: "reads the dockerfile a container app's image names",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", build: { dockerfile: "../shared/Dockerfile" } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { image: { dockerfile: "../shared/Dockerfile" } } } }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
 				if cfg.Apps[0].Container == nil || cfg.Apps[0].Container.Build == nil {
-					t.Fatalf("Apps[0].Container = %+v, want the build the config writes", cfg.Apps[0].Container)
+					t.Fatalf("Apps[0].Container = %+v, want the image the config writes", cfg.Apps[0].Container)
 				}
 				if got, want := cfg.Apps[0].Container.Build.Dockerfile, "../shared/Dockerfile"; got != want {
 					t.Fatalf("Apps[0].Container.Build.Dockerfile = %q, want %q, resolved against the app's own directory", got, want)
@@ -416,7 +416,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/healthz" } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { health: { path: "/healthz" } } } }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -433,7 +433,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "next" }],
+  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "next" } } }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -447,7 +447,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "go" }],
+  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "go" } } }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -461,7 +461,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "node", arch: "arm64" }],
+  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } }, arch: "arm64" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -522,8 +522,8 @@ export default {
   slug: "test-app",
   domains: { production: "acme.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "node", domains: { production: "App.Acme.com" } },
-    { name: "admin", path: "apps/admin", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "App.Acme.com" } },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } } },
   ],
 };
 `,
@@ -549,7 +549,7 @@ export default {
   slug: "test-app",
   domains: { preview: "*.preview.acme.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "node", domains: { production: "app.acme.com" } },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "app.acme.com" } },
   ],
 };
 `,
@@ -593,8 +593,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", framework: "next", folder: "/web" },
-    { name: "admin", path: "apps/admin", framework: "next" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "/web" },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } } },
   ],
 };
 `,
@@ -695,7 +695,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { relay: {} },
+  provider: { fake: { edge: { relay: {} } } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -709,7 +709,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { relay: { tunnel: true, hops: { max: 2 } } },
+  provider: { fake: { edge: { relay: { tunnel: true, hops: { max: 2 } } } } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -725,7 +725,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: "relay",
+  provider: { fake: { edge: "relay" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -739,7 +739,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  dns: { zone: { zone: "Z123" } },
+  provider: { fake: { dns: { zone: { zone: "Z123" } } } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -767,8 +767,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: "relay",
-  dns: "zone",
+  provider: { fake: { edge: "relay", dns: "zone" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -782,8 +781,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { direct: {} },
-  dns: { zone: {} },
+  provider: { fake: { edge: { direct: {} }, dns: { zone: {} } } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
@@ -837,7 +835,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "deno" }],
+  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "deno" } } }],
 };
 `,
 			wantErr: []string{`app "api"`, "deno", "node", "next", "go"},
@@ -847,7 +845,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "node", arch: "riscv" }],
+  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } }, arch: "riscv" }],
 };
 `,
 			wantErr: []string{`app "api"`, "riscv", "x86_64", "arm64"},
@@ -858,29 +856,29 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", framework: "node" },
-    { name: "api", path: "services/other", framework: "node" },
+    { name: "api", path: "services/api", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "services/other", compute: { serverless: { framework: "node" } } },
   ],
 };
 `,
 			wantErr: []string{"api"},
 		},
 		{
-			name: "rejects a build.dockerfile that is only whitespace",
+			name: "rejects an image.dockerfile that is only whitespace",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", build: { dockerfile: "   " } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { image: { dockerfile: "   " } } } }],
 };
 `,
-			wantErr: []string{`app "api"`, "build.dockerfile"},
+			wantErr: []string{`app "api"`, "image.dockerfile"},
 		},
 		{
 			name: "rejects a health.path that is not a path off the app's root",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "healthz" } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { health: { path: "healthz" } } } }],
 };
 `,
 			wantErr: []string{`app "api"`, "health.path", "drop health.path to have the provider choose"},
@@ -890,7 +888,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/up?ready=1" } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { health: { path: "/up?ready=1" } } } }],
 };
 `,
 			wantErr: []string{`app "api"`, "health.path", "?"},
@@ -900,7 +898,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/up#ready" } }],
+  apps: [{ name: "api", path: "services/api", compute: { container: { health: { path: "/up#ready" } } } }],
 };
 `,
 			wantErr: []string{`app "api"`, "health.path", "#"},
@@ -910,7 +908,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", framework: "node" }],
+  apps: [{ name: "api", compute: { serverless: { framework: "node" } } }],
 };
 `,
 			wantErr: []string{"path"},
@@ -921,7 +919,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", framework: "node", domains: { preview: "*.preview.acme.com" } },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { preview: "*.preview.acme.com" } },
   ],
 };
 `,
@@ -951,8 +949,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", framework: "next", folder: "/shared" },
-    { name: "admin", path: "apps/admin", framework: "next", folder: "/shared" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "/shared" },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } }, folder: "/shared" },
   ],
 };
 `,
@@ -1043,50 +1041,50 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: true,
+  provider: { fake: { edge: true } },
 };
 `,
-			wantErr: []string{`"edge" must be an object keyed by one of`, "relay", "direct"},
+			wantErr: []string{`"provider.fake.edge" must be an object keyed by one of`, "relay", "direct"},
 		},
 		{
 			name: "rejects an edge keyed by nothing",
 			config: `
 export default {
   slug: "test-app",
-  edge: {},
+  provider: { fake: { edge: {} } },
 };
 `,
-			wantErr: []string{`"edge" is keyed by nothing`, "relay"},
+			wantErr: []string{`"provider.fake.edge" is keyed by nothing`, "relay"},
 		},
 		{
 			name: "rejects an edge keyed by two",
 			config: `
 export default {
   slug: "test-app",
-  edge: { direct: {}, relay: {} },
+  provider: { fake: { edge: { direct: {}, relay: {} } } },
 };
 `,
-			wantErr: []string{`"edge" is keyed by direct and relay`, "one edge"},
+			wantErr: []string{`"provider.fake.edge" is keyed by direct and relay`, "one edge"},
 		},
 		{
-			name: "rejects an edge no provider fronts with",
+			name: "rejects an edge the provider cannot front with",
 			config: `
 export default {
   slug: "test-app",
-  edge: "unknown-edge",
+  provider: { fake: { edge: "unknown-edge" } },
 };
 `,
-			wantErr: []string{`"unknown-edge"`, "relay, direct"},
+			wantErr: []string{`"provider.fake.edge" names "unknown-edge", which fake cannot front deployments with`, "relay, direct"},
 		},
 		{
 			name: "refuses an edge turned off outright",
 			config: `
 export default {
   slug: "test-app",
-  edge: false,
+  provider: { fake: { edge: false } },
 };
 `,
-			wantErr: []string{`"edge" must be an object keyed by one of`},
+			wantErr: []string{`"provider.fake.edge" must be an object keyed by one of`},
 		},
 		{
 			name: "rejects a provider named alone that cannot go without its options",
@@ -1113,10 +1111,10 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  dns: "acme.com",
+  provider: { fake: { dns: "acme.com" } },
 };
 `,
-			wantErr: []string{`"dns" names "acme.com"`, "zone"},
+			wantErr: []string{`"provider.fake.dns" names "acme.com"`, "zone"},
 		},
 		{
 			name: "lists the known needs when one is unknown",
@@ -1389,7 +1387,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -1415,7 +1413,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -1444,7 +1442,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -1476,7 +1474,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: "apps/web", framework: "next", folder: "`+folder+`" }],
+  apps: [{ name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "`+folder+`" }],
 };
 `)
 

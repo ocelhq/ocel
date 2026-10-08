@@ -152,9 +152,9 @@ CloudWatch rate limits a read shares.
 
 ## Edge
 
-Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —
-`cloudfront` and `api-gateway` are its own, [`cloudflare`](/docs/providers/cloudflare) is
-bought independently. On `api-gateway` a preview is served on its alias alone, with no
+Leave `edge` out of the provider's options and the deployment is fronted by CloudFront. Name
+an edge there to choose it — `cloudfront` and `api-gateway` are its own,
+[`cloudflare`](/docs/providers/cloudflare) is bought independently. On `api-gateway` a preview is served on its alias alone, with no
 hostname per deployment: each hostname would take a REST API of its own, and a region holds
 at most 600.
 
@@ -165,8 +165,7 @@ import { cloudfront } from "ocel/providers/aws/edge";
 
 export default defineConfig({
   slug: "my-app",
-  provider: awsProvider(),
-  edge: cloudfront(),
+  provider: awsProvider({ edge: cloudfront() }),
   apps: [{ name: "web", path: "." }],
 });
 ```
@@ -175,8 +174,7 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": "aws",
-  "edge": "cloudfront",
+  "provider": { "aws": { "edge": "cloudfront" } },
   "apps": [{ "name": "web", "path": "." }]
 }
 ```

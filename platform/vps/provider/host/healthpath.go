@@ -15,7 +15,7 @@ import (
 
 var healthPathCandidates = []string{"/up", "/health", "/healthz", "/"}
 
-const healthPathExample = `"health": { "path": "/health" }`
+const healthPathExample = `"compute": { "container": { "health": { "path": "/health" } } }`
 
 type HealthPathSearch struct {
 	App    string

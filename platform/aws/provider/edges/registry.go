@@ -42,7 +42,7 @@ var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error)
 		}
 		if decoded.OriginDomain != "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"edge.cloudflare.originDomain names where the Cloudflare worker reaches a load-balanced origin's deployments, and on AWS the worker reaches each function at its own URL: remove originDomain")
+				"provider.aws.edge.cloudflare.originDomain names where the Cloudflare worker reaches a load-balanced origin's deployments, and on AWS the worker reaches each function at its own URL: remove originDomain")
 		}
 		return cloudflare.New(string(deps.Namespace), decoded), nil
 	},

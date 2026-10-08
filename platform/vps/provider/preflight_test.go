@@ -196,7 +196,7 @@ func TestAContainerAppAskingForOtherThanOneInstanceIsRefusedBeforeTheBoxIsAsked(
 		if err == nil {
 			t.Fatalf("PreflightDeploy() let %+v instances onto a box that runs one container per app", instances)
 		}
-		for _, want := range []string{`web`, "minInstances", "maxInstances", "1"} {
+		for _, want := range []string{`web`, "instances.min", "instances.max", "1"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("PreflightDeploy(%+v) = %q, want it to name %s", instances, err, want)
 			}

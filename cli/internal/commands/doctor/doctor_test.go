@@ -188,8 +188,8 @@ export default {
   provider: { fake: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "node" },
-    { name: "api", path: "apps/api", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
   ],
 };
 `)
@@ -256,7 +256,7 @@ export default {
   slug: "my-shop",
   provider: { fake: {} },
   apps: [
-    { name: "web", path: "apps/web", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
     { name: "api", path: "apps/api", compute: "container" },
   ],
 };
@@ -467,8 +467,8 @@ export default {
   provider: { fake: {} },
   domains: { production: "shop.example.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "node" },
-    { name: "api", path: "apps/api", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
   ],
 };
 `)

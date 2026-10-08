@@ -14,8 +14,7 @@
     {
       "name": "web",
       "path": ".",
-      "compute": "container",
-      "health": { "path": "/health" }
+      "compute": { "container": { "health": { "path": "/health" } } }
     }
   ]
 }

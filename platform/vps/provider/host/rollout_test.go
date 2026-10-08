@@ -564,7 +564,7 @@ func TestAGateOnADiscoveredHealthPathThatFailsSaysItWasFoundByProbingAndHowToNam
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
-	for _, want := range []string{"found earlier by probing", `"health.path"`, `"health": { "path": "/health" }`} {
+	for _, want := range []string{"found earlier by probing", `"compute.container.health.path"`, healthPathExample} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal reads\n%s\nand never says %q", err, want)
 		}

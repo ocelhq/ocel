@@ -21,12 +21,32 @@
       ]
     }
   },
-  "edge": {
-    "ids": ["alb", "api-gateway", "cloudflare", "cloudfront"],
-    "shorthand": ["alb", "api-gateway", "cloudflare", "cloudfront"]
+  "edges": {
+    "aws": {
+      "ids": ["api-gateway", "cloudflare", "cloudfront"],
+      "shorthand": ["api-gateway", "cloudflare", "cloudfront"]
+    },
+    "gcp": {
+      "ids": ["alb", "cloudflare"],
+      "shorthand": ["alb", "cloudflare"]
+    },
+    "vps": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    }
   },
   "dns": {
-    "ids": ["cloudflare", "route53"],
-    "shorthand": ["cloudflare", "route53"]
+    "aws": {
+      "ids": ["cloudflare", "route53"],
+      "shorthand": ["cloudflare", "route53"]
+    },
+    "gcp": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    },
+    "vps": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    }
   }
 }

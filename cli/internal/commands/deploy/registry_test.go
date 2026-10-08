@@ -152,7 +152,7 @@ func containerProject(t *testing.T, health string) (Dependencies, clitest.FakePr
 
 	fixture := setUpDeployProject(t)
 	clitest.ServeImageDaemon(t, "amd64")
-	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "container"`+health+` }],`+"\n")
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { container: { `+health+` } } }],`+"\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
 	return dependencies, fixture
 }
@@ -186,7 +186,7 @@ func TestAContainerAppContributesZeroFunctions(t *testing.T) {
 }
 
 func TestAContainersHealthPathIsTheOneTheAppNames(t *testing.T) {
-	container := deployContainerProject(t, `, health: { path: "/healthz" }`).GetContainer()
+	container := deployContainerProject(t, `health: { path: "/healthz" }`).GetContainer()
 
 	if container.GetHealthCheckPath() != "/healthz" {
 		t.Errorf("health path = %q, want the health path the app names passed through to the provider", container.GetHealthCheckPath())
@@ -248,7 +248,7 @@ func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *t
 		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	fixture := setUpDeployProject(t)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
   registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
 `)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")

@@ -232,7 +232,7 @@ func TestAConfiguredBuildCommandIsWhatTheImageRuns(t *testing.T) {
 	plan := plannedFrom(t, loc)
 
 	if build := strings.Join(plan.step(t, "build"), "\n"); !strings.Contains(build, loc.BuildCommand) {
-		t.Errorf("the build step runs:\n%s\nwant the build.command the app names", build)
+		t.Errorf("the build step runs:\n%s\nwant the image.command the app names", build)
 	}
 }
 

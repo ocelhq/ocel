@@ -157,8 +157,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, apiFunction())
 		fixture := setUpDeployProject(t)
-		writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node" }],
-  dns: { zone: { zone: "acme.com" } },
+		writeConfigWithProvider(t, fixture.Root, `dns: { zone: { zone: "acme.com" } }`, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
 `)
 		writeAppSource(t, fixture.Root, "api")
 		writeHosting(t, fixture.Root, "api", "bld_api_1")
@@ -257,7 +256,7 @@ export default {
   transforms: [`+transforms+`],
   provider: { fake: `+options+` },
   domains: { production: "`+productionDomain+`" },
-  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -312,10 +311,10 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	}
 }
 
-func deployUsageMonorepo(t *testing.T, fields string) (clitest.FakeProject, string, error) {
+func deployUsageMonorepo(t *testing.T, providerOptions, fields string) (clitest.FakeProject, string, error) {
 	t.Helper()
 	fixture := setUpDeployProject(t)
-	writeUsageMonorepo(t, fixture.Root, fields)
+	writeUsageMonorepoWithProvider(t, fixture.Root, providerOptions, fields)
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, apiFunction())
 
@@ -332,12 +331,12 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", ""},
-		{"a declared direct edge names it", "  edge: \"direct\",\n", "direct"},
-		{"a declared relay edge names it", "  edge: \"relay\",\n", "relay"},
+		{"a declared direct edge names it", "edge: \"direct\"", "direct"},
+		{"a declared relay edge names it", "edge: \"relay\"", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			fixture, out, err := deployUsageMonorepo(t, tc.declaration)
+			fixture, out, err := deployUsageMonorepo(t, tc.declaration, "")
 			if err != nil {
 				t.Fatalf("runDeploy err = %v; output=%s", err, out)
 			}
@@ -349,7 +348,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
-	fixture, out, err := deployUsageMonorepo(t, "  edge: \"relay\",\n  dns: { zone: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	fixture, out, err := deployUsageMonorepo(t, "edge: \"relay\", dns: { zone: { zone: \"acme.com\" } }", "  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}

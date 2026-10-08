@@ -65,7 +65,7 @@ prepared:
    ```bash
    OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap production --features tasks
    ```
-   Add `edge: alb()` and `dns: cloudflareDns()` to that config, then:
+   Add `edge: alb()` and `dns: cloudflareDns()` to `gcpProvider`'s options, then:
    ```bash
    OCEL_NAMESPACE=e2e-nc-alb ocel bootstrap preview --features tasks,alb-edge
    OCEL_NAMESPACE=e2e-nc-alb ocel domain use '*.<gcp wildcard>' --preview
