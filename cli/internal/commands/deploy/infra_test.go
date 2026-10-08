@@ -21,6 +21,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -277,6 +278,30 @@ func TestADeployWhoseBuildFailsAfterItsInfraFreesTheEnvironmentItHeld(t *testing
 	}
 	if environmentLeaseHeld(t, fixture) {
 		t.Error("the environment still holds the lease of a deploy whose build failed, want it abandoned so the next deploy is not refused until it expires")
+	}
+}
+
+func TestADeployWhoseProvisionInfraFailsAbandonsTheLeaseItSentIt(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+	fixture.Provider.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind == provider.StackInfra {
+			return errors.New("the infra stack failed to provision")
+		}
+		return nil
+	})
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded though its infra failed to provision")
+	}
+
+	abandoned := clitest.RequestsTo[*contractv1.AbandonDeployRequest](t, fixture.Requests, contractv1connect.ProviderServiceAbandonDeployProcedure)
+	sent := sentProvisionInfras(t, fixture)
+	if len(sent) != 1 || len(abandoned) != 1 || abandoned[0].GetLeaseToken() != sent[0].GetLeaseToken() {
+		t.Errorf("after a ProvisionInfra that failed the CLI abandoned %d leases, want the one it sent ProvisionInfra: a failure that only reached the CLI as a broken stream may have left that lease taken", len(abandoned))
 	}
 }
 
