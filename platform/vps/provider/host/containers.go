@@ -189,6 +189,7 @@ func containerRun(spec Container, env handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
+		"--init=false",
 		"--network", live.AppNetwork(spec.Tier, spec.Project),
 		"--label", LabelTier + "=" + string(spec.Tier),
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
