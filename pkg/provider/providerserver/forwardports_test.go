@@ -613,3 +613,29 @@ func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorP
 		t.Errorf("ForwardPorts() sent %d responses, want one leaving %s unforwarded", len(responses), inlineUploads)
 	}
 }
+
+func TestForwardPortsLeavesUnforwardedTheProxiedBindingsTheProxyReportsItDoesNotServe(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", SessionToken: "token-1", Unserved: []string{"uploads"}, Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	served := stream.Msg().GetResponse()
+	if len(served.GetBindings()) != 0 || !slices.Equal(served.GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() handed back %v and left %v unforwarded, want uploads unforwarded since the proxy does not serve it", served.GetBindings(), served.GetUnforwarded())
+	}
+}

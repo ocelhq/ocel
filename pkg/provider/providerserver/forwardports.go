@@ -257,7 +257,7 @@ func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForw
 		resp.BindingProxy = &contractv1.BindingProxy{Address: proxy.Address, SessionToken: proxy.SessionToken}
 	}
 	for _, binding := range bindings {
-		if slices.ContainsFunc(proxied, func(served provider.Binding) bool { return served.Name == binding.Name }) {
+		if slices.ContainsFunc(proxied, func(served provider.Binding) bool { return served.Name == binding.Name }) && !slices.Contains(proxy.Unserved, binding.Name) {
 			message, err := provider.BindingMessage(binding)
 			if err != nil {
 				return nil, err
