@@ -165,6 +165,8 @@ type fakeGateway struct {
 	stageErr    error
 	resourceErr error
 
+	deploymentErr error
+
 	deleteErr       error
 	deleteRefused   int
 	deleteDomainErr error
@@ -534,6 +536,9 @@ func (f *fakeGateway) CreateDeployment(_ context.Context, in *apigateway.CreateD
 		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
 	}
 	f.record("CreateDeployment " + api.name)
+	if f.deploymentErr != nil {
+		return nil, f.deploymentErr
+	}
 	api.stage = aws.ToString(in.StageName)
 	if in.Variables != nil {
 		api.variables = map[string]string{}

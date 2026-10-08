@@ -1106,3 +1106,68 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 		t.Errorf("the stage %s is mapped onto serves %q, want the promoted %q", host, api.variables[entryVariable], entryFunction)
 	}
 }
+
+func TestEveryResourceAStaticRouteNeedsSendsTheRestOfItsPathsToTheRootFunction(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/docs/_app/immutable/")
+
+	for _, path := range []string{"/docs", "/docs/{proxy+}", "/docs/_app", "/docs/_app/{proxy+}", "/docs/_app/immutable"} {
+		entry := methodOn(api, path, anyMethod)
+		if entry == nil {
+			t.Errorf("%s has no method, so API Gateway answers every request it matches, such as /docs/_app/version.json, itself instead of the root function", path)
+			continue
+		}
+		if !strings.Contains(entry.uri, "function:${stageVariables."+entryVariable+"}") {
+			t.Errorf("%s integrates with %q, want the root function", path, entry.uri)
+		}
+	}
+}
+
+func TestAPromotionRemovesEveryResourceOnlyAPrefixTheReleaseNoLongerStatesNeeded(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/docs/_next/static/")
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}, "p2", 2)
+
+	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
+		"/", "/{proxy+}", "/.well-known", "/.well-known/ocel-edge",
+		"/_app", "/_app/{proxy+}", "/_app/immutable", "/_app/immutable/{proxy+}",
+	})
+}
+
+func TestAPromotionPublishesTheStaticRoutesAPromotionThatFailedAfterShapingThemNeverPublished(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	api := w.gateway.named(productionAPIName())
+	record := router.ReleaseRecord{
+		App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/one",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	w.gateway.deploymentErr = errors.New("throttled")
+	move := router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}
+	if err := openRouter(stack).MovePointer(context.Background(), move, progress.Discard()); err == nil {
+		t.Fatal("MovePointer succeeded with every deployment failing; the retry this test covers cannot happen")
+	}
+	w.gateway.deploymentErr = nil
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	retry := router.PointerMove{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Releases: map[string]string{"web": record.Release}}}
+	if err := openRouter(stack).MovePointer(context.Background(), retry, progress.Discard()); err != nil {
+		t.Fatalf("retried MovePointer: %v", err)
+	}
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments+1 {
+		t.Errorf("deployments = %d, want one more than %d: the routes the failed promotion shaped were never published", got, deployments)
+	}
+}
