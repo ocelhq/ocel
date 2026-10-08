@@ -175,6 +175,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 			return provider.RefusalError(err)
 		}
 		if served.Address == "" {
+			closeProxy(&served)
 			proxied = nil
 		} else {
 			proxy = &served

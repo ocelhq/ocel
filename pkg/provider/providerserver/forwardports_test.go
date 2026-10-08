@@ -614,6 +614,35 @@ func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorP
 	}
 }
 
+func TestForwardPortsClosesWhatAVendorOpenedForAProxyWithNoAddress(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	for stream.Receive() {
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the vendor's proxy with no address was never closed, so whatever it opened stays open")
+	}
+}
+
 func TestForwardPortsHoldsNoBindingProxyWhenTheVendorServesNoneOfTheBindings(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
