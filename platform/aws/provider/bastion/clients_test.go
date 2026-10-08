@@ -62,11 +62,12 @@ type task struct {
 type account struct {
 	mu sync.Mutex
 
-	clusters   map[string]map[string]string
-	definition map[string][]*ecstypes.TaskDefinition
-	roles      map[string]*role
-	groups     map[string]*securityGroup
-	tasks      map[string]*task
+	clusters     map[string]map[string]string
+	definition   map[string][]*ecstypes.TaskDefinition
+	revisionTags map[string]map[string]string
+	roles        map[string]*role
+	groups       map[string]*securityGroup
+	tasks        map[string]*task
 
 	calls         []string
 	agentAfter    int
@@ -82,11 +83,12 @@ type account struct {
 
 func newAccount() *account {
 	return &account{
-		clusters:   map[string]map[string]string{},
-		definition: map[string][]*ecstypes.TaskDefinition{},
-		roles:      map[string]*role{},
-		groups:     map[string]*securityGroup{},
-		tasks:      map[string]*task{},
+		clusters:     map[string]map[string]string{},
+		definition:   map[string][]*ecstypes.TaskDefinition{},
+		revisionTags: map[string]map[string]string{},
+		roles:        map[string]*role{},
+		groups:       map[string]*securityGroup{},
+		tasks:        map[string]*task{},
 	}
 }
 
@@ -221,18 +223,28 @@ func (a *account) RegisterTaskDefinition(_ context.Context, in *ecs.RegisterTask
 		Memory:                  in.Memory,
 	}
 	a.definition[family] = append(a.definition[family], registered)
+	a.revisionTags[aws.ToString(registered.TaskDefinitionArn)] = tagMap(in.Tags)
 	return &ecs.RegisterTaskDefinitionOutput{TaskDefinition: registered}, nil
 }
 
 func (a *account) DescribeTaskDefinition(_ context.Context, in *ecs.DescribeTaskDefinitionInput, _ ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	family, _, _ := strings.Cut(aws.ToString(in.TaskDefinition), ":")
-	family = family[strings.LastIndex(family, "/")+1:]
+	named := aws.ToString(in.TaskDefinition)
+	named = named[strings.LastIndex(named, "/")+1:]
+	family, revision, exact := strings.Cut(named, ":")
 	for i := len(a.definition[family]) - 1; i >= 0; i-- {
-		if a.definition[family][i].Status == ecstypes.TaskDefinitionStatusActive {
-			return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: a.definition[family][i]}, nil
+		found := a.definition[family][i]
+		if exact && fmt.Sprint(found.Revision) != revision || !exact && found.Status != ecstypes.TaskDefinitionStatusActive {
+			continue
 		}
+		out := &ecs.DescribeTaskDefinitionOutput{TaskDefinition: found}
+		if slices.Contains(in.Include, ecstypes.TaskDefinitionFieldTags) {
+			for key, value := range a.revisionTags[aws.ToString(found.TaskDefinitionArn)] {
+				out.Tags = append(out.Tags, ecstypes.Tag{Key: aws.String(key), Value: aws.String(value)})
+			}
+		}
+		return out, nil
 	}
 	return nil, &ecstypes.ClientException{Message: aws.String("Unable to describe task definition.")}
 }
