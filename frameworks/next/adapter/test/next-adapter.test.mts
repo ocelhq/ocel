@@ -1347,46 +1347,6 @@ test("trusts the host header so a deployed res.revalidate can address itself", a
   expect(config.experimental).toEqual({ ppr: true, trustHostHeader: true });
 });
 
-async function modifyOnRefreshingHost(config: object, byRequest: boolean) {
-  if (byRequest) vi.stubEnv("OCEL_NEXT_REFRESHES_BY_REQUEST", "1");
-  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
-  const adapter = await loadAdapterIn(projectDir);
-  return {
-    projectDir,
-    run: () =>
-      adapter.modifyConfig!(config as never, {
-        phase: PHASE_PRODUCTION_BUILD,
-        nextVersion: "16.2.10",
-      }),
-  };
-}
-
-test("refuses partial fallbacks on a host that refreshes by request, naming the setting", async () => {
-  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: true } }, true);
-
-  await expect(run()).rejects.toThrow(/experimental\.partialFallbacks/);
-  await expect(run()).rejects.toThrow(/"compute": "container"/);
-});
-
-test("refuses partial prefetching on a host that refreshes by request, naming the setting", async () => {
-  for (const partialPrefetching of [true, "unstable_eager"]) {
-    const { run } = await modifyOnRefreshingHost({ partialPrefetching }, true);
-    await expect(run()).rejects.toThrow(/partialPrefetching/);
-  }
-});
-
-test("keeps partial fallbacks on a host that refreshes in the background", async () => {
-  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: true } }, false);
-
-  expect((await run()).cacheMaxMemorySize).toBe(0);
-});
-
-test("builds an app without partial fallbacks on a host that refreshes by request", async () => {
-  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: false } }, true);
-
-  expect((await run()).cacheMaxMemorySize).toBe(0);
-});
-
 test("leaves a non-build phase untouched and writes nothing", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);

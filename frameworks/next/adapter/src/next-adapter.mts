@@ -67,29 +67,11 @@ function readMaxFunctionBytes(): number | undefined {
   return bytes;
 }
 
-function refusePartialFallbacks(
-  config: Parameters<NonNullable<NextAdapter["modifyConfig"]>>[0],
-): void {
-  if (process.env.OCEL_NEXT_REFRESHES_BY_REQUEST !== "1") return;
-  let setting: string;
-  if (config.experimental?.partialFallbacks === true) {
-    setting = "experimental.partialFallbacks";
-  } else if ((config as { partialPrefetching?: unknown }).partialPrefetching) {
-    setting = "partialPrefetching";
-  } else {
-    return;
-  }
-  throw new Error(
-    `ocel: ${setting} has Next render a more specific fallback shell after the response ends, and this host stops a function's work when its response ends, so the shell would be lost and its page refreshed again and again. Turn ${setting} off in next.config, or set "compute": "container" on the app in ocel.json, where the CPU stays allocated between requests and the shell renders in the background`,
-  );
-}
-
 const adapter = {
   name: "ocel-adapter",
 
   async modifyConfig(config, { phase }) {
     if (phase === PHASE_PRODUCTION_BUILD) {
-      refusePartialFallbacks(config);
       refuseAppCacheHandlers(config);
       return {
         ...config,

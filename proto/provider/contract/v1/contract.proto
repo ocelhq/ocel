@@ -111,8 +111,6 @@ message ProviderFacts {
 
   int64 max_function_bytes = 5 [(buf.validate.field).int64.gte = 0];
 
-  bool next_refreshes_by_request = 6;
-
   bool forwards_ports = 8;
 }
 
