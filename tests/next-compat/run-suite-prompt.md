@@ -257,7 +257,7 @@ aws service-quotas get-service-quota --service-code lambda \
   Anything but `0` and every exact-request-list assertion in the run is void.
 - **Cloudflare serves a managed `robots.txt`** that never reaches the worker,
   failing the `robots.txt` metadata test independently of any adapter bug.
-- A `routing-manifest.json` sitting in the working tree under
+- A `next-route-table.json` sitting in the working tree under
   `platform/edge/cloudflare/workers/entry/` is a **scratch artifact for a
   different app**, not the deployed manifest. The real one is in the app's
   `.ocel/output/apps/app/`.

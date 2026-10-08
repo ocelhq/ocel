@@ -1,4 +1,4 @@
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { EdgeWorkers } from "./edge";
 import { lruSet } from "./lru";
 
@@ -7,8 +7,8 @@ export interface ReleaseRecord {
   framework: string;
   release: string;
   buildId: string;
-  entry?: string;
-  routingManifest?: RoutingManifest | null;
+  rootFunction?: string;
+  routeTable?: { format: "next"; table: NextRouteTable } | null;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;

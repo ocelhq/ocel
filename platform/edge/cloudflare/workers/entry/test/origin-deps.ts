@@ -8,7 +8,7 @@ export function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "node",
     release: "deploy-1",
     buildId: "deploy-1",
-    routingManifest: null,
+    routeTable: null,
     functionUrls: { api: FN_URL },
     assetPrefix: "",
     isrPrefix: "",

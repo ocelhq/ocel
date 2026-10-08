@@ -16,7 +16,7 @@ function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routingManifest: { pathnames: [] },
+    routeTable: { format: "next", table: { pathnames: [] } },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",

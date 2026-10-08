@@ -122,7 +122,7 @@ export function deps(scenario: Scenario): RouteDeps {
   const pages = scenario.pages ?? [];
   return {
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "t",
       basePath,
       trailingSlash: scenario.trailingSlash,

@@ -536,14 +536,14 @@ func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(
 }
 
 func functionRecord(app, release string) router.ReleaseRecord {
-	entry := "conformance-prod-" + app + "-r0a1b2c3d"
+	physical := "conformance-prod-" + app + "-r0a1b2c3d"
 	return router.ReleaseRecord{
-		App:           app,
-		Release:       release,
-		Entry:         "/",
-		EntryFunction: entry,
-		FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},
-		Revisions:     map[string]string{entry: entry + "-" + release},
+		App:                  app,
+		Release:              release,
+		RootFunction:         "/",
+		RootFunctionPhysical: physical,
+		FunctionURLs:         map[string]string{"/": "https://conformance-" + app + ".example.com/"},
+		Revisions:            map[string]string{physical: physical + "-" + release},
 	}
 }
 

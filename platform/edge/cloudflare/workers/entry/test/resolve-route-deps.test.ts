@@ -9,13 +9,16 @@ function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routingManifest: {
-      buildId: "build-1",
-      basePath: "",
-      pathnames: [],
-      routes: {},
-      dispatch: {},
-      i18n: { locales: ["en", "fr"], defaultLocale: "en" },
+    routeTable: {
+      format: "next",
+      table: {
+        buildId: "build-1",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {},
+        i18n: { locales: ["en", "fr"], defaultLocale: "en" },
+      },
     },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "build-1",
@@ -90,7 +93,7 @@ describe("resolveRouteDeps", () => {
 
     expect(deps).not.toBeInstanceOf(Response);
     const routeDeps = deps as RouteDeps;
-    expect(routeDeps.manifest).toEqual(record.routingManifest);
+    expect(routeDeps.manifest).toEqual(record.routeTable?.table);
     expect(routeDeps.functionUrls).toEqual(record.functionUrls);
     expect(routeDeps.appBuildId).toBe("deploy-1");
   });
@@ -142,8 +145,8 @@ describe("resolveRouteDeps", () => {
     expect(await response.text()).toMatch(/deployment/i);
   });
 
-  it("returns 501 for a Deployment that ships no routing manifest", async () => {
-    const record = makeRecord({ framework: "node", routingManifest: undefined });
+  it("returns 501 for a Deployment that ships no route table", async () => {
+    const record = makeRecord({ framework: "node", routeTable: undefined });
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
@@ -168,7 +171,11 @@ describe("the image origin of a routed deployment", () => {
 
   function imageRecord(): ReleaseRecord {
     const record = makeRecord({ functionUrls: { "bundle-0": entryUrl } });
-    return { ...record, routingManifest: { ...record.routingManifest!, entry: "bundle-0" } };
+    const routeTable = record.routeTable!;
+    return {
+      ...record,
+      routeTable: { ...routeTable, table: { ...routeTable.table, rootFunction: "bundle-0" } },
+    };
   }
 
   const payload = {

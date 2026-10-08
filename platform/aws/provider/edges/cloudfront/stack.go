@@ -198,9 +198,9 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
-		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the %q edge answers on points at one app's entry function; deploy an app before promoting", promotionID, Kind)
+		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the %q edge answers on points at one app's root function; deploy an app before promoting", promotionID, Kind)
 	case len(apps) > 1:
-		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge points a hostname at one release's entry function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotionID, len(apps), strings.Join(apps, ", "), Kind)
+		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge points a hostname at one release's root function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotionID, len(apps), strings.Join(apps, ", "), Kind)
 	}
 
 	app := apps[0]
@@ -220,15 +220,18 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 		published.Container = record.Physical
 		return published, nil
 	}
-	if record.EntryFunction == "" {
-		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release)
+	if record.RootFunctionPhysical == "" {
+		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names no root function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release)
 	}
-	published.Origin = originHost(record.FunctionURLs[record.Entry])
+	published.Origin = originHost(record.FunctionURLs[record.RootFunction])
 	if published.Origin == "" {
-		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotionID, app, release, record.EntryFunction, Kind)
+		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names root function %s but no URL the edge can reach it on, and the %q edge fronts a release over its root function's URL; re-run the deploy to write the record again", promotionID, app, release, record.RootFunctionPhysical, Kind)
 	}
 	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
+	if record.Static != nil {
+		published.Immutable = record.Static.ImmutablePrefixes
+	}
 	return published, nil
 }
 
@@ -277,11 +280,11 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	secret, err := bootstrap.OriginSecretOf(aws.ToString(out.Parameter.Value))
 	if err != nil {
-		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
 }

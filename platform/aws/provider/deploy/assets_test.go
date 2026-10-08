@@ -12,10 +12,10 @@ import (
 func staticAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json":        `{"buildId":"WEB1"}`,
 		"apps/web/static/next.svg":              "<svg/>",
 		"apps/web/static/_next/static/chunk.js": "console.log(1)",
-		"apps/admin/routing-manifest.json":      `{"buildId":"ADM1"}`,
+		"apps/admin/next-route-table.json":      `{"buildId":"ADM1"}`,
 		"apps/admin/static/favicon.ico":         "ico",
 	})
 }
@@ -29,7 +29,7 @@ func sortedPuts(f *fakeArtifactStore) []string {
 func imageConfigTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 		"apps/web/image-config.json":     `{"formats":["image/webp"]}`,
 		"apps/web/static/logo.png":       "PNG",
 	})
@@ -113,7 +113,10 @@ func TestUploadStaticAssets(t *testing.T) {
 		t.Parallel()
 		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":                         `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
+			"apps/web/hosting.json": `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{` +
+				`"immutablePrefixes":["/_next/static/","/docs/_next/static/"],` +
+				`"mustRevalidatePrefixes":["/_next/static/service-worker/","/docs/_next/static/service-worker/"]}}`,
 			"apps/web/static/_next/static/chunk.js":                  "console.log(1)",
 			"apps/web/static/_next/static/css/app.css":               "body{}",
 			"apps/web/static/_next/static/service-worker/sw.js":      "self",
@@ -169,7 +172,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		asset := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":        `{"buildId":"WEB1"}`,
 			"apps/web/static/_next/static/chunk.js": "console.log(1)",
 		})
 		cfg := mirrorConfig(root, store, asset)
@@ -201,7 +204,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{
 			ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
@@ -302,7 +305,7 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("a project's own image config asset does not collide", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":    `{"buildId":"WEB1"}`,
 			"apps/web/image-config.json":        `{"formats":["image/webp"]}`,
 			"apps/web/static/image-config.json": `{"mine":true}`,
 		})
@@ -401,7 +404,7 @@ func TestUploadStaticAssets(t *testing.T) {
 func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 	t.Run("route entries are not mirrored to the asset bucket", func(t *testing.T) {
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":     `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":     `{"buildId":"WEB1"}`,
 			"apps/web/cache/index.cache.json":    `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/fetch-cache/a1.cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})

@@ -20,7 +20,7 @@ const (
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
 
-const entryRouteID = "/"
+const rootFunctionRouteID = "/"
 
 const nativeDirName = "native"
 

@@ -93,7 +93,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 		return fixture(w, e, stack)
 	}
 	record := func(app, build string) router.ReleaseRecord {
-		return router.ReleaseRecord{App: app, Release: build, Entry: "/", EntryFunction: "fn-" + build}
+		return router.ReleaseRecord{App: app, Release: build, RootFunction: "/", RootFunctionPhysical: "fn-" + build}
 	}
 	t.Run("on a preview pointer", func(t *testing.T) {
 		routerconformance.Run(t, routerconformance.Suite{
@@ -133,11 +133,11 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 func staged(t *testing.T, stack edge.EdgeStack, function, assets string) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
-		App:           "web",
-		Release:       "d1.f1",
-		Entry:         "/",
-		EntryFunction: function,
-		AssetPrefix:   assets,
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: function,
+		AssetPrefix:          assets,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -209,10 +209,10 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 		t.Errorf("catch-all integration = %q, want AWS_PROXY", entry.integration)
 	}
 	if entry.transfer != agtypes.ResponseTransferModeStream {
-		t.Errorf("catch-all response transfer mode = %q, want STREAM; the entry function answers as a stream", entry.transfer)
+		t.Errorf("catch-all response transfer mode = %q, want STREAM; the root function answers as a stream", entry.transfer)
 	}
 	if entry.timeoutMillis != 60_000 {
-		t.Errorf("catch-all integration timeout = %dms, want 60000ms, the minute the entry function has to answer", entry.timeoutMillis)
+		t.Errorf("catch-all integration timeout = %dms, want 60000ms, the minute the root function has to answer", entry.timeoutMillis)
 	}
 	if !strings.Contains(entry.uri, "function:${stageVariables."+entryVariable+"}") {
 		t.Errorf("catch-all URI = %q, want it to name the entry stage variable", entry.uri)
@@ -252,7 +252,7 @@ func TestOnlyTheRoutesThatCanSetTheRouterHeaderDeclareIt(t *testing.T) {
 	for _, path := range []string{"/", "/{proxy+}"} {
 		entry := methodOn(api, path, anyMethod)
 		if len(entry.methodResponses) != 0 {
-			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the entry function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), router.HeaderRouter)
+			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the root function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), router.HeaderRouter)
 		}
 	}
 	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
@@ -322,8 +322,8 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 		t.Errorf("UpdateStage calls = %d, want exactly one; promoting is moving one stage", got)
 	}
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != record.EntryFunction {
-		t.Errorf("stage variable %s = %q, want the entry function %q", entryVariable, api.variables[entryVariable], record.EntryFunction)
+	if api.variables[entryVariable] != record.RootFunctionPhysical {
+		t.Errorf("stage variable %s = %q, want the root function %q", entryVariable, api.variables[entryVariable], record.RootFunctionPhysical)
 	}
 	if api.variables[assetsVariable] != record.AssetPrefix {
 		t.Errorf("stage variable %s = %q, want %q", assetsVariable, api.variables[assetsVariable], record.AssetPrefix)
@@ -343,10 +343,10 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	record := router.ReleaseRecord{
-		App:           "web",
-		Release:       "d1.f1",
-		Entry:         "/",
-		EntryFunction: entryFunction,
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: entryFunction,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -384,7 +384,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		assertStageUnmoved(t, w)
 	})
 
-	t.Run("a record from before the entry function was recorded", func(t *testing.T) {
+	t.Run("a record from before the root function was recorded", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -393,9 +393,9 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 
 		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard())
 		if err == nil {
-			t.Fatal("Promote succeeded on a record naming no entry function")
+			t.Fatal("Promote succeeded on a record naming no root function")
 		}
-		if !strings.Contains(err.Error(), "entry function") {
+		if !strings.Contains(err.Error(), "root function") {
 			t.Errorf("error = %v, want it to name what the record is missing", err)
 		}
 		assertUnserved(t, err)
@@ -408,7 +408,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		for _, app := range []string{"api", "web"} {
-			record := router.ReleaseRecord{App: app, Release: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-" + app + "-r1234abcd"}
+			record := router.ReleaseRecord{App: app, Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-" + app + "-r1234abcd"}
 			if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 				t.Fatalf("PutStaged(%s): %v", app, err)
 			}
@@ -470,8 +470,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	first := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
-	second := router.ReleaseRecord{App: "web", Release: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
+	first := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
+	second := router.ReleaseRecord{App: "web", Release: "d2.f2", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
 	for _, record := range []router.ReleaseRecord{first, second} {
 		if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
@@ -493,8 +493,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	}
 
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != first.EntryFunction {
-		t.Errorf("stage variable %s = %q, want the rolled-back release %q", entryVariable, api.variables[entryVariable], first.EntryFunction)
+	if api.variables[entryVariable] != first.RootFunctionPhysical {
+		t.Errorf("stage variable %s = %q, want the rolled-back release %q", entryVariable, api.variables[entryVariable], first.RootFunctionPhysical)
 	}
 	history, err := openRouter(stack).Ledger.History(ctx, "")
 	if err != nil {
@@ -587,7 +587,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 	}
 
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != record.EntryFunction {
+	if api.variables[entryVariable] != record.RootFunctionPhysical {
 		t.Errorf("stage variable %s = %q, want the release in effect left alone by a reconcile", entryVariable, api.variables[entryVariable])
 	}
 }

@@ -2,7 +2,6 @@ import cf from 'cloudfront';
 
 var kvs = cf.kvs();
 
-var STATIC_PREFIX = '/_next/static/';
 var DRAFT_COOKIE = '__prerender_bypass';
 var ROUTER_HEADER = 'x-ocel-router';
 var ROUTER_KIND = 'cloudfront';
@@ -23,6 +22,14 @@ var CONTROL_HEADERS = [
   CLIENT_ADDRESS_HEADER,
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
+
+function underAny(uri, prefixes) {
+  if (!prefixes) return false;
+  for (let i = 0; i < prefixes.length; i++) {
+    if (uri.indexOf(prefixes[i]) === 0) return true;
+  }
+  return false;
+}
 
 function headerValue(headers, name) {
   var entry = headers[name];
@@ -126,7 +133,7 @@ async function handler(event) {
     value: cacheKey(route.release, request.uri, request.headers, request.cookies),
   };
 
-  if (route.assets && request.uri.indexOf(STATIC_PREFIX) === 0) {
+  if (route.assets && underAny(request.uri, route.immutable)) {
     const assets = {
       domainName: route.assets,
       originAccessControlConfig: {

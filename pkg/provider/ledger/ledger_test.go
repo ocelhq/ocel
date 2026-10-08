@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -696,7 +697,7 @@ func TestThePointerDocumentIsJSONACustomerCanRead(t *testing.T) {
 func TestRestagingABuildWithTheRecordItHoldsSucceeds(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid", RoutingManifest: json.RawMessage(`{ "routes": [] }`)}
+	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid", RouteTable: &router.RouteTable{Format: buildoutput.RouteTableNext, Table: json.RawMessage(`{ "routes": [] }`)}}
 	if err := l.PutStaged(ctx, record); err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -133,8 +132,8 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{
-		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/hosting.json":          `{"framework":"next","frameworkBuildId":"WEB1","edgeRouting":true,"entry":"/"}`,
+		"apps/web/next-route-table.json": routedManifest,
+		"apps/web/hosting.json":          `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{"immutablePrefixes":["/_next/static/"],"mustRevalidatePrefixes":["/_next/static/service-worker/"]}}`,
 	}
 	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		files["apps/web/static/"+name+".txt"] = name
@@ -162,11 +161,11 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
 
-	first, err := staticAssetSet(cfg, "web", buildoutput.FrameworkNext, coord)
+	first, err := staticAssetSet(cfg, "web", nextStatic, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}
-	second, err := staticAssetSet(cfg, "web", buildoutput.FrameworkNext, coord)
+	second, err := staticAssetSet(cfg, "web", nextStatic, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}

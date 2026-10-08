@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -32,12 +33,12 @@ func nextSpec() provider.StackSpec {
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
-			App:       "web",
-			Framework: buildoutput.FrameworkNext,
-			Entry:     "bundle-0",
-			BuildID:   "dpl_7",
-			Compute:   provider.ComputeServerless,
-			Router:    "cloudrun",
+			App:          "web",
+			Framework:    buildoutput.FrameworkNext,
+			RootFunction: "bundle-0",
+			BuildID:      "dpl_7",
+			Compute:      provider.ComputeServerless,
+			Router:       "cloudrun",
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
@@ -118,7 +119,7 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 
 func routedNextSpec() provider.StackSpec {
 	spec := nextSpec()
-	spec.App.Routing = &provider.RoutingSpec{Entry: "bundle-0", Manifest: []byte(`{"entry":"bundle-0"}`)}
+	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: buildoutput.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
 	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
 	spec.App.AssetPrefix = "prod/shop/web/r1/assets"
 	return spec
@@ -128,7 +129,7 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 	env := envOf(releasedNext(t, routedNextSpec()))
 
 	for name, want := range map[string]string{
-		"OCEL_ROUTING_MANIFEST": "/ocel/app/" + edge.RoutingManifestFile,
+		"OCEL_NEXT_ROUTE_TABLE": "/ocel/app/" + edge.NextRouteTableFile,
 		"OCEL_ASSET_PREFIX":     "prod/shop/web/r1/assets",
 		"OCEL_SLUG":             "shop",
 		"OCEL_APP":              "web",
@@ -186,7 +187,7 @@ func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T
 func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
 	env := envOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_ROUTING_MANIFEST", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
+	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service whose spec routes nothing reads %s=%q", name, got)
 		}
@@ -202,7 +203,7 @@ func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T
 	}
 	spec := routedNextSpec()
 	spec.Edge = front
-	spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+	spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 
 	_, err = p.ProvisionFunctions(context.Background(), spec, nil)
 	if err == nil {
@@ -227,7 +228,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 			}
 			spec := routedNextSpec()
 			spec.Edge = front
-			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
@@ -274,7 +275,7 @@ func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testin
 			}
 			spec := routedNextSpec()
 			spec.Edge = front
-			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 
 			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 				t.Fatalf("ProvisionFunctions() = %v", err)
@@ -604,7 +605,7 @@ func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.
 
 	env := envOf(service.Template.Containers[0])
 	for _, name := range []string{
-		routingManifestEnvVar, routerKindEnvVar, staticDirEnvVar,
+		routeTableEnvVar, routerKindEnvVar, staticDirEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {

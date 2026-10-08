@@ -159,12 +159,12 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
 	record := router.ReleaseRecord{
-		App:        app,
-		Release:    build.String(),
-		Entry:      "/",
-		Image:      image,
-		Physical:   provisioned.Containers[0].Physical,
-		HealthPath: healthPath,
+		App:          app,
+		Release:      build.String(),
+		RootFunction: "/",
+		Image:        image,
+		Physical:     provisioned.Containers[0].Physical,
+		HealthPath:   healthPath,
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Releases: map[string]string{app: build.String()}}
 	state := stack.State()

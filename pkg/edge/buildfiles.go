@@ -1,6 +1,6 @@
 package edge
 
-const RoutingManifestFile = "routing-manifest.json"
+const NextRouteTableFile = "next-route-table.json"
 
 const StaticAssetDir = "static"
 

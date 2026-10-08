@@ -359,7 +359,7 @@ func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 		},
 		Record: func(app, build string) router.ReleaseRecord {
 			return router.ReleaseRecord{
-				App: app, Release: build, Entry: "/", Image: imageFor(app, build),
+				App: app, Release: build, RootFunction: "/", Image: imageFor(app, build),
 				Physical: app + "-" + build, HealthPath: "/healthz",
 			}
 		},
@@ -403,12 +403,12 @@ func staged(t *testing.T, stack boxStack, app, identity, physical string) {
 	t.Helper()
 
 	if err := stack.Ledger().PutStaged(context.Background(), router.ReleaseRecord{
-		App:        app,
-		Release:    identity,
-		Entry:      "/",
-		Image:      imageFor(app, identity),
-		Physical:   physical,
-		HealthPath: "/healthz",
+		App:          app,
+		Release:      identity,
+		RootFunction: "/",
+		Image:        imageFor(app, identity),
+		Physical:     physical,
+		HealthPath:   "/healthz",
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestAPromotionOfARecordWhosePathWasDiscoveredSaysSoToTheGate(t *testing.T) 
 
 	m, _, stack := reconciled(t)
 	if err := stack.Ledger().PutStaged(context.Background(), router.ReleaseRecord{
-		App: "web", Release: "b1", Entry: "/", Image: imageFor("web", "b1"), Physical: "shop-web-1111",
+		App: "web", Release: "b1", RootFunction: "/", Image: imageFor("web", "b1"), Physical: "shop-web-1111",
 		HealthPath: "/up", HealthPathDiscovered: true,
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -1259,14 +1259,14 @@ func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t
 
 	m, _, stack := reconciled(t)
 	if err := stack.Ledger().PutStaged(context.Background(), router.ReleaseRecord{
-		App:        "web",
-		Release:    "b1",
-		Entry:      "/",
-		Image:      imageFor("web", "b1"),
-		Physical:   "shop-web-1111",
-		HealthPath: "/healthz",
-		Variables:  []router.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
-		Env:        map[string]string{"orders": "postgres"},
+		App:          "web",
+		Release:      "b1",
+		RootFunction: "/",
+		Image:        imageFor("web", "b1"),
+		Physical:     "shop-web-1111",
+		HealthPath:   "/healthz",
+		Variables:    []router.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
+		Env:          map[string]string{"orders": "postgres"},
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}

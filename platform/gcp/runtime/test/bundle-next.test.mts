@@ -289,7 +289,7 @@ test("a stale page served by a Next service that refreshes by task queues one re
   await writeFile(log, "");
   const launcher = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcher, staleLauncher(log));
-  const manifest = join(projectDir, "routing-manifest.json");
+  const manifest = join(projectDir, "next-route-table.json");
   await writeFile(
     manifest,
     JSON.stringify({
@@ -320,7 +320,7 @@ test("a stale page served by a Next service that refreshes by task queues one re
       ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
-      OCEL_ROUTING_MANIFEST: manifest,
+      OCEL_NEXT_ROUTE_TABLE: manifest,
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -400,7 +400,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
   await writeFile(log, "");
   const launcher = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcher, partiallyStaticLauncher(log));
-  const manifest = join(projectDir, "routing-manifest.json");
+  const manifest = join(projectDir, "next-route-table.json");
   await writeFile(
     manifest,
     JSON.stringify({
@@ -430,7 +430,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
       ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
-      OCEL_ROUTING_MANIFEST: manifest,
+      OCEL_NEXT_ROUTE_TABLE: manifest,
     },
     stdio: ["ignore", "inherit", "inherit"],
   });

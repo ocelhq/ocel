@@ -114,7 +114,7 @@ func shapeAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
 		return err
 	}
 	for _, path := range []string{rootPath, proxy} {
-		if err := putEntryRoute(ctx, c, spec, id, resources[path]); err != nil {
+		if err := putRootFunctionRoute(ctx, c, spec, id, resources[path]); err != nil {
 			return err
 		}
 	}
@@ -264,7 +264,7 @@ func ensureIntegrationResponse(ctx context.Context, c Clients, in *apigateway.Pu
 	return nil
 }
 
-func putEntryRoute(ctx context.Context, c Clients, spec apiSpec, api, resource string) error {
+func putRootFunctionRoute(ctx context.Context, c Clients, spec apiSpec, api, resource string) error {
 	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
@@ -284,7 +284,7 @@ func putEntryRoute(ctx context.Context, c Clients, spec apiSpec, api, resource s
 		ResponseTransferMode:  agtypes.ResponseTransferModeStream,
 		TimeoutInMillis:       aws.Int32(int32(awsports.RequestTimeout.Milliseconds())),
 	}); err != nil {
-		return fmt.Errorf("point REST API %s at the entry function: %w", api, err)
+		return fmt.Errorf("point REST API %s at the root function: %w", api, err)
 	}
 	return nil
 }

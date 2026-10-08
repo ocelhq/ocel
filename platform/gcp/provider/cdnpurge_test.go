@@ -25,7 +25,7 @@ func behindTheALB(t *testing.T, p *Provider) provider.StackSpec {
 	}
 	spec := routedNextSpec()
 	spec.Edge = front
-	spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+	spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 	return spec
 }
 

@@ -8,7 +8,7 @@ export interface ReleaseRecord {
   framework: string;
   release: string;
   buildId: string;
-  routingManifest: unknown;
+  routeTable?: unknown;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;

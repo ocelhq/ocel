@@ -21,7 +21,7 @@ func TestAnUploadSaysWhichAppAndHowManyFilesOrWhere(t *testing.T) {
 			name: "static assets",
 			tree: staticAppTree,
 			set: func(cfg Config, builds appBuilds) (*assetSet, error) {
-				return staticAssetSet(cfg, "web", "next", builds.coords["web"])
+				return staticAssetSet(cfg, "web", nextStatic, builds.coords["web"])
 			},
 			want: "INFO Uploading web's 2 static assets",
 		},

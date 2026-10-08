@@ -225,7 +225,7 @@ export async function buildOriginEdgeApp(
   return {
     projectDir,
     outputDir,
-    manifest: (await readJson("routing-manifest.json")) as BuiltManifest,
+    manifest: (await readJson("next-route-table.json")) as BuiltManifest,
     hosting: (await readJson("hosting.json")) as BuiltHosting,
     hasEdgeBundle: await exists(join(outputDir, "edge/bundle.json")),
     funcDir,

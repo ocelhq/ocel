@@ -1119,7 +1119,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				App: &provider.AppSpec{
 					App:                       entry.App,
 					Framework:                 entry.Manifest.GetFramework().GetName(),
-					Entry:                     entryLogicalName(entry.Manifest, facts.Entry),
+					RootFunction:              rootFunctionLogicalName(entry.Manifest, facts.RootFunction),
 					BuildID:                   entry.Release.BuildID(),
 					Compute:                   entry.Compute(),
 					Router:                    r.appRouters[entry.App],
@@ -1136,6 +1136,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
+					Static:                    facts.Static,
 					Guard:                     facts.Guard,
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
@@ -1403,7 +1404,7 @@ func findOwnContainer(containers []provider.AppContainer, app string) (provider.
 }
 
 func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []provider.Function) provider.Function {
-	named := entryLogicalName(entry.Manifest, facts.Entry)
+	named := rootFunctionLogicalName(entry.Manifest, facts.RootFunction)
 	if declared := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(declared) == 1 {
 		named = declared[0].GetLogicalName()
 	}
@@ -1415,12 +1416,12 @@ func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []prov
 	return provider.Function{}
 }
 
-func entryLogicalName(app *contractv1.ManifestApp, entry string) string {
-	if entry == "" {
+func rootFunctionLogicalName(app *contractv1.ManifestApp, rootFunction string) string {
+	if rootFunction == "" {
 		return ""
 	}
 	for _, fn := range app.GetServerless().GetFunctions() {
-		if resolveRouteID(fn) == entry {
+		if resolveRouteID(fn) == rootFunction {
 			return fn.GetLogicalName()
 		}
 	}
@@ -1495,22 +1496,23 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
-	var routing any
+	var routeTable *router.RouteTable
 	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
-		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
+		routeTable = &facts.EdgeDispatch.RouteTable
 		if origin == "" {
-			origin = urlByLogical[entryLogicalName(entry.Manifest, facts.Entry)]
+			origin = urlByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)]
 		}
 	}
 	record := router.ReleaseRecord{
-		RoutingManifest:      routing,
+		RouteTable:           routeTable,
+		Static:               facts.Static,
 		App:                  entry.App,
 		Framework:            entry.Manifest.GetFramework().GetName(),
 		Release:              r.spec.Releases[entry.App],
 		BuildID:              entry.Release.BuildID(),
-		Entry:                facts.Entry,
-		EntryFunction:        physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
+		RootFunction:         facts.RootFunction,
+		RootFunctionPhysical: physicalByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)],
 		Image:                images.ImageRef(entry.App),
 		Physical:             physicalOf(result.Containers, entry.App),
 		Revisions:            revisionsOf(result, entry.App, logical),

@@ -68,8 +68,8 @@ function verify() {
     `symlinked .func directories under functions/: ${symlinked.map((d) => relative(appOut, d)).join(", ")}`,
   );
 
-  const manifestPath = join(appOut, "routing-manifest.json");
-  if (!existsSync(manifestPath)) fatal(`no routing manifest at ${manifestPath}`);
+  const manifestPath = join(appOut, "next-route-table.json");
+  if (!existsSync(manifestPath)) fatal(`no route table at ${manifestPath}`);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const dispatch = manifest.dispatch ?? {};
 

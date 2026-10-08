@@ -7,11 +7,19 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const HostingFile = "hosting.json"
+
+const HostingVersion = 1
+
+type RouteTableFormat string
+
+const RouteTableNext RouteTableFormat = "next"
 
 type NeedDetail struct {
 	Count    int      `json:"count"`
@@ -19,11 +27,18 @@ type NeedDetail struct {
 	Matchers []string `json:"matchers,omitempty"`
 }
 
+type Static struct {
+	ImmutablePrefixes      []string `json:"immutablePrefixes"`
+	MustRevalidatePrefixes []string `json:"mustRevalidatePrefixes,omitempty"`
+}
+
 type Hosting struct {
+	Version          int                      `json:"version"`
 	Framework        string                   `json:"framework"`
 	FrameworkBuildID string                   `json:"frameworkBuildId"`
-	EdgeRouting      bool                     `json:"edgeRouting"`
-	Entry            string                   `json:"entry"`
+	RootFunction     string                   `json:"rootFunction"`
+	RouteTable       RouteTableFormat         `json:"routeTable,omitempty"`
+	Static           *Static                  `json:"static,omitempty"`
 	Needs            map[edge.Need]NeedDetail `json:"needs"`
 }
 
@@ -40,4 +55,12 @@ func ReadHosting(root, app string) (Hosting, bool, error) {
 		return Hosting{}, false, fmt.Errorf("parse hosting.json of %s: %w", app, err)
 	}
 	return hosting, true, nil
+}
+
+func (s *Static) IsImmutable(path string) bool {
+	if s == nil {
+		return false
+	}
+	under := func(prefix string) bool { return strings.HasPrefix(path, prefix) }
+	return slices.ContainsFunc(s.ImmutablePrefixes, under) && !slices.ContainsFunc(s.MustRevalidatePrefixes, under)
 }

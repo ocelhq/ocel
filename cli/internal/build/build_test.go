@@ -602,7 +602,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("ReadHosting = %v, %v", found, err)
 		}
-		if hosting.Framework != "node" || len(hosting.FrameworkBuildID) != 16 || hosting.Entry != "/" || hosting.Needs == nil || hosting.EdgeRouting {
+		if hosting.Framework != "node" || len(hosting.FrameworkBuildID) != 16 || hosting.RootFunction != "/" || hosting.Needs == nil || hosting.RouteTable != "" || hosting.Version != buildoutput.HostingVersion {
 			t.Errorf("hosting.json = %+v, want a node app's hosting", hosting)
 		}
 		if _, err := os.Stat(filepath.Join(functionDir, buildoutput.HostingFile)); err == nil {

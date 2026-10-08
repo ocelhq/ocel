@@ -24,7 +24,7 @@ func TestServedAppsHandsOutASnapshotRatherThanTheEntryItself(t *testing.T) {
 			defer wg.Done()
 			fn, known := served.byPhysicalName("shop-prod-web-entry")
 			if !known {
-				t.Error("byPhysicalName() lost the entry function it was told about")
+				t.Error("byPhysicalName() lost the root function it was told about")
 				return
 			}
 			fn.Warmed.Key = "a reader's own scribble"
@@ -34,7 +34,7 @@ func TestServedAppsHandsOutASnapshotRatherThanTheEntryItself(t *testing.T) {
 
 	fn, known := served.byPhysicalName("shop-prod-web-entry")
 	if !known {
-		t.Fatal("byPhysicalName() lost the entry function it was told about")
+		t.Fatal("byPhysicalName() lost the root function it was told about")
 	}
 	if fn.Warmed.Key != "a-cache-key" {
 		t.Errorf("the index stores %q, want the warm reply it recorded: a caller may not write through what it was handed", fn.Warmed.Key)

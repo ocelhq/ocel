@@ -1,4 +1,4 @@
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { type DispatchHost, readDispatchHost } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
 import { cloudCdnRelease, newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
@@ -6,8 +6,8 @@ import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
 import type { RefreshEndpoint } from "./refresh-endpoint.mjs";
 
-function listFunctionIds(manifest: RoutingManifest): string[] {
-  const ids = new Set<string>([manifest.entry]);
+function listFunctionIds(manifest: NextRouteTable): string[] {
+  const ids = new Set<string>([manifest.rootFunction]);
   for (const target of Object.values(manifest.dispatch)) {
     if ((target.kind === "function" || target.kind === "prerender") && target.id) {
       ids.add(target.id);

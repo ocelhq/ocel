@@ -6,10 +6,19 @@ export type NeedDetail = {
   matchers?: string[];
 };
 
+export type RouteTableFormat = "next";
+
+export type Static = {
+  immutablePrefixes: string[];
+  mustRevalidatePrefixes?: string[];
+};
+
 export type Hosting = {
+  version: 1;
   framework: string;
   frameworkBuildId: string;
-  edgeRouting: boolean;
-  entry: string;
+  rootFunction: string;
+  routeTable?: RouteTableFormat;
+  static?: Static;
   needs: Partial<Record<Need, NeedDetail>>;
 };

@@ -1,8 +1,8 @@
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
 
-export type TestManifest = Omit<RoutingManifest, "entry"> & { entry?: string };
+export type TestManifest = Omit<NextRouteTable, "rootFunction"> & { rootFunction?: string };
 
 export type TestRouteDeps = Omit<Partial<RouteDeps>, "manifest"> & {
   manifest?: TestManifest;
@@ -42,7 +42,7 @@ export function baseDeps(overrides: TestRouteDeps = {}): RouteDeps {
     assetStore: noAssets(),
     ...rest,
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "test",
       basePath: "",
       pathnames: [],
