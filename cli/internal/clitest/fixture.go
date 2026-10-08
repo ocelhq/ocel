@@ -177,6 +177,14 @@ func WriteFile(t *testing.T, path, contents string) {
 	}
 }
 
+func InstallOcelPackage(t *testing.T, dir string) {
+	t.Helper()
+	pkg := filepath.Join(dir, "node_modules", "ocel")
+	WriteFile(t, filepath.Join(pkg, "package.json"), `{"name":"ocel","type":"module","exports":{"./config":"./config.js","./providers/fake":"./fake.js"}}`)
+	WriteFile(t, filepath.Join(pkg, "config.js"), `export const defineConfig = (config) => config;`)
+	WriteFile(t, filepath.Join(pkg, "fake.js"), `export default (options) => ({ fake: options });`)
+}
+
 func WriteUsageMonorepo(t *testing.T, root string) {
 	t.Helper()
 
