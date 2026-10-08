@@ -115,10 +115,9 @@ func (p *Provider) Facts() provider.Facts {
 			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: []provider.Compute{provider.ComputeServerless}},
 			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
 		},
-		DNSKinds:               []provider.DNSKind{dnsCloudflare},
-		StoresArtifacts:        true,
-		WorkerCeilings:         slices.Clone(workerCeilings),
-		NextRefreshesByRequest: true,
+		DNSKinds:        []provider.DNSKind{dnsCloudflare},
+		StoresArtifacts: true,
+		WorkerCeilings:  slices.Clone(workerCeilings),
 	}
 }
 

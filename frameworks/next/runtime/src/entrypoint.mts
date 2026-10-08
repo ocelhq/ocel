@@ -74,11 +74,11 @@ async function boot(): Promise<void> {
     announceRevalidations(res);
     const { scheduleRefresh } = getNextHost();
     if (scheduleRefresh)
-      routeStaleHitsToRefresh(req, res, prerendered, scheduleRefresh, ocel.holdEnd);
+      routeStaleHitsToRefresh(req, res, prerendered, scheduleRefresh, ocel.waitUntil);
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
     }
-    return runWithWaitUntil(ocel.holdEnd, () =>
+    return runWithWaitUntil(ocel.waitUntil, () =>
       handler(req, res, {
         waitUntil: ocel.waitUntil,
         requestMeta: {

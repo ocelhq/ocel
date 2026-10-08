@@ -58,13 +58,16 @@ reads, writes and storage its records use.
 
 ## Next.js
 
-A serverless Next app runs as Cloud Run services billed per request (per instance in a preview behind Identity-Aware Proxy), each with 2 GiB of memory.
+A serverless Next app runs as Cloud Run services billed per instance, each with 1 vCPU and 2 GiB
+of memory. An instance keeps its CPU after it answers, so the work Next runs after the response
+(`after()`, refreshing a stale page, writing the cache) finishes rather than stalling until the next request.
 
-A Next app deployed as functions (serverless compute, billed per request) cannot turn on
-`experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
-the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
-Turn the setting off, or set `compute` to `container` on the app: a Next app on
-container compute is not affected.
+The catch is the bill. Cloud Run charges an instance for its whole life, idle time included, and
+keeps an idle instance for up to 15 minutes after its last request. At list prices one instance costs
+about $0.08 an hour, so traffic that never pauses for 15 minutes keeps one alive all month, about $58,
+where billing per request would charge only the seconds spent answering. Steady traffic costs less
+this way, because the per-instance rate is lower and has no per-request fee. `ocel cost` prices the
+services this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
@@ -343,12 +346,11 @@ a dead-letter topic of its own. A task with a `cron` is a Cloud Scheduler job pu
 topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
 waits in the tier's Cloud Tasks queue until it is due.
 
-A Next app billed per request refreshes a stale page through the same queue: it queues the
+A serverless Next app refreshes a stale page through the same queue: it queues the
 refresh, and Cloud Tasks calls the app's Cloud Run url with a token signed as the tier's refresh
 account. A Next app on container compute, or behind an edge that runs code, refreshes on its own.
-A Next app in a preview served behind Identity-Aware Proxy is billed for its instance's whole life
-instead, and refreshes on its own too: the proxy lets in only the people `previewViewers` names, so
-Cloud Tasks could not reach it.
+A Next app in a preview served behind Identity-Aware Proxy refreshes on its own too: the proxy lets
+in only the people `previewViewers` names, so Cloud Tasks could not reach it.
 
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
@@ -363,8 +365,8 @@ ocel bootstrap production --features tasks
 
 That is the tier's task database, its delay queue, its push account, and the account Cloud Tasks
 signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also
-needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a Next app billed
-per request behind an edge that runs no code, on a tier without it is refused, naming that
+needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a serverless Next
+app behind an edge that runs no code, on a tier without it is refused, naming that
 command, and an ephemeral preview declaring one is refused. A Next app on container compute, or
 behind an edge that runs code, needs no queue. Dropping `tasks` from a bootstrap is refused while
 any project on the tier still declares a topic or task, or still holds the refresh grant of a Next
@@ -437,7 +439,7 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
-because a delayed message is published as the app that sent it. A Next app billed per request may
+because a delayed message is published as the app that sent it. A serverless Next app may
 act as the tier's refresh account, which holds no grant of its own, so Cloud Tasks signs its
 refreshes as that account; a deploy sets that with the custom role too.
 

@@ -89,7 +89,7 @@ export function routeStaleHitsToRefresh(
   res: http.ServerResponse,
   routes: PrerenderedRoutes,
   schedule: ScheduleRefresh,
-  holdEnd: (promise: Promise<unknown>) => void,
+  waitUntil: (promise: Promise<unknown>) => void,
 ): void {
   if (req.headers[refreshHeader] !== undefined) return;
   const route = findPrerenderedRoute(req.url, routes);
@@ -113,7 +113,7 @@ export function routeStaleHitsToRefresh(
           [refreshHeader]: String(stale.lastModified),
         },
       };
-      holdEnd(
+      waitUntil(
         Promise.resolve()
           .then(() => schedule(refresh))
           .catch((err) => {

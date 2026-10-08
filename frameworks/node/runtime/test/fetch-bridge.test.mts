@@ -13,9 +13,7 @@ let server: http.Server;
 let port: number;
 
 beforeAll(async () => {
-  server = http.createServer(
-    (req, res) => void invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} }),
-  );
+  server = http.createServer((req, res) => void invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, resolve));
   port = (server.address() as any).port;
 });

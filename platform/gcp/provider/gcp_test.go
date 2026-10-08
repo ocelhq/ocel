@@ -8,9 +8,9 @@ func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 	}
 }
 
-func TestCloudRunDeclaresItsNextFunctionsRefreshByRequest(t *testing.T) {
-	if !pushing(t, "").Facts().NextRefreshesByRequest {
-		t.Error("Facts().NextRefreshesByRequest = false, want true: a Cloud Run function billed per request stops its work when the response ends")
+func TestCloudRunDeclaresItsNextFunctionsKeepWorkingAfterTheResponse(t *testing.T) {
+	if pushing(t, "").Facts().NextRefreshesByRequest {
+		t.Error("Facts().NextRefreshesByRequest = true, want false: a Next service on Cloud Run is billed per instance and keeps its CPU once the response ends")
 	}
 }
 

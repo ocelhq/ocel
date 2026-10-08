@@ -47,13 +47,9 @@ const (
 	refreshTargetEnvVar     = "OCEL_REFRESH_TARGET"
 	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
 	idTokenCertsURLEnvVar   = "OCEL_ID_TOKEN_CERTS_URL"
-
-	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
 
 const refreshPath = "/_ocel/refresh"
-
-const finishBeforeResponseCap = 10 * time.Second
 
 var routingManifestInImage = path.Join(images.FunctionImageRoot, edge.RoutingManifestFile)
 
@@ -144,9 +140,6 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 	maps.Copy(env, newCacheTagPurgeEnv(spec.Edge))
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
-	}
-	if s.billsPerRequest() {
-		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
 		if factsOf(spec.Edge).RunsCode {

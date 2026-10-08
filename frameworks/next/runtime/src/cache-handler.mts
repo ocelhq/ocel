@@ -9,8 +9,7 @@ import {
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
-import { background, holdEnd } from "@framework/node-runtime/background";
-import { finishBeforeResponseMs } from "@framework/node-runtime/host";
+import { background, keptUntilSettled } from "@framework/node-runtime/background";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
@@ -168,11 +167,6 @@ export default class OcelCacheHandler {
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
         return null;
       }
-      if (ctx?.kind === "FETCH" && finishBeforeResponseMs(process.env) > 0) {
-        if (isStaleEntry(entry.lastModified, tags, ctx.revalidate || entry.value.revalidate)) {
-          return null;
-        }
-      }
       const served = readServedRoute(this.requestHeaders);
       if (ctx?.kind !== "FETCH" && served) {
         if (
@@ -237,7 +231,7 @@ export default class OcelCacheHandler {
 
     noteRevalidation();
     recordTags(list, record);
-    await holdEnd(this.openStore().then((store) => store.writeTags(list, record)));
+    await keptUntilSettled(this.openStore().then((store) => store.writeTags(list, record)));
   }
 
   private noteOriginTags(tags: string[]): void {

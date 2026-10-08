@@ -456,7 +456,7 @@ func nextManifest(container bool) *contractv1.Manifest {
 	return &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{app}}
 }
 
-func TestShapeOfANextAppBilledPerRequestListsTheTiersQueueAndRefreshAccount(t *testing.T) {
+func TestShapeOfAServerlessNextAppListsTheTiersQueueAndRefreshAccount(t *testing.T) {
 	client, _ := costServed(t)
 	shaped := func(container bool) *costv1.ResourceSet {
 		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -469,9 +469,9 @@ func TestShapeOfANextAppBilledPerRequestListsTheTiersQueueAndRefreshAccount(t *t
 		return set
 	}
 
-	perRequest, container := shaped(false), shaped(true)
+	serverless, container := shaped(false), shaped(true)
 
-	counts, without := typeCounts(perRequest), typeCounts(container)
+	counts, without := typeCounts(serverless), typeCounts(container)
 	if counts["google_cloud_tasks_queue"] != 1 {
 		t.Errorf("counts = %v, want the tier's delay queue", counts)
 	}
@@ -481,7 +481,7 @@ func TestShapeOfANextAppBilledPerRequestListsTheTiersQueueAndRefreshAccount(t *t
 	if counts["google_firestore_database"] != without["google_firestore_database"] {
 		t.Errorf("counts = %v, want no task database: a refresh keeps no run records", counts)
 	}
-	for _, r := range perRequest.GetResources() {
+	for _, r := range serverless.GetResources() {
 		if r.GetType() == "google_cloud_tasks_queue" && r.GetScope() != "project:shop/shared:production" {
 			t.Errorf("the queue is scoped %q, want the tier it is shared by", r.GetScope())
 		}

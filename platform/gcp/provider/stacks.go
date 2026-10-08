@@ -150,7 +150,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			compute:          provider.ComputeServerless,
 			public:           !gated,
 			iap:              gated,
-			instanceBilled:   gated && servesNext(app),
+			instanceBilled:   servesNext(app),
 			ingress:          ingressFor(factsOf(spec.Edge)),
 			memory:           fn.Memory,
 			egress:           p.egressFor(names, spec),

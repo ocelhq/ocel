@@ -97,7 +97,7 @@ test("a static asset is served from the directory the service's image holds it i
 
 async function serveInvoke(invoke: ReturnType<typeof newGcpDispatchInvoke>): Promise<http.Server> {
   const server = http.createServer((req, res) => {
-    Promise.resolve(invoke(req, res, { waitUntil() {}, holdEnd() {} })).catch(() => {
+    Promise.resolve(invoke(req, res, { waitUntil() {} })).catch(() => {
       res.statusCode = 500;
       res.end();
     });
@@ -174,9 +174,7 @@ test("a static flight response reaches Cloud CDN without the router state tree i
     },
     undefined,
   );
-  const edge = http.createServer((req, res) =>
-    invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} }),
-  );
+  const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {
     const { port } = edge.address() as { port: number };
@@ -202,9 +200,7 @@ test("a page the GCP dispatch serves carries its release tag when its edge purge
     },
     undefined,
   );
-  const edge = http.createServer((req, res) =>
-    invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} }),
-  );
+  const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {
     const { port } = edge.address() as { port: number };
