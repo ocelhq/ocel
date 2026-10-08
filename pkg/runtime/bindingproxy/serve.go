@@ -12,9 +12,11 @@ import (
 )
 
 type Served struct {
-	Env    []string
-	Errs   <-chan error
-	server *http.Server
+	Address string
+	Token   string
+	Env     []string
+	Errs    <-chan error
+	server  *http.Server
 }
 
 func (s Served) Close() error {
@@ -39,9 +41,12 @@ func Serve(services Services) (Served, error) {
 	errs := make(chan error, 1)
 	go func() { errs <- srv.Serve(ln) }()
 
+	address := "http://" + ln.Addr().String()
 	return Served{
+		Address: address,
+		Token:   token,
 		Env: []string{
-			processenv.RuntimeAddressEnvVar + "=http://" + ln.Addr().String(),
+			processenv.RuntimeAddressEnvVar + "=" + address,
 			localrpc.SessionTokenEnvVar + "=" + token,
 		},
 		Errs:   errs,
