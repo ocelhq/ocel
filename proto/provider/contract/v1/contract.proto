@@ -21,6 +21,8 @@ service ProviderService {
 
     rpc ProvisionInfra(ProvisionInfraRequest) returns (stream common.progress.v1.OperationEvent);
 
+    rpc RenewDeployLease(RenewDeployLeaseRequest) returns (RenewDeployLeaseResponse);
+
     rpc AbandonDeploy(AbandonDeployRequest) returns (AbandonDeployResponse);
 
     rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent);
@@ -389,6 +391,16 @@ message ProvisionInfraRequest {
 
   string lease_token = 6 [(buf.validate.field).string.pattern = "^[a-f0-9]{32}$"];
 }
+
+message RenewDeployLeaseRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  string lease_token = 3 [(buf.validate.field).string.pattern = "^[a-f0-9]{32}$"];
+}
+
+message RenewDeployLeaseResponse {}
 
 message AbandonDeployRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];

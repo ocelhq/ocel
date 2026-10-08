@@ -303,3 +303,67 @@ func TestADeployWhoseLeaseAnotherDeployTookOverAndFreedIsRefusedRatherThanTaking
 		t.Error("the refused deploy took the freed lease back, want the environment left free")
 	}
 }
+
+func renewDeployLease(client contractv1connect.ProviderServiceClient, token string) error {
+	_, err := client.RenewDeployLease(context.Background(), &contractv1.RenewDeployLeaseRequest{
+		Slug:        "shop",
+		Environment: deployRequest().GetEnvironment(),
+		LeaseToken:  token,
+	})
+	return err
+}
+
+func readLeaseRevision(t *testing.T, vendor *fake.Provider) keyvalue.Revision {
+	t.Helper()
+	recorded, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
+	if err != nil {
+		t.Fatalf("reading the environment lease = %v", err)
+	}
+	return recorded.Revision
+}
+
+func TestRenewDeployLeaseKeepsTheLeaseOfADeployThatIsStillBuilding(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	provisioned := readLeaseRevision(t, vendor)
+
+	if err := renewDeployLease(client, infraLease); err != nil {
+		t.Fatalf("RenewDeployLease() error = %v", err)
+	}
+
+	if readLeaseRevision(t, vendor) == provisioned {
+		t.Error("RenewDeployLease left the lease as ProvisionInfra wrote it, want it renewed")
+	}
+}
+
+func TestRenewDeployLeaseIsRefusedOnceAnotherDeployTookTheLeaseOver(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	takeLeaseOver(t, vendor.KeyValues(), otherEnvironmentLease)
+
+	err := renewDeployLease(client, infraLease)
+
+	if code, _ := provider.RefusedCode(err); code != refusal.CodeBusy {
+		t.Errorf("RenewDeployLease() = %v, want a busy refusal: another deploy holds the lease now", err)
+	}
+}
+
+func TestAbandonDeployReportsALeaseItCouldNotFree(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	vendor.KeyValues().(*fake.KeyValues).SetRemovalError(
+		stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv), errors.New("the table refused the delete"))
+
+	_, err := client.AbandonDeploy(context.Background(), &contractv1.AbandonDeployRequest{
+		Slug:        "shop",
+		Environment: deployRequest().GetEnvironment(),
+		LeaseToken:  infraLease,
+	})
+
+	if err == nil {
+		t.Error("AbandonDeploy() succeeded though the lease is still recorded, want the failure reported")
+	}
+}

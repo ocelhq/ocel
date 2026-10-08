@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -153,6 +154,48 @@ func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testi
 
 	if sent := sentProvisionInfras(t, fixture); len(sent) != 2 {
 		t.Errorf("the CLI sent %d ProvisionInfra requests, want 2: one for orders, none again for the same orders, one once uploads is declared", len(sent))
+	}
+}
+
+func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	ctx := context.Background()
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
+	renewals := func() []*contractv1.RenewDeployLeaseRequest {
+		return clitest.RequestsTo[*contractv1.RenewDeployLeaseRequest](t, fixture.Requests, contractv1connect.ProviderServiceRenewDeployLeaseProcedure)
+	}
+
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project}, false, false)
+		infra.renewal = time.Millisecond
+		defer infra.abandon(ctx, p.Project.Slug)
+		if err := infra.provision(ctx, []declaration.Resource{orders}, nil); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for len(renewals()) == 0 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("provision() error = %v; stdout=%s", err, stdout.String())
+	}
+
+	sent := renewals()
+	if len(sent) == 0 {
+		t.Fatal("the CLI never renewed its lease while the deploy built, want it renewed so the lease outlasts a long build and runs out once the CLI is gone")
+	}
+	if token := sentProvisionInfras(t, fixture)[0].GetLeaseToken(); sent[0].GetLeaseToken() != token {
+		t.Errorf("the CLI renewed the lease token %q, want %q, the one ProvisionInfra took", sent[0].GetLeaseToken(), token)
 	}
 }
 
