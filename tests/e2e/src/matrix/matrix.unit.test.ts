@@ -774,3 +774,27 @@ describe("the fixtures a lane deploys", () => {
     expect([...undetectable].sort()).toEqual([]);
   });
 });
+
+describe("the prerender-from-a-bucket cell", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const cellsOn = (lane: Lane) =>
+    planOn(lane, {}, EVERY_CELL)
+      .cells.map((cell) => cell.name)
+      .filter((name) => name === "prerender/next-bucket");
+
+  it("builds a page from a bucket on every vendor, behind the binding proxy its provider serves", () => {
+    for (const lane of ["aws", "gcp", "gcp.floci", "vps", "vps.incus"] as const) {
+      expect(cellsOn(lane)).toEqual(["prerender/next-bucket"]);
+    }
+  });
+
+  it("runs on no lane that serves no Next app", () => {
+    expect(cellsOn("dev")).toEqual([]);
+  });
+
+  it("skips the cell on floci's aws, whose CloudFront serves no Next app", () => {
+    expect(planOn("aws.floci").skipped["prerender/next-bucket"]?.map((gap) => gap.issue)).toEqual([
+      852,
+    ]);
+  });
+});
