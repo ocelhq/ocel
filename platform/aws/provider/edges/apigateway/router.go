@@ -85,11 +85,11 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			return err
 		}
 		defer stop()
-		routes, err := routeStatic(bounded, c, s.spec(pointer), id, immutablePrefixes(move.Records))
+		routes, err := routeStatic(bounded, c, s.spec(pointer), id, collectImmutablePrefixes(move.Records))
 		if err != nil {
 			return err
 		}
-		published, err := stageVariable(bounded, c, id, routesVariable)
+		published, err := readStageVariable(bounded, c, id, routesVariable)
 		if err != nil {
 			return err
 		}

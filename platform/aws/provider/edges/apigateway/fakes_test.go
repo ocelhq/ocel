@@ -382,6 +382,23 @@ func (f *fakeGateway) PutMethod(_ context.Context, in *apigateway.PutMethodInput
 	return &apigateway.PutMethodOutput{}, nil
 }
 
+func (f *fakeGateway) DeleteMethod(_ context.Context, in *apigateway.DeleteMethodInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteMethodOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	httpMethod := aws.ToString(in.HttpMethod)
+	f.record("DeleteMethod " + api.resources[aws.ToString(in.ResourceId)] + " " + httpMethod)
+	key := aws.ToString(in.ResourceId) + " " + httpMethod
+	if m, ok := api.methods[key]; !ok || !m.open {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method " + httpMethod)}
+	}
+	delete(api.methods, key)
+	return &apigateway.DeleteMethodOutput{}, nil
+}
+
 func (f *fakeGateway) GetMethod(_ context.Context, in *apigateway.GetMethodInput, _ ...func(*apigateway.Options)) (*apigateway.GetMethodOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

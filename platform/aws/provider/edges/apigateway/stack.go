@@ -182,7 +182,7 @@ func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]
 	}), nil
 }
 
-func immutablePrefixes(records map[string]router.ReleaseRecord) []string {
+func collectImmutablePrefixes(records map[string]router.ReleaseRecord) []string {
 	var prefixes []string
 	for _, record := range records {
 		if record.Static != nil {
