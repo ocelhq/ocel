@@ -22,8 +22,8 @@ function isImmutable(pathname) {
 }
 
 function clientAddress(request) {
-  const carried = request.headers.get(CLIENT_ADDRESS);
-  if (carried) return carried;
+  const forwarded = request.headers.get(CLIENT_ADDRESS);
+  if (forwarded) return forwarded;
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 }
 

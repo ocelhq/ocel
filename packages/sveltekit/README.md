@@ -35,8 +35,9 @@ export default { kit: { adapter: ocel() } };
 ## Running it yourself
 
 Outside `ocel build`, `vite build` writes the same output to `build/`, and `node build` serves
-it on `PORT` (3000 by default). That is what a container runs, so give the app a
-`"start": "node build"` script.
+it on `PORT` (3000 by default) at `HOST` (`127.0.0.1` by default, which is where the ocel
+runtime in front of a container reaches it). That is what a container runs, so give the app a
+`"start": "node build"` script. Set `HOST=0.0.0.0` only to serve it to other machines yourself.
 
 ## `ocel(options?)`
 

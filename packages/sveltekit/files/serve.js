@@ -3,7 +3,7 @@ import http from "node:http";
 import { getRequest, setResponse } from "@sveltejs/kit/node";
 
 const port = Number(process.env.PORT ?? 3000);
-const host = process.env.HOST ?? "0.0.0.0";
+const host = process.env.HOST ?? "127.0.0.1";
 
 http
   .createServer(async (req, res) => {

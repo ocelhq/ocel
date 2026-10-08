@@ -29,8 +29,9 @@ beforeAll(async () => {
   const serve = readFileSync(new URL("../files/serve.js", import.meta.url), "utf8");
   writeFileSync(join(dir, "index.js"), serve.replace("ENTRY", "./app.js"));
   port = await freePort();
+  const { HOST: _host, ...inherited } = process.env;
   child = spawn(process.execPath, [join(dir, "index.js")], {
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" },
+    env: { ...inherited, PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   await new Promise<void>((resolve) => child.stdout?.once("data", () => resolve()));
@@ -46,4 +47,13 @@ it("answers 500 to a request the app throws on, and keeps serving", async () => 
   expect(thrown.status).toBe(500);
   const next = await fetch(`http://127.0.0.1:${port}/`);
   expect(await next.text()).toBe("ok");
+});
+
+it("listens on loopback alone unless HOST names another address", async () => {
+  const { networkInterfaces } = await import("node:os");
+  const outward = Object.values(networkInterfaces())
+    .flat()
+    .find((address) => address && address.family === "IPv4" && !address.internal);
+  if (!outward) return;
+  await expect(fetch(`http://${outward.address}:${port}/`)).rejects.toThrow();
 });
