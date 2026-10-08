@@ -9,9 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	connect "connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -104,13 +101,4 @@ func Client(socket string) *http.Client {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
 	}}
-}
-
-func PresentCallerSecret(secret string) connect.Option {
-	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", localrpc.FormatAuthHeader(secret))
-			return next(ctx, req)
-		}
-	}))
 }

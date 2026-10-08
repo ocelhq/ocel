@@ -51,18 +51,23 @@ func TestACallerIsKnownByTheContainerItsCgroupNamesUnderEitherDriver(t *testing.
 type inspecting struct {
 	mu        sync.Mutex
 	manifests map[string]string
+	initPID   int
 	asked     []string
 	broken    error
 }
 
-func (i *inspecting) Manifest(_ context.Context, container string) (string, error) {
+func (i *inspecting) ReadContainer(_ context.Context, container string) (Container, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.asked = append(i.asked, container)
 	if i.broken != nil {
-		return "", i.broken
+		return Container{}, i.broken
 	}
-	return i.manifests[container], nil
+	init := i.initPID
+	if init == 0 {
+		init = os.Getpid()
+	}
+	return Container{Manifest: i.manifests[container], InitPID: init}, nil
 }
 
 type resolving struct {

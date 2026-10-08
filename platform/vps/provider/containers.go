@@ -42,9 +42,6 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if hasQueue(app) {
 		pinned.Queue = spec.Ref.Name.Env
-		if pinned.QueueCallerSecret, err = p.ensureCallerSecret(ctx, spec.Ref); err != nil {
-			return nil, fmt.Errorf("pin the caller secret %s's binding proxy presents to its queue: %w", app.App, err)
-		}
 	}
 	manifest, err := variables.Render(pinned)
 	if err != nil {

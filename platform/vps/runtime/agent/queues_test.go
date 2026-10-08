@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
-	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
 type queueTasks struct {
@@ -61,12 +61,10 @@ func (s servedQueues) Served(tier environment.Tier, project, env string) (taskv1
 	return tasks, &queueTopics{queue: tasks.queue}, true
 }
 
-const callerSecret = "binding-proxy-caller-secret"
-
 func queueManifest(t *testing.T, slug, queue string) string {
 	t.Helper()
 	rendered, err := variables.Render(variables.Manifest{
-		Slug: slug, Tier: "production", Queue: queue, QueueCallerSecret: callerSecret,
+		Slug: slug, Tier: "production", Queue: queue,
 		Bindings: []live.Binding{{Name: "task--send-email", Key: "OCEL_RESOURCE_TASK_send-email"}},
 	})
 	if err != nil {
@@ -95,7 +93,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 		Queues:  queues,
 	})
 
-	tasks := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live", source.PresentCallerSecret(callerSecret))
+	tasks := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live")
 	triggered, err := tasks.Trigger(context.Background(), &taskv1.TriggerRequest{Task: "send-email"})
 	if err != nil {
 		t.Fatalf("Trigger() = %v", err)
@@ -103,7 +101,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 	if triggered.GetId() != "shop-prod-run" || len(shop.triggered) != 1 {
 		t.Errorf("Trigger() = %q reaching %v, want shop's own queue", triggered.GetId(), shop.triggered)
 	}
-	topics := topicv1connect.NewTopicServiceClient(overSocket(socket), "http://ocel-live", source.PresentCallerSecret(callerSecret))
+	topics := topicv1connect.NewTopicServiceClient(overSocket(socket), "http://ocel-live")
 	sent, err := topics.Send(context.Background(), &topicv1.SendRequest{Topic: "orders"})
 	if err != nil || sent.GetMessageId() != "shop-prod-message" {
 		t.Errorf("Send() = %v, %v, want it sent through shop's own queue", sent, err)
@@ -131,76 +129,57 @@ func TestADirectCallFromOutsideEveryContainerIsRefusedBeforeAnyQueueIsReached(t 
 	}
 }
 
-func TestACallerInsideTheRightContainerWithoutTheBindingProxysCallerSecretIsRefusedByEveryMethod(t *testing.T) {
+func TestAProcessInsideTheRightContainerOtherThanItsRuntimeIsRefusedByEveryMethod(t *testing.T) {
 	t.Parallel()
 	shop := &queueTasks{queue: "shop-prod"}
 	socket := serving(t, &Server{
-		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
+		Proc: procNaming(t, "0::/docker/"+containerID+"\n"),
+		Inspect: &inspecting{
+			manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")},
+			initPID:   os.Getpid() + 1,
+		},
 		Resolve: &resolving{},
 		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: shop},
 	})
-	for name, option := range map[string]connect.Option{
-		"no authorization header": connect.WithInterceptors(),
-		"another secret":          source.PresentCallerSecret("the-session-token-of-some-other-container"),
-		"a prefix of it":          source.PresentCallerSecret(callerSecret[:len(callerSecret)-1]),
-	} {
-		tasks := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live", option)
-		topics := topicv1connect.NewTopicServiceClient(overSocket(socket), "http://ocel-live", option)
-		ctx := context.Background()
-		calls := map[string]error{}
-		_, calls["Trigger"] = tasks.Trigger(ctx, &taskv1.TriggerRequest{Task: "send-email"})
-		_, calls["BatchTrigger"] = tasks.BatchTrigger(ctx, &taskv1.BatchTriggerRequest{})
-		_, calls["RetrieveRun"] = tasks.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{})
-		_, calls["ListRuns"] = tasks.ListRuns(ctx, &taskv1.ListRunsRequest{})
-		_, calls["CancelRun"] = tasks.CancelRun(ctx, &taskv1.CancelRunRequest{})
-		_, calls["ReplayRun"] = tasks.ReplayRun(ctx, &taskv1.ReplayRunRequest{})
-		_, calls["RescheduleRun"] = tasks.RescheduleRun(ctx, &taskv1.RescheduleRunRequest{})
-		_, calls["Send"] = topics.Send(ctx, &topicv1.SendRequest{Topic: "orders"})
-		_, calls["ListDeadLetters"] = topics.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{})
-		_, calls["RedriveDeadLetters"] = topics.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{})
-		_, calls["PurgeDeadLetters"] = topics.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{})
-		_, calls["CountDeadLetters"] = topics.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{})
-		for method, err := range calls {
-			if code := connect.CodeOf(err); code != connect.CodeUnauthenticated {
-				t.Errorf("%s: %s() = %v (%s), want %s", name, method, err, code, connect.CodeUnauthenticated)
-			}
+	tasks := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live")
+	topics := topicv1connect.NewTopicServiceClient(overSocket(socket), "http://ocel-live")
+	ctx := context.Background()
+	calls := map[string]error{}
+	_, calls["Trigger"] = tasks.Trigger(ctx, &taskv1.TriggerRequest{Task: "send-email"})
+	_, calls["BatchTrigger"] = tasks.BatchTrigger(ctx, &taskv1.BatchTriggerRequest{})
+	_, calls["RetrieveRun"] = tasks.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{})
+	_, calls["ListRuns"] = tasks.ListRuns(ctx, &taskv1.ListRunsRequest{})
+	_, calls["CancelRun"] = tasks.CancelRun(ctx, &taskv1.CancelRunRequest{})
+	_, calls["ReplayRun"] = tasks.ReplayRun(ctx, &taskv1.ReplayRunRequest{})
+	_, calls["RescheduleRun"] = tasks.RescheduleRun(ctx, &taskv1.RescheduleRunRequest{})
+	_, calls["Send"] = topics.Send(ctx, &topicv1.SendRequest{Topic: "orders"})
+	_, calls["ListDeadLetters"] = topics.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{})
+	_, calls["RedriveDeadLetters"] = topics.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{})
+	_, calls["PurgeDeadLetters"] = topics.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{})
+	_, calls["CountDeadLetters"] = topics.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{})
+	for method, err := range calls {
+		if code := connect.CodeOf(err); code != connect.CodePermissionDenied {
+			t.Errorf("%s() from a process the app started = %v (%s), want %s", method, err, code, connect.CodePermissionDenied)
 		}
 	}
 	if len(shop.triggered) != 0 {
-		t.Errorf("a caller without the caller secret reached the queue: %v", shop.triggered)
+		t.Errorf("a process other than the container's runtime reached the queue: %v", shop.triggered)
 	}
 }
 
-func TestAManifestCarryingNoCallerSecretServesNoQueueCallWhateverTheCallerPresents(t *testing.T) {
+func TestTheDaemonNamesTheProcessAContainerRunsAsItsInit(t *testing.T) {
 	t.Parallel()
-	rendered, err := variables.Render(variables.Manifest{
-		Slug: "shop", Tier: "production", Queue: "prod",
-		Bindings: []live.Binding{{Name: "task--send-email", Key: "OCEL_RESOURCE_TASK_send-email"}},
+	docker := dockerAnswering(t, map[string]string{
+		"/containers/" + containerID + "/json": `{"State":{"Running":true,"Pid":4242},"Config":{"Env":["PATH=/usr/bin","` + variables.EnvVar + `={\"slug\":\"shop\"}"]}}`,
+		"/containers/stopped/json":             `{"State":{"Running":false,"Pid":0},"Config":{"Env":[]}}`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	running, err := docker.ReadContainer(context.Background(), containerID)
+	if err != nil || running.InitPID != 4242 || running.Manifest != `{"slug":"shop"}` {
+		t.Errorf("ReadContainer(%s) = %+v, %v, want init 4242 and its manifest", containerID, running, err)
 	}
-	shop := &queueTasks{queue: "shop-prod"}
-	socket := serving(t, &Server{
-		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: string(rendered)}},
-		Resolve: &resolving{},
-		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: shop},
-	})
-	for name, option := range map[string]connect.Option{
-		"no authorization header": connect.WithInterceptors(),
-		"an empty bearer":         source.PresentCallerSecret(""),
-		"a blank bearer":          source.PresentCallerSecret(" "),
-	} {
-		_, err := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live", option).
-			Trigger(context.Background(), &taskv1.TriggerRequest{Task: "send-email"})
-		if code := connect.CodeOf(err); code != connect.CodeUnauthenticated {
-			t.Errorf("%s: Trigger() = %v (%s), want %s", name, err, code, connect.CodeUnauthenticated)
-		}
-	}
-	if len(shop.triggered) != 0 {
-		t.Errorf("a manifest with no caller secret let a call reach the queue: %v", shop.triggered)
+	stopped, err := docker.ReadContainer(context.Background(), "stopped")
+	if err != nil || stopped.InitPID != 0 {
+		t.Errorf("ReadContainer(stopped) = %+v, %v, want no init process", stopped, err)
 	}
 }
 
@@ -212,7 +191,7 @@ func TestAContainerWhoseManifestNamesNoQueueIsToldItHasNone(t *testing.T) {
 		Resolve: &resolving{},
 		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: {queue: "shop-prod"}},
 	})
-	_, err := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live", source.PresentCallerSecret(callerSecret)).
+	_, err := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live").
 		Trigger(context.Background(), &taskv1.TriggerRequest{Task: "send-email"})
 	var refused *connect.Error
 	if !errors.As(err, &refused) || refused.Code() != connect.CodeFailedPrecondition {
@@ -228,7 +207,7 @@ func TestAQueueTheBoxIsNotServingYetIsUnavailableNotMissing(t *testing.T) {
 		Resolve: &resolving{},
 		Queues:  servedQueues{},
 	})
-	_, err := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live", source.PresentCallerSecret(callerSecret)).
+	_, err := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live").
 		Trigger(context.Background(), &taskv1.TriggerRequest{Task: "send-email"})
 	if code := connect.CodeOf(err); code != connect.CodeUnavailable {
 		t.Errorf("Trigger() = %v (%s), want %s while the box opens the queue", err, code, connect.CodeUnavailable)
