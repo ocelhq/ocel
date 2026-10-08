@@ -154,6 +154,8 @@ message OperationResult {
   bool refused = 10;
 
   ConnectorInstalled connector = 11;
+
+  int64 promoted_at_seconds = 12;
 }
 
 message ConnectorInstalled {

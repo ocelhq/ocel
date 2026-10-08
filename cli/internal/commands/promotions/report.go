@@ -29,7 +29,7 @@ func reportRolledBack(attempt deployreport.Attempt, promoted *contractv1.Promoti
 	if err != nil {
 		return nil, err
 	}
-	attempt.Apps, attempt.PromotionID, attempt.Tag = apps, promoted.GetPromotionId(), promoted.GetTag()
+	attempt.Apps, attempt.PromotionID, attempt.PromotionSeq, attempt.Tag = apps, promoted.GetPromotionId(), promoted.GetTs(), promoted.GetTag()
 	deployment := attempt.Succeeded(time.Now())
 	return deployment, deployreport.Write(attempt.Project.Dir, deployment)
 }

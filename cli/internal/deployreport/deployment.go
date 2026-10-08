@@ -14,24 +14,25 @@ import (
 const maxErrorRunes = 4000
 
 type Attempt struct {
-	Kind        consolev1.DeploymentKind
-	Project     *project.Project
-	Environment *environmentv1.Environment
-	Target      string
-	TraceID     string
-	StartedAt   time.Time
-	Apps        []*consolev1.App
-	PromotionID string
-	Tag         string
-	Trigger     *consolev1.Trigger
-	CI          *consolev1.CI
-	Source      *consolev1.Source
+	Kind         consolev1.DeploymentKind
+	Project      *project.Project
+	Environment  *environmentv1.Environment
+	Target       string
+	TraceID      string
+	StartedAt    time.Time
+	Apps         []*consolev1.App
+	PromotionID  string
+	PromotionSeq int64
+	Tag          string
+	Trigger      *consolev1.Trigger
+	CI           *consolev1.CI
+	Source       *consolev1.Source
 }
 
 func (a Attempt) Succeeded(finishedAt time.Time) *consolev1.Deployment {
 	deployment := a.deployment(finishedAt)
 	deployment.Outcome = consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED
-	deployment.Promotion = &consolev1.Promotion{Id: a.PromotionID, Seq: deployment.GetFinishedAt().AsTime().UnixMilli(), Tag: a.Tag}
+	deployment.Promotion = &consolev1.Promotion{Id: a.PromotionID, Seq: a.PromotionSeq, Tag: a.Tag}
 	return deployment
 }
 

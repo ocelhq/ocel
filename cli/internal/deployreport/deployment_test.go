@@ -26,14 +26,15 @@ var (
 
 func productionAttempt() Attempt {
 	return Attempt{
-		Kind:        consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
-		Project:     &project.Project{Slug: "shop", Provider: &project.Provider{ID: "aws"}},
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-		Target:      targetAccount,
-		TraceID:     traceID,
-		StartedAt:   startedAt,
-		PromotionID: "p_01",
-		Tag:         "v1.2.0",
+		Kind:         consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
+		Project:      &project.Project{Slug: "shop", Provider: &project.Provider{ID: "aws"}},
+		Environment:  &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Target:       targetAccount,
+		TraceID:      traceID,
+		StartedAt:    startedAt,
+		PromotionID:  "p_01",
+		PromotionSeq: 1791374400,
+		Tag:          "v1.2.0",
 		Apps: []*consolev1.App{{
 			Name:    "web",
 			BuildId: "3f7c1b9a5e2d4c8f",
@@ -68,8 +69,8 @@ func TestASucceededAttemptIsADeploymentRecordTheConsoleAccepts(t *testing.T) {
 	if deployment.GetPromotion().GetId() != "p_01" || deployment.GetPromotion().GetTag() != "v1.2.0" {
 		t.Errorf("promotion = %v, want p_01 tagged v1.2.0", deployment.GetPromotion())
 	}
-	if deployment.GetPromotion().GetSeq() != finishedAt.UnixMilli() {
-		t.Errorf("promotion seq = %d, want the promotion's finish time in milliseconds %d", deployment.GetPromotion().GetSeq(), finishedAt.UnixMilli())
+	if deployment.GetPromotion().GetSeq() != 1791374400 {
+		t.Errorf("promotion seq = %d, want the router's ts for the promotion, 1791374400", deployment.GetPromotion().GetSeq())
 	}
 	if deployment.GetProvider().GetName() != "aws" || deployment.GetTarget() != targetAccount {
 		t.Errorf("provider %q target %q, want aws and %q", deployment.GetProvider().GetName(), deployment.GetTarget(), targetAccount)

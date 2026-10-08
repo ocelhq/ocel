@@ -91,6 +91,23 @@ func TestADeployFromALinkedTreeReportsOneDeploymentToTheConsole(t *testing.T) {
 	}
 }
 
+func TestADeployedPromotionIsSequencedByTheTimeTheRouterRecordedIt(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+
+	if _, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{}); err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	active, _, err := fixture.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).ReadActive(context.Background(), router.DefaultPointer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := console.Reports()[0].GetDeployment().GetPromotion().GetSeq(); got != active.Ts {
+		t.Errorf("promotion seq = %d, want the router's ts %d", got, active.Ts)
+	}
+}
+
 func TestTheDeployReportFileHoldsTheDocumentTheConsoleReceived(t *testing.T) {
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)
