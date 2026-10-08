@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 func TestOptionFlagsAreNameValuePairsTheProviderIsGiven(t *testing.T) {
@@ -63,10 +64,10 @@ func TestInitRefusesAProviderWhoseRequiredOptionsAreNotGivenAndWritesNothing(t *
 func TestInitNamesEveryRequiredOptionThatIsMissing(t *testing.T) {
 	dir := initTestDir(t, "proj")
 
-	_, hint := runFailingInit(t, dir, initOptions{provider: "gcp"})
+	code, hint := runFailingInit(t, dir, initOptions{provider: twoOptionProvider})
 
-	if !strings.Contains(hint, "--option region=") {
-		t.Errorf("hint = %q, want it to name region", hint)
+	if code != clierror.CodeInputRequired || hint != "--option host=<value> --option zone=<value>" {
+		t.Errorf("code, hint = %q, %q; want input_required naming both host and zone", code, hint)
 	}
 }
 
@@ -77,34 +78,38 @@ func TestAnOptionValueIsWrittenAsTheLiteralTheConfigFormatReadsBack(t *testing.T
 			dependencies := newTestDependencies()
 			stubPackageManager(&dependencies, nil)
 			dir := initTestDir(t, "proj")
+			if format == "ts" {
+				if _, err := exec.LookPath("node"); err != nil {
+					t.Skip("node not found on PATH")
+				}
+				installVPSProviderPackage(t, dir)
+			}
 
 			opts := initOptions{provider: "vps", format: format, settings: []providerSetting{{name: "ssh", value: value}}}
 			if _, err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 				t.Fatalf("runInit err = %v", err)
 			}
 
-			written, err := os.ReadFile(filepath.Join(dir, configFileName(opts, sdkLanguage{})))
+			cfg, err := project.Load(context.Background(), dir, "")
 			if err != nil {
-				t.Fatalf("read config: %v", err)
-			}
-			if format != "json" {
-				if !strings.Contains(string(written), `"bo\"x\\ $${HOME} é"`) {
-					t.Errorf("config = %s, want the value as an escaped literal", written)
-				}
-				return
-			}
-			doc, err := configdoc.Decode(written, func(string) (string, bool) { return "", false })
-			if err != nil {
-				t.Fatalf("the config init wrote does not load: %v\n%s", err, written)
+				t.Fatalf("the config init wrote does not load: %v", err)
 			}
 			var options struct {
 				SSH string `json:"ssh"`
 			}
-			if err := json.Unmarshal(doc.Provider.Options, &options); err != nil || options.SSH != value {
+			if err := json.Unmarshal(cfg.Provider.Options, &options); err != nil || options.SSH != value {
 				t.Errorf("ssh = %q (err %v), want %q", options.SSH, err, value)
 			}
 		})
 	}
+}
+
+func installVPSProviderPackage(t *testing.T, dir string) {
+	t.Helper()
+	pkg := filepath.Join(dir, "node_modules", "ocel")
+	clitest.WriteFile(t, filepath.Join(pkg, "package.json"), `{"name":"ocel","type":"module","exports":{"./config":"./config.js","./providers/vps":"./vps.js"}}`)
+	clitest.WriteFile(t, filepath.Join(pkg, "config.js"), `export const defineConfig = (config) => config;`)
+	clitest.WriteFile(t, filepath.Join(pkg, "vps.js"), `export default (options) => ({ vps: options });`)
 }
 
 func TestInitAsksOnATerminalForTheRequiredOptionsItWasNotGivenAndLeavesStdoutToTheResult(t *testing.T) {
