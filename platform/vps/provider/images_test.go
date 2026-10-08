@@ -582,3 +582,29 @@ func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAga
 		t.Errorf("the registry does not hold %s after the push: %v", ref, err)
 	}
 }
+
+func TestAnImageTheMachineHoldsAndTheRegistryLostIsNotHeld(t *testing.T) {
+	t.Parallel()
+
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	machine := &box{hasImage: true}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	held, err := store.Has(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: wrapped(t)})
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+
+	if held {
+		t.Error("Has() = true for an image only the machine's own cache holds: a sweep elsewhere removed its registry tag, and a fresh box pulls from the registry")
+	}
+}
