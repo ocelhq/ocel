@@ -68,17 +68,19 @@ func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consol
 		if err != nil {
 			return nil, fmt.Errorf("app %s: %w", name, err)
 		}
+		at := slices.IndexFunc(cfg.Apps, func(a project.App) bool { return a.Name == name })
+		if at < 0 {
+			continue
+		}
 		app := &consolev1.App{
 			Name:    name,
 			BuildId: release.BuildID(),
 			Release: release.String(),
+			Compute: computeKind(cfg.Apps[at].Compute),
 			Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
 		}
-		if at := slices.IndexFunc(cfg.Apps, func(a project.App) bool { return a.Name == name }); at >= 0 {
-			app.Compute = computeKind(cfg.Apps[at].Compute)
-			if framework := cfg.Apps[at].Framework(); buildoutput.IsKnownFramework(framework) {
-				app.Framework = framework
-			}
+		if framework := cfg.Apps[at].Framework(); buildoutput.IsKnownFramework(framework) {
+			app.Framework = framework
 		}
 		apps = append(apps, app)
 	}

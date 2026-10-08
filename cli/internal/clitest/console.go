@@ -4,11 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 
 	"connectrpc.com/connect"
 	connectvalidate "connectrpc.com/validate"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
@@ -81,4 +83,17 @@ func SignedInTo(apiURL string) deployreport.Console {
 	return deployreport.Console{LoadCredentials: func() (console.Credentials, error) {
 		return console.Credentials{AccessToken: "device-session", APIURL: apiURL}, nil
 	}}
+}
+
+func ReadDeployReport(t *testing.T, path string) *consolev1.Deployment {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the deploy report: %v", err)
+	}
+	var report consolev1.Deployment
+	if err := protojson.Unmarshal(raw, &report); err != nil {
+		t.Fatalf("the deploy report is not a deployment's protojson: %v", err)
+	}
+	return &report
 }

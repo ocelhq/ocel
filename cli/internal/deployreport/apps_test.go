@@ -125,13 +125,13 @@ func TestARolledBackPromotionRecordsEachAppAtTheReleaseItWentLiveWith(t *testing
 		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
 	}}
 
-	apps, err := AppsRolledBack(cfg, map[string]string{"web": webRelease, "api": "a1b2c3d4e5f60718~0123456789ab"})
+	apps, err := AppsRolledBack(cfg, map[string]string{"web": webRelease, "api": "a1b2c3d4e5f60718~0123456789ab", "removed": "0000000000000000~0123456789ab"})
 	if err != nil {
 		t.Fatalf("AppsRolledBack() error = %v", err)
 	}
 
 	if len(apps) != 2 || apps[0].GetName() != "api" || apps[1].GetName() != "web" {
-		t.Fatalf("apps = %v, want api then web, sorted", apps)
+		t.Fatalf("apps = %v, want api then web, sorted, without removed: the project no longer says what compute it ran on", apps)
 	}
 	web := apps[1]
 	if web.GetBuildId() != "3f7c1b9a5e2d4c8f" || web.GetRelease() != webRelease || web.GetFramework() != "next" {
