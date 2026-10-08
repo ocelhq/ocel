@@ -51,12 +51,7 @@ func askProvider(ctx context.Context, prompt terminal.Prompt, slug string, opts 
 		return false, err
 	}
 	opts.provider = provider
-	for _, required := range configdoc.RequiredProviderOptions(provider) {
-		value, answered, err := prompt.Input(ctx, required.Name, required.Doc)
-		if err != nil || !answered || value == "" {
-			return false, err
-		}
-		opts.settings = append(opts.settings, providerSetting{name: required.Name, value: value})
-	}
-	return true, nil
+	settings, answered, err := askMissingOptions(ctx, prompt, provider, opts.settings)
+	opts.settings = settings
+	return answered, err
 }
