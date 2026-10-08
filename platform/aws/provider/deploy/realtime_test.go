@@ -34,6 +34,7 @@ func testRealtimeArgs() realtimeArgs {
 		},
 		Authorizer:  testRealtimeAuthorizer(),
 		BoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
+		RolePath:    testAppRolePath,
 	}
 }
 

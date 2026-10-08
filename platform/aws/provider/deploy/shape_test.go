@@ -122,11 +122,8 @@ func (s secretedCluster) NewResource(args pulumi.MockResourceArgs) (string, reso
 	return id, state, err
 }
 
-func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
-	t.Parallel()
-
-	set := shaped(t, nil, shapeRequest(t))
-
+func everyProgramRecorded(t *testing.T) *inputRecorder {
+	t.Helper()
 	rec := &inputRecorder{}
 	run := func(name string, program func(*pulumi.Context) error) {
 		if err := pulumi.RunErr(program, pulumi.WithMocks("shop", name, secretedCluster{rec})); err != nil {
@@ -146,7 +143,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
-	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN}).run)
+	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN, rolePath: containerCfg.AppRolePath}).run)
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {
@@ -154,7 +151,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	})
 	hosted := &workersWork{
 		project: "shop", stack: workersStack("prod", "web"), topics: topicsOf("shop", "prod", req.Resources), workers: req.Deploy.Apps[0].Workers,
-		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: testBoundaryARN},
+		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: testBoundaryARN, Path: testAppRolePath},
 		region: "us-east-1", account: mockAccount, table: testStateTableARN, prefix: naming.TaskKeyPrefix("shop", "prod"), group: queues.ScheduleGroupName("shop", "prod"),
 	}
 	run("workers", hosted.run)
@@ -172,9 +169,18 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		if err := registerRealtime(pctx, "shop", "prod", testRealtimeArgs()); err != nil {
 			return err
 		}
-		return registerBucket(pctx, "shop", "prod", "uploads", translateBucket(nil), "ocel-state", containerCfg.AppBoundaryARN, newSessionScope("shop", "prod", "arn"), testUploadCompleter())
+		return registerBucket(pctx, "shop", "prod", "uploads", translateBucket(nil), "ocel-state", containerCfg.AppBoundaryARN, containerCfg.AppRolePath, newSessionScope("shop", "prod", "arn"), testUploadCompleter())
 	})
 
+	return rec
+}
+
+func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
+	t.Parallel()
+
+	set := shaped(t, nil, shapeRequest(t))
+
+	rec := everyProgramRecorded(t)
 	registered := map[string]int{}
 	for key := range rec.recorded {
 		token, _, _ := strings.Cut(key, "::")
@@ -230,6 +236,22 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	for _, name := range []string{"live", "chat"} {
 		if key := shapedNamed(t, set, "aws_secretsmanager_secret", name); key["managed_by"] != "ocel" {
 			t.Errorf("shaped signing key %s = %v, want the secret a deploy mints for it", name, key)
+		}
+	}
+}
+
+func TestEveryRoleTheProgramsMintSitsUnderTheTiersAppRolePath(t *testing.T) {
+	t.Parallel()
+
+	rec := everyProgramRecorded(t)
+	roles := rec.registered("aws:iam/role:Role")
+	if len(roles) == 0 {
+		t.Fatal("the programs registered no role")
+	}
+	for _, name := range roles {
+		path := rec.recorded["aws:iam/role:Role::"+name]["path"]
+		if !path.IsString() || path.StringValue() != testAppRolePath {
+			t.Errorf("role %s has path %v, want %q: a credential passes an app role only under its own tier's path", name, path, testAppRolePath)
 		}
 	}
 }

@@ -38,6 +38,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environm
 	return fmt.Sprintf(`  EnvSourceSyncRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Execution role for the %[1]s env source sync: items in the %[1]s variables table, encrypting and decrypting under its key, and its own log group."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -103,6 +104,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environm
   EnvSourceSyncScheduleRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Role EventBridge Scheduler invokes the %[1]s env source sync through, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'

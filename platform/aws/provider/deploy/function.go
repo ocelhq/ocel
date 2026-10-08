@@ -320,6 +320,7 @@ type executionRole struct {
 	Bytecode        *bytecodeConfig
 	VariablesKeyARN string
 	Boundary        string
+	Path            string
 	VPCAccess       bool
 	Dispatch        *dispatchHost
 
@@ -334,7 +335,7 @@ type executionRole struct {
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VariablesKeyARN: cfg.VariablesKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VariablesKeyARN: cfg.VariablesKeyARN, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.hasLive() {
 		role.ValuesTableARN = cfg.VariablesTableARN
 		role.VariablesReferenced = bundle.Referenced
@@ -358,6 +359,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		Description:         describe(coord, "execution role for this app's functions"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
 		PermissionsBoundary: pulumi.String(r.Boundary),
+		Path:                pulumi.String(r.Path),
 		Tags:                resourceTags(coord.Kind, "", r.Tags),
 	})
 	if err != nil {

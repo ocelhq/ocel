@@ -94,6 +94,14 @@ func (n Namespace) variablesKeyAliasFor(tier environment.Tier) string {
 	return "alias/" + string(n) + "-variables-" + string(tier)
 }
 
+func (n Namespace) bootstrapRolePathFor(tier environment.Tier) string {
+	return "/" + string(n) + "/" + string(tier) + "/bootstrap/"
+}
+
+func (n Namespace) AppRolePathFor(tier environment.Tier) string {
+	return "/" + string(n) + "/" + string(tier) + "/app/"
+}
+
 func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {
 	return n.edgeSetName("edge-invoke", tier)
 }

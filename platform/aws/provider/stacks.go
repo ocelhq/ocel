@@ -81,6 +81,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		VariablesTableARN:   tableARN(p.aws.Region, account, deployed.VariablesTable),
 		VariablesKeyARN:     deployed.VariablesKeyARN,
 		AppBoundaryARN:      deployed.AppBoundaryARN,
+		AppRolePath:         p.namespace.AppRolePathFor(scope.Tier),
 		VariablesReferenced: referenced,
 
 		RuntimeLayers: deployed.RuntimeLayers,

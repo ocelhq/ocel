@@ -52,6 +52,7 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, tier environme
   TagPublisherRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Execution role for this bootstrap's tag-snapshot publisher: the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'

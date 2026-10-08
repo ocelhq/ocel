@@ -48,6 +48,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environ
   TagInvalidatorRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which distributions the CloudFront router reaches, and invalidation on those distributions."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'

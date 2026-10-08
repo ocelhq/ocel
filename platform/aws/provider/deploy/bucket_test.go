@@ -98,7 +98,7 @@ func testUploadCompleter() payloads.Placement {
 
 func TestBucketComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", testAppRolePath, newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		return err
 	})
 
@@ -121,7 +121,7 @@ func TestBucketComponentTags(t *testing.T) {
 func TestBucketUploadCompleterDescriptionFitsLambda(t *testing.T) {
 	long := strings.Repeat("storefront-", 40)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, long, "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, long, "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", testAppRolePath, newSessionScope(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	})
 
 	got := rec.inputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["description"].StringValue()
@@ -170,7 +170,7 @@ func TestBucketPhysicalPrefix(t *testing.T) {
 		t.Parallel()
 
 		rec := recordTags(t, func(ctx *pulumi.Context) error {
-			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", testAppRolePath, newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		})
 		prefix := rec.inputsOf(t, "aws:s3/bucketV2:BucketV2", "bucket-uploads")["bucketPrefix"].StringValue()
 		if !strings.HasPrefix(prefix, awsports.AppScope+naming.WordSeparator) {
@@ -368,7 +368,7 @@ func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 	registered := func(t *testing.T, spec *provider.BucketSpec) bool {
 		t.Helper()
 		rec := recordTags(t, func(ctx *pulumi.Context) error {
-			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(spec), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(spec), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", testAppRolePath, newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		})
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
@@ -391,7 +391,7 @@ func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 
 func TestBucketUploadCompleterLogGroup(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", testAppRolePath, newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	})
 
 	group := rec.inputsOf(t, "aws:cloudwatch/logGroup:LogGroup", "bucket-uploads-upload-completer-logs")
@@ -417,7 +417,7 @@ func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 	t.Parallel()
 
 	program := func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "", testAppRolePath, newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	}
 	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{}))
 	if err == nil || !strings.Contains(err.Error(), "boundary") {

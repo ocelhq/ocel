@@ -353,6 +353,7 @@ func (w *workersWork) declareCrons(ctx *pulumi.Context, functions []*lambda.Func
 		Description:         capDescription(at.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), maxDescriptionLen),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(schedulerServicePrincipal)),
 		PermissionsBoundary: pulumi.String(w.role.Boundary),
+		Path:                pulumi.String(w.role.Path),
 		Tags:                resourceTags(at.Kind, "", w.role.Tags),
 	})
 	if err != nil {

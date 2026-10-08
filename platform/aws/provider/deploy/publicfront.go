@@ -143,6 +143,7 @@ func (w *containerInfraWork) runLiveness(ctx *pulumi.Context, listener *lb.Liste
 		Description:         pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(lambdaPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
+		Path:                pulumi.String(w.rolePath),
 		Tags:                tags,
 	})
 	if err != nil {

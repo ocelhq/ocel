@@ -80,6 +80,7 @@ func revalidatorResources(ns Namespace, tier environment.Tier, code payloads.Pla
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Execution role for this bootstrap's ISR revalidator: the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'

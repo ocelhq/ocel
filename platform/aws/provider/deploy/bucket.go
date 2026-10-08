@@ -110,7 +110,7 @@ func appPhysicalPrefix(at naming.Coordinate, max int) string {
 	return scope + at.PhysicalPrefix(max-len(scope))
 }
 
-func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN string, sessions sessionScope, completerCode payloads.Placement) error {
+func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN, rolePath string, sessions sessionScope, completerCode payloads.Placement) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
 	if boundaryARN == "" {
 		return fmt.Errorf("bucket %s: this deploy resolved no app boundary, and its upload completer's role made without one is capped by nothing", at.Name)
@@ -159,6 +159,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
 		"lambda.amazonaws.com",
 		boundaryARN,
+		rolePath,
 		args.Tags,
 		map[string]policyStatement{
 			"s3":       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
@@ -249,11 +250,12 @@ func sessionStatement(actions []string, sessions sessionScope) policyStatement {
 	}
 }
 
-func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, boundaryARN string, tags map[string]string, statements map[string]policyStatement) (*iam.Role, error) {
+func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, boundaryARN, rolePath string, tags map[string]string, statements map[string]policyStatement) (*iam.Role, error) {
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(servicePrincipal)),
 		Description:         pulumi.String(description),
 		PermissionsBoundary: pulumi.String(boundaryARN),
+		Path:                pulumi.String(rolePath),
 		Tags:                resourceTags(naming.KindRole, "", tags),
 	})
 	if err != nil {

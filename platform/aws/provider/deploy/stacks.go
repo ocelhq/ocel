@@ -227,7 +227,7 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 			args := translateBucket(resource.Bucket)
 			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
 			args.PatchedCORS = transformed.opensCORS(resource.Name)
-			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
+			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, r.cfg.AppRolePath, sessions, work.completer)
 		case provider.BindingKV:
 			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnets.Ids)
 		case provider.BindingTask, provider.BindingTopic, provider.BindingRealtime:

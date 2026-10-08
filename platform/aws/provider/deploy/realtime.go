@@ -45,6 +45,7 @@ type realtimeArgs struct {
 	Namespaces  []realtimeNamespace
 	Authorizer  payloads.Placement
 	BoundaryARN string
+	RolePath    string
 }
 
 func realtimeResourcesOf(resources []provider.Resource) []provider.Resource {
@@ -86,6 +87,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy("lambda.amazonaws.com")),
 		Description:         pulumi.String(at.Description("execution role for the realtime authorizer")),
 		PermissionsBoundary: pulumi.String(args.BoundaryARN),
+		Path:                pulumi.String(args.RolePath),
 		Tags:                resourceTags(naming.KindRole, "", nil),
 	})
 	if err != nil {
