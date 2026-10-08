@@ -12,11 +12,15 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/realtime"
@@ -1057,9 +1061,9 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 				t.Fatalf("reading the stack record back = %v", err)
 			}
 			for _, binding := range result.Bindings {
-				for _, name := range provider.SecretProperties(binding.Type) {
+				for _, name := range listRedactedProperties(binding.Type) {
 					if secret := binding.Properties[name]; secret != "" && bytes.Contains(raw.Value, []byte(secret)) {
-						t.Errorf("the stack record holds binding %s's %q in clear, and the record store is readable without the sealer", binding.Name, name)
+						t.Errorf("the stack record holds binding %s's %q in clear, which bindings.proto marks debug_redact, and the record store is readable without the sealer", binding.Name, name)
 					}
 				}
 			}
@@ -1115,4 +1119,19 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)
 		}
 	})
+}
+
+func listRedactedProperties(t provider.BindingType) []string {
+	field := (&bindingsv1.Binding{}).ProtoReflect().Descriptor().Oneofs().ByName("properties").Fields().ByName(protoreflect.Name(t))
+	if field == nil || field.Message() == nil {
+		return nil
+	}
+	var names []string
+	properties := field.Message().Fields()
+	for i := range properties.Len() {
+		if options, _ := properties.Get(i).Options().(*descriptorpb.FieldOptions); options.GetDebugRedact() {
+			names = append(names, properties.Get(i).JSONName())
+		}
+	}
+	return names
 }
