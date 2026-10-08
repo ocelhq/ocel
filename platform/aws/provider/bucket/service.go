@@ -96,6 +96,17 @@ func (s *Service) reach(bucket string, keys ...string) error {
 	return nil
 }
 
+func (s *Service) grantedSession(ctx context.Context, id string) (session, error) {
+	sess, err := s.store.get(ctx, id)
+	if err != nil {
+		return session{}, err
+	}
+	if !slices.Contains(s.granted(), sess.Bucket) {
+		return session{}, errSessionNotFound
+	}
+	return sess, nil
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
@@ -185,7 +196,7 @@ func (s *Service) presignPut(ctx context.Context, bucket, key, contentType strin
 }
 
 func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
-	sess, err := s.store.get(ctx, req.GetSessionId())
+	sess, err := s.grantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return &bucketv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
@@ -211,7 +222,7 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.Verif
 }
 
 func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
-	sess, err := s.store.get(ctx, req.GetSessionId())
+	sess, err := s.grantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
 	}
