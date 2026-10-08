@@ -12,7 +12,6 @@ import { SiteHeader } from "@/components/landing/site-header";
 import { StatusQuo } from "@/components/landing/status-quo";
 import { Terminal } from "@/components/landing/terminal";
 import {
-  AstroLogo,
   ExpressLogo,
   FastifyLogo,
   HonoLogo,
@@ -109,7 +108,6 @@ const frameworks: {
   Logo: ComponentType<{ className?: string }>;
 }[] = [
   { name: "Next.js", Logo: NextjsLogo },
-  { name: "Astro", Logo: AstroLogo },
   { name: "SvelteKit", Logo: SvelteLogo },
   { name: "Nest.js", Logo: NestjsLogo },
   { name: "Fastify", Logo: FastifyLogo },
@@ -244,25 +242,25 @@ const sdkResources: SdkResource[] = [
   },
   {
     handle: "jobs",
-    call: 'queue("emails")',
+    call: 'task("emails")',
     service: "Amazon SQS",
-    blurb: "Durable queue",
+    blurb: "Background task",
     Icon: SqsIcon,
   },
 ];
 
 const sdkCode = `import { postgres } from "ocel/postgres";
 import { bucket } from "ocel/bucket";
-import { queue } from "ocel/queue";
+import { task } from "ocel/task";
 
 export const db = postgres("main");
 export const uploads = bucket("uploads");
-export const jobs = queue("emails");
+export const jobs = task("emails", { run: sendEmail });
 
 // then consume them anywhere
 await db.query("select * from orders");
 await uploads.put(file);
-await jobs.send({ to: user.email });
+await jobs.trigger({ to: user.email });
 `;
 
 async function Sdk() {
@@ -559,7 +557,7 @@ const faqs = [
   },
   {
     q: "Do I have to use the SDK?",
-    a: "No. The CLI alone gives you zero-config deploys. The SDK is there when your app needs a database, storage, or queues.",
+    a: "No. The CLI alone gives you zero-config deploys. The SDK is there when your app needs a database, storage, or background tasks.",
   },
   {
     q: "We already use Pulumi / SST.",
