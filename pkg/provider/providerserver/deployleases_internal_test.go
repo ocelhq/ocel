@@ -46,7 +46,7 @@ func TestAHeldDeployLeaseIsRenewedWhileItsDeployRuns(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	leases := quickLeases()
-	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+	if _, err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
 		t.Fatal(err)
 	}
 	defer leases.release(ctx, store, shopProduction, renewedLease)
@@ -66,7 +66,7 @@ func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	leases := quickLeases()
-	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+	if _, err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
 		t.Fatal(err)
 	}
 	defer leases.release(ctx, store, shopProduction, renewedLease)
@@ -81,7 +81,7 @@ func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+	if _, err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
 		t.Fatal(err)
 	}
 	taken := readLeaseExpiry(t, store)
@@ -100,7 +100,7 @@ func TestADeployThatLostItsLeaseDoesNotRenewItOverTheDeployThatTookItOver(t *tes
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	leases := quickLeases()
-	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+	if _, err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
 		t.Fatal(err)
 	}
 	defer leases.release(ctx, store, shopProduction, renewedLease)

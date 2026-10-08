@@ -203,6 +203,27 @@ func TestProvisionInfraFreesTheEnvironmentWhenItFails(t *testing.T) {
 	}
 }
 
+func TestAFailedProvisionInfraKeepsTheLeaseAnEarlierProvisionInfraOfItsDeployTook(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind == provider.StackInfra {
+			return errors.New("the infra stack failed to provision")
+		}
+		return nil
+	})
+
+	result, _ := provisionInfraStream(t, client, infraRequest(deployRequest()))
+
+	if result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
+	}
+	if !readDeployLease(t, vendor) {
+		t.Error("the failed ProvisionInfra freed the lease its deploy took earlier, want it held until that deploy ends")
+	}
+}
+
 func TestADeployWhoseLeaseAnotherDeployTookOverIsRefusedBeforeItPromotes(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

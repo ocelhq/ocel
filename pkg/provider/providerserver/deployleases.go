@@ -56,20 +56,20 @@ func newLeaseToken() (string, error) {
 	return hex.EncodeToString(token), nil
 }
 
-func (l *deployLeases) hold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) error {
+func (l *deployLeases) hold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) (taken bool, err error) {
 	if err := stackrecords.TakeDeployLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl); err != nil {
-		return err
+		return false, err
 	}
 	name := leaseName(scope, token)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if renewal := l.renewing[name]; renewal != nil && !renewal.ended() {
-		return nil
+		return false, nil
 	}
 	renewal := &leaseRenewal{stop: make(chan struct{}), done: make(chan struct{})}
 	l.renewing[name] = renewal
 	go l.renew(store, scope, token, renewal)
-	return nil
+	return true, nil
 }
 
 func (l *deployLeases) renew(store keyvalue.Store, scope environmentScope, token string, renewal *leaseRenewal) {
@@ -124,10 +124,10 @@ func leaseName(scope environmentScope, token string) string {
 	return stackrecords.DeployLeaseKey(scope.tier, scope.slug, scope.env).String() + "|" + token
 }
 
-func (h *handlers) holdEnvironment(ctx context.Context, spec provider.DeploySpec, token string) error {
+func (h *handlers) holdEnvironment(ctx context.Context, spec provider.DeploySpec, token string) (taken bool, err error) {
 	p, err := h.session.use()
 	if err != nil {
-		return err
+		return false, err
 	}
 	return h.leases.hold(ctx, p.KeyValues(), scopeOf(spec), token)
 }
