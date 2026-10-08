@@ -50,7 +50,7 @@ func refuseUnknownOptions(provider string, settings []providerSetting) error {
 func findMissingOptions(provider string, settings []providerSetting) []configdoc.ProviderOption {
 	return slices.DeleteFunc(configdoc.RequiredProviderOptions(provider), func(required configdoc.ProviderOption) bool {
 		return slices.ContainsFunc(settings, func(set providerSetting) bool {
-			return set.name == required.Name && set.value != ""
+			return set.name == required.Name && strings.TrimSpace(set.value) != ""
 		})
 	})
 }
@@ -75,8 +75,11 @@ func refuseMissingOptions(provider string, settings []providerSetting) error {
 func askMissingOptions(ctx context.Context, prompt terminal.Prompt, provider string, settings []providerSetting) ([]providerSetting, bool, error) {
 	for _, required := range findMissingOptions(provider, settings) {
 		value, answered, err := prompt.Input(ctx, required.Name, required.Doc)
-		if err != nil || !answered || value == "" {
+		if err != nil || !answered {
 			return settings, false, err
+		}
+		if strings.TrimSpace(value) == "" {
+			return settings, true, nil
 		}
 		settings = append(slices.DeleteFunc(settings, func(set providerSetting) bool { return set.name == required.Name }), providerSetting{name: required.Name, value: value})
 	}
