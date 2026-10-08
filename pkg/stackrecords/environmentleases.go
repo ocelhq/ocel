@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,13 @@ import (
 type EnvironmentLease struct {
 	Token     string `json:"token"`
 	ExpiresAt int64  `json:"expiresAt"`
+}
+
+type LeaseTerms struct {
+	TTL   time.Duration
+	Watch time.Duration
+	Now   func() time.Time
+	Wait  func(ctx context.Context, d time.Duration) error
 }
 
 func NewEnvironmentLeaseToken() (string, error) {
@@ -34,43 +42,80 @@ func EnvironmentLeaseKey(tier environment.Tier, slug, env string) keyvalue.Key {
 	return EnvironmentLeasesPartition(tier, slug).Key(env)
 }
 
-func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, now time.Time, ttl time.Duration) error {
+const leaseWriteAttempts = 5
+
+func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, terms LeaseTerms) (held bool, err error) {
 	name := EnvironmentLeaseKey(tier, slug, env)
-	return keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
-		held, err := decodeEnvironmentLease(name, recorded)
+	var (
+		watching     bool
+		watched      keyvalue.Revision
+		watchedSince time.Time
+		stale        int
+	)
+	for {
+		recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
 		if err != nil {
-			return nil, false, err
+			return false, fmt.Errorf("read %s: %w", name, err)
 		}
-		if held.Token != "" && held.Token != token && now.Before(time.Unix(held.ExpiresAt, 0)) {
-			return nil, false, refusal.Refuse(refusal.CodeBusy,
-				"another deploy to %s is running: deploy again once it ends, or once its lease runs out at %s if it was interrupted",
-				env, time.Unix(held.ExpiresAt, 0).UTC().Format(time.DateTime+" MST"))
-		}
-		value, err := json.Marshal(EnvironmentLease{Token: token, ExpiresAt: now.Add(ttl).Unix()})
+		current, err := decodeEnvironmentLease(name, recorded)
 		if err != nil {
-			return nil, false, fmt.Errorf("record %s: %w", name, err)
+			return false, err
 		}
-		return value, true, nil
-	})
+		switch {
+		case current.Token == "" || current.Token == token:
+		case watching && recorded.Revision != watched:
+			return false, refuseHeldLease(env, current)
+		case !watching && terms.Now().Before(time.Unix(current.ExpiresAt, 0)):
+			return false, refuseHeldLease(env, current)
+		case !watching:
+			watching, watched, watchedSince = true, recorded.Revision, terms.Now()
+			if err := terms.Wait(ctx, min(terms.Watch, terms.TTL)); err != nil {
+				return false, err
+			}
+			continue
+		case terms.Now().Sub(watchedSince) < terms.TTL:
+			if err := terms.Wait(ctx, min(terms.Watch, terms.TTL-terms.Now().Sub(watchedSince))); err != nil {
+				return false, err
+			}
+			continue
+		}
+		err = writeEnvironmentLease(ctx, store, recorded, token, terms)
+		if errors.Is(err, keyvalue.ErrStale) && stale < leaseWriteAttempts {
+			stale++
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("record %s: %w", name, err)
+		}
+		return current.Token == token, nil
+	}
 }
 
-func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, now time.Time, ttl time.Duration) error {
+func refuseHeldLease(env string, held EnvironmentLease) error {
+	return refusal.Refuse(refusal.CodeBusy,
+		"another deploy to %s is running: deploy again once it ends, or once its lease runs out at %s if it was interrupted",
+		env, time.Unix(held.ExpiresAt, 0).UTC().Format(time.DateTime+" MST"))
+}
+
+func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, terms LeaseTerms) error {
 	name := EnvironmentLeaseKey(tier, slug, env)
 	return keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
-		held, err := decodeEnvironmentLease(name, recorded)
+		current, err := decodeEnvironmentLease(name, recorded)
 		if err != nil {
 			return nil, false, err
 		}
-		if held.Token != token {
+		if current.Token == "" {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
-				"another deploy to %s is running, and took over the lease this deploy held, so this deploy stops before it promotes: deploy again once that deploy ends",
+				"the lease this deploy held on %s ran out and was freed, so another deploy may have changed %s since: deploy again",
+				env, env)
+		}
+		if current.Token != token {
+			return nil, false, refusal.Refuse(refusal.CodeBusy,
+				"another deploy to %s is running, and took over the lease this deploy held, so this deploy stopped: deploy again once that deploy ends",
 				env)
 		}
-		value, err := json.Marshal(EnvironmentLease{Token: token, ExpiresAt: now.Add(ttl).Unix()})
-		if err != nil {
-			return nil, false, fmt.Errorf("record %s: %w", name, err)
-		}
-		return value, true, nil
+		value, err := encodeEnvironmentLease(name, token, terms)
+		return value, err == nil, err
 	})
 }
 
@@ -80,6 +125,24 @@ func ForgetEnvironmentLease(ctx context.Context, store keyvalue.Store, tier envi
 		held, err := decodeEnvironmentLease(name, recorded)
 		return held.Token == token, err
 	})
+}
+
+func writeEnvironmentLease(ctx context.Context, store keyvalue.Store, recorded keyvalue.Entry, token string, terms LeaseTerms) error {
+	value, err := encodeEnvironmentLease(recorded.Key, token, terms)
+	if err != nil {
+		return err
+	}
+	recorded.Value = value
+	_, err = store.Write(ctx, recorded)
+	return err
+}
+
+func encodeEnvironmentLease(name keyvalue.Key, token string, terms LeaseTerms) ([]byte, error) {
+	value, err := json.Marshal(EnvironmentLease{Token: token, ExpiresAt: terms.Now().Add(terms.TTL).Unix()})
+	if err != nil {
+		return nil, fmt.Errorf("record %s: %w", name, err)
+	}
+	return value, nil
 }
 
 func decodeEnvironmentLease(name keyvalue.Key, recorded keyvalue.Entry) (EnvironmentLease, error) {

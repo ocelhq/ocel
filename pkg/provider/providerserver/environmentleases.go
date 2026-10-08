@@ -18,6 +18,7 @@ const (
 	environmentLeaseTTL            = 5 * time.Minute
 	environmentLeaseRenewal        = 2 * time.Minute
 	environmentLeaseReleaseTimeout = 30 * time.Second
+	environmentLeaseWatch          = 30 * time.Second
 )
 
 type environmentScope struct {
@@ -41,12 +42,27 @@ type leaseRenewal struct {
 	done chan struct{}
 }
 
+func (l *environmentLeases) terms() stackrecords.LeaseTerms {
+	return stackrecords.LeaseTerms{TTL: l.ttl, Watch: environmentLeaseWatch, Now: time.Now, Wait: waitFor}
+}
+
+func waitFor(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func newEnvironmentLeases() *environmentLeases {
 	return &environmentLeases{ttl: environmentLeaseTTL, renewal: environmentLeaseRenewal, renewing: map[heldLease]*leaseRenewal{}}
 }
 
 func (l *environmentLeases) hold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) (taken bool, err error) {
-	if err := stackrecords.TakeEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl); err != nil {
+	if _, err := stackrecords.TakeEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, l.terms()); err != nil {
 		return false, err
 	}
 	held := heldLease{scope: scope, token: token}
@@ -72,7 +88,7 @@ func (l *environmentLeases) renew(store keyvalue.Store, scope environmentScope, 
 		case <-ticker.C:
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), l.renewal)
-		err := stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl)
+		err := stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, l.terms())
 		cancel()
 		var refused refusal.Refusal
 		if errors.As(err, &refused) && refused.Code == refusal.CodeBusy {
@@ -91,7 +107,7 @@ func (r *leaseRenewal) ended() bool {
 }
 
 func (l *environmentLeases) confirm(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) error {
-	return stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, time.Now(), l.ttl)
+	return stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, l.terms())
 }
 
 func (l *environmentLeases) release(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) {

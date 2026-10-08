@@ -24,8 +24,16 @@ func quickLeases() *environmentLeases {
 	return &environmentLeases{ttl: 3 * time.Second, renewal: 20 * time.Millisecond, renewing: map[heldLease]*leaseRenewal{}}
 }
 
-func takeAs(ctx context.Context, store keyvalue.Store, token string, now time.Time) error {
-	return stackrecords.TakeEnvironmentLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, token, now, time.Hour)
+func takeAs(ctx context.Context, store keyvalue.Store, token string) error {
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
+	if err != nil {
+		return err
+	}
+	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+		return err
+	}
+	_, err = store.Write(ctx, recorded)
+	return err
 }
 
 func readLeaseExpiry(t *testing.T, store keyvalue.Store) int64 {
@@ -70,7 +78,7 @@ func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer leases.release(ctx, store, shopProduction, renewedLease)
-	if err := takeAs(ctx, store, rivalLease, time.Now().Add(time.Hour)); err != nil {
+	if err := takeAs(ctx, store, rivalLease); err != nil {
 		t.Fatal(err)
 	}
 	leases.mu.Lock()
@@ -104,7 +112,7 @@ func TestADeployThatLostItsLeaseDoesNotRenewItOverTheDeployThatTookItOver(t *tes
 		t.Fatal(err)
 	}
 	defer leases.release(ctx, store, shopProduction, renewedLease)
-	if err := takeAs(ctx, store, rivalLease, time.Now().Add(time.Hour)); err != nil {
+	if err := takeAs(ctx, store, rivalLease); err != nil {
 		t.Fatal(err)
 	}
 	leases.mu.Lock()
