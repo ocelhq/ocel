@@ -6,9 +6,7 @@ import { afterEach, expect, test, vi } from "vitest";
 const handlerPath = fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url));
 const require = createRequire(import.meta.url);
 
-function loadHandler(runtime?: string) {
-  if (runtime) vi.stubEnv("NEXT_RUNTIME", runtime);
-  else vi.stubEnv("NEXT_RUNTIME", "nodejs");
+function loadHandler() {
   delete require.cache[handlerPath];
   return require(handlerPath);
 }
@@ -35,27 +33,16 @@ function bind(rpc: unknown, scope = "prod/app/build") {
 }
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   delete (globalThis as Record<string, unknown>).__OCEL_EDGE_CACHE;
   delete require.cache[handlerPath];
 });
 
-test("delegates to FileSystemCache off the edge, so the build keeps its cache", () => {
-  const Handler = loadHandler();
-
-  expect(Handler.name).toBe("FileSystemCache");
-});
-
-test("has no require in the edge branch", () => {
-  const source = readFileSync(handlerPath, "utf8");
-  const [edgeBranch] = source.split("\n} else {");
-
-  expect(source).toContain('process.env.NEXT_RUNTIME === "edge"');
-  expect(edgeBranch).not.toContain("require(");
+test("has no require, so the edge shim can inline it", () => {
+  expect(readFileSync(handlerPath, "utf8")).not.toContain("require(");
 });
 
 test("reads a fetch entry through the binding, keyed by scope", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   const rpc = fakeRpc();
   rpc.entry = { lastModified: 5, value: { kind: "FETCH", data: { x: 1 } } };
   bind(rpc);
@@ -74,7 +61,7 @@ test("reads a fetch entry through the binding, keyed by scope", async () => {
 });
 
 test("reports a miss when the binding throws", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   bind({
     async fetchGet() {
       throw new Error("upstream down");
@@ -85,7 +72,7 @@ test("reports a miss when the binding throws", async () => {
 });
 
 test("reports a miss for a kind the edge never stores", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   const rpc = fakeRpc();
   bind(rpc);
 
@@ -94,7 +81,7 @@ test("reports a miss for a kind the edge never stores", async () => {
 });
 
 test("writes a fetch entry stamped with its own tags and lastModified", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   const rpc = fakeRpc();
   bind(rpc);
   vi.spyOn(Date, "now").mockReturnValue(1234);
@@ -125,7 +112,7 @@ test("writes a fetch entry stamped with its own tags and lastModified", async ()
 });
 
 test("hands the write's promise back rather than detaching it", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   let land: () => void;
   const landed = new Promise<void>((resolve) => (land = resolve));
   bind({ fetchSet: () => landed });
@@ -142,7 +129,7 @@ test("hands the write's promise back rather than detaching it", async () => {
 });
 
 test("refuses a non-fetch write instead of storing it", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   const rpc = fakeRpc();
   bind(rpc);
 
@@ -153,7 +140,7 @@ test("refuses a non-fetch write instead of storing it", async () => {
 });
 
 test("forwards a tag invalidation with its durations", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
   const rpc = fakeRpc();
   bind(rpc);
 
@@ -171,7 +158,7 @@ test("forwards a tag invalidation with its durations", async () => {
 });
 
 test("fails loudly on a write with no binding", async () => {
-  const Handler = loadHandler("edge");
+  const Handler = loadHandler();
 
   await expect(new Handler().set("k", { kind: "FETCH", data: {} }, {})).rejects.toThrow(
     /__OCEL_EDGE_CACHE/,

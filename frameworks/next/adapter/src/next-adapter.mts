@@ -15,8 +15,9 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
-import { addCacheHandlers, cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import type { AdapterOutput, NextAdapter } from "next";
@@ -66,16 +67,6 @@ function readMaxFunctionBytes(): number | undefined {
   return bytes;
 }
 
-function readNextRuntimeDir(): string {
-  const dir = process.env.OCEL_NEXT_RUNTIME_DIR;
-  if (!dir) {
-    throw new Error(
-      "ocel: OCEL_NEXT_RUNTIME_DIR names no directory the host loads Next's runtime files from, so this build could not be served — build through `ocel build` or `ocel deploy` for a provider that serves Next apps",
-    );
-  }
-  return dir;
-}
-
 function refusePartialFallbacks(
   config: Parameters<NonNullable<NextAdapter["modifyConfig"]>>[0],
 ): void {
@@ -93,23 +84,16 @@ function refusePartialFallbacks(
   );
 }
 
-async function installCacheHandler(): Promise<string> {
-  const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
-  await mkdir(dirname(dest), { recursive: true });
-  await copyFile(new URL("edge-cache-handler.cjs", import.meta.url), dest);
-  return dest;
-}
-
 const adapter = {
   name: "ocel-adapter",
 
   async modifyConfig(config, { phase }) {
     if (phase === PHASE_PRODUCTION_BUILD) {
       refusePartialFallbacks(config);
+      refuseAppCacheHandlers(config);
       return {
         ...config,
         cacheMaxMemorySize: 0,
-        cacheHandler: await installCacheHandler(),
         experimental: { ...config.experimental, trustHostHeader: true },
       };
     }
@@ -177,8 +161,6 @@ const adapter = {
     const appRel = relative(repoRoot, projectDir);
 
     const appName = process.env.OCEL_APP_NAME || basename(projectDir);
-
-    await patchCacheHandlers(distDir);
 
     const groups = new Map<string, typeof functionRoutes>();
     for (const route of functionRoutes) {
@@ -651,6 +633,7 @@ function edgeEntryOf(output: EdgeOutput): {
 }
 
 function renderEdgeShim(
+  edgeCacheHandler: string,
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
   wasmIdByName: Map<string, string>,
@@ -659,6 +642,13 @@ function renderEdgeShim(
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 globalThis.NEXT_CLIENT_ASSET_SUFFIX = ${JSON.stringify(clientAssetSuffix)}
+
+globalThis[Symbol.for("@next/cache-handlers")] = {
+  FetchCache: ((module) => {
+${edgeCacheHandler}
+    return module.exports
+  })({ exports: {} }),
+}
 
 const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
@@ -961,7 +951,13 @@ async function emitEdgeBundle(
   const json = stableStringify({
     version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName, clientAssetSuffix),
+    shim: renderEdgeShim(
+      await readFile(new URL("edge-cache-handler.cjs", import.meta.url), "utf8"),
+      entries,
+      assetIdByName,
+      wasmIdByName,
+      clientAssetSuffix,
+    ),
     chunks,
     wasm: wasmModules,
     assets: assetModules,
@@ -992,19 +988,6 @@ function cacheTags(prerender: AdapterOutput["PRERENDER"], programmableEdge: bool
     );
   }
   return tags;
-}
-
-async function patchCacheHandlers(distDir: string): Promise<void> {
-  const manifestPath = join(distDir, "required-server-files.json");
-  let manifest: { config?: Record<string, unknown> };
-  try {
-    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  } catch {
-    return;
-  }
-  if (!manifest.config) return;
-  Object.assign(manifest.config, addCacheHandlers(manifest.config, readNextRuntimeDir()));
-  await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
 interface CacheEntryFile {

@@ -14,7 +14,6 @@ export interface NextBuild {
   unset?: string[];
   edgeKind?: string;
   allowDegraded?: string[];
-  nextRuntimeDir?: string;
   maxFunctionBytes?: number;
   nextRefreshesByRequest?: boolean;
 }
@@ -57,7 +56,6 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     OCEL_APP_FOLDER: app.folder ?? "",
     OCEL_EDGE_KIND: app.edgeKind ?? "",
     OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
-    OCEL_NEXT_RUNTIME_DIR: app.nextRuntimeDir ?? "",
     OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
     OCEL_NEXT_REFRESHES_BY_REQUEST: app.nextRefreshesByRequest ? "1" : "",
     [ADAPTER_PATH_ENV]: adapterPath,

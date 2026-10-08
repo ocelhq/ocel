@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type http from "node:http";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { ProjectManifest } from "./project-manifest.mjs";
 
@@ -59,22 +58,18 @@ class PagesRuntimeIncrementalCache {
 
 export type IncrementalCacheFactory = (req: http.IncomingMessage) => unknown;
 
-export function loadIncrementalCacheFactory(
-  projectDir: string,
+export function newIncrementalCacheFactory(
   manifest: ProjectManifest | null,
+  CacheHandler: new (opts: any) => any,
 ): IncrementalCacheFactory | null {
-  if (!manifest?.config?.cacheHandler) return null;
+  if (!manifest) return null;
   const { config, distDir } = manifest;
-
-  const appRequire = createRequire(join(projectDir, "package.json"));
-  const handlerModule = appRequire(config.cacheHandler);
-  const CurCacheHandler = handlerModule.default ?? handlerModule;
   const fetchCacheKeyPrefix = config.experimental?.fetchCacheKeyPrefix ?? "";
   const previewModeId: string | undefined = manifest.prerender?.preview?.previewModeId;
 
   return (req) =>
     new PagesRuntimeIncrementalCache({
-      handler: new CurCacheHandler({
+      handler: new CacheHandler({
         dev: false,
         flushToDisk: config.experimental?.isrFlushToDisk,
         serverDistDir: join(distDir, "server"),

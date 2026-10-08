@@ -13,9 +13,10 @@ import {
   serveLocal,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
+import { installCacheHandlers } from "./cache-handlers.mjs";
 import { originShaping, revalidatingRoutes, shapeOriginCache } from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
-import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
+import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { prerenderedRoutes } from "./prerendered-routes.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
 import { routeStaleHitsToRefresh } from "./refresh.mjs";
@@ -43,6 +44,7 @@ async function boot(): Promise<void> {
   if (refused) throw refused;
 
   installCompileCacheFlush();
+  const CacheHandler = installCacheHandlers();
 
   const handlerPath = process.env.OCEL_HANDLER!;
   const href = isAbsolute(handlerPath) ? pathToFileURL(handlerPath).href : handlerPath;
@@ -61,7 +63,7 @@ async function boot(): Promise<void> {
   mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
 
   const manifest = await loadProjectManifest(dirname(handlerPath));
-  const newIncrementalCache = loadIncrementalCacheFactory(dirname(handlerPath), manifest);
+  const newIncrementalCache = newIncrementalCacheFactory(manifest, CacheHandler);
   const routes = revalidatingRoutes(manifest);
   const prerendered = prerenderedRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);

@@ -24,7 +24,7 @@ var (
 	nextServerRuntime = loadNextServerRuntime()
 )
 
-var nextServerRuntimeFiles = []string{containerimage.NextServerAdapterFile, "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
+var nextServerRuntimeFiles = []string{containerimage.NextServerAdapterFile}
 
 func NodeRuntime() []byte { return nodeRuntime }
 
