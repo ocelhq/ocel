@@ -178,11 +178,16 @@ func refuseMissingOptions(path string, set map[string]any, required []ProviderOp
 		return nil
 	}
 	for _, option := range required {
-		if set[option.Name] == nil {
+		if isBlank(set[option.Name]) {
 			return fmt.Errorf("%s needs %q: %s", PathName(path), option.Name, strings.TrimSpace(option.Doc))
 		}
 	}
 	return nil
+}
+
+func isBlank(value any) bool {
+	text, isText := value.(string)
+	return value == nil || isText && strings.TrimSpace(text) == ""
 }
 
 func refuseUnserved(path, provider, serves string, value any, of selection) error {
