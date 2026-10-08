@@ -21,6 +21,9 @@ func (r registryStore) Remove(ctx context.Context, imageRef string) error {
 	if err != nil {
 		return fmt.Errorf("%q names no image a registry can remove: %w", imageRef, err)
 	}
+	if served, err := name.NewRegistry(r.target.Server, options...); err != nil || tag.RegistryStr() != served.RegistryStr() {
+		return fmt.Errorf("%s is not under %s, the registry this store holds credentials for", imageRef, r.target.Server)
+	}
 	called := []remote.Option{
 		remote.WithContext(ctx),
 		remote.WithRetryStatusCodes(http.StatusRequestTimeout, http.StatusTooManyRequests,
