@@ -37,9 +37,9 @@ func (r registryStore) Remove(ctx context.Context, imageRef string) error {
 	}
 	err = remote.Delete(tag, called...)
 	switch {
-	case err == nil, isAbsent(err):
+	case err == nil:
 		return nil
-	case !isTagDeleteRefused(err):
+	case !isAbsent(err) && !isTagDeleteRefused(err):
 		return fmt.Errorf("remove %s from %s: %w", imageRef, r.target.Server, err)
 	}
 	described, err := remote.Head(tag, called...)
