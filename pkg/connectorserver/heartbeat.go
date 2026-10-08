@@ -115,6 +115,7 @@ func (b *beat) once(ctx context.Context) error {
 		connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 				req.Header().Set("Authorization", "Bearer "+token)
+				req.Header().Set("User-Agent", "ocel-connector/"+b.version)
 				return next(ctx, req)
 			}
 		})))

@@ -164,6 +164,18 @@ func TestHeartbeatCallsTheConsoleWithATokenTheConnectorSigned(t *testing.T) {
 	}
 }
 
+func TestHeartbeatNamesTheConnectorAndItsVersionAsItsUserAgent(t *testing.T) {
+	server, service := console(t, accepted)
+
+	heartbeat, _, _ := beating(t, server.URL)
+	if err := heartbeat.once(context.Background()); err != nil {
+		t.Fatalf("once: %v", err)
+	}
+	if got := service.headers[0].Get("User-Agent"); got != "ocel-connector/0.0.0-alpha" {
+		t.Errorf("user agent = %q, want ocel-connector/0.0.0-alpha", got)
+	}
+}
+
 func TestHeartbeatReturnsTheRefusalTheConsoleGave(t *testing.T) {
 	server, _ := console(t, refused(connect.CodeNotFound))
 
