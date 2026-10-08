@@ -5,11 +5,13 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -17,6 +19,8 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
 type proxied struct {
@@ -61,21 +65,81 @@ func TestTheKeyReadOutOfTheParameterSignsAsTheSeedTheInstallWrote(t *testing.T) 
 	}
 }
 
+type heartbeatCounter struct {
+	consolev1connect.UnimplementedConnectorServiceHandler
+	beats   *atomic.Int64
+	refusal error
+}
+
+func (c heartbeatCounter) Heartbeat(context.Context, *consolev1.HeartbeatConnectorRequest) (*consolev1.HeartbeatConnectorResponse, error) {
+	c.beats.Add(1)
+	if c.refusal != nil {
+		return nil, c.refusal
+	}
+	return &consolev1.HeartbeatConnectorResponse{}, nil
+}
+
+func invokedAgainst(t *testing.T, origin string) func(context.Context, json.RawMessage) (any, error) {
+	t.Helper()
+	identity, err := connectorserver.IdentityFromSeed(make([]byte, ed25519.SeedSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := connectorserver.Spec{
+		Config:   connectorserver.Config{Console: origin, ConnectorID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
+		Identity: identity,
+	}
+	return invoked(spec, &proxied{})
+}
+
+func TestAScheduledWakeTheConsoleRefusesSucceedsSoLambdaDoesNotRetryIt(t *testing.T) {
+	t.Parallel()
+
+	var beats atomic.Int64
+	mux := http.NewServeMux()
+	path, handler := consolev1connect.NewConnectorServiceHandler(heartbeatCounter{
+		beats:   &beats,
+		refusal: connect.NewError(connect.CodeNotFound, errors.New("no such connector")),
+	})
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	console := httptest.NewServer(mux)
+	t.Cleanup(console.Close)
+
+	if _, err := invokedAgainst(t, console.URL)(context.Background(), json.RawMessage(`{"ocel":"heartbeat"}`)); err != nil {
+		t.Fatalf("a wake the console refused failed, and Lambda retries a failed wake: %v", err)
+	}
+	if beats.Load() != 1 {
+		t.Errorf("the console saw %d beats, want 1", beats.Load())
+	}
+}
+
+func TestAScheduledWakeThatDoesNotReachTheConsoleFails(t *testing.T) {
+	t.Parallel()
+
+	console := httptest.NewServer(http.NotFoundHandler())
+	origin := console.URL
+	console.Close()
+
+	if _, err := invokedAgainst(t, origin)(context.Background(), json.RawMessage(`{"ocel":"heartbeat"}`)); err == nil {
+		t.Fatal("a wake that never reached the console succeeded")
+	}
+}
+
 func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 	t.Parallel()
 
 	var beats atomic.Int64
-	console := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		beats.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
+	mux := http.NewServeMux()
+	path, handler := consolev1connect.NewConnectorServiceHandler(heartbeatCounter{beats: &beats})
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	console := httptest.NewServer(mux)
 	t.Cleanup(console.Close)
 	identity, err := connectorserver.IdentityFromSeed(make([]byte, ed25519.SeedSize))
 	if err != nil {
 		t.Fatal(err)
 	}
 	spec := connectorserver.Spec{
-		Config:   connectorserver.Config{Console: console.URL, ConnectorID: "conn-1", OrganizationID: "org-1"},
+		Config:   connectorserver.Config{Console: console.URL, ConnectorID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
 		Identity: identity,
 	}
 	serve := &proxied{}
