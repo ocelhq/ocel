@@ -25,6 +25,9 @@ exits.
 ocel run --env production -- pnpm drizzle-kit migrate
 ```
 
+What the bindings keep secret, such as a database password, is hidden wherever the command prints
+it, so its output reaches `ocel run` through pipes rather than straight to your terminal.
+
 The command receives the bindings alone: the project's variables are resolved by a deploy. It stops
 before the command starts when nothing is deployed to the environment yet, or when the provider
 forwards no port.
