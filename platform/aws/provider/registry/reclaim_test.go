@@ -76,16 +76,16 @@ func TestASweepDeletesEveryImageOfTheRepositoryNothingKeeps(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-old", "sha256-kept", "sha256-older"}}, pushedAt: pushedLongAgo("sha256-old", "sha256-kept", "sha256-older")}
 
-	removed, err := Sweep(context.Background(), api, anECRTarget(), ref("sha256-kept"), map[string]bool{ref("sha256-kept"): true}, now)
+	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-kept"), map[string]bool{ref("sha256-kept"): true}, now)
 	if err != nil {
-		t.Fatalf("Sweep() = %v", err)
+		t.Fatalf("sweep() = %v", err)
 	}
 
 	if want := []string{ref("sha256-old"), ref("sha256-older")}; !slices.Equal(removed, want) {
-		t.Errorf("Sweep() removed %v, want %v", removed, want)
+		t.Errorf("sweep() removed %v, want %v", removed, want)
 	}
 	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-kept"}) {
-		t.Errorf("the repository holds %v, want only the image a standing release pins", got)
+		t.Errorf("the repository holds %v, want only the image a kept release pins", got)
 	}
 }
 
@@ -97,13 +97,13 @@ func TestASweepLeavesAnImagePushedMoreRecentlyThanThePushedBefore(t *testing.T) 
 		pushedAt: map[string]time.Time{"sha256-old": longAgo, "sha256-just-pushed": now.Add(-5 * time.Minute)},
 	}
 
-	removed, err := Sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now.Add(-time.Hour))
+	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now.Add(-time.Hour))
 	if err != nil {
-		t.Fatalf("Sweep() = %v", err)
+		t.Fatalf("sweep() = %v", err)
 	}
 
 	if want := []string{ref("sha256-old")}; !slices.Equal(removed, want) {
-		t.Errorf("Sweep() removed %v, want %v: another deploy pushes an image before it records the release that runs it, and deleting that image fails the deploy", removed, want)
+		t.Errorf("sweep() removed %v, want %v: another deploy pushes an image before it records the release that runs it, and deleting that image fails the deploy", removed, want)
 	}
 }
 
@@ -116,25 +116,25 @@ func TestASweepReadsEveryPageAndDeletesInBatchesECRAccepts(t *testing.T) {
 	}
 	api := &fakeECR{tagged: map[string][]string{shopWeb: slices.Clone(tags)}, pushedAt: pushedLongAgo(tags...), pageSize: 100}
 
-	removed, err := Sweep(context.Background(), api, anECRTarget(), ref("sha256-000"), nil, now)
+	removed, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-000"), nil, now)
 	if err != nil {
-		t.Fatalf("Sweep() = %v", err)
+		t.Fatalf("sweep() = %v", err)
 	}
 
 	if len(removed) != 250 || len(api.tagged[shopWeb]) != 0 {
-		t.Errorf("Sweep() removed %d images and left %v, want all 250 of a repository that spans three pages", len(removed), api.tagged[shopWeb])
+		t.Errorf("sweep() removed %d images and left %v, want all 250 of a repository that spans three pages", len(removed), api.tagged[shopWeb])
 	}
 	if api.deleteCalls != 3 {
-		t.Errorf("Sweep() called BatchDeleteImage %d times, want 3: it takes 100 image ids a call", api.deleteCalls)
+		t.Errorf("sweep() called BatchDeleteImage %d times, want 3: it takes 100 image ids a call", api.deleteCalls)
 	}
 }
 
 func TestASweepOfARepositoryThatIsGoneIsDone(t *testing.T) {
 	t.Parallel()
 
-	removed, err := Sweep(context.Background(), &fakeECR{}, anECRTarget(), ref("sha256-new"), nil, now)
+	removed, err := sweep(context.Background(), &fakeECR{}, anECRTarget(), ref("sha256-new"), nil, now)
 	if err != nil || len(removed) != 0 {
-		t.Errorf("Sweep() = %v, %v, want nothing removed and no error: the repository a first deploy has not created yet holds nothing to reclaim", removed, err)
+		t.Errorf("sweep() = %v, %v, want nothing removed and no error: the repository a first deploy has not created yet holds nothing to reclaim", removed, err)
 	}
 }
 
@@ -143,32 +143,32 @@ func TestASweepECRRefusesSaysWhichRepository(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-old"}}, describeErr: errors.New("AccessDeniedException: not authorized to perform ecr:DescribeImages")}
 
-	_, err := Sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now)
+	_, err := sweep(context.Background(), api, anECRTarget(), ref("sha256-new"), nil, now)
 	if err == nil {
-		t.Fatal("Sweep() = nil for a listing ECR refused")
+		t.Fatal("sweep() = nil for a listing ECR refused")
 	}
 }
 
 func TestASweepOfAnImageUnderAnotherRegistryIsRefused(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Sweep(context.Background(), &fakeECR{}, anECRTarget(), "ghcr.io/acme/web:sha256-new", nil, now); err == nil {
-		t.Error("Sweep() accepted a coordinate under another registry, which no repository of this account's holds")
+	if _, err := sweep(context.Background(), &fakeECR{}, anECRTarget(), "ghcr.io/acme/web:sha256-new", nil, now); err == nil {
+		t.Error("sweep() accepted a coordinate under another registry, which no repository of this account's holds")
 	}
 }
 
-func TestReleasingImagesDeletesTheOnesNoStandingReleaseKeeps(t *testing.T) {
+func TestRemovingImagesDeletesTheOnesNoRecordedReleaseKeeps(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-one", "sha256-two", "sha256-three"}}}
 
-	removed, err := Release(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true})
+	removed, err := removeImages(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true})
 	if err != nil {
-		t.Fatalf("Release() = %v", err)
+		t.Fatalf("removeImages() = %v", err)
 	}
 
 	if want := []string{ref("sha256-one")}; !slices.Equal(removed, want) {
-		t.Errorf("Release() removed %v, want %v", removed, want)
+		t.Errorf("removeImages() removed %v, want %v", removed, want)
 	}
 	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-two", "sha256-three"}) {
 		t.Errorf("the repository holds %v, want the image another release keeps and the one nobody named", got)
@@ -179,20 +179,20 @@ func aLoggedInECR() *fakeECR {
 	return &fakeECR{token: "AWS:tok3n", endpoint: "https://" + registryAt}
 }
 
-func TestReconcilingKeepsTheImageTheReleaseRunsAndEveryOneAStandingReleasePins(t *testing.T) {
+func TestReconcilingKeepsTheImageTheReleaseRunsAndEveryOneARecordedReleaseRuns(t *testing.T) {
 	t.Parallel()
 
 	api := aLoggedInECR()
-	api.tagged = map[string][]string{shopWeb: {"sha256-new", "sha256-standing", "sha256-leaked"}}
-	api.pushedAt = pushedLongAgo("sha256-new", "sha256-standing", "sha256-leaked")
+	api.tagged = map[string][]string{shopWeb: {"sha256-new", "sha256-kept", "sha256-leaked"}}
+	api.pushedAt = pushedLongAgo("sha256-new", "sha256-kept", "sha256-leaked")
 
-	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), map[string]bool{ref("sha256-standing"): true}, now)
+	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), map[string]bool{ref("sha256-kept"): true}, now)
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	if want := []string{ref("sha256-leaked")}; !slices.Equal(removed, want) {
-		t.Errorf("Reconcile() removed %v, want %v: the release's own image is not yet in any record, and the standing release's is", removed, want)
+		t.Errorf("Reconcile() removed %v, want %v: the release's own image is not yet in any record, and the kept release's is", removed, want)
 	}
 }
 
@@ -209,7 +209,7 @@ func TestReconcilingAnImageOfAnotherRegistryTouchesNothing(t *testing.T) {
 	}
 }
 
-func TestForgettingDeletesTheImagesAStackRanThatNoStandingReleasePins(t *testing.T) {
+func TestForgettingDeletesTheImagesAStackRanThatNoRecordedReleaseRuns(t *testing.T) {
 	t.Parallel()
 
 	api := aLoggedInECR()

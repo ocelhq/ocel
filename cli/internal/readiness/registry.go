@@ -11,6 +11,22 @@ func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil, nil
 	}
+	return authenticatedRegistry(cfg)
+}
+
+func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, warning string) {
+	if cfg.Registry == nil {
+		return nil, ""
+	}
+	registry, err := authenticatedRegistry(cfg)
+	if err != nil {
+		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
+			"its password is read from %s, which is unset here", cfg.Registry.Server, cfg.Registry.Password)
+	}
+	return registry, ""
+}
+
+func authenticatedRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	password, err := projectRegistryPassword(cfg)
 	if err != nil {
 		return nil, err
@@ -21,23 +37,6 @@ func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 		Username:  cfg.Registry.Username,
 		Password:  password,
 	}, nil
-}
-
-func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, left string) {
-	if cfg.Registry == nil {
-		return nil, ""
-	}
-	password, err := projectRegistryPassword(cfg)
-	if err != nil {
-		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
-			"its password is read from %s, which is unset here", cfg.Registry.Server, cfg.Registry.Password)
-	}
-	return &contractv1.ImageRegistry{
-		Server:    cfg.Registry.Server,
-		Namespace: cfg.Registry.Namespace,
-		Username:  cfg.Registry.Username,
-		Password:  password,
-	}, ""
 }
 
 func projectRegistryPassword(cfg *project.Project) (string, error) {

@@ -408,9 +408,9 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		}
 		env.Lifecycle = recorded.GetLifecycle()
 
-		registry, left := readiness.RemovalRegistry(cfg)
-		if left != "" {
-			check.Warn(left)
+		registry, warning := readiness.RemovalRegistry(cfg)
+		if warning != "" {
+			check.Warn(warning)
 		}
 		check.End(nil)
 

@@ -18,12 +18,12 @@ import (
 
 const batchDeleteImages = 100
 
-func Sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRef string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
+func sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRef string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
 	repository, err := repositoryOf(target, imageRef)
 	if err != nil {
 		return nil, err
 	}
-	var doomed []string
+	var unkept []string
 	var token *string
 	for {
 		listed, err := api.DescribeImages(ctx, &ecr.DescribeImagesInput{
@@ -44,7 +44,7 @@ func Sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imag
 			}
 			for _, tag := range detail.ImageTags {
 				if !kept[target.Server+"/"+repository+":"+tag] {
-					doomed = append(doomed, tag)
+					unkept = append(unkept, tag)
 				}
 			}
 		}
@@ -52,10 +52,10 @@ func Sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imag
 			break
 		}
 	}
-	return deleteTags(ctx, api, target, repository, doomed)
+	return deleteTags(ctx, api, target, repository, unkept)
 }
 
-func Release(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRefs []string, kept map[string]bool) ([]string, error) {
+func removeImages(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imageRefs []string, kept map[string]bool) ([]string, error) {
 	tagged := map[string][]string{}
 	for _, imageRef := range imageRefs {
 		if kept[imageRef] {
@@ -109,7 +109,7 @@ func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget,
 	return removed, nil
 }
 
-func Reconcile(ctx context.Context, api ECRAPI, imageRef string, standing map[string]bool, pushedBefore time.Time) ([]string, error) {
+func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded map[string]bool, pushedBefore time.Time) ([]string, error) {
 	target, err := Resolve(ctx, api)
 	if err != nil {
 		return nil, err
@@ -117,15 +117,15 @@ func Reconcile(ctx context.Context, api ECRAPI, imageRef string, standing map[st
 	if !strings.HasPrefix(imageRef, target.Server+"/") {
 		return nil, nil
 	}
-	kept := maps.Clone(standing)
+	kept := maps.Clone(recorded)
 	if kept == nil {
 		kept = map[string]bool{}
 	}
 	kept[imageRef] = true
-	return Sweep(ctx, api, target, imageRef, kept, pushedBefore)
+	return sweep(ctx, api, target, imageRef, kept, pushedBefore)
 }
 
-func Forget(ctx context.Context, api ECRAPI, imageRefs []string, standing map[string]bool) ([]string, error) {
+func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string]bool) ([]string, error) {
 	target, err := Resolve(ctx, api)
 	if err != nil {
 		return nil, err
@@ -136,5 +136,5 @@ func Forget(ctx context.Context, api ECRAPI, imageRefs []string, standing map[st
 			ours = append(ours, imageRef)
 		}
 	}
-	return Release(ctx, api, target, ours, standing)
+	return removeImages(ctx, api, target, ours, kept)
 }
