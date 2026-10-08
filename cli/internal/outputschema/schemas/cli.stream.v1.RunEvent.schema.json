@@ -1015,6 +1015,18 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
+        "^(promoted_at_seconds)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
         "^(promotion_id)$": {
           "default": "",
           "type": "string"
@@ -1039,6 +1051,18 @@
         "error": {
           "default": "",
           "type": "string"
+        },
+        "promotedAtSeconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
         },
         "promotionId": {
           "default": "",

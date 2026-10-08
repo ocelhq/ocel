@@ -12,9 +12,10 @@ import (
 type deployOutcome struct {
 	apps        []*progressv1.AppResult
 	promotionID string
+	promotedAt  int64
 }
 
 func streamDeploy(ctx context.Context, provider *providerprocess.Provider, req *contractv1.DeployRequest) (deployOutcome, error) {
 	res, err := providerprocess.Stream(ctx, provider, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
-	return deployOutcome{apps: res.GetApps(), promotionID: res.GetPromotionId()}, err
+	return deployOutcome{apps: res.GetApps(), promotionID: res.GetPromotionId(), promotedAt: res.GetPromotedAtSeconds()}, err
 }

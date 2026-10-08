@@ -27,7 +27,7 @@ func reportDeployed(cfg *project.Project, manifest *contractv1.Manifest, env *en
 	if err != nil {
 		return nil, err
 	}
-	attempt.Apps, attempt.PromotionID = apps, out.promotionID
+	attempt.Apps, attempt.PromotionID, attempt.PromotionSeq = apps, out.promotionID, out.promotedAt
 	deployment := attempt.Succeeded(time.Now())
 	return deployment, deployreport.Write(cfg.Dir, deployment)
 }

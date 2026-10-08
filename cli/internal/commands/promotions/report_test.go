@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
+	"github.com/ocelhq/ocel/pkg/environment"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -71,6 +72,25 @@ func TestARollbackFromALinkedTreeReportsOneRollbackDeploymentToTheConsole(t *tes
 	}
 	if file := readReportFile(t, project.Root); file.GetId() != got.GetId() {
 		t.Errorf("the report file holds deployment %q, want the %q the console received", file.GetId(), got.GetId())
+	}
+}
+
+func TestARolledBackPromotionIsSequencedByTheTimeTheRouterRecordedIt(t *testing.T) {
+	project := promotedTwice(t)
+	withWebApp(t, project)
+	console := clitest.ServeConsole(t)
+	console.Link(t, project.Root)
+
+	if stderr, err := rollBack(t, project, console, rollbackOptions{}); err != nil {
+		t.Fatalf("runRollback err = %v; stderr=%s", err, stderr)
+	}
+
+	active, _, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).ReadActive(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := console.Reports()[0].GetDeployment().GetPromotion().GetSeq(); got != active.Ts {
+		t.Errorf("promotion seq = %d, want the router's ts %d", got, active.Ts)
 	}
 }
 

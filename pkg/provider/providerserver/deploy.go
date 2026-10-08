@@ -1664,9 +1664,10 @@ func (r *deployRun) restoreAliases(ctx context.Context, previous []edge.PreviewH
 
 func (r *deployRun) result(promotion router.Promotion, propagation router.Propagation) (*progressv1.OperationEvent, error) {
 	result := &progressv1.OperationResult{
-		Success:     true,
-		PromotionId: promotion.PromotionID,
-		Propagation: propagationProto(&propagation),
+		Success:           true,
+		PromotionId:       promotion.PromotionID,
+		PromotedAtSeconds: promotion.Ts,
+		Propagation:       propagationProto(&propagation),
 	}
 	r.reportApps(result)
 	for slot, hosts := range r.listServedHostnames() {

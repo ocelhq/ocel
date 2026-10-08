@@ -1004,17 +1004,18 @@ func (x *AppResult) GetRelease() string {
 }
 
 type OperationResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	Propagation   *Propagation           `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
-	UrlNotes      []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	Apps          []*AppResult           `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
-	Refused       bool                   `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
-	Connector     *ConnectorInstalled    `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Success           bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error             string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	PromotionId       string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Propagation       *Propagation           `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
+	UrlNotes          []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
+	Apps              []*AppResult           `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
+	Refused           bool                   `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
+	Connector         *ConnectorInstalled    `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
+	PromotedAtSeconds int64                  `protobuf:"varint,12,opt,name=promoted_at_seconds,json=promotedAtSeconds,proto3" json:"promoted_at_seconds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *OperationResult) Reset() {
@@ -1101,6 +1102,13 @@ func (x *OperationResult) GetConnector() *ConnectorInstalled {
 		return x.Connector
 	}
 	return nil
+}
+
+func (x *OperationResult) GetPromotedAtSeconds() int64 {
+	if x != nil {
+		return x.PromotedAtSeconds
+	}
+	return 0
 }
 
 type ConnectorInstalled struct {
@@ -1267,7 +1275,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04urls\x18\x04 \x03(\tR\x04urls\x12%\n" +
 	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\x12%\n" +
 	"\x0estorage_prefix\x18\x06 \x01(\tR\rstoragePrefix\x12\x18\n" +
-	"\arelease\x18\a \x01(\tR\arelease\"\xd7\x02\n" +
+	"\arelease\x18\a \x01(\tR\arelease\"\x87\x03\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
@@ -1277,7 +1285,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x12\x18\n" +
 	"\arefused\x18\n" +
 	" \x01(\bR\arefused\x12D\n" +
-	"\tconnector\x18\v \x01(\v2&.common.progress.v1.ConnectorInstalledR\tconnector\"_\n" +
+	"\tconnector\x18\v \x01(\v2&.common.progress.v1.ConnectorInstalledR\tconnector\x12.\n" +
+	"\x13promoted_at_seconds\x18\f \x01(\x03R\x11promotedAtSeconds\"_\n" +
 	"\x12ConnectorInstalled\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +

@@ -247,6 +247,23 @@ func TestADeployReportsTheReleaseItMadeLiveForEachApp(t *testing.T) {
 	}
 }
 
+func TestADeployReportsWhenThePromotionItMadeLiveWasRecorded(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	active, ok, err := p.Releases(environment.TierProduction, "shop").ReadActive(context.Background(), router.DefaultPointer)
+	if err != nil || !ok {
+		t.Fatalf("read the active promotion: ok %v err %v", ok, err)
+	}
+	if got := result.GetPromotedAtSeconds(); got != active.Ts {
+		t.Errorf("the result says the promotion went live at %d, want the %d the router recorded", got, active.Ts)
+	}
+}
+
 func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
