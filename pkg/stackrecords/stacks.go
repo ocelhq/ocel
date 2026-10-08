@@ -5,12 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
+
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -60,7 +65,7 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 	}
 	recorded.Bindings = slices.Clone(recorded.Bindings)
 	for i, binding := range recorded.Bindings {
-		recorded.Bindings[i] = binding.WithoutSecrets()
+		recorded.Bindings[i] = redactSecrets(binding)
 	}
 	recorded.UpdatedAt = time.Now().Unix()
 	if row.Value, err = json.Marshal(recorded); err != nil {
@@ -70,6 +75,25 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
+}
+
+func redactSecrets(binding provider.Binding) provider.Binding {
+	if len(binding.Properties) == 0 {
+		return binding
+	}
+	field := (&bindingsv1.Binding{}).ProtoReflect().Descriptor().Oneofs().ByName("properties").Fields().ByName(protoreflect.Name(binding.Type))
+	if binding.Type == provider.BindingCustom || field == nil {
+		binding.Properties = nil
+		return binding
+	}
+	binding.Properties = maps.Clone(binding.Properties)
+	properties := field.Message().Fields()
+	for i := range properties.Len() {
+		if options, _ := properties.Get(i).Options().(*descriptorpb.FieldOptions); options.GetDebugRedact() {
+			delete(binding.Properties, properties.Get(i).JSONName())
+		}
+	}
+	return binding
 }
 
 func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {

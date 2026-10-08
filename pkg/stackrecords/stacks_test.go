@@ -18,7 +18,7 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	name := naming.InfraStack("main")
-	secrets := []string{"pg-password-s3cret", "kv-password-s3cret", "signing-key-s3cret"}
+	secrets := []string{"pg-password-s3cret", "kv-password-s3cret", "signing-key-s3cret", "bucket-secret-access-key-s3cret", "custom-token-s3cret"}
 
 	err := stackrecords.Write(ctx, store, environment.TierProduction, "shop", name, stackrecords.Stack{
 		Kind: provider.StackInfra,
@@ -35,6 +35,11 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 				provider.PropertyURL: "/socket", provider.PropertySigningKey: secrets[2],
 				provider.PropertyVerifyKey: "verify",
 			}},
+			{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{
+				provider.PropertyBucket: "uploads", provider.PropertyEndpoint: "https://s3.internal",
+				"accessKeyId": "AKIA", "secretAccessKey": secrets[3],
+			}},
+			{Type: provider.BindingCustom, Name: "stripe", Properties: map[string]string{"token": secrets[4]}},
 		},
 	})
 	if err != nil {
@@ -61,6 +66,9 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 	}
 	if read.Bindings[2].Properties[provider.PropertyVerifyKey] != "verify" {
 		t.Errorf("Read's realtime binding = %v, want the public verify key kept", read.Bindings[2].Properties)
+	}
+	if read.Bindings[3].Properties[provider.PropertyBucket] != "uploads" {
+		t.Errorf("Read's bucket binding = %v, want the bucket kept: bucket removal empties it by name", read.Bindings[3].Properties)
 	}
 }
 
