@@ -1,23 +1,28 @@
 package connectorserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwt"
+
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
 const (
 	beatEvery    = 60 * time.Second
 	beatLifetime = 5 * time.Minute
+
+	connectRoute = "/api/connect"
 )
 
 func originOf(raw string) (string, error) {
@@ -41,6 +46,7 @@ type beat struct {
 	configPath   string
 	client       *http.Client
 	every        time.Duration
+	out          io.Writer
 
 	greeted bool
 	said    spoken
@@ -48,7 +54,7 @@ type beat struct {
 
 type spoken struct {
 	unreached bool
-	status    int
+	code      connect.Code
 }
 
 func beatFor(spec Spec) (*beat, error) {
@@ -66,16 +72,17 @@ func beatFor(spec Spec) (*beat, error) {
 		configPath:   spec.ConfigPath,
 		client:       &http.Client{Timeout: 20 * time.Second},
 		every:        beatEvery,
+		out:          os.Stdout,
 	}, nil
 }
 
-func Heartbeat(ctx context.Context, spec Spec) (int, error) {
+func Heartbeat(ctx context.Context, spec Spec) error {
 	if !spec.Identity.HasKey() {
-		return 0, errors.New("connectorserver: this connector has no identity, so it has nothing to sign a heartbeat with")
+		return errors.New("connectorserver: this connector has no identity, so it has nothing to sign a heartbeat with")
 	}
 	beating, err := beatFor(spec)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	return beating.once(ctx)
 }
@@ -99,32 +106,36 @@ func (b *beat) token() (string, error) {
 	return string(signed), nil
 }
 
-func (b *beat) once(ctx context.Context) (int, error) {
+func (b *beat) once(ctx context.Context) error {
 	token, err := b.token()
 	if err != nil {
-		return 0, err
+		return err
 	}
-	body, err := json.Marshal(map[string]any{
-		"version":      b.version,
-		"capabilities": b.capabilities,
+	consoleClient := consolev1connect.NewConnectorServiceClient(b.client, b.origin+connectRoute,
+		connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+				req.Header().Set("Authorization", "Bearer "+token)
+				return next(ctx, req)
+			}
+		})))
+	_, err = consoleClient.Heartbeat(ctx, &consolev1.HeartbeatConnectorRequest{
+		Id:           b.connectorID,
+		Version:      b.version,
+		Capabilities: b.capabilities,
 	})
-	if err != nil {
-		return 0, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		b.origin+"/api/connectors/"+url.PathEscape(b.connectorID)+"/heartbeat", bytes.NewReader(body))
-	if err != nil {
-		return 0, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+token)
+	return err
+}
 
-	response, err := b.client.Do(request)
-	if err != nil {
-		return 0, err
+func IsRefusal(err error) bool {
+	var refusal *connect.Error
+	if !errors.As(err, &refusal) {
+		return false
 	}
-	defer response.Body.Close()
-	return response.StatusCode, nil
+	switch refusal.Code() {
+	case connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeCanceled:
+		return false
+	}
+	return true
 }
 
 func (b *beat) wipe() {
@@ -133,11 +144,11 @@ func (b *beat) wipe() {
 			continue
 		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			fmt.Printf("connector %s: the console no longer knows this connector, and %s could not be removed: %v\n",
+			fmt.Fprintf(b.out, "connector %s: the console no longer knows this connector, and %s could not be removed: %v\n",
 				b.connectorID, path, err)
 		}
 	}
-	fmt.Printf("connector %s: the console no longer knows this connector, so its key and config are gone\n", b.connectorID)
+	fmt.Fprintf(b.out, "connector %s: the console no longer knows this connector, so its key and config are gone\n", b.connectorID)
 }
 
 func (b *beat) run(ctx context.Context, retired chan<- struct{}) {
@@ -145,27 +156,26 @@ func (b *beat) run(ctx context.Context, retired chan<- struct{}) {
 	defer ticker.Stop()
 
 	for {
-		status, err := b.once(ctx)
+		err := b.once(ctx)
 		switch {
-		case err != nil:
-			if ctx.Err() != nil {
-				return
-			}
-			if !b.said.unreached {
-				fmt.Printf("connector %s: heartbeat did not reach %s: %v\n", b.connectorID, b.origin, err)
-				b.said = spoken{unreached: true}
-			}
-		case status >= 200 && status < 300:
+		case err == nil:
 			b.greeted = true
 			b.said = spoken{}
-		case status == http.StatusNotFound && b.greeted:
+		case ctx.Err() != nil:
+			return
+		case !IsRefusal(err):
+			if !b.said.unreached {
+				fmt.Fprintf(b.out, "connector %s: heartbeat did not reach %s: %v\n", b.connectorID, b.origin, err)
+				b.said = spoken{unreached: true}
+			}
+		case connect.CodeOf(err) == connect.CodeNotFound && b.greeted:
 			b.wipe()
 			close(retired)
 			return
 		default:
-			if b.said.unreached || b.said.status != status {
-				fmt.Printf("connector %s: heartbeat to %s answered %d\n", b.connectorID, b.origin, status)
-				b.said = spoken{status: status}
+			if b.said.unreached || b.said.code != connect.CodeOf(err) {
+				fmt.Fprintf(b.out, "connector %s: heartbeat to %s was refused: %v\n", b.connectorID, b.origin, err)
+				b.said = spoken{code: connect.CodeOf(err)}
 			}
 		}
 
