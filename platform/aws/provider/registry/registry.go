@@ -106,10 +106,15 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 		return nil
 	}
 	created, err := ensure(ctx, i.api, repository)
-	if err != nil || !created {
+	if err != nil || !created && !missingRepository(pushErr) {
 		return pushErr
 	}
 	return i.pushed.Push(ctx, push, progress)
+}
+
+func missingRepository(err error) bool {
+	said := strings.ReplaceAll(strings.ToLower(err.Error()), "_", " ")
+	return strings.Contains(said, "name unknown")
 }
 
 func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
