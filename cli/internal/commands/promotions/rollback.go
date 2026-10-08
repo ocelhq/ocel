@@ -150,12 +150,17 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 
 func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
 	span := phase.Child(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
+	registry, warning := readiness.RemovalRegistry(cfg)
+	if warning != "" {
+		span.Warn(warning)
+	}
 	var resp *contractv1.RollbackResponse
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
-			Slug: cfg.Slug,
-			To:   target.GetPromotionId(),
-			Edge: cfg.EdgeSelection(),
+			Slug:            cfg.Slug,
+			To:              target.GetPromotionId(),
+			Edge:            cfg.EdgeSelection(),
+			ProjectRegistry: registry,
 		})
 		return err
 	})

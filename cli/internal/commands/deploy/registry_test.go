@@ -388,3 +388,18 @@ func TestRemovingAPreviewWhoseRegistryVariableIsUnsetStillRemovesItAndSaysWhatIt
 		}
 	}
 }
+
+func TestPruningAPreviewSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItReclaimsGoWithThem(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	previewPrune(t, fixture, dependencies, previewPruneOptions{})
+
+	reqs := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(reqs) != 1 || reqs[0].GetProjectRegistry().GetServer() != "registry.example.com" || reqs[0].GetProjectRegistry().GetPassword() != "hunter2" {
+		t.Errorf("the prune sent %d requests, want one naming the project's registry with its secret resolved: it is how the images of the releases it reclaims are deleted", len(reqs))
+	}
+}

@@ -1056,3 +1056,80 @@ func TestRollingBackToAnEarlierDeployOfTheSameImageServesTheOriginThatDeployProv
 		t.Errorf("after the rollback web serves build %s at %s, want build %s at %s, the origin the first deploy provisioned", build, origin, builds[0], origins[0])
 	}
 }
+
+func TestARollbackDestroysTheBuildItDroppedWithTheStoreOfTheRegistryTheProjectNames(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedKeptContainers(t, vendor)
+
+	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	stores := vendor.FakeStacks().DestroyedWith()
+	if len(stores) == 0 {
+		t.Fatal("Rollback() destroyed no stack")
+	}
+	for _, store := range stores {
+		if store != provider.ImageStore(vendor.ImageStore()) {
+			t.Errorf("a dropped build was destroyed with %v, want the store opened on the project's registry: the image it pushed there goes with it", store)
+		}
+	}
+}
+
+func TestAPruneDestroysTheBuildsItDropsWithTheStoreOfTheRegistryTheProjectNames(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2", "p3")
+
+	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug:            "shop",
+		KeepN:           2,
+		Environment:     &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		ProjectRegistry: projectRegistry,
+	})
+	if err != nil {
+		t.Fatalf("RemoveStalePromotions() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveStalePromotions() = %q, %v", result.GetError(), err)
+	}
+
+	stores := vendor.FakeStacks().DestroyedWith()
+	if len(stores) == 0 {
+		t.Fatal("the prune destroyed no stack")
+	}
+	for _, store := range stores {
+		if store != provider.ImageStore(vendor.ImageStore()) {
+			t.Errorf("a pruned build was destroyed with %v, want the store opened on the project's registry: the image it pushed there goes with it", store)
+		}
+	}
+}
+
+type registryRefusingStacks struct {
+	provider.Stacks
+}
+
+func (s registryRefusingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+	progress.Warn("Left " + ref.Name.String() + "'s image in the registry it was pushed to: UNSUPPORTED")
+	return s.Stacks.Destroy(ctx, ref, images, progress)
+}
+
+func TestARollbackWarnsOfTheImagesItsReclaimLeftInTheProjectsRegistry(t *testing.T) {
+	t.Parallel()
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: registryRefusingStacks{Stacks: vendor.Stacks()}})
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedKeptContainers(t, vendor)
+
+	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry})
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if !slices.ContainsFunc(rolled.GetWarnings(), func(warning string) bool { return strings.Contains(warning, "UNSUPPORTED") }) {
+		t.Errorf("the rollback warned %q, want what its reclaim left in the project's registry", rolled.GetWarnings())
+	}
+}

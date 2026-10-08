@@ -67,18 +67,28 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Propagation: &propagation,
 	}
 	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
+	reclaiming := &warningsLog{Log: progress.Discard()}
+	images := removalImages(ctx, session.provider, req.GetProjectRegistry(), reclaiming)
 	if err != nil {
-		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, nil, "", dropped, progress.Discard())))
+		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, images, "", dropped, reclaiming)))
 	}
 	if err := session.checkpoint(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
-	if err := session.reclaimDropped(ctx, nil, "", dropped, progress.Discard()); err != nil {
+	if err := session.reclaimDropped(ctx, images, "", dropped, reclaiming); err != nil {
 		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
 	}
+	rolled.Warnings = append(rolled.Warnings, reclaiming.warnings...)
 	return rolled, nil
 }
+
+type warningsLog struct {
+	progress.Log
+	warnings []string
+}
+
+func (w *warningsLog) Warn(line string) { w.warnings = append(w.warnings, line) }
 
 func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promotion, error) {
 	if tag != "" {
@@ -144,7 +154,8 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := reclaimUnnamed(ctx, session.provider, nil, session.ledger, pointer, pruned, progress); err != nil {
+		images := removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)
+		if err := reclaimUnnamed(ctx, session.provider, images, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {
