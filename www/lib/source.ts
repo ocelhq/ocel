@@ -8,12 +8,25 @@ import {
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type * as PageTree from "fumadocs-core/page-tree";
-import { loader } from "fumadocs-core/source";
+import { type InferPageType, loader } from "fumadocs-core/source";
 import { defineDocs } from "fumadocs-mdx/macro";
 import { createElement } from "react";
 
 const docs = defineDocs({
   dir: "content/docs",
+  docs: {
+    postprocess: {
+      includeProcessedMarkdown: {
+        headingIds: false,
+        stringify(node) {
+          if (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") {
+            node.data = { ...node.data, _stringify: "children-only" };
+          }
+          return undefined;
+        },
+      },
+    },
+  },
 });
 
 const icons = {
@@ -32,6 +45,15 @@ export const source = loader({
     if (name && name in icons) return createElement(icons[name as keyof typeof icons]);
   },
 });
+
+export type DocsPage = InferPageType<typeof source>;
+
+export async function pageMarkdown(page: DocsPage): Promise<string> {
+  const heading = page.data.description
+    ? `# ${page.data.title}\n\n> ${page.data.description}`
+    : `# ${page.data.title}`;
+  return `${heading}\n\n${(await page.data.getText("processed")).trim()}\n`;
+}
 
 export const tabColors: Record<string, string> = {
   guide: "var(--electric)",
