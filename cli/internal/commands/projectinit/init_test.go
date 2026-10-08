@@ -421,7 +421,7 @@ func TestInitAsJSONPrintsWhatItWrote(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", tc.opts, &stdout); err != nil {
+			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", tc.opts, strings.NewReader(""), &stdout); err != nil {
 				t.Fatalf("runInitCommand err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -456,7 +456,7 @@ func TestInitAsJSONNamesNoSDKPackageWhenNoneWasAdded(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, strings.NewReader(""), &stdout); err != nil {
 			t.Fatalf("runInitCommand err = %v", err)
 		}
 
@@ -476,7 +476,7 @@ func TestInitAsJSONNamesNoSDKPackageWhenNoneWasAdded(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, strings.NewReader(""), &stdout); err != nil {
 			t.Fatalf("runInitCommand err = %v", err)
 		}
 
@@ -501,7 +501,7 @@ func TestInitAsJSONNamesTheSDKPackageOfTheLanguageItAdded(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake", language: lang}, &stdout); err != nil {
+			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake", language: lang}, strings.NewReader(""), &stdout); err != nil {
 				t.Fatalf("runInitCommand err = %v", err)
 			}
 
@@ -523,7 +523,7 @@ func TestInitInHumanModePrintsNoResult(t *testing.T) {
 
 	var stdout, stream bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
-	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("runInitCommand err = %v", err)
 	}
 	if stdout.Len() != 0 {

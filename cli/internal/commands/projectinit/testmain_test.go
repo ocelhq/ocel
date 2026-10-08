@@ -30,7 +30,9 @@ func providerNamedAlone() string {
 }
 
 func providerKeyed() string {
-	return providerWhere(func(id string) bool { return !configdoc.ProviderNamedAlone(id) })
+	return providerWhere(func(id string) bool {
+		return !configdoc.ProviderNamedAlone(id) && len(configdoc.RequiredProviderOptions(id)) == 0
+	})
 }
 
 func providerWhere(matches func(id string) bool) string {

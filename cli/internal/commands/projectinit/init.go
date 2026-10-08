@@ -1,7 +1,9 @@
 package projectinit
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,6 +43,7 @@ type initOptions struct {
 	language   string
 	format     string
 	configPath string
+	options    []string
 	settings   []providerSetting
 }
 
@@ -73,17 +77,26 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 
 			opts := flags
 			opts.configPath = dependencies.ConfigPath()
+			if opts.settings, err = parseOptionFlags(flags.options); err != nil {
+				return err
+			}
 
-			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.OutOrStdout())
+			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
 	cmd.Flags().StringVar(&flags.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
+	cmd.Flags().StringArrayVar(&flags.options, "option", nil, "Option the provider cannot deploy without, as name=value; repeat it for each (asked for on a terminal when missing)")
 	cmd.Flags().StringVar(&flags.format, "format", "", "Write the config as ts, json or yaml — the same document in each; ts needs node, and is the default only in a project built with it")
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
 
-func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdout io.Writer) error {
+func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdin io.Reader, stdout io.Writer) error {
+	if len(missingOptions(strings.TrimSpace(opts.provider), opts.settings)) > 0 && dependencies.CanAsk(stdin) {
+		if err := askForMissingOptions(ctx, dependencies, &opts, stdin, stdout); err != nil {
+			return err
+		}
+	}
 	result, err := runInit(ctx, dependencies, cwd, slug, opts)
 	if err != nil {
 		return err
@@ -122,6 +135,10 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	}
 	if !slices.Contains(shipped, provider) {
 		return nil, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
+	}
+
+	if err := refuseMissingOptions(provider, opts.settings); err != nil {
+		return nil, err
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
@@ -264,12 +281,31 @@ type providerSetting struct {
 	value string
 }
 
-func settingFields(settings []providerSetting, layout string) []string {
+func settingFields(settings []providerSetting, key func(string) string) []string {
 	fields := make([]string, 0, len(settings))
 	for _, setting := range settings {
-		fields = append(fields, fmt.Sprintf(layout, setting.name, setting.value))
+		fields = append(fields, key(setting.name)+": "+quoted(strings.ReplaceAll(setting.value, "${", "$${")))
 	}
 	return fields
+}
+
+var plainYAMLKey = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+
+func yamlKey(name string) string {
+	if plainYAMLKey.MatchString(name) {
+		return name
+	}
+	return quoted(name)
+}
+
+func quoted(text string) string {
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(text); err != nil {
+		panic(fmt.Sprintf("a string always encodes as JSON: %v", err))
+	}
+	return strings.TrimSuffix(out.String(), "\n")
 }
 
 func configTemplate(name, slug, provider string, settings []providerSetting) string {
@@ -282,7 +318,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
 	selected := fmt.Sprintf("{ %q: {} }", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, "%q: %q"), ", "))
+		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, quoted), ", "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = strconv.Quote(provider)
 	}
@@ -298,7 +334,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, "%s: %q"), "\n    "))
+		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, yamlKey), "\n    "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = " " + provider
 	}
@@ -311,7 +347,7 @@ provider:%s
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {
 	options := "{}"
 	if len(settings) > 0 {
-		options = "{ " + strings.Join(settingFields(settings, "%q: %q"), ", ") + " }"
+		options = "{ " + strings.Join(settingFields(settings, quoted), ", ") + " }"
 	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";

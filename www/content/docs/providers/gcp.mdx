@@ -4,10 +4,10 @@ description: Deploy to your own Google Cloud project, on Cloud Run.
 ---
 
 ```bash
-ocel init --provider gcp
+ocel init --provider gcp --option region=europe-west1
 ```
 
-Name the project and the region:
+Name the region, and the project unless `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT` or your gcloud config already does:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
