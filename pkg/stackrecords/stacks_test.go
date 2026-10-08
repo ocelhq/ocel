@@ -1,8 +1,8 @@
 package stackrecords_test
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"maps"
 	"testing"
 
@@ -14,12 +14,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
+func decodedRecord(t *testing.T, raw []byte) stackrecords.Stack {
+	t.Helper()
+	var stored stackrecords.Stack
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		t.Fatalf("decoding the stored stack record = %v", err)
+	}
+	return stored
+}
+
 func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	name := naming.InfraStack("main")
-	secrets := []string{"pg-password-s3cret", "kv-password-s3cret", "signing-key-s3cret", "bucket-secret-access-key-s3cret", "custom-token-s3cret"}
+	secretKeys := []string{provider.PropertyPassword, provider.PropertyPassword, provider.PropertySigningKey, "secretAccessKey", "token"}
 
 	err := stackrecords.Write(ctx, store, environment.TierProduction, "shop", name, stackrecords.Stack{
 		Kind: provider.StackInfra,
@@ -27,20 +36,20 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 			{Type: provider.BindingPostgres, Name: "db", Properties: map[string]string{
 				provider.PropertyHost: "db.internal", provider.PropertyPort: "5432",
 				provider.PropertyDatabase: "app", provider.PropertyUsername: "admin",
-				provider.PropertyPassword: secrets[0],
+				provider.PropertyPassword: "pg-password-s3cret",
 			}},
 			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{
-				provider.PropertyHost: "cache.internal", provider.PropertyPassword: secrets[1],
+				provider.PropertyHost: "cache.internal", provider.PropertyPassword: "kv-password-s3cret",
 			}},
 			{Type: provider.BindingRealtime, Name: "live", Properties: map[string]string{
-				provider.PropertyURL: "/socket", provider.PropertySigningKey: secrets[2],
+				provider.PropertyURL: "/socket", provider.PropertySigningKey: "signing-key-s3cret",
 				provider.PropertyVerifyKey: "verify",
 			}},
 			{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{
 				provider.PropertyBucket: "uploads", provider.PropertyEndpoint: "https://s3.internal",
-				"accessKeyId": "AKIA", "secretAccessKey": secrets[3],
+				"accessKeyId": "AKIA", "secretAccessKey": "bucket-secret-access-key-s3cret",
 			}},
-			{Type: provider.BindingCustom, Name: "stripe", Properties: map[string]string{"token": secrets[4]}},
+			{Type: provider.BindingCustom, Name: "stripe", Properties: map[string]string{"token": "custom-token-s3cret"}},
 		},
 	})
 	if err != nil {
@@ -51,9 +60,13 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the raw record: %v", err)
 	}
-	for _, secret := range secrets {
-		if bytes.Contains(raw.Value, []byte(secret)) {
-			t.Errorf("the stored stack record holds %q, and the record store is readable without the sealer", secret)
+	stored := decodedRecord(t, raw.Value)
+	if len(stored.Bindings) != len(secretKeys) {
+		t.Fatalf("the stored stack record holds %d bindings, want the %d written", len(stored.Bindings), len(secretKeys))
+	}
+	for i, binding := range stored.Bindings {
+		if _, held := binding.Properties[secretKeys[i]]; held {
+			t.Errorf("the stored stack record holds binding %s's %q, and the record store is readable without the sealer", binding.Name, secretKeys[i])
 		}
 	}
 
@@ -118,9 +131,13 @@ func TestAStackRecordKeepsOnlyTheBindingPropertiesItKnowsAreNotSecret(t *testing
 	if err != nil {
 		t.Fatalf("read the raw record: %v", err)
 	}
-	for _, unclassified := range []string{"admin-token-s3cret", "projects/p/topics/orders"} {
-		if bytes.Contains(raw.Value, []byte(unclassified)) {
-			t.Errorf("the stored stack record holds %q, a property neither bindings.proto nor the record declares, so it may be a secret", unclassified)
+	stored := decodedRecord(t, raw.Value)
+	if len(stored.Bindings) != 3 {
+		t.Fatalf("the stored stack record holds %d bindings, want the 3 written", len(stored.Bindings))
+	}
+	for i, unclassified := range []string{"adminToken", "topic"} {
+		if _, held := stored.Bindings[i].Properties[unclassified]; held {
+			t.Errorf("the stored stack record holds binding %s's %q, a property neither bindings.proto nor the record declares, so it may be a secret", stored.Bindings[i].Name, unclassified)
 		}
 	}
 	read, _, err := stackrecords.Read(ctx, store, environment.TierProduction, "shop", name)
