@@ -816,50 +816,141 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	}
 }
 
-var ofThePrincipalsProject = map[string]any{
-	"StringEquals": map[string]any{"aws:ResourceAccount": "${aws:PrincipalAccount}"},
-	"StringLike":   map[string]any{"aws:ResourceTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
+type ecrRequest struct {
+	action           string
+	principalProject string
+	repository       string
+	requestProject   string
+	resourceProject  string
 }
 
-var taggedForThePrincipalsProject = map[string]any{
-	"StringEquals":       map[string]any{"aws:ResourceAccount": "${aws:PrincipalAccount}"},
-	"StringLike":         map[string]any{"aws:RequestTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
-	"StringLikeIfExists": map[string]any{"aws:ResourceTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
+func (r ecrRequest) context() map[string]string {
+	context := map[string]string{
+		"aws:PrincipalAccount": "123456789012",
+		"aws:ResourceAccount":  "123456789012",
+	}
+	if r.principalProject != "" {
+		context["aws:PrincipalTag/ocel:project"] = r.principalProject
+	}
+	if r.requestProject != "" {
+		context["aws:RequestTag/ocel:project"] = r.requestProject
+		context["aws:RequestTag/ocel:managed-by"] = "ocel"
+	}
+	if r.resourceProject != "" {
+		context["aws:ResourceTag/ocel:project"] = r.resourceProject
+		context["aws:ResourceTag/ocel:managed-by"] = "ocel"
+	}
+	return context
 }
 
-func TestEveryCredentialDeletesImagesOnlyInRepositoriesTaggedWithAProjectItsPrincipalMaySpeakFor(t *testing.T) {
-	for purpose, document := range bothCredentials(t) {
-		grants := grantsOf(t, document)
-		for _, action := range []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"} {
-			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, ofThePrincipalsProject)}
-			if !grants[want] {
-				t.Errorf("the %s credential does not grant %s on %s for the project its principal is tagged with: a principal tagged ocel:project reaches that project's repositories alone", purpose, action, appRepositoryARN)
-			}
+var policyVariable = regexp.MustCompile(`\$\{([^}]*)\}`)
+
+func resolveVariables(t *testing.T, value string, context map[string]string) (string, bool) {
+	t.Helper()
+	resolved := true
+	out := policyVariable.ReplaceAllStringFunc(value, func(variable string) string {
+		key := policyVariable.FindStringSubmatch(variable)[1]
+		if strings.Contains(key, ",") {
+			t.Fatalf("%s gives a policy variable a default, whose matching IAM documents nowhere: name what each principal may reach in statements of its own", value)
 		}
-		for g := range grants {
-			if (g.action == "ecr:BatchDeleteImage" || g.action == "ecr:DeleteRepository") && g.condition != conditionJSON(t, ofThePrincipalsProject) {
-				t.Errorf("the %s credential grants %s on %s under %s, which reaches repositories of a project its principal is not tagged with", purpose, g.action, g.resource, g.condition)
+		got, ok := context[key]
+		resolved = resolved && ok
+		return got
+	})
+	return out, resolved
+}
+
+func conditionHolds(t *testing.T, condition map[string]any, context map[string]string) bool {
+	t.Helper()
+	for operator, operands := range condition {
+		base, ifExists := strings.CutSuffix(operator, "IfExists")
+		for key, raw := range operands.(map[string]any) {
+			values := []string{}
+			switch v := raw.(type) {
+			case string:
+				values = append(values, v)
+			case []any:
+				for _, one := range v {
+					values = append(values, one.(string))
+				}
+			}
+			got, present := context[key]
+			if base == "Null" {
+				if len(values) != 1 || (values[0] == "true") == present {
+					return false
+				}
+				continue
+			}
+			if base != "StringEquals" && base != "StringLike" {
+				t.Fatalf("the ECR grants test evaluates no %s condition", operator)
+			}
+			if !present {
+				if ifExists {
+					continue
+				}
+				return false
+			}
+			if !slices.ContainsFunc(values, func(pattern string) bool {
+				resolved, ok := resolveVariables(t, pattern, context)
+				return ok && conditionAdmits(base, resolved, got)
+			}) {
+				return false
 			}
 		}
 	}
+	return true
 }
 
-func TestEveryCredentialTagsARepositoryOnlyWithAProjectItsPrincipalMaySpeakFor(t *testing.T) {
-	for purpose, document := range bothCredentials(t) {
-		grants := grantsOf(t, document)
-		for _, action := range []string{"ecr:CreateRepository", "ecr:TagResource"} {
-			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, taggedForThePrincipalsProject)}
-			if !grants[want] {
-				t.Errorf("the %s credential does not grant %s on %s for the project its principal is tagged with", purpose, action, appRepositoryARN)
-			}
-			for g := range grants {
-				if g.action == action && g.condition != conditionJSON(t, taggedForThePrincipalsProject) {
-					t.Errorf("the %s credential grants %s under %s: retagging another project's repository would hand its deletes to this principal", purpose, action, g.condition)
-				}
-			}
+func allowsECR(t *testing.T, document string, r ecrRequest) bool {
+	t.Helper()
+	context := r.context()
+	arn := "arn:aws:ecr:us-east-1:123456789012:repository/" + r.repository
+	for _, statement := range parsePolicy(t, document).Statement {
+		if !slices.Contains(stringsOf(t, statement.Action, "Action"), r.action) {
+			continue
 		}
-		if want := (grant{action: "ecr:DescribeImages", resource: appRepositoryARN, condition: conditionJSON(t, inCallerAccount())}); !grants[want] {
-			t.Errorf("the %s credential does not grant ecr:DescribeImages on %s: a reconcile reads the images it may sweep", purpose, appRepositoryARN)
+		matches := slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(resource string) bool {
+			resolved, ok := resolveVariables(t, resource, context)
+			return ok && conditionAdmits("StringLike", resolved, arn)
+		})
+		if matches && conditionHolds(t, statement.Condition, context) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestEveryCredentialReachesImageRepositoriesOnlyOfTheProjectItsPrincipalIsTaggedWith(t *testing.T) {
+	cases := []struct {
+		name    string
+		request ecrRequest
+		allowed bool
+	}{
+		{"an untagged principal deletes in an Ocel repository tagged with a project", ecrRequest{action: "ecr:BatchDeleteImage", repository: "ocel/shop.web", resourceProject: "shop"}, true},
+		{"an untagged principal removes an Ocel repository tagged with a project", ecrRequest{action: "ecr:DeleteRepository", repository: "ocel/shop.web", resourceProject: "shop"}, true},
+		{"an untagged principal deletes in a repository no project is tagged on", ecrRequest{action: "ecr:BatchDeleteImage", repository: "ocel/shop.web"}, false},
+		{"an untagged principal creates a repository tagged with its project", ecrRequest{action: "ecr:CreateRepository", repository: "ocel/shop.web", requestProject: "shop"}, true},
+		{"an untagged principal creates a repository with no project tag", ecrRequest{action: "ecr:CreateRepository", repository: "ocel/shop.web"}, false},
+		{"an untagged principal tags a repository made before the tag existed", ecrRequest{action: "ecr:TagResource", repository: "ocel/shop.web", requestProject: "shop"}, true},
+		{"a tagged principal deletes in its project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
+		{"a tagged principal removes its project's repository", ecrRequest{action: "ecr:DeleteRepository", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
+		{"a tagged principal deletes in another project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/blog.web", resourceProject: "blog"}, false},
+		{"a tagged principal deletes in another project's repository it tagged as its own", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/blog.web", resourceProject: "shop"}, false},
+		{"a tagged principal deletes in its project's repository tagged with another project", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "blog"}, false},
+		{"a tagged principal creates its project's repository", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop.web", requestProject: "shop"}, true},
+		{"a tagged principal creates another project's repository tagged as its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/blog.web", requestProject: "shop"}, false},
+		{"a tagged principal creates its project's repository tagged with another project", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop.web", requestProject: "blog"}, false},
+		{"a tagged principal creates a repository whose project only starts with its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop-two.web", requestProject: "shop"}, false},
+		{"a tagged principal tags its project's repository", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "ocel/shop.web", requestProject: "shop"}, true},
+		{"a tagged principal tags another project's repository as its own", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "ocel/blog.web", requestProject: "shop", resourceProject: "blog"}, false},
+		{"a tagged principal pushes to its project's repository", ecrRequest{action: "ecr:PutImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
+		{"any principal deletes outside the ocel namespace", ecrRequest{action: "ecr:BatchDeleteImage", repository: "theirs/web", resourceProject: "shop"}, false},
+	}
+	for purpose, document := range bothCredentials(t) {
+		for _, c := range cases {
+			if got := allowsECR(t, document, c.request); got != c.allowed {
+				t.Errorf("the %s credential: %s is allowed = %t, want %t", purpose, c.name, got, c.allowed)
+			}
 		}
 	}
 }

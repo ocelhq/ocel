@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ type ECRAPI interface {
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
 	DescribeRepositories(ctx context.Context, in *ecr.DescribeRepositoriesInput, opts ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error)
 	TagResource(ctx context.Context, in *ecr.TagResourceInput, opts ...func(*ecr.Options)) (*ecr.TagResourceOutput, error)
+	ListTagsForResource(ctx context.Context, in *ecr.ListTagsForResourceInput, opts ...func(*ecr.Options)) (*ecr.ListTagsForResourceOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
@@ -152,7 +154,14 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 }
 
 func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
-	tags := repositoryTags(name)
+	project, ok := images.RegistryRepositoryProject(strings.TrimPrefix(name, Namespace+"/"))
+	if !ok {
+		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)
+	}
+	tags := []ecrtypes.Tag{
+		{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)},
+		{Key: aws.String(ProjectTag), Value: aws.String(project)},
+	}
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:             aws.String(name),
 		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
@@ -169,23 +178,33 @@ func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
 	return true, nil
 }
 
-func repositoryTags(name string) []ecrtypes.Tag {
-	project, _, _ := strings.Cut(strings.TrimPrefix(name, Namespace+"/"), ".")
-	return []ecrtypes.Tag{
-		{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)},
-		{Key: aws.String(ProjectTag), Value: aws.String(project)},
-	}
-}
-
 func tagRepository(ctx context.Context, api ECRAPI, name string, tags []ecrtypes.Tag) error {
 	described, err := api.DescribeRepositories(ctx, &ecr.DescribeRepositoriesInput{RepositoryNames: []string{name}})
 	if err != nil {
 		return fmt.Errorf("read the image repository %s to tag it with its project: %w", name, err)
 	}
 	for _, repository := range described.Repositories {
+		listed, err := api.ListTagsForResource(ctx, &ecr.ListTagsForResourceInput{ResourceArn: repository.RepositoryArn})
+		if err != nil {
+			return fmt.Errorf("read the tags of the image repository %s: %w", name, err)
+		}
+		if carriesTags(listed.Tags, tags) {
+			continue
+		}
 		if _, err := api.TagResource(ctx, &ecr.TagResourceInput{ResourceArn: repository.RepositoryArn, Tags: tags}); err != nil {
-			return fmt.Errorf("tag the image repository %s with its project: %w", name, err)
+			return fmt.Errorf("tag the image repository %s with its project, without which no credential limited to a project may delete its images: %w", name, err)
 		}
 	}
 	return nil
+}
+
+func carriesTags(carried, wanted []ecrtypes.Tag) bool {
+	for _, want := range wanted {
+		if !slices.ContainsFunc(carried, func(tag ecrtypes.Tag) bool {
+			return aws.ToString(tag.Key) == aws.ToString(want.Key) && aws.ToString(tag.Value) == aws.ToString(want.Value)
+		}) {
+			return false
+		}
+	}
+	return true
 }
