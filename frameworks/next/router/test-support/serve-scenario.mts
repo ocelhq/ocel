@@ -148,7 +148,7 @@ export function deps(scenario: Scenario): RouteDeps {
     appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing(
-      { "/404.html": "not found", ...(scenario.files ?? {}) },
+      { [`${basePath}/404.html`]: "not found", ...(scenario.files ?? {}) },
       scenario.probes,
       basePath,
     ),

@@ -92,7 +92,8 @@ function plainNotFound(): Response {
 }
 
 async function notFound(deps: AssetStoreDeps, locale?: string): Promise<Response> {
-  const names = locale ? [`/${locale}/404.html`, "/404.html"] : ["/404.html"];
+  const base = deps.basePath ?? "";
+  const names = locale ? [`${base}/${locale}/404.html`, `${base}/404.html`] : [`${base}/404.html`];
   for (const name of names) {
     const page = await deps.store?.get(`${deps.assetPrefix}${name}`);
     if (page?.body) {
