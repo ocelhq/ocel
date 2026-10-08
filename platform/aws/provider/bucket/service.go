@@ -73,8 +73,12 @@ func New(cfg Config) *Service {
 	}
 }
 
+func (s *Service) isGranted(bucket string) bool {
+	return slices.Contains(s.granted(), bucket)
+}
+
 func (s *Service) checkGranted(bucket string) error {
-	if slices.Contains(s.granted(), bucket) {
+	if s.isGranted(bucket) {
 		return nil
 	}
 	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
@@ -96,12 +100,12 @@ func (s *Service) reach(bucket string, keys ...string) error {
 	return nil
 }
 
-func (s *Service) grantedSession(ctx context.Context, id string) (session, error) {
+func (s *Service) readGrantedSession(ctx context.Context, id string) (session, error) {
 	sess, err := s.store.get(ctx, id)
 	if err != nil {
 		return session{}, err
 	}
-	if !slices.Contains(s.granted(), sess.Bucket) {
+	if !s.isGranted(sess.Bucket) {
 		return session{}, errSessionNotFound
 	}
 	return sess, nil
@@ -196,7 +200,7 @@ func (s *Service) presignPut(ctx context.Context, bucket, key, contentType strin
 }
 
 func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
-	sess, err := s.grantedSession(ctx, req.GetSessionId())
+	sess, err := s.readGrantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return &bucketv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
@@ -222,7 +226,7 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.Verif
 }
 
 func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
-	sess, err := s.grantedSession(ctx, req.GetSessionId())
+	sess, err := s.readGrantedSession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
 	}
