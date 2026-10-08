@@ -28,7 +28,8 @@ from the asset bucket wherever the edge in front reads one. `/_app/version.json`
 revalidated, so an open tab learns of a new deployment.
 
 To run the app in a container, give it a `"start": "node build"` script. Outside `ocel build`,
-`vite build` writes to `build/`, and `node build` serves it on `PORT`.
+`vite build` writes to `build/`, and `node build` serves it on `PORT` at `HOST`, which is
+`127.0.0.1` unless you set it.
 
 `ocel/env/client` is not available in a SvelteKit app yet. Read values on the server, in
 `+page.server.ts` or `+server.ts`.
