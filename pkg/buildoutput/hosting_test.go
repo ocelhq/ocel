@@ -29,8 +29,8 @@ func TestHostingRoundTripsNeeds(t *testing.T) {
 		Framework:        "next",
 		FrameworkBuildID: "b1",
 		RootFunction:     "bundle-0",
-		RouteTable:       RouteTableNext,
-		Static: &Static{
+		RouteTable:       edge.RouteTableNext,
+		Static: &edge.Static{
 			ImmutablePrefixes:      []string{"/docs/_next/static/"},
 			MustRevalidatePrefixes: []string{"/docs/_next/static/service-worker/"},
 		},
@@ -86,27 +86,5 @@ func TestHostingWithNoRouteTableOrStaticDirWritesNeitherKey(t *testing.T) {
 		if _, ok := keys[key]; ok {
 			t.Errorf("hosting = %s, want no %q key for a build that has none", encoded, key)
 		}
-	}
-}
-
-func TestAStaticPathIsImmutableOnlyUnderAnImmutablePrefixAndOutsideEveryMustRevalidatePrefix(t *testing.T) {
-	t.Parallel()
-
-	static := &Static{
-		ImmutablePrefixes:      []string{"/docs/_next/static/"},
-		MustRevalidatePrefixes: []string{"/docs/_next/static/service-worker/"},
-	}
-	for path, want := range map[string]bool{
-		"/docs/_next/static/chunks/main.js":       true,
-		"/docs/_next/static/service-worker/sw.js": false,
-		"/_next/static/chunks/main.js":            false,
-		"/docs/favicon.ico":                       false,
-	} {
-		if got := static.IsImmutable(path); got != want {
-			t.Errorf("IsImmutable(%q) = %v, want %v", path, got, want)
-		}
-	}
-	if (*Static)(nil).IsImmutable("/docs/_next/static/chunks/main.js") {
-		t.Error("a build with no static dir calls a path immutable")
 	}
 }

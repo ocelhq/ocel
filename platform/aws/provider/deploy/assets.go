@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -69,14 +68,14 @@ func assetContentType(rel string) string {
 	return "application/octet-stream"
 }
 
-func assetCacheControl(static *buildoutput.Static, rel string) string {
+func assetCacheControl(static *edge.Static, rel string) string {
 	if static.IsImmutable("/" + rel) {
 		return immutableCacheControl
 	}
 	return revalidateCacheControl
 }
 
-func assetHeaders(static *buildoutput.Static, rel string) objectHeaders {
+func assetHeaders(static *edge.Static, rel string) objectHeaders {
 	return objectHeaders{contentType: assetContentType(rel), cacheControl: assetCacheControl(static, rel)}
 }
 
@@ -100,7 +99,7 @@ type assetUpload struct {
 	headers  objectHeaders
 }
 
-func staticAssetSet(cfg Config, app string, static *buildoutput.Static, coord naming.Coordinate) (*assetSet, error) {
+func staticAssetSet(cfg Config, app string, static *edge.Static, coord naming.Coordinate) (*assetSet, error) {
 	if static == nil {
 		return nil, nil
 	}

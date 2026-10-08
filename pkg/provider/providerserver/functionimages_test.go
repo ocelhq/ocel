@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -283,7 +284,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *te
 
 func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, []byte(`{"rootFunction":"index"}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, []byte(`{"rootFunction":"index"}`))
 	app := filepath.Join(workingOutputRoot(t), "apps", "web")
 	for rel, body := range map[string]string{
 		"static/_next/static/app.js": "chunk",

@@ -208,7 +208,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 
 func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
@@ -235,7 +235,7 @@ func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t
 
 func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

@@ -11,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -80,7 +81,7 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
 			},
-			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: buildoutput.RouteTableNext, Table: []byte(routedManifest)}},
+			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
 			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
 			AssetPrefix: coord.AssetKey(""),

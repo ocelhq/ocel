@@ -91,7 +91,7 @@ func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 
 func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, manifest)
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, manifest)
 
 	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
@@ -103,14 +103,14 @@ func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing
 	if facts.OriginDispatch.RootFunction != "index" {
 		t.Errorf("OriginDispatch.RootFunction = %q, want the root function the build named", facts.OriginDispatch.RootFunction)
 	}
-	if got := facts.OriginDispatch.RouteTable; got.Format != buildoutput.RouteTableNext || !bytes.Equal(got.Table, manifest) {
+	if got := facts.OriginDispatch.RouteTable; got.Format != edge.RouteTableNext || !bytes.Equal(got.Table, manifest) {
 		t.Errorf("OriginDispatch.RouteTable = %s %q, want the next table the build wrote", got.Format, got.Table)
 	}
 }
 
 func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, manifest)
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, manifest)
 	query := servingQuery(root, "web", buildoutput.FrameworkNext)
 	query.EdgeRunsCode = true
 
@@ -127,7 +127,7 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 }
 
 func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, []byte(`{"routes":[]}`))
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, []byte(`{"routes":[]}`))
 	for name, runsCode := range map[string]bool{"an edge that runs code": true, "an edge that runs none": false} {
 		t.Run(name, func(t *testing.T) {
 			query := servingQuery(root, "web", buildoutput.FrameworkNext)
@@ -146,7 +146,7 @@ func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) 
 }
 
 func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, nil)
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, nil)
 	query := servingQuery(root, "web", buildoutput.FrameworkNext)
 	query.Compute = provider.ComputeContainer
 
@@ -156,7 +156,7 @@ func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
 }
 
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, []byte(`{}`))
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, []byte(`{}`))
 
 	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 }
 
 func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index"}, nil)
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, nil)
 
 	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), edge.NextRouteTableFile) {
@@ -177,7 +177,7 @@ func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 }
 
 func TestAnAppThatRoutesAtItsOriginAndNamesNoRootFunctionIsRefused(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext}, []byte(`{}`))
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext}, []byte(`{}`))
 
 	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), "root function") {
@@ -217,7 +217,7 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
 
 	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
@@ -252,7 +252,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
