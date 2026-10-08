@@ -3336,12 +3336,11 @@ func (x *BootstrapScope) GetConsented() *v14.ChangePlan {
 }
 
 type RemoveEnvironmentRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Environment *v1.Environment        `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
-	Slug        string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
-	Edge        *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
-	// The registry the project pushes its images to, so the removal can delete what the deploys pushed there.
-	ProjectRegistry *ImageRegistry `protobuf:"bytes,4,opt,name=project_registry,json=projectRegistry,proto3" json:"project_registry,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Environment     *v1.Environment        `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	Slug            string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Edge            *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
+	ProjectRegistry *ImageRegistry         `protobuf:"bytes,4,opt,name=project_registry,json=projectRegistry,proto3" json:"project_registry,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3410,9 +3409,8 @@ type ProjectRequest struct {
 	Environment *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	Edge        *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
 	// A removal that sends a consented plan refuses work that plan never showed.
-	Consented *v14.ChangePlan `protobuf:"bytes,4,opt,name=consented,proto3" json:"consented,omitempty"`
-	// The registry the project pushes its images to, so the removal can delete what the deploys pushed there.
-	ProjectRegistry *ImageRegistry `protobuf:"bytes,5,opt,name=project_registry,json=projectRegistry,proto3" json:"project_registry,omitempty"`
+	Consented       *v14.ChangePlan `protobuf:"bytes,4,opt,name=consented,proto3" json:"consented,omitempty"`
+	ProjectRegistry *ImageRegistry  `protobuf:"bytes,5,opt,name=project_registry,json=projectRegistry,proto3" json:"project_registry,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
