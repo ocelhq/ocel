@@ -526,3 +526,23 @@ func TestAPreBuildNamingAnAppAlsoReceivesThatAppsVariables(t *testing.T) {
 		t.Errorf("the preBuild saw %q, want the app's plain value in its environment and its secret in the live dir", got)
 	}
 }
+
+func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing.T) {
+	p := setUpPreBuildProject(t, `"true"`)
+	servingBindingProxy(t, p.fixture)
+	writeNextDatabaseAndBucketProject(t, p.fixture.Root)
+	seen := filepath.Join(t.TempDir(), "runtime")
+	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf("%q", fmt.Sprintf(`echo "$OCEL_RUNTIME_ADDRESS $OCEL_SESSION_TOKEN" > %s; echo "token is $OCEL_SESSION_TOKEN"`, seen)))
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	if got := strings.TrimSpace(readOrEmpty(t, seen)); got != "http://127.0.0.1:41999 proxy-token" {
+		t.Errorf("the preBuild saw the runtime env %q, want the binding proxy the provider served", got)
+	}
+	if strings.Contains(out, "proxy-token") {
+		t.Errorf("the deploy showed %q, want the session token hidden", out)
+	}
+}

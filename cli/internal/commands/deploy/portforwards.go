@@ -27,6 +27,11 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 			values[app] = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
 		}
 		maps.Copy(values[app].Live, f.Bindings(app))
+		if runtimeEnv := f.RuntimeEnv(); len(runtimeEnv) > 0 {
+			delivered := values[app]
+			delivered.RuntimeEnv = runtimeEnv
+			values[app] = delivered
+		}
 	}
 }
 

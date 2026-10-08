@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
 type Log struct {
@@ -74,6 +75,9 @@ func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariable
 			return l, fmt.Errorf("app %q: %w", a.Name, err)
 		}
 		readable = append(readable, SecretValues(live)...)
+		if token := variables[a.Name].RuntimeEnv[localrpc.SessionTokenEnvVar]; token != "" {
+			readable = append(readable, token)
+		}
 	}
 	return l.hiding(redaction.NewValues(readable)), nil
 }

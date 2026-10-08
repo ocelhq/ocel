@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -18,6 +19,8 @@ var buildSetNames = []string{
 	processenv.AppFolderEnvVar,
 	processenv.PhaseEnvVar,
 	processenv.LiveDirEnvVar,
+	processenv.RuntimeAddressEnvVar,
+	localrpc.SessionTokenEnvVar,
 	"OCEL_APP_NAME",
 	"OCEL_OUTPUT_DIR",
 	"OCEL_EDGE_KIND",

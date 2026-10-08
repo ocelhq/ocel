@@ -8,8 +8,9 @@ import (
 )
 
 type AppVariables struct {
-	Env  map[string]string
-	Live map[string]string
+	Env        map[string]string
+	Live       map[string]string
+	RuntimeEnv map[string]string
 }
 
 func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
