@@ -37,6 +37,28 @@ func entriesOf(t *testing.T, dir string) []string {
 	return names
 }
 
+func modeOf(t *testing.T, path string) fs.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
+}
+
+func plainFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "plain")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestNewFileWritesTheContentAndLeavesNoTemporaryFile(t *testing.T) {
 	t.Parallel()
 	for name, file := range map[string]newFile{
@@ -55,8 +77,8 @@ func TestNewFileWritesTheContentAndLeavesNoTemporaryFile(t *testing.T) {
 			if got, _ := os.ReadFile(path); string(got) != "{}\n" {
 				t.Errorf("content = %q, want %q", got, "{}\n")
 			}
-			if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o644 {
-				t.Errorf("stat = %v, %v, want mode 0644", info, err)
+			if got, want := modeOf(t, path), modeOf(t, plainFile(t)); got != want {
+				t.Errorf("mode = %v, want %v, as a plain create under the umask gives", got, want)
 			}
 			if got := entriesOf(t, dir); !slices.Equal(got, []string{"ocel.json"}) {
 				t.Errorf("directory holds %q, want only ocel.json", got)
