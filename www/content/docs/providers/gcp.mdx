@@ -7,7 +7,7 @@ description: Deploy to your own Google Cloud project, on Cloud Run.
 ocel init --provider gcp --option region=europe-west1
 ```
 
-Name the region, and the project unless `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT` or your gcloud config already does:
+Name the region, and the project unless `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT` or your gcloud config already does. `ocel cost scan` reads no credentials and runs no gcloud, so it needs `project` in the config or in one of those two variables:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";

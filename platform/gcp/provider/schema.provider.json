@@ -18,7 +18,7 @@
         "type": "array"
       },
       "project": {
-        "description": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config.",
+        "description": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables.",
         "type": "string"
       },
       "region": {
