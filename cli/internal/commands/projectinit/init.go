@@ -249,7 +249,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return "", fmt.Errorf("create directory for %s: %w", name, err)
 	}
-	if err := writeNewFile(configPath, []byte(configTemplate(name, slug, provider, settings))); errors.Is(err, fs.ErrExist) {
+	if err := systemNewFile.create(configPath, []byte(configTemplate(name, slug, provider, settings))); errors.Is(err, fs.ErrExist) {
 		return "", &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
 	} else if err != nil {
 		return "", fmt.Errorf("write %s: %w", name, err)
@@ -263,18 +263,6 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 	}
 	build.Say("Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
 	return added, nil
-}
-
-func writeNewFile(path string, content []byte) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(content); err != nil {
-		file.Close()
-		return err
-	}
-	return file.Close()
 }
 
 func initConfigPath(cwd string, opts initOptions) (string, error) {
