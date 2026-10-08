@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -285,6 +287,33 @@ func TestAContainerAppIsBuiltWithTheBindingsAndSecretsOfItsOwnAppAlone(t *testin
 	}
 	if want := map[string]string{"OCEL_BINDING_KV": "kv-api"}; !maps.Equal(got["api"], want) {
 		t.Errorf("api was built with %v, want %v", got["api"], want)
+	}
+}
+
+func TestAContainerAppIsBuiltWithTheBindingProxyItsAppIsHandedInItsBuildEnvironment(t *testing.T) {
+	proxy := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-session-token"}
+	var got image.LiveValues
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, live image.LiveValues, _ io.Writer) (image.Image, error) {
+			got = live
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+		"web": {BindingProxyEnv: proxy},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Fatalf("apps() = %v", err)
+	}
+
+	if !maps.Equal(got.Env, proxy) {
+		t.Errorf("web was built with the environment %v, want the binding proxy's address and session token, which every SDK reads from its environment", got.Env)
+	}
+	if len(got.Values) != 0 {
+		t.Errorf("web was built with the live files %v, want none: the binding proxy is no file in the live dir", got.Values)
+	}
+	if got.Hash == "" {
+		t.Error("the build was handed no live hash, so a cached build step would keep the address and token of a proxy that has closed")
 	}
 }
 
