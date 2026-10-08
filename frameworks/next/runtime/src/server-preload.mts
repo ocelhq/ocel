@@ -5,30 +5,30 @@ import {
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import { getNextHost, installNextHostOnFirstUse, type NextHost } from "./host.mjs";
 
-const nextRouterServerContexts = Symbol.for("@next/router-server-methods");
+const nextRouterServers = Symbol.for("@next/router-server-methods");
 
-type NextServerContext = Record<PropertyKey, unknown> & { nextConfig?: CacheHandlerSettings };
+type NextRouterServer = Record<PropertyKey, unknown> & { nextConfig?: CacheHandlerSettings };
 
-function startNextServer(config: CacheHandlerSettings): void {
+function refuseAppCacheHandlersThenBuildHost(config: CacheHandlerSettings): void {
   refuseAppCacheHandlers(config);
   getNextHost();
 }
 
-function newNextServerContext(context: NextServerContext): NextServerContext {
-  if (context.nextConfig) startNextServer(context.nextConfig);
-  return new Proxy(context, {
+function newNextRouterServer(server: NextRouterServer): NextRouterServer {
+  return new Proxy(server, {
     set(target, key, value) {
-      if (key === "nextConfig") startNextServer(value);
+      if (key === "nextConfig") refuseAppCacheHandlersThenBuildHost(value);
       target[key] = value;
       return true;
     },
   });
 }
 
-function newNextServerContexts(): Record<string, NextServerContext> {
-  return new Proxy({} as Record<string, NextServerContext>, {
-    set(contexts, dir: string, context: NextServerContext) {
-      contexts[dir] = newNextServerContext(context);
+function newNextRouterServers(): Record<string, NextRouterServer> {
+  return new Proxy({} as Record<string, NextRouterServer>, {
+    set(servers, dir: string, server: NextRouterServer) {
+      if (server.nextConfig) refuseAppCacheHandlersThenBuildHost(server.nextConfig);
+      servers[dir] = newNextRouterServer(server);
       return true;
     },
   });
@@ -37,5 +37,5 @@ function newNextServerContexts(): Record<string, NextServerContext> {
 export function installServerPreload(newHost: () => NextHost): void {
   installNextHostOnFirstUse(newHost);
   installCacheHandlers();
-  (globalThis as Record<symbol, unknown>)[nextRouterServerContexts] = newNextServerContexts();
+  (globalThis as Record<symbol, unknown>)[nextRouterServers] = newNextRouterServers();
 }
