@@ -44,7 +44,7 @@ func serveProjects(t *testing.T, service *projectService) *Client {
 	return New(srv.URL)
 }
 
-func TestCreateProject(t *testing.T) {
+func TestCreateProjectSendsTheNameAndSlugAndCallsOnlyATakenSlugAConflict(t *testing.T) {
 	t.Parallel()
 
 	t.Run("sends the name and slug to ProjectService.Create under the console's connect route with the session as a bearer", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestCreateProject(t *testing.T) {
 	}
 }
 
-func TestListProjects(t *testing.T) {
+func TestListProjectsReturnsEveryProjectAndRefusesARejectedSession(t *testing.T) {
 	t.Parallel()
 
 	t.Run("calls ProjectService.List with the session as a bearer and returns every project", func(t *testing.T) {
