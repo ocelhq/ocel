@@ -76,7 +76,7 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework buildoutpu
 
 func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {
 	cached, _ := p.pulled.LoadOrStore(ref, &memo[v1.Image]{})
-	return cached.(*memo[v1.Image]).get(func() (v1.Image, error) { return p.pull(ctx, ref) })
+	return cached.(*memo[v1.Image]).get(func() (v1.Image, error) { return p.pull(context.WithoutCancel(ctx), ref) })
 }
 
 func commandable(image v1.Image, bins []string) (v1.Image, error) {

@@ -234,3 +234,28 @@ func TestOneBaseIsFetchedOnceHoweverManyFunctionsRunOnIt(t *testing.T) {
 		t.Errorf("the base was fetched %d times for 2 functions, want once: an app with many functions pays a registry round trip for each", got)
 	}
 }
+
+func TestABaseFetchedForOneRequestStillReadsItsLayersAfterThatRequestEnds(t *testing.T) {
+	var fetchedWith context.Context
+	image, err := mutate.Config(empty.Image, v1.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Provider{bases: functionBases(), pull: func(ctx context.Context, _ string) (v1.Image, error) {
+		fetchedWith = ctx
+		return image, nil
+	}}
+
+	infra, endInfra := context.WithCancel(context.Background())
+	if _, err := p.based(infra, staticImage); err != nil {
+		t.Fatalf("based() = %v", err)
+	}
+	endInfra()
+	if _, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkGo}); err != nil {
+		t.Fatalf("ResolveFunctionBase() = %v", err)
+	}
+
+	if err := fetchedWith.Err(); err != nil {
+		t.Errorf("the shared base reads its layers with a context that is %v once the request that first pulled it ended, so a later deploy's image load fails", err)
+	}
+}
