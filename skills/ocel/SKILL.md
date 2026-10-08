@@ -22,9 +22,13 @@ as theirs to approve.
    ask the human which provider (`aws`, `gcp` or `vps`) and run
    `ocel init --provider <id>`. When init answers `input_required` for a provider option
    (`--option ssh=<target>` for a VPS, for example), the value names the human's own
-   machine or account: ask for it.
+   machine or account. Local work never uses it: when the task stays in `ocel dev`, pass a
+   placeholder such as `deploy@example.invalid` and tell the human to replace it before
+   the first deploy; otherwise ask for it.
 2. **Declare.** Add or change resources in the discovery folder. Open the reference for each
-   kind you touch (table below) before writing the call.
+   kind you touch (table below) before writing the call. Files in the discovery folder only
+   declare: Ocel runs them to discover resources, before any resource exists, so queries,
+   uploads and other I/O belong in app code or a one-off `ocel run` script.
 3. **Run locally.** `ocel dev -- <the app's own dev command>` (for example
    `ocel dev -- pnpm dev`). It starts every declared resource in Docker and runs the app
    against them. It is done when the app serves requests and the code path you changed has

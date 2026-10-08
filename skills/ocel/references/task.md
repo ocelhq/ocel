@@ -48,6 +48,12 @@ Rust needs `#[ocel::main]` on `main`. A Rust task's name defaults to the functio
 
 ## Behaviour
 
+- **Where runs execute:** in a worker process separate from the web app. The two share
+  nothing in memory, so state a task reads (orders, users) lives in a resource such as
+  Postgres or KV.
+- **Triggering by hand in dev:** with `ocel dev` running, `ocel run -- <a script that calls
+  .trigger()>` connects to the same dev resources; `ocel dev` prints each run's outcome.
+
 - **Failure:**
   - Throwing or returning an error fails the attempt; `retry` decides whether another attempt follows.
   - `AbortTaskRunError` (TS, Python) or `ocel.ErrAbort` (Go) ends the run with no retry.
