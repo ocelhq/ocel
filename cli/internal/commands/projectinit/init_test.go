@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -511,6 +512,66 @@ func TestInitAsJSONNamesTheSDKPackageOfTheLanguageItAdded(t *testing.T) {
 				t.Errorf("init result = %v, want %s with the %s package", &got, lang, want)
 			}
 		})
+	}
+}
+
+func initForSkill(t *testing.T, dependencies Dependencies, dir string) (stdout, prompts string) {
+	t.Helper()
+	stubPackageManager(&dependencies, nil)
+	var out, said, stream bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, strings.NewReader(""), &said, &out); err != nil {
+		t.Fatalf("runInitCommand err = %v", err)
+	}
+	return out.String(), said.String()
+}
+
+func TestInitSuggestsTheSkillWhenTheProjectHasNone(t *testing.T) {
+	t.Parallel()
+
+	_, prompts := initForSkill(t, newTestDependencies(), initTestDir(t, "proj"))
+
+	if strings.Count(prompts, "ocel skill install") != 1 || strings.Count(prompts, "\n") != 1 {
+		t.Errorf("prompts = %q, want one line suggesting `ocel skill install`", prompts)
+	}
+}
+
+func TestInitSaysNothingOfTheSkillWhenTheProjectHasIt(t *testing.T) {
+	t.Parallel()
+
+	dir := initTestDir(t, "proj")
+	if err := skill.Write(skill.Dirs(dir)[1], "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, prompts := initForSkill(t, newTestDependencies(), dir); prompts != "" {
+		t.Errorf("prompts = %q, want nothing", prompts)
+	}
+}
+
+func TestInitAsJSONSaysWhetherTheProjectHasTheSkill(t *testing.T) {
+	t.Parallel()
+
+	for _, installed := range []bool{false, true} {
+		dependencies := newTestDependencies()
+		dependencies.Presentation = clitest.ResolveJSONPresentation
+		dir := initTestDir(t, "proj")
+		if installed {
+			if err := skill.Write(skill.Dirs(dir)[0], "1.0.0"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		stdout, prompts := initForSkill(t, dependencies, dir)
+
+		var got resultv1.InitResult
+		clitest.DecodeResultInto(t, stdout, &got)
+		if got.GetSkillInstalled() != installed {
+			t.Errorf("skill_installed = %v, want %v", got.GetSkillInstalled(), installed)
+		}
+		if prompts != "" {
+			t.Errorf("prompts under --json = %q, want nothing", prompts)
+		}
 	}
 }
 

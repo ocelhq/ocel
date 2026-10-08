@@ -26,6 +26,15 @@ func Dirs(base string) []string {
 	}
 }
 
+func IsInstalled(root string) bool {
+	for _, dir := range Dirs(root) {
+		if info, err := os.Stat(filepath.Join(dir, manifestName)); err == nil && info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
+
 func ListFiles() []string {
 	var names []string
 	err := fs.WalkDir(Files(), ".", func(name string, entry fs.DirEntry, err error) error {
