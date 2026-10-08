@@ -2,11 +2,13 @@ package bootstrap
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 
 	"gopkg.in/yaml.v3"
@@ -192,12 +194,13 @@ func TestTheVariablesKeyRotatesAndGrantsOnlyThroughIAM(t *testing.T) {
 				t.Errorf("KeyPolicy Action = %v, want kms:*", st.Action)
 			}
 
-			tagged := false
+			tags := map[string]string{}
 			for _, tag := range key.Properties.Tags {
-				tagged = tagged || tag.Key == VariablesKeyComponentTagKey && tag.Value == VariablesKeyComponentTagValue
+				tags[tag.Key] = tag.Value
 			}
-			if !tagged {
-				t.Errorf("VariablesKey Tags = %+v, want %s=%s, which is what the bootstrap credential policy scopes key lifecycle to", key.Properties.Tags, VariablesKeyComponentTagKey, VariablesKeyComponentTagValue)
+			want := map[string]string{VariablesKeyComponentTagKey: VariablesKeyComponentTagValue, naming.EnvTierTagKey: string(tc.tier)}
+			if !maps.Equal(tags, want) {
+				t.Errorf("VariablesKey Tags = %v, want %v, which is what the bootstrap credential policy scopes the key's lifecycle and aliasing to", tags, want)
 			}
 
 			alias, ok := tmpl.Resources["VariablesKeyAlias"]

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
@@ -328,9 +329,19 @@ func variablesKeyLifecycleActions() []string {
 		"kms:ListResourceTags",
 		"kms:PutKeyPolicy",
 		"kms:ScheduleKeyDeletion",
-		"kms:TagResource",
 		"kms:UntagResource",
 	}
+}
+
+func variablesKeyTaggedFor(tier environment.Tier) map[string]any {
+	return map[string]any{"StringEquals": map[string]any{
+		"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
+		"aws:ResourceTag/" + naming.EnvTierTagKey:        string(tier),
+	}}
+}
+
+func retaggedOnlyAs(tier environment.Tier) map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}}
 }
 
 func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
@@ -1124,16 +1135,20 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 		{
 			Actions:   []string{"kms:CreateKey"},
 			Resources: []string{UnscopedResource},
-			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
-			},
+			Condition: map[string]any{"StringEquals": map[string]any{
+				"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
+				"aws:RequestTag/" + naming.EnvTierTagKey:        string(tier),
+			}},
 		},
 		{
 			Actions:   variablesKeyLifecycleActions(),
 			Resources: []string{AnyKeyARN},
-			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
-			},
+			Condition: variablesKeyTaggedFor(tier),
+		},
+		{
+			Actions:   []string{"kms:TagResource"},
+			Resources: []string{AnyKeyARN},
+			Condition: mergeConditions(variablesKeyTaggedFor(tier), retaggedOnlyAs(tier)),
 		},
 		{
 			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
@@ -1149,9 +1164,7 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
 			Resources: []string{AnyKeyARN},
-			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
-			},
+			Condition: variablesKeyTaggedFor(tier),
 		},
 		{
 			Actions: []string{
