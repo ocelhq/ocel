@@ -17,7 +17,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-const imageReclaimGrace = 30 * time.Minute
+const (
+	imageReclaimGrace = 30 * time.Minute
+	recordsClockSkew  = time.Minute
+)
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, _ provider.ImageStore, log progress.Log) error {
 	kept, err := reconciledKeptImages(ctx, p.KeyValues(), ref)
@@ -38,6 +41,7 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if err != nil || !found {
 		return err
 	}
+	readAt := time.Now()
 	kept, err := forgottenKeptImages(ctx, store, ref)
 	if err != nil {
 		return err
@@ -56,7 +60,7 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if len(ours) == 0 {
 		return nil
 	}
-	removed, err := registry.Forget(ctx, api, ours, kept, time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Forget(ctx, api, ours, kept, readAt.Add(-recordsClockSkew))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }

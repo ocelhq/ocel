@@ -41,6 +41,19 @@ func (f *fakeECR) DescribeImages(_ context.Context, in *ecr.DescribeImagesInput,
 		return nil, &ecrtypes.RepositoryNotFoundException{Message: aws.String(repository + " is gone")}
 	}
 	f.described++
+	if len(in.ImageIds) > 0 {
+		out := &ecr.DescribeImagesOutput{}
+		for _, id := range in.ImageIds {
+			if !slices.Contains(tags, aws.ToString(id.ImageTag)) {
+				return nil, &ecrtypes.ImageNotFoundException{Message: aws.String(aws.ToString(id.ImageTag) + " is not in " + repository)}
+			}
+			out.ImageDetails = append(out.ImageDetails, ecrtypes.ImageDetail{
+				ImageTags:     []string{aws.ToString(id.ImageTag)},
+				ImagePushedAt: aws.Time(f.pushedAt[aws.ToString(id.ImageTag)]),
+			})
+		}
+		return out, nil
+	}
 	start := 0
 	if in.NextToken != nil {
 		start, _ = strconv.Atoi(*in.NextToken)
@@ -162,7 +175,7 @@ func TestRemovingImagesDeletesTheOnesNoRecordedReleaseKeeps(t *testing.T) {
 
 	api := &fakeECR{tagged: map[string][]string{shopWeb: {"sha256-one", "sha256-two", "sha256-three"}}}
 
-	removed, err := removeImages(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true})
+	removed, err := removeImages(context.Background(), api, anECRTarget(), []string{ref("sha256-one"), ref("sha256-two")}, map[string]bool{ref("sha256-two"): true}, now)
 	if err != nil {
 		t.Fatalf("removeImages() = %v", err)
 	}
@@ -305,5 +318,25 @@ func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *tes
 	}
 	if len(api.deletedRepositories) != 0 {
 		t.Errorf("Forget() deleted %v while it held an image", api.deletedRepositories)
+	}
+}
+
+func TestForgettingLeavesAnImageItNamesThatWasPushedAfterTheRecordsWereRead(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-old"}}
+	api.pushedAt = map[string]time.Time{"sha256-one": now.Add(time.Minute), "sha256-old": longAgo}
+
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one"), ref("sha256-old"), ref("sha256-gone")}, nil, now)
+	if err != nil {
+		t.Fatalf("Forget() = %v", err)
+	}
+
+	if want := []string{ref("sha256-old")}; !slices.Equal(removed, want) {
+		t.Errorf("Forget() removed %v, want %v: a tag pushed after the records were read may be one a deploy recorded since", removed, want)
+	}
+	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-one"}) {
+		t.Errorf("the repository holds %v, want the tag pushed after the read", got)
 	}
 }
