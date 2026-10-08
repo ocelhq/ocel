@@ -526,6 +526,24 @@ func TestADeployOverInfraWhoseLastProvisioningFailedIsRefused(t *testing.T) {
 	}
 }
 
+func TestProvisionInfraAfterAFirstProvisioningFailedPartwayProvisionsTheStackItLeft(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	base.WithHooks(func(hooks *provider.Hooks) { hooks.InspectStack = base.InspectStack })
+	stacks := &failingInfraStacks{Stacks: base.Stacks()}
+	client := servedBy(t, refusingStacks{Provider: base, stacks: stacks})
+
+	stacks.failing.Store(true)
+	if result, err := provisionInfraStream(t, client, infraRequest(deployRequest())); err == nil && result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
+	}
+
+	stacks.failing.Store(false)
+	if result, err := provisionInfraStream(t, client, infraRequest(deployRequest())); err != nil || !result.GetSuccess() {
+		t.Fatalf("ProvisionInfra() = %q, %v, want it to provision over the stack its own failed provisioning left", result.GetError(), err)
+	}
+}
+
 func readProjectRecord(t *testing.T, vendor *fake.Provider) (stackrecords.Project, bool) {
 	t.Helper()
 	row, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
