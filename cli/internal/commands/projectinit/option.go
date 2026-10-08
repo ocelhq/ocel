@@ -3,7 +3,6 @@ package projectinit
 import (
 	"context"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
@@ -30,7 +29,7 @@ func parseOptionFlags(flags []string) ([]providerSetting, error) {
 	return settings, nil
 }
 
-func missingOptions(provider string, settings []providerSetting) []configdoc.ProviderOption {
+func findMissingOptions(provider string, settings []providerSetting) []configdoc.ProviderOption {
 	return slices.DeleteFunc(configdoc.RequiredProviderOptions(provider), func(required configdoc.ProviderOption) bool {
 		return slices.ContainsFunc(settings, func(set providerSetting) bool {
 			return set.name == required.Name && set.value != ""
@@ -39,7 +38,7 @@ func missingOptions(provider string, settings []providerSetting) []configdoc.Pro
 }
 
 func refuseMissingOptions(provider string, settings []providerSetting) error {
-	missing := missingOptions(provider, settings)
+	missing := findMissingOptions(provider, settings)
 	if len(missing) == 0 {
 		return nil
 	}
@@ -56,7 +55,7 @@ func refuseMissingOptions(provider string, settings []providerSetting) error {
 }
 
 func askMissingOptions(ctx context.Context, prompt terminal.Prompt, provider string, settings []providerSetting) ([]providerSetting, bool, error) {
-	for _, required := range missingOptions(provider, settings) {
+	for _, required := range findMissingOptions(provider, settings) {
 		value, answered, err := prompt.Input(ctx, required.Name, required.Doc)
 		if err != nil || !answered || value == "" {
 			return settings, false, err
@@ -64,12 +63,4 @@ func askMissingOptions(ctx context.Context, prompt terminal.Prompt, provider str
 		settings = append(slices.DeleteFunc(settings, func(set providerSetting) bool { return set.name == required.Name }), providerSetting{name: required.Name, value: value})
 	}
 	return settings, true, nil
-}
-
-func askForMissingOptions(ctx context.Context, dependencies Dependencies, opts *initOptions, stdin io.Reader, stdout io.Writer) error {
-	provider := strings.TrimSpace(opts.provider)
-	return dependencies.Events.Preamble(ctx).Ask(func() (err error) {
-		opts.settings, _, err = askMissingOptions(ctx, terminal.NewPrompt(stdout, stdin), provider, opts.settings)
-		return err
-	})
 }
