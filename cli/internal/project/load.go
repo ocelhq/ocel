@@ -19,6 +19,17 @@ func LoadOptional(ctx context.Context, startDir, explicitPath string) (*Project,
 	return find(ctx, startDir, explicitPath, true)
 }
 
+func FindRoot(startDir, explicitPath string) (string, error) {
+	if explicitPath == "" {
+		return findProjectRoot(startDir)
+	}
+	configPath, err := explicitConfigFile(startDir, explicitPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(configPath), nil
+}
+
 func find(ctx context.Context, startDir, explicitPath string, optional bool) (*Project, error) {
 	if explicitPath != "" {
 		configPath, err := explicitConfigFile(startDir, explicitPath)

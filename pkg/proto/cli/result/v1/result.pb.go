@@ -3192,6 +3192,118 @@ func (x *ListedCommand) GetOutput() CommandOutput {
 	return CommandOutput_COMMAND_OUTPUT_UNSPECIFIED
 }
 
+type SkillInstallResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Written       bool                   `protobuf:"varint,1,opt,name=written,proto3" json:"written,omitempty"`
+	OcelVersion   string                 `protobuf:"bytes,2,opt,name=ocel_version,json=ocelVersion,proto3" json:"ocel_version,omitempty"`
+	Targets       []*SkillTarget         `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkillInstallResult) Reset() {
+	*x = SkillInstallResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkillInstallResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkillInstallResult) ProtoMessage() {}
+
+func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkillInstallResult.ProtoReflect.Descriptor instead.
+func (*SkillInstallResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *SkillInstallResult) GetWritten() bool {
+	if x != nil {
+		return x.Written
+	}
+	return false
+}
+
+func (x *SkillInstallResult) GetOcelVersion() string {
+	if x != nil {
+		return x.OcelVersion
+	}
+	return ""
+}
+
+func (x *SkillInstallResult) GetTargets() []*SkillTarget {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+type SkillTarget struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Dir           string                 `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
+	Files         []string               `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkillTarget) Reset() {
+	*x = SkillTarget{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkillTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkillTarget) ProtoMessage() {}
+
+func (x *SkillTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkillTarget.ProtoReflect.Descriptor instead.
+func (*SkillTarget) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *SkillTarget) GetDir() string {
+	if x != nil {
+		return x.Dir
+	}
+	return ""
+}
+
+func (x *SkillTarget) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
@@ -3456,7 +3568,14 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x06schema\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06schema\"Y\n" +
 	"\rListedCommand\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
-	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output*\x8d\x01\n" +
+	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output\"\x87\x01\n" +
+	"\x12SkillInstallResult\x12\x18\n" +
+	"\awritten\x18\x01 \x01(\bR\awritten\x12!\n" +
+	"\focel_version\x18\x02 \x01(\tR\vocelVersion\x124\n" +
+	"\atargets\x18\x03 \x03(\v2\x1a.cli.result.v1.SkillTargetR\atargets\"5\n" +
+	"\vSkillTarget\x12\x10\n" +
+	"\x03dir\x18\x01 \x01(\tR\x03dir\x12\x14\n" +
+	"\x05files\x18\x02 \x03(\tR\x05files*\x8d\x01\n" +
 	"\x0ePromotionState\x12\x1f\n" +
 	"\x1bPROMOTION_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PROMOTION_STATE_ACTIVE\x10\x01\x12\x1e\n" +
@@ -3496,7 +3615,7 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(PromotionState)(0),           // 0: cli.result.v1.PromotionState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
@@ -3548,27 +3667,29 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*SchemaListResult)(nil),      // 47: cli.result.v1.SchemaListResult
 	(*SchemaResult)(nil),          // 48: cli.result.v1.SchemaResult
 	(*ListedCommand)(nil),         // 49: cli.result.v1.ListedCommand
-	nil,                           // 50: cli.result.v1.PromotionSummary.BuildsEntry
-	nil,                           // 51: cli.result.v1.PinnedExecutable.DigestsEntry
-	(*v1.ResourceSet)(nil),        // 52: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 53: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 54: common.environment.v1.Lifecycle
-	(v11.Tier)(0),                 // 55: common.environment.v1.Tier
-	(*structpb.Value)(nil),        // 56: google.protobuf.Value
-	(*structpb.Struct)(nil),       // 57: google.protobuf.Struct
+	(*SkillInstallResult)(nil),    // 50: cli.result.v1.SkillInstallResult
+	(*SkillTarget)(nil),           // 51: cli.result.v1.SkillTarget
+	nil,                           // 52: cli.result.v1.PromotionSummary.BuildsEntry
+	nil,                           // 53: cli.result.v1.PinnedExecutable.DigestsEntry
+	(*v1.ResourceSet)(nil),        // 54: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 55: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 56: common.environment.v1.Lifecycle
+	(v11.Tier)(0),                 // 57: common.environment.v1.Tier
+	(*structpb.Value)(nil),        // 58: google.protobuf.Value
+	(*structpb.Struct)(nil),       // 59: google.protobuf.Struct
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	9,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	11, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	12, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	52, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	53, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	54, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	55, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	15, // 6: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
-	50, // 7: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
+	52, // 7: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
 	0,  // 8: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	17, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	54, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	56, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
 	11, // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	12, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
 	21, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
@@ -3578,37 +3699,38 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	24, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
 	25, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 19: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	55, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	57, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
 	28, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
 	26, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	26, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	55, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	57, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
 	26, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	26, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	55, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	57, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
 	26, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	26, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	55, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	57, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
 	26, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	32, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	55, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	57, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
 	34, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
 	36, // 35: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
-	56, // 36: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	58, // 36: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
 	40, // 37: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
 	41, // 38: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
 	44, // 39: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
 	44, // 40: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	51, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	53, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
 	3,  // 42: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
 	49, // 43: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
-	57, // 44: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
+	59, // 44: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
 	4,  // 45: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
-	46, // [46:46] is the sub-list for method output_type
-	46, // [46:46] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	51, // 46: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
+	47, // [47:47] is the sub-list for method output_type
+	47, // [47:47] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -3625,7 +3747,7 @@ func file_cli_result_v1_result_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   47,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
