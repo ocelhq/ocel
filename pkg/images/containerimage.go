@@ -109,7 +109,7 @@ func sortedNames(files map[string][]byte) []string {
 func packNextServerLayer(next *NextServerRuntime) ([]byte, error) {
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
-	dir := FrameworkRuntimeDir(buildoutput.FrameworkNext)
+	dir := containerimage.FrameworkRuntimeDir(buildoutput.FrameworkNext)
 	if err := archive.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeDir,
 		Name:     strings.TrimPrefix(dir, "/") + "/",

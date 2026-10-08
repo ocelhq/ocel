@@ -1,6 +1,7 @@
 package containerimage
 
 import (
+	"path"
 	"regexp"
 	"strconv"
 )
@@ -23,8 +24,9 @@ func IsHealthCheckPath(path string) bool {
 }
 
 const (
-	PortEnvVar = "PORT"
-	Port       = 8080
+	PortEnvVar        = "PORT"
+	NodeOptionsEnvVar = "NODE_OPTIONS"
+	Port              = 8080
 )
 
 var PortText = strconv.Itoa(Port)
@@ -34,3 +36,7 @@ const (
 	RuntimeRoot = "/ocel/runtime"
 	LivePath    = "/ocel/live"
 )
+
+func FrameworkRuntimeDir(framework string) string {
+	return path.Join(RuntimeRoot, framework)
+}
