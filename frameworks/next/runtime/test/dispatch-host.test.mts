@@ -7,6 +7,7 @@ import {
   dispatchRequest,
   readDispatchHost,
   siblingFunctionUrls,
+  staticRules,
   withoutClientControl,
 } from "../src/dispatch-host.mjs";
 
@@ -296,4 +297,26 @@ test("dispatch handed no router marks nothing", async () => {
   );
 
   expect(bare.headers.get("x-ocel-router")).toBeNull();
+});
+
+test("a dispatch host serves by the static rules its host states", async () => {
+  const { writeFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-static-"));
+  const path = join(dir, "next-route-table.json");
+  await writeFile(path, JSON.stringify(manifest));
+  const rules = { immutablePrefixes: ["/docs/_next/static/"] };
+
+  const built = readDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STATIC_RULES: JSON.stringify(rules) },
+    localOrigin,
+    { originFetch: fetch },
+  );
+
+  expect(built.static).toEqual(rules);
+});
+
+test("a dispatch host refuses static rules that state no immutable prefixes", async () => {
+  expect(() => staticRules(`{"mustRevalidatePrefixes":[]}`)).toThrow(/OCEL_STATIC_RULES/);
 });

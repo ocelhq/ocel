@@ -417,3 +417,18 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 		t.Error("an app whose edge dispatches has an invoke grant, want the grant only where the origin dispatches")
 	}
 }
+
+func TestDispatchHostIsToldTheStaticRulesTheBuildStates(t *testing.T) {
+	t.Parallel()
+
+	cfg := routedConfig(t, cloudfront.Kind)
+	spec := routedSpec(t, cfg)
+	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
+	host, err := releasing(t, cfg).newDispatchHost(spec)
+	if err != nil {
+		t.Fatalf("newDispatchHost: %v", err)
+	}
+	if got, want := host.Env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
+		t.Errorf("entry env %s = %q, want %q", edge.StaticRulesVar, got, want)
+	}
+}

@@ -736,3 +736,13 @@ func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
 		}
 	}
 }
+
+func TestANextServiceThatRoutesItsOwnRequestsIsToldTheStaticRulesItsBuildStates(t *testing.T) {
+	spec := routedNextSpec()
+	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
+	env := envOf(releasedNext(t, spec))
+
+	if got, want := env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
+		t.Errorf("the Next service reads %s=%q, want %q", edge.StaticRulesVar, got, want)
+	}
+}

@@ -30,6 +30,10 @@ function countingDeps(
   const deps = {
     store,
     assetPrefix: prefix,
+    static: {
+      immutablePrefixes: ["/_next/static/"],
+      mustRevalidatePrefixes: ["/_next/static/service-worker/"],
+    },
     puts: 0,
     cache: {
       match: (...args: Parameters<Cache["match"]>) => real.match(...args),
@@ -181,6 +185,7 @@ describe("serveStaticAsset", () => {
       bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
       "assets/p/app/b1",
     );
+    deps.static = { immutablePrefixes: ["/docs/_next/static/"] };
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 

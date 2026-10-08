@@ -43,5 +43,8 @@ func ReadHosting(root, app string) (Hosting, bool, error) {
 	if err := json.Unmarshal(raw, &hosting); err != nil {
 		return Hosting{}, false, fmt.Errorf("parse hosting.json of %s: %w", app, err)
 	}
+	if hosting.Version != HostingVersion {
+		return Hosting{}, false, fmt.Errorf("the hosting.json of %s is version %d, and this CLI reads version %d; build the app with an adapter and CLI of the same release", app, hosting.Version, HostingVersion)
+	}
 	return hosting, true, nil
 }

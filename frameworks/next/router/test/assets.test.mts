@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cacheControlFor, contentTypeFor } from "../src/assets.mjs";
+import { contentTypeFor } from "../src/assets.mjs";
 
 describe("contentTypeFor", () => {
   it("infers content-type from the file extension", () => {
@@ -38,33 +38,5 @@ describe("contentTypeFor", () => {
 
   it("reads the extension off the file name alone", () => {
     expect(contentTypeFor("/v1.0/README")).toBe("application/octet-stream");
-  });
-});
-
-describe("cacheControlFor", () => {
-  const immutable = "public, max-age=31536000, immutable";
-  const revalidate = "public, max-age=0, must-revalidate";
-
-  it("makes the content-hashed _next/static chunks immutable", () => {
-    expect(cacheControlFor("/_next/static/chunks/main-abc123.js")).toBe(immutable);
-    expect(cacheControlFor("/_next/static/css/app.css")).toBe(immutable);
-    expect(cacheControlFor("/_next/static/media/font.woff2")).toBe(immutable);
-  });
-
-  it("exempts the service-worker chunk", () => {
-    expect(cacheControlFor("/_next/static/service-worker/sw.js")).toBe(revalidate);
-  });
-
-  it("classifies a basePath app's assets the same way", () => {
-    expect(cacheControlFor("/docs/_next/static/chunks/main.js")).toBe(immutable);
-    expect(cacheControlFor("/docs/_next/static/service-worker/sw.js")).toBe(revalidate);
-  });
-
-  it("revalidates every asset served at a stable URL", () => {
-    expect(cacheControlFor("/favicon.ico")).toBe(revalidate);
-    expect(cacheControlFor("/sitemap.xml")).toBe(revalidate);
-    expect(cacheControlFor("/icons/static/apple-icon.png")).toBe(revalidate);
-    expect(cacheControlFor("/next.svg")).toBe(revalidate);
-    expect(cacheControlFor("/some.html")).toBe(revalidate);
   });
 });

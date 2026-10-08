@@ -13,6 +13,8 @@ const (
 
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 
+const StaticRulesVar = "OCEL_STATIC_RULES"
+
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
 
 const (

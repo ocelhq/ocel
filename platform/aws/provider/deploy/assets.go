@@ -18,11 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-const (
-	immutableCacheControl  = "public, max-age=31536000, immutable"
-	revalidateCacheControl = "public, max-age=0, must-revalidate"
-)
-
 var assetContentTypes = map[string]string{
 	".html":        "text/html; charset=utf-8",
 	".js":          "text/javascript; charset=utf-8",
@@ -68,15 +63,8 @@ func assetContentType(rel string) string {
 	return "application/octet-stream"
 }
 
-func assetCacheControl(static *edge.Static, rel string) string {
-	if static.IsImmutable("/" + rel) {
-		return immutableCacheControl
-	}
-	return revalidateCacheControl
-}
-
 func assetHeaders(static *edge.Static, rel string) objectHeaders {
-	return objectHeaders{contentType: assetContentType(rel), cacheControl: assetCacheControl(static, rel)}
+	return objectHeaders{contentType: assetContentType(rel), cacheControl: static.CacheControl("/" + rel)}
 }
 
 const imageConfigFile = "image-config.json"

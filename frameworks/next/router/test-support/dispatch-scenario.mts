@@ -8,7 +8,17 @@ export type TestRouteDeps = Omit<Partial<RouteDeps>, "manifest"> & {
   manifest?: TestManifest;
 };
 
-export function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
+export function nextStatic(basePath = ""): NonNullable<RouteDeps["assetStore"]["static"]> {
+  return {
+    immutablePrefixes: [`${basePath}/_next/static/`],
+    mustRevalidatePrefixes: [`${basePath}/_next/static/service-worker/`],
+  };
+}
+
+export function assetStoreServing(
+  files: Record<string, string>,
+  basePath = "",
+): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
       const body = files[key];
@@ -19,6 +29,7 @@ export function assetStoreServing(files: Record<string, string>): RouteDeps["ass
   return {
     store,
     assetPrefix: "",
+    static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -27,6 +38,7 @@ export function assetStoreServing(files: Record<string, string>): RouteDeps["ass
 export function noAssets(): RouteDeps["assetStore"] {
   return {
     assetPrefix: "",
+    static: nextStatic(),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };

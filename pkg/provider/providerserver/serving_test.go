@@ -27,6 +27,7 @@ func servingRoot(t *testing.T, app string, hosting buildoutput.Hosting, manifest
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	hosting.Version = buildoutput.HostingVersion
 	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
@@ -200,6 +201,7 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	hosting.Version = buildoutput.HostingVersion
 	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)

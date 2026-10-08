@@ -221,6 +221,7 @@ function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: Resolv
       ...base.assetStore,
       assetPrefix: record.assetPrefix,
       basePath: manifest.basePath,
+      ...(record.static ? { static: record.static } : {}),
     },
   };
 }

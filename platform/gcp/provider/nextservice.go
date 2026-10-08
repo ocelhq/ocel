@@ -165,6 +165,9 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		}
 		env[routeTableEnvVar] = routeTableInImage
 		env[staticDirEnvVar] = images.StaticRoot
+		if rules := app.Static.Variable(); rules != "" {
+			env[edge.StaticRulesVar] = rules
+		}
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
 		env[appNameEnvVar] = app.App

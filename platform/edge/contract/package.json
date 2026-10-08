@@ -13,7 +13,9 @@
     "./revalidation": "./src/revalidation.mts",
     "./hosting": "./src/hosting.mts",
     "./revalidation/sample": "./src/revalidation-sample.mts",
-    "./fixtures/cache-key": "./fixtures/cache-key.json"
+    "./fixtures/cache-key": "./fixtures/cache-key.json",
+    "./static": "./src/static.mts",
+    "./fixtures/static-rules": "./fixtures/static-rules.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

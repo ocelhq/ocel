@@ -25,6 +25,7 @@ func hostedApp(t *testing.T, app string, hosting buildoutput.Hosting) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	hosting.Version = buildoutput.HostingVersion
 	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
