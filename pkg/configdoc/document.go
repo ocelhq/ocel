@@ -155,7 +155,7 @@ func (c ComputeDescriptor) checkShape(path string, value any) error {
 }
 
 type ServerlessCompute struct {
-	Framework  string `json:"framework,omitempty" doc:"What the app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,go,python,rust"`
+	Framework  string `json:"framework,omitempty" doc:"What the app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,sveltekit,go,python,rust"`
 	Entrypoint string `json:"entrypoint,omitempty" doc:"The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect."`
 }
 

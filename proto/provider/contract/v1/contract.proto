@@ -257,7 +257,7 @@ message TierDomains {
 }
 
 message Framework {
-  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "go", "python", "rust"]}];
+  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "sveltekit", "go", "python", "rust"]}];
 
   string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }

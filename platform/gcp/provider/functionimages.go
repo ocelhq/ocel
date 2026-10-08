@@ -35,11 +35,12 @@ type base struct {
 
 func functionBases() map[string]base {
 	return map[string]base{
-		buildoutput.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkNext:   {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkGo:     {ref: staticImage},
-		buildoutput.FrameworkPython: {ref: pythonImage},
-		buildoutput.FrameworkRust:   {ref: staticImage},
+		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkGo:        {ref: staticImage},
+		buildoutput.FrameworkPython:    {ref: pythonImage},
+		buildoutput.FrameworkRust:      {ref: staticImage},
 	}
 }
 
@@ -117,7 +118,7 @@ func runsX8664(architecture, what string) error {
 
 func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
 	switch framework.Name {
-	case buildoutput.FrameworkNode:
+	case buildoutput.FrameworkNode, buildoutput.FrameworkSvelteKit:
 		return map[string][]byte{images.RuntimeEntrypointFile: payloads.NodeRuntime()}, nil
 	case buildoutput.FrameworkNext:
 		return maps.Clone(payloads.NextRuntime()), nil

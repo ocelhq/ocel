@@ -3,9 +3,10 @@ package buildoutput
 import "slices"
 
 const (
-	FrameworkNode = "node"
-	FrameworkNext = "next"
-	FrameworkGo   = "go"
+	FrameworkNode      = "node"
+	FrameworkNext      = "next"
+	FrameworkSvelteKit = "sveltekit"
+	FrameworkGo        = "go"
 
 	FrameworkPython = "python"
 
@@ -13,13 +14,21 @@ const (
 )
 
 func Frameworks() []string {
-	return []string{FrameworkNode, FrameworkNext, FrameworkGo, FrameworkPython, FrameworkRust}
+	return []string{FrameworkNode, FrameworkNext, FrameworkSvelteKit, FrameworkGo, FrameworkPython, FrameworkRust}
 }
 
 func IsKnownFramework(name string) bool { return slices.Contains(Frameworks(), name) }
 
+func RunsOnNode(framework string) bool {
+	return framework == FrameworkNode || framework == FrameworkNext || framework == FrameworkSvelteKit
+}
+
 func FrameworkBundlesClient(framework string) bool {
-	return framework == FrameworkNode || framework == FrameworkNext
+	return RunsOnNode(framework)
+}
+
+func BuildsWithItsOwnScript(framework string) bool {
+	return framework == FrameworkNext || framework == FrameworkSvelteKit
 }
 
 type Framework struct {

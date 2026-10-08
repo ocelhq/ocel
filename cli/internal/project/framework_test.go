@@ -57,6 +57,16 @@ func TestDetectFramework(t *testing.T) {
 			want:  "next",
 		},
 		{
+			name:  "a package.json depending on @sveltejs/kit is a sveltekit app",
+			files: map[string]string{"package.json": `{"devDependencies":{"@sveltejs/kit":"^3.0.1"}}`},
+			want:  "sveltekit",
+		},
+		{
+			name:  "a package.json depending on next and @sveltejs/kit is a next app",
+			files: map[string]string{"package.json": `{"dependencies":{"next":"15.0.0","@sveltejs/kit":"^3.0.1"}}`},
+			want:  "next",
+		},
+		{
 			name:  "a package.json alone is a node app",
 			files: map[string]string{"package.json": `{"name":"api"}`},
 			want:  "node",

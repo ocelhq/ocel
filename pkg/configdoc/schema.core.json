@@ -65,6 +65,7 @@
                             "enum": [
                               "node",
                               "next",
+                              "sveltekit",
                               "go",
                               "python",
                               "rust"

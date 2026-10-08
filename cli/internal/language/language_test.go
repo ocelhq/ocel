@@ -116,6 +116,7 @@ func TestHasClientBundle(t *testing.T) {
 		want      bool
 	}{
 		{"a next app bundles a client", "next", nil, true},
+		{"a sveltekit app bundles a client", "sveltekit", nil, true},
 		{"a go app bundles none", "go", []string{"package.json"}, false},
 		{"an undeclared node app with a native addon bundles a client", "", []string{"package.json", "Cargo.toml"}, true},
 		{"an undeclared go app with a package.json for its tooling bundles none", "", []string{"package.json", "go.mod"}, false},
