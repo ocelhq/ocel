@@ -96,6 +96,14 @@ describe("whether ocel dev is past resolving the app's environment", () => {
     ).toBe(true);
   });
 
+  it("is true once it resolved the app's environment in colour", () => {
+    expect(
+      resolvedEnvironment(
+        "\x1b[90mINFO \x1b[0m \x1b[32m✓\x1b[0m Resolved the app's environment\x1b[90m in <1s\x1b[0m\n",
+      ),
+    ).toBe(true);
+  });
+
   it("is true once a second ocel dev connected to the running one", () => {
     expect(resolvedEnvironment("INFO  ✓ Connected to the running `ocel dev` in 0s\n")).toBe(true);
   });
