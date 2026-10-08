@@ -164,7 +164,7 @@ func TestARemovalSendsTheRegistryEvenWhenTheConfigNamesNoAppAnyMore(t *testing.T
 func TestARemovalOfAProjectNamingNoRegistrySendsNone(t *testing.T) {
 	registry, left := RemovalRegistry(registryConfig(nil))
 	if registry != nil || left != "" {
-		t.Errorf("RemovalRegistry() = %v, %q, want nothing", registry, left)
+		t.Errorf("RemovalRegistry() = %q, %q, want nothing", registry.GetServer(), left)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestARemovalWhoseDotenvCannotBeReadNamesThatFailureRatherThanAnUnsetVariabl
 
 	registry, left := RemovalRegistry(cfg)
 	if registry != nil {
-		t.Errorf("RemovalRegistry() = %v, want none", registry)
+		t.Errorf("RemovalRegistry() = %q, want none", registry.GetServer())
 	}
 	if !strings.Contains(left, "read .env") || strings.Contains(left, "unset") {
 		t.Errorf("RemovalRegistry() left %q, want it to name the unreadable .env, not an unset variable", left)
@@ -187,7 +187,7 @@ func TestARemovalWhoseDotenvCannotBeReadNamesThatFailureRatherThanAnUnsetVariabl
 func TestARemovalWhoseRegistryVariableIsUnsetSendsNoneAndNamesWhatStays(t *testing.T) {
 	registry, left := RemovalRegistry(registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"}))
 	if registry != nil {
-		t.Errorf("RemovalRegistry() = %v, want none: a token that is gone must not keep a project from being removed", registry)
+		t.Errorf("RemovalRegistry() = %q, want none: a token that is gone must not keep a project from being removed", registry.GetServer())
 	}
 	for _, want := range []string{"REGISTRY_TOKEN", "registry.example.com"} {
 		if !strings.Contains(left, want) {

@@ -94,7 +94,7 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 		}
 		_, removed := removals(t, project)
 		if len(removed) != 1 || removed[0].GetSlug() != "test-app" || removed[0].GetEnvironment().GetTier() != environmentv1.Tier_TIER_PREVIEW {
-			t.Fatalf("the provider was asked to remove %v, want test-app's preview footprint", removed)
+			t.Fatalf("the provider was asked for %d removals, want one of test-app's preview footprint", len(removed))
 		}
 		if left := recordedStacks(t, project, environment.TierPreview); len(left) != 0 {
 			t.Errorf("the provider still records %v, want every preview stack destroyed", left)
@@ -119,7 +119,7 @@ export default {
 		}
 		_, removed := removals(t, project)
 		if len(removed) != 1 || removed[0].GetEdge().GetDns().GetKind() != "zone" {
-			t.Errorf("the provider was asked to remove %v, want the dns descriptor on the teardown request", removed)
+			t.Errorf("the provider was asked for %d removals, want one carrying the dns descriptor", len(removed))
 		}
 	})
 
@@ -260,7 +260,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		_, removed := removals(t, project)
 		if len(removed) != 1 || len(removed[0].GetConsented().GetGroups()) == 0 {
-			t.Fatalf("the destroy reached the provider as %v, want it to carry the plan behind it", removed)
+			t.Fatalf("the destroy reached the provider as %d removals, want one carrying the plan behind it", len(removed))
 		}
 		var consented []string
 		for _, group := range removed[0].GetConsented().GetGroups() {
@@ -505,7 +505,7 @@ func TestDestroyingSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t 
 
 			_, removed := removals(t, project)
 			if len(removed) != 1 {
-				t.Fatalf("the provider was asked to remove %v, want one removal", removed)
+				t.Fatalf("the provider was asked for %d removals, want one", len(removed))
 			}
 			registry := removed[0].GetProjectRegistry()
 			if registry.GetServer() != "registry.example.com" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
@@ -529,7 +529,7 @@ func TestDestroyingWhoseRegistryVariableIsUnsetStillDestroysAndSaysWhatItLeft(t 
 
 	_, removed := removals(t, project)
 	if len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
-		t.Fatalf("the provider was asked to remove %v, want the project removed with no registry: a token that is gone must not keep a project undeletable", removed)
+		t.Fatalf("the provider was asked for %d removals, want one with no registry: a token that is gone must not keep a project undeletable", len(removed))
 	}
 	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
 		if !strings.Contains(stdout.String(), want) {
@@ -548,6 +548,6 @@ func TestDestroyingAProjectThatNamesNoRegistrySendsNone(t *testing.T) {
 		t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
 	}
 	if _, removed := removals(t, project); len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
-		t.Errorf("the provider was asked to remove %v, want no registry", removed)
+		t.Errorf("the provider was asked for %d removals, want one with no registry", len(removed))
 	}
 }
