@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -18,13 +20,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
 const (
-	roleVar    = "OCEL_TEST_CONTAINER_ROLE"
-	healthPath = "/_ocel/health"
-	lingerFor  = 400 * time.Millisecond
+	roleVar        = "OCEL_TEST_CONTAINER_ROLE"
+	reportVar      = "OCEL_TEST_CONTAINER_REPORT"
+	nodeOptionsVar = "NODE_OPTIONS"
+	healthPath     = "/_ocel/health"
+	lingerFor      = 400 * time.Millisecond
 )
 
 type served struct {
@@ -45,6 +51,12 @@ func TestContainerHelper(t *testing.T) {
 		os.Exit(99)
 	}()
 
+	if role == "report" {
+		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv(nodeOptionsVar)), 0o600); err != nil {
+			os.Exit(96)
+		}
+		os.Exit(0)
+	}
 	if role == "linger" {
 		time.Sleep(lingerFor)
 		os.Exit(0)
@@ -128,12 +140,17 @@ type running struct {
 
 func launch(t *testing.T, role string, environ ...string) *running {
 	t.Helper()
+	return launchHolding(t, fileExists, role, environ...)
+}
+
+func launchHolding(t *testing.T, present func(string) bool, role string, environ ...string) *running {
+	t.Helper()
 	port := exposedPort(t)
 	command := appCommand(t)
 	environ = append([]string{containerimage.PortEnvVar + "=" + port}, environ...)
 
 	out := &running{port: port, code: make(chan int, 1)}
-	go func() { out.code <- run(context.Background(), command, append(environ, roleVar+"="+role)) }()
+	go func() { out.code <- run(context.Background(), command, append(environ, roleVar+"="+role), present) }()
 	return out
 }
 
@@ -217,7 +234,7 @@ func (r *running) await(t *testing.T) int {
 
 func TestRun(t *testing.T) {
 	t.Run("refuses an image that names no command", func(t *testing.T) {
-		if code := run(context.Background(), nil, nil); code != 1 {
+		if code := run(context.Background(), nil, nil, fileExists); code != 1 {
 			t.Errorf("run = %d, want 1 for an image with no entrypoint", code)
 		}
 	})
@@ -319,4 +336,57 @@ func TestRun(t *testing.T) {
 			t.Errorf("run = %d, want 0: the app was asked to stop and finished on its own terms", code)
 		}
 	})
+}
+
+func holding(files ...string) func(string) bool {
+	return func(path string) bool { return slices.Contains(files, path) }
+}
+
+func reportedNodeOptions(t *testing.T, present func(string) bool, environ ...string) string {
+	t.Helper()
+	report := filepath.Join(t.TempDir(), "node-options")
+	r := launchHolding(t, present, "report", append(environ, reportVar+"="+report)...)
+	if code := r.await(t); code != 0 {
+		t.Fatalf("run = %d, want 0 from an app that reported its node options", code)
+	}
+	got, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("the app reported nothing: %v", err)
+	}
+	return string(got)
+}
+
+func TestTheRuntimeRunsANextContainersAppWithTheServerPreloadAfterTheNodeOptionsItIsGiven(t *testing.T) {
+	preload := "--import " + containerimage.NextServerPreloadPath
+	next := holding(containerimage.NextServerPreloadPath)
+
+	if got := reportedNodeOptions(t, next); got != preload {
+		t.Errorf("NODE_OPTIONS = %q with none given, want %q", got, preload)
+	}
+	if got, want := reportedNodeOptions(t, next, nodeOptionsVar+"=--max-old-space-size=512"), "--max-old-space-size=512 "+preload; got != want {
+		t.Errorf("NODE_OPTIONS = %q, want %q: the image's or the deploy's node options are kept and the preload follows them", got, want)
+	}
+}
+
+func TestTheRuntimeLeavesTheNodeOptionsOfAContainerWithoutTheNextServerPreload(t *testing.T) {
+	if got := reportedNodeOptions(t, holding(), nodeOptionsVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
+		t.Errorf("NODE_OPTIONS = %q, want the image's own %q", got, "--max-old-space-size=512")
+	}
+}
+
+func TestTheRuntimeRunsAWorkerInANextContainerWithoutTheServerPreload(t *testing.T) {
+	manifest, err := variables.Render(variables.Manifest{
+		Project: "p", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "preview",
+		Tasks: &variables.Tasks{Environment: "t", Topics: map[string]provider.TopicSpec{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := reportedNodeOptions(t, holding(containerimage.NextServerPreloadPath),
+		nodeOptionsVar+"=--max-old-space-size=512", processenv.WorkerEnvVar+"=worker", variables.EnvVar+"="+string(manifest))
+
+	if got != "--max-old-space-size=512" {
+		t.Errorf("NODE_OPTIONS = %q, want the image's own %q: a worker is not the Next server the preload is for", got, "--max-old-space-size=512")
+	}
 }
