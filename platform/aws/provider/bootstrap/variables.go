@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -28,6 +29,8 @@ func variablesKeyResources(ns Namespace, tier environment.Tier) string {
       Tags:
         - Key: %s
           Value: %s
+        - Key: %s
+          Value: %s
       KeyPolicy:
         Version: '2012-10-17'
         Statement:
@@ -43,7 +46,7 @@ func variablesKeyResources(ns Namespace, tier environment.Tier) string {
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VariablesKey
-`, tier, VariablesKeyComponentTagKey, VariablesKeyComponentTagValue, tier, ns.variablesKeyAliasFor(tier))
+`, tier, VariablesKeyComponentTagKey, VariablesKeyComponentTagValue, naming.EnvTierTagKey, tier, tier, ns.variablesKeyAliasFor(tier))
 }
 
 func variablesKeyOutputs() string {

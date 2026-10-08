@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type parsedPolicy struct {
@@ -872,47 +873,6 @@ func resolveVariables(t *testing.T, value string, context map[string]string) (st
 	return out, resolved
 }
 
-func conditionHolds(t *testing.T, condition map[string]any, context map[string]string) bool {
-	t.Helper()
-	for operator, operands := range condition {
-		base, ifExists := strings.CutSuffix(operator, "IfExists")
-		for key, raw := range operands.(map[string]any) {
-			values := []string{}
-			switch v := raw.(type) {
-			case string:
-				values = append(values, v)
-			case []any:
-				for _, one := range v {
-					values = append(values, one.(string))
-				}
-			}
-			got, present := context[key]
-			if base == "Null" {
-				if len(values) != 1 || (values[0] == "true") == present {
-					return false
-				}
-				continue
-			}
-			if base != "StringEquals" && base != "StringLike" {
-				t.Fatalf("the ECR grants test evaluates no %s condition", operator)
-			}
-			if !present {
-				if ifExists {
-					continue
-				}
-				return false
-			}
-			if !slices.ContainsFunc(values, func(pattern string) bool {
-				resolved, ok := resolveVariables(t, pattern, context)
-				return ok && conditionAdmits(base, resolved, got)
-			}) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func allowsECR(t *testing.T, document string, r ecrRequest) bool {
 	t.Helper()
 	context := r.context()
@@ -1296,6 +1256,137 @@ func TestACredentialIsRefusedForATierItDoesNotServe(t *testing.T) {
 		}
 		if _, err := render(defaultNamespace, ""); err == nil {
 			t.Error("render for no tier produced a document, want a refusal: it would reach both tiers")
+		}
+	}
+}
+
+type requestContext map[string]string
+
+func allows(t *testing.T, document, action, arn string, request requestContext) bool {
+	t.Helper()
+	service, _, _ := strings.Cut(action, ":")
+	allowed := false
+	for _, statement := range parsePolicy(t, document).Statement {
+		actions := stringsOf(t, statement.Action, "Action")
+		if !slices.Contains(actions, action) && !slices.Contains(actions, service+":*") {
+			continue
+		}
+		if !slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
+			return iamResourceMatches(pattern, arn)
+		}) {
+			continue
+		}
+		if !conditionHolds(t, statement.Condition, request) {
+			continue
+		}
+		if statement.Effect == "Deny" {
+			return false
+		}
+		allowed = true
+	}
+	return allowed
+}
+
+func conditionHolds(t *testing.T, condition map[string]any, request requestContext) bool {
+	t.Helper()
+	for operator, operands := range condition {
+		base, ifExists := strings.CutSuffix(operator, "IfExists")
+		for key, operand := range operands.(map[string]any) {
+			var wanted []string
+			switch v := operand.(type) {
+			case string:
+				wanted = []string{v}
+			case []any:
+				for _, each := range v {
+					wanted = append(wanted, each.(string))
+				}
+			default:
+				t.Fatalf("condition %s %s has operand %v of type %T", operator, key, operand, operand)
+			}
+			got, present := request[key]
+			if base == "Null" {
+				if len(wanted) != 1 || (wanted[0] == "true") == present {
+					return false
+				}
+				continue
+			}
+			if !present {
+				if ifExists {
+					continue
+				}
+				return false
+			}
+			if !slices.ContainsFunc(wanted, func(pattern string) bool {
+				resolved, ok := resolveVariables(t, pattern, request)
+				return ok && operatorAdmits(t, base, resolved, got)
+			}) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func operatorAdmits(t *testing.T, operator, pattern, value string) bool {
+	t.Helper()
+	switch operator {
+	case "StringEquals", "ArnEquals", "Bool", "ForAnyValue:StringEquals":
+		return pattern == value
+	case "StringLike", "ArnLike":
+		return conditionAdmits("StringLike", pattern, value)
+	}
+	t.Fatalf("condition operator %s has no evaluation in this test", operator)
+	return false
+}
+
+const variablesKeyARN = "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+
+func variablesKeyOf(tier environment.Tier) requestContext {
+	return requestContext{
+		"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
+		"aws:ResourceTag/" + naming.EnvTierTagKey:        string(tier),
+		"kms:ResourceAliases":                            defaultNamespace.variablesKeyAliasFor(tier),
+	}
+}
+
+func TestABootstrapCredentialRetargetsAndManagesOnlyTheVariablesKeyOfItsOwnTier(t *testing.T) {
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		for _, action := range []string{
+			"kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias",
+			"kms:PutKeyPolicy", "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:TagResource", "kms:UntagResource",
+		} {
+			if !allows(t, bootstrapDoc, action, variablesKeyARN, variablesKeyOf(tier)) {
+				t.Errorf("the %s bootstrap credential cannot %s on its own tier's variables key", tier, action)
+			}
+			if allows(t, bootstrapDoc, action, variablesKeyARN, variablesKeyOf(sibling)) {
+				t.Errorf("the %s bootstrap credential can %s on the %s tier's variables key, so it can point its own alias at that key or take the key over", tier, action, sibling)
+			}
+		}
+	}
+}
+
+func TestABootstrapCredentialMakesAndTagsVariablesKeysOnlyAsItsOwnTiers(t *testing.T) {
+	creating := func(tier environment.Tier) requestContext {
+		return requestContext{
+			"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
+			"aws:RequestTag/" + naming.EnvTierTagKey:        string(tier),
+		}
+	}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		if !allows(t, bootstrapDoc, "kms:CreateKey", UnscopedResource, creating(tier)) {
+			t.Errorf("the %s bootstrap credential cannot create its own tier's variables key", tier)
+		}
+		if allows(t, bootstrapDoc, "kms:CreateKey", UnscopedResource, creating(sibling)) {
+			t.Errorf("the %s bootstrap credential can create a variables key tagged for the %s tier", tier, sibling)
+		}
+		retag := variablesKeyOf(tier)
+		retag["aws:RequestTag/"+naming.EnvTierTagKey] = string(sibling)
+		if allows(t, bootstrapDoc, "kms:TagResource", variablesKeyARN, retag) {
+			t.Errorf("the %s bootstrap credential can retag its own variables key as the %s tier's", tier, sibling)
 		}
 	}
 }
