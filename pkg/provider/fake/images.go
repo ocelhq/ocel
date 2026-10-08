@@ -17,6 +17,9 @@ type Images struct {
 	denied error
 	opened []provider.RegistryTarget
 	probed []string
+
+	removed     []string
+	unremovable error
 }
 
 func NewImages() *Images { return &Images{stored: map[string]bool{}} }
@@ -90,6 +93,35 @@ func (i *Images) Push(_ context.Context, push provider.ImagePush, _ progress.Log
 	}
 	i.pushed = append(i.pushed, push)
 	i.stored[push.ImageRef] = true
+	return nil
+}
+
+func (i *Images) FailRemovals(err error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.unremovable = err
+}
+
+func (i *Images) Removed() []string {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return append([]string(nil), i.removed...)
+}
+
+func (i *Images) Stored(imageRef string) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.stored[imageRef]
+}
+
+func (i *Images) Remove(_ context.Context, imageRef string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.unremovable != nil {
+		return i.unremovable
+	}
+	i.removed = append(i.removed, imageRef)
+	delete(i.stored, imageRef)
 	return nil
 }
 

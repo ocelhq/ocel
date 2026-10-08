@@ -1,0 +1,14 @@
+{
+  "static": {
+    "immutablePrefixes": ["/docs/_next/static/", "/_app/immutable/"],
+    "mustRevalidatePrefixes": ["/docs/_next/static/service-worker/"]
+  },
+  "cases": [
+    { "path": "/docs/_next/static/chunks/main.js", "immutable": true },
+    { "path": "/docs/_next/static/service-worker/sw.js", "immutable": false },
+    { "path": "/_next/static/chunks/main.js", "immutable": false },
+    { "path": "/_app/immutable/entry/start.BxQ3k.js", "immutable": true },
+    { "path": "/_app/version.json", "immutable": false },
+    { "path": "/docs/favicon.ico", "immutable": false }
+  ]
+}

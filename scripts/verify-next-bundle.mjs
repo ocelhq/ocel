@@ -8,11 +8,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const providerBuilds = {
-  aws: {
-    OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
-    OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024),
-  },
-  gcp: { OCEL_NEXT_RUNTIME_DIR: "/ocel/next", OCEL_MAX_FUNCTION_BYTES: "" },
+  aws: { OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024) },
+  gcp: { OCEL_MAX_FUNCTION_BYTES: "" },
 };
 
 const opts = parseArgs(process.argv.slice(2));
@@ -71,8 +68,8 @@ function verify() {
     `symlinked .func directories under functions/: ${symlinked.map((d) => relative(appOut, d)).join(", ")}`,
   );
 
-  const manifestPath = join(appOut, "routing-manifest.json");
-  if (!existsSync(manifestPath)) fatal(`no routing manifest at ${manifestPath}`);
+  const manifestPath = join(appOut, "next-route-table.json");
+  if (!existsSync(manifestPath)) fatal(`no route table at ${manifestPath}`);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const dispatch = manifest.dispatch ?? {};
 
@@ -101,9 +98,9 @@ function verify() {
 }
 
 function readBundle(dir, name) {
-  const configPath = join(dir, "config.json");
+  const configPath = join(dir, "function-config.json");
   if (!existsSync(configPath)) {
-    failures.push(`${name}: no config.json`);
+    failures.push(`${name}: no function-config.json`);
     return null;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -134,11 +131,11 @@ function verifyBundle({
 }) {
   check(
     config.id === name,
-    `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
+    `${name}: function-config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
   );
   check(
     config.framework?.name === "next",
-    `${name}: config.json.framework is ${JSON.stringify(config.framework)}`,
+    `${name}: function-config.json.framework is ${JSON.stringify(config.framework)}`,
   );
 
   const appRelDir = dirname(launcherRel);

@@ -1,21 +1,26 @@
 package router
 
-import "github.com/ocelhq/ocel/pkg/edge"
+import (
+	"encoding/json"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+)
 
 type ReleaseRecord struct {
 	App                  string            `json:"app"`
 	Framework            string            `json:"framework"`
 	Release              string            `json:"release"`
 	BuildID              string            `json:"buildId"`
-	Entry                string            `json:"entry"`
-	EntryFunction        string            `json:"entryFunction,omitempty"`
+	RootFunction         string            `json:"rootFunction"`
+	RootFunctionPhysical string            `json:"rootFunctionPhysical,omitempty"`
 	Image                string            `json:"image,omitempty"`
 	Physical             string            `json:"physical,omitempty"`
 	Revisions            map[string]string `json:"revisions,omitempty"`
 	Origin               string            `json:"origin,omitempty"`
 	HealthPath           string            `json:"healthPath,omitempty"`
 	HealthPathDiscovered bool              `json:"healthPathDiscovered,omitempty"`
-	RoutingManifest      any               `json:"routingManifest"`
+	RouteTable           *RouteTable       `json:"routeTable,omitempty"`
+	Static               *edge.Static      `json:"static,omitempty"`
 	FunctionURLs         map[string]string `json:"functionUrls"`
 	AssetPrefix          string            `json:"assetPrefix"`
 	IsrPrefix            string            `json:"isrPrefix"`
@@ -43,4 +48,9 @@ type Code struct {
 	ID          string   `json:"id"`
 	CompatDate  string   `json:"compatDate"`
 	CompatFlags []string `json:"compatFlags"`
+}
+
+type RouteTable struct {
+	Format edge.RouteTableFormat `json:"format"`
+	Table  json.RawMessage       `json:"table"`
 }

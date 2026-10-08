@@ -20,8 +20,8 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", ""},
-		{"a declared direct edge names it", "  edge: \"direct\",\n", "direct"},
-		{"a declared relay edge names it", "  edge: \"relay\",\n", "relay"},
+		{"a declared direct edge names it", "edge: \"direct\"", "direct"},
+		{"a declared relay edge names it", "edge: \"relay\"", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

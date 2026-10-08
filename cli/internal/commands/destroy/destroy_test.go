@@ -94,7 +94,7 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 		}
 		_, removed := removals(t, project)
 		if len(removed) != 1 || removed[0].GetSlug() != "test-app" || removed[0].GetEnvironment().GetTier() != environmentv1.Tier_TIER_PREVIEW {
-			t.Fatalf("the provider was asked to remove %v, want test-app's preview footprint", removed)
+			t.Fatalf("the provider was asked for %d removals, want one of test-app's preview footprint", len(removed))
 		}
 		if left := recordedStacks(t, project, environment.TierPreview); len(left) != 0 {
 			t.Errorf("the provider still records %v, want every preview stack destroyed", left)
@@ -106,9 +106,8 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { fake: {} },
+  provider: { fake: { dns: "zone" } },
   domains: { preview: "*.preview.acme.com" },
-  dns: "zone",
 };
 `)
 		invocation := clitest.NewInvocation()
@@ -120,7 +119,7 @@ export default {
 		}
 		_, removed := removals(t, project)
 		if len(removed) != 1 || removed[0].GetEdge().GetDns().GetKind() != "zone" {
-			t.Errorf("the provider was asked to remove %v, want the dns descriptor on the teardown request", removed)
+			t.Errorf("the provider was asked for %d removals, want one carrying the dns descriptor", len(removed))
 		}
 	})
 
@@ -261,7 +260,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 
 		_, removed := removals(t, project)
 		if len(removed) != 1 || len(removed[0].GetConsented().GetGroups()) == 0 {
-			t.Fatalf("the destroy reached the provider as %v, want it to carry the plan behind it", removed)
+			t.Fatalf("the destroy reached the provider as %d removals, want one carrying the plan behind it", len(removed))
 		}
 		var consented []string
 		for _, group := range removed[0].GetConsented().GetGroups() {
@@ -440,8 +439,8 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		planned     string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "", "relay"},
-		{"a declared direct edge names it", "  edge: \"direct\",\n", "direct", "direct"},
-		{"a declared relay edge names it", "  edge: \"relay\",\n", "relay", "relay"},
+		{"a declared direct edge names it", "edge: \"direct\"", "direct", "direct"},
+		{"a declared relay edge names it", "edge: \"relay\"", "relay", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -468,5 +467,88 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 				t.Errorf("stdout = %q, want the plan to name the edge it planned", stdout.String())
 			}
 		})
+	}
+}
+
+const registryConfig = `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
+};
+`
+
+func TestDestroyingSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	for name, destroy := range map[string]func(commands.Invocation, string, *bytes.Buffer) error{
+		"production": func(invocation commands.Invocation, root string, stdout *bytes.Buffer) error {
+			return runDestroyProduction(context.Background(), invocation, root, true, false, stdout, io.Discard, strings.NewReader(""))
+		},
+		"preview": func(invocation commands.Invocation, root string, stdout *bytes.Buffer) error {
+			return runDestroyPreviewProject(context.Background(), invocation, root, true, false, stdout, io.Discard, strings.NewReader(""))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			deployed := deployedToProduction
+			if name == "preview" {
+				deployed = deployedToPreview
+			}
+			project := deployed(t)
+			clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), registryConfig)
+
+			invocation := clitest.NewInvocation()
+			var stdout bytes.Buffer
+			clitest.AttachTerminalSink(invocation, &stdout)
+			if err := destroy(invocation, project.Root, &stdout); err != nil {
+				t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+			}
+
+			_, removed := removals(t, project)
+			if len(removed) != 1 {
+				t.Fatalf("the provider was asked for %d removals, want one", len(removed))
+			}
+			registry := removed[0].GetProjectRegistry()
+			if registry.GetServer() != "registry.example.com" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
+				t.Errorf("the removal named registry %q as %q with password %q, want the project's registry with its secret resolved: it is how the images a deploy pushed there are deleted",
+					registry.GetServer(), registry.GetUsername(), registry.GetPassword())
+			}
+		})
+	}
+}
+
+func TestDestroyingWhoseRegistryVariableIsUnsetStillDestroysAndSaysWhatItLeft(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
+	project := deployedToProduction(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), registryConfig)
+	invocation := clitest.NewInvocation()
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
+		t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+	}
+
+	_, removed := removals(t, project)
+	if len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
+		t.Fatalf("the provider was asked for %d removals, want one with no registry: a token that is gone must not keep a project undeletable", len(removed))
+	}
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to say the images in the registry stay and name %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestDestroyingAProjectThatNamesNoRegistrySendsNone(t *testing.T) {
+	project := deployedToProduction(t)
+	invocation := clitest.NewInvocation()
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
+		t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+	}
+	if _, removed := removals(t, project); len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
+		t.Errorf("the provider was asked for %d removals, want one with no registry", len(removed))
 	}
 }

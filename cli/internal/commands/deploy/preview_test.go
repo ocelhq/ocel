@@ -665,7 +665,7 @@ func TestPreviewPruneTakesItsNameOnTheCommandLine(t *testing.T) {
 	}
 	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
 	if len(requests) != 1 || requests[0].GetEnvironment().GetIdentity() != "staging" || requests[0].GetKeepN() != 5 {
-		t.Errorf("the CLI pruned %v, want staging pruned down to 5", requests)
+		t.Errorf("the CLI pruned %d environments, want staging pruned down to 5", len(requests))
 	}
 }
 
@@ -1165,5 +1165,63 @@ func TestAPreviewAliasIsAssignedOnlyWhereAHostnameServesIt(t *testing.T) {
 				t.Errorf("assignsPreviewAlias() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func removedWithRegistry(t *testing.T, fixture clitest.FakeProject) []*contractv1.ImageRegistry {
+	t.Helper()
+	var registries []*contractv1.ImageRegistry
+	for _, req := range clitest.RequestsTo[*contractv1.RemoveEnvironmentRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveEnvironmentProcedure) {
+		registries = append(registries, req.GetProjectRegistry())
+	}
+	return registries
+}
+
+func TestRemovingAPreviewSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	previewRemove(t, fixture, dependencies, previewRemoveOptions{})
+
+	registries := removedWithRegistry(t, fixture)
+	if len(registries) != 1 || registries[0].GetServer() != "registry.example.com" || registries[0].GetUsername() != "acme-bot" || registries[0].GetPassword() != "hunter2" {
+		t.Errorf("the removal named %d registries, want the project's registry with its secret resolved: it is how the images the preview pushed there are deleted", len(registries))
+	}
+}
+
+func TestRemovingAPreviewWhoseRegistryVariableIsUnsetStillRemovesItAndSaysWhatItLeft(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	out := previewRemove(t, fixture, dependencies, previewRemoveOptions{})
+
+	if registries := removedWithRegistry(t, fixture); len(registries) != 1 || registries[0] != nil {
+		t.Fatalf("the removal named %d registries, want one removal naming none: a token that is gone must not keep a preview from being torn down", len(registries))
+	}
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want it to say the images stay in the registry and name %q", out, want)
+		}
+	}
+}
+
+func TestPruningAPreviewSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItReclaimsGoWithThem(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	previewPrune(t, fixture, dependencies, previewPruneOptions{})
+
+	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(requests) != 1 || requests[0].GetProjectRegistry().GetServer() != "registry.example.com" || requests[0].GetProjectRegistry().GetPassword() != "hunter2" {
+		t.Errorf("the prune sent %d requests, want one naming the project's registry with its secret resolved: it is how the images of the releases it reclaims are deleted", len(requests))
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -51,18 +53,19 @@ func TestACallerIsKnownByTheContainerItsCgroupNamesUnderEitherDriver(t *testing.
 type inspecting struct {
 	mu        sync.Mutex
 	manifests map[string]string
+	initPID   int
 	asked     []string
 	broken    error
 }
 
-func (i *inspecting) Manifest(_ context.Context, container string) (string, error) {
+func (i *inspecting) ReadContainer(_ context.Context, container string) (Container, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.asked = append(i.asked, container)
 	if i.broken != nil {
-		return "", i.broken
+		return Container{}, i.broken
 	}
-	return i.manifests[container], nil
+	return Container{Manifest: i.manifests[container], InitPID: i.initPID}, nil
 }
 
 type resolving struct {
@@ -145,7 +148,7 @@ func manifestFor(t *testing.T, slug, environment string) string {
 
 func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingItSays(t *testing.T) {
 	t.Parallel()
-	inspect := &inspecting{manifests: map[string]string{containerID: manifestFor(t, "shop", "pr-7")}}
+	inspect := &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: manifestFor(t, "shop", "pr-7")}}
 	resolve := &resolving{}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
@@ -229,7 +232,7 @@ func TestTheAgentMeasuresTheVolumeTheCallersOwnManifestNamesAndNoOther(t *testin
 	space := &measuring{free: 7 << 30, total: 40 << 30}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: storeManifest(t, "shop-prod-store-s3-data")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: storeManifest(t, "shop-prod-store-s3-data")}},
 		Resolve: &resolving{},
 		Space:   space,
 	})
@@ -255,7 +258,7 @@ func TestACallerWhoseManifestNamesNoStoreIsToldOfNoVolume(t *testing.T) {
 	space := &measuring{free: 1, total: 2}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: manifestFor(t, "shop", "")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: manifestFor(t, "shop", "")}},
 		Resolve: &resolving{},
 		Space:   space,
 	})
@@ -270,7 +273,7 @@ func TestACallerWhoseManifestNamesNoStoreIsToldOfNoVolume(t *testing.T) {
 
 func TestACallerOutsideEveryContainerIsRefused(t *testing.T) {
 	t.Parallel()
-	inspect := &inspecting{manifests: map[string]string{containerID: manifestFor(t, "shop", "")}}
+	inspect := &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: manifestFor(t, "shop", "")}}
 	socket := serving(t, &Server{Proc: procNaming(t, "0::/user.slice/user-1000.slice/session-3.scope\n"), Inspect: inspect, Resolve: &resolving{}})
 
 	status, body := ask(t, socket)
@@ -282,9 +285,37 @@ func TestACallerOutsideEveryContainerIsRefused(t *testing.T) {
 	}
 }
 
+func TestAProcessInsideTheContainerOtherThanItsRuntimeIsHandedNoValueAndMeasuresNoVolume(t *testing.T) {
+	t.Parallel()
+	resolve := &resolving{}
+	space := &measuring{free: 1, total: 2}
+	socket := serving(t, &Server{
+		Proc: procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
+		Inspect: &inspecting{
+			manifests: map[string]string{containerID: storeManifest(t, "shop-prod-store-s3-data")},
+			initPID:   os.Getpid() + 1,
+		},
+		Resolve: resolve,
+		Space:   space,
+	})
+	status, body := ask(t, socket)
+	if status != http.StatusForbidden {
+		t.Errorf("a process the app started was answered %d %q asking for values, want a refusal: the runtime holds the store's credential for the binding proxy, not the app", status, body)
+	}
+	if !strings.Contains(body, "is not its container's init process") || strings.Contains(body, "the app started") {
+		t.Errorf("the refusal reads %q: it names a guess at the caller, and a container whose runtime is not its init (a daemon running docker-init) would be misread as an app process", body)
+	}
+	if status, body := askSpace(t, socket); status != http.StatusForbidden {
+		t.Errorf("a process the app started was answered %d %q asking after the store volume, want a refusal", status, body)
+	}
+	if len(resolve.given) != 0 || len(space.asked) != 0 {
+		t.Errorf("a process other than the container's runtime reached the store (%v) or the volume (%v)", resolve.given, space.asked)
+	}
+}
+
 func TestACallerWhoseCgroupCannotBeReadIsRefused(t *testing.T) {
 	t.Parallel()
-	socket := serving(t, &Server{Proc: procNaming(t, ""), Inspect: &inspecting{}, Resolve: &resolving{}})
+	socket := serving(t, &Server{Proc: procNaming(t, ""), Inspect: &inspecting{initPID: os.Getpid()}, Resolve: &resolving{}})
 	if status, body := ask(t, socket); status != http.StatusForbidden {
 		t.Errorf("a caller whose cgroup is unreadable was answered %d %q", status, body)
 	}
@@ -295,7 +326,7 @@ func TestAContainerHandedNoManifestIsToldSoRatherThanHandedAnything(t *testing.T
 	resolve := &resolving{}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{}},
 		Resolve: resolve,
 	})
 	if status, body := ask(t, socket); status != http.StatusNotFound {
@@ -310,7 +341,7 @@ func TestAnEngineThatCannotBeAskedIsReportedAsTheBoxsFault(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{broken: errors.New("the daemon is not answering")},
+		Inspect: &inspecting{initPID: os.Getpid(), broken: errors.New("the daemon is not answering")},
 		Resolve: &resolving{},
 	})
 	if status, body := ask(t, socket); status != http.StatusBadGateway || !strings.Contains(body, "not answering") {
@@ -428,4 +459,38 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 		t.Errorf("the app was told %q, want the live keys named", said)
 	}
 
+}
+
+func TestTheDaemonNamesTheProcessAContainerRunsAsItsInit(t *testing.T) {
+	t.Parallel()
+	docker := dockerAnswering(t, map[string]string{
+		"/containers/" + containerID + "/json": `{"State":{"Running":true,"Pid":4242},"Config":{"Env":["PATH=/usr/bin","` + variables.EnvVar + `={\"slug\":\"shop\"}"]}}`,
+		"/containers/stopped/json":             `{"State":{"Running":false,"Pid":0},"Config":{"Env":[]}}`,
+	})
+	running, err := docker.ReadContainer(context.Background(), containerID)
+	if err != nil || running.InitPID != 4242 || running.Manifest != `{"slug":"shop"}` {
+		t.Errorf("ReadContainer(%s) = %+v, %v, want init 4242 and its manifest", containerID, running, err)
+	}
+	stopped, err := docker.ReadContainer(context.Background(), "stopped")
+	if err != nil || stopped.InitPID != 0 {
+		t.Errorf("ReadContainer(stopped) = %+v, %v, want no init process", stopped, err)
+	}
+}
+
+func dockerAnswering(t *testing.T, answers map[string]string) *Docker {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		answer, found := answers[r.URL.Path]
+		if !found {
+			http.Error(w, `{"message":"No such container"}`, http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(answer))
+	}))
+	t.Cleanup(server.Close)
+	return &Docker{host: images.DockerHost{Address: server.URL}, transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
+		},
+	}}
 }

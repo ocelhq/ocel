@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -25,7 +24,7 @@ const (
 const (
 	memoryEnvVar            = "OCEL_FUNCTION_MEMORY_MB"
 	routerKindEnvVar        = "OCEL_ROUTER_KIND"
-	routingManifestEnvVar   = "OCEL_ROUTING_MANIFEST"
+	routeTableEnvVar        = "OCEL_NEXT_ROUTE_TABLE"
 	assetPrefixEnvVar       = "OCEL_ASSET_PREFIX"
 	slugEnvVar              = "OCEL_SLUG"
 	appNameEnvVar           = "OCEL_APP"
@@ -48,15 +47,11 @@ const (
 	refreshTargetEnvVar     = "OCEL_REFRESH_TARGET"
 	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
 	idTokenCertsURLEnvVar   = "OCEL_ID_TOKEN_CERTS_URL"
-
-	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
 
 const refreshPath = "/_ocel/refresh"
 
-const finishBeforeResponseCap = 10 * time.Second
-
-var routingManifestInImage = path.Join(images.FunctionImageRoot, edge.RoutingManifestFile)
+var routeTableInImage = path.Join(images.FunctionImageRoot, edge.NextRouteTableFile)
 
 func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
@@ -146,10 +141,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
-	if s.billsPerRequest() {
-		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
-	}
-	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
+	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
 		if factsOf(spec.Edge).RunsCode {
 			env[imageEndpointEnvVar] = "1"
 		} else {
@@ -171,8 +163,11 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 				}
 			}
 		}
-		env[routingManifestEnvVar] = routingManifestInImage
+		env[routeTableEnvVar] = routeTableInImage
 		env[staticDirEnvVar] = images.StaticRoot
+		if rules := app.Static.Variable(); rules != "" {
+			env[edge.StaticRulesVar] = rules
+		}
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
 		env[appNameEnvVar] = app.App
@@ -209,7 +204,6 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 func newNextContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
 	env := newNextCacheEnv(spec.App.ISR, cache)
 	env[memoryEnvVar] = strconv.Itoa(memory)
-	env[containerimage.NextAdapterPathVar] = path.Join(nextRuntimeDir, containerimage.NextServerAdapterFile)
 	return env
 }
 

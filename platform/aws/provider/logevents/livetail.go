@@ -223,6 +223,9 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 		var limit *types.LimitExceededException
 		switch {
 		case ctx.Err() != nil:
+			if session != nil {
+				_ = session.Close()
+			}
 			return nil
 		case errors.As(err, &limit):
 			if err := s.notice(Notice{Kind: NoticeReconnected, Message: sessionLimitMessage}); err != nil {

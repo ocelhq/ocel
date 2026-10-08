@@ -54,7 +54,7 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	root := fixture.Root
 	addAppToFixtureConfig(t, root)
-	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeHosting(t, root, "api", "bld_api_1")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -87,7 +87,7 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
 	root := setUpPreviewProject(t).Root
 	addAppToFixtureConfig(t, root)
-	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeHosting(t, root, "api", "bld_api_1")
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -164,7 +164,7 @@ func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	root := fixture.Root
 	addAppToFixtureConfig(t, root)
-	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeHosting(t, root, "api", "bld_api_1")
 	fixture.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	var stdout, stderr bytes.Buffer
@@ -317,7 +317,7 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
 	root := setUpDeployProject(t).Root
 	addAppToFixtureConfig(t, root)
-	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeHosting(t, root, "api", "bld_api_1")
 	writeAppTSConfig(t, root, "api")
 
 	before := projectFiles(t, root)
@@ -341,7 +341,7 @@ func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
 	root := setUpDeployProject(t).Root
 	addAppToFixtureConfig(t, root)
-	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeHosting(t, root, "api", "bld_api_1")
 	tsconfig := writeAppTSConfig(t, root, "api")
 
 	var stdout, stderr bytes.Buffer

@@ -44,7 +44,7 @@ beforeAll(async () => {
     }),
   );
   env = {
-    OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+    OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
     OCEL_STATIC_DIR: staticDir,
     OCEL_ASSET_PREFIX: assetPrefix,
   };

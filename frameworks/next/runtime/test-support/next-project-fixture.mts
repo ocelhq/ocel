@@ -43,7 +43,6 @@ export async function writeNextProjectFixture(
 
   const config = {
     distDir: ".next",
-    cacheHandler: cacheHandlerPath,
     cacheMaxMemorySize: 0,
     experimental: {
       fetchCacheKeyPrefix: "prefix",

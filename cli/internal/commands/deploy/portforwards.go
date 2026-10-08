@@ -26,7 +26,10 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 		if _, ok := values[app]; !ok {
 			values[app] = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
 		}
-		maps.Copy(values[app].Live, f.Bindings(app))
+		delivered := values[app]
+		maps.Copy(delivered.Live, f.Bindings(app))
+		delivered.BindingProxyEnv = f.BindingProxyEnv(app)
+		values[app] = delivered
 	}
 }
 
@@ -83,8 +86,8 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 
 func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (buildUses, preBuildUses []portforward.Use, err error) {
 	built := map[string]bool{}
-	for _, app := range build.FunctionApps(cfg.Apps) {
-		if app.BuildsWithBindings && app.Framework() == buildoutput.FrameworkNext {
+	for _, app := range cfg.Apps {
+		if app.BuildsWithResources && buildoutput.BuildsWithItsOwnScript(app.Framework()) {
 			built[app.Name] = true
 		}
 	}

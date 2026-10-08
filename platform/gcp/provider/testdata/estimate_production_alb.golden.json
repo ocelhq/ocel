@@ -522,7 +522,8 @@
     "list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
     "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
     "the forwarding rule is priced as the project's first five, which share one hourly charge",
-    "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills"
+    "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills",
+    "a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month"
   ],
   "monthlyFixed": "68.46",
   "monthlyUsage": "8.76"

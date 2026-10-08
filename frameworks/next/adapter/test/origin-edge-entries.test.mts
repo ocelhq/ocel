@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -183,34 +182,6 @@ test("a waived edge route reads an edge asset the bundle contains", async () => 
   expect(await response.text()).toBe("hello from the asset");
 });
 
-test("a waived edge route's compiled cache handler writes without throwing", async () => {
-  const cacheHandler = fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url));
-  const app = await buildOriginEdgeApp({
-    allowDegraded: "edge-middleware,edge-runtime",
-    edgeRouteHandler: `async () => {
-      process.env.NEXT_RUNTIME = "edge"
-      const CacheHandler = require(${JSON.stringify(cacheHandler)})
-      const cache = new CacheHandler()
-      await cache.set(
-        "k",
-        { kind: "FETCH", data: { body: "x" }, revalidate: 60 },
-        { tags: [] },
-      )
-      await cache.revalidateTag(["t"])
-      return new Response(String(await cache.get("k", { kind: "FETCH" })))
-    }`,
-  });
-  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
-
-  try {
-    const response = await fetch(`${origin.origin}/api/edge`);
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("null");
-  } finally {
-    delete process.env.NEXT_RUNTIME;
-  }
-});
-
 test("keeps a waived edge entry's own env out of the process it shares", async () => {
   vi.stubEnv("__NEXT_BUILD_ID", "already-running");
   const app = await buildOriginEdgeApp({ allowDegraded: "edge-middleware" });
@@ -267,10 +238,10 @@ test("declares the degraded needs whether or not they are waived", async () => {
   const waived = await buildOriginEdgeApp({
     allowDegraded: "edge-middleware,edge-runtime",
   });
-  expect(Object.keys(waived.serve.needs)).toContain("edge-middleware");
-  expect(waived.serve.needs["edge-runtime"]?.routes).toEqual(["/api/edge"]);
+  expect(Object.keys(waived.hosting.needs)).toContain("edge-middleware");
+  expect(waived.hosting.needs["edge-runtime"]?.routes).toEqual(["/api/edge"]);
 
   const unwaived = await buildOriginEdgeApp();
-  expect(Object.keys(unwaived.serve.needs)).toContain("edge-middleware");
-  expect(unwaived.serve.needs["edge-runtime"]?.routes).toEqual(["/api/edge"]);
+  expect(Object.keys(unwaived.hosting.needs)).toContain("edge-middleware");
+  expect(unwaived.hosting.needs["edge-runtime"]?.routes).toEqual(["/api/edge"]);
 });

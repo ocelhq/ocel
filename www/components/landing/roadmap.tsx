@@ -17,7 +17,7 @@ const columns: Column[] = [
     iconClass: "text-chart-2",
     items: [
       "Zero-config CLI deploys",
-      "SDK primitives — postgres, bucket, queue",
+      "SDK primitives — postgres, bucket, task, topic",
       "ocel dev — the declared stack, one command",
       "Preview environments per branch",
       "One-command rollback",

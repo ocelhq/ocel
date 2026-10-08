@@ -1,14 +1,24 @@
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
 
-export type TestManifest = Omit<RoutingManifest, "entry"> & { entry?: string };
+export type TestManifest = Omit<NextRouteTable, "rootFunction"> & { rootFunction?: string };
 
 export type TestRouteDeps = Omit<Partial<RouteDeps>, "manifest"> & {
   manifest?: TestManifest;
 };
 
-export function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
+export function nextStatic(basePath = ""): NonNullable<RouteDeps["assetStore"]["static"]> {
+  return {
+    immutablePrefixes: [`${basePath}/_next/static/`],
+    mustRevalidatePrefixes: [`${basePath}/_next/static/service-worker/`],
+  };
+}
+
+export function assetStoreServing(
+  files: Record<string, string>,
+  basePath = "",
+): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
       const body = files[key];
@@ -19,6 +29,7 @@ export function assetStoreServing(files: Record<string, string>): RouteDeps["ass
   return {
     store,
     assetPrefix: "",
+    static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -27,6 +38,7 @@ export function assetStoreServing(files: Record<string, string>): RouteDeps["ass
 export function noAssets(): RouteDeps["assetStore"] {
   return {
     assetPrefix: "",
+    static: nextStatic(),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -42,7 +54,7 @@ export function baseDeps(overrides: TestRouteDeps = {}): RouteDeps {
     assetStore: noAssets(),
     ...rest,
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "test",
       basePath: "",
       pathnames: [],

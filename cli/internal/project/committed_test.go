@@ -21,14 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func committedSchemaFile(t *testing.T, root string) string {
-	t.Helper()
-	version, err := os.ReadFile(filepath.Join(root, "VERSION"))
-	if err != nil {
-		t.Fatalf("read the release version: %v", err)
-	}
-	return filepath.Join("www", "public", "schema", strings.TrimSpace(string(version)), "ocel.schema.json")
-}
+var committedSchemaFile = filepath.Join("www", "public", "schema", "ocel.schema.json")
 
 const compareTable = "www/components/docs/compare/data.ts"
 
@@ -48,7 +41,7 @@ func schemaID(t *testing.T, root string) string {
 	var read struct {
 		ID string `json:"$id"`
 	}
-	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile(t, root)))
+	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)
 	}
@@ -60,7 +53,7 @@ func schemaID(t *testing.T, root string) string {
 
 func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 	t.Helper()
-	file := committedSchemaFile(t, root)
+	file := committedSchemaFile
 	data, err := os.ReadFile(filepath.Join(root, file))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)
@@ -240,20 +233,29 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 func TestTheCommittedSchemaTakesTunnelAsACloudflareEdgeOptionAlone(t *testing.T) {
 	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
+	options := map[string]string{
+		"aws": ``,
+		"gcp": `"project":"shop","region":"us-central1",`,
+		"vps": `"ssh":"box",`,
+	}
 	cases := []struct {
-		edge  string
-		valid bool
+		provider string
+		edge     string
+		valid    bool
 	}{
-		{`{"cloudflare":{"tunnel":true}}`, true},
-		{`{"cloudfront":{"tunnel":true}}`, false},
-		{`{"api-gateway":{"tunnel":true}}`, false},
-		{`{"alb":{"tunnel":true}}`, false},
-		{`{"cloudflare":{"tunel":true}}`, false},
+		{"aws", `{"cloudflare":{"tunnel":true}}`, true},
+		{"gcp", `{"cloudflare":{"tunnel":true}}`, true},
+		{"vps", `{"cloudflare":{"tunnel":true}}`, true},
+		{"aws", `{"cloudfront":{"tunnel":true}}`, false},
+		{"aws", `{"api-gateway":{"tunnel":true}}`, false},
+		{"gcp", `{"alb":{"tunnel":true}}`, false},
+		{"aws", `{"cloudflare":{"tunel":true}}`, false},
 	}
 	for _, c := range cases {
-		document := documentOf(t, c.edge, "ocel.json", []byte(`{"slug":"shop","edge":`+c.edge+`}`))
+		config := `{"slug":"shop","provider":{"` + c.provider + `":{` + options[c.provider] + `"edge":` + c.edge + `}}}`
+		document := documentOf(t, c.edge, "ocel.json", []byte(config))
 		if err := schema.Validate(document); (err == nil) != c.valid {
-			t.Errorf("the committed schema validates edge %s with %v, want valid = %v", c.edge, err, c.valid)
+			t.Errorf("the committed schema validates %s edge %s with %v, want valid = %v", c.provider, c.edge, err, c.valid)
 		}
 	}
 }

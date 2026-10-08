@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { NextHost } from "../src/host.mjs";
 import { newInstanceCache } from "../src/instance-cache.mjs";
+import { now } from "../src/use-cache-entry.mjs";
 
 async function loadHandler(env: Record<string, string> = {}, host: NextHost = {}) {
   vi.resetModules();
@@ -228,12 +229,12 @@ test("reports the latest expiry per tag and zero for tags never revalidated", as
 
   expect(await handler.getExpiration(["products"])).toBe(0);
 
-  const before = Date.now();
+  const before = now();
   await handler.updateTags(["products"]);
 
   const expiration = await handler.getExpiration(["products", "reviews"]);
   expect(expiration).toBeGreaterThanOrEqual(before);
-  expect(expiration).toBeLessThanOrEqual(Date.now() + 1);
+  expect(expiration).toBeLessThanOrEqual(now());
 });
 
 test("does not treat a duration-scoped revalidation as an expiry until it is asked for", async () => {

@@ -11,12 +11,6 @@ const distNode = join(dist, "node");
 
 const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
-const handlers = {
-  "cache-handler": Bun.resolveSync("@framework/next-runtime/cache-handler", pkgDir),
-  "use-cache-default": Bun.resolveSync("@framework/next-runtime/use-cache-default", pkgDir),
-  "use-cache-remote": Bun.resolveSync("@framework/next-runtime/use-cache-remote", pkgDir),
-};
-
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
 const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store", "tag-index"];
@@ -46,20 +40,6 @@ async function bundle(entry, outfile, options) {
 
 await rm(dist, { recursive: true, force: true });
 execFileSync("tsc", ["--outDir", dist], { cwd: pkgDir, stdio: "inherit" });
-
-await Promise.all(
-  Object.entries(handlers).map(([name, entry]) =>
-    bundle(entry, join(distNext, `${name}.cjs`), {
-      format: "cjs",
-      minify: true,
-      footer: "module.exports = module.exports.default;",
-    }),
-  ),
-);
-
-await Promise.all(
-  Object.keys(handlers).map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
-);
 
 await Promise.all(
   bundledModules.map((name) =>

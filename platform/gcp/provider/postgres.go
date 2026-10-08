@@ -34,6 +34,7 @@ const (
 	cloudSQLEncryptedOnly  = "ENCRYPTED_ONLY"
 	cloudSQLRunnable       = "RUNNABLE"
 	cloudSQLInstanceType   = "CLOUD_SQL_INSTANCE"
+	cloudSQLPrimaryAddress = "PRIMARY"
 	postgresPort           = 5432
 	postgresAccount        = "ocel"
 	postgresDatabaseName   = "ocel"
@@ -201,7 +202,7 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 		Name:     resource.Name,
 		Resource: resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyHost:     addressOf(current, i.clients.NetworkPath(i.ref.Tier)),
+			provider.PropertyHost:     i.addressOf(current),
 			provider.PropertyPort:     strconv.Itoa(postgresPort),
 			provider.PropertyDatabase: postgresDatabaseName,
 			provider.PropertyUsername: postgresAccount,
@@ -292,26 +293,35 @@ func (i postgresInstances) awaitSettled(ctx context.Context, database string, cu
 		database, current.Name, current.State, cloudSQLRunnable, current.Name)
 }
 
-func addressOf(instance *sqladmin.DatabaseInstance, network string) string {
-	if instance.Settings == nil || instance.Settings.IpConfiguration == nil || instance.Settings.IpConfiguration.PscConfig == nil {
-		return ""
+func addressOf(instance *sqladmin.DatabaseInstance, network string, emulated bool) string {
+	if instance.Settings != nil && instance.Settings.IpConfiguration != nil && instance.Settings.IpConfiguration.PscConfig != nil {
+		for _, auto := range instance.Settings.IpConfiguration.PscConfig.PscAutoConnections {
+			if auto.ConsumerNetwork == network && auto.IpAddress != "" {
+				return auto.IpAddress
+			}
+		}
 	}
-	for _, auto := range instance.Settings.IpConfiguration.PscConfig.PscAutoConnections {
-		if auto.ConsumerNetwork == network && auto.IpAddress != "" {
-			return auto.IpAddress
+	if emulated {
+		for _, mapping := range instance.IpAddresses {
+			if mapping.Type == cloudSQLPrimaryAddress && mapping.IpAddress != "" {
+				return mapping.IpAddress
+			}
 		}
 	}
 	return ""
 }
 
+func (i postgresInstances) addressOf(instance *sqladmin.DatabaseInstance) string {
+	return addressOf(instance, i.clients.NetworkPath(i.ref.Tier), i.clients.emulated())
+}
+
 func (i postgresInstances) awaitAddress(ctx context.Context, database string, current *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
-	network := i.clients.NetworkPath(i.ref.Tier)
-	if addressOf(current, network) != "" {
+	if i.addressOf(current) != "" {
 		return current, nil
 	}
 	reached, err := until(ctx, "postgres "+database+" to be given an address on "+i.clients.Network(i.ref.Tier),
 		func() (*sqladmin.DatabaseInstance, error) { return i.readInstance(ctx, database, current.Name) },
-		func(instance *sqladmin.DatabaseInstance) bool { return addressOf(instance, network) != "" })
+		func(instance *sqladmin.DatabaseInstance) bool { return i.addressOf(instance) != "" })
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud SQL instance postgres %s runs on, %s, has no address on the %s network yet, so nothing names where an app reaches it: %v\n"+

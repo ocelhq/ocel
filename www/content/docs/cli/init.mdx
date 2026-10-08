@@ -7,8 +7,9 @@ description: Make this directory deployable.
 ocel init --provider aws
 ```
 
-Writes `ocel.json` here, naming the provider you gave and a slug — this directory's name
-unless you pass one — and adds the ocel SDK with your language's own package manager. It
+Writes the [config](/docs/configuration) here, naming the provider you gave and a slug — this
+directory's name unless you pass one — and adds the ocel SDK with your language's own package
+manager. A project built with node gets `ocel.config.ts`, and any other gets `ocel.json`. It
 runs entirely offline: it neither signs you in nor contacts the console.
 
 ```bash
@@ -18,9 +19,13 @@ ocel init my-app --provider vps
 | Flag | What it does |
 | --- | --- |
 | `--provider` | The provider this project deploys through: `aws`, `gcp` or `vps`. Required. |
+| `--option` | A provider option whose value is text, as `name=value`; repeat it for each. `gcp` cannot deploy without `region`, nor `vps` without `ssh`; a name the provider does not take is refused, naming the ones it does. On a terminal, init asks for any you leave out; under `--json` or with no terminal, it fails with [`input_required`](/docs/errors/input_required). |
 | `--lang` | The language of this project (`go`, `rust`, `python`, `node`), when no manifest here says. |
-| `--ts` | Write the config [as a TypeScript program](/docs/typescript-config) instead — it compiles to the same document and needs node. |
-| `--yaml` | Write the config [as YAML](/docs/configuration#yaml) instead — the same document, and no node needed. |
+| `--format` | Write the config as `ts`, `json` or [`yaml`](/docs/configuration#yaml) instead of the default — the same document in each. `ts` needs node. |
+
+```bash
+ocel init --provider gcp --option region=europe-west1
+```
 
 Then pin the providers this CLI runs, and commit the result:
 

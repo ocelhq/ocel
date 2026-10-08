@@ -52,7 +52,7 @@ type heldItem struct {
 
 type compute[T any] struct {
 	kind   string
-	remove func(context.Context, provider.StackRef, []T, progress.Log) error
+	remove func(context.Context, provider.StackRef, []T, provider.ImageStore, progress.Log) error
 	shared *SharedHooks[T]
 	held   func(T) heldItem
 	item   func(heldItem) T
@@ -125,7 +125,7 @@ func provisionCompute[T any](
 	stray := slices.DeleteFunc(slices.Clone(planned), func(each T) bool {
 		return slices.ContainsFunc(provisioned, func(made T) bool { return c.held(made).physical == c.held(each).physical })
 	})
-	if err := removeCompute(ctx, f, spec.Ref, stray, c, progress); err != nil {
+	if err := removeCompute(ctx, f, spec.Ref, stray, c, spec.Images.Store, progress); err != nil {
 		return nil, err
 	}
 	for _, each := range provisioned {
@@ -137,7 +137,7 @@ func provisionCompute[T any](
 		if err != nil {
 			return nil, err
 		}
-		if err := removeRevisions(ctx, f, spec.Ref, c, held.physical, retry, progress); err != nil && progress != nil {
+		if err := removeRevisions(ctx, f, spec.Ref, c, held.physical, retry, spec.Images.Store, progress); err != nil && progress != nil {
 			progress.Warn(fmt.Sprintf("Left revisions %v of %s in place, and the next release of it tries again: %v", retry, held.physical, err))
 		}
 	}
@@ -169,9 +169,9 @@ func recordPlanned[T any](ctx context.Context, f *hookStacks, spec provider.Stac
 	return stackrecords.Write(ctx, f.keyValues, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name, recorded)
 }
 
-func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, c compute[T], progress progress.Log) error {
+func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, c compute[T], images provider.ImageStore, progress progress.Log) error {
 	if c.shared == nil {
-		return removeAll(ctx, ref, going, c.remove, progress)
+		return removeAll(ctx, ref, going, c.remove, images, progress)
 	}
 	var batch []T
 	var whole []heldItem
@@ -192,13 +192,13 @@ func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.Stack
 			whole = append(whole, held)
 			continue
 		}
-		if err := removeRevisions(ctx, f, ref, c, held.physical, retry, progress); err != nil {
+		if err := removeRevisions(ctx, f, ref, c, held.physical, retry, images, progress); err != nil {
 			failed = err
 			break
 		}
 	}
 	if len(batch) > 0 {
-		removed := removeAll(ctx, ref, batch, c.remove, progress)
+		removed := removeAll(ctx, ref, batch, c.remove, images, progress)
 		failed = errors.Join(failed, removed)
 		for _, held := range whole {
 			failed = errors.Join(failed, f.finishRemoval(ctx, ref, held, removed == nil))
@@ -207,7 +207,7 @@ func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.Stack
 	return failed
 }
 
-func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, c compute[T], physical string, revisions []heldItem, progress progress.Log) error {
+func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, c compute[T], physical string, revisions []heldItem, images provider.ImageStore, progress progress.Log) error {
 	if len(revisions) == 0 {
 		return nil
 	}
@@ -215,7 +215,7 @@ func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.Sta
 	for _, revision := range revisions {
 		going = append(going, c.item(revision))
 	}
-	kept, err := c.shared.RemoveRevisions(ctx, ref, going, progress)
+	kept, err := c.shared.RemoveRevisions(ctx, ref, going, images, progress)
 	if err != nil {
 		return err
 	}

@@ -51,7 +51,7 @@ service ProviderService {
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
-    rpc Rollback(RollbackRequest) returns (RollbackResponse);
+    rpc Rollback(RollbackRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -109,13 +109,7 @@ message ProviderFacts {
 
   repeated WorkerCeiling worker_ceilings = 3;
 
-  string next_runtime_dir = 4;
-
   int64 max_function_bytes = 5 [(buf.validate.field).int64.gte = 0];
-
-  bool next_refreshes_by_request = 6;
-
-  bool ships_next_server_runtime = 7;
 
   bool forwards_ports = 8;
 }
@@ -263,7 +257,7 @@ message TierDomains {
 }
 
 message Framework {
-  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "go", "python", "rust"]}];
+  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "sveltekit", "go", "python", "rust"]}];
 
   string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
@@ -544,6 +538,8 @@ message RemoveEnvironmentRequest {
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   EdgeSelection edge = 3;
+
+  ImageRegistry project_registry = 4;
 }
 
 message ProjectRequest {
@@ -555,6 +551,8 @@ message ProjectRequest {
 
   // A removal that sends a consented plan refuses work that plan never showed.
   common.plan.v1.ChangePlan consented = 4;
+
+  ImageRegistry project_registry = 5;
 }
 
 message ListEnvironmentsRequest {
@@ -789,11 +787,8 @@ message RollbackRequest {
   string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
-}
 
-message RollbackResponse {
-  Promotion promoted = 1;
-  repeated string warnings = 2;
+  ImageRegistry project_registry = 5;
 }
 
 message RemoveStalePromotionsRequest {
@@ -804,6 +799,8 @@ message RemoveStalePromotionsRequest {
   common.environment.v1.Environment environment = 3;
 
   EdgeSelection edge = 4;
+
+  ImageRegistry project_registry = 5;
 }
 
 message Question {
@@ -963,7 +960,13 @@ message ForwardPortsRequest {
 
   common.environment.v1.Environment environment = 2;
 
-  repeated string bindings = 3 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
+  repeated ForwardPortsGrant grants = 3 [(buf.validate.field).repeated = {min_items: 1}];
+}
+
+message ForwardPortsGrant {
+  string grantee = 1;
+
+  repeated string bindings = 2 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
 }
 
 message ForwardPortsEvent {
@@ -979,4 +982,14 @@ message ForwardPortsResponse {
   repeated common.bindings.v1.Binding bindings = 1 [debug_redact = true];
 
   repeated string unforwarded = 2;
+
+  repeated BindingProxy binding_proxies = 3 [debug_redact = true];
+}
+
+message BindingProxy {
+  string grantee = 1;
+
+  string address = 2 [(buf.validate.field).string.min_len = 1];
+
+  string session_token = 3 [(buf.validate.field).string.min_len = 1];
 }

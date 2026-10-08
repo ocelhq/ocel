@@ -1,0 +1,35 @@
+---
+title: SvelteKit
+description: Deploy a SvelteKit app.
+---
+
+Install the adapter and name it in your config:
+
+```bash
+pnpm add -D @ocel/sveltekit
+```
+
+```ts title="vite.config.ts"
+import ocel from "@ocel/sveltekit";
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [sveltekit({ adapter: ocel() })],
+});
+```
+
+On SvelteKit 2.31 or later, set `kit: { adapter: ocel() }` in `svelte.config.js` instead.
+
+`ocel deploy` recognises the app by its `@sveltejs/kit` dependency and runs its `build` script.
+Every route renders in one function. Prerendered pages and the files in `static/` are served
+beside it, and the content-hashed chunks under `/_app/immutable/` are cached for a year,
+from the asset bucket wherever the edge in front reads one. `/_app/version.json` is always
+revalidated, so an open tab learns of a new deployment.
+
+To run the app in a container, give it a `"start": "node build"` script. Outside `ocel build`,
+`vite build` writes to `build/`, and `node build` serves it on `PORT` at `HOST`, which is
+`127.0.0.1` unless you set it.
+
+`ocel/env/client` is not available in a SvelteKit app yet. Read values on the server, in
+`+page.server.ts` or `+server.ts`.

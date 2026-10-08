@@ -24,11 +24,12 @@ type Stacks struct {
 	journal    *Journal
 	refusal    error
 
-	mu          sync.Mutex
-	stacks      map[string]provider.StackResult
-	provisioned []provider.StackSpec
-	taken       []string
-	entered     func(provider.StackSpec) error
+	mu            sync.Mutex
+	stacks        map[string]provider.StackResult
+	provisioned   []provider.StackSpec
+	taken         []string
+	destroyedWith []provider.ImageStore
+	entered       func(provider.StackSpec) error
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
@@ -114,10 +115,17 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) DestroyedWith() []provider.ImageStore {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.destroyedWith)
+}
+
+func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.destroyedWith = append(r.destroyedWith, images)
 	if r.refusal != nil {
 		refused := r.refusal
 		r.refusal = nil
@@ -241,7 +249,7 @@ func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, 
 	return ProvisionedFunctions(spec), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 	for _, function := range functions {
 		p.stacks.recordDestroyed(function.Name)
 	}
@@ -252,7 +260,7 @@ func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec,
 	return ProvisionedContainers(spec), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
 	for _, container := range containers {
 		p.stacks.recordDestroyed(container.Name)
 	}

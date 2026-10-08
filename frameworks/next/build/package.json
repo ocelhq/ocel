@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "package-manager-detector": "^0.2.11"
+    "@framework/node-build": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24",

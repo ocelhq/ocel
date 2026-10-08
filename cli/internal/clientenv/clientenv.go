@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -31,6 +32,7 @@ var recordPath = filepath.Join(statedir.Name, "output", "client-digests.json")
 type App struct {
 	Name         string
 	Dir          string
+	Framework    string
 	ClientBundle bool
 	Variables    []variables.Variable
 }
@@ -42,6 +44,7 @@ func AppsOf(cfg *project.Project, values map[string][]variables.Variable) []App 
 		apps = append(apps, App{
 			Name:         a.Name,
 			Dir:          dir,
+			Framework:    a.Framework(),
 			ClientBundle: language.HasClientBundle(a.Framework(), dir),
 			Variables:    values[a.Name],
 		})
@@ -89,6 +92,9 @@ func MapEnvImports(projectDir string, apps []App) error {
 }
 
 func MapAppEnvImport(projectDir string, app App) (written string, err error) {
+	if app.Framework == buildoutput.FrameworkSvelteKit {
+		return "", nil
+	}
 	return mapSpecifier(app.Dir, accessorPath(projectDir, app.Name, app.Dir))
 }
 

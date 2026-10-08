@@ -629,6 +629,9 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.StackResult{}, err
 	}
+	if err := spec.Images.PushMissing(ctx, progress); err != nil {
+		return provider.StackResult{}, err
+	}
 	public, err := readPublicRanges(spec)
 	if err != nil {
 		return provider.StackResult{}, err

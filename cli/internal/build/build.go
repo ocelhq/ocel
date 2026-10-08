@@ -73,7 +73,7 @@ func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariable
 		if err := livedir.RefuseUnnamableKeys(live); err != nil {
 			return l, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		readable = append(readable, SecretValues(live)...)
+		readable = append(readable, variables[a.Name].SecretValues()...)
 	}
 	return l.hiding(redaction.NewValues(readable)), nil
 }
@@ -87,19 +87,19 @@ type nodeRun func(ctx context.Context, scriptPath string, request []byte, log Lo
 
 type imageBuild func(ctx context.Context, app image.App, arch string, live image.LiveValues, progress io.Writer) (image.Image, error)
 
-type builtArchitecture func(ctx context.Context, repository, digest string) (string, error)
+type builtImageInspection func(ctx context.Context, repository, digest string) (images.ImageInspection, error)
 
 type fileAddition func(ctx context.Context, base image.Image, slug, app, files, dst, arch string, progress io.Writer) (image.Image, error)
 
 type tools struct {
-	node         nodeRun
-	image        imageBuild
-	architecture builtArchitecture
-	addFiles     fileAddition
-	liveHashKey  func() ([]byte, error)
+	node        nodeRun
+	image       imageBuild
+	inspection  builtImageInspection
+	addFiles    fileAddition
+	liveHashKey func() ([]byte, error)
 }
 
-var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
+var installed = tools{node: runNode, image: image.Build, inspection: images.InspectBuiltImage, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
 
 func Apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	return installed.apps(ctx, cfg, variables, archs, workers, host, log)
@@ -145,9 +145,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	defer log.flushShared()
 	defer func() { err = log.hidden.HideError(err) }()
 
-	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
-		return err
-	}
 	if err := RefuseNextFunctionsWithOwnAdapter(cfg); err != nil {
 		return err
 	}
@@ -193,7 +190,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
 	var traced []toolchain.Target
-	var nextApps []project.App
+	var scriptBuilt []project.App
 	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework(); {
 		case compiledFromSource(name):
@@ -208,7 +205,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				return err
 			}
 		case name == buildoutput.FrameworkNext:
-			nextApps = append(nextApps, a)
+			scriptBuilt = append(scriptBuilt, a)
 			env, err := deliverValues(a)
 			if err != nil {
 				return err
@@ -225,9 +222,23 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 
-				NextRuntimeDir:         host.NextRuntimeDir,
-				MaxFunctionBytes:       host.MaxFunctionBytes,
-				NextRefreshesByRequest: host.NextRefreshesByRequest,
+				MaxFunctionBytes: host.MaxFunctionBytes,
+			})
+		case name == buildoutput.FrameworkSvelteKit:
+			scriptBuilt = append(scriptBuilt, a)
+			env, err := deliverValues(a)
+			if err != nil {
+				return err
+			}
+			req.Apps = append(req.Apps, nodeAppBuild{
+				Unset:     env.unset,
+				Framework: buildoutput.FrameworkSvelteKit,
+				Name:      a.Name,
+				Cwd:       filepath.Join(cfg.Dir, a.Path),
+				OutputDir: buildoutput.AppRoot(outputDir, a.Name),
+				BuildID:   buildIDs[a.Name],
+				Folder:    a.Folder,
+				Env:       env.set,
 			})
 		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)
@@ -256,7 +267,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				return err
 			}
 		default:
-			return fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
+			return fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
 		}
 	}
 
@@ -283,15 +294,15 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			return err
 		}
 	}
-	for _, a := range nextApps {
-		if err := installNextPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
+	for _, a := range scriptBuilt {
+		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func installNextPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
+func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
 	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), functionsDirName, "*"+functionDirSuffix))
 	if err != nil {
 		return err

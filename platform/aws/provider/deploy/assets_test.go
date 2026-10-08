@@ -7,15 +7,17 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func staticAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json":        `{"buildId":"WEB1"}`,
 		"apps/web/static/next.svg":              "<svg/>",
 		"apps/web/static/_next/static/chunk.js": "console.log(1)",
-		"apps/admin/routing-manifest.json":      `{"buildId":"ADM1"}`,
+		"apps/admin/next-route-table.json":      `{"buildId":"ADM1"}`,
 		"apps/admin/static/favicon.ico":         "ico",
 	})
 }
@@ -29,7 +31,7 @@ func sortedPuts(f *fakeArtifactStore) []string {
 func imageConfigTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 		"apps/web/image-config.json":     `{"formats":["image/webp"]}`,
 		"apps/web/static/logo.png":       "PNG",
 	})
@@ -113,7 +115,10 @@ func TestUploadStaticAssets(t *testing.T) {
 		t.Parallel()
 		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":                         `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
+			"apps/web/hosting.json": `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{` +
+				`"immutablePrefixes":["/_next/static/","/docs/_next/static/"],` +
+				`"mustRevalidatePrefixes":["/_next/static/service-worker/","/docs/_next/static/service-worker/"]}}`,
 			"apps/web/static/_next/static/chunk.js":                  "console.log(1)",
 			"apps/web/static/_next/static/css/app.css":               "body{}",
 			"apps/web/static/_next/static/service-worker/sw.js":      "self",
@@ -136,20 +141,20 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 
 		for _, tc := range []struct{ rel, contentType, cacheControl string }{
-			{"_next/static/chunk.js", "text/javascript; charset=utf-8", immutableCacheControl},
-			{"_next/static/css/app.css", "text/css; charset=utf-8", immutableCacheControl},
-			{"_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
-			{"docs/_next/static/chunks/main.js", "text/javascript; charset=utf-8", immutableCacheControl},
-			{"docs/_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
-			{"next.svg", "image/svg+xml", revalidateCacheControl},
-			{"styles.css", "text/css; charset=utf-8", revalidateCacheControl},
-			{"chunk.js.map", "application/json; charset=utf-8", revalidateCacheControl},
-			{"favicon.ico", "image/x-icon", revalidateCacheControl},
-			{"robots.txt", "text/plain", revalidateCacheControl},
-			{"manifest.json", "application/manifest+json", revalidateCacheControl},
-			{"index.html", "text/html; charset=utf-8", revalidateCacheControl},
-			{"font.woff2", "font/woff2", revalidateCacheControl},
-			{"LICENSE", "application/octet-stream", revalidateCacheControl},
+			{"_next/static/chunk.js", "text/javascript; charset=utf-8", edge.ImmutableCacheControl},
+			{"_next/static/css/app.css", "text/css; charset=utf-8", edge.ImmutableCacheControl},
+			{"_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", edge.RevalidateCacheControl},
+			{"docs/_next/static/chunks/main.js", "text/javascript; charset=utf-8", edge.ImmutableCacheControl},
+			{"docs/_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", edge.RevalidateCacheControl},
+			{"next.svg", "image/svg+xml", edge.RevalidateCacheControl},
+			{"styles.css", "text/css; charset=utf-8", edge.RevalidateCacheControl},
+			{"chunk.js.map", "application/json; charset=utf-8", edge.RevalidateCacheControl},
+			{"favicon.ico", "image/x-icon", edge.RevalidateCacheControl},
+			{"robots.txt", "text/plain", edge.RevalidateCacheControl},
+			{"manifest.json", "application/manifest+json", edge.RevalidateCacheControl},
+			{"index.html", "text/html; charset=utf-8", edge.RevalidateCacheControl},
+			{"font.woff2", "font/woff2", edge.RevalidateCacheControl},
+			{"LICENSE", "application/octet-stream", edge.RevalidateCacheControl},
 		} {
 			key := assetKeyFor("web", testBuildID, tc.rel)
 			for name, up := range map[string]*fakeArtifactStore{"cache store": store, "asset bucket": asset} {
@@ -169,7 +174,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		asset := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":        `{"buildId":"WEB1"}`,
 			"apps/web/static/_next/static/chunk.js": "console.log(1)",
 		})
 		cfg := mirrorConfig(root, store, asset)
@@ -201,7 +206,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{
 			ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
@@ -302,7 +307,7 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("a project's own image config asset does not collide", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":    `{"buildId":"WEB1"}`,
 			"apps/web/image-config.json":        `{"formats":["image/webp"]}`,
 			"apps/web/static/image-config.json": `{"mine":true}`,
 		})
@@ -401,7 +406,7 @@ func TestUploadStaticAssets(t *testing.T) {
 func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 	t.Run("route entries are not mirrored to the asset bucket", func(t *testing.T) {
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":     `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":     `{"buildId":"WEB1"}`,
 			"apps/web/cache/index.cache.json":    `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/fetch-cache/a1.cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})

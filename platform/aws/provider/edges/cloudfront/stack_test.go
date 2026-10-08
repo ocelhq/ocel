@@ -30,7 +30,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	live := routeOn(t, w, stack, boundHost)
 	wrote := w.store.count("kvs.UpdateKeys")
 
-	next := router.ReleaseRecord{App: "web", Release: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}}
+	next := router.ReleaseRecord{App: "web", Release: "d2.f2", RootFunction: "/", RootFunctionPhysical: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), next); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
@@ -583,5 +583,34 @@ func TestBindDomainBeforeAnyPromotionPublishesNoRoute(t *testing.T) {
 
 	if items := w.store.itemsOf(ownState(t, stack).KeyValueStore); len(items) != 0 {
 		t.Errorf("the key value store contains %v, want nothing: no release is promoted for the hostname to answer with", items)
+	}
+}
+
+func TestAPromotedRouteSendsTheImmutablePrefixesTheBuildNamedToTheBucket(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	record := router.ReleaseRecord{
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: entryFunction,
+		FunctionURLs:         map[string]string{"/": fakeEntryURL},
+		AssetPrefix:          fakeAssetPrefix,
+		Static:               &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}},
+	}
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	bound(t, stack)
+
+	published := routeOn(t, w, stack, boundHost)
+	if !slices.Equal(published.Immutable, []string{"/docs/_next/static/"}) {
+		t.Errorf("the hostname's route sends %v to the bucket, want the prefixes the build named: the resolver reads no framework's paths of its own", published.Immutable)
 	}
 }

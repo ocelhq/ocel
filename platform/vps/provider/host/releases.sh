@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository>" >&2
+	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>..." >&2
 	exit 2
 }
 
@@ -43,10 +43,42 @@ root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
 reached "$root"
 [ -d "$root" ] || abort "$root is missing; run ocel bootstrap"
 
+dir="$root/$project/$app"
+dropped="$dir/.dropped"
+
 lock() {
-	mkdir -p "$root/$project/$app"
-	exec 9<"$root/$project/$app"
-	flock -x 9
+	tries=0
+	while :; do
+		tries=$((tries + 1))
+		if [ "$tries" -gt 50 ]; then
+			mkdir -p "$dir"
+			command exec 9<"$dir"
+			abort "$dir kept vanishing before it could be locked"
+		fi
+		mkdir -p "$dir" 2>/dev/null || continue
+		command exec 9<"$dir" 2>/dev/null || continue
+		flock -x 9
+		[ "$(stat -c %i "$dir" 2>/dev/null)" = "$(stat -L -c %i /proc/self/fd/9)" ] && return
+		exec 9<&-
+	done
+}
+
+remove_emptied_scope() {
+	if [ -z "$(find "$dir" -type f)" ]; then
+		rmdir "$dir" 2>/dev/null || true
+		rmdir "$root/$project" 2>/dev/null || true
+	fi
+}
+
+read_desired() {
+	: >"$scratch".desired
+	find "$dir" -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
+
+	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
+	while IFS= read -r running; do
+		[ -n "$running" ] || abort "a container with ocel.project=$project and ocel.app=$app has no ocel.ref"
+		printf '%s\n' "$running" >>"$scratch".desired
+	done <"$scratch".running
 }
 
 coordinate() {
@@ -57,7 +89,8 @@ coordinate() {
 
 scratch="$root/.staging.$$"
 clean() {
-	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged
+	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed \
+		"$scratch".removed "$scratch".pending "$scratch".settled
 }
 trap clean EXIT
 trap 'clean; exit 129' HUP
@@ -83,13 +116,16 @@ promote)
 	esac
 	coordinate "$ref"
 	lock
-	file="$root/$project/$app/$tier"
+	file="$dir/$tier"
 	: >>"$file"
 	{
 		printf '%s\n' "$ref"
 		grep -F -x -v -e "$ref" "$file" || true
-	} | head -n $keep >"$scratch".staged
-	mv -f "$scratch".staged "$file"
+	} >"$scratch".staged
+	tail -n +$((keep + 1)) "$scratch".staged >>"$dropped"
+	head -n $keep "$scratch".staged >"$scratch".kept
+	mv -f "$scratch".kept "$file"
+	[ -s "$dropped" ] || rm -f "$dropped"
 	;;
 forget)
 	[ $# -eq 1 ] || usage
@@ -98,35 +134,73 @@ forget)
 	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 	esac
 	lock
-	rm -f "$root/$project/$app/$tier"
-	rmdir "$root/$project/$app" 2>/dev/null || true
-	rmdir "$root/$project" 2>/dev/null || true
+	if [ -f "$dir/$tier" ]; then
+		cat "$dir/$tier" >>"$dropped"
+	fi
+	rm -f "$dir/$tier"
+	[ -s "$dropped" ] || rm -f "$dropped"
+	remove_emptied_scope
 	;;
 reconcile)
 	[ $# -eq 1 ] || usage
 	repository=$1
 	coordinate "$repository"
 	lock
-
-	: >"$scratch".desired
-	if [ -d "$root/$project/$app" ]; then
-		find "$root/$project/$app" -type f -exec cat {} + >>"$scratch".desired
-	fi
-
-	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
-	while IFS= read -r running; do
-		[ -n "$running" ] || abort "a container with ocel.project=$project and ocel.app=$app has no ocel.ref"
-		printf '%s\n' "$running" >>"$scratch".desired
-	done <"$scratch".running
+	read_desired
 
 	docker images --filter "reference=$repository:*" --format '{{.Repository}}:{{.Tag}}' >"$scratch".actual
 	grep -F -x -v -f "$scratch".desired "$scratch".actual >"$scratch".going || true
 
+	: >"$scratch".removed
 	while IFS= read -r going; do
 		case $going in '' | *'<none>'*) continue ;; esac
 		docker rmi "$going" >/dev/null 2>&1 || continue
-		printf '%s\n' "$going"
+		printf '%s\n' "$going" >>"$scratch".removed
+		printf 'removed %s\n' "$going"
 	done <"$scratch".going
+
+	: >>"$dropped"
+	cat "$dropped" "$scratch".removed | grep -F -x -v -f "$scratch".desired | sort -u >"$scratch".unnamed || true
+	: >"$scratch".pending
+	while IFS= read -r going; do
+		[ -n "$going" ] || continue
+		if grep -F -x -q -e "$going" "$scratch".actual && ! grep -F -x -q -e "$going" "$scratch".removed; then
+			continue
+		fi
+		printf '%s\n' "$going" >>"$scratch".pending
+		printf 'unused %s\n' "$going"
+	done <"$scratch".unnamed
+	mv -f "$scratch".pending "$dropped"
+	[ -s "$dropped" ] || rm -f "$dropped"
+	remove_emptied_scope
+	;;
+settle)
+	[ $# -ge 1 ] || usage
+	for ref in "$@"; do
+		coordinate "$ref"
+	done
+	lock
+	if [ -f "$dropped" ]; then
+		printf '%s\n' "$@" >"$scratch".settled
+		grep -F -x -v -f "$scratch".settled "$dropped" >"$scratch".kept || true
+		mv -f "$scratch".kept "$dropped"
+		[ -s "$dropped" ] || rm -f "$dropped"
+	fi
+	remove_emptied_scope
+	;;
+claimed)
+	[ $# -ge 1 ] || usage
+	for ref in "$@"; do
+		coordinate "$ref"
+	done
+	lock
+	read_desired
+	for ref in "$@"; do
+		if grep -F -x -q -e "$ref" "$scratch".desired; then
+			printf '%s\n' "$ref"
+		fi
+	done
+	remove_emptied_scope
 	;;
 *)
 	usage

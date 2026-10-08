@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cacheControlFor, contentTypeFor } from "../src/assets.mjs";
+import { type AssetStoreDeps, contentTypeFor, serveStaticAsset } from "../src/assets.mjs";
 
 describe("contentTypeFor", () => {
   it("infers content-type from the file extension", () => {
@@ -41,30 +41,44 @@ describe("contentTypeFor", () => {
   });
 });
 
-describe("cacheControlFor", () => {
-  const immutable = "public, max-age=31536000, immutable";
-  const revalidate = "public, max-age=0, must-revalidate";
+function basePathStoreServing(files: Record<string, string>): AssetStoreDeps {
+  return {
+    store: {
+      async get(key) {
+        const body = files[key];
+        return body === undefined ? null : { body: new Blob([body]).stream() };
+      },
+    },
+    assetPrefix: "assets/p/app/b1",
+    basePath: "/docs",
+    static: { immutablePrefixes: ["/docs/_next/static/"] },
+    cache: { match: async () => undefined, put: async () => {} },
+    waitUntil: () => {},
+  };
+}
 
-  it("makes the content-hashed _next/static chunks immutable", () => {
-    expect(cacheControlFor("/_next/static/chunks/main-abc123.js")).toBe(immutable);
-    expect(cacheControlFor("/_next/static/css/app.css")).toBe(immutable);
-    expect(cacheControlFor("/_next/static/media/font.woff2")).toBe(immutable);
+describe("serveStaticAsset under a basePath", () => {
+  it("serves the 404 page the build stored under the basePath when a page misses", async () => {
+    const url = new URL("https://app.example/docs/missing");
+    const deps = basePathStoreServing({ "assets/p/app/b1/docs/404.html": "<h1>gone</h1>" });
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>gone</h1>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
-  it("exempts the service-worker chunk", () => {
-    expect(cacheControlFor("/_next/static/service-worker/sw.js")).toBe(revalidate);
-  });
+  it("serves the locale's 404 page the build stored under the basePath", async () => {
+    const url = new URL("https://app.example/docs/fr/missing");
+    const deps = basePathStoreServing({
+      "assets/p/app/b1/docs/fr/404.html": "<h1>introuvable</h1>",
+      "assets/p/app/b1/docs/404.html": "<h1>gone</h1>",
+    });
 
-  it("classifies a basePath app's assets the same way", () => {
-    expect(cacheControlFor("/docs/_next/static/chunks/main.js")).toBe(immutable);
-    expect(cacheControlFor("/docs/_next/static/service-worker/sw.js")).toBe(revalidate);
-  });
+    const res = await serveStaticAsset(new Request(url), url, deps, "fr");
 
-  it("revalidates every asset served at a stable URL", () => {
-    expect(cacheControlFor("/favicon.ico")).toBe(revalidate);
-    expect(cacheControlFor("/sitemap.xml")).toBe(revalidate);
-    expect(cacheControlFor("/icons/static/apple-icon.png")).toBe(revalidate);
-    expect(cacheControlFor("/next.svg")).toBe(revalidate);
-    expect(cacheControlFor("/some.html")).toBe(revalidate);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>introuvable</h1>");
   });
 });

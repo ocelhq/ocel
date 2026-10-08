@@ -167,3 +167,30 @@ describe("a host the Next runtime starts on", () => {
     expect(refuseIncompleteHost(stores, { OCEL_ISR_PREFIX: "app/isr" })).toBeUndefined();
   });
 });
+
+test("builds a host installed for first use only when it is first read", async () => {
+  const { getNextHost, installNextHostOnFirstUse } = await import("../src/host.mjs");
+  let built = 0;
+  installNextHostOnFirstUse(() => {
+    built++;
+    return { cacheTagsPerObject: 7 };
+  });
+
+  expect(built).toBe(0);
+  expect(getNextHost().cacheTagsPerObject).toBe(7);
+  expect(getNextHost().cacheTagsPerObject).toBe(7);
+  expect(built).toBe(1);
+});
+
+test("a host installed for first use that fails to build fails every read with that error and is built once", async () => {
+  const { getNextHost, installNextHostOnFirstUse } = await import("../src/host.mjs");
+  let built = 0;
+  installNextHostOnFirstUse(() => {
+    built++;
+    throw new Error("ocel: no url map");
+  });
+
+  expect(() => getNextHost()).toThrow("ocel: no url map");
+  expect(() => getNextHost()).toThrow("ocel: no url map");
+  expect(built).toBe(1);
+});

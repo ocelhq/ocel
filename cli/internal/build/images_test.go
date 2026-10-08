@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -146,9 +148,9 @@ func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *te
 
 	err := RefuseUnbuildableImages(context.Background(), rep, cfg, nil)
 	if err == nil {
-		t.Fatal("RefuseUnbuildableImages() accepted a build.dockerfile naming nothing")
+		t.Fatal("RefuseUnbuildableImages() accepted a image.dockerfile naming nothing")
 	}
-	if !strings.Contains(err.Error(), "build.dockerfile") || !strings.Contains(err.Error(), "web") {
+	if !strings.Contains(err.Error(), "image.dockerfile") || !strings.Contains(err.Error(), "web") {
 		t.Errorf("RefuseUnbuildableImages() = %v, want the app and the key it got wrong named", err)
 	}
 	if strings.Contains(err.Error(), images.DockerHostEnv) {
@@ -197,15 +199,17 @@ func builtImage(t *testing.T, cfg *project.Project) Output {
 	return built
 }
 
-func daemonHolding(architecture string) func(context.Context, string, string) (string, error) {
-	return func(context.Context, string, string) (string, error) { return architecture, nil }
+func daemonHolding(architecture string) builtImageInspection {
+	return func(context.Context, string, string) (images.ImageInspection, error) {
+		return images.ImageInspection{Architecture: architecture}, nil
+	}
 }
 
 func TestAPrebuiltImageIsReadBackRatherThanBuiltAgain(t *testing.T) {
 	cfg := containerProject(t, "")
 	built := builtImage(t, cfg)
 
-	prebuilt, err := tools{architecture: daemonHolding("arm64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
+	prebuilt, err := tools{inspection: daemonHolding("arm64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
 	if err != nil {
 		t.Fatalf("readPrebuilt() = %v", err)
 	}
@@ -220,7 +224,7 @@ func TestAPrebuiltContainerAppWithNoImageRecordedIsRefusedByName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := tools{architecture: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, nil)
+	_, err := tools{inspection: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, nil)
 	if err == nil {
 		t.Fatal("readPrebuilt() deployed a container app the prebuilt output holds no image for")
 	}
@@ -235,10 +239,10 @@ func TestAPrebuiltImageTheDaemonNoLongerHoldsIsRefused(t *testing.T) {
 	cfg := containerProject(t, "")
 	builtImage(t, cfg)
 
-	gone := func(context.Context, string, string) (string, error) {
-		return "", errors.New("the daemon answered \"404 Not Found\"")
+	gone := func(context.Context, string, string) (images.ImageInspection, error) {
+		return images.ImageInspection{}, errors.New("the daemon answered \"404 Not Found\"")
 	}
-	_, err := tools{architecture: gone}.readPrebuilt(context.Background(), cfg, nil)
+	_, err := tools{inspection: gone}.readPrebuilt(context.Background(), cfg, nil)
 	if err == nil {
 		t.Fatal("readPrebuilt() accepted an image the daemon no longer holds, so the push fails after the deploy has started")
 	}
@@ -251,7 +255,7 @@ func TestAPrebuiltImageBuiltForAnotherArchitectureThanTheTargetRunsIsRefused(t *
 	cfg := containerProject(t, "")
 	builtImage(t, cfg)
 
-	_, err := tools{architecture: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
+	_, err := tools{inspection: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
 	if err == nil {
 		t.Fatal("readPrebuilt() accepted an amd64 image for a target that runs arm64")
 	}
@@ -285,6 +289,66 @@ func TestAContainerAppIsBuiltWithTheBindingsAndSecretsOfItsOwnAppAlone(t *testin
 	}
 	if want := map[string]string{"OCEL_BINDING_KV": "kv-api"}; !maps.Equal(got["api"], want) {
 		t.Errorf("api was built with %v, want %v", got["api"], want)
+	}
+}
+
+func TestAContainerAppIsBuiltWithTheBindingProxyItsAppIsHandedInItsBuildEnvironment(t *testing.T) {
+	proxy := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-session-token"}
+	var got image.LiveValues
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, live image.LiveValues, _ io.Writer) (image.Image, error) {
+			got = live
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+		"web": {BindingProxyEnv: proxy},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Fatalf("apps() = %v", err)
+	}
+
+	if !maps.Equal(got.Env, proxy) {
+		t.Errorf("web was built with the environment %v, want the binding proxy's address and session token, which every SDK reads from its environment", got.Env)
+	}
+	if len(got.Values) != 0 {
+		t.Errorf("web was built with the live files %v, want none: the binding proxy is no file in the live dir", got.Values)
+	}
+	if got.Hash == "" {
+		t.Error("the build was handed no live hash, so a cached build step would keep the address and token of a proxy that has closed")
+	}
+}
+
+func TestAContainerAppCannotDeclareTheNamesTheBindingProxyIsDeliveredUnder(t *testing.T) {
+	for _, name := range []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar} {
+		built := false
+		_, err := tools{
+			image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+				built = true
+				return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+			},
+			liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+		}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+			"web": {Live: map[string]string{name: "mine"}},
+		}, nil, nil, Host{}, Log{})
+
+		if err == nil || !strings.Contains(err.Error(), name) || built {
+			t.Errorf("an image app declaring %s was built (%v) with %v, want it refused by name before the build, since the binding proxy is delivered under it", name, built, err)
+		}
+	}
+}
+
+func TestAContainerAppMayDeclareANameAFunctionBuildSetsItself(t *testing.T) {
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+		"web": {Live: map[string]string{"NODE_ENV": "production"}},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Errorf("an image app declaring NODE_ENV = %v, want it built: an image build sets no such name itself", err)
 	}
 }
 

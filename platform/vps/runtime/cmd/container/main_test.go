@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
@@ -207,5 +208,22 @@ func TestAManifestNamingNothingLiveResolvesToNoValuesAndNoDirectory(t *testing.T
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("a deployment reading nothing live still had %s made for it", dir)
+	}
+}
+
+func TestTheRuntimeLeavesNoProcessInItsContainerAbleToTraceItOrReadItsMemory(t *testing.T) {
+	t.Cleanup(func() { _ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0) })
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if code := run(context.Background(), []string{"true"}, []string{boxlive.EnvVar + "={"}); code == 0 {
+		t.Fatalf("run() with an unreadable manifest = %d, want it to stop before starting the app", code)
+	}
+	dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dumpable != 0 {
+		t.Errorf("the runtime is dumpable (%d), so a process the app starts as the same user can attach to it and call the box agent as the container's init", dumpable)
 	}
 }

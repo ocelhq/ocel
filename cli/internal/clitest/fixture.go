@@ -64,7 +64,7 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), config, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "function-config.json"), config, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -177,6 +177,14 @@ func WriteFile(t *testing.T, path, contents string) {
 	}
 }
 
+func InstallOcelPackage(t *testing.T, dir string) {
+	t.Helper()
+	pkg := filepath.Join(dir, "node_modules", "ocel")
+	WriteFile(t, filepath.Join(pkg, "package.json"), `{"name":"ocel","type":"module","exports":{"./config":"./config.js","./providers/fake":"./fake.js"}}`)
+	WriteFile(t, filepath.Join(pkg, "config.js"), `export const defineConfig = (config) => config;`)
+	WriteFile(t, filepath.Join(pkg, "fake.js"), `export default (options) => ({ fake: options });`)
+}
+
 func WriteUsageMonorepo(t *testing.T, root string) {
 	t.Helper()
 
@@ -185,7 +193,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
@@ -239,16 +247,16 @@ export function handler() {
 `)
 }
 
-func writeEdgeConfig(t *testing.T, root, declaration string) {
+func writeEdgeConfig(t *testing.T, root, providerOptions string) {
 	t.Helper()
 
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { fake: {} },
+  provider: { fake: { `+providerOptions+` } },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node" }],
-`+declaration+`};
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+};
 `)
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
@@ -11,10 +13,10 @@ func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadNextServerRuntime() = %v", err)
 	}
-	allowed := []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
+	allowed := []string{containerimage.NextServerPreloadFile}
 	for name := range files {
 		if !slices.Contains(allowed, name) {
-			t.Errorf("ReadNextServerRuntime() ships %s, and next start loads only %v", name, allowed)
+			t.Errorf("ReadNextServerRuntime() ships %s, and a Next container runs only %v", name, allowed)
 		}
 	}
 	for _, name := range allowed {
@@ -22,9 +24,9 @@ func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
 			t.Errorf("ReadNextServerRuntime() ships no %s", name)
 		}
 	}
-	delete(files, "server-adapter.mjs")
+	delete(files, containerimage.NextServerPreloadFile)
 	again, _ := (&Provider{}).ReadNextServerRuntime(context.Background())
-	if len(again["server-adapter.mjs"]) == 0 {
+	if len(again[containerimage.NextServerPreloadFile]) == 0 {
 		t.Error("ReadNextServerRuntime() hands out the map it keeps, and a caller's change would reach every later image")
 	}
 }

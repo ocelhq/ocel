@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -39,27 +38,49 @@ func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app s
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Log) error {
+type Swept struct {
+	Removed []string
+	Unused  []string
+}
+
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string) (Swept, error) {
 	repository, named := Repository(imageRef)
 	if !named {
-		return refusal.Refuse(refusal.CodeInvalid,
+		return Swept{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
 	said, err := h.releases(ctx, "reconcile "+app+"'s images", Scope(project, app), "reconcile", repository)
 	if err != nil {
-		return err
+		return Swept{}, err
 	}
-	if progress == nil {
+	var swept Swept
+	for line := range strings.Lines(said) {
+		kind, image, _ := strings.Cut(strings.TrimSpace(line), " ")
+		switch {
+		case image == "":
+		case kind == "removed":
+			swept.Removed = append(swept.Removed, image)
+		case kind == "unused":
+			swept.Unused = append(swept.Unused, image)
+		}
+	}
+	return swept, nil
+}
+
+func (h *Host) Settle(ctx context.Context, project, app string, imageRefs []string) error {
+	if len(imageRefs) == 0 {
 		return nil
 	}
-	for line := range strings.Lines(said) {
-		removed := strings.TrimSpace(line)
-		if removed == "" {
-			continue
-		}
-		progress.Say("Removed " + app + "'s unused image " + removed)
+	_, err := h.releases(ctx, "settle "+app+"'s removed images", Scope(project, app), append([]string{"settle"}, imageRefs...)...)
+	return err
+}
+
+func (h *Host) IsClaimed(ctx context.Context, project, app, imageRef string) (bool, error) {
+	said, err := h.releases(ctx, "read whether a release of "+app+" still names "+imageRef, Scope(project, app), "claimed", imageRef)
+	if err != nil {
+		return false, err
 	}
-	return nil
+	return strings.TrimSpace(said) == imageRef, nil
 }
 
 func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {

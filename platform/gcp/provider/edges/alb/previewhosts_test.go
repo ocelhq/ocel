@@ -81,7 +81,7 @@ func TestADeploymentHostnameOfAFunctionAppIsRoutedToItsEntryFunctionsTaggedRevis
 	w, stack := previewRouter(t)
 	record := previewRecord("b1")
 	record.Physical = ""
-	record.EntryFunction = previewService
+	record.RootFunctionPhysical = previewService
 	if err := stack.MovePointer(context.Background(), deploymentMove(deploymentFirst, deploymentHost, record), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -21,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -34,12 +33,12 @@ func nextSpec() provider.StackSpec {
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
-			App:       "web",
-			Framework: buildoutput.FrameworkNext,
-			Entry:     "bundle-0",
-			BuildID:   "dpl_7",
-			Compute:   provider.ComputeServerless,
-			Router:    "cloudrun",
+			App:          "web",
+			Framework:    buildoutput.FrameworkNext,
+			RootFunction: "bundle-0",
+			BuildID:      "dpl_7",
+			Compute:      provider.ComputeServerless,
+			Router:       "cloudrun",
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
@@ -63,7 +62,7 @@ func releasedNext(t *testing.T, spec provider.StackSpec) *run.GoogleCloudRunV2Co
 	return server.created[0].Template.Containers[0]
 }
 
-func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerRequest(t *testing.T) {
+func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerInstance(t *testing.T) {
 	container := releasedNext(t, nextSpec())
 
 	if got := container.Resources.Limits["memory"]; got != "2048Mi" {
@@ -72,8 +71,8 @@ func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerRequest(t *testing.T) {
 	if got := container.Resources.Limits["cpu"]; got != revisionCPU {
 		t.Errorf("a Next service asks for %q CPU, want %q, which Cloud Run pairs with up to 4 GiB", got, revisionCPU)
 	}
-	if !container.Resources.CpuIdle {
-		t.Error("a Next service keeps its CPU between requests, and a serverless app is billed per request")
+	if container.Resources.CpuIdle {
+		t.Error("a Next service idles its CPU once a response ends, want it kept: work Next hands waitUntil runs after the response")
 	}
 }
 
@@ -120,7 +119,7 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 
 func routedNextSpec() provider.StackSpec {
 	spec := nextSpec()
-	spec.App.Routing = &provider.RoutingSpec{Entry: "bundle-0", Manifest: []byte(`{"entry":"bundle-0"}`)}
+	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
 	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
 	spec.App.AssetPrefix = "prod/shop/web/r1/assets"
 	return spec
@@ -130,7 +129,7 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 	env := envOf(releasedNext(t, routedNextSpec()))
 
 	for name, want := range map[string]string{
-		"OCEL_ROUTING_MANIFEST": "/ocel/app/" + edge.RoutingManifestFile,
+		"OCEL_NEXT_ROUTE_TABLE": "/ocel/app/" + edge.NextRouteTableFile,
 		"OCEL_ASSET_PREFIX":     "prod/shop/web/r1/assets",
 		"OCEL_SLUG":             "shop",
 		"OCEL_APP":              "web",
@@ -188,7 +187,7 @@ func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T
 func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
 	env := envOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_ROUTING_MANIFEST", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
+	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service whose spec routes nothing reads %s=%q", name, got)
 		}
@@ -204,7 +203,7 @@ func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T
 	}
 	spec := routedNextSpec()
 	spec.Edge = front
-	spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+	spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 
 	_, err = p.ProvisionFunctions(context.Background(), spec, nil)
 	if err == nil {
@@ -229,7 +228,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 			}
 			spec := routedNextSpec()
 			spec.Edge = front
-			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
@@ -265,19 +264,6 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	}
 }
 
-func TestANextServiceBilledPerRequestFinishesItsWorkBeforeItsResponseEnds(t *testing.T) {
-	container := releasedNext(t, routedNextSpec())
-
-	capMs, err := strconv.Atoi(envOf(container)[finishBeforeResponseEnvVar])
-	if err != nil || capMs <= 0 {
-		t.Fatalf("the Next service reads %s=%q, want a cap in milliseconds: Cloud Run takes an instance's CPU away once a request billed per request is answered",
-			finishBeforeResponseEnvVar, envOf(container)[finishBeforeResponseEnvVar])
-	}
-	if limit := int(nextRequestTimeout.Milliseconds()); capMs >= limit {
-		t.Errorf("the Next service holds its response's end for up to %dms, want well under the %dms Cloud Run lets a request run", capMs, limit)
-	}
-}
-
 func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testing.T) {
 	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
 		t.Run(string(kind), func(t *testing.T) {
@@ -289,7 +275,7 @@ func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testin
 			}
 			spec := routedNextSpec()
 			spec.Edge = front
-			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
 
 			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 				t.Fatalf("ProvisionFunctions() = %v", err)
@@ -614,12 +600,12 @@ func TestANodeFunctionIsToldNoRefreshQueue(t *testing.T) {
 	}
 }
 
-func TestANextContainerIsToldNothingThatRefreshesByRequestOrRoutes(t *testing.T) {
+func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.T) {
 	service, _ := releasedNextContainer(t, nextContainerSpec())
 
 	env := envOf(service.Template.Containers[0])
 	for _, name := range []string{
-		finishBeforeResponseEnvVar, routingManifestEnvVar, routerKindEnvVar, staticDirEnvVar,
+		routeTableEnvVar, routerKindEnvVar, staticDirEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {
@@ -636,31 +622,6 @@ func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service on container compute reads %s=%q", name, got)
 		}
-	}
-}
-
-func TestANextContainerCarriesOcelsServerAdapterPath(t *testing.T) {
-	service, _ := releasedNextContainer(t, nextContainerSpec())
-
-	want := path.Join(nextRuntimeDir, containerimage.NextServerAdapterFile)
-	if got := envOf(service.Template.Containers[0])[containerimage.NextAdapterPathVar]; got != want {
-		t.Errorf("a Next container is told %s = %q, want %q", containerimage.NextAdapterPathVar, got, want)
-	}
-}
-
-func TestANextContainerRefusesAUserValueForTheAdapterPath(t *testing.T) {
-	spec := nextContainerSpec()
-	spec.App.Values.ContainerEnv = map[string]string{containerimage.NextAdapterPathVar: "/app/mine.mjs"}
-	server := &runServer{}
-	p := server.open(t)
-
-	_, err := p.ProvisionContainers(context.Background(), spec, nil)
-
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Fatalf("ProvisionContainers() = %v, want a refusal of code %v", err, refusal.CodeInvalid)
-	}
-	if len(server.created) != 0 {
-		t.Errorf("released %d services before refusing, want none", len(server.created))
 	}
 }
 
@@ -740,26 +701,18 @@ func TestANextPreviewBehindIdentityAwareProxyRefreshesOnItsOwnRatherThanByTask(t
 		t.Error("a Next preview behind Identity-Aware Proxy refreshes by task, but Cloud Tasks' token cannot pass the proxy")
 	}
 	if !refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, false) {
-		t.Error("a Next app billed per request that is not gated refreshes on its own, want the tier's queue")
+		t.Error("a Next app that is not gated refreshes on its own, want the tier's queue")
 	}
 }
 
-func TestANextServiceBilledPerInstanceIsToldNoResponseEndHoldAndNoRefreshQueue(t *testing.T) {
+func TestANextServiceGivenNoRefreshQueueIsToldNone(t *testing.T) {
 	spec := routedNextSpec()
 
-	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: true}, nextCache{}, nil)
-	if got, told := env[finishBeforeResponseEnvVar]; told {
-		t.Errorf("a Next service billed per instance reads %s=%q, want no hold: its cpu outlives the response", finishBeforeResponseEnvVar, got)
-	}
+	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{}, nil)
 	for _, name := range refreshEnvVars {
 		if got, told := env[name]; told {
-			t.Errorf("a Next service billed per instance reads %s=%q, want no refresh queue", name, got)
+			t.Errorf("a Next service given no refresh queue reads %s=%q", name, got)
 		}
-	}
-
-	billedPerRequest := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: false}, nextCache{}, nil)
-	if _, told := billedPerRequest[finishBeforeResponseEnvVar]; !told {
-		t.Errorf("a Next service billed per request reads no %s, so billing is not what decides it", finishBeforeResponseEnvVar)
 	}
 }
 
@@ -781,5 +734,15 @@ func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
 				t.Errorf("a worker of a Next container is told %s, which only the Next service reads", name)
 			}
 		}
+	}
+}
+
+func TestANextServiceThatRoutesItsOwnRequestsIsToldTheStaticRulesItsBuildStates(t *testing.T) {
+	spec := routedNextSpec()
+	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
+	env := envOf(releasedNext(t, spec))
+
+	if got, want := env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
+		t.Errorf("the Next service reads %s=%q, want %q", edge.StaticRulesVar, got, want)
 	}
 }

@@ -14,6 +14,9 @@ import (
 
 	"google.golang.org/protobuf/types/descriptorpb"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -22,13 +25,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func forwardPortsRequest(names ...string) *contractv1.ForwardPortsRequest {
+	return forwardPortsGrants(&contractv1.ForwardPortsGrant{Grantee: "web", Bindings: names})
+}
+
+func forwardPortsGrants(grants ...*contractv1.ForwardPortsGrant) *contractv1.ForwardPortsRequest {
 	return &contractv1.ForwardPortsRequest{
 		Slug:        "shop",
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-		Bindings:    names,
+		Grants:      grants,
 	}
 }
 
@@ -497,3 +506,257 @@ func (w *lateWriter) Flush() {
 }
 
 func (w *lateWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func TestForwardPortsServesTheBindingProxyForBindingsNoPortReachesAndHoldsItUntilTheCallerLeaves(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	var asked provider.BindingProxyRequest
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			asked = req
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}, Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	served := stream.Msg().GetResponse()
+
+	if asked.Slug != "shop" || asked.Env != stackrecords.ProductionEnv || asked.Tier != environment.TierProduction {
+		t.Errorf("the hook was asked to proxy for %q in %q at tier %q, want shop in production: its sessions and tasks live under that scope", asked.Slug, asked.Env, asked.Tier)
+	}
+	if len(asked.Grants) != 1 || asked.Grants[0].Grantee != "web" || len(asked.Grants[0].Bindings) != 1 || asked.Grants[0].Bindings[0].Name != "uploads" || asked.Grants[0].Bindings[0].Type != provider.BindingBucket {
+		t.Errorf("the hook was asked to proxy %+v, want the published uploads bucket granted to web", asked.Grants)
+	}
+	if got := served.GetBindingProxies(); len(got) != 1 || got[0].GetGrantee() != "web" || got[0].GetAddress() != "http://127.0.0.1:41999" || got[0].GetSessionToken() != "token-1" {
+		t.Errorf("ForwardPorts() answered the proxies %v, want web's address and token the hook served", got)
+	}
+	if len(served.GetBindings()) != 1 || served.GetBindings()[0].GetName() != "uploads" || served.GetBindings()[0].GetBucket() == nil {
+		t.Errorf("ForwardPorts() handed back %d bindings, want the uploads bucket binding as published", len(served.GetBindings()))
+	}
+	if len(served.GetUnforwarded()) != 0 {
+		t.Errorf("ForwardPorts() left %v unforwarded, want none", served.GetUnforwarded())
+	}
+	field := served.ProtoReflect().Descriptor().Fields().ByName("binding_proxies")
+	if options, _ := field.Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
+		t.Error("the binding proxy is not marked debug_redact, want it redacted wherever it is printed: it holds the session token")
+	}
+
+	select {
+	case <-closed:
+		t.Fatal("the binding proxy closed while the caller still held the stream")
+	case <-time.After(50 * time.Millisecond):
+	}
+	leave()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the binding proxy stayed open after the caller left")
+	}
+}
+
+func TestForwardPortsOnAProviderThatServesNoBindingProxyLeavesProxiedBindingsUnforwarded(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	if len(responses) != 1 || len(responses[0].GetBindingProxies()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one naming uploads unforwarded with no proxy", len(responses))
+	}
+}
+
+func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorProxyServesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	props := &bindingsv1.BucketProperties{Bucket: "acme", Endpoint: "https://s3.example.com", AccessKeyId: "AKID", SecretAccessKey: inlinePassword}
+	if result, _ := deploy(t, client, inlineBucketRequest(&resourcesv1.BucketConfig{}, props)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the inline record published", result.GetError())
+	}
+	var asked []provider.BindingGrant
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			asked = req.Grants
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}}, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest(inlineUploads))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	if len(asked) != 0 {
+		t.Errorf("the hook was asked to proxy %v, want nothing: the vendor's proxy serves the vendor's own buckets, not a store the config addresses", asked)
+	}
+	if len(responses) != 1 || len(responses[0].GetBindings()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{inlineUploads}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one leaving %s unforwarded", len(responses), inlineUploads)
+	}
+}
+
+func TestForwardPortsClosesWhatAVendorOpenedForAProxyWithNoAddress(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	for stream.Receive() {
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the vendor's proxy with no address was never closed, so whatever it opened stays open")
+	}
+}
+
+func TestForwardPortsHoldsNoBindingProxyWhenTheVendorServesNoneOfTheBindings(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Unserved: []string{req.Grants[0].Bindings[0].Name}}, nil
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v, want the stream ended at once since nothing is held open", err)
+	}
+	if len(responses) != 1 || len(responses[0].GetBindingProxies()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one naming uploads unforwarded, with no proxy, and the stream ended since nothing is held open", len(responses))
+	}
+}
+
+func TestForwardPortsLeavesUnforwardedTheProxiedBindingsTheProxyReportsItDoesNotServe(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}, Unserved: []string{"uploads"}, Close: func() { close(closed) }}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	served := stream.Msg().GetResponse()
+	if len(served.GetBindings()) != 0 || !slices.Equal(served.GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() handed back %d bindings and left %v unforwarded, want uploads unforwarded since the proxy does not serve it", len(served.GetBindings()), served.GetUnforwarded())
+	}
+}
+
+func TestForwardPortsAsksTheBindingProxyForEachGranteeItsOwnProxiedBindingsAndAnswersEachItsOwnToken(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	var asked []provider.BindingGrant
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			asked = req.Grants
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{
+				{Grantee: "web", SessionToken: "token-web"},
+				{Grantee: "admin", SessionToken: "token-admin"},
+			}}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsGrants(
+		&contractv1.ForwardPortsGrant{Grantee: "web", Bindings: []string{"orders"}},
+		&contractv1.ForwardPortsGrant{Grantee: "admin", Bindings: []string{"orders", "uploads"}},
+	))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+
+	if len(asked) != 1 || asked[0].Grantee != "admin" || len(asked[0].Bindings) != 1 || asked[0].Bindings[0].Name != "uploads" {
+		t.Errorf("the hook was asked to proxy %+v, want the uploads bucket granted to admin alone: web binds nothing a proxy serves", asked)
+	}
+	tokens := map[string]string{}
+	for _, proxy := range stream.Msg().GetResponse().GetBindingProxies() {
+		tokens[proxy.GetGrantee()] = proxy.GetSessionToken()
+	}
+	if tokens["web"] != "token-web" || tokens["admin"] != "token-admin" || len(tokens) != 2 {
+		t.Errorf("ForwardPorts() answered the tokens %v, want each grantee its own", tokens)
+	}
+}
+
+func TestForwardPortsRefusesTwoGrantsToTheSameGrantee(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsGrants(
+		&contractv1.ForwardPortsGrant{Grantee: "web", Bindings: []string{"orders"}},
+		&contractv1.ForwardPortsGrant{Grantee: "web", Bindings: []string{"uploads"}},
+	))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	for stream.Receive() {
+	}
+	if code, refused := provider.RefusedCode(stream.Err()); !refused || code != refusal.CodeInvalid {
+		t.Errorf("ForwardPorts() = %v, want it refused as invalid: one token per grantee", stream.Err())
+	}
+}

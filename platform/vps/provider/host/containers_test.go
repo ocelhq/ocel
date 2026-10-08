@@ -78,6 +78,15 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 	}
 }
 
+func TestAnAppContainerRunsItsRuntimeAsInitWhateverTheDaemonDefaults(t *testing.T) {
+	t.Parallel()
+
+	command := ranContainer(t, runningContainer(t, "false "))
+	if !strings.Contains(command, quoted("--init=false")) {
+		t.Errorf("starting a container runs %q, which leaves init to the daemon: a daemon set to `\"init\": true` puts docker-init in front of the runtime, and the box agent answers only the container's init process", command)
+	}
+}
+
 func TestNoPortIsPublishedForAnAppContainerAndNoListenerIsAddedAnywhere(t *testing.T) {
 	t.Parallel()
 

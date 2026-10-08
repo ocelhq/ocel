@@ -228,6 +228,7 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	for _, want := range []string{
 		"docker rm --force '" + queueContainer + "'",
 		host.KeptPath(environment.TierProduction, queueContainer),
+		host.KeptPath(environment.TierProduction, queueContainer+"-"+live.QueueDeliverySecretName),
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("removing the last task ran %q and never reached %s", joined, want)

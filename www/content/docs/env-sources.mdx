@@ -16,9 +16,30 @@ An env source is where a tier's values come from. Each tier names its own under
 is the project's `.env` file, which only `ocel dev` and `ocel run` read. Naming the default
 is the same as leaving it off.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { infisical } from "ocel/env-source";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  envSource: {
+    production: infisical({
+      project: "4f1c2e0a-...",
+      environment: "prod",
+      auth: { identity: { identityId: "b7d0..." } },
+    }),
+    preview: "builtin",
+    dev: infisical({ project: "4f1c2e0a-...", environment: "dev" }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "envSource": {
@@ -36,8 +57,8 @@ is the same as leaving it off.
 }
 ```
 
-A [TypeScript config](/docs/typescript-config#env-sources) writes the same thing with
-`infisical()` and `exec()` from `ocel/env-source`.
+In `ocel.config.ts`, `infisical()` and `exec()` from `ocel/env-source` take a source's
+options, and `builtin` and `dotenv`, which take none, are written as strings.
 
 ## Who owns a value
 
@@ -165,9 +186,33 @@ set.
 A client id and a client secret, each written `{ "$env": "NAME" }` for the ocel variable
 containing it:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { infisical } from "ocel/env-source";
+import vpsProvider from "ocel/providers/vps";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: { host: "203.0.113.10", user: "deploy" } }),
+  envSource: {
+    production: infisical({
+      project: "4f1c2e0a-...",
+      environment: "prod",
+      auth: {
+        universal: {
+          clientId: { $env: "INFISICAL_CLIENT_ID" },
+          clientSecret: { $env: "INFISICAL_CLIENT_SECRET" },
+        },
+      },
+    }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "vps": { "ssh": { "host": "203.0.113.10", "user": "deploy" } } },
   "envSource": {
@@ -198,9 +243,28 @@ The target's own cloud identity signs in, so no secret is stored. `identity` nam
 Infisical machine identity to sign in as, and ocel proves it with the cloud identity of
 wherever it runs:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { infisical } from "ocel/env-source";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  envSource: {
+    production: infisical({
+      project: "4f1c2e0a-...",
+      environment: "prod",
+      auth: { identity: { identityId: "b7d0..." } },
+    }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "envSource": {
@@ -305,9 +369,24 @@ A command whose output is the tier's values: a JSON object of names to values, o
 `KEY=VALUE` lines. It runs on the machine that deploys, once per variables folder, with
 `{folder}` replaced by the folder being read.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { exec } from "ocel/env-source";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  envSource: {
+    production: exec({ command: ["./scripts/env.sh", "{folder}"], format: "dotenv" }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": "aws",
   "envSource": {

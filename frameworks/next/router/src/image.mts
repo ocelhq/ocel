@@ -2,7 +2,7 @@ import type {
   CompiledLocalPattern,
   CompiledRemotePattern,
   ImageConfig,
-} from "@framework/next-protocol/routing-manifest";
+} from "@framework/next-protocol/route-table";
 
 import { mediaType } from "./accept.mjs";
 import { deltaSeconds, headResponse, NEXT_CACHE_STATUS, withStatus } from "./http-cache.mjs";

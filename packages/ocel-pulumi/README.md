@@ -10,11 +10,11 @@ pnpm add @ocel/pulumi
 ```
 
 `@pulumi/pulumi` and `ocel` are peer dependencies. `ocel` is resolved from the ocel
-project — the directory containing `ocel.json` — not from the Pulumi program.
+project — the directory containing `ocel.config.ts` or `ocel.json` — not from the Pulumi program.
 
 ## Use
 
-`ocel.json` beside `Pulumi.yaml` in the same package is the supported layout.
+`ocel.config.ts` beside `Pulumi.yaml` in the same package is the supported layout.
 Declare the binding in the Pulumi program:
 
 ```ts
@@ -39,16 +39,18 @@ bind.postgres("orders", {
 });
 ```
 
-Name it in `ocel.json`:
+Name it in `ocel.config.ts`:
 
-```json
-{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
-  "slug": "shop",
-  "provider": "aws",
-  "bindings": { "postgres": { "orders": "@orders" } },
-  "apps": [{ "name": "api", "path": "." }]
-}
+```ts
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "shop",
+  provider: awsProvider(),
+  bindings: { postgres: { orders: "@orders" } },
+  apps: [{ name: "api", path: "." }],
+});
 ```
 
 Then read it in the app:
@@ -84,7 +86,7 @@ bind.postgres("orders", {
 | ------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
 | `tier`        | `"production"`              | The ocel tier the binding is published to.                                                     |
 | `environment` | none                        | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview.   |
-| `project`     | the program's directory     | The directory containing `ocel.json`.                                                      |
+| `project`     | the program's directory     | The directory containing `ocel.config.ts` or `ocel.json`.                                                      |
 | `parent`      | none                        | The Pulumi resource this binding hangs under.                                                   |
 
 One call is one resource. Remove the call and the published binding goes with it. A name

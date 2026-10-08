@@ -11,5 +11,6 @@ export * from "./probes";
 export * from "./product";
 export * from "./realtime";
 export * from "./static";
+export * from "./sveltekit";
 export * from "./tasks";
 export * from "./wire";

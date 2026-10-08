@@ -18,7 +18,7 @@ export interface NextHost {
 
 const hostKey = Symbol.for("ocel.next.host.v1");
 
-const slots = globalThis as Record<symbol, NextHost | undefined>;
+const slots = globalThis as Record<symbol, NextHost | (() => NextHost) | undefined>;
 
 const isrPrefixVar = "OCEL_ISR_PREFIX";
 
@@ -26,8 +26,23 @@ export function installNextHost(host: NextHost): void {
   slots[hostKey] = host;
 }
 
+export function installNextHostOnFirstUse(newHost: () => NextHost): void {
+  slots[hostKey] = newHost;
+}
+
 export function getNextHost(): NextHost {
-  return slots[hostKey] ?? {};
+  const slot = slots[hostKey];
+  if (typeof slot !== "function") return slot ?? {};
+  try {
+    const host = slot();
+    slots[hostKey] = host;
+    return host;
+  } catch (err) {
+    slots[hostKey] = () => {
+      throw err;
+    };
+    throw err;
+  }
 }
 
 export function refuseIncompleteHost(host: NextHost, env: NodeJS.ProcessEnv): Error | undefined {

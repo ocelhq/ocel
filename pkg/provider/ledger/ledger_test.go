@@ -696,7 +696,7 @@ func TestThePointerDocumentIsJSONACustomerCanRead(t *testing.T) {
 func TestRestagingABuildWithTheRecordItHoldsSucceeds(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid", RoutingManifest: json.RawMessage(`{ "routes": [] }`)}
+	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid", RouteTable: &router.RouteTable{Format: edge.RouteTableNext, Table: json.RawMessage(`{ "routes": [] }`)}}
 	if err := l.PutStaged(ctx, record); err != nil {
 		t.Fatal(err)
 	}

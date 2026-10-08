@@ -39,7 +39,7 @@ func buildingWithWorkers(t *testing.T, cfg *project.Project, workers HostedWorke
 		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
 			return image.Image{Repository: "ocel/" + cfg.Slug + "/" + app.Name, Tag: "sha256-" + strings.Repeat("a", 64), Ref: "ocel/" + cfg.Slug + "/" + app.Name + "@sha256:" + strings.Repeat("a", 64)}, nil
 		},
-		architecture: daemonHolding("arm64"),
+		inspection: daemonHolding("arm64"),
 		addFiles: func(_ context.Context, base image.Image, _, _, files, dst, arch string, _ io.Writer) (image.Image, error) {
 			added = &addedFiles{base: base, dst: dst, arch: arch, entries: map[string][]byte{}}
 			found, err := os.ReadDir(files)

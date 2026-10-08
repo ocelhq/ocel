@@ -1,6 +1,7 @@
 import type { Route } from "@next/routing";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
+import { nextStatic } from "./dispatch-scenario.mjs";
 
 export function assetStoreServing(
   files: Record<string, string>,
@@ -19,6 +20,7 @@ export function assetStoreServing(
     store,
     assetPrefix: "",
     basePath,
+    static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -122,7 +124,7 @@ export function deps(scenario: Scenario): RouteDeps {
   const pages = scenario.pages ?? [];
   return {
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "t",
       basePath,
       trailingSlash: scenario.trailingSlash,
@@ -146,7 +148,7 @@ export function deps(scenario: Scenario): RouteDeps {
     appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing(
-      { "/404.html": "not found", ...(scenario.files ?? {}) },
+      { [`${basePath}/404.html`]: "not found", ...(scenario.files ?? {}) },
       scenario.probes,
       basePath,
     ),

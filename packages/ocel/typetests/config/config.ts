@@ -5,7 +5,9 @@ import { exec, infisical } from "ocel/env-source";
 import awsProvider from "ocel/providers/aws";
 import { route53 } from "ocel/providers/aws/dns";
 import { apiGateway, cloudfront } from "ocel/providers/aws/edge";
+import gcpProvider from "ocel/providers/gcp";
 import { alb } from "ocel/providers/gcp/edge";
+import vpsProvider from "ocel/providers/vps";
 
 type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -16,87 +18,100 @@ export const needsAreTheFive: Exactly<
 
 export const cloudflareEdge = defineConfig({
   slug: "test-app",
-  edge: cloudflare(),
-  dns: cloudflareDns({ zone: "acme.com" }),
+  provider: awsProvider({ edge: cloudflare(), dns: cloudflareDns({ zone: "acme.com" }) }),
 });
 
 export const cloudfrontEdge = defineConfig({
   slug: "test-app",
-  edge: cloudfront(),
-  dns: route53({ zone: "Z123456789ABCDEFGHIJK" }),
+  provider: awsProvider({ edge: cloudfront(), dns: route53({ zone: "Z123456789ABCDEFGHIJK" }) }),
 });
 
 export const apiGatewayEdge = defineConfig({
   slug: "test-app",
-  edge: apiGateway(),
-  dns: route53({ zone: "Z123456789ABCDEFGHIJK" }),
+  provider: awsProvider({ edge: apiGateway(), dns: route53({ zone: "Z123456789ABCDEFGHIJK" }) }),
+});
+
+export const albEdge = defineConfig({
+  slug: "test-app",
+  provider: gcpProvider({ project: "acme", region: "europe-west1", edge: alb() }),
+});
+
+export const cloudflareInFrontOfABox = defineConfig({
+  slug: "test-app",
+  provider: vpsProvider({ ssh: "box", edge: cloudflare({ tunnel: true }), dns: cloudflareDns() }),
+});
+
+export const cloudfrontInFrontOfGcp = gcpProvider({
+  project: "acme",
+  region: "europe-west1",
+  // @ts-expect-error cloudfront fronts aws alone
+  edge: cloudfront(),
+});
+
+export const route53ForABox = vpsProvider({
+  ssh: "box",
+  // @ts-expect-error route53 writes records for aws alone
+  dns: route53(),
 });
 
 export const providerDefaultEdge = defineConfig({ slug: "test-app" });
 
 export const keyedByHand = defineConfig({
   slug: "test-app",
-  provider: { aws: { region: "us-east-1" } },
-  edge: { cloudflare: {} },
-  dns: { cloudflare: { zone: "acme.com" } },
+  provider: {
+    aws: {
+      region: "us-east-1",
+      edge: { cloudflare: {} },
+      dns: { cloudflare: { zone: "acme.com" } },
+    },
+  },
 });
 
 export const namedAloneByHand = defineConfig({
   slug: "test-app",
-  provider: "aws",
-  edge: "cloudfront",
-  dns: "route53",
+  provider: { aws: { edge: "cloudfront", dns: "route53" } },
 });
 
-export const edgeFromAString = defineConfig({
-  slug: "test-app",
+export const edgeFromAString = awsProvider({
   // @ts-expect-error cloudflare takes no options
   edge: cloudflare("nonsense"),
 });
 
-export const cloudflareThroughATunnel = defineConfig({
-  slug: "test-app",
-  edge: cloudflare({ tunnel: true }),
-});
+export const cloudflareThroughATunnel = awsProvider({ edge: cloudflare({ tunnel: true }) });
 
-export const cloudfrontThroughATunnel = defineConfig({
-  slug: "test-app",
+export const cloudfrontThroughATunnel = awsProvider({
   // @ts-expect-error tunnel is an option of the cloudflare edge alone
   edge: cloudfront({ tunnel: true }),
 });
 
-export const apiGatewayThroughATunnel = defineConfig({
-  slug: "test-app",
+export const apiGatewayThroughATunnel = awsProvider({
   // @ts-expect-error tunnel is an option of the cloudflare edge alone
   edge: apiGateway({ tunnel: true }),
 });
 
-export const albThroughATunnel = defineConfig({
-  slug: "test-app",
+export const albThroughATunnel = gcpProvider({
+  project: "acme",
+  region: "europe-west1",
   // @ts-expect-error tunnel is an option of the cloudflare edge alone
   edge: alb({ tunnel: true }),
 });
 
-export const edgeWithAZone = defineConfig({
-  slug: "test-app",
+export const edgeWithAZone = awsProvider({
   // @ts-expect-error a zone belongs to dns, not to the edge
   edge: cloudflare({ zone: "acme.com" }),
 });
 
-export const edgeTurnedOn = defineConfig({
-  slug: "test-app",
+export const edgeTurnedOn = awsProvider({
   // @ts-expect-error true is not an edge
   edge: true,
 });
 
-export const edgeTurnedOff = defineConfig({
-  slug: "test-app",
+export const edgeTurnedOff = awsProvider({
   // @ts-expect-error there is no off; omit `edge` for the provider's default
   edge: false,
 });
 
-export const zoneAsDns = defineConfig({
-  slug: "test-app",
+export const zoneAsDns = awsProvider({
   // @ts-expect-error dns is declared with a marker, not a bare zone name
   dns: "acme.com",
 });

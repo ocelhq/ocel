@@ -4,12 +4,22 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type AppVariables struct {
-	Env  map[string]string
-	Live map[string]string
+	Env             map[string]string
+	Live            map[string]string
+	BindingProxyEnv map[string]string
+}
+
+func (v AppVariables) SecretValues() []string {
+	secrets := SecretValues(v.Live)
+	if token := v.BindingProxyEnv[localrpc.SessionTokenEnvVar]; token != "" {
+		secrets = append(secrets, token)
+	}
+	return secrets
 }
 
 func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {

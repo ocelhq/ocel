@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func pythonApp(t *testing.T, files map[string]string) string {
@@ -90,8 +89,8 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 
 	appDir, functionDir := vendored(t, pythonApp(t, map[string]string{"main.py": "print('hi')\n"}), "arm64")
 
-	var config buildoutput.FunctionDescriptor
-	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), &config)
+	var config buildoutput.FunctionConfig
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile), &config)
 	if config.EntryFile != pythonEntryFile {
 		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, pythonEntryFile)
 	}
@@ -105,16 +104,16 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 		t.Errorf("app = %q, want %q", config.App, "web")
 	}
 
-	var descriptor edge.ServeDescriptor
-	readJSON(t, filepath.Join(appDir, edge.ServeDescriptorFile), &descriptor)
-	if descriptor.Framework != "python" {
-		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "python")
+	var hosting buildoutput.Hosting
+	readJSON(t, filepath.Join(appDir, buildoutput.HostingFile), &hosting)
+	if hosting.Framework != "python" {
+		t.Errorf("hosting.json names runtime %q, want %q", hosting.Framework, "python")
 	}
-	if descriptor.FrameworkBuildID == "" {
-		t.Error("the serve descriptor names no build id, and a release is identified by one")
+	if hosting.FrameworkBuildID == "" {
+		t.Error("hosting.json names no build id, and a release is identified by one")
 	}
-	if len(descriptor.Needs) != 0 {
-		t.Errorf("the serve descriptor names needs %v: a python app speaks http and asks the edge for nothing", descriptor.Needs)
+	if len(hosting.Needs) != 0 {
+		t.Errorf("hosting.json names needs %v: a python app speaks http and asks the edge for nothing", hosting.Needs)
 	}
 }
 

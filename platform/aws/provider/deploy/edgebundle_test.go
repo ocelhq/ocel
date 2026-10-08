@@ -16,9 +16,9 @@ import (
 func edgeAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json":   `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json":   `{"buildId":"WEB1"}`,
 		"apps/web/edge/bundle.json":        `{"version":1,"mainModule":"main.js"}`,
-		"apps/admin/routing-manifest.json": `{"buildId":"ADM1"}`,
+		"apps/admin/next-route-table.json": `{"buildId":"ADM1"}`,
 	})
 }
 
@@ -80,7 +80,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{
-				"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+				"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 				"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js","shim":"REBUILT"}`,
 			}),
 			AssetBucket: "assets", Env: "prod",

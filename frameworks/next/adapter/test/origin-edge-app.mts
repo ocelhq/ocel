@@ -34,7 +34,7 @@ export interface BuiltManifest {
   dispatch: Record<string, Record<string, unknown>>;
 }
 
-export interface BuiltServe {
+export interface BuiltHosting {
   needs: Record<string, { routes?: string[] }>;
 }
 
@@ -50,7 +50,7 @@ export interface OriginEdgeApp {
   projectDir: string;
   outputDir: string;
   manifest: BuiltManifest;
-  serve: BuiltServe;
+  hosting: BuiltHosting;
   hasEdgeBundle: boolean;
   funcDir: (id: string) => string;
   dispatchIn: (id: string) => Dispatch;
@@ -225,8 +225,8 @@ export async function buildOriginEdgeApp(
   return {
     projectDir,
     outputDir,
-    manifest: (await readJson("routing-manifest.json")) as BuiltManifest,
-    serve: (await readJson("serve.json")) as BuiltServe,
+    manifest: (await readJson("next-route-table.json")) as BuiltManifest,
+    hosting: (await readJson("hosting.json")) as BuiltHosting,
     hasEdgeBundle: await exists(join(outputDir, "edge/bundle.json")),
     funcDir,
     dispatchIn: (id: string) => {

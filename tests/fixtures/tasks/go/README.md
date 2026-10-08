@@ -19,7 +19,7 @@ ocel dev -- go run ./server
 ```
 
 ```bash
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
+ocel deploy
 ```
 
 On a box, `web`'s image carries the compiled worker, and the default worker runs as a second

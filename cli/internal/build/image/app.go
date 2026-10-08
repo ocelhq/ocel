@@ -28,7 +28,7 @@ func Describe(cfg *project.Project, app project.App) (App, error) {
 		if build.Context != "" {
 			located, err = located.Rebase(filepath.Join(cfg.Dir, filepath.FromSlash(build.Context)))
 			if err != nil {
-				return App{}, fmt.Errorf("app %q sets build.context to %q: %w", app.Name, build.Context, err)
+				return App{}, fmt.Errorf("app %q sets image.context to %q: %w", app.Name, build.Context, err)
 			}
 		}
 		located.BuildCommand = build.Command

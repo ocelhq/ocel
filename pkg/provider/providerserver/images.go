@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -37,26 +38,26 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
 	}
-	arch, err := images.BuiltArchitecture(ctx, repository, digest)
+	built, err := images.InspectBuiltImage(ctx, repository, digest)
 	if err != nil {
-		return provider.ImagePush{}, fmt.Errorf("read the architecture %s's image is built for: %w", app, err)
+		return provider.ImagePush{}, fmt.Errorf("inspect the image %s was built as: %w", app, err)
 	}
 	runs, err := runtimePort.Arch(ctx, app, entry.Arch)
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", app, err)
 	}
-	if arch != runs {
+	if built.Architecture != runs {
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s's image is built for %s and the target runs %s, which cannot execute it: build it for %s, and drop any --platform its Dockerfile pins a FROM to",
-			app, images.ContainerPlatform(arch), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
+			app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
 	}
-	runtime, err := runtimePort.Binary(ctx, arch)
+	runtime, err := runtimePort.Binary(ctx, built.Architecture)
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("read the runtime %s's container boots through: %w", app, err)
 	}
 	if len(runtime) == 0 {
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider ships no container runtime built for %s, and %s's image is built for it", arch, app)
+			"this provider ships no container runtime built for %s, and %s's image is built for it", built.Architecture, app)
 	}
 	next, err := r.readNextServerRuntime(ctx, entry)
 	if err != nil {
@@ -65,7 +66,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 	return provider.ImagePush{
 		App:      app,
 		Source:   ref,
-		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(digest, runtime, next), r.registry),
+		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(built.ContentDigest, runtime, next), r.registry),
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
 			return images.WrapFromDaemon(ctx, repository, digest, runtime, next)
 		},
@@ -77,16 +78,11 @@ func (r *deployRun) readNextServerRuntime(ctx context.Context, entry provider.Ap
 	if read == nil || entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
 		return nil, nil
 	}
-	dir := r.provider.Facts().NextRuntimeDir
-	if dir == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider ships a Next server runtime and names no directory for it, so %s's image has nowhere to hold it", entry.App)
-	}
 	files, err := read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the Next server runtime %s's container loads: %w", entry.App, err)
 	}
-	return &images.NextServerRuntime{Dir: dir, Files: files}, nil
+	return &images.NextServerRuntime{Files: files}, nil
 }
 
 func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageRegistry) error {
@@ -103,14 +99,30 @@ func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageReg
 	return nil
 }
 
+func registryTargetOf(project *contractv1.ImageRegistry) provider.RegistryTarget {
+	return provider.RegistryTarget{
+		Server:    project.GetServer(),
+		Namespace: project.GetNamespace(),
+		Username:  project.GetUsername(),
+		Password:  project.GetPassword(),
+	}
+}
+
+func removalImages(ctx context.Context, p provider.Provider, project *contractv1.ImageRegistry, log progress.Log) provider.ImageStore {
+	if project.GetServer() == "" {
+		return nil
+	}
+	store, err := imageStoreFor(ctx, p, registryTargetOf(project))
+	if err != nil {
+		log.Warn(fmt.Sprintf("Left the images this project pushed to %s in place, as the registry could not be opened: %v", project.GetServer(), err))
+		return nil
+	}
+	return store
+}
+
 func (r *deployRun) registryTarget(ctx context.Context, project *contractv1.ImageRegistry) (provider.RegistryTarget, error) {
 	if project.GetServer() != "" {
-		return provider.RegistryTarget{
-			Server:    project.GetServer(),
-			Namespace: project.GetNamespace(),
-			Username:  project.GetUsername(),
-			Password:  project.GetPassword(),
-		}, nil
+		return registryTargetOf(project), nil
 	}
 	ensure := r.provider.Hooks().EnsureImageRegistry
 	if ensure == nil || len(r.spec.Apps) == 0 {
@@ -149,4 +161,27 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, fu
 		return provider.ImagePushes{}, err
 	}
 	return provider.ImagePushes{Store: r.images, Pushes: []provider.ImagePush{push}}, nil
+}
+
+func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log progress.Log) (bool, error) {
+	if images.Store == nil {
+		return false, nil
+	}
+	var removed []provider.ImagePush
+	for _, push := range images.Pushes {
+		present, err := images.Store.Has(ctx, push)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Could not confirm %s still holds %s after its release provisioned, so a removal that ran meanwhile would go unnoticed: %v",
+				images.Store.Destination(), push.ImageRef, err))
+			continue
+		}
+		if !present {
+			log.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start tasks from it", push.ImageRef, images.Store.Destination()))
+			removed = append(removed, push)
+		}
+	}
+	if len(removed) == 0 {
+		return false, nil
+	}
+	return true, provider.ImagePushes{Store: images.Store, Pushes: removed}.PushMissing(ctx, log)
 }

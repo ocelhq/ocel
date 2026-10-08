@@ -546,18 +546,18 @@ func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, progr
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, progress.Log) error {
+func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, provider.ImageStore, progress.Log) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Log) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ provider.ImageStore, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ provider.ImageStore, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)

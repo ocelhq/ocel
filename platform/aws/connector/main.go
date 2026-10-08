@@ -143,11 +143,15 @@ type proxy interface {
 func invoked(spec connectorserver.Spec, serve proxy) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, raw json.RawMessage) (any, error) {
 		if woken(raw) {
-			status, err := connectorserver.Heartbeat(ctx, spec)
-			if err != nil {
+			err := connectorserver.Heartbeat(ctx, spec)
+			switch {
+			case connectorserver.IsRefusal(err):
+				fmt.Printf("connector %s: heartbeat was refused: %v\n", spec.ConnectorID, err)
+			case err != nil:
 				return nil, err
+			default:
+				fmt.Printf("connector %s: heartbeat answered\n", spec.ConnectorID)
 			}
-			fmt.Printf("connector %s: heartbeat answered %d\n", spec.ConnectorID, status)
 			return nil, nil
 		}
 		var req events.APIGatewayV2HTTPRequest

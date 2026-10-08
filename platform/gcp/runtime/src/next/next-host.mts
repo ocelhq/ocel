@@ -1,11 +1,7 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
 import type { ScheduleRefresh } from "@framework/next-runtime/refresh";
-import {
-  dispatchesAtOrigin,
-  finishBeforeResponseMs,
-  readPortBind,
-} from "@framework/node-runtime/host";
+import { readPortBind } from "@framework/node-runtime/host";
 import { type IsrWriterClient, newIsrWriterClient } from "@platform/edge-contract/isr-writer";
 import { newGcpCacheStore } from "./cache-store.mjs";
 import { newCdnPurge, withCdnPurge } from "./cdn-purge.mjs";
@@ -123,13 +119,6 @@ function readRefreshQueue(
   env: NodeJS.ProcessEnv,
   refresh: RefreshEnv | undefined,
 ): ScheduleRefresh | undefined {
-  if (!refresh) {
-    if (dispatchesAtOrigin(env) && finishBeforeResponseMs(env) > 0 && env.OCEL_ISR_PREFIX) {
-      throw new Error(
-        "ocel: a Next service billed per request refreshes stale pages through a Cloud Tasks queue, and its deploy named none",
-      );
-    }
-    return undefined;
-  }
+  if (!refresh) return undefined;
   return newRefreshQueue({ ...refresh, endpoint: env.OCEL_TASKS_ENDPOINT });
 }

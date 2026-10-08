@@ -135,7 +135,7 @@
           "arm64"
         ],
         "memory_size": 512,
-        "runtime": "nodejs22.x",
+        "runtime": "nodejs24.x",
         "timeout": 150
       }
     },
@@ -182,7 +182,7 @@
           "arm64"
         ],
         "memory_size": 512,
-        "runtime": "nodejs22.x",
+        "runtime": "nodejs24.x",
         "timeout": 60
       }
     },
@@ -218,7 +218,7 @@
           "arm64"
         ],
         "memory_size": 1769,
-        "runtime": "nodejs22.x",
+        "runtime": "nodejs24.x",
         "timeout": 20
       }
     },

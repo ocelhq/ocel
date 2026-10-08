@@ -23,6 +23,11 @@ import (
 
 func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
 	apps := ImageApps(cfg.Apps)
+	for _, app := range apps {
+		if err := RefuseBindingProxyNames(app.Name, variables[app.Name]); err != nil {
+			return nil, err
+		}
+	}
 	log, err = log.hideLiveValues(apps, variables)
 	if err != nil {
 		return nil, err
@@ -40,7 +45,7 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 			return nil, err
 		}
 		appLog, ended := log.App(app.Name)
-		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, hashKey), appLog)
+		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, variables[app.Name].BindingProxyEnv, hashKey), appLog)
 		if sources, hosts := workers[app.Name]; hosts && err == nil {
 			built, err = t.addWorkerEntry(ctx, cfg, app, built, archs[app.Name], sources, appLog)
 		}
@@ -61,7 +66,7 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 
 func (t tools) ensureLiveHashKey(apps []project.App, variables map[string]AppVariables) ([]byte, error) {
 	for _, app := range apps {
-		if len(variables[app.Name].Live) > 0 {
+		if len(variables[app.Name].Live) > 0 || len(variables[app.Name].BindingProxyEnv) > 0 {
 			return t.liveHashKey()
 		}
 	}
@@ -92,12 +97,12 @@ func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map
 
 func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) error {
 	repository, digest, _ := strings.Cut(ref, "@")
-	holds, err := t.architecture(ctx, repository, digest)
+	built, err := t.inspection(ctx, repository, digest)
 	if err != nil {
 		return fmt.Errorf("app %q was prebuilt into the image %s, and the docker daemon cannot hand it over: %w; run `ocel build` again, or deploy without --prebuilt", app, ref, err)
 	}
-	if arch != "" && holds != arch {
-		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(holds), images.ContainerPlatform(arch), arch, app)
+	if arch != "" && built.Architecture != arch {
+		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(arch), arch, app)
 	}
 	return nil
 }

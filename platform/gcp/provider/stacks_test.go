@@ -183,7 +183,7 @@ func (r releasedStacks) provision(t *testing.T, spec provider.StackSpec) provide
 func (r releasedStacks) destroy(t *testing.T, ref provider.StackRef) {
 	t.Helper()
 	ctx := context.Background()
-	if err := r.stacks.Destroy(ctx, ref, nil); err != nil {
+	if err := r.stacks.Destroy(ctx, ref, nil, nil); err != nil {
 		t.Fatalf("Destroy(%s) = %v", ref.Name, err)
 	}
 	if err := stackrecords.Forget(ctx, r.store, ref.Tier, ref.Project, ref.Name); err != nil {
@@ -494,7 +494,7 @@ func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testin
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
-	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one, two}, nil); err != nil {
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one, two}, nil, nil); err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 
@@ -549,7 +549,7 @@ func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
-	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil); err != nil {
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil, nil); err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 

@@ -15,6 +15,7 @@ type environment struct {
 func composeEnvironment(values AppVariables, liveDir string) environment {
 	env := make(map[string]string, len(values.Env)+1)
 	maps.Copy(env, values.Env)
+	maps.Copy(env, values.BindingProxyEnv)
 	env[processenv.LiveDirEnvVar] = liveDir
 	var unset []string
 	for key := range values.Env {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,7 +17,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const Namespace = "ocel"
+const (
+	Namespace  = "ocel"
+	ProjectTag = "ocel:project"
+)
 
 const (
 	ecrUsername   = "AWS"
@@ -25,7 +29,13 @@ const (
 )
 
 type ECRAPI interface {
+	DescribeImages(ctx context.Context, in *ecr.DescribeImagesInput, opts ...func(*ecr.Options)) (*ecr.DescribeImagesOutput, error)
+	BatchDeleteImage(ctx context.Context, in *ecr.BatchDeleteImageInput, opts ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error)
+	DeleteRepository(ctx context.Context, in *ecr.DeleteRepositoryInput, opts ...func(*ecr.Options)) (*ecr.DeleteRepositoryOutput, error)
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
+	DescribeRepositories(ctx context.Context, in *ecr.DescribeRepositoriesInput, opts ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error)
+	TagResource(ctx context.Context, in *ecr.TagResourceInput, opts ...func(*ecr.Options)) (*ecr.TagResourceOutput, error)
+	ListTagsForResource(ctx context.Context, in *ecr.ListTagsForResourceInput, opts ...func(*ecr.Options)) (*ecr.ListTagsForResourceOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
@@ -76,6 +86,10 @@ func Images(target provider.RegistryTarget, api ECRAPI) provider.ImageStore {
 	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target)}
 }
 
+func IsInRegistry(target provider.RegistryTarget, imageRef string) bool {
+	return strings.HasPrefix(imageRef, target.Server+"/")
+}
+
 func (i ecrImages) String() string {
 	return "images pushed to this account's ECR at " + i.target.Server
 }
@@ -95,10 +109,36 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 	if err != nil {
 		return err
 	}
-	if err := ensure(ctx, i.api, repository); err != nil {
+	if _, err := ensure(ctx, i.api, repository); err != nil {
 		return err
 	}
+	pushErr := i.pushed.Push(ctx, push, progress)
+	if pushErr == nil {
+		return nil
+	}
+	created, err := ensure(ctx, i.api, repository)
+	if err != nil || !created && !missingRepository(pushErr) {
+		return pushErr
+	}
 	return i.pushed.Push(ctx, push, progress)
+}
+
+func missingRepository(err error) bool {
+	said := strings.ReplaceAll(strings.ToLower(err.Error()), "_", " ")
+	return strings.Contains(said, "name unknown")
+}
+
+func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
+	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil, noneRecorded)
+	return err
+}
+
+func tagOf(imageRef string) (string, error) {
+	at := strings.LastIndex(imageRef, ":")
+	if at < strings.LastIndex(imageRef, "/") || at+1 == len(imageRef) {
+		return "", fmt.Errorf("%s names no tag to remove", imageRef)
+	}
+	return imageRef[at+1:], nil
 }
 
 func repositoryOf(target provider.RegistryTarget, imageRef string) (string, error) {
@@ -116,19 +156,58 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 	return repository, nil
 }
 
-func ensure(ctx context.Context, api ECRAPI, name string) error {
+func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
+	project, ok := images.RegistryRepositoryProject(strings.TrimPrefix(name, Namespace+"/"))
+	if !ok {
+		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)
+	}
+	tags := []ecrtypes.Tag{
+		{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)},
+		{Key: aws.String(ProjectTag), Value: aws.String(project)},
+	}
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:             aws.String(name),
 		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
 		ImageScanningConfiguration: &ecrtypes.ImageScanningConfiguration{ScanOnPush: true},
-		Tags:                       []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)}},
+		Tags:                       tags,
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {
-		return nil
+		return false, tagRepository(ctx, api, name, tags)
 	}
 	if err != nil {
-		return fmt.Errorf("create the image repository %s: %w", name, err)
+		return false, fmt.Errorf("create the image repository %s: %w", name, err)
+	}
+	return true, nil
+}
+
+func tagRepository(ctx context.Context, api ECRAPI, name string, tags []ecrtypes.Tag) error {
+	described, err := api.DescribeRepositories(ctx, &ecr.DescribeRepositoriesInput{RepositoryNames: []string{name}})
+	if err != nil {
+		return fmt.Errorf("read the image repository %s to tag it with its project: %w", name, err)
+	}
+	for _, repository := range described.Repositories {
+		listed, err := api.ListTagsForResource(ctx, &ecr.ListTagsForResourceInput{ResourceArn: repository.RepositoryArn})
+		if err != nil {
+			return fmt.Errorf("read the tags of the image repository %s: %w", name, err)
+		}
+		if carriesTags(listed.Tags, tags) {
+			continue
+		}
+		if _, err := api.TagResource(ctx, &ecr.TagResourceInput{ResourceArn: repository.RepositoryArn, Tags: tags}); err != nil {
+			return fmt.Errorf("tag the image repository %s with its project, without which no credential limited to a project may delete its images: %w", name, err)
+		}
 	}
 	return nil
+}
+
+func carriesTags(carried, wanted []ecrtypes.Tag) bool {
+	for _, want := range wanted {
+		if !slices.ContainsFunc(carried, func(tag ecrtypes.Tag) bool {
+			return aws.ToString(tag.Key) == aws.ToString(want.Key) && aws.ToString(tag.Value) == aws.ToString(want.Value)
+		}) {
+			return false
+		}
+	}
+	return true
 }

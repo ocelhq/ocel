@@ -3,9 +3,10 @@ package payloads
 import (
 	"bytes"
 	"debug/elf"
-	"io/fs"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
@@ -20,28 +21,30 @@ func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
 	}
 }
 
-func TestTheNextRuntimeShipsItsEntrypointAndEveryCacheHandler(t *testing.T) {
-	for _, name := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		body, err := fs.ReadFile(NextRuntime(), name)
-		if err != nil {
-			t.Errorf("NextRuntime() holds no %s: %v", name, err)
-			continue
+func TestTheNextRuntimeShipsItsEntrypointAndSharpButNotTheServerPreload(t *testing.T) {
+	files := NextRuntime()
+	for _, name := range []string{"entrypoint.mjs", "node_modules/sharp/package.json"} {
+		if len(files[name]) == 0 {
+			t.Errorf("NextRuntime() holds no bytes for %s", name)
 		}
-		if len(body) == 0 {
-			t.Errorf("NextRuntime()'s %s is empty", name)
+	}
+	if _, shipped := files[containerimage.NextServerPreloadFile]; shipped {
+		t.Errorf("NextRuntime() holds %s, which only a Next container loads", containerimage.NextServerPreloadFile)
+	}
+	for name := range files {
+		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
+			t.Errorf("NextRuntime() names %q, want a path inside the runtime directory", name)
 		}
 	}
 }
 
-func TestTheNextServerRuntimeHoldsTheAdapterAndEveryCacheHandlerItNames(t *testing.T) {
+func TestTheNextServerRuntimeHoldsThePreloadAlone(t *testing.T) {
 	files := NextServerRuntime()
-	for _, name := range []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		if len(files[name]) == 0 {
-			t.Errorf("NextServerRuntime() holds no bytes for %s, and next start loads it from the image", name)
-		}
+	if len(files[containerimage.NextServerPreloadFile]) == 0 {
+		t.Errorf("NextServerRuntime() holds no bytes for %s, and a Next container runs it from the image", containerimage.NextServerPreloadFile)
 	}
-	if len(files) != 4 {
-		t.Errorf("NextServerRuntime() holds %d files, want the adapter and the three cache handlers", len(files))
+	if len(files) != 1 {
+		t.Errorf("NextServerRuntime() holds %d files, want the preload alone: the cache handlers are bundled into the entrypoint and the preload", len(files))
 	}
 }
 

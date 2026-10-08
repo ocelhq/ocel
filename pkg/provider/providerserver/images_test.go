@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -26,7 +27,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -37,7 +40,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
+const builtContentDigest = "sha256:18f506afda961821b6026743c6309340f89b9b842bf994d53c1d6e6119199165"
+
+var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -106,7 +111,7 @@ func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ progre
 	return provider.StackResult{Containers: fake.ProvisionedContainers(spec)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, provider.StackRef, progress.Log) error {
+func (muteStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
 	return nil
 }
 
@@ -163,6 +168,50 @@ func TestADigestTheRegistryAlreadyHasIsNotPushedAgain(t *testing.T) {
 	}
 	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already has", pushed)
+	}
+}
+
+type recordReadingStacks struct {
+	provider.Stacks
+	store keyvalue.Store
+
+	mu    sync.Mutex
+	named []string
+}
+
+func (s *recordReadingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+	recorded, _, err := stackrecords.Read(ctx, s.store, ref.Tier, ref.Project, ref.Name)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.named = append(s.named, recorded.Image)
+	s.mu.Unlock()
+	return s.Stacks.Destroy(ctx, ref, images, progress)
+}
+
+func TestAFailedDeployDestroysItsAppStackWithARecordNamingTheImageItPushed(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind == provider.StackApp {
+			return errors.New("the app stack failed")
+		}
+		return nil
+	})
+	reading := &recordReadingStacks{Stacks: vendor.Stacks(), store: vendor.KeyValues()}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: reading})
+	bootstrappedOverRPC(t, client)
+
+	if result, _ := deploy(t, client, registryDeployRequest()); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want the app stack to fail it")
+	}
+
+	reading.mu.Lock()
+	defer reading.mu.Unlock()
+	if !slices.Equal(reading.named, []string{pushedCoordinate}) {
+		t.Errorf("the failed deploy destroyed stacks whose records name %q, want %q: the destroy reclaims only the image the record names, and nothing else records it", reading.named, pushedCoordinate)
 	}
 }
 
@@ -331,6 +380,7 @@ type refusingStore struct{ where string }
 func (s refusingStore) Destination() string { return s.where }
 
 func (s refusingStore) ProbePush(context.Context, string) error { return nil }
+func (s refusingStore) Remove(context.Context, string) error    { return nil }
 
 func (s refusingStore) Has(context.Context, provider.ImagePush) (bool, error) {
 	return false, nil
@@ -358,7 +408,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
+var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
 
 type loadingProvider struct {
 	*fake.Provider
@@ -422,6 +472,55 @@ func TestADigestTheBoxAlreadyHasIsNotSentAgain(t *testing.T) {
 	}
 	if handed := vendor.direct.Pushed(); len(handed) != 0 {
 		t.Errorf("the redeploy sent %v again over a box that already has the digest", handed)
+	}
+}
+
+func rebuiltContainerRequest() *contractv1.DeployRequest {
+	req := containerDeployRequest("/")
+	req.Manifest.Apps[0].Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+		Image:           "ocel/shop/web@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+		HealthCheckPath: "/",
+		MinInstances:    1,
+		MaxInstances:    1,
+	}}
+	return req
+}
+
+func TestARebuildOfUnchangedContentIsHeldByTheBoxThatHasTheImageItShipped(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := loadServed(t)
+	vendor.direct.Preload(loadedCoordinate)
+
+	req := rebuiltContainerRequest()
+	req.Dry = true
+	_, events := deploy(t, client, req)
+	rows := imageRows(lastPlan(events))
+	if len(rows) != 1 || rows[0].GetAction() != planv1.Change_ACTION_KEEP {
+		t.Errorf("the plan shows %v for a rebuild of content the box already holds, want one %q row: the build's digest differs on every build, so a row keyed by it is never standing", rows, provider.ActionKeep)
+	}
+
+	result, _ := deploy(t, client, rebuiltContainerRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if handed := vendor.direct.Pushed(); len(handed) != 0 {
+		t.Errorf("the redeploy sent %v over a box that holds the same content under another build digest", handed)
+	}
+}
+
+func TestARebuildOfUnchangedContentIsNotPushedAgainToARegistry(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.ImageStore().Preload(pushedCoordinate)
+
+	result, _ := deploy(t, client, namingARegistry(rebuiltContainerRequest()))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
+		t.Errorf("the deploy pushed %v that the registry already holds under this content's digest", pushed)
 	}
 }
 
@@ -780,7 +879,8 @@ func daemonWithTheBuiltImage(t *testing.T, architecture string) *builtImageDaemo
 	daemonServing(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/json"):
-			_, _ = w.Write([]byte(`{"Architecture":"` + architecture + `","Os":"linux"}`))
+			_, _ = w.Write([]byte(`{"Id":"` + r.URL.Path + `","Created":"` + time.Now().Format(time.RFC3339Nano) + `","Architecture":"` + architecture + `","Os":"linux",` +
+				`"Config":{"Entrypoint":["/app/server"]},"RootFS":{"Type":"layers","Layers":["sha256:aa"]}}`))
 		case strings.HasSuffix(r.URL.Path, "/get"):
 			daemon.mu.Lock()
 			daemon.exported++
@@ -806,8 +906,7 @@ func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.Prov
 }
 
 func wrappedCoordinate() string {
-	_, digest, _ := strings.Cut(containerTestImage, "@")
-	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, nil)
+	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, nil)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {
@@ -821,7 +920,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames
 	}
 
 	asked := vendor.ImageStore().Asked()
-	if len(asked) != 1 {
+	if len(asked) == 0 || slices.ContainsFunc(asked, func(push provider.ImagePush) bool { return push.ImageRef != asked[0].ImageRef }) {
 		t.Fatalf("the deploy asked the registry about %v, want the one image its container app runs", asked)
 	}
 	if asked[0].ImageRef != wrappedCoordinate() {
@@ -953,6 +1052,7 @@ func (s *stubStore) Has(context.Context, provider.ImagePush) (bool, error) {
 func (s *stubStore) Destination() string { return "the stub registry" }
 
 func (s *stubStore) ProbePush(context.Context, string) error { return nil }
+func (s *stubStore) Remove(context.Context, string) error    { return nil }
 
 func (s *stubStore) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
 	s.pushed = append(s.pushed, push)
@@ -1034,7 +1134,7 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	client, vendor := wrappingServed(t)
 	vendor.WithHooks(func(h *provider.Hooks) {
 		h.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) {
-			return map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}, nil
+			return map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}, nil
 		}
 	})
 
@@ -1047,13 +1147,13 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
 	}
-	want := containerimage.NextAdapterPathVar + "=/opt/fake/next/" + containerimage.NextServerAdapterFile
-	if env := configOf(t, pushed[0].Built).Env; !slices.Contains(env, want) {
-		t.Errorf("the pushed image has env %v, want it to hold %s", env, want)
+	if env := configOf(t, pushed[0].Built).Env; slices.ContainsFunc(env, func(entry string) bool {
+		return strings.HasPrefix(entry, "NEXT_ADAPTER_PATH=") || strings.HasPrefix(entry, "NODE_OPTIONS=")
+	}) {
+		t.Errorf("the pushed image has env %v, want the Next adapter path and node options left to the app and the container runtime", env)
 	}
-	_, digest, _ := strings.Cut(containerTestImage, "@")
-	next := &images.NextServerRuntime{Dir: "/opt/fake/next", Files: map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}}
-	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
+	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}}
+	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
 		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
 	}
 }
@@ -1075,9 +1175,226 @@ func TestANextContainerOnAProviderWithoutANextServerRuntimeIsWrappedAsBefore(t *
 	if pushed[0].ImageRef != wrappedCoordinate() {
 		t.Errorf("the image is pushed as %q, want today's %q", pushed[0].ImageRef, wrappedCoordinate())
 	}
-	for _, entry := range configOf(t, pushed[0].Built).Env {
-		if strings.HasPrefix(entry, containerimage.NextAdapterPathVar+"=") {
-			t.Errorf("the pushed image sets %s though its provider ships no Next server runtime", entry)
+}
+
+var projectRegistry = &contractv1.ImageRegistry{Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
+
+func TestRemoveProjectHandsEveryDestroyTheStoreOfTheRegistryTheProjectNames(t *testing.T) {
+	client, vendor := deployedProject(t)
+	req := projectRequest()
+	req.ProjectRegistry = projectRegistry
+
+	stream, err := client.RemoveProject(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	stores := vendor.FakeStacks().DestroyedWith()
+	if len(stores) == 0 {
+		t.Fatal("RemoveProject() destroyed no stack")
+	}
+	for _, store := range stores {
+		if store != provider.ImageStore(vendor.ImageStore()) {
+			t.Errorf("a stack was destroyed with %v, want the store opened on the project's registry: the images its deploys pushed there are deleted through it", store)
 		}
+	}
+	opened := vendor.ImageStore().Opened()
+	if len(opened) != 1 || opened[0].Server != "registry.example.com" || opened[0].Password != "hunter2" {
+		t.Errorf("the removal opened %v, want the project's registry with the credentials the CLI sent, once", opened)
+	}
+}
+
+func TestRemoveProjectWithoutARegistryOpensNoStore(t *testing.T) {
+	client, vendor := deployedProject(t)
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	for _, store := range vendor.FakeStacks().DestroyedWith() {
+		if store != nil {
+			t.Errorf("a stack was destroyed with %v, want none: no registry was named", store)
+		}
+	}
+	if opened := vendor.ImageStore().Opened(); len(opened) != 0 {
+		t.Errorf("the removal opened %v, want no registry", opened)
+	}
+}
+
+func TestRemoveEnvironmentHandsEveryDestroyTheStoreOfTheRegistryTheProjectNames(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
+	outlived := naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7)))
+	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:            "shop",
+		Environment:     &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+		ProjectRegistry: projectRegistry,
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, %v", result.GetError(), err)
+	}
+
+	stores := vendor.FakeStacks().DestroyedWith()
+	if len(stores) == 0 {
+		t.Fatal("RemoveEnvironment() destroyed no stack")
+	}
+	for _, store := range stores {
+		if store != provider.ImageStore(vendor.ImageStore()) {
+			t.Errorf("a stack was destroyed with %v, want the store opened on the project's registry", store)
+		}
+	}
+}
+
+func TestADeployThatReclaimsADroppedBuildHandsTheDestroyTheStoreItPushedTo(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	seedKept(t, vendor)
+	req := deployRequest()
+	req.ProjectRegistry = projectRegistry
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	stores := vendor.FakeStacks().DestroyedWith()
+	if len(stores) == 0 {
+		t.Fatal("the deploy destroyed no stack, and this case drops a build past the retained promotions")
+	}
+	for _, store := range stores {
+		if store != provider.ImageStore(vendor.ImageStore()) {
+			t.Errorf("a dropped build was destroyed with %v, want the store the deploy pushed to: it is where that build's image lives", store)
+		}
+	}
+}
+
+type imageRemovingStacks struct {
+	provider.Stacks
+	images *fake.Images
+	image  string
+}
+
+func (s imageRemovingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	if err == nil && spec.Kind == provider.StackApp {
+		err = s.images.Remove(ctx, s.image)
+	}
+	return result, err
+}
+
+func TestAnImageRemovedWhileItsReleaseProvisionedIsPushedAgainAndSaidSo(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	stacks := imageRemovingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, events := deploy(t, client, registryDeployRequest())
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the release to land with its image pushed again", result.GetError())
+	}
+	if !vendor.ImageStore().Stored(pushedCoordinate) {
+		t.Errorf("the registry no longer holds %s after the deploy: the release's next task start or cold pull fails with nothing said", pushedCoordinate)
+	}
+	said := false
+	for _, event := range events {
+		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the deploy said nothing about %s leaving the registry while it provisioned", pushedCoordinate)
+	}
+}
+
+type pullingStacks struct {
+	provider.Stacks
+	images      *fake.Images
+	image       string
+	removeFirst bool
+	provisions  *int
+}
+
+func (s pullingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	if err != nil || spec.Kind != provider.StackApp {
+		return result, err
+	}
+	*s.provisions++
+	if *s.provisions == 1 {
+		if s.removeFirst {
+			if err := s.images.Remove(ctx, s.image); err != nil {
+				return result, err
+			}
+		}
+		if s.images.Stored(s.image) {
+			return provider.StackResult{}, errors.New("the service never became stable")
+		}
+	}
+	if !s.images.Stored(s.image) {
+		return provider.StackResult{}, errors.New("CannotPullContainerError: " + s.image + " not found")
+	}
+	return result, nil
+}
+
+func TestARemovalThatTakesTheImageBeforeItsReleasePullsItIsPushedAgainAndTheReleaseRetried(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	provisions := 0
+	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, removeFirst: true, provisions: &provisions}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, events := deploy(t, client, registryDeployRequest())
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the release retried once with its image pushed again: a removal that read the records before this deploy wrote its own took the image between the push check and the pull", result.GetError())
+	}
+	if !vendor.ImageStore().Stored(pushedCoordinate) {
+		t.Errorf("the registry no longer holds %s after the deploy", pushedCoordinate)
+	}
+	said := false
+	for _, event := range events {
+		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the deploy said nothing about %s leaving the registry before its release pulled it", pushedCoordinate)
+	}
+}
+
+func TestAReleaseThatFailsWithItsImageInPlaceIsNotRetried(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	provisions := 0
+	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, provisions: &provisions}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
+	bootstrappedOverRPC(t, client)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "never became stable") {
+		t.Errorf("Deploy() = %t, %q, want the release's own failure: only an image that left the registry earns a second attempt", result.GetSuccess(), result.GetError())
+	}
+	if provisions != 1 {
+		t.Errorf("the app stack provisioned %d times, want once", provisions)
 	}
 }

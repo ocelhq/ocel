@@ -136,7 +136,7 @@ func holdsInside(blob []byte, value string) bool {
 func builtWithBinding(t *testing.T, name, fixture string) (image.Image, string) {
 	t.Helper()
 	value := bindingValue(t, answeringOnTheHost(t))
-	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: name, Workspace: located(t, fixture)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, []byte("the integration test machine")), os.Stderr)
+	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: name, Workspace: located(t, fixture)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, nil, []byte("the integration test machine")), os.Stderr)
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -175,6 +175,22 @@ func TestARailpackBuildReadsABindingFromTheLiveDirAndLeavesItInNoLayer(t *testin
 	}
 	holdsNowhere(t, built.Ref, value)
 	leavesNoLiveFiles(t, built.Ref)
+}
+
+func TestARailpackBuildReadsTheBindingProxysSessionTokenFromItsEnvironmentAndLeavesItInNoLayer(t *testing.T) {
+	value := bindingValue(t, answeringOnTheHost(t))
+	token := bindingValue(t, 0)
+	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: "Railpack Proxy", Workspace: located(t, "testdata/secretrailpack")}, "", image.NewLiveValues(map[string]string{bindingKey: value}, map[string]string{"OCEL_SESSION_TOKEN": token}, []byte("the integration test machine")), os.Stderr)
+	if err != nil {
+		t.Fatalf("Build() = %v", err)
+	}
+	t.Cleanup(func() { _ = exec.Command("docker", "image", "rm", "--force", built.Ref).Run() })
+
+	sum := sha256.Sum256([]byte(token))
+	if got := strings.TrimSpace(runInImage(t, built.Ref, "cat", "/app/dist/session-token")); got != hex.EncodeToString(sum[:]) {
+		t.Errorf("the build step read %q as its session token, want the digest of the token it was handed", got)
+	}
+	holdsNowhere(t, built.Ref, token)
 }
 
 func TestABuildRunAgainWithAChangedBindingReadsTheNewValueRatherThanTheCachedOne(t *testing.T) {

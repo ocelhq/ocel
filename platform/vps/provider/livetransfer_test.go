@@ -35,11 +35,11 @@ func transferBase() string { return transferRepository + ":" + transferTag }
 
 func transferRuntime(t *testing.T, daemon images.DockerHost, client *http.Client) []byte {
 	t.Helper()
-	arch, err := daemon.Architecture(context.Background(), client, transferBase())
+	inspection, err := daemon.Inspect(context.Background(), client, transferBase())
 	if err != nil {
-		t.Fatalf("read the architecture the daemon at %s imported %s as: %v", daemon.Address, transferBase(), err)
+		t.Fatalf("inspect the image the daemon at %s imported %s as: %v", daemon.Address, transferBase(), err)
 	}
-	runtime, err := host.ContainerRuntime(arch)
+	runtime, err := host.ContainerRuntime(inspection.Architecture)
 	if err != nil {
 		t.Fatal(err)
 	}

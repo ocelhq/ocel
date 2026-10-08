@@ -74,7 +74,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 		}
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, nil, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {

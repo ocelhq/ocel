@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 
 	connect "connectrpc.com/connect"
@@ -14,7 +15,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -186,13 +189,38 @@ func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
 		return err
 	}
 	r.infraHoldsUndeclared = len(undeclared) > 0
-	return nil
+	published, err := r.publishedBindings().Published(ctx)
+	if err != nil {
+		return err
+	}
+	r.bindings, err = mergePublishedProperties(r.spec.Infra, recorded.Bindings, published)
+	return err
 }
 
-func (r *deployRun) forgetInfraDigest(ctx context.Context, holds []byte) error {
+func mergePublishedProperties(infra naming.StackName, recorded, published []provider.Binding) ([]provider.Binding, error) {
+	bindings := slices.Clone(recorded)
+	for i, binding := range bindings {
+		at := slices.IndexFunc(published, func(p provider.Binding) bool { return p.Name == binding.Name && p.Type == binding.Type })
+		if at < 0 {
+			return nil, refusal.Refuse(refusal.CodeNotReady,
+				"%s records %s binding %s, and no %s binding named %s is published any more, so this deploy has none of the secrets the record never keeps to grant its apps: "+
+					"deploy again, and the infra is provisioned and published before the build",
+				infra, binding.Type, binding.Name, binding.Type, binding.Name)
+		}
+		bindings[i].Properties = map[string]string{}
+		maps.Copy(bindings[i].Properties, binding.Properties)
+		maps.Copy(bindings[i].Properties, published[at].Properties)
+	}
+	return bindings, nil
+}
+
+func (r *deployRun) recordInfraStack(ctx context.Context, holds []byte) error {
 	recorded, found, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
-	if err != nil || !found {
+	if err != nil {
 		return err
+	}
+	if !found {
+		recorded = stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: provider.WrittenByVersion("")}
 	}
 	recorded.Resources, recorded.ResourceDigest = holds, ""
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, recorded)
@@ -203,13 +231,22 @@ func (r *deployRun) listUndeclaredResources(recorded stackrecords.Stack) ([]*con
 	if err := proto.Unmarshal(recorded.Resources, &held); err != nil {
 		return nil, fmt.Errorf("read the resources %s holds: %w", r.spec.Infra, err)
 	}
-	declared := map[string]bool{}
+	declared := map[typedResourceName]bool{}
 	for _, resource := range r.manifest.GetResources() {
-		declared[resourceName(resource)] = true
+		declared[newTypedResourceName(resource)] = true
 	}
 	return slices.DeleteFunc(held.GetResources(), func(resource *contractv1.ManifestResource) bool {
-		return declared[resourceName(resource)]
+		return declared[newTypedResourceName(resource)]
 	}), nil
+}
+
+type typedResourceName struct {
+	resourceType resourcesv1.ResourceType
+	name         string
+}
+
+func newTypedResourceName(resource *contractv1.ManifestResource) typedResourceName {
+	return typedResourceName{resource.GetResource().GetType(), resourceName(resource)}
 }
 
 func resourceName(resource *contractv1.ManifestResource) string {

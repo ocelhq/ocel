@@ -1,0 +1,9 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "prerender-bucket",
+  "allowDegraded": ["edge-runtime", "edge-cache"],
+  "provider": {
+    "gcp": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}

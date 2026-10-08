@@ -52,10 +52,10 @@ type appStackFunctions struct {
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
 	siblings := pulumi.StringMap{}
 	var arns []pulumi.StringInput
-	var entry *appFunction
+	var rootFunction *appFunction
 	for _, fn := range a.Functions {
 		if a.Dispatch.hosts(fn) || a.Guard.hosts(fn) {
-			entry = &fn
+			rootFunction = &fn
 			continue
 		}
 		ref, err := a.declare(ctx, fn, a.Env, nil, functionURLAuthIAM)
@@ -65,7 +65,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		siblings[fn.route()] = ref.URL
 		arns = append(arns, ref.ARN)
 	}
-	if entry == nil {
+	if rootFunction == nil {
 		return nil
 	}
 	var resolved map[string]pulumi.StringInput
@@ -75,7 +75,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		}
 		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err := a.declare(ctx, *entry, a.Guard.entryEnv(a.Dispatch.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
+	_, err := a.declare(ctx, *rootFunction, a.Guard.rootFunctionEnv(a.Dispatch.rootFunctionEnv(a.Env)), resolved, a.Guard.rootFunctionURLAuth())
 	return err
 }
 
@@ -94,7 +94,7 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 	policy := pulumi.All(parts...).ApplyT(func(resolved []any) (string, error) {
 		account := accountOfARN(fmt.Sprint(resolved[0]))
 		if optimizer && account == "" {
-			return "", fmt.Errorf("scope the entry function's invoke grant: %q names no account", resolved[0])
+			return "", fmt.Errorf("scope the root function's invoke grant: %q names no account", resolved[0])
 		}
 		siblings := make([]string, 0, len(resolved)-1)
 		for _, arn := range resolved[1:] {

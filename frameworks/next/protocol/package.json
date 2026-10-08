@@ -6,7 +6,7 @@
   "description": "what a next build emits and whatever serves it reads",
   "license": "Apache-2.0",
   "exports": {
-    "./routing-manifest": "./src/routing-manifest.mts"
+    "./route-table": "./src/route-table.mts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

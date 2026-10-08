@@ -157,19 +157,19 @@ func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]
 	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
-		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's entry function; deploy an app before promoting", promotionID, stageName)
+		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's root function; deploy an app before promoting", promotionID, stageName)
 	case len(apps) > 1:
-		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in your config, such as `\"edge\": \"cloudflare\"`", promotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
+		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one root function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in your config, such as `\"provider\": {\"aws\": {\"edge\": \"cloudflare\"}}`", promotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
 	}
 
 	app := apps[0]
 	record := records[app]
 	release := record.Release
 	if record.Origin != "" {
-		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotionID, app, release, record.Origin, Kind)
+		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's root function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"provider\": {\"aws\": {\"edge\": \"cloudfront\"}}`", promotionID, app, release, record.Origin, Kind)
 	}
-	if record.EntryFunction == "" {
-		return nil, fmt.Errorf("promote %s: the release record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release, stageName)
+	if record.RootFunctionPhysical == "" {
+		return nil, fmt.Errorf("promote %s: the release record for %s/%s names no root function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release, stageName)
 	}
 
 	assets := record.AssetPrefix
@@ -177,9 +177,19 @@ func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]
 		assets = unsetVariable
 	}
 	return variablePatch(map[string]string{
-		entryVariable:  record.EntryFunction,
+		entryVariable:  record.RootFunctionPhysical,
 		assetsVariable: assets,
 	}), nil
+}
+
+func collectImmutablePrefixes(records map[string]router.ReleaseRecord) []string {
+	var prefixes []string
+	for _, record := range records {
+		if record.Static != nil {
+			prefixes = append(prefixes, record.Static.ImmutablePrefixes...)
+		}
+	}
+	return prefixes
 }
 
 func (s *stack) findPreviewWildcard() string {

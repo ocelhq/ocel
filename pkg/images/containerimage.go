@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -18,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -25,10 +27,10 @@ import (
 
 const (
 	runtimeTagHexLen = 12
+	wrappedBaseLabel = "ocel.base"
 )
 
 type NextServerRuntime struct {
-	Dir   string
 	Files map[string][]byte
 }
 
@@ -49,7 +51,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 	}
 	config := file.Config
 	if next != nil {
-		if err := checkNextServerRuntime(next, config.Env); err != nil {
+		if err := refuseNextServerRuntimeWithoutPreload(next); err != nil {
 			return nil, err
 		}
 	}
@@ -73,12 +75,20 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 			return nil, err
 		}
 		addenda = append(addenda, mutate.Addendum{Layer: nextLayer})
-		config.Env = append(append([]string{}, config.Env...), containerimage.NextAdapterPathVar+"="+path.Join(next.Dir, containerimage.NextServerAdapterFile))
 	}
 	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
 		return nil, err
 	}
+	digest, err := base.Digest()
+	if err != nil {
+		return nil, err
+	}
+	config.Labels = maps.Clone(config.Labels)
+	if config.Labels == nil {
+		config.Labels = map[string]string{}
+	}
+	config.Labels[wrappedBaseLabel] = digest.String()
 	config.Entrypoint = []string{containerimage.RuntimePath}
 	config.Cmd = command
 	return mutate.Config(appended, config)
@@ -90,21 +100,10 @@ func newBytesLayer(packed []byte) (v1.Layer, error) {
 	})
 }
 
-func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
-	if !path.IsAbs(next.Dir) {
+func refuseNextServerRuntimeWithoutPreload(next *NextServerRuntime) error {
+	if _, ok := next.Files[containerimage.NextServerPreloadFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the provider names %q as the directory of its Next server runtime, and NEXT_ADAPTER_PATH only finds the adapter at an absolute path", next.Dir)
-	}
-	if _, ok := next.Files[containerimage.NextServerAdapterFile]; !ok {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the provider's Next server runtime holds no %s, so next start has no adapter to load", containerimage.NextServerAdapterFile)
-	}
-	for _, entry := range env {
-		if name, value, _ := strings.Cut(entry, "="); name == containerimage.NextAdapterPathVar {
-			return refusal.Refuse(refusal.CodeInvalid,
-				"the image sets %s=%s and ocel sets it to load the cache handlers its provider ships: remove it from the image",
-				containerimage.NextAdapterPathVar, value)
-		}
+			"the provider's Next server runtime holds no %s, so next start has no preload to run in front of it", containerimage.NextServerPreloadFile)
 	}
 	return nil
 }
@@ -121,15 +120,16 @@ func sortedNames(files map[string][]byte) []string {
 func packNextServerLayer(next *NextServerRuntime) ([]byte, error) {
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
+	dir := containerimage.FrameworkRuntimeDir(buildoutput.FrameworkNext)
 	if err := archive.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeDir,
-		Name:     strings.TrimPrefix(next.Dir, "/") + "/",
+		Name:     strings.TrimPrefix(dir, "/") + "/",
 		Mode:     0o755,
 	}); err != nil {
 		return nil, err
 	}
 	for _, name := range sortedNames(next.Files) {
-		if err := tarBody(archive, path.Join(next.Dir, name), next.Files[name], 0o644); err != nil {
+		if err := tarBody(archive, path.Join(dir, name), next.Files[name], 0o644); err != nil {
 			return nil, err
 		}
 	}
@@ -165,29 +165,28 @@ func packRuntimeLayer(runtime []byte) ([]byte, error) {
 	return packed.Bytes(), nil
 }
 
-func RuntimeTag(digest string, runtime []byte, next *NextServerRuntime) string {
+func RuntimeTag(contentDigest string, runtime []byte, next *NextServerRuntime) string {
 	hash := sha256.New()
 	hash.Write(runtime)
 	if next != nil {
 		hash.Write([]byte{0})
-		hash.Write([]byte(next.Dir))
 		for _, name := range sortedNames(next.Files) {
 			body := next.Files[name]
 			fmt.Fprintf(hash, "\x00%d:%s\x00%d:", len(name), name, len(body))
 			hash.Write(body)
 		}
 	}
-	return naming.DigestTag(digest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(hash.Sum(nil))[:runtimeTagHexLen]
+	return naming.DigestTag(contentDigest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(hash.Sum(nil))[:runtimeTagHexLen]
 }
 
-func BuiltArchitecture(ctx context.Context, repository, digest string) (string, error) {
+func InspectBuiltImage(ctx context.Context, repository, digest string) (ImageInspection, error) {
 	host, err := DockerHostFromEnv()
 	if err != nil {
-		return "", err
+		return ImageInspection{}, err
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
-	return host.Architecture(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
+	return host.Inspect(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
 }
 
 func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte, next *NextServerRuntime) (v1.Image, func(), error) {

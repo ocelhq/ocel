@@ -4,14 +4,25 @@ description: Deploy to your own Google Cloud project, on Cloud Run.
 ---
 
 ```bash
-ocel init --provider gcp
+ocel init --provider gcp --option region=europe-west1
 ```
 
-Name the project and the region:
+Name the region, and the project unless `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT` or your gcloud config already does. `ocel cost scan` reads no credentials and runs no gcloud, so it needs `project` in the config or in one of those two variables:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": { "project": "my-project", "region": "europe-west1" }
@@ -47,30 +58,38 @@ reads, writes and storage its records use.
 
 ## Next.js
 
-A serverless Next app runs as Cloud Run services billed per request (per instance in a preview behind Identity-Aware Proxy), each with 2 GiB of memory.
+A serverless Next app runs as Cloud Run services billed per instance, each with 1 vCPU and 2 GiB
+of memory. An instance keeps its CPU after it answers, so the work Next runs after the response
+(`after()`, refreshing a stale page, writing the cache) finishes rather than stalling until the next request.
 
-A Next app deployed as functions (serverless compute, billed per request) cannot turn on
-`experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
-the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
-Turn the setting off, or set `"compute": "container"` on the app in `ocel.json`: a Next app on
-container compute is not affected.
+The catch is the bill. Cloud Run charges an instance for its whole life, idle time included, and
+keeps an idle instance for up to 15 minutes after its last request. At list prices one instance costs
+about $0.08 an hour, so traffic that never pauses for 15 minutes keeps one alive all month, about $58,
+where billing per request would charge only the seconds spent answering. The per-instance rate is
+about a quarter lower and has no per-request fee, so it costs less only for an instance that spends
+most of its life, roughly three quarters or more, answering requests. `ocel cost` prices the services
+this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
-unless `minInstances` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
+unless `instances.min` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
 with a serverless Next app, so a revalidated tag reaches every instance, and it refreshes stale
 pages in the background. Cloud CDN does not store its pages: ocel marks every response that
 names `s-maxage` private, so a revalidated page is never served stale; its hashed static files are
-still cached. Do not build it with `output: "standalone"` and do not set
-`adapterPath` in `next.config`: the deploy warns about both.
+still cached. It may build with `output: "standalone"` and set `adapterPath` in `next.config`: ocel
+installs its cache handlers before Next loads. The Next server stops as it starts when the config it
+loads names the app's own `cacheHandler`, `cacheHandlers.default` or `cacheHandlers.remote`, whether
+`next.config` sets it or `NEXT_CACHE_HANDLER_PATH`, `NEXT_DEFAULT_CACHE_HANDLER_PATH` or
+`NEXT_REMOTE_CACHE_HANDLER_PATH` does under `next start`. Other Node processes the app starts are
+left alone.
 
 Each prerendered page renders on its first request after a deploy and is then served from the
-cache. With `minInstances: 0`, Cloud Run stops an idle instance after at most 15 minutes, so the
+cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
 next request starts cold. See [Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings).
 
 ## Edge
 
-Leave `edge` out and a deployment has no edge in front of it: each service is answered on
+Leave `edge` out of the provider's options and a deployment has no edge in front of it: each service is answered on
 the URL Cloud Run gives it, which costs nothing while it serves nothing and binds no
 hostname of your own.
 
@@ -90,9 +109,24 @@ Each deploy of the preview is also answered on a URL of its own, the `run.app` U
 revision tag its release gave it, behind the same proxy; the deploy prints it, and it keeps
 serving that deploy after later ones until a prune drops it.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    previewViewers: ["group:team@example.com", "user:ana@example.com"],
+  }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
     "gcp": {
@@ -131,14 +165,25 @@ Cloud CDN passes the `Cache-Tag` response header through to clients, so the tag 
 stamps on its pages, including the release, are visible to visitors: never put a user or tenant id
 in a tag.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+import { alb } from "ocel/providers/gcp/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1", edge: alb() }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
-    "gcp": { "project": "my-project", "region": "europe-west1" }
+    "gcp": { "project": "my-project", "region": "europe-west1", "edge": "alb" }
   },
-  "edge": "alb",
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
@@ -180,15 +225,36 @@ name, as
 [serverless apps on Google Cloud](/docs/providers/cloudflare#serverless-apps-on-google-cloud)
 describes.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    edge: cloudflare(),
+    dns: cloudflareDns(),
+  }),
+  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": {
-    "gcp": { "project": "my-project", "region": "europe-west1" }
+    "gcp": {
+      "project": "my-project",
+      "region": "europe-west1",
+      "edge": "cloudflare",
+      "dns": "cloudflare"
+    }
   },
-  "edge": "cloudflare",
-  "dns": "cloudflare",
   "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
 }
 ```
@@ -285,12 +351,11 @@ a dead-letter topic of its own. A task with a `cron` is a Cloud Scheduler job pu
 topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
 waits in the tier's Cloud Tasks queue until it is due.
 
-A Next app billed per request refreshes a stale page through the same queue: it queues the
+A serverless Next app refreshes a stale page through the same queue: it queues the
 refresh, and Cloud Tasks calls the app's Cloud Run url with a token signed as the tier's refresh
 account. A Next app on container compute, or behind an edge that runs code, refreshes on its own.
-A Next app in a preview served behind Identity-Aware Proxy is billed for its instance's whole life
-instead, and refreshes on its own too: the proxy lets in only the people `previewViewers` names, so
-Cloud Tasks could not reach it.
+A Next app in a preview served behind Identity-Aware Proxy refreshes on its own too: the proxy lets
+in only the people `previewViewers` names, so Cloud Tasks could not reach it.
 
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
@@ -305,8 +370,8 @@ ocel bootstrap production --features tasks
 
 That is the tier's task database, its delay queue, its push account, and the account Cloud Tasks
 signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also
-needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a Next app billed
-per request behind an edge that runs no code, on a tier without it is refused, naming that
+needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a serverless Next
+app behind an edge that runs no code, on a tier without it is refused, naming that
 command, and an ephemeral preview declaring one is refused. A Next app on container compute, or
 behind an edge that runs code, needs no queue. Dropping `tasks` from a bootstrap is refused while
 any project on the tier still declares a topic or task, or still holds the refresh grant of a Next
@@ -379,7 +444,7 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
-because a delayed message is published as the app that sent it. A Next app billed per request may
+because a delayed message is published as the app that sent it. A serverless Next app may
 act as the tier's refresh account, which holds no grant of its own, so Cloud Tasks signs its
 refreshes as that account; a deploy sets that with the custom role too.
 
@@ -390,8 +455,8 @@ Google's first 7 days, and one whose permissions drifted is put back.
 Each app runs as a service account of its own, which a deploy creates the first time the app
 ships to a tier and grants only what the app's runtime reads: the namespace's database, the
 tier's key, for a Next app the tier's tags database, and for an app that reaches topics, tasks or
-workers the tier's task database, the delay queue and its topics, and for a Next app billed per
-request the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
+workers the tier's task database, the delay queue and its topics, and for a serverless Next app
+the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
 a deploy holds it under a condition that lets it grant and revoke the four roles an app needs and
 the custom role that clears Cloud CDN, and no others:
 

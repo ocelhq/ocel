@@ -70,12 +70,12 @@ func fileHash(path string) (string, error) {
 }
 
 func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command, worker []string, functionDir, appDir string) error {
-	if err := writeJSON(filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), buildoutput.FunctionDescriptor{
+	if err := writeJSON(filepath.Join(functionDir, buildoutput.FunctionConfigFile), buildoutput.FunctionConfig{
 		Framework: framework,
 		EntryFile: entryFile,
 		Command:   command,
 		Worker:    worker,
-		ID:        entryRouteID,
+		ID:        rootFunctionRouteID,
 		App:       app,
 	}); err != nil {
 		return err
@@ -85,11 +85,12 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 	if err != nil {
 		return err
 	}
-	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
+	return writeJSON(filepath.Join(appDir, buildoutput.HostingFile), buildoutput.Hosting{
+		Version:          buildoutput.HostingVersion,
 		Framework:        framework.Name,
 		FrameworkBuildID: buildID,
-		Entry:            entryRouteID,
-		Needs:            map[edge.Need]edge.NeedDetail{},
+		RootFunction:     rootFunctionRouteID,
+		Needs:            map[edge.Need]buildoutput.NeedDetail{},
 	})
 }
 

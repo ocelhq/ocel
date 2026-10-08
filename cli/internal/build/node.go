@@ -34,9 +34,7 @@ type nodeAppBuild struct {
 	Entrypoint    string            `json:"entrypoint,omitempty"`
 	FunctionDir   string            `json:"functionDir,omitempty"`
 
-	NextRuntimeDir         string `json:"nextRuntimeDir,omitempty"`
-	MaxFunctionBytes       int64  `json:"maxFunctionBytes,omitempty"`
-	NextRefreshesByRequest bool   `json:"nextRefreshesByRequest,omitempty"`
+	MaxFunctionBytes int64 `json:"maxFunctionBytes,omitempty"`
 }
 
 const summaryLines = 2

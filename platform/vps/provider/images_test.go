@@ -17,10 +17,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -53,12 +55,16 @@ type box struct {
 	follows    func(ctx context.Context, command string, each func(session.Line) error) error
 	forwarded  []string
 	stopped    []string
+	listening  string
 }
 
 func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.forwarded = append(b.forwarded, remote)
+	if b.listening != "" {
+		return b.listening, func() {}, nil
+	}
 	return fmt.Sprintf("127.0.0.1:%d", 41000+len(b.forwarded)), func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
@@ -184,7 +190,7 @@ func (b *box) proxying(command, input string) (session.Result, bool) {
 }
 
 func (b *box) catting(command string) (session.Result, bool) {
-	if named, catted := strings.CutPrefix(command, "cat "); catted {
+	if named, catted := strings.CutPrefix(command, "cat "); catted && !strings.HasPrefix(named, "| ") {
 		var said string
 		for _, path := range strings.Fields(named) {
 			read, found := b.reads[unquoted(path)]
@@ -481,5 +487,124 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker pull "+quote(server+"/shop/web@"+digest.String())) {
 		t.Errorf("the machine ran:\n%s\nwant a pull pinned to the digest of the wrapped image, which is what the registry now has", commands)
+	}
+}
+
+func TestAnImagePulledOntoTheMachineIsRemovedFromTheRegistryItWasPushedTo(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: wrapped(t)}
+	if err := store.Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+
+	if err := store.Remove(context.Background(), push.ImageRef); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+
+	tag, err := name.NewTag(push.ImageRef, name.Insecure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := remote.Head(tag); err == nil {
+		t.Errorf("the registry still answers for %s after Remove()", tag)
+	}
+}
+
+func TestAnImageLoadedOntoTheMachineHasNothingInARegistryToRemove(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	if err := directImagesOn(t, machine).Remove(context.Background(), loadedImageRef); err != nil {
+		t.Errorf("Remove() = %v, want nothing: an image loaded over SSH lives on the machine alone, which its release window sweeps", err)
+	}
+	if ran := machine.commands(); len(ran) != 0 {
+		t.Errorf("Remove() ran %v on the machine, and the window sweeps it", ran)
+	}
+}
+
+func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAgain(t *testing.T) {
+	t.Parallel()
+
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	built := wrapped(t)
+	ref := server + "/shop/web:sha256-abc-ocel-0123"
+	tag, err := name.NewTag(ref, name.Insecure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.Write(tag, built); err != nil {
+		t.Fatal(err)
+	}
+	pulls := 0
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "docker pull") {
+			return session.Result{}, false
+		}
+		pulls++
+		if pulls == 1 {
+			if err := remote.Delete(tag); err != nil {
+				t.Errorf("remove the tag as another box's reconcile would: %v", err)
+			}
+		}
+		if _, err := remote.Head(tag); err != nil {
+			return session.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"}, true
+		}
+		return session.Result{}, false
+	}}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: built}, nil); err != nil {
+		t.Fatalf("Push() = %v, want the image pushed again: a box's reconcile removes from the shared registry what that box dropped, and another box of the project may be about to pull it", err)
+	}
+	if _, err := remote.Head(tag); err != nil {
+		t.Errorf("the registry does not hold %s after the push: %v", ref, err)
+	}
+}
+
+func TestAnImageTheMachineHoldsAndTheRegistryLostIsNotHeld(t *testing.T) {
+	t.Parallel()
+
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	machine := &box{hasImage: true}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	held, err := store.Has(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: wrapped(t)})
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+
+	if held {
+		t.Error("Has() = true for an image only the machine's own cache holds: a sweep elsewhere removed its registry tag, and a fresh box pulls from the registry")
 	}
 }

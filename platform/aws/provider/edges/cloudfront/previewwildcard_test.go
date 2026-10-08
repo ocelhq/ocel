@@ -438,13 +438,13 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			t.Fatalf("routes = %v, want one under %q", slices.Sorted(maps.Keys(routes)), previewHostname())
 		}
 		if published.Origin != fakeEntryHost || published.Release != "d1.f1" {
-			t.Errorf("route = %+v, want the release's entry function URL", published)
+			t.Errorf("route = %+v, want the release's root function URL", published)
 		}
 		if published.Assets != assetOriginDomain(fakeAssetBucket, fakeRegion) || published.AssetPrefix != "/"+fakeAssetPrefix {
 			t.Errorf("route = %+v, want the preview bootstrap's assets", published)
 		}
 		if published.Secret != fakeSecret {
-			t.Errorf("route = %+v, want the origin secret the entry function demands", published)
+			t.Errorf("route = %+v, want the origin secret the root function demands", published)
 		}
 		if made := w.front.mutations(); len(made) != 0 {
 			t.Errorf("promoting a preview changed %v, want the wildcard distribution left alone", made)

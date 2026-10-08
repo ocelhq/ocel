@@ -15,10 +15,11 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
-import { addCacheHandlers, cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import type { ServeDescriptor } from "@platform/edge-contract/serve";
+import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
+import type { Hosting } from "@platform/edge-contract/hosting";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { compileImageConfig, imageConfigHash, serializeImageConfig } from "./image-config.mjs";
@@ -66,50 +67,15 @@ function readMaxFunctionBytes(): number | undefined {
   return bytes;
 }
 
-function readNextRuntimeDir(): string {
-  const dir = process.env.OCEL_NEXT_RUNTIME_DIR;
-  if (!dir) {
-    throw new Error(
-      "ocel: OCEL_NEXT_RUNTIME_DIR names no directory the host loads Next's runtime files from, so this build could not be served — build through `ocel build` or `ocel deploy` for a provider that serves Next apps",
-    );
-  }
-  return dir;
-}
-
-function refusePartialFallbacks(
-  config: Parameters<NonNullable<NextAdapter["modifyConfig"]>>[0],
-): void {
-  if (process.env.OCEL_NEXT_REFRESHES_BY_REQUEST !== "1") return;
-  let setting: string;
-  if (config.experimental?.partialFallbacks === true) {
-    setting = "experimental.partialFallbacks";
-  } else if ((config as { partialPrefetching?: unknown }).partialPrefetching) {
-    setting = "partialPrefetching";
-  } else {
-    return;
-  }
-  throw new Error(
-    `ocel: ${setting} has Next render a more specific fallback shell after the response ends, and this host stops a function's work when its response ends, so the shell would be lost and its page refreshed again and again. Turn ${setting} off in next.config, or set "compute": "container" on the app in ocel.json, where the CPU stays allocated between requests and the shell renders in the background`,
-  );
-}
-
-async function installCacheHandler(): Promise<string> {
-  const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
-  await mkdir(dirname(dest), { recursive: true });
-  await copyFile(new URL("edge-cache-handler.cjs", import.meta.url), dest);
-  return dest;
-}
-
 const adapter = {
   name: "ocel-adapter",
 
   async modifyConfig(config, { phase }) {
     if (phase === PHASE_PRODUCTION_BUILD) {
-      refusePartialFallbacks(config);
+      refuseAppCacheHandlers(config);
       return {
         ...config,
         cacheMaxMemorySize: 0,
-        cacheHandler: await installCacheHandler(),
         experimental: { ...config.experimental, trustHostHeader: true },
       };
     }
@@ -177,8 +143,6 @@ const adapter = {
     const appRel = relative(repoRoot, projectDir);
 
     const appName = process.env.OCEL_APP_NAME || basename(projectDir);
-
-    await patchCacheHandlers(distDir);
 
     const groups = new Map<string, typeof functionRoutes>();
     for (const route of functionRoutes) {
@@ -260,7 +224,10 @@ const adapter = {
 
     const rootPathname = basePath || "/";
     const rootEntryKey = entryKeyByPathname.get(rootPathname);
-    const entry = rootEntryKey === undefined ? "" : bundleNameOf(rootEntryKey, rootPathname);
+    const rootFunction =
+      rootEntryKey === undefined
+        ? (bundles[0]?.name ?? "")
+        : bundleNameOf(rootEntryKey, rootPathname);
 
     const routeKinds = routeKindsById(allRoutes, outputs.prerenders);
 
@@ -268,7 +235,7 @@ const adapter = {
 
     const variantHeaders = JSON.stringify(variantHeaderProjection(prerenderGroups));
 
-    const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
+    const routes = launcherRoutes(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
     const nextConfigProjection = {
       basePath: config.basePath || "",
@@ -321,7 +288,7 @@ const adapter = {
         );
 
         await writeFile(
-          join(funcDir, "config.json"),
+          join(funcDir, "function-config.json"),
           JSON.stringify({
             framework: { name: "next" },
             entryFile: launcherRel,
@@ -472,21 +439,21 @@ const adapter = {
     const notFoundKey = firstDispatchedErrorPage([`${basePath}/404`, `${basePath}/_not-found`]);
     const notFoundFlightKey = firstDispatchedErrorPage([`${basePath}/_not-found`]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
-    const errorRoutes: NonNullable<RoutingManifest["errorRoutes"]> = {};
+    const errorRoutes: NonNullable<NextRouteTable["errorRoutes"]> = {};
     if (notFoundKey !== undefined) errorRoutes.notFound = notFoundKey;
     if (notFoundFlightKey !== undefined) {
       errorRoutes.notFoundFlight = notFoundFlightKey;
     }
     if (serverErrorKey !== undefined) errorRoutes.serverError = serverErrorKey;
 
-    const imagesField: Partial<Pick<RoutingManifest, "images">> = images
+    const imagesField: Partial<Pick<NextRouteTable, "images">> = images
       ? { images: { ...images, configHash: imageConfigHash(images) } }
       : {};
 
-    const vercelCacheField: Partial<Pick<RoutingManifest, "vercelCacheAlias">> =
+    const vercelCacheField: Partial<Pick<NextRouteTable, "vercelCacheAlias">> =
       process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" ? { vercelCacheAlias: true } : {};
 
-    const middlewareField: Partial<Pick<RoutingManifest, "middleware">> = middleware
+    const middlewareField: Partial<Pick<NextRouteTable, "middleware">> = middleware
       ? {
           middleware: originMiddleware
             ? {
@@ -503,18 +470,18 @@ const adapter = {
         }
       : {};
 
-    const errorRoutesField: Partial<Pick<RoutingManifest, "errorRoutes">> =
+    const errorRoutesField: Partial<Pick<NextRouteTable, "errorRoutes">> =
       Object.keys(errorRoutes).length > 0 ? { errorRoutes } : {};
 
-    const routingManifest = exactly<RoutingManifest>()({
-      entry,
+    const routeTable = exactly<NextRouteTable>()({
+      rootFunction,
       buildId,
       appName,
       basePath: config.basePath || "",
       trailingSlash: !!config.trailingSlash,
       skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
       skipMiddlewareUrlNormalize: !!config.skipMiddlewareUrlNormalize,
-      i18n: (config.i18n ?? undefined) as RoutingManifest["i18n"],
+      i18n: (config.i18n ?? undefined) as NextRouteTable["i18n"],
       ...imagesField,
 
       ...vercelCacheField,
@@ -539,14 +506,14 @@ const adapter = {
     });
 
     await mkdir(outputRoot, { recursive: true });
-    writeFileSync(join(outputRoot, "routing-manifest.json"), JSON.stringify(routingManifest));
+    writeFileSync(join(outputRoot, "next-route-table.json"), JSON.stringify(routeTable));
     const pprRoutes = outputs.prerenders
       .filter((p) => p.pprChain && isUserFacingPathname(p.pathname))
       .map((p) => p.pathname);
     const cachedRoutes = outputs.prerenders.filter((p) => isUserFacingPathname(p.pathname));
     const streamedRoutes = outputs.appPages.filter((p) => isUserFacingPathname(p.pathname));
     const edgeNeedRoutes = edgeRoutes.filter((r) => isUserFacingPathname(r.pathname));
-    const needs: ServeDescriptor["needs"] = {
+    const needs: Hosting["needs"] = {
       ...(middleware?.runtime === "edge" && {
         "edge-middleware": {
           count: 1,
@@ -570,14 +537,16 @@ const adapter = {
       }),
     };
 
-    const serve: ServeDescriptor = {
+    const hosting: Hosting = {
+      version: 1,
       framework: "next",
       frameworkBuildId: buildId,
-      edgeRouting: true,
-      entry,
+      rootFunction,
+      routeTable: "next",
+      static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
       needs,
     };
-    writeFileSync(join(outputRoot, "serve.json"), JSON.stringify(serve));
+    writeFileSync(join(outputRoot, "hosting.json"), JSON.stringify(hosting));
 
     if (images) {
       await writeFile(join(outputRoot, "image-config.json"), serializeImageConfig(images));
@@ -651,6 +620,7 @@ function edgeEntryOf(output: EdgeOutput): {
 }
 
 function renderEdgeShim(
+  edgeCacheHandler: string,
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
   wasmIdByName: Map<string, string>,
@@ -659,6 +629,13 @@ function renderEdgeShim(
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 globalThis.NEXT_CLIENT_ASSET_SUFFIX = ${JSON.stringify(clientAssetSuffix)}
+
+globalThis[Symbol.for("@next/cache-handlers")] = {
+  FetchCache: ((module) => {
+${edgeCacheHandler}
+    return module.exports
+  })({ exports: {} }),
+}
 
 const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
@@ -961,7 +938,13 @@ async function emitEdgeBundle(
   const json = stableStringify({
     version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName, clientAssetSuffix),
+    shim: renderEdgeShim(
+      await readFile(new URL("edge-cache-handler.cjs", import.meta.url), "utf8"),
+      entries,
+      assetIdByName,
+      wasmIdByName,
+      clientAssetSuffix,
+    ),
     chunks,
     wasm: wasmModules,
     assets: assetModules,
@@ -992,19 +975,6 @@ function cacheTags(prerender: AdapterOutput["PRERENDER"], programmableEdge: bool
     );
   }
   return tags;
-}
-
-async function patchCacheHandlers(distDir: string): Promise<void> {
-  const manifestPath = join(distDir, "required-server-files.json");
-  let manifest: { config?: Record<string, unknown> };
-  try {
-    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  } catch {
-    return;
-  }
-  if (!manifest.config) return;
-  Object.assign(manifest.config, addCacheHandlers(manifest.config, readNextRuntimeDir()));
-  await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
 interface CacheEntryFile {
@@ -1184,15 +1154,15 @@ async function emitFetchEntries(outputRoot: string, distDir: string): Promise<vo
   );
 }
 
-export interface RouteTable {
+export interface LauncherRoutes {
   exact: Record<string, string>;
   dynamic: [string, string][];
 }
 
-function routeTable(
+function launcherRoutes(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
-): RouteTable {
+): LauncherRoutes {
   const exact = Object.fromEntries(entryKeyByPathname);
 
   const dynamic: [string, string][] = [];
@@ -1225,7 +1195,7 @@ function clientAssetSuffix(config: {
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
-  routes: RouteTable,
+  routes: LauncherRoutes,
   nextConfig: NextConfigProjection,
 ): string {
   return `${[
@@ -1322,6 +1292,23 @@ function nextDataPathnameOf(pageKey: string, buildId: string, basePath: string):
   const normalized = unprefixed === "/" ? "/index" : unprefixed;
   const dataPathname = `/_next/data/${buildId}${normalized}.json`;
   return basePath ? `${basePath}${dataPathname}` : dataPathname;
+}
+
+const NEXT_STATIC_SEGMENT = "/_next/static/";
+
+export function deriveNextStatic(pathnames: string[]): NonNullable<Hosting["static"]> {
+  const immutablePrefixes = [
+    ...new Set(
+      pathnames.flatMap((pathname) => {
+        const at = pathname.indexOf(NEXT_STATIC_SEGMENT);
+        return at === -1 ? [] : [pathname.slice(0, at + NEXT_STATIC_SEGMENT.length)];
+      }),
+    ),
+  ].sort();
+  return {
+    immutablePrefixes,
+    mustRevalidatePrefixes: immutablePrefixes.map((prefix) => `${prefix}service-worker/`),
+  };
 }
 
 function servedPathname(file: { pathname: string; filePath: string }): string {

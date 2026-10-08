@@ -17,7 +17,7 @@ func TestAFreshBuildSupersedesTheBuildIDTheLastOneRecorded(t *testing.T) {
 	root := t.TempDir()
 	writeBuildScript(t, root)
 	cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)

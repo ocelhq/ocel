@@ -452,7 +452,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		}
 	})
 
-	t.Run("a directory the app does not sit under is refused by what build.context may name", func(t *testing.T) {
+	t.Run("a directory the app does not sit under is refused by what image.context may name", func(t *testing.T) {
 		dir := t.TempDir()
 		write(t, dir, workspaceFiles)
 		elsewhere := filepath.Join(dir, "elsewhere")
@@ -464,8 +464,8 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		if err == nil {
 			t.Fatal("Rebase() took a context the app is not inside, so the image would be built without the app in it")
 		}
-		if !strings.Contains(err.Error(), "build.context") {
-			t.Errorf("Rebase() = %v, and the reader is never told what build.context may point at", err)
+		if !strings.Contains(err.Error(), "image.context") {
+			t.Errorf("Rebase() = %v, and the reader is never told what image.context may point at", err)
 		}
 	})
 

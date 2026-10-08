@@ -3,6 +3,7 @@ package apigateway
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 
@@ -84,6 +85,20 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			return err
 		}
 		defer stop()
+		routes, err := routeStatic(bounded, c, s.spec(pointer), id, collectImmutablePrefixes(move.Records))
+		if err != nil {
+			return err
+		}
+		published, err := readStageVariable(bounded, c, id, routesVariable)
+		if err != nil {
+			return err
+		}
+		if routes.Reshaped || published != routes.Fingerprint {
+			if err := publish(bounded, c, id); err != nil {
+				return err
+			}
+		}
+		patch := append(slices.Clone(patch), variablePatch(map[string]string{routesVariable: routes.Fingerprint})...)
 		if err := moveStage(bounded, c, id, move.Promotion.PromotionID, patch); err != nil {
 			return err
 		}

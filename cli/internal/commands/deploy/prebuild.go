@@ -48,7 +48,11 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	env := map[string]string{}
 	live := map[string]string{}
 	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
+	maps.Copy(env, forwards.BindingProxyEnv(portforward.WholeProject))
 	if command.App != "" {
+		if err := build.RefuseBindingProxyNames(command.App, values[command.App]); err != nil {
+			return fmt.Errorf("%s: %w", preBuildName, err)
+		}
 		maps.Copy(env, values[command.App].Env)
 		maps.Copy(live, values[command.App].Live)
 	}
@@ -57,7 +61,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	if forwards == nil && resourceCount > 0 && !a.infra.providerProcess.Facts().GetForwardsPorts() {
 		span.Say(fmt.Sprintf("The provider forwards no port, so %s goes without the bindings of the resources %s declares", preBuildName, cfg.Slug))
 	}
-	hidden := redaction.NewValues(build.SecretValues(live))
+	hidden := redaction.NewValues(build.AppVariables{Live: live, BindingProxyEnv: forwards.BindingProxyEnv(portforward.WholeProject)}.SecretValues())
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	err := lifecycle.Run(ctx, lifecycle.Command{
 		Line:    command.Command,

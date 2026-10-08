@@ -103,10 +103,10 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	for i, fn := range functions {
 		declared := env
 		if dispatch.hosts(fn) {
-			declared = dispatch.plannedEntryEnv(env, functions)
+			declared = dispatch.plannedRootFunctionEnv(env, functions)
 		}
 		if guard.hosts(fn) {
-			declared = guard.entryEnv(declared)
+			declared = guard.rootFunctionEnv(declared)
 		}
 		if err := checkFunctionEnvBudget(logical[i], functionEnv(declared, args[logical[i]], cache, bytecode)); err != nil {
 			return nil, err
@@ -142,7 +142,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, delivery, err := r.assetSets(spec, app.App, app.Framework, bundle, cache)
+	sets, delivery, err := r.assetSets(spec, app.App, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -234,16 +234,16 @@ func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error
 	}
 	prefix := spec.App.AssetPrefix
 	host := &dispatchHost{
-		Entry:             routing.Entry,
+		RootFunction:      routing.RootFunction,
 		AssetBucket:       r.cfg.AssetBucket,
 		AssetPrefix:       prefix,
 		ImageOptimizerURL: r.cfg.ImageOptimizerURL,
 		Env: map[string]string{
-			routingManifestEnv: routingManifestInTask,
-			assetPrefixEnv:     prefix,
-			slugEnv:            r.cfg.Slug,
-			appNameEnv:         spec.App.App,
-			buildIDEnv:         spec.App.BuildID,
+			routeTableEnv:  routeTableInTask,
+			assetPrefixEnv: prefix,
+			slugEnv:        r.cfg.Slug,
+			appNameEnv:     spec.App.App,
+			buildIDEnv:     spec.App.BuildID,
 		},
 	}
 	if r.cfg.AssetBucket != "" {
@@ -251,6 +251,9 @@ func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error
 	}
 	if r.cfg.ImageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = r.cfg.ImageOptimizerURL
+	}
+	if rules := spec.App.Static.Variable(); rules != "" {
+		host.Env[edge.StaticRulesVar] = rules
 	}
 	return host, nil
 }
@@ -262,10 +265,10 @@ func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
-			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the entry function to demand of it; re-run `%s`",
+			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the root function to demand of it; re-run `%s`",
 			spec.App.App, provider.BootstrapCommand(r.cfg.Tier))
 	}
-	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
+	return &originGuard{RootFunction: guard.RootFunction, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
 func (r *release) isrCache(spec provider.StackSpec) *isrConfig {

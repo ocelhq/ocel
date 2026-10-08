@@ -40,9 +40,9 @@ func TestABuildContextTheAppDoesNotSitUnderIsRefusedByName(t *testing.T) {
 
 	_, err := Describe(cfg, cfg.Apps[0])
 	if err == nil {
-		t.Fatal("Describe() accepted a build.context the app is not inside, so the image would be built without the app in it")
+		t.Fatal("Describe() accepted a image.context the app is not inside, so the image would be built without the app in it")
 	}
-	if !strings.Contains(err.Error(), "build.context") || !strings.Contains(err.Error(), "web") {
+	if !strings.Contains(err.Error(), "image.context") || !strings.Contains(err.Error(), "web") {
 		t.Errorf("Describe() = %v, want the app and the key it got wrong named", err)
 	}
 }

@@ -92,7 +92,7 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 	destroyed := false
 	t.Cleanup(func() {
 		if !destroyed {
-			if err := stacks.Destroy(ctx, ref, nil); err != nil {
+			if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
 				t.Errorf("Destroy() in cleanup = %v", err)
 			}
 		}
@@ -131,7 +131,7 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 		t.Errorf("a PING with the store's token was answered %q, want PONG", said)
 	}
 
-	if err := stacks.Destroy(ctx, ref, nil); err != nil {
+	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	destroyed = true

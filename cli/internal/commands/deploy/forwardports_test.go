@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -48,6 +50,14 @@ func (s *forwardsSeen) openNow() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.open
+}
+
+func grantedBindings(req *contractv1.ForwardPortsRequest) map[string][]string {
+	granted := map[string][]string{}
+	for _, grant := range req.GetGrants() {
+		granted[grant.GetGrantee()] = grant.GetBindings()
+	}
+	return granted
 }
 
 func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
@@ -84,10 +94,10 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	return seen
 }
 
-func writeNextUsageProject(t *testing.T, root, build string) {
+func writeNextUsageProject(t *testing.T, root, appFields string) {
 	t.Helper()
 	clitest.WriteUsageMonorepo(t, root)
-	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless"`+build+` }],
+	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }`+appFields+` }],
 `)
 }
 
@@ -132,8 +142,8 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 	}
 
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
-	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
-		t.Errorf("the CLI asked to forward %v, want the one binding the built app uses", sent)
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{"web": {"db--main"}}, slices.Equal) {
+		t.Errorf("the CLI asked to forward %v, want the one binding the built app uses granted to that app", sent)
 	}
 	seen.mutex.Lock()
 	deployedWith := slices.Clone(seen.openAtDeploy)
@@ -146,7 +156,7 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 func TestAnAppWhoseBuildTakesNoBindingsIsBuiltWithoutForwardingAPort(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
-	writeNextUsageProject(t, fixture.Root, `, build: { bindings: false }`)
+	writeNextUsageProject(t, fixture.Root, `, buildWithResources: false`)
 	forwardingPorts(t, fixture)
 	built := capturingBuild(t, &dependencies)
 
@@ -238,34 +248,39 @@ func TestAProviderThatForwardsNoPortIsNotAskedToAndOpensNoForwardingStep(t *test
 	}
 }
 
-func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(t *testing.T) {
-	dependencies := newTestDependencies()
-	fixture := setUpDeployProject(t)
-	writeNextUsageProject(t, fixture.Root, "")
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "storage.ts"), `
+func writeNextDatabaseAndBucketProject(t *testing.T, root string) {
+	t.Helper()
+	writeNextUsageProject(t, root, "")
+	clitest.WriteFile(t, filepath.Join(root, "shared", "storage.ts"), `
 import { declareBucket } from "./declare.js";
 
 export const files = declareBucket("files");
 `)
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "index.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
 export * from "./db.js";
 export * from "./storage.js";
 `)
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), `
 import { db, files } from "../../../shared/index.js";
 
 export function handler() {
   return db.name + files.name;
 }
 `)
+}
+
+func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
 	forwardingPorts(t, fixture)
 	built := capturingBuild(t, &dependencies)
 
 	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
 
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
-	if len(sent) != 1 || len(sent[0].GetBindings()) != 2 {
-		t.Fatalf("the CLI asked to forward %v, want every binding the built app uses, left to the provider to forward or not", sent)
+	if len(sent) != 1 || len(grantedBindings(sent[0])["web"]) != 2 || len(sent[0].GetGrants()) != 1 {
+		t.Fatalf("the CLI asked to forward %v, want every binding the built app uses granted to that app, left to the provider to forward or not", sent)
 	}
 	if _, ok := built.Live[forwardedPostgresKey]; !ok {
 		t.Error("the build was not handed main, which the provider forwarded")
@@ -286,7 +301,7 @@ func TestAnEphemeralPreviewBuildsWithTheTiersPublishedBindingsPointedAtPortForwa
 	previewUp(t, fixture, dependencies, previewUpOptions{})
 
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
-	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) || sent[0].GetEnvironment().GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{"web": {"db--main"}}, slices.Equal) || sent[0].GetEnvironment().GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		t.Fatalf("the CLI asked to forward %v, want db--main for the ephemeral preview, which builds on the tier's published bindings", sent)
 	}
 	if _, ok := built.Live[forwardedPostgresKey]; !ok {
@@ -406,26 +421,199 @@ func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWh
 	}
 }
 
-func TestANextAppBuiltAsAnImageForwardsNoPort(t *testing.T) {
+func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortForwards(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	clitest.WriteUsageMonorepo(t, fixture.Root)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), `{"name":"api","dependencies":{"next":"16.0.0"}}`)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: "container" }],
 `)
 	forwardingPorts(t, fixture)
 	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
-	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
-		built = true
+	var live map[string]string
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		live = variables["web"].Live
 		return build.Output{}, errors.New("the image is not built in this test")
 	}
 
 	deployErr := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
 
-	if !built {
-		t.Fatalf("the deploy never reached the build, so it never decided whether to forward: %v", deployErr)
+	if live == nil {
+		t.Fatalf("the deploy never reached the build with a live value: %v", deployErr)
 	}
-	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
-		t.Errorf("the CLI forwarded ports for %v, want none for an image build, which never reads the live directory", sent)
+	if _, ok := live[forwardedPostgresKey]; !ok {
+		t.Errorf("the image build was handed %v to read from its live dir, want %s", slices.Sorted(maps.Keys(live)), forwardedPostgresKey)
+	}
+	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{"web": {"db--main"}}, slices.Equal) {
+		t.Errorf("the CLI asked to forward %v, want the one binding the image build uses granted to that app", sent)
+	}
+}
+
+func TestANextAppBuiltAsAnImageIsHandedTheBindingProxyAndTheBindingsItsBuildReads(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), `{"name":"api","dependencies":{"next":"16.0.0"}}`)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: "container" }],
+`)
+	servingBindingProxy(t, fixture)
+	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
+	var built *build.AppVariables
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		web := variables["web"]
+		built = &web
+		return build.Output{}, errors.New("the image is not built in this test")
+	}
+
+	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
+
+	if built == nil {
+		t.Fatal("the deploy never reached the build")
+	}
+	wantProxy := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-token-web"}
+	if !maps.Equal(built.BindingProxyEnv, wantProxy) {
+		t.Errorf("the image build was handed the binding proxy %v, want the one the provider served", built.BindingProxyEnv)
+	}
+	for _, key := range []string{forwardedPostgresKey, "OCEL_RESOURCE_BUCKET_files"} {
+		if _, ok := built.Live[key]; !ok {
+			t.Errorf("the image build was handed %v to read, want %s", slices.Sorted(maps.Keys(built.Live)), key)
+		}
+	}
+}
+
+func sessionsFor(req provider.BindingProxyRequest) []provider.BindingSession {
+	sessions := make([]provider.BindingSession, 0, len(req.Grants))
+	for _, grant := range req.Grants {
+		sessions = append(sessions, provider.BindingSession{Grantee: grant.Grantee, SessionToken: "proxy-token-" + cmp.Or(grant.Grantee, "project")})
+	}
+	return sessions
+}
+
+func servingBindingProxy(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
+	t.Helper()
+	seen := forwardingPorts(t, fixture)
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			seen.mutex.Lock()
+			defer seen.mutex.Unlock()
+			seen.open++
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: sessionsFor(req), Close: func() {
+				time.Sleep(forwardTeardown)
+				seen.mutex.Lock()
+				defer seen.mutex.Unlock()
+				seen.open--
+			}}, nil
+		}
+	})
+	return seen
+}
+
+func TestADeployBuildsAnAppWithTheBindingProxyAndTheBucketRecordItBindsAndClosesTheProxyBeforeItDeploys(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	seen := servingBindingProxy(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	wantRuntime := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-token-web"}
+	if !maps.Equal(built.BindingProxyEnv, wantRuntime) {
+		t.Errorf("the build was handed the runtime env %v, want the binding proxy the provider served", built.BindingProxyEnv)
+	}
+	if _, ok := built.Live["OCEL_RESOURCE_BUCKET_files"]; !ok {
+		t.Errorf("the build was handed %v to read from its live dir, want the files bucket beside main", slices.Sorted(maps.Keys(built.Live)))
+	}
+	if strings.Contains(said, "goes without the bindings of files") {
+		t.Errorf("the deploy said %q, want no bucket left out of the build", said)
+	}
+	if strings.Contains(said, "proxy-token-") {
+		t.Errorf("the deploy said %q, want the session token never shown", said)
+	}
+	seen.mutex.Lock()
+	deployedWith := slices.Clone(seen.openAtDeploy)
+	seen.mutex.Unlock()
+	if !slices.Equal(deployedWith, []int{0}) {
+		t.Errorf("the deploy began with %v forwards or proxies still open, want it to begin after the build closed them", deployedWith)
+	}
+}
+
+func TestAnAppWhoseBuildTakesNoBindingsIsHandedNoBindingProxy(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }, buildWithResources: false }],
+`)
+	servingBindingProxy(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	if len(built.BindingProxyEnv) != 0 {
+		t.Errorf("an app that opted out was handed the runtime env %v", built.BindingProxyEnv)
+	}
+}
+
+func TestEachAppBuildIsHandedTheBindingProxyTokenGrantedOnlyTheBucketsItBinds(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "files.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const files = declareBucket("files");
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "reports.ts"), `
+import { declareBucket } from "./declare.js";
+
+export const reports = declareBucket("reports");
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "index.ts"), `
+export * from "./db.js";
+export * from "./files.js";
+export * from "./reports.js";
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), `
+import { files } from "../../../shared/files.js";
+
+export function handler() {
+  return files.name;
+}
+`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), `{"name":"api","dependencies":{"next":"16.0.0"}}`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "admin", "package.json"), `{"name":"admin","dependencies":{"next":"16.0.0"}}`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "admin", "src", "server.ts"), `
+import { reports } from "../../../shared/reports.js";
+
+export function handler() {
+  return reports.name;
+}
+`)
+	writeConfig(t, fixture.Root, `  apps: [
+    { name: "web", path: "apps/api", compute: { serverless: { framework: "next" } } },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } } },
+  ],
+`)
+	servingBindingProxy(t, fixture)
+	var built map[string]build.AppVariables
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		built = variables
+		return build.Output{}, errors.New("the apps are not built in this test")
+	}
+
+	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
+
+	if built == nil {
+		t.Fatal("the deploy never reached the build")
+	}
+	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{"web": {"bucket--files"}, "admin": {"bucket--reports"}}, slices.Equal) {
+		t.Fatalf("the CLI asked to forward %v, want each app granted the bucket it binds and no other", sent)
+	}
+	for app, token := range map[string]string{"web": "proxy-token-web", "admin": "proxy-token-admin"} {
+		if got := built[app].BindingProxyEnv[localrpc.SessionTokenEnvVar]; got != token {
+			t.Errorf("the build of %s was handed the token %q, want %q: the one granted its own buckets", app, got, token)
+		}
 	}
 }

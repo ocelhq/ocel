@@ -180,7 +180,7 @@ func TestARemovedStackTakesItsContainersWithIt(t *testing.T) {
 
 	machine := &box{}
 	err := over(machine).RemoveContainers(context.Background(), provider.StackRef{},
-		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil, nil)
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

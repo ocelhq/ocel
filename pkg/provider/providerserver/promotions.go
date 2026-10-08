@@ -38,46 +38,72 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 	return &contractv1.ListPromotionsResponse{Promotions: promotionHistoryProto(history)}, nil
 }
 
-func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
-	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	current, err := session.ledger.Read(ctx, "")
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	target, err := rollbackTarget(current.History(), req.GetTo(), req.GetTag())
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	promotionID, err := newPromotionID()
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
+func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
+		session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
+		if err != nil {
+			return nil, err
+		}
+		current, err := session.ledger.Read(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		target, err := rollbackTarget(current.History(), req.GetTo(), req.GetTag())
+		if err != nil {
+			return nil, err
+		}
+		promotionID, err := newPromotionID()
+		if err != nil {
+			return nil, err
+		}
+		var promoted router.Promotion
+		root := RootSpan(naming.SpanPromotion, req.GetSlug(),
+			progress.Switching.Title("production traffic back to promotion "+target.PromotionID), progressv1.Phase_PHASE_PROMOTE)
+		if err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {
+			propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
+			if err != nil {
+				return err
+			}
+			promoted = router.Promotion{
+				PromotionID: promotionID,
+				Ts:          time.Now().Unix(),
+				Releases:    target.Releases,
+				Propagation: &propagation,
+			}
+			dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, log)
+			images := removalImages(ctx, session.provider, req.GetProjectRegistry(), log)
+			if err != nil {
+				return errors.Join(err, session.reclaimDropped(ctx, images, "", dropped, log))
+			}
+			if err := session.checkpoint(ctx); err != nil {
+				return err
+			}
+			if err := session.reclaimDropped(ctx, images, "", dropped, log); err != nil {
+				log.Warn(unreclaimedWarning(promoted.PromotionID, err))
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		return rollbackResult(promoted), nil
+	})
+}
 
-	propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
-	if err != nil {
-		return nil, provider.RefusalError(err)
+func rollbackResult(promoted router.Promotion) *progressv1.OperationEvent {
+	result := &progressv1.OperationResult{
+		Success:           true,
+		PromotionId:       promoted.PromotionID,
+		PromotedAtSeconds: promoted.Ts,
+		Propagation:       propagationProto(promoted.Propagation),
 	}
-	promoted := router.Promotion{
-		PromotionID: promotionID,
-		Ts:          time.Now().Unix(),
-		Releases:    target.Releases,
-		Propagation: &propagation,
+	for _, app := range slices.Sorted(maps.Keys(promoted.Releases)) {
+		result.Apps = append(result.Apps, &progressv1.AppResult{
+			App:     app,
+			Release: promoted.Releases[app],
+			Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+		})
 	}
-	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
-	if err != nil {
-		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.Discard())))
-	}
-	if err := session.checkpoint(ctx); err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
-	if err := session.reclaimDropped(ctx, "", dropped, progress.Discard()); err != nil {
-		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
-	}
-	return rolled, nil
+	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: result}}
 }
 
 func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promotion, error) {
@@ -144,7 +170,8 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := reclaimUnnamed(ctx, session.provider, session.ledger, pointer, pruned, progress); err != nil {
+		images := removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)
+		if err := reclaimUnnamed(ctx, session.provider, images, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {

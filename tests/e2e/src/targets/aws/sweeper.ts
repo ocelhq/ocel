@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { awsSweepOverlay, DEFAULT_BASE, type Overlay, writeJourneyConfig } from "../../config";
+import { awsSweepOverlay, type Overlay, writeJourneyConfig } from "../../config";
 import { projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Fixture } from "../../matrix/types";
@@ -311,7 +311,7 @@ export class AwsSweeper implements Sweeper {
       return;
     }
     await inFixture(first.name, runId, `sweep-bootstrap-${namespace}`, async (dir) => {
-      await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: namespace });
+      await writeJourneyConfig(dir, { target: "aws", slug: namespace });
       await ocel(dir, BOOTSTRAP_DESTROY_ARGS, ocelEnvIn(dir, namespace));
       process.stdout.write(`swept the ${namespace} bootstrap\n`);
     }).catch((error) => complaints.push(`${namespace} bootstrap: ${String(error)}`));

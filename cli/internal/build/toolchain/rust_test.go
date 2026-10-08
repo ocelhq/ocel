@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const rustCrateManifest = "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
@@ -215,8 +214,8 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	var config buildoutput.FunctionDescriptor
-	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), &config)
+	var config buildoutput.FunctionConfig
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile), &config)
 	if config.EntryFile != "web" {
 		t.Errorf("entryFile = %q, want the binary named after the app", config.EntryFile)
 	}
@@ -227,16 +226,16 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Framework)
 	}
 
-	var descriptor edge.ServeDescriptor
-	readJSON(t, filepath.Join(appDir, edge.ServeDescriptorFile), &descriptor)
-	if descriptor.Framework != "rust" {
-		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "rust")
+	var hosting buildoutput.Hosting
+	readJSON(t, filepath.Join(appDir, buildoutput.HostingFile), &hosting)
+	if hosting.Framework != "rust" {
+		t.Errorf("hosting.json names runtime %q, want %q", hosting.Framework, "rust")
 	}
-	if descriptor.FrameworkBuildID == "" {
-		t.Error("the serve descriptor names no build id, and a release is identified by one")
+	if hosting.FrameworkBuildID == "" {
+		t.Error("hosting.json names no build id, and a release is identified by one")
 	}
-	if len(descriptor.Needs) != 0 {
-		t.Errorf("the serve descriptor names needs %v: a rust binary speaks http and asks the edge for nothing", descriptor.Needs)
+	if len(hosting.Needs) != 0 {
+		t.Errorf("hosting.json names needs %v: a rust binary speaks http and asks the edge for nothing", hosting.Needs)
 	}
 }
 

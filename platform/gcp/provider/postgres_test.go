@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	sqladmin "google.golang.org/api/sqladmin/v1"
+
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -126,6 +128,41 @@ func TestADatabaseIsOneSmallCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(
 	}
 	if err := provider.VerifyProperties(binding); err != nil {
 		t.Errorf("VerifyProperties() = %v, want a binding every SDK can connect with", err)
+	}
+}
+
+func TestADatabaseOnTheEmulatorIsBoundToTheAddressItsDataPlaneAnswersOn(t *testing.T) {
+	h := servingPostgres(t)
+	h.server.addressed, h.server.primary = false, "172.17.0.3"
+
+	binding := h.provision(t, "16")
+
+	if host := binding.Properties[provider.PropertyHost]; host != "172.17.0.3" {
+		t.Errorf("the binding's host is %q, want 172.17.0.3: the emulator makes no private service connect endpoint, "+
+			"and its data plane answers on the instance's primary address", host)
+	}
+}
+
+func TestOnlyTheEmulatorBindsADatabaseToItsPrimaryAddress(t *testing.T) {
+	t.Parallel()
+
+	network := "projects/acme-prod/global/networks/ocel-production"
+	instance := &sqladmin.DatabaseInstance{
+		IpAddresses: []*sqladmin.IpMapping{{Type: "PRIMARY", IpAddress: "34.1.2.3"}},
+		Settings: &sqladmin.Settings{IpConfiguration: &sqladmin.IpConfiguration{PscConfig: &sqladmin.PscConfig{
+			PscAutoConnections: []*sqladmin.PscAutoConnectionConfig{{ConsumerNetwork: network}},
+		}}},
+	}
+
+	if got := addressOf(instance, network, false); got != "" {
+		t.Errorf("addressOf() on Google Cloud = %q, want none until the tier's network has its endpoint", got)
+	}
+	if got := addressOf(instance, network, true); got != "34.1.2.3" {
+		t.Errorf("addressOf() on the emulator = %q, want the primary address its data plane answers on", got)
+	}
+	instance.Settings.IpConfiguration.PscConfig.PscAutoConnections[0].IpAddress = "10.240.0.9"
+	if got := addressOf(instance, network, true); got != "10.240.0.9" {
+		t.Errorf("addressOf() with an endpoint in the tier's network = %q, want that endpoint", got)
 	}
 }
 

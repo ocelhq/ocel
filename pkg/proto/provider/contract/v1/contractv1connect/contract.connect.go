@@ -153,7 +153,7 @@ type ProviderServiceClient interface {
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*connect.ServerStreamForClient[v1.PreflightEvent], error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
-	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
+	Rollback(context.Context, *v1.RollbackRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
@@ -284,7 +284,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ListPromotions")),
 			connect.WithClientOptions(opts...),
 		),
-		rollback: connect.NewClient[v1.RollbackRequest, v1.RollbackResponse](
+		rollback: connect.NewClient[v1.RollbackRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceRollbackProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Rollback")),
@@ -402,7 +402,7 @@ type providerServiceClient struct {
 	forgetPreviewAlias        *connect.Client[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightEvent]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
-	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	rollback                  *connect.Client[v1.RollbackRequest, v11.OperationEvent]
 	removeStalePromotions     *connect.Client[v1.RemoveStalePromotionsRequest, v11.OperationEvent]
 	usePreviewWildcard        *connect.Client[v1.UsePreviewWildcardRequest, v11.OperationEvent]
 	getPreviewWildcard        *connect.Client[v1.PreviewWildcardRequest, v1.GetPreviewWildcardResponse]
@@ -546,12 +546,8 @@ func (c *providerServiceClient) ListPromotions(ctx context.Context, req *v1.List
 }
 
 // Rollback calls provider.contract.v1.ProviderService.Rollback.
-func (c *providerServiceClient) Rollback(ctx context.Context, req *v1.RollbackRequest) (*v1.RollbackResponse, error) {
-	response, err := c.rollback.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
+func (c *providerServiceClient) Rollback(ctx context.Context, req *v1.RollbackRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.rollback.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // RemoveStalePromotions calls provider.contract.v1.ProviderService.RemoveStalePromotions.
@@ -672,7 +668,7 @@ type ProviderServiceHandler interface {
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
-	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
+	Rollback(context.Context, *v1.RollbackRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error
 	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
@@ -799,7 +795,7 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ListPromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceRollbackHandler := connect.NewUnaryHandlerSimple(
+	providerServiceRollbackHandler := connect.NewServerStreamHandlerSimple(
 		ProviderServiceRollbackProcedure,
 		svc.Rollback,
 		connect.WithSchema(providerServiceMethods.ByName("Rollback")),
@@ -1040,8 +1036,8 @@ func (UnimplementedProviderServiceHandler) ListPromotions(context.Context, *v1.L
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ListPromotions is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Rollback is not implemented"))
+func (UnimplementedProviderServiceHandler) Rollback(context.Context, *v1.RollbackRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Rollback is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error {

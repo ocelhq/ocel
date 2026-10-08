@@ -17,9 +17,11 @@ import {
   overlapRefusal,
   preBuildChecks,
   preBuildPrerenderChecks,
+  prerenderBucketChecks,
   prerenderChecks,
   realtimeChecks,
   staticChecks,
+  svelteKitChecks,
   tasksChecks,
   tasksWireChecks,
   todoAndDocumentChecks,
@@ -63,6 +65,13 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
   ...nextStateChecks,
   ...nextDataCacheChecks,
   ...nextOriginDataCacheChecks,
+];
+const SVELTEKIT_CHECKS = [
+  ...healthChecks,
+  ...staticChecks,
+  ...nativeModuleChecks,
+  ...nodeRuntimeChecks,
+  ...svelteKitChecks,
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
@@ -126,6 +135,17 @@ export const deploy = {
       gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
     },
     previews: { gcp: [defaults, alb] },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+  }),
+  sveltekit: fixture("deploy/sveltekit", {
+    apps: ["web"],
+    checks: SVELTEKIT_CHECKS,
+    on: {
+      dev: [defaults],
+      aws: [defaults, container, apiGateway, cloudflare],
+      vps: [defaults],
+      gcp: [defaults, container],
+    },
   }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
@@ -137,6 +157,7 @@ export const deploy = {
       gcp: [defaults, container],
     },
     sample: { group: "node-http", representative: true },
+    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
   }),
 };
 
@@ -154,6 +175,7 @@ export const lifecycle = {
       vps: [defaults, cloudflareOnABox, cloudflareTunnel],
       gcp: [defaults, container],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
 };
 
@@ -182,6 +204,7 @@ export const sdk = {
       vps: [defaults],
       gcp: [defaults],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   workspace: fixture("sdk/workspace", {
     apps: ["next", "express"],
@@ -193,6 +216,7 @@ export const sdk = {
       gcp: [defaults],
     },
     sample: { group: "node-http", representative: true },
+    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
   }),
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],
@@ -210,6 +234,7 @@ export const buildVariables = {
       aws: [defaults],
       gcp: [defaults],
     },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
 };
 
@@ -218,6 +243,11 @@ export const prerender = {
     apps: ["web"],
     checks: [...healthChecks, ...prerenderChecks],
     on: { vps: [defaults] },
+  }),
+  nextBucket: fixture("prerender/next-bucket", {
+    apps: ["web"],
+    checks: [...healthChecks, ...prerenderBucketChecks],
+    on: { aws: [defaults], gcp: [defaults], vps: [defaults] },
   }),
   nextDockerfile: fixture("prerender/next-dockerfile", {
     apps: ["web"],
@@ -272,6 +302,7 @@ export const tasks = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: TASKS_GO_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
+    configOn: { vps: { apps: { web: { path: "./server" } } } },
   }),
 };
 
@@ -286,6 +317,7 @@ export const realtime = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: REALTIME_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+    configOn: { vps: { apps: { web: { path: "./server" } } } },
   }),
   python: fixture("realtime/python", {
     apps: ["web"],

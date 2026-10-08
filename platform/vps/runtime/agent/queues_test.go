@@ -5,14 +5,13 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/images"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -87,7 +86,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 	}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
 		Resolve: &resolving{},
 		Queues:  queues,
 	})
@@ -110,7 +109,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 func TestADirectCallFromOutsideEveryContainerIsRefusedBeforeAnyQueueIsReached(t *testing.T) {
 	t.Parallel()
 	shop := &queueTasks{queue: "shop-prod"}
-	inspect := &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}}
+	inspect := &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/user.slice/user-1000.slice/session-3.scope\n"),
 		Inspect: inspect,
@@ -128,11 +127,49 @@ func TestADirectCallFromOutsideEveryContainerIsRefusedBeforeAnyQueueIsReached(t 
 	}
 }
 
+func TestAProcessInsideTheRightContainerOtherThanItsRuntimeIsRefusedByEveryMethod(t *testing.T) {
+	t.Parallel()
+	shop := &queueTasks{queue: "shop-prod"}
+	socket := serving(t, &Server{
+		Proc: procNaming(t, "0::/docker/"+containerID+"\n"),
+		Inspect: &inspecting{
+			manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")},
+			initPID:   os.Getpid() + 1,
+		},
+		Resolve: &resolving{},
+		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: shop},
+	})
+	tasks := taskv1connect.NewTaskServiceClient(overSocket(socket), "http://ocel-live")
+	topics := topicv1connect.NewTopicServiceClient(overSocket(socket), "http://ocel-live")
+	ctx := context.Background()
+	calls := map[string]error{}
+	_, calls["Trigger"] = tasks.Trigger(ctx, &taskv1.TriggerRequest{Task: "send-email"})
+	_, calls["BatchTrigger"] = tasks.BatchTrigger(ctx, &taskv1.BatchTriggerRequest{})
+	_, calls["RetrieveRun"] = tasks.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{})
+	_, calls["ListRuns"] = tasks.ListRuns(ctx, &taskv1.ListRunsRequest{})
+	_, calls["CancelRun"] = tasks.CancelRun(ctx, &taskv1.CancelRunRequest{})
+	_, calls["ReplayRun"] = tasks.ReplayRun(ctx, &taskv1.ReplayRunRequest{})
+	_, calls["RescheduleRun"] = tasks.RescheduleRun(ctx, &taskv1.RescheduleRunRequest{})
+	_, calls["Send"] = topics.Send(ctx, &topicv1.SendRequest{Topic: "orders"})
+	_, calls["ListDeadLetters"] = topics.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{})
+	_, calls["RedriveDeadLetters"] = topics.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{})
+	_, calls["PurgeDeadLetters"] = topics.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{})
+	_, calls["CountDeadLetters"] = topics.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{})
+	for method, err := range calls {
+		if code := connect.CodeOf(err); code != connect.CodePermissionDenied {
+			t.Errorf("%s() from a process the app started = %v (%s), want %s", method, err, code, connect.CodePermissionDenied)
+		}
+	}
+	if len(shop.triggered) != 0 {
+		t.Errorf("a process other than the container's runtime reached the queue: %v", shop.triggered)
+	}
+}
+
 func TestAContainerWhoseManifestNamesNoQueueIsToldItHasNone(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "")}},
 		Resolve: &resolving{},
 		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: {queue: "shop-prod"}},
 	})
@@ -148,7 +185,7 @@ func TestAQueueTheBoxIsNotServingYetIsUnavailableNotMissing(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
 		Resolve: &resolving{},
 		Queues:  servedQueues{},
 	})
@@ -157,24 +194,6 @@ func TestAQueueTheBoxIsNotServingYetIsUnavailableNotMissing(t *testing.T) {
 	if code := connect.CodeOf(err); code != connect.CodeUnavailable {
 		t.Errorf("Trigger() = %v (%s), want %s while the box opens the queue", err, code, connect.CodeUnavailable)
 	}
-}
-
-func dockerAnswering(t *testing.T, answers map[string]string) *Docker {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		answer, found := answers[r.URL.Path]
-		if !found {
-			http.Error(w, `{"message":"No such container"}`, http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte(answer))
-	}))
-	t.Cleanup(server.Close)
-	return &Docker{host: images.DockerHost{Address: server.URL}, transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
-		},
-	}}
 }
 
 func TestAContainerIsReachedAtTheAddressItHoldsOnItsProjectNetwork(t *testing.T) {

@@ -11,12 +11,14 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -179,7 +181,7 @@ export default {
   slug: "test-app",
   provider: { fake: {} },
   domains: { production: "acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "api.acme.com" } }],
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } }, domains: { production: "api.acme.com" } }],
 };
 `)
 		writeAppSource(t, fixture.Root, "api")
@@ -385,7 +387,7 @@ func TestADNSCredentialProblemAbortsTheDeployBeforeTheBuild(t *testing.T) {
 	stubBuild(&dependencies, nil)
 	pretendStdoutIsTerminal(&dependencies)
 	fixture := setUpDeployProject(t)
-	writeConfig(t, fixture.Root, "  dns: { zone: { zone: \"acme.com\" } },\n")
+	writeConfigWithProvider(t, fixture.Root, "dns: { zone: { zone: \"acme.com\" } }", "")
 	fixture.Provider.DNS().(*fake.DNS).Verifies(errors.New("the zone token was revoked"))
 
 	var stdout, stderr bytes.Buffer
@@ -632,8 +634,8 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, buildoutput.HostingFile),
+		`{"version":1,"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
 }
 
 const middlewareNeeds = `{"edge-middleware":{"count":2,"routes":["/dashboard","/admin"]}}`
@@ -744,7 +746,7 @@ func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 
 func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	t.Run("human", func(t *testing.T) {
-		_, out, err := deployUsageMonorepo(t, "")
+		_, out, err := deployUsageMonorepo(t, "", "")
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; output=%s", err, out)
 		}

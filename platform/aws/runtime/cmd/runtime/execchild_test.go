@@ -230,7 +230,7 @@ func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
 func TestReadArtifactNamesTheCommandItIsServedBy(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
-	if err := os.WriteFile(filepath.Join(root, "config.json"),
+	if err := os.WriteFile(filepath.Join(root, "function-config.json"),
 		[]byte(`{"framework":{"name":"go"},"entryFile":"web","command":["./web"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestReadArtifactNamesTheCommandItIsServedBy(t *testing.T) {
 func TestAnArtifactWithoutACommandIsHostedByNode(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
-	if err := os.WriteFile(filepath.Join(root, "config.json"),
+	if err := os.WriteFile(filepath.Join(root, "function-config.json"),
 		[]byte(`{"framework":{"name":"node"},"entryFile":"index.mjs"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

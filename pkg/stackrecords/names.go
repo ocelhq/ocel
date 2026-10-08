@@ -36,6 +36,12 @@ func StackKey(tier environment.Tier, slug string, stack naming.StackName) keyval
 	return StacksPartition(tier, slug).Key(stack.String())
 }
 
+const appImagesSegment = "images"
+
+func appImagesKey(tier environment.Tier, slug string, stack naming.StackName) keyvalue.Key {
+	return StacksPartition(tier, slug).Key(appImagesSegment, stack.App, stack.String())
+}
+
 func EnvironmentsPartition(tier environment.Tier, slug string) keyvalue.Partition {
 	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvironments, Path: []string{slug}}
 }

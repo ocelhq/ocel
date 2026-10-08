@@ -79,7 +79,7 @@ func (p Propagation) Await(ctx context.Context, records []edge.Record, say func(
 		wanted = append(wanted, rec.Instruction())
 	}
 	return fmt.Errorf(
-		"gave up after %s waiting for DNS: %s, then re-run — or declare `dns` (`route53()` or `cloudflareDns()`) and ocel writes the record itself",
+		"gave up after %s waiting for DNS: %s, then re-run — or declare `provider.aws.dns` (`route53()` or `cloudflareDns()`) and ocel writes the record itself",
 		p.window(), strings.Join(wanted, "; "),
 	)
 }
@@ -102,7 +102,7 @@ func Release(ctx context.Context, writer edge.DNSRecords, records []edge.Record,
 	}
 	if writer == nil {
 		for _, rec := range records {
-			say(fmt.Sprintf("Leaving %s in place: nothing here writes DNS any more — delete it by hand, or declare `dns` and run this again", rec))
+			say(fmt.Sprintf("Leaving %s in place: nothing here writes DNS any more — delete it by hand, or declare `provider.aws.dns` and run this again", rec))
 		}
 		return nil
 	}

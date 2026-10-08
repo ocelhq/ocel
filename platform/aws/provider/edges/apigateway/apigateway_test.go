@@ -93,7 +93,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 		return fixture(w, e, stack)
 	}
 	record := func(app, build string) router.ReleaseRecord {
-		return router.ReleaseRecord{App: app, Release: build, Entry: "/", EntryFunction: "fn-" + build}
+		return router.ReleaseRecord{App: app, Release: build, RootFunction: "/", RootFunctionPhysical: "fn-" + build}
 	}
 	t.Run("on a preview pointer", func(t *testing.T) {
 		routerconformance.Run(t, routerconformance.Suite{
@@ -133,11 +133,11 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 func staged(t *testing.T, stack edge.EdgeStack, function, assets string) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
-		App:           "web",
-		Release:       "d1.f1",
-		Entry:         "/",
-		EntryFunction: function,
-		AssetPrefix:   assets,
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: function,
+		AssetPrefix:          assets,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -194,8 +194,7 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 		t.Errorf("state records API %q, want the one reconcile created (%q)", ownState(t, stack).API, api.id)
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
-		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
-		"/.well-known", "/.well-known/ocel-edge",
+		"/", "/{proxy+}", "/.well-known", "/.well-known/ocel-edge",
 	})
 	if !slices.Contains(api.binary, "*/*") {
 		t.Errorf("binary media types = %v, want */* so the static assets survive the trip", api.binary)
@@ -209,10 +208,10 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 		t.Errorf("catch-all integration = %q, want AWS_PROXY", entry.integration)
 	}
 	if entry.transfer != agtypes.ResponseTransferModeStream {
-		t.Errorf("catch-all response transfer mode = %q, want STREAM; the entry function answers as a stream", entry.transfer)
+		t.Errorf("catch-all response transfer mode = %q, want STREAM; the root function answers as a stream", entry.transfer)
 	}
 	if entry.timeoutMillis != 60_000 {
-		t.Errorf("catch-all integration timeout = %dms, want 60000ms, the minute the entry function has to answer", entry.timeoutMillis)
+		t.Errorf("catch-all integration timeout = %dms, want 60000ms, the minute the root function has to answer", entry.timeoutMillis)
 	}
 	if !strings.Contains(entry.uri, "function:${stageVariables."+entryVariable+"}") {
 		t.Errorf("catch-all URI = %q, want it to name the entry stage variable", entry.uri)
@@ -223,10 +222,43 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	if entry.credentials == "" || !strings.Contains(entry.credentials, "role/ocel-edge-invoke") {
 		t.Errorf("catch-all credentials = %q, want the execution role on the integration", entry.credentials)
 	}
+}
 
-	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
+func promotedWithStatic(t *testing.T, w *world, prefixes ...string) (*fakeAPI, edge.EdgeStack) {
+	t.Helper()
+	stack := reconciled(t, w)
+	record := router.ReleaseRecord{
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: entryFunction,
+		AssetPrefix:          "assets/one",
+		Static:               &edge.Static{ImmutablePrefixes: prefixes},
+	}
+	promote(t, stack, record, "p1", 1)
+	return w.gateway.named(productionAPIName()), stack
+}
+
+func promote(t *testing.T, stack edge.EdgeStack, record router.ReleaseRecord, promotion string, ts int64) {
+	t.Helper()
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	move := router.PointerMove{Promotion: router.Promotion{PromotionID: promotion, Ts: ts, Releases: map[string]string{record.App: record.Release}}}
+	if err := openRouter(stack).MovePointer(context.Background(), move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer: %v", err)
+	}
+}
+
+func TestAPromotionRoutesEachImmutablePrefixTheReleaseStatesToTheAssetBucket(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/docs/_app/immutable/")
+
+	static := methodOn(api, "/docs/_app/immutable/{proxy+}", getMethod)
 	if static == nil {
-		t.Fatal("no static-asset method")
+		t.Fatalf("no static-asset method; resources are %v", slices.Sorted(maps.Values(api.resources)))
 	}
 	if static.integration != agtypes.IntegrationTypeAws {
 		t.Errorf("static integration = %q, want the S3 service integration", static.integration)
@@ -234,25 +266,77 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	if static.transfer == agtypes.ResponseTransferModeStream {
 		t.Error("static integration streams, want it buffered so API Gateway maps its response headers")
 	}
-	if !strings.Contains(static.uri, "s3:path/"+fakeAssetBucket+"/${stageVariables."+assetsVariable+"}") {
-		t.Errorf("static URI = %q, want the asset bucket under the release's prefix", static.uri)
+	if want := "s3:path/" + fakeAssetBucket + "/${stageVariables." + assetsVariable + "}/docs/_app/immutable/{proxy}"; !strings.Contains(static.uri, want) {
+		t.Errorf("static URI = %q, want it to hold %q", static.uri, want)
 	}
+	if methodOn(api, "/_next/static/{proxy+}", getMethod) != nil {
+		t.Error("a route sends /_next/static/ to the bucket, a prefix this release never stated")
+	}
+}
+
+func TestAPromotionRemovesTheStaticRouteOfAPrefixTheReleaseNoLongerStates(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/_next/static/")
+	if methodOn(api, "/_next/static/{proxy+}", getMethod) == nil {
+		t.Fatal("the first promotion routed no /_next/static/; the removal this test covers cannot happen")
+	}
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}, "p2", 2)
+
+	if methodOn(api, "/_next/static/{proxy+}", getMethod) != nil {
+		t.Error("/_next/static/ still reaches the bucket under the release that no longer states it")
+	}
+	if methodOn(api, "/_app/immutable/{proxy+}", getMethod) == nil {
+		t.Error("/_app/immutable/ reaches no bucket")
+	}
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments+1 {
+		t.Errorf("deployments = %d, want one more than %d: the stage serves the routes it was last deployed with", got, deployments)
+	}
+}
+
+func TestAPromotionOfTheSameStaticRoutesPublishesNothing(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/_app/immutable/")
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}, "p2", 2)
+
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments {
+		t.Errorf("deployments = %d, want %d: a promotion that changes no route needs only its stage variables", got, deployments)
+	}
+}
+
+func TestAPrefixNoResourcePathCanSpellIsLeftToTheRootFunction(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/caf\u00e9/_app/immutable/")
+
+	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
+		"/", "/{proxy+}", "/.well-known", "/.well-known/ocel-edge",
+	})
 }
 
 func TestOnlyTheRoutesThatCanSetTheRouterHeaderDeclareIt(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	reconciled(t, w)
-
-	api := w.gateway.named(productionAPIName())
-	if api == nil {
-		t.Fatal("no REST API for the stack")
-	}
+	api, _ := promotedWithStatic(t, w, "/_next/static/")
 	for _, path := range []string{"/", "/{proxy+}"} {
 		entry := methodOn(api, path, anyMethod)
 		if len(entry.methodResponses) != 0 {
-			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the entry function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), router.HeaderRouter)
+			t.Errorf("the entry method on %s declares the response %v; API Gateway ignores method responses on a proxy integration, so the root function is what sets %s", path, slices.Sorted(maps.Keys(entry.methodResponses)), router.HeaderRouter)
 		}
 	}
 	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
@@ -322,8 +406,8 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 		t.Errorf("UpdateStage calls = %d, want exactly one; promoting is moving one stage", got)
 	}
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != record.EntryFunction {
-		t.Errorf("stage variable %s = %q, want the entry function %q", entryVariable, api.variables[entryVariable], record.EntryFunction)
+	if api.variables[entryVariable] != record.RootFunctionPhysical {
+		t.Errorf("stage variable %s = %q, want the root function %q", entryVariable, api.variables[entryVariable], record.RootFunctionPhysical)
 	}
 	if api.variables[assetsVariable] != record.AssetPrefix {
 		t.Errorf("stage variable %s = %q, want %q", assetsVariable, api.variables[assetsVariable], record.AssetPrefix)
@@ -343,10 +427,10 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	record := router.ReleaseRecord{
-		App:           "web",
-		Release:       "d1.f1",
-		Entry:         "/",
-		EntryFunction: entryFunction,
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: entryFunction,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -384,7 +468,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		assertStageUnmoved(t, w)
 	})
 
-	t.Run("a record from before the entry function was recorded", func(t *testing.T) {
+	t.Run("a record from before the root function was recorded", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -393,9 +477,9 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 
 		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard())
 		if err == nil {
-			t.Fatal("Promote succeeded on a record naming no entry function")
+			t.Fatal("Promote succeeded on a record naming no root function")
 		}
-		if !strings.Contains(err.Error(), "entry function") {
+		if !strings.Contains(err.Error(), "root function") {
 			t.Errorf("error = %v, want it to name what the record is missing", err)
 		}
 		assertUnserved(t, err)
@@ -408,7 +492,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		for _, app := range []string{"api", "web"} {
-			record := router.ReleaseRecord{App: app, Release: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-" + app + "-r1234abcd"}
+			record := router.ReleaseRecord{App: app, Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-" + app + "-r1234abcd"}
 			if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 				t.Fatalf("PutStaged(%s): %v", app, err)
 			}
@@ -470,8 +554,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	first := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
-	second := router.ReleaseRecord{App: "web", Release: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
+	first := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
+	second := router.ReleaseRecord{App: "web", Release: "d2.f2", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
 	for _, record := range []router.ReleaseRecord{first, second} {
 		if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
@@ -493,8 +577,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	}
 
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != first.EntryFunction {
-		t.Errorf("stage variable %s = %q, want the rolled-back release %q", entryVariable, api.variables[entryVariable], first.EntryFunction)
+	if api.variables[entryVariable] != first.RootFunctionPhysical {
+		t.Errorf("stage variable %s = %q, want the rolled-back release %q", entryVariable, api.variables[entryVariable], first.RootFunctionPhysical)
 	}
 	history, err := openRouter(stack).Ledger.History(ctx, "")
 	if err != nil {
@@ -556,8 +640,7 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 		t.Errorf("state records API %q, want the one left behind (%q)", ownState(t, stack).API, api.id)
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
-		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
-		"/.well-known", "/.well-known/ocel-edge",
+		"/", "/{proxy+}", "/.well-known", "/.well-known/ocel-edge",
 	})
 	if api.stage != stageName {
 		t.Errorf("stage = %q, want %q; the repair has to publish what it shaped", api.stage, stageName)
@@ -587,7 +670,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 	}
 
 	api := w.gateway.named(productionAPIName())
-	if api.variables[entryVariable] != record.EntryFunction {
+	if api.variables[entryVariable] != record.RootFunctionPhysical {
 		t.Errorf("stage variable %s = %q, want the release in effect left alone by a reconcile", entryVariable, api.variables[entryVariable])
 	}
 }
@@ -630,16 +713,11 @@ func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
 	}
 }
 
-func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) {
+func TestAPromotionRewritesStaticResponseHeadersThatNoLongerMatchThePlan(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	w := newWorld()
-	e := bootstrapped(t, w)
-	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	api := w.gateway.named(productionAPIName())
+	api, stack := promotedWithStatic(t, w, "/_next/static/")
 	resource := api.id + "/_next/static/{proxy+}"
 	method := api.methods[resource+" "+getMethod]
 	if method == nil {
@@ -647,11 +725,12 @@ func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) 
 	}
 	method.methodResponses["200"] = map[string]bool{routerHeaderParameter: true}
 	method.integrationResponse["200"] = map[string]string{routerHeaderParameter: "'stale'"}
-	w.gateway.calls = nil
 
-	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
-		t.Fatalf("second Reconcile: %v", err)
-	}
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_next/static/"}},
+	}, "p2", 2)
+
 	if got := method.methodResponses["200"]["method.response.header.Content-Type"]; !got {
 		t.Errorf("the method response still declares %v, not the headers the plan names; a header dropped outside Ocel would stay dropped", method.methodResponses["200"])
 	}
@@ -1025,5 +1104,116 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 	}
 	if api.variables[entryVariable] != entryFunction {
 		t.Errorf("the stage %s is mapped onto serves %q, want the promoted %q", host, api.variables[entryVariable], entryFunction)
+	}
+}
+
+func TestEveryResourceAStaticRouteNeedsSendsTheRestOfItsPathsToTheRootFunction(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/docs/_app/immutable/")
+
+	for _, path := range []string{"/docs", "/docs/{proxy+}", "/docs/_app", "/docs/_app/{proxy+}", "/docs/_app/immutable"} {
+		entry := methodOn(api, path, anyMethod)
+		if entry == nil {
+			t.Errorf("%s has no method, so API Gateway answers every request it matches, such as /docs/_app/version.json, itself instead of the root function", path)
+			continue
+		}
+		if !strings.Contains(entry.uri, "function:${stageVariables."+entryVariable+"}") {
+			t.Errorf("%s integrates with %q, want the root function", path, entry.uri)
+		}
+	}
+}
+
+func TestAPromotionRemovesEveryResourceOnlyAPrefixTheReleaseNoLongerStatesNeeded(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/docs/_next/static/")
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}, "p2", 2)
+
+	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
+		"/", "/{proxy+}", "/.well-known", "/.well-known/ocel-edge",
+		"/_app", "/_app/{proxy+}", "/_app/immutable", "/_app/immutable/{proxy+}",
+	})
+}
+
+func TestAPromotionPublishesTheStaticRoutesAPromotionThatFailedAfterShapingThemNeverPublished(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	api := w.gateway.named(productionAPIName())
+	record := router.ReleaseRecord{
+		App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/one",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
+	}
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	w.gateway.deploymentErr = errors.New("throttled")
+	move := router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}
+	if err := openRouter(stack).MovePointer(context.Background(), move, progress.Discard()); err == nil {
+		t.Fatal("MovePointer succeeded with every deployment failing; the retry this test covers cannot happen")
+	}
+	w.gateway.deploymentErr = nil
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	retry := router.PointerMove{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Releases: map[string]string{"web": record.Release}}}
+	if err := openRouter(stack).MovePointer(context.Background(), retry, progress.Discard()); err != nil {
+		t.Fatalf("retried MovePointer: %v", err)
+	}
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments+1 {
+		t.Errorf("deployments = %d, want one more than %d: the routes the failed promotion shaped were never published", got, deployments)
+	}
+}
+
+func TestAPromotionSendsTheGetRequestsOfAResourceThatStoppedServingAPrefixToTheRootFunction(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/a/")
+	if methodOn(api, "/a/{proxy+}", getMethod) == nil {
+		t.Fatal("the first promotion routed no /a/; the change this test covers cannot happen")
+	}
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/a/b/"}},
+	}, "p2", 2)
+
+	if methodOn(api, "/a/{proxy+}", getMethod) != nil {
+		t.Error("GET /a/page still reaches the bucket under the release that states only /a/b/, instead of the root function")
+	}
+	if methodOn(api, "/a/b/{proxy+}", getMethod) == nil {
+		t.Error("/a/b/ reaches no bucket")
+	}
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments+1 {
+		t.Errorf("deployments = %d, want one more than %d: the stage serves the routes it was last deployed with", got, deployments)
+	}
+}
+
+func TestAPrefixNestedUnderAnotherTheReleaseStatesIsServedByTheOuterStaticRoute(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, _ := promotedWithStatic(t, w, "/a/b/", "/a/", "/a/")
+
+	outer := methodOn(api, "/a/{proxy+}", getMethod)
+	if outer == nil {
+		t.Fatal("GET /a/ reaches no bucket: the nested /a/b/ took over the resource /a/ is served from")
+	}
+	if !strings.HasSuffix(outer.uri, "}/a/{proxy}") {
+		t.Errorf("/a/{proxy+} integrates with %q, want the bucket under /a/", outer.uri)
+	}
+	for _, path := range slices.Collect(maps.Values(api.resources)) {
+		if strings.HasPrefix(path, "/a/b") {
+			t.Errorf("%s exists, but /a/b/ is under /a/, whose static route already serves it", path)
+		}
 	}
 }

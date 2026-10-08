@@ -1,5 +1,5 @@
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
-import { holdEnd } from "@framework/node-runtime/background";
+import { keptUntilSettled } from "@framework/node-runtime/background";
 import { getNextHost } from "./host.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
@@ -137,7 +137,7 @@ export const tagClock: TagClock = {
     }
     if (tags.length > 0) noteRevalidation();
 
-    await holdEnd(writeTags(tags, at));
+    await keptUntilSettled(writeTags(tags, at));
   },
 
   async refreshTags() {

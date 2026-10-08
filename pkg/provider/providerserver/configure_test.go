@@ -89,29 +89,6 @@ func configureInWorkingDir(t *testing.T) *contractv1.ConfigureRequest {
 	return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: workingDir(t)}}
 }
 
-func TestConfigureNamesTheDirectoryItsFunctionsLoadNextsCacheHandlersFromWithoutCredentials(t *testing.T) {
-	vendor := fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) {
-		facts.NextRuntimeDir = "/var/host/next"
-	})
-	vendor.Credentials().(*fake.Credentials).Ask("sign in to fake", provider.Question{Finding: "no session", Prompt: "Sign in?"})
-	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
-		Version: "test",
-		New: func(context.Context, provider.Settings) (provider.Provider, error) {
-			return vendor, nil
-		},
-	}))
-	t.Cleanup(server.Close)
-	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-
-	configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
-	if err != nil {
-		t.Fatalf("Configure() error = %v", err)
-	}
-	if got := configured.GetFacts().GetNextRuntimeDir(); got != "/var/host/next" {
-		t.Errorf("Configure() facts name the Next runtime directory %q, want the one the provider declares", got)
-	}
-}
-
 func TestConfigureNamesTheFunctionSizeBudgetTheProviderDeclares(t *testing.T) {
 	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "test",
@@ -130,59 +107,6 @@ func TestConfigureNamesTheFunctionSizeBudgetTheProviderDeclares(t *testing.T) {
 	}
 	if got := configured.GetFacts().GetMaxFunctionBytes(); got != 200<<20 {
 		t.Errorf("Configure() facts name a function size budget of %d bytes, want the one the provider declares", got)
-	}
-}
-
-func TestConfigureSaysWhetherTheProvidersNextFunctionsRefreshByRequest(t *testing.T) {
-	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
-		Version: "test",
-		New: func(context.Context, provider.Settings) (provider.Provider, error) {
-			return fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) {
-				facts.NextRefreshesByRequest = true
-			}), nil
-		},
-	}))
-	t.Cleanup(server.Close)
-	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-
-	configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
-	if err != nil {
-		t.Fatalf("Configure() error = %v", err)
-	}
-	if !configured.GetFacts().GetNextRefreshesByRequest() {
-		t.Error("Configure() facts say Next functions refresh in the background, want the refresh by request the provider declares")
-	}
-}
-
-func TestConfigureSaysTheProviderShipsANextServerRuntimeWhenItsHookIsSet(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		set  func(*provider.Hooks)
-		want bool
-	}{
-		{"hook set", func(hooks *provider.Hooks) {
-			hooks.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) { return nil, nil }
-		}, true},
-		{"hook absent", func(*provider.Hooks) {}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
-				Version: "test",
-				New: func(context.Context, provider.Settings) (provider.Provider, error) {
-					return fake.NewProvider(fake.Options{}).WithHooks(tc.set), nil
-				},
-			}))
-			t.Cleanup(server.Close)
-			client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-
-			configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
-			if err != nil {
-				t.Fatalf("Configure() error = %v", err)
-			}
-			if got := configured.GetFacts().GetShipsNextServerRuntime(); got != tc.want {
-				t.Errorf("Configure() facts ship a Next server runtime = %v, want %v", got, tc.want)
-			}
-		})
 	}
 }
 

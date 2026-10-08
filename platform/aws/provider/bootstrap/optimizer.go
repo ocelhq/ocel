@@ -13,7 +13,7 @@ const (
 
 	optimizerKeyPrefix = "ocel-image-optimizer"
 
-	optimizerRuntime      = "nodejs22.x"
+	optimizerRuntime      = "nodejs24.x"
 	optimizerArchitecture = "arm64"
 	optimizerHandler      = "index.handler"
 	optimizerMemoryMB     = 1769

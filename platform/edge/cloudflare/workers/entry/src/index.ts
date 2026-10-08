@@ -129,7 +129,7 @@ const originRuntime: ServeRuntime = {
 };
 
 function runtimeFor(record: ReleaseRecord): ServeRuntime {
-  return record.routingManifest ? routedRuntime : originRuntime;
+  return record.routeTable ? routedRuntime : originRuntime;
 }
 
 async function resolveRecord(releases: ReleaseLookup): Promise<ReleaseRecord | Response> {
@@ -166,9 +166,9 @@ export async function resolveRouteDeps(
 function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase): RouteDeps {
   const { edgeRuntime, imagesAtDeployment, ...rest } = base;
   const { edgeWorkers } = record;
-  const manifest = record.routingManifest;
+  const manifest = record.routeTable?.table;
   if (!manifest) {
-    throw new Error(`release ${record.release} has no routing manifest to route with`);
+    throw new Error(`release ${record.release} has no route table to route with`);
   }
   const app = releases.app ?? record.app;
   if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, releases.slug, app)) {
@@ -182,7 +182,7 @@ function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: Resolv
       rest.imageOrigin ??
       (imagesAtDeployment
         ? deploymentImageOrigin(
-            record.functionUrls[manifest.entry],
+            record.functionUrls[manifest.rootFunction],
             rest.originFetch ?? rest.fetch ?? fetch,
           )
         : undefined),
@@ -221,6 +221,7 @@ function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: Resolv
       ...base.assetStore,
       assetPrefix: record.assetPrefix,
       basePath: manifest.basePath,
+      ...(record.static ? { static: record.static } : {}),
     },
   };
 }

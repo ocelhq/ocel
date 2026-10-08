@@ -98,6 +98,32 @@ func TestProvisionInfraProvisionsTheInfraStackAloneAndPublishesItsBindings(t *te
 	}
 }
 
+func TestProvisionInfraRecordsNoPasswordInTheInfraStackRecord(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	recorded, err := vendor.KeyValues().List(context.Background(), stackrecords.StacksPartition(environment.TierProduction, "shop"))
+	if err != nil {
+		t.Fatalf("listing the stack records = %v", err)
+	}
+	if len(recorded) == 0 {
+		t.Fatal("ProvisionInfra() recorded no stack, so there is no record to hold a password")
+	}
+	for _, entry := range recorded {
+		var stack stackrecords.Stack
+		if err := json.Unmarshal(entry.Value, &stack); err != nil {
+			t.Fatalf("decoding the record %s = %v", entry.Key, err)
+		}
+		for _, binding := range stack.Bindings {
+			if _, held := binding.Properties[provider.PropertyPassword]; held {
+				t.Errorf("the record %s holds binding %s's password in clear", entry.Key, binding.Name)
+			}
+		}
+	}
+}
+
 func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublished(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
@@ -115,6 +141,87 @@ func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublis
 	}
 	if !slices.ContainsFunc(specs[1].App.Grants, func(binding provider.Binding) bool { return binding.Name == "orders" }) {
 		t.Errorf("the app spec grants %v, want orders, which ProvisionInfra published", specs[1].App.Grants)
+	}
+}
+
+func TestADeployAfterProvisionInfraGrantsTheBindingWithTheSecretsInfraPublished(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
+	}
+	specs := vendor.FakeStacks().Provisioned()
+	grants := specs[len(specs)-1].App.Grants
+	grant := slices.IndexFunc(grants, func(binding provider.Binding) bool { return binding.Name == "orders" })
+	if grant < 0 {
+		t.Fatalf("the app spec grants %v, want orders", grants)
+	}
+	if got := grants[grant].Properties[provider.PropertyPassword]; got != "fake-"+provider.PropertyPassword {
+		t.Errorf("the app is granted orders with password %q, want the one ProvisionInfra published: a deploy that provisions its own infra grants it whole", got)
+	}
+}
+
+func TestADeployAfterProvisionInfraRefusesARecordedBindingNoLongerPublished(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	if removed, err := store.RemoveBinding(context.Background(), scope, storedBindings(t, vendor)["orders"].Environment, "orders"); err != nil || !removed {
+		t.Fatalf("RemoveBinding(orders) = %v, %v", removed, err)
+	}
+
+	req.InfraProvisioned = true
+	result, _ := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, granting orders as the stack record holds it, without the password the record never keeps")
+	}
+	if !strings.Contains(result.GetError(), "orders") {
+		t.Errorf("Deploy() = %q, want it to name orders, the binding no longer published", result.GetError())
+	}
+}
+
+type declaringStacks struct {
+	provider.Stacks
+}
+
+func (s declaringStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	result, err := s.Stacks.Provision(ctx, spec, progress)
+	for i, binding := range result.Bindings {
+		at := slices.IndexFunc(spec.Resources, func(resource provider.Resource) bool { return resource.Name == binding.Name })
+		if at >= 0 {
+			result.Bindings[i].Resource = spec.Resources[at].Declared
+		}
+	}
+	return result, err
+}
+
+func TestADeployAfterProvisionInfraGrantsTheResourceItsBindingWasProvisionedFor(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	client := servedBy(t, refusingStacks{Provider: base, stacks: declaringStacks{Stacks: base.Stacks()}})
+	req := deployRequest()
+	req.Manifest.Resources[0].LogicalName = "postgres--orders"
+	req.Manifest.Usages[0].Resource = "postgres--orders"
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
+	}
+	specs := base.FakeStacks().Provisioned()
+	grants := specs[len(specs)-1].App.Grants
+	grant := slices.IndexFunc(grants, func(binding provider.Binding) bool { return binding.Name == "postgres--orders" })
+	if grant < 0 {
+		t.Fatalf("the app spec grants %v, want postgres--orders", grants)
+	}
+	if got := grants[grant].Resource; got != "orders" {
+		t.Errorf("the app is granted postgres--orders for resource %q, want orders, the resource the app reads it under", got)
 	}
 }
 
@@ -286,6 +393,51 @@ func TestProvisionInfraKeepsAResourceNoLongerDeclaredUntilTheDeployOverItRemoves
 	}
 }
 
+func lastInfraBindingTypes(vendor *fake.Provider) map[string][]provider.BindingType {
+	var held map[string][]provider.BindingType
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind != provider.StackInfra {
+			continue
+		}
+		held = map[string][]provider.BindingType{}
+		for _, resource := range spec.Resources {
+			held[resource.Name] = append(held[resource.Name], resource.Type)
+		}
+	}
+	return held
+}
+
+func TestProvisionInfraKeepsAResourceDeclaredAsAnotherTypeUntilTheDeployOverItReplacesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	before := deployRequest()
+	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
+	provisionedInfra(t, client, infraRequest(before))
+	before.InfraProvisioned = true
+	if result, _ := deploy(t, client, before); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	after := deployRequest()
+	after.Manifest.Resources = append(after.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "legacy",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "legacy"},
+	})
+	provisionedInfra(t, client, infraRequest(after))
+
+	if held := lastInfraBindingTypes(vendor)["legacy"]; !slices.Equal(held, []provider.BindingType{provider.BindingPostgres}) {
+		t.Errorf("ProvisionInfra() left the infra stack holding legacy as %v, want the postgres kept: a build that fails next leaves the live release reading it", held)
+	}
+
+	after.InfraProvisioned = true
+	if result, _ := deploy(t, client, after); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if held := lastInfraBindingTypes(vendor)["legacy"]; !slices.Equal(held, []provider.BindingType{provider.BindingBucket}) {
+		t.Errorf("the deploy over the infra left it holding legacy as %v, want the bucket it declares", held)
+	}
+}
+
 func TestADeployOverInfraHoldingOnlyWhatItDeclaresProvisionsNoInfra(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
@@ -371,6 +523,24 @@ func TestADeployOverInfraWhoseLastProvisioningFailedIsRefused(t *testing.T) {
 	result, _ := deploy(t, client, earlier)
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded over infra a failed provisioning changed after the earlier one, want it refused: the stack no longer holds what the apps were built against")
+	}
+}
+
+func TestProvisionInfraAfterAFirstProvisioningFailedPartwayProvisionsTheStackItLeft(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	base.WithHooks(func(hooks *provider.Hooks) { hooks.InspectStack = base.InspectStack })
+	stacks := &failingInfraStacks{Stacks: base.Stacks()}
+	client := servedBy(t, refusingStacks{Provider: base, stacks: stacks})
+
+	stacks.failing.Store(true)
+	if result, err := provisionInfraStream(t, client, infraRequest(deployRequest())); err == nil && result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
+	}
+
+	stacks.failing.Store(false)
+	if result, err := provisionInfraStream(t, client, infraRequest(deployRequest())); err != nil || !result.GetSuccess() {
+		t.Fatalf("ProvisionInfra() = %q, %v, want it to provision over the stack its own failed provisioning left", result.GetError(), err)
 	}
 }
 

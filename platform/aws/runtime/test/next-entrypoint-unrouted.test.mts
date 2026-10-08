@@ -30,7 +30,7 @@ beforeAll(async () => {
 
   process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";
-  delete process.env.OCEL_ROUTING_MANIFEST;
+  delete process.env.OCEL_NEXT_ROUTE_TABLE;
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
 });
@@ -56,5 +56,5 @@ test("an origin that must route but was packed no manifest dies at boot", async 
   await import("../src/next/entrypoint.mjs");
 
   expect(await exited).toBe(1);
-  expect(reported.join("\n")).toMatch(/OCEL_ROUTING_MANIFEST/);
+  expect(reported.join("\n")).toMatch(/OCEL_NEXT_ROUTE_TABLE/);
 });

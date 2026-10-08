@@ -17,6 +17,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -402,6 +403,22 @@ func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	}
 }
 
+func TestARollbackShowsWhatTheProviderSaysWhileItMovesProduction(t *testing.T) {
+	project := promotedTwice(t)
+	const said = "waiting on the router to pick up the pointer"
+	project.Provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).SayOnPointerMove(said)
+	invocation := clitest.NewInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, said) || !strings.Contains(out, "Rolled back to promotion promo-1") {
+		t.Errorf("stdout = %q, want the rollback reported with the line %q the pointer move said", out, said)
+	}
+}
+
 var propagationCases = []struct {
 	name        string
 	propagation router.Propagation
@@ -463,5 +480,23 @@ func assertPropagationNote(t *testing.T, out, want string, absent []string) {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("output = %q, want no %q", out, unwanted)
 		}
+	}
+}
+
+func TestARollbackSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItDropsGoWithThem(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	project := promotedTwice(t)
+	namingARegistry(t, project)
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	requests := clitest.RequestsTo[*contractv1.RollbackRequest](t, project.Requests, contractv1connect.ProviderServiceRollbackProcedure)
+	if len(requests) != 1 || !isTheProjectsRegistry(requests[0].GetProjectRegistry()) {
+		t.Errorf("the rollback sent %d requests, want one naming the project's registry with its secret resolved", len(requests))
 	}
 }

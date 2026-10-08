@@ -273,13 +273,14 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
-	if err := p.ensureImageTag(ctx, clients, s.image); err != nil {
+	version, err := p.ensureImageTag(ctx, clients, s.image, "")
+	if err != nil {
 		return release{}, err
 	}
 	err = p.writeRelease(ctx, clients, services, s, desired, progress)
 	if isImageMissing(err, s.image) {
 		ensureProgress(progress).Say("Cloud Run found no image " + s.image + ", which a prune untagged during this release: tagging it again and releasing " + s.service + " once more")
-		if err := p.ensureImageTag(ctx, clients, s.image); err != nil {
+		if _, err := p.ensureImageTag(ctx, clients, s.image, version); err != nil {
 			return release{}, err
 		}
 		desired.Template.Labels[imageRetaggedLabel] = "true"
@@ -606,7 +607,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress progre
 	if err != nil {
 		return err
 	}
-	p.untagUnusedImages(ctx, images, progress)
+	p.removeUnrunImages(ctx, "", images, nil, func(context.Context) (map[string]bool, error) { return nil, nil }, progress)
 	return nil
 }
 

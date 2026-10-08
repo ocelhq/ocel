@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -119,16 +118,12 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 
 		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
 		rolled, err := promote(ctx, promoting, provider, cfg, target)
-		for _, warning := range rolled.GetWarnings() {
-			promoting.Warn(warning)
-		}
 		promoting.End(err)
 		if err != nil {
 			return err
 		}
-		promoted := rolled.GetPromoted()
-		apps, unparsed := deployreport.AppsRolledBack(attempt.Project, promoted.GetReleases())
-		promotion := &consolev1.Promotion{Id: promoted.GetPromotionId(), Seq: promoted.GetTs(), Tag: promoted.GetTag()}
+		apps, unparsed := deployreport.AppsRolledBack(attempt.Project, rolledReleases(rolled))
+		promotion := &consolev1.Promotion{Id: rolled.GetPromotionId(), Seq: rolled.GetPromotedAtSeconds()}
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, promotion, unparsed); err != nil {
 			return err
 		}
@@ -137,30 +132,37 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
 		}
 		noteSuffix := ""
-		if note := terminal.PropagationNote(promoted.GetPropagation()); note != "" {
+		if note := terminal.PropagationNote(rolled.GetPropagation()); note != "" {
 			noteSuffix = "; " + note
 		}
 		run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
-			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), noteSuffix))
+			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, rolled.GetPromotionId(), noteSuffix))
 		return nil
 	})
 	invocation.Console.ReportAttempt(ctx, attempt, nil, succeeded, err, stderr)
 	return err
 }
 
-func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
-	span := phase.Child(cfg.Slug, progress.Switching.Title("production traffic back to promotion "+target.GetPromotionId()))
-	var resp *contractv1.RollbackResponse
-	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
-			Slug: cfg.Slug,
-			To:   target.GetPromotionId(),
-			Edge: cfg.EdgeSelection(),
-		})
-		return err
-	})
-	span.End(err)
-	return resp, err
+func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*progressv1.OperationResult, error) {
+	registry, warning := readiness.RemovalRegistry(cfg)
+	if warning != "" {
+		phase.Warn(warning)
+	}
+	req := &contractv1.RollbackRequest{
+		Slug:            cfg.Slug,
+		To:              target.GetPromotionId(),
+		Edge:            cfg.EdgeSelection(),
+		ProjectRegistry: registry,
+	}
+	return providerprocess.Stream(ctx, provider, "Rollback", req, contractv1connect.ProviderServiceClient.Rollback)
+}
+
+func rolledReleases(result *progressv1.OperationResult) map[string]string {
+	releases := make(map[string]string, len(result.GetApps()))
+	for _, app := range result.GetApps() {
+		releases[app.GetApp()] = app.GetRelease()
+	}
+	return releases
 }
 
 func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string) (*contractv1.Promotion, error) {

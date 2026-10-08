@@ -130,7 +130,7 @@ func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
 func (r Recipe) run(ctx context.Context, buildkit *client.Client, opt client.SolveOpt, live LiveValues, status chan *client.SolveStatus) (*client.SolveResponse, error) {
 	if r.railpack() {
 		return buildkit.Build(ctx, opt, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-			return railpack.Build(ctx, liveGateway{Client: c, keys: live.listKeys()})
+			return railpack.Build(ctx, liveGateway{Client: c, keys: live.listKeys(), envKeys: live.listEnvKeys()})
 		}, status)
 	}
 	return buildkit.Solve(ctx, nil, opt, status)

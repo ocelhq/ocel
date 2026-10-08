@@ -3,6 +3,7 @@ package images
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -39,6 +40,18 @@ func TestAProjectSlugIsSanitizedIntoTheRepositoryName(t *testing.T) {
 	want := "registry.invalid/ocel/my-shop.web:" + localTag
 	if got := FormatRef("My Shop", "web", localTag, registry); got != want {
 		t.Errorf("FormatRef(My Shop, web) = %q, want %q", got, want)
+	}
+}
+
+func TestARegistryRepositoryNamesTheSanitizedProjectItWasMadeFor(t *testing.T) {
+	for _, project := range []string{"shop", "My Shop", "a-b"} {
+		got, ok := RegistryRepositoryProject(RegistryRepository(project, "web-api"))
+		if want := naming.Sanitize(project); !ok || got != want {
+			t.Errorf("RegistryRepositoryProject(RegistryRepository(%q, web-api)) = %q, %t, want %q", project, got, ok, want)
+		}
+	}
+	if got, ok := RegistryRepositoryProject("web"); ok {
+		t.Errorf("RegistryRepositoryProject(web) = %q, want no project", got)
 	}
 }
 

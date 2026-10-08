@@ -64,16 +64,15 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime directory holds the entrypoint and every cache handler a Next build names", async () => {
-  expect(await shippedFiles()).toEqual(
-    expect.arrayContaining([
-      "cache-handler.cjs",
-      "entrypoint.mjs",
-      "server-adapter.mjs",
-      "use-cache-default.cjs",
-      "use-cache-remote.cjs",
-    ]),
-  );
+test("the runtime directory holds the entrypoint and the server preload, with the cache handlers inside them, and libvips's notices", async () => {
+  const own = (await shippedFiles()).filter((file) => !file.startsWith("node_modules/"));
+  expect(own).toEqual([
+    "GPL-3.0.txt",
+    "LGPL-3.0.txt",
+    "THIRD_PARTY_NOTICES",
+    "entrypoint.mjs",
+    "server-preload.mjs",
+  ]);
 });
 
 test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
@@ -85,45 +84,113 @@ test("the entrypoint imports nothing but Node's own modules and the sharp the di
   expect([...new Set(bare)]).toEqual(["sharp"]);
 });
 
-test("the server adapter imports nothing but Node's own modules", async () => {
+test("the server preload imports nothing but Node's own modules", async () => {
   await init;
-  const [imports] = parse(await readFile(join(dir, "server-adapter.mjs"), "utf8"));
+  const [imports] = parse(await readFile(join(dir, "server-preload.mjs"), "utf8"));
   const bare = imports
     .flatMap((found) => (found.n === undefined ? [] : [found.n]))
     .filter((specifier) => !isBuiltin(specifier));
   expect(bare).toEqual([]);
 });
 
-test("the server adapter installs the Cloud Run host and points Next's production server at the handlers beside it", async () => {
+const cacheEnv = {
+  PORT: "8080",
+  OCEL_ISR_BUCKET: "bucket",
+  OCEL_ISR_OBJECT_PREFIX: "cache/app",
+  OCEL_ISR_PREFIX: "app",
+  OCEL_TAG_DATABASE: "database",
+};
+
+const registerNextServer = (config: string) =>
+  `globalThis[Symbol.for("@next/router-server-methods")] ??= {};
+globalThis[Symbol.for("@next/router-server-methods")][""] = { nextConfig: ${config} };`;
+
+test("the server preload installs the cache handlers and builds its Cloud Run host only once a Next server loads its config", async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     [
       "--input-type=module",
       "-e",
-      `const { default: adapter } = await import(${JSON.stringify(join(dir, "server-adapter.mjs"))});
-const config = adapter.modifyConfig({}, { phase: "phase-production-server" });
+      `process.env.OCEL_REFRESH_SECRET = "s1";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+const handlers = globalThis[Symbol.for("@next/cache-handlers")];
+const before = { slot: typeof globalThis[Symbol.for("ocel.next.host.v1")], secret: process.env.OCEL_REFRESH_SECRET ?? null };
+${registerNextServer("{ cacheHandlers: {} }")}
 const host = globalThis[Symbol.for("ocel.next.host.v1")];
-process.stdout.write(JSON.stringify({ config, store: typeof host?.newCacheStore }));`,
+process.stdout.write(JSON.stringify({
+  before,
+  after: { store: typeof host.newCacheStore, secret: process.env.OCEL_REFRESH_SECRET ?? null },
+  handlers: Object.fromEntries(Object.entries(handlers ?? {}).map(([name, handler]) => [name, typeof handler])),
+}));`,
+    ],
+    { env: { PATH: process.env.PATH, ...cacheEnv } },
+  );
+
+  expect(JSON.parse(stdout)).toEqual({
+    before: { slot: "function", secret: "s1" },
+    after: { store: "function", secret: null },
+    handlers: { FetchCache: "function", DefaultCache: "object", RemoteCache: "object" },
+  });
+});
+
+test("the server preload withholds a response's shared-cache lifetime from Cloud CDN", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import http from "node:http";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+const server = http.createServer((req, res) => {
+  res.setHeader("cache-control", "s-maxage=60, stale-while-revalidate");
+  res.end("x");
+});
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+const res = await fetch("http://127.0.0.1:" + server.address().port);
+process.stdout.write(res.headers.get("cache-control") ?? "");
+server.close();`,
+    ],
+    { env: { PATH: process.env.PATH } },
+  );
+
+  expect(stdout).not.toContain("s-maxage");
+});
+
+test("a process running the server preload stops when the Next server it runs loads a config naming the app's own cache handler", async () => {
+  const run = execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+${registerNextServer(`{ cacheHandler: "/app/mine.cjs" }`)}`,
+    ],
+    { env: { PATH: process.env.PATH } },
+  );
+
+  await expect(run).rejects.toThrow("cacheHandler");
+});
+
+test("a process running the server preload that runs no Next server listens and keeps its environment", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import net from "node:net";
+await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+const server = net.createServer();
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+server.close();
+process.stdout.write(process.env.OCEL_REFRESH_SECRET ?? "");`,
     ],
     {
-      env: {
-        PATH: process.env.PATH,
-        PORT: "8080",
-        OCEL_ISR_BUCKET: "bucket",
-        OCEL_ISR_OBJECT_PREFIX: "cache/app",
-        OCEL_ISR_PREFIX: "app",
-        OCEL_TAG_DATABASE: "database",
-      },
+      env: { PATH: process.env.PATH, OCEL_REFRESH_SECRET: "s1", OCEL_CDN_URL_MAP: "m" },
+      cwd: tmpdir(),
     },
   );
 
-  const { config, store } = JSON.parse(stdout);
-  expect(config.cacheHandler).toBe(join(dir, "cache-handler.cjs"));
-  expect(config.cacheHandlers).toEqual({
-    default: join(dir, "use-cache-default.cjs"),
-    remote: join(dir, "use-cache-remote.cjs"),
-  });
-  expect(store).toBe("function");
+  expect(stdout).toBe("s1");
 });
 
 test("the runtime directory ships sharp built for the Linux x64 Cloud Run runs", async () => {
@@ -209,7 +276,15 @@ module.exports = {
 };
 `;
 
-test("a stale page served by a Next service billed per request queues a refresh task before its response ends", async () => {
+async function until(met: () => boolean, timeoutMs = 3_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!met()) {
+    if (Date.now() > deadline) throw new Error(`nothing met the condition within ${timeoutMs}ms`);
+    await new Promise((wait) => setTimeout(wait, 10));
+  }
+}
+
+test("a stale page served by a Next service that refreshes by task queues one refresh task", async () => {
   const projectDir = join(dist, "stale-project");
   await writeNextProjectFixture(
     projectDir,
@@ -220,7 +295,7 @@ test("a stale page served by a Next service billed per request queues a refresh 
   await writeFile(log, "");
   const launcher = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcher, staleLauncher(log));
-  const manifest = join(projectDir, "routing-manifest.json");
+  const manifest = join(projectDir, "next-route-table.json");
   await writeFile(
     manifest,
     JSON.stringify({
@@ -251,8 +326,7 @@ test("a stale page served by a Next service billed per request queues a refresh 
       ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
-      OCEL_ROUTING_MANIFEST: manifest,
-      OCEL_FINISH_BEFORE_RESPONSE_MS: "5000",
+      OCEL_NEXT_ROUTE_TABLE: manifest,
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -263,6 +337,7 @@ test("a stale page served by a Next service billed per request queues a refresh 
   const res = await fetch(`http://127.0.0.1:${port}/blog`);
 
   expect(await res.text()).toBe("stale");
+  await until(() => tasks.bodies.length > 0);
   tasks.server.close();
   expect(tasks.bodies).toHaveLength(1);
   expect(decodedTask(tasks.bodies[0]!)).toMatchObject({
@@ -271,40 +346,6 @@ test("a stale page served by a Next service billed per request queues a refresh 
   });
   expect(signedBySecret(tasks.bodies[0]!)).toBe(true);
   expect(await readFile(log, "utf8")).toBe("");
-});
-
-test("a Next service billed per request that names no refresh queue refuses to start", async () => {
-  const projectDir = join(dist, "no-queue-project");
-  await writeNextProjectFixture(projectDir);
-  const launcher = join(projectDir, "__next_launcher.cjs");
-  await writeFile(launcher, `module.exports = { async handler(req, res) { res.end("x"); } };\n`);
-  const manifest = join(projectDir, "routing-manifest.json");
-  await writeFile(manifest, "{}");
-  const port = await freePort();
-
-  const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
-    cwd: projectDir,
-    env: {
-      PATH: process.env.PATH,
-      OCEL_HANDLER: launcher,
-      PORT: String(port),
-      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
-      OCEL_ORIGIN_DISPATCH: "1",
-      OCEL_ORIGIN_SIGNED: "1",
-      OCEL_ROUTING_MANIFEST: manifest,
-      OCEL_FINISH_BEFORE_RESPONSE_MS: "5000",
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  children.push(child);
-  let stderr = "";
-  child.stderr!.on("data", (chunk) => {
-    stderr += chunk;
-  });
-  const code = await new Promise<number | null>((done) => child.on("exit", done));
-
-  expect(code).not.toBe(0);
-  expect(stderr).toContain("Cloud Tasks queue");
 });
 
 test("the entrypoint serves a Next app on the port Cloud Run names", async () => {
@@ -327,13 +368,8 @@ test("the entrypoint serves a Next app on the port Cloud Run names", async () =>
   expect(await answer(port)).toBe("rendered");
 });
 
-const handlerPath = (runtimeDir: string) => JSON.stringify(join(runtimeDir, "cache-handler.cjs"));
-
-const partiallyStaticLauncher = (
-  runtimeDir: string,
-  log: string,
-) => `const { appendFileSync } = require("node:fs");
-const Handler = require(${handlerPath(runtimeDir)});
+const partiallyStaticLauncher = (log: string) => `const { appendFileSync } = require("node:fs");
+const Handler = globalThis[Symbol.for("@next/cache-handlers")].FetchCache;
 const page = { kind: "APP_PAGE", html: "<p>old</p>", status: 200, headers: {} };
 module.exports = {
   async handler(req, res) {
@@ -359,7 +395,7 @@ module.exports = {
 };
 `;
 
-test("a stale RSC navigation to a partially static page is answered without the entry and queues one refresh task before its response ends", async () => {
+test("a stale RSC navigation to a partially static page is answered without the entry and queues one refresh task", async () => {
   const projectDir = join(dist, "ppr-project");
   await writeNextProjectFixture(
     projectDir,
@@ -369,8 +405,8 @@ test("a stale RSC navigation to a partially static page is answered without the 
   const log = join(projectDir, "refreshes.log");
   await writeFile(log, "");
   const launcher = join(projectDir, "__next_launcher.cjs");
-  await writeFile(launcher, partiallyStaticLauncher(dir, log));
-  const manifest = join(projectDir, "routing-manifest.json");
+  await writeFile(launcher, partiallyStaticLauncher(log));
+  const manifest = join(projectDir, "next-route-table.json");
   await writeFile(
     manifest,
     JSON.stringify({
@@ -400,8 +436,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
       ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
-      OCEL_ROUTING_MANIFEST: manifest,
-      OCEL_FINISH_BEFORE_RESPONSE_MS: "5000",
+      OCEL_NEXT_ROUTE_TABLE: manifest,
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
@@ -415,6 +450,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
   const res = await fetch(`http://127.0.0.1:${port}/blog`, { headers: { RSC: "1" } });
 
   expect(await res.text()).toBe("no entry");
+  await until(() => tasks.bodies.length > 0);
   tasks.server.close();
   expect(tasks.bodies).toHaveLength(1);
   const queued = decodedTask(tasks.bodies[0]!);

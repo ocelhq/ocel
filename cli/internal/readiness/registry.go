@@ -15,12 +15,39 @@ func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if password == "" {
+		return nil, fmt.Errorf("the registry %s is pushed to authenticates with the environment variable %s, which is unset here: "+
+			"export it or set it in the project's .env before deploying, or drop `registry` from the config to push nowhere",
+			cfg.Registry.Server, cfg.Registry.Password)
+	}
+	return imageRegistry(cfg.Registry, password), nil
+}
+
+func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, warning string) {
+	if cfg.Registry == nil {
+		return nil, ""
+	}
+	password, err := projectRegistryPassword(cfg)
+	if err != nil {
+		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: %v",
+			cfg.Registry.Server, err)
+	}
+	if password == "" {
+		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
+			"it authenticates with the environment variable %s, which is unset here; "+
+			"export it or set it in the project's .env before removing for the removal to delete them",
+			cfg.Registry.Server, cfg.Registry.Password)
+	}
+	return imageRegistry(cfg.Registry, password), ""
+}
+
+func imageRegistry(registry *project.Registry, password string) *contractv1.ImageRegistry {
 	return &contractv1.ImageRegistry{
-		Server:    cfg.Registry.Server,
-		Namespace: cfg.Registry.Namespace,
-		Username:  cfg.Registry.Username,
+		Server:    registry.Server,
+		Namespace: registry.Namespace,
+		Username:  registry.Username,
 		Password:  password,
-	}, nil
+	}
 }
 
 func projectRegistryPassword(cfg *project.Project) (string, error) {
@@ -28,12 +55,6 @@ func projectRegistryPassword(cfg *project.Project) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	registry := cfg.Registry
-	password, _ := lookup(registry.Password)
-	if password == "" {
-		return "", fmt.Errorf("the registry %s is pushed to authenticates with the environment variable %s, which is unset here: "+
-			"export it or set it in the project's .env before deploying, or drop `registry` from the config to push nowhere",
-			registry.Server, registry.Password)
-	}
+	password, _ := lookup(cfg.Registry.Password)
 	return password, nil
 }

@@ -7,12 +7,6 @@ const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
 const directory = join(dist, "next");
 
-const handlers = {
-  "cache-handler": Bun.resolveSync("@framework/next-runtime/cache-handler", pkgDir),
-  "use-cache-default": Bun.resolveSync("@framework/next-runtime/use-cache-default", pkgDir),
-  "use-cache-remote": Bun.resolveSync("@framework/next-runtime/use-cache-remote", pkgDir),
-};
-
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',
   'import { fileURLToPath as ocelFileURLToPath } from "node:url";',
@@ -38,16 +32,6 @@ async function bundle(entry, outfile, options) {
 
 await rm(dist, { recursive: true, force: true });
 
-await Promise.all(
-  Object.entries(handlers).map(([name, entry]) =>
-    bundle(entry, join(directory, `${name}.cjs`), {
-      format: "cjs",
-      minify: true,
-      footer: "module.exports = module.exports.default;",
-    }),
-  ),
-);
-
 await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoint.mjs"), {
   format: "esm",
   minify: true,
@@ -56,7 +40,7 @@ await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoin
   define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
 });
 
-await bundle(join(pkgDir, "src/next/server-adapter.mts"), join(directory, "server-adapter.mjs"), {
+await bundle(join(pkgDir, "src/next/server-preload.mts"), join(directory, "server-preload.mjs"), {
   format: "esm",
   minify: true,
   banner: cjsInterop,

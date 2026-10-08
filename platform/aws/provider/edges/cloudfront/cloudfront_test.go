@@ -181,12 +181,12 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
-		App:           "web",
-		Release:       "d1.f1",
-		Entry:         "/",
-		EntryFunction: entryFunction,
-		FunctionURLs:  map[string]string{"/": url},
-		AssetPrefix:   assets,
+		App:                  "web",
+		Release:              "d1.f1",
+		RootFunction:         "/",
+		RootFunctionPhysical: entryFunction,
+		FunctionURLs:         map[string]string{"/": url},
+		AssetPrefix:          assets,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -445,7 +445,7 @@ func TestReconcile(t *testing.T) {
 func TestPromote(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the published route names the release, its entry function and its assets", func(t *testing.T) {
+	t.Run("the published route names the release, its root function and its assets", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -459,7 +459,7 @@ func TestPromote(t *testing.T) {
 
 		published := routeOn(t, w, stack, boundHost)
 		if published.Origin != fakeEntryHost {
-			t.Errorf("origin = %q, want the entry function's URL host %q", published.Origin, fakeEntryHost)
+			t.Errorf("origin = %q, want the root function's URL host %q", published.Origin, fakeEntryHost)
 		}
 		if published.Release != "d1.f1" {
 			t.Errorf("release = %q, want the build the promotion names", published.Release)
@@ -474,7 +474,7 @@ func TestPromote(t *testing.T) {
 			t.Errorf("stack = %q, want the stack that owns the hostname (%q)", published.Stack, productionDistributionName())
 		}
 		if published.Secret != fakeSecret {
-			t.Errorf("the route includes a secret the entry function will not accept")
+			t.Errorf("the route includes a secret the root function will not accept")
 		}
 	})
 
@@ -635,7 +635,7 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
-	t.Run("a release with no reachable entry function is refused", func(t *testing.T) {
+	t.Run("a release with no reachable root function is refused", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -648,7 +648,7 @@ func TestPromote(t *testing.T) {
 			t.Fatal("Promote error = nil, want a refusal: nothing names a URL the edge can reach")
 		}
 		if !strings.Contains(err.Error(), entryFunction) {
-			t.Errorf("err = %q, want it to name the entry function it found no URL for", err)
+			t.Errorf("err = %q, want it to name the root function it found no URL for", err)
 		}
 	})
 

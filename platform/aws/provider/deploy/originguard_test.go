@@ -23,8 +23,8 @@ const lambdaPermissionToken = "aws:lambda/permission:Permission"
 func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing.T) {
 	t.Parallel()
 
-	rotating := &originGuard{Entry: "/", Secret: testOriginSecret, Previous: "0ld"}
-	env := rotating.entryEnv(map[string]string{edge.OriginSignedVar: "1"})
+	rotating := &originGuard{RootFunction: "/", Secret: testOriginSecret, Previous: "0ld"}
+	env := rotating.rootFunctionEnv(map[string]string{edge.OriginSignedVar: "1"})
 	if env[edge.OriginSecretVar] != testOriginSecret || env[edge.OriginSecretPreviousVar] != "0ld" {
 		t.Errorf("entry env = %v, want both secrets: a route written before the rotation still presents the old one", env)
 	}
@@ -32,8 +32,8 @@ func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing
 		t.Errorf("entry env = %v, still waved past the guard", env)
 	}
 
-	unrotated := &originGuard{Entry: "/", Secret: testOriginSecret}
-	if _, present := unrotated.entryEnv(nil)[edge.OriginSecretPreviousVar]; present {
+	unrotated := &originGuard{RootFunction: "/", Secret: testOriginSecret}
+	if _, present := unrotated.rootFunctionEnv(nil)[edge.OriginSecretPreviousVar]; present {
 		t.Error("a tier with no rotation underway hands the entry a predecessor")
 	}
 }
@@ -141,7 +141,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	}
 	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
-		t.Errorf("a sibling has %s, want the secret to reach the entry function alone", edge.OriginSecretVar)
+		t.Errorf("a sibling has %s, want the secret to reach the root function alone", edge.OriginSecretVar)
 	}
 	if sibling[edge.OriginSignedVar] == "" {
 		t.Errorf("a sibling has no %s, so its runtime refuses the entry's signed requests", edge.OriginSignedVar)
@@ -198,7 +198,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 
 	cfg := guardedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
-		"apps/api/serve.json": `{"framework":"node","frameworkBuildId":"API1","entry":"/"}`,
+		"apps/api/hosting.json": `{"version":1,"framework":"node","frameworkBuildId":"API1","rootFunction":"/"}`,
 	})
 	coord := storageCoordinate("prod", "shop", "api", fixedRelease(t))
 	spec := servingSpec(t, cfg, "api", "express", coord)

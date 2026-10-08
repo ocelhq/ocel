@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
@@ -42,6 +43,12 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			dir := manifestDir(t, want.manifest)
 			dependencies := newTestDependencies()
 			argv := stubPackageManager(&dependencies, nil)
+			if want.manifest == "package.json" {
+				if _, err := exec.LookPath("node"); err != nil {
+					t.Skip("node not found on PATH")
+				}
+				clitest.InstallOcelPackage(t, dir)
+			}
 
 			var stdout bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -63,7 +70,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 	}
 }
 
-func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
+func TestInitWritesTheSchemaEveryVersionNames(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
@@ -82,22 +89,22 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !strings.Contains(doc.Schema, version.Version) || !strings.HasSuffix(doc.Schema, "ocel.schema.json") {
-		t.Fatalf("$schema = %q, want it to name this CLI's version and the schema", doc.Schema)
+	if doc.Schema != docsurl.Schema {
+		t.Fatalf("$schema = %q, want the one schema %q", doc.Schema, docsurl.Schema)
 	}
 }
 
-func TestInitWritesTypeScriptOnRequest(t *testing.T) {
+func TestInitWritesTypeScriptForAProjectBuiltWithNode(t *testing.T) {
 	dir := manifestDir(t, "package.json")
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", ts: true}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
-		t.Fatal("--ts wrote a JSON config as well")
+		t.Fatal("init wrote a JSON config beside the TypeScript one")
 	}
 	written, err := os.ReadFile(filepath.Join(dir, project.TSFileName))
 	if err != nil {
@@ -108,17 +115,75 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	}
 }
 
+func TestInitWritesJSONForAProjectNodeIsNoPartOf(t *testing.T) {
+	for _, manifest := range []string{"go.mod", "Cargo.toml", "pyproject.toml", ""} {
+		t.Run(manifest, func(t *testing.T) {
+			dir := manifestDir(t, manifest)
+			dependencies := newTestDependencies()
+			stubPackageManager(&dependencies, nil)
+
+			if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+				t.Fatalf("runInit: %v", err)
+			}
+
+			if _, err := os.Stat(filepath.Join(dir, project.TSFileName)); err == nil {
+				t.Fatal("init wrote a TypeScript config, which needs node and the ocel package to read")
+			}
+			if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err != nil {
+				t.Fatalf("stat %s: %v", project.DefaultFileName, err)
+			}
+		})
+	}
+}
+
+func TestInitWritesJSONOnRequestInAProjectBuiltWithNode(t *testing.T) {
+	dir := manifestDir(t, "package.json")
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", format: "json"}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, project.TSFileName)); err == nil {
+		t.Fatal("--format json wrote a TypeScript config as well")
+	}
+	cfg, err := project.Load(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("the config init wrote does not load: %v", err)
+	}
+	if cfg.Path != filepath.Join(dir, project.DefaultFileName) {
+		t.Fatalf("loaded %s, want %s", cfg.Path, project.DefaultFileName)
+	}
+}
+
+func TestInitRefusesAFormatItDoesNotWrite(t *testing.T) {
+	dir := manifestDir(t, "package.json")
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", format: "toml"})
+	if err == nil || !strings.Contains(err.Error(), `"toml"`) || !strings.Contains(err.Error(), "ts, json or yaml") {
+		t.Fatalf("err = %v, want the format refused, naming the ones init writes", err)
+	}
+	for _, name := range []string{project.TSFileName, project.DefaultFileName, project.YAMLFileName} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			t.Fatalf("wrote %s for a format init does not write", name)
+		}
+	}
+}
+
 func TestInitWritesYAMLOnRequest(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if _, err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "fake", yaml: true}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "fake", format: "yaml"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, project.DefaultFileName)); err == nil {
-		t.Fatal("--yaml wrote a JSON config as well")
+		t.Fatal("--format yaml wrote a JSON config as well")
 	}
 	cfg, err := project.Load(context.Background(), dir, "")
 	if err != nil {
@@ -131,8 +196,8 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !strings.Contains(string(written), "$schema=https://ocel.dev/schema/"+version.Version+"/ocel.schema.json") {
-		t.Fatalf("config names no schema for this CLI's version:\n%s", written)
+	if !strings.Contains(string(written), "# yaml-language-server: $schema="+docsurl.Schema+"\n") {
+		t.Fatalf("config names no schema:\n%s", written)
 	}
 }
 
@@ -142,11 +207,12 @@ func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
 		opts     initOptions
 		refused  string
 	}{
-		{project.DefaultFileName, initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
-		{project.TSFileName, initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
-		{"ocel.yml", initOptions{provider: "fake", yaml: true}, project.YAMLFileName},
+		{project.DefaultFileName, initOptions{provider: "fake", format: "yaml"}, project.YAMLFileName},
+		{project.TSFileName, initOptions{provider: "fake", format: "yaml"}, project.YAMLFileName},
+		{"ocel.yml", initOptions{provider: "fake", format: "yaml"}, project.YAMLFileName},
 		{project.YAMLFileName, initOptions{provider: "fake"}, project.DefaultFileName},
-		{project.YAMLFileName, initOptions{provider: "fake", ts: true}, project.TSFileName},
+		{project.YAMLFileName, initOptions{provider: "fake", format: "json"}, project.DefaultFileName},
+		{project.YAMLFileName, initOptions{provider: "fake", language: "node"}, project.TSFileName},
 	} {
 		t.Run(tc.existing+" then "+tc.refused, func(t *testing.T) {
 			dir := manifestDir(t, "go.mod")
@@ -173,8 +239,9 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 		opts initOptions
 		want string
 	}{
-		{project.DefaultFileName, initOptions{provider: "fake", yaml: true}, "--yaml"},
-		{"ocel.staging.yaml", initOptions{provider: "fake", ts: true}, "--ts"},
+		{project.DefaultFileName, initOptions{provider: "fake", format: "yaml"}, "--format yaml"},
+		{"ocel.staging.yaml", initOptions{provider: "fake", format: "json"}, "--format json"},
+		{"ocel.staging.json", initOptions{provider: "fake", format: "ts"}, "--format ts"},
 		{"config.json", initOptions{provider: "fake"}, "config.json"},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
@@ -199,7 +266,7 @@ func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	opts := initOptions{provider: "fake", yaml: true, configPath: "ocel.staging.yml"}
+	opts := initOptions{provider: "fake", format: "yaml", configPath: "ocel.staging.yml"}
 	if _, err := runInit(context.Background(), dependencies, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
@@ -290,10 +357,10 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 		want    string
 	}{
 		{initOptions{provider: alone}, project.DefaultFileName, fmt.Sprintf("  \"provider\": %q\n", alone)},
-		{initOptions{provider: alone, yaml: true}, project.YAMLFileName, "provider: " + alone + "\n"},
+		{initOptions{provider: alone, format: "yaml"}, project.YAMLFileName, "provider: " + alone + "\n"},
 		{initOptions{provider: keyed}, project.DefaultFileName, fmt.Sprintf("  \"provider\": { %q: {} }\n", keyed)},
-		{initOptions{provider: keyed, yaml: true}, project.YAMLFileName, "provider:\n  " + keyed + ": {}\n"},
-		{initOptions{provider: "fake", ts: true}, project.TSFileName, "  provider: fakeProvider({}),\n"},
+		{initOptions{provider: keyed, format: "yaml"}, project.YAMLFileName, "provider:\n  " + keyed + ": {}\n"},
+		{initOptions{provider: "fake", language: "node"}, project.TSFileName, "  provider: fakeProvider({}),\n"},
 	} {
 		t.Run(tc.opts.provider+" in "+tc.written, func(t *testing.T) {
 			dir := manifestDir(t, "")

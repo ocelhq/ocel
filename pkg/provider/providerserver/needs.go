@@ -31,7 +31,7 @@ func (e *UnknownNeedError) Error() string {
 	return fmt.Sprintf(
 		"app %s declares the need %q, which no edge knows: the needs an app may declare are %s. "+
 			"Rebuild the app with a CLI that speaks the same need set, or drop it from its %s",
-		e.App, e.Need, strings.Join(edge.NeedNames(edge.AllNeeds()), ", "), edge.ServeDescriptorFile,
+		e.App, e.Need, strings.Join(edge.NeedNames(edge.AllNeeds()), ", "), buildoutput.HostingFile,
 	)
 }
 
@@ -39,7 +39,7 @@ type UnsupportedNeedError struct {
 	App    string
 	Need   edge.Need
 	Edge   edge.Kind
-	Detail edge.NeedDetail
+	Detail buildoutput.NeedDetail
 }
 
 func (e *UnsupportedNeedError) Error() string {
@@ -79,7 +79,7 @@ func (e *EdgeEntitlementError) Error() string {
 
 func (e *EdgeEntitlementError) Unwrap() error { return e.Err }
 
-func affected(detail edge.NeedDetail) string {
+func affected(detail buildoutput.NeedDetail) string {
 	if len(detail.Routes) > 0 {
 		return "routes " + strings.Join(detail.Routes, ", ")
 	}
@@ -120,14 +120,14 @@ func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
-		desc, present, err := buildoutput.ReadServeDescriptor(c.Root, name)
+		hosting, present, err := buildoutput.ReadHosting(c.Root, name)
 		if err != nil {
 			return nil, err
 		}
 		if !present {
 			continue
 		}
-		record, err := c.forApp(name, desc, entitles, entitlement)
+		record, err := c.forApp(name, hosting, entitles, entitlement)
 		if err != nil {
 			return nil, err
 		}
@@ -138,16 +138,16 @@ func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (
 
 func (c EdgeNeedCheck) forApp(
 	name string,
-	desc edge.ServeDescriptor,
+	hosting buildoutput.Hosting,
 	entitles bool,
 	entitlement func() (edge.CodeEntitlement, error),
 ) (AppNeedVerdict, error) {
 	var record AppNeedVerdict
-	for _, need := range declaredNeeds(desc) {
+	for _, need := range declaredNeeds(hosting) {
 		if !edge.ValidNeed(need) {
 			return AppNeedVerdict{}, &UnknownNeedError{App: name, Need: need}
 		}
-		detail := desc.Needs[need]
+		detail := hosting.Needs[need]
 		waived := slices.Contains(c.AllowDegraded, string(need))
 		serves := edge.Supports(c.Edge, need) && c.isRouted(name, need)
 
@@ -185,15 +185,15 @@ func (c EdgeNeedCheck) isRouted(app string, need edge.Need) bool {
 	return router.Supports(c.Router(app), need)
 }
 
-func declaredNeeds(desc edge.ServeDescriptor) []edge.Need {
-	ordered := make([]edge.Need, 0, len(desc.Needs))
+func declaredNeeds(hosting buildoutput.Hosting) []edge.Need {
+	ordered := make([]edge.Need, 0, len(hosting.Needs))
 	for _, need := range edge.AllNeeds() {
-		if _, declared := desc.Needs[need]; declared {
+		if _, declared := hosting.Needs[need]; declared {
 			ordered = append(ordered, need)
 		}
 	}
 	unknown := make([]string, 0)
-	for need := range desc.Needs {
+	for need := range hosting.Needs {
 		if !edge.ValidNeed(need) {
 			unknown = append(unknown, string(need))
 		}

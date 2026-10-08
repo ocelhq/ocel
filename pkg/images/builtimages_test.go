@@ -51,8 +51,8 @@ func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	host := servingRegistry(t)
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export const handler = () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export const handler = () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {

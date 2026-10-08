@@ -6,7 +6,8 @@
   "description": "the build-time adapter that traces a plain node function into its artifact",
   "license": "Apache-2.0",
   "exports": {
-    "./trace": "./src/trace.mts"
+    "./trace": "./src/trace.mts",
+    "./script": "./src/script.mts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -15,6 +16,7 @@
   "dependencies": {
     "@vercel/nft": "^0.27.4",
     "es-module-lexer": "^1.5.4",
+    "package-manager-detector": "^0.2.11",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

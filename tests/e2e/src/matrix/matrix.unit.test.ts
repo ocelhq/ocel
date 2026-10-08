@@ -17,14 +17,14 @@ import {
   todoAndDocumentChecks,
 } from "../checks";
 import { PREVIEW_TITLES } from "../checks/previews";
-import { DEFAULT_BASE, GCP_BASE, VPS_BASE } from "../config";
+import { JSON_BASE } from "../config";
 import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
 import { hasReleaseCycle, previewsOn, targetNamed } from "../targets";
 import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
-import { type Concern, LANES, type Lane, type TargetName, targetOfLane } from "./types";
+import { type Concern, LANES, type Lane, targetOfLane } from "./types";
 
 const REGISTRY_CREDENTIALS = {
   OCEL_E2E_REGISTRY_USER: "octocat",
@@ -175,6 +175,7 @@ describe("Cloudflare in front of gcp", () => {
 
 describe("the needs a Google Cloud origin does not serve", () => {
   const WAIVED = {
+    "build-variables/next": ["edge-runtime", "edge-cache"],
     "deploy/next": ["edge-runtime", "edge-cache"],
     "lifecycle/next": ["edge-runtime", "edge-cache"],
     "sdk/next": ["edge-runtime", "edge-cache"],
@@ -182,12 +183,11 @@ describe("the needs a Google Cloud origin does not serve", () => {
     "sdk/workspace": ["edge-cache"],
   };
 
-  it("waives the needs each Next fixture's gcp config deploys degraded, since the origin serves them on node", () => {
+  it("waives the needs each Next fixture deploys degraded on gcp, since the origin serves them on node", () => {
     for (const [name, needs] of Object.entries(WAIVED)) {
-      const config = JSON.parse(
-        stripJsonComments(readFileSync(path.join(fixtureDir(name), GCP_BASE), "utf8")),
-      ) as { allowDegraded?: string[] };
-      expect([...(config.allowDegraded ?? [])].sort()).toEqual([...needs].sort());
+      const waived: string[] =
+        fixtures.find((one) => one.name === name)?.configOn?.gcp?.allowDegraded ?? [];
+      expect([...waived].sort()).toEqual([...needs].sort());
     }
   });
 
@@ -743,11 +743,6 @@ describe("the realtime concern", () => {
 });
 
 describe("the fixtures a lane deploys", () => {
-  const BASES: Record<Exclude<TargetName, "dev">, string> = {
-    aws: DEFAULT_BASE,
-    gcp: GCP_BASE,
-    vps: VPS_BASE,
-  };
   const MARKERS = ["go.mod", "pyproject.toml", "requirements.txt", "package.json", "Cargo.toml"];
 
   it("put every app a planned cell deploys where ocel can tell what it is built with", () => {
@@ -759,21 +754,53 @@ describe("the fixtures a lane deploys", () => {
       }
       for (const cell of planOn(lane).cells) {
         const dir = fixtureDir(cell.fixture);
-        const base = path.join(dir, BASES[target]);
+        const base = path.join(dir, JSON_BASE);
         if (!existsSync(base)) {
           continue;
         }
         const config = JSON.parse(stripJsonComments(readFileSync(base, "utf8"))) as {
-          apps?: { name: string; path: string; framework?: string }[];
+          apps?: {
+            name: string;
+            path: string;
+            compute?: string | { serverless?: { framework?: string } };
+          }[];
         };
-        for (const app of config.apps ?? []) {
-          const appDir = path.join(dir, app.path);
-          if (!app.framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
-            undetectable.add(`${lane}: ${cell.fixture} ${BASES[target]} app ${app.name}`);
+        const changed = fixtures.find((one) => one.name === cell.fixture)?.configOn?.[target]?.apps;
+        for (const declared of config.apps ?? []) {
+          const app = { ...declared, ...changed?.[declared.name] };
+          const appDir = path.join(dir, app.path ?? ".");
+          const framework =
+            typeof app.compute === "object" ? app.compute.serverless?.framework : undefined;
+          if (!framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
+            undetectable.add(`${lane}: ${cell.fixture} on ${target} app ${app.name}`);
           }
         }
       }
     }
     expect([...undetectable].sort()).toEqual([]);
+  });
+});
+
+describe("the prerender-from-a-bucket cell", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const cellsOn = (lane: Lane) =>
+    planOn(lane, {}, EVERY_CELL)
+      .cells.map((cell) => cell.name)
+      .filter((name) => name === "prerender/next-bucket");
+
+  it("builds a page from a bucket on every vendor, behind the binding proxy its provider serves", () => {
+    for (const lane of ["aws", "gcp", "gcp.floci", "vps", "vps.incus"] as const) {
+      expect(cellsOn(lane)).toEqual(["prerender/next-bucket"]);
+    }
+  });
+
+  it("runs on no lane that serves no Next app", () => {
+    expect(cellsOn("dev")).toEqual([]);
+  });
+
+  it("skips the cell on floci's aws, whose CloudFront serves no Next app", () => {
+    expect(planOn("aws.floci").skipped["prerender/next-bucket"]?.map((gap) => gap.issue)).toEqual([
+      852,
+    ]);
   });
 });

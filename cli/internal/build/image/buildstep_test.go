@@ -12,6 +12,9 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	railpack "github.com/railwayapp/railpack/buildkit"
 	railpackplan "github.com/railwayapp/railpack/core/plan"
+
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const hyphenatedKey = "OCEL_RESOURCE_POSTGRES_my-db"
@@ -99,7 +102,7 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 		t.Fatal("the plan has no build command to give the live values to")
 	}
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB", hyphenatedKey})
+	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB", hyphenatedKey}, nil)
 	if err != nil {
 		t.Fatalf("mountLiveValues() = %v", err)
 	}
@@ -136,6 +139,51 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 	}
 }
 
+func TestOnlyTheBuildStepsCommandsReadTheBindingProxyAndFromTheirEnvironment(t *testing.T) {
+	original, plan := defineRailpackBuild(t, "a live hash")
+	proxy := []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
+
+	rewritten, err := mountLiveValues(original, nil, proxy)
+	if err != nil {
+		t.Fatalf("mountLiveValues() = %v", err)
+	}
+
+	built := 0
+	for _, operation := range decodeOperations(t, rewritten) {
+		exec := operation.GetExec()
+		if exec == nil {
+			continue
+		}
+		if !isFromBuildStep(plan, exec) {
+			if len(exec.Secretenv) > 0 || exec.Network == pb.NetMode_HOST {
+				t.Errorf("%q, outside the build step, is given %v or the host network", joinArgs(exec), exec.Secretenv)
+			}
+			continue
+		}
+		built++
+		if exec.Network != pb.NetMode_HOST {
+			t.Errorf("the build command %q runs on network %v, want the host's, where the binding proxy listens", joinArgs(exec), exec.Network)
+		}
+		var named []string
+		for _, env := range exec.Secretenv {
+			if env.ID != env.Name {
+				t.Errorf("the build command %q reads the secret %s as %s, want it under its own name", joinArgs(exec), env.ID, env.Name)
+			}
+			named = append(named, env.Name)
+		}
+		slices.Sort(named)
+		if !slices.Equal(named, proxy) {
+			t.Errorf("the build command %q has %v in its environment, want %v", joinArgs(exec), named, proxy)
+		}
+		if mounted := listSecretMounts(exec); len(mounted) != 0 {
+			t.Errorf("the build command %q mounts %v, want the binding proxy in its environment alone", joinArgs(exec), mounted)
+		}
+	}
+	if built == 0 {
+		t.Error("no command of the build step was given the binding proxy")
+	}
+}
+
 func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "a live hash")
 	var before []string
@@ -145,7 +193,7 @@ func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 		}
 	}
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"})
+	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
 	if err != nil {
 		t.Fatalf("mountLiveValues() = %v", err)
 	}
@@ -169,7 +217,7 @@ func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 func TestTheRewrittenDefinitionStaysAGraphWhoseOpsPointAtOpsItHolds(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "a live hash")
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"})
+	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
 	if err != nil {
 		t.Fatalf("mountLiveValues() = %v", err)
 	}
@@ -195,7 +243,7 @@ func TestTheRewrittenDefinitionStaysAGraphWhoseOpsPointAtOpsItHolds(t *testing.T
 func TestABuildWithNoLiveValuesIsHandedBackUntouched(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "")
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"})
+	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
 	if err != nil {
 		t.Fatalf("mountLiveValues() = %v", err)
 	}
@@ -211,7 +259,7 @@ func TestASecretTheAppsRailpackFileDeclaresUnderALiveKeyReachesNoCommandsEnviron
 		t.Fatalf("the plan names the secrets %v, want the %s the app's railpack.json declares, or this test proves nothing", plan.Secrets, hyphenatedKey)
 	}
 
-	rewritten, err := mountLiveValues(original, []string{hyphenatedKey})
+	rewritten, err := mountLiveValues(original, []string{hyphenatedKey}, nil)
 	if err != nil {
 		t.Fatalf("mountLiveValues() = %v", err)
 	}

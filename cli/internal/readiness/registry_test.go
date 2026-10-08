@@ -9,6 +9,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
+const tokenVariable = "REGISTRY_TOKEN"
+
+func unsetTokenVariable(t *testing.T) {
+	t.Helper()
+	t.Setenv(tokenVariable, "")
+	if err := os.Unsetenv(tokenVariable); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func registryConfig(registry *project.Registry) *project.Project {
 	return &project.Project{
 		Path:     "/repo/ocel.config.ts",
@@ -19,10 +29,10 @@ func registryConfig(registry *project.Registry) *project.Project {
 }
 
 func TestAProjectRegistryRidesTheDeployWithItsPasswordReadFromTheEnvironment(t *testing.T) {
-	t.Setenv("REGISTRY_TOKEN", "hunter2")
+	t.Setenv(tokenVariable, "hunter2")
 
 	registry, err := ProjectRegistry(registryConfig(&project.Registry{
-		Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: "REGISTRY_TOKEN",
+		Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: tokenVariable,
 	}))
 	if err != nil {
 		t.Fatalf("ProjectRegistry() error = %v", err)
@@ -45,8 +55,8 @@ func TestAProjectNamingNoRegistrySendsNone(t *testing.T) {
 }
 
 func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
-	t.Setenv("REGISTRY_TOKEN", "hunter2")
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	t.Setenv(tokenVariable, "hunter2")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 	cfg.Apps = nil
 
 	registry, err := ProjectRegistry(cfg)
@@ -56,13 +66,14 @@ func TestAProjectWithNoAppSendsNoRegistry(t *testing.T) {
 }
 
 func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	unsetTokenVariable(t)
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 
 	_, err := ProjectRegistry(cfg)
 	if err == nil {
 		t.Fatal("ProjectRegistry() passed with the registry's variable unset, so the deploy would build before discovering it cannot push")
 	}
-	for _, want := range []string{"REGISTRY_TOKEN", "registry.example.com"} {
+	for _, want := range []string{tokenVariable, "registry.example.com"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("ProjectRegistry() error = %v, want it to mention %q", err, want)
 		}
@@ -70,8 +81,8 @@ func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.
 }
 
 func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
-	t.Setenv("REGISTRY_TOKEN", "")
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	t.Setenv(tokenVariable, "")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 
 	if _, err := ProjectRegistry(cfg); err == nil {
 		t.Fatal("ProjectRegistry() passed with the registry's variable empty, which authenticates as nobody")
@@ -79,7 +90,8 @@ func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
 }
 
 func TestAProjectWithNoAppIsAskedForNoRegistryPassword(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	unsetTokenVariable(t)
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 	cfg.Apps = nil
 
 	if _, err := ProjectRegistry(cfg); err != nil {
@@ -94,14 +106,14 @@ func TestAProjectWithNoRegistryIsAskedForNoPassword(t *testing.T) {
 }
 
 func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 
-	t.Setenv("REGISTRY_TOKEN", "the-one-checked-at-preflight")
+	t.Setenv(tokenVariable, "the-one-checked-at-preflight")
 	if _, err := ProjectRegistry(cfg); err != nil {
 		t.Fatalf("ProjectRegistry() = %v", err)
 	}
 
-	t.Setenv("REGISTRY_TOKEN", "the-one-the-push-uses")
+	t.Setenv(tokenVariable, "the-one-the-push-uses")
 	registry, err := ProjectRegistry(cfg)
 	if err != nil {
 		t.Fatalf("ProjectRegistry() error = %v", err)
@@ -112,7 +124,8 @@ func TestTheRegistryPasswordIsReadWhenTheRequestIsBuiltAndNowhereEarlier(t *test
 }
 
 func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	unsetTokenVariable(t)
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 	cfg.Dir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("REGISTRY_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -131,12 +144,12 @@ func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *te
 }
 
 func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
-	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"})
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
 	cfg.Dir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("REGISTRY_TOKEN=from-dotenv\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("REGISTRY_TOKEN", "from-shell")
+	t.Setenv(tokenVariable, "from-shell")
 
 	registry, err := ProjectRegistry(cfg)
 	if err != nil {
@@ -144,5 +157,68 @@ func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
 	}
 	if registry.GetPassword() != "from-shell" {
 		t.Error("ProjectRegistry() sent the .env's password, want the shell's: the shell wins, as it does for every ${} in the config")
+	}
+}
+
+func TestARemovalSendsTheRegistryEvenWhenTheConfigNamesNoAppAnyMore(t *testing.T) {
+	t.Setenv(tokenVariable, "hunter2")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: tokenVariable})
+	cfg.Apps = nil
+
+	registry, left := RemovalRegistry(cfg)
+	if left != "" {
+		t.Fatalf("RemovalRegistry() left %q", left)
+	}
+	if registry.GetServer() != "registry.example.com" || registry.GetPassword() != "hunter2" {
+		t.Errorf("RemovalRegistry() = %q with password %q, want the project's registry: the images it holds outlive the apps that pushed them", registry.GetServer(), registry.GetPassword())
+	}
+}
+
+func TestARemovalOfAProjectNamingNoRegistrySendsNone(t *testing.T) {
+	registry, left := RemovalRegistry(registryConfig(nil))
+	if registry != nil || left != "" {
+		t.Errorf("RemovalRegistry() = %q, %q, want nothing", registry.GetServer(), left)
+	}
+}
+
+func TestARemovalWhoseDotenvCannotBeReadNamesThatFailureRatherThanAnUnsetVariable(t *testing.T) {
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable})
+	cfg.Dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(cfg.Dir, ".env"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, left := RemovalRegistry(cfg)
+	if registry != nil {
+		t.Errorf("RemovalRegistry() = %q, want none", registry.GetServer())
+	}
+	if !strings.Contains(left, "read .env") || strings.Contains(left, "unset") {
+		t.Errorf("RemovalRegistry() left %q, want it to name the unreadable .env, not an unset variable", left)
+	}
+}
+
+func TestARemovalWhoseRegistryVariableIsUnsetSaysToRestoreItBeforeRemovingNotToDropTheRegistry(t *testing.T) {
+	unsetTokenVariable(t)
+	_, left := RemovalRegistry(registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable}))
+	if !strings.Contains(left, "before removing") {
+		t.Errorf("RemovalRegistry() left %q, want it to say to restore the variable before removing: the removal is what deletes the images", left)
+	}
+	for _, deployAdvice := range []string{"before deploying", "drop `registry`"} {
+		if strings.Contains(left, deployAdvice) {
+			t.Errorf("RemovalRegistry() left %q, want no deploy advice %q: without `registry` a removal cannot find the images", left, deployAdvice)
+		}
+	}
+}
+
+func TestARemovalWhoseRegistryVariableIsUnsetSendsNoneAndNamesWhatStays(t *testing.T) {
+	unsetTokenVariable(t)
+	registry, left := RemovalRegistry(registryConfig(&project.Registry{Server: "registry.example.com", Password: tokenVariable}))
+	if registry != nil {
+		t.Errorf("RemovalRegistry() = %q, want none: a token that is gone must not keep a project from being removed", registry.GetServer())
+	}
+	for _, want := range []string{tokenVariable, "registry.example.com"} {
+		if !strings.Contains(left, want) {
+			t.Errorf("RemovalRegistry() left %q, want it to name %q", left, want)
+		}
 	}
 }

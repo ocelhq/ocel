@@ -2,31 +2,71 @@
   "provider": {
     "ids": ["aws", "gcp", "vps"],
     "shorthand": ["aws"],
-    "required": {
+    "options": {
+      "aws": [
+        {
+          "name": "region",
+          "doc": "The AWS region to deploy into."
+        },
+        {
+          "name": "variablesKey",
+          "doc": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns."
+        }
+      ],
       "gcp": [
         {
           "name": "project",
-          "doc": "The Google Cloud project to deploy into."
+          "doc": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables."
         },
         {
           "name": "region",
-          "doc": "The region to deploy into. A project spans them all, so this names the one."
+          "doc": "The region to deploy into. A project spans them all, so this names the one.",
+          "required": true
         }
       ],
       "vps": [
         {
+          "name": "deployKey",
+          "doc": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."
+        },
+        {
+          "name": "proxy",
+          "doc": "What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."
+        },
+        {
           "name": "ssh",
-          "doc": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."
+          "doc": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out.",
+          "required": true
         }
       ]
     }
   },
-  "edge": {
-    "ids": ["alb", "api-gateway", "cloudflare", "cloudfront"],
-    "shorthand": ["alb", "api-gateway", "cloudflare", "cloudfront"]
+  "edges": {
+    "aws": {
+      "ids": ["api-gateway", "cloudflare", "cloudfront"],
+      "shorthand": ["api-gateway", "cloudflare", "cloudfront"]
+    },
+    "gcp": {
+      "ids": ["alb", "cloudflare"],
+      "shorthand": ["alb", "cloudflare"]
+    },
+    "vps": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    }
   },
   "dns": {
-    "ids": ["cloudflare", "route53"],
-    "shorthand": ["cloudflare", "route53"]
+    "aws": {
+      "ids": ["cloudflare", "route53"],
+      "shorthand": ["cloudflare", "route53"]
+    },
+    "gcp": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    },
+    "vps": {
+      "ids": ["cloudflare"],
+      "shorthand": ["cloudflare"]
+    }
   }
 }

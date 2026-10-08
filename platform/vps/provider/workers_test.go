@@ -175,7 +175,7 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 	}
 	current, _ := recordedWorker(t, store, "worker")
 
-	if err := p.RemoveContainers(context.Background(), first.Ref, nil, nil); err != nil {
+	if err := p.RemoveContainers(context.Background(), first.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if after, found := recordedWorker(t, store, "worker"); !found || after != current {
@@ -183,7 +183,7 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 	}
 
 	before := len(machine.commands())
-	if err := p.RemoveContainers(context.Background(), second.Ref, nil, nil); err != nil {
+	if err := p.RemoveContainers(context.Background(), second.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if !slices.ContainsFunc(machine.commands()[before:], func(command string) bool {

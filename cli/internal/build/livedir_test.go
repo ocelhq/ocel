@@ -33,7 +33,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		var liveDir string
 		files := map[string]string{}
 		modes := map[string]os.FileMode{}
-		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, sent []byte, _ Log) error {
+		builder := nodeOnly{node: func(_ context.Context, _ string, sent []byte, _ Log) error {
 			request = sent
 			var got nodeBuildRequest
 			if err := json.Unmarshal(sent, &got); err != nil {
@@ -103,7 +103,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		var liveDir string
-		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, sent []byte, _ Log) error {
+		builder := nodeOnly{node: func(_ context.Context, _ string, sent []byte, _ Log) error {
 			var got nodeBuildRequest
 			if err := json.Unmarshal(sent, &got); err != nil {
 				return err
@@ -131,7 +131,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		var got nodeBuildRequest
-		builder := nodeOnly{host: servingNext, node: requestOf(&got)}
+		builder := nodeOnly{node: requestOf(&got)}
 		if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{"POSTHOG_ID": "ph-web"}}}, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -148,7 +148,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		ran := false
-		builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 			ran = true
 			return nil
 		}}
@@ -169,7 +169,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		var got nodeBuildRequest
-		builder := nodeOnly{host: servingNext, node: requestOf(&got)}
+		builder := nodeOnly{node: requestOf(&got)}
 		if err := builder.Build(context.Background(), cfg, values, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -188,7 +188,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 
 		var shared, app bytes.Buffer
 		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
-		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, _ []byte, log Log) error {
+		builder := nodeOnly{node: func(_ context.Context, _ string, _ []byte, log Log) error {
 			appLog, ended := log.App("web")
 			_, _ = io.WriteString(log.Shared, "booting with sk_live_sensitive\n")
 			_, _ = io.WriteString(appLog, "signing with ss_live_secret\n")
@@ -221,7 +221,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 
 		var shared, app bytes.Buffer
 		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
-		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, _ []byte, log Log) error {
+		builder := nodeOnly{node: func(_ context.Context, _ string, _ []byte, log Log) error {
 			appLog, ended := log.App("web")
 			_, _ = io.WriteString(log.Shared, "booting with sk_live_sen")
 			_, _ = io.WriteString(log.Shared, "sitive, ready")
@@ -249,7 +249,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		writeBuildScript(t, root)
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web"), nextContainerApp("api", "apps/api")}}
 
-		builder := nodeOnly{host: servingNext, node: requestOf(&nodeBuildRequest{})}
+		builder := nodeOnly{node: requestOf(&nodeBuildRequest{})}
 		err := builder.Build(context.Background(), cfg, map[string]AppVariables{"api": {Live: map[string]string{"a/b": "x"}}}, Log{})
 		if err != nil {
 			t.Errorf("Build err = %v, want the key of an app whose build reads no live dir left alone", err)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,8 +19,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -119,8 +123,8 @@ func TestAPreBuildIsHandedTheBindingsOfEveryResourceTheProjectProvisionsWhetherO
 	}
 
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, p.fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
-	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
-		t.Errorf("the CLI asked to forward %v, want db--main though no app of this project builds with bindings", sent)
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{portforward.WholeProject: {"db--main"}}, slices.Equal) {
+		t.Errorf("the CLI asked to forward %v, want db--main granted to the project though no app of this project builds with bindings", sent)
 	}
 }
 
@@ -435,8 +439,8 @@ func TestADeployWarnsOnceThatNpmRunsAPrebuildScriptPerAppWhenAPreBuildIsSet(t *t
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{"scripts":{"prebuild":"drizzle-kit migrate"}}`)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "worker", "package.json"), `{"scripts":{"prebuild":"drizzle-kit migrate"}}`)
 	writeConfig(t, root, `  apps: [
-    { name: "api", path: "apps/api", framework: "node" },
-    { name: "worker", path: "apps/worker", framework: "node" },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "worker", path: "apps/worker", compute: { serverless: { framework: "node" } } },
   ],
   lifecycle: { preBuild: "true" },
 `)
@@ -488,7 +492,7 @@ func TestAFailedPreBuildLeavesNoLiveDirectoryBehind(t *testing.T) {
 
 func writeConfigWithLifecycle(t *testing.T, root, preBuild string) {
 	t.Helper()
-	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
   lifecycle: { preBuild: `+preBuild+` },
 `)
 }
@@ -524,5 +528,46 @@ func TestAPreBuildNamingAnAppAlsoReceivesThatAppsVariables(t *testing.T) {
 	}
 	if got := readOrEmpty(t, seen); got != "baked_value\nsk_live_value" {
 		t.Errorf("the preBuild saw %q, want the app's plain value in its environment and its secret in the live dir", got)
+	}
+}
+
+func TestAPreBuildNamingAnAppThatDeclaresANameTheBindingProxyIsDeliveredUnderIsRefusedBeforeItRuns(t *testing.T) {
+	fixture := setUpVariablesProject(t, fmt.Sprintf(`[{"key":%q,"class":"VARIABLE_CLASS_PLAIN","required":true}]`, localrpc.SessionTokenEnvVar))
+	envSet(t, fixture, localrpc.SessionTokenEnvVar, "mine", envOptions{})
+	writeRootApp(t, fixture.Root)
+	ran := filepath.Join(t.TempDir(), "ran")
+	writeConfig(t, fixture.Root, fmt.Sprintf(`  lifecycle: { preBuild: { app: %q, command: "touch %s" } },
+`, clitest.FixtureSlug, ran))
+
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+
+	if err == nil || !strings.Contains(err.Error(), localrpc.SessionTokenEnvVar) {
+		t.Errorf("runDeploy err = %v, want the preBuild refused by the name it would lose to the binding proxy; out=%s", err, out)
+	}
+	if _, statErr := os.Stat(ran); statErr == nil {
+		t.Error("the preBuild ran though its app declares a name the binding proxy is delivered under")
+	}
+}
+
+func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing.T) {
+	p := setUpPreBuildProject(t, `"true"`)
+	servingBindingProxy(t, p.fixture)
+	writeNextDatabaseAndBucketProject(t, p.fixture.Root)
+	seen := filepath.Join(t.TempDir(), "runtime")
+	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf("%q", fmt.Sprintf(`echo "$%s $%s" > %s; echo "token is $%s"`, processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar, seen, localrpc.SessionTokenEnvVar)))
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	if got := strings.TrimSpace(readOrEmpty(t, seen)); got != "http://127.0.0.1:41999 proxy-token-project" {
+		t.Errorf("the preBuild saw the runtime env %q, want the binding proxy the provider served", got)
+	}
+	if strings.Contains(out, "proxy-token") {
+		t.Errorf("the deploy showed %q, want the session token hidden", out)
 	}
 }

@@ -484,11 +484,11 @@ func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Log) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
 	return nil
 }
 
-func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
+func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsItsBindings(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
 	client := servedBy(t, refusingStacks{Provider: base, stacks: halfBindingStacks{}})
@@ -508,8 +508,14 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := stackrecords.List(context.Background(), base.KeyValues(), environment.TierProduction, "shop"); rerr != nil || len(entries) != 0 {
-		t.Errorf("the refused deploy recorded %v, want nothing written for a binding providerserver would not accept", entries)
+	entries, err := stackrecords.List(context.Background(), base.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if len(entry.Bindings) != 0 || entry.ResourceDigest != "" {
+			t.Errorf("the refused deploy recorded %s with bindings %v and digest %q, want neither written for a binding providerserver would not accept", entry.Name, entry.Bindings, entry.ResourceDigest)
+		}
 	}
 }
 
@@ -609,8 +615,8 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	return r.inner.Destroy(ctx, ref, progress)
+func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+	return r.inner.Destroy(ctx, ref, images, progress)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
@@ -679,13 +685,14 @@ func declaresNeed(t *testing.T, app string, need edge.Need) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(edge.ServeDescriptor{
-		Needs: map[edge.Need]edge.NeedDetail{need: {Routes: []string{"/feed"}}},
+	raw, err := json.Marshal(buildoutput.Hosting{
+		Version: buildoutput.HostingVersion,
+		Needs:   map[edge.Need]buildoutput.NeedDetail{need: {Routes: []string{"/feed"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

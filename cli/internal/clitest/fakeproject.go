@@ -31,11 +31,11 @@ func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features .
 	}
 }
 
-func SetUpMonorepoProject(t *testing.T, declaration string) FakeProject {
+func SetUpMonorepoProject(t *testing.T, providerOptions string) FakeProject {
 	t.Helper()
 
 	project := SetUpProject(t)
 	WriteUsageMonorepo(t, project.Root)
-	writeEdgeConfig(t, project.Root, declaration)
+	writeEdgeConfig(t, project.Root, providerOptions)
 	return project
 }

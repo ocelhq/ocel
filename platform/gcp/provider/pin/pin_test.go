@@ -643,7 +643,7 @@ func TestAPromotionThatClosedAServiceAndIsRepinnedWhilePuttingItBackRecordsARoll
 func TestAFunctionAppAnswersOnItsEntryFunctionsService(t *testing.T) {
 	t.Parallel()
 
-	if got := pin.ResolveService(router.ReleaseRecord{EntryFunction: "fn-svc"}); got != "fn-svc" {
+	if got := pin.ResolveService(router.ReleaseRecord{RootFunctionPhysical: "fn-svc"}); got != "fn-svc" {
 		t.Errorf("ResolveService = %q, want fn-svc", got)
 	}
 }
@@ -651,7 +651,7 @@ func TestAFunctionAppAnswersOnItsEntryFunctionsService(t *testing.T) {
 func TestAContainerAppAnswersOnItsContainersService(t *testing.T) {
 	t.Parallel()
 
-	if got := pin.ResolveService(router.ReleaseRecord{Physical: "ctr", EntryFunction: "fn"}); got != "ctr" {
+	if got := pin.ResolveService(router.ReleaseRecord{Physical: "ctr", RootFunctionPhysical: "fn"}); got != "ctr" {
 		t.Errorf("ResolveService = %q, want ctr", got)
 	}
 }
@@ -660,7 +660,7 @@ func TestTheTagsOfAFunctionAppsDeploymentAreReadWithoutRefusal(t *testing.T) {
 	t.Parallel()
 
 	tags, err := pin.ReadTags(context.Background(), &services{}, router.ReleaseRecord{
-		App: "web", Release: "b1", EntryFunction: "fn-svc", Revisions: map[string]string{"fn-svc": "fn-svc-b1"},
+		App: "web", Release: "b1", RootFunctionPhysical: "fn-svc", Revisions: map[string]string{"fn-svc": "fn-svc-b1"},
 	})
 	if err != nil {
 		t.Fatalf("ReadTags = %v", err)

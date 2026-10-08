@@ -132,7 +132,10 @@ func managedRuntime(name string) string {
 	switch name {
 	case buildoutput.FrameworkPython:
 		return pythonFunctionRuntime
-	case "", buildoutput.FrameworkNode, buildoutput.FrameworkNext:
+	case "":
+		return defaultFunctionRuntime
+	}
+	if buildoutput.RunsOnNode(name) {
 		return defaultFunctionRuntime
 	}
 	return providedFunctionRuntime

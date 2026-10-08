@@ -815,7 +815,7 @@ func TestAHostnameBoundToAPromotedFunctionAppIsRoutedToItsEntryFunctionsService(
 		t.Errorf("shop.example.com is routed to %q, want %q", got, want)
 	}
 	if got := hostOf(stack, "shop.example.com").Service; got != "ocel-shop-prod-web" {
-		t.Errorf("the bind recorded service %q, want the entry function's ocel-shop-prod-web", got)
+		t.Errorf("the bind recorded service %q, want the root function's ocel-shop-prod-web", got)
 	}
 }
 

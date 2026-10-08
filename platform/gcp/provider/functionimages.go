@@ -1,14 +1,8 @@
 package gcp
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
-	"fmt"
-	"io"
-	"io/fs"
 	"maps"
-	"path"
 	"slices"
 	"strings"
 
@@ -17,7 +11,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -33,28 +26,21 @@ const (
 
 const nodeBinDir = "/nodejs/bin"
 
-const nextRuntimeDir = "/ocel/next"
-
 const pathVariable = "PATH"
 
 type base struct {
-	ref     string
-	bins    []string
-	runtime *runtimeFiles
-}
-
-type runtimeFiles struct {
-	dir   string
-	files fs.FS
+	ref  string
+	bins []string
 }
 
 func functionBases() map[string]base {
 	return map[string]base{
-		buildoutput.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkNext:   {ref: nodeImage, bins: []string{nodeBinDir}, runtime: &runtimeFiles{dir: nextRuntimeDir, files: payloads.NextRuntime()}},
-		buildoutput.FrameworkGo:     {ref: staticImage},
-		buildoutput.FrameworkPython: {ref: pythonImage},
-		buildoutput.FrameworkRust:   {ref: staticImage},
+		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkGo:        {ref: staticImage},
+		buildoutput.FrameworkPython:    {ref: pythonImage},
+		buildoutput.FrameworkRust:      {ref: staticImage},
 	}
 }
 
@@ -85,49 +71,7 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework buildoutpu
 	if err != nil {
 		return nil, err
 	}
-	if on.runtime != nil {
-		if image, err = appendRuntimeLayer(image, *on.runtime); err != nil {
-			return nil, err
-		}
-	}
 	return commandable(image, on.bins)
-}
-
-func appendRuntimeLayer(image v1.Image, runtime runtimeFiles) (v1.Image, error) {
-	var packed bytes.Buffer
-	archive := tar.NewWriter(&packed)
-	err := fs.WalkDir(runtime.files, ".", func(name string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return err
-		}
-		body, err := fs.ReadFile(runtime.files, name)
-		if err != nil {
-			return err
-		}
-		if err := archive.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     strings.TrimPrefix(path.Join(runtime.dir, name), "/"),
-			Mode:     0o644,
-			Size:     int64(len(body)),
-		}); err != nil {
-			return err
-		}
-		_, err = archive.Write(body)
-		return err
-	})
-	if err != nil {
-		return nil, fmt.Errorf("pack the runtime files for %s: %w", runtime.dir, err)
-	}
-	if err := archive.Close(); err != nil {
-		return nil, err
-	}
-	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(packed.Bytes())), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return mutate.Append(image, mutate.Addendum{Layer: layer})
 }
 
 func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {
@@ -172,9 +116,13 @@ func runsX8664(architecture, what string) error {
 		what, arch.Architecture(architecture), arch.X8664, arch.X8664, arch.Architecture(architecture))
 }
 
-func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.Framework) ([]byte, error) {
-	if !images.BootsThroughNodeRuntime(framework) {
+func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
+	switch framework.Name {
+	case buildoutput.FrameworkNode, buildoutput.FrameworkSvelteKit:
+		return map[string][]byte{images.RuntimeEntrypointFile: payloads.NodeRuntime()}, nil
+	case buildoutput.FrameworkNext:
+		return maps.Clone(payloads.NextRuntime()), nil
+	default:
 		return nil, nil
 	}
-	return payloads.NodeRuntime(), nil
 }

@@ -1001,22 +1001,35 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 	if isEphemeralPreview(r.spec) {
 		return nil
 	}
-	resources, err := manifestResources(r.manifest)
+	declaredResources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
 	}
+	undeclaredNames := map[string]bool{}
 	for _, held := range undeclared {
-		resource, err := manifestResource(held)
+		undeclaredNames[resourceName(held)] = true
+	}
+	var held []*contractv1.ManifestResource
+	var resources []provider.Resource
+	for i, resource := range r.manifest.GetResources() {
+		if !undeclaredNames[resourceName(resource)] {
+			held = append(held, resource)
+			resources = append(resources, declaredResources[i])
+		}
+	}
+	for _, message := range undeclared {
+		resource, err := manifestResource(message)
 		if err != nil {
 			return err
 		}
+		held = append(held, message)
 		resources = append(resources, resource)
 	}
 	declared, err := encodeResources(r.manifest.GetResources())
 	if err != nil {
 		return err
 	}
-	holds, err := encodeResources(append(slices.Clone(r.manifest.GetResources()), undeclared...))
+	holds, err := encodeResources(held)
 	if err != nil {
 		return err
 	}
@@ -1042,7 +1055,7 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 				r.dryRunPlan.parameters, err = r.planValuesGroup(ctx)
 				return err
 			}
-			if err := r.forgetInfraDigest(ctx, holds); err != nil {
+			if err := r.recordInfraStack(ctx, holds); err != nil {
 				return err
 			}
 			result, err := r.provider.Stacks().Provision(ctx, stack, progress)
@@ -1119,7 +1132,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				App: &provider.AppSpec{
 					App:                       entry.App,
 					Framework:                 entry.Manifest.GetFramework().GetName(),
-					Entry:                     entryLogicalName(entry.Manifest, facts.Entry),
+					RootFunction:              rootFunctionLogicalName(entry.Manifest, facts.RootFunction),
 					BuildID:                   entry.Release.BuildID(),
 					Compute:                   entry.Compute(),
 					Router:                    r.appRouters[entry.App],
@@ -1136,6 +1149,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
+					Static:                    facts.Static,
 					Guard:                     facts.Guard,
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
@@ -1151,14 +1165,23 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				return nil
 			}
 			r.recordProvisioning(entry.App)
-			if err := r.recordAppStack(ctx, entry, provider.StackResult{}); err != nil {
+			if err := r.recordAppStack(ctx, entry, images, provider.StackResult{}); err != nil {
 				return err
 			}
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
 			if err != nil {
+				resent, pushErr := pushRemovedImages(ctx, images, progress)
+				if pushErr != nil || !resent {
+					return errors.Join(err, pushErr)
+				}
+				if result, err = r.provider.Stacks().Provision(ctx, spec, progress); err != nil {
+					return err
+				}
+			}
+			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
 				return err
 			}
-			if err := r.recordAppStack(ctx, entry, result); err != nil {
+			if _, err := pushRemovedImages(ctx, images, progress); err != nil {
 				return err
 			}
 			address, deployment := findOwnAddresses(entry, facts, result)
@@ -1175,7 +1198,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 	})
 }
 
-func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, result provider.StackResult) error {
+func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, images provider.ImagePushes, result provider.StackResult) error {
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
 		Kind:         provider.StackApp,
 		App:          entry.App,
@@ -1183,6 +1206,7 @@ func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry,
 		Release:      entry.Release.String(),
 		Functions:    result.Functions,
 		Containers:   result.Containers,
+		Image:        images.ImageRef(entry.App),
 		WrittenBy:    provider.WrittenByVersion(""),
 	})
 }
@@ -1403,7 +1427,7 @@ func findOwnContainer(containers []provider.AppContainer, app string) (provider.
 }
 
 func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []provider.Function) provider.Function {
-	named := entryLogicalName(entry.Manifest, facts.Entry)
+	named := rootFunctionLogicalName(entry.Manifest, facts.RootFunction)
 	if declared := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(declared) == 1 {
 		named = declared[0].GetLogicalName()
 	}
@@ -1415,12 +1439,12 @@ func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []prov
 	return provider.Function{}
 }
 
-func entryLogicalName(app *contractv1.ManifestApp, entry string) string {
-	if entry == "" {
+func rootFunctionLogicalName(app *contractv1.ManifestApp, rootFunction string) string {
+	if rootFunction == "" {
 		return ""
 	}
 	for _, fn := range app.GetServerless().GetFunctions() {
-		if resolveRouteID(fn) == entry {
+		if resolveRouteID(fn) == rootFunction {
 			return fn.GetLogicalName()
 		}
 	}
@@ -1495,22 +1519,23 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
-	var routing any
+	var routeTable *router.RouteTable
 	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
-		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
+		routeTable = &facts.EdgeDispatch.RouteTable
 		if origin == "" {
-			origin = urlByLogical[entryLogicalName(entry.Manifest, facts.Entry)]
+			origin = urlByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)]
 		}
 	}
 	record := router.ReleaseRecord{
-		RoutingManifest:      routing,
+		RouteTable:           routeTable,
+		Static:               facts.Static,
 		App:                  entry.App,
 		Framework:            entry.Manifest.GetFramework().GetName(),
 		Release:              r.spec.Releases[entry.App],
 		BuildID:              entry.Release.BuildID(),
-		Entry:                facts.Entry,
-		EntryFunction:        physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
+		RootFunction:         facts.RootFunction,
+		RootFunctionPhysical: physicalByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)],
 		Image:                images.ImageRef(entry.App),
 		Physical:             physicalOf(result.Containers, entry.App),
 		Revisions:            revisionsOf(result, entry.App, logical),
@@ -1619,7 +1644,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, previous: previous, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
-				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))
+				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress))
 			}
 			if err := r.serveDeployment(ctx, r.spec.Pointer, promotion, r.readAppRouter, progress); err != nil {
 				progress.Warn(fmt.Sprintf("Promotion %s serves on %s, but not on its own deployment hostname: %v",
@@ -1629,7 +1654,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.checkpoint(ctx); err != nil {
 				return err
 			}
-			if err := r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress); err != nil {
+			if err := r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress); err != nil {
 				progress.Warn(unreclaimedWarning(promotion.PromotionID, err))
 			}
 			r.pruneInlineBindings(ctx, progress)

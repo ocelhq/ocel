@@ -12,8 +12,6 @@ import (
 
 const Vendor provider.Vendor = "fake"
 
-const nextRuntimeDir = "/opt/fake/next"
-
 type Provider struct {
 	mu                    sync.Mutex
 	pins                  map[string]string
@@ -115,8 +113,6 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings:        p.edges.pairings(),
 		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
-
-		NextRuntimeDir: nextRuntimeDir,
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

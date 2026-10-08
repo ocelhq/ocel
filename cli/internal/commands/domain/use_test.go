@@ -33,9 +33,8 @@ func writeZonedPreviewConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { fake: {} },
+  provider: { fake: { dns: "zone" } },
   domains: { preview: "*.preview.acme.com" },
-  dns: "zone",
 };
 `)
 }

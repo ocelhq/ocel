@@ -29,7 +29,7 @@ jobs:
           build-scope: binaries
 
       - name: The node bundles the CLI embeds and the fixtures and external stacks import
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms --filter=@ocel/sst --filter=@ocel/pulumi
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms --filter=@ocel/sst --filter=@ocel/pulumi --filter=@ocel/sveltekit
 
       - uses: ./.github/actions/goreleaser
 
@@ -53,3 +53,4 @@ jobs:
             packages/ocel-transforms/dist/**
             packages/ocel-sst/dist/**
             packages/ocel-pulumi/dist/**
+            packages/sveltekit/dist/**

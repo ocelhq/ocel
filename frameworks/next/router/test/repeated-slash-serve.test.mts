@@ -22,7 +22,7 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
 function deps(basePath = ""): RouteDeps {
   return {
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "t",
       basePath,
       trailingSlash: false,

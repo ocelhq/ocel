@@ -8,10 +8,26 @@ ocel init --provider aws
 ```
 
 Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
+`ocel permissions deploy` prints the policy they need. Untagged, the user or role may delete
+container images in every Ocel ECR repository of the account. Tag it with `ocel:project` set to
+the project's slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, every run of
+other characters a single `-`), and it may create, tag and delete images only in that project's
+repositories.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ region: "eu-west-1" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
   "provider": { "aws": { "region": "eu-west-1" } },
   "apps": [{ "name": "web", "path": "." }]
@@ -141,18 +157,29 @@ CloudWatch rate limits a read shares.
 
 ## Edge
 
-Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —
-`cloudfront` and `api-gateway` are its own, [`cloudflare`](/docs/providers/cloudflare) is
-bought independently. On `api-gateway` a preview is served on its alias alone, with no
+Leave `edge` out of the provider's options and the deployment is fronted by CloudFront. Name
+an edge there to choose it — `cloudfront` and `api-gateway` are its own,
+[`cloudflare`](/docs/providers/cloudflare) is bought independently. On `api-gateway` a preview is served on its alias alone, with no
 hostname per deployment: each hostname would take a REST API of its own, and a region holds
 at most 600.
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+import { cloudfront } from "ocel/providers/aws/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ edge: cloudfront() }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": "aws",
-  "edge": "cloudfront",
+  "provider": { "aws": { "edge": "cloudfront" } },
   "apps": [{ "name": "web", "path": "." }]
 }
 ```

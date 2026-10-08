@@ -87,7 +87,7 @@ func rulesOn(t *testing.T, w *world, domain string) map[string]*fakeRule {
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
-	record := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: previewEntry}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: previewEntry}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestPromoteRoutesThePreviewHostAtItsOwnAPI(t *testing.T) {
 		t.Errorf("rule priority = %d, want it below the catch-all's %d so the preview beats the 404", rule.priority, catchAllPriority)
 	}
 	if api.variables[entryVariable] != previewEntry {
-		t.Errorf("stage variable %s = %q, want the preview's entry function", entryVariable, api.variables[entryVariable])
+		t.Errorf("stage variable %s = %q, want the preview's root function", entryVariable, api.variables[entryVariable])
 	}
 
 	entry := methodOn(api, "/{proxy+}", anyMethod)

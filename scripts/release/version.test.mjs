@@ -4,7 +4,6 @@ import {
   parse,
   pep440,
   withPathPins,
-  withSchemaURLs,
   withSdkVersion,
   withSection,
   withVersionLine,
@@ -108,22 +107,6 @@ describe("withPathPins", () => {
         'other = { version = "0.0.2", path = "../other" }',
       ].join("\n"),
     );
-  });
-});
-
-describe("withSchemaURLs", () => {
-  it("points every schema reference at the version", () => {
-    const host = "https://ocel.dev/schema/";
-    const text = `{"$schema": "${host}0.0.1-alpha.0/ocel.schema.json"}\n${host}0.0.3/ocel.schema.json`;
-    assert.equal(
-      withSchemaURLs(text, "0.0.4"),
-      `{"$schema": "${host}0.0.4/ocel.schema.json"}\n${host}0.0.4/ocel.schema.json`,
-    );
-  });
-
-  it("leaves a url the code builds from a version alone", () => {
-    const text = `const url = \`https://ocel.dev/schema/\${version}/ocel.schema.json\`;`;
-    assert.equal(withSchemaURLs(text, "0.0.4"), text);
   });
 });
 

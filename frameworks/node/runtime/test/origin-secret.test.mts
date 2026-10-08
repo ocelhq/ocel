@@ -44,9 +44,7 @@ const doors: Record<string, (invoke: Invoke) => Promise<void>> = {
   serveEntry: (invoke) => host.serveEntry(invoke),
   serveInvoke: (invoke) => host.serveInvoke(invoke),
   serveServer: (invoke) =>
-    host.serveServer(
-      http.createServer((req, res) => invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} })),
-    ),
+    host.serveServer(http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }))),
 };
 
 async function start(door: string, invoke: Invoke): Promise<number> {

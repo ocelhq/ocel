@@ -573,6 +573,27 @@ func TestLiveTailClosesItsSessionsAndReturnsNothingWhenItsContextEnds(t *testing
 	}
 }
 
+func TestLiveTailClosesASessionThatStartedAsItsContextEnded(t *testing.T) {
+	t.Parallel()
+	session := newFakeSession()
+	ctx, cancel := context.WithCancel(context.Background())
+	client := liveTailClient{startSession: func(context.Context, *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		cancel()
+		return session, nil
+	}}
+	noSleep := func(context.Context, time.Duration) error { return nil }
+
+	err := liveTail(ctx, lambdaGroups(1), Query{Since: epoch}, client,
+		func([]Event) error { return nil }, func(Notice) error { return nil }, noSleep, func() float64 { return 0 })
+
+	if err != nil {
+		t.Errorf("LiveTail() error = %v, want none: a cancelled tail is the normal way to stop", err)
+	}
+	if !session.isClosed() {
+		t.Error("LiveTail() left open a session that started as its context ended")
+	}
+}
+
 func TestLiveTailReturnsAStreamErrorThatIsNotATimeout(t *testing.T) {
 	t.Parallel()
 	session := newFakeSession()

@@ -107,13 +107,13 @@ func asked(t *testing.T, uri string) (int, string) {
 
 func staged(t *testing.T, dir string, framework buildoutput.Framework, entryFile string, command []string, files map[string]string) string {
 	t.Helper()
-	config, err := json.Marshal(buildoutput.FunctionDescriptor{
+	config, err := json.Marshal(buildoutput.FunctionConfig{
 		Framework: framework, EntryFile: entryFile, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	files[buildoutput.FunctionDescriptorFile] = string(config)
+	files[buildoutput.FunctionConfigFile] = string(config)
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -182,7 +182,7 @@ func pushedToDaemon(t *testing.T, repository string, image v1.Image) string {
 	if err := images.DaemonStore().Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("write %s into the docker daemon the emulator runs out of: %v", target, err)
 	}
-	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
+	return target
 }
 
 func functionImage(t *testing.T, p *gcp.Provider, repository string, framework buildoutput.Framework, dir string) string {
@@ -192,18 +192,11 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework b
 	if err != nil {
 		t.Fatalf("read the base a %s function is built on: %v", framework.Name, err)
 	}
-	payload, err := p.ReadFunctionRuntime(ctx, framework)
+	runtime, err := p.ReadFunctionRuntime(ctx, framework)
 	if err != nil {
 		t.Fatal(err)
 	}
-	overlay := map[string][]byte{}
-	if len(payload) > 0 {
-		overlay[images.NodeRuntimePath] = payload
-	}
-	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
-		Overlay:        overlay,
-		NextRuntimeDir: p.Facts().NextRuntimeDir,
-	})
+	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{Runtime: runtime})
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}
@@ -301,7 +294,7 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	image := functionImage(t, p, "ocel-live/fn", nodeRuntime,
 		stagedNode(t, "export default { fetch: () => new Response(process.env.MARK) };"))
 	spec := serverlessSpec("fn", image, map[string]string{"MARK": "runtime-one"})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil, nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {
@@ -340,7 +333,7 @@ func TestLiveAContainerAppIsDeployedAndReleasedAgainOntoANewRevision(t *testing.
 	t.Cleanup(func() {
 		_ = p.RemoveContainers(ctx, spec.Ref, []provider.AppContainer{
 			{Name: "app", Physical: runningAs(t, p, spec)[0].Physical},
-		}, nil)
+		}, nil, nil)
 	})
 
 	containers, err := p.ProvisionContainers(ctx, spec, nil)
@@ -386,13 +379,13 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 		t.Fatalf("GET %s = %d %q, want it up before it is taken down", at, status, said)
 	}
 
-	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if status, said := gone(t, at); status == http.StatusOK {
 		t.Errorf("GET %s = %d %q after the service was taken down, want nothing answering there", at, status, said)
 	}
-	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil, nil); err != nil {
 		t.Errorf("RemoveContainers() a second time = %v, want a teardown that is safe to re-run", err)
 	}
 }
@@ -403,7 +396,7 @@ func servesItsOwn(t *testing.T, app string, framework buildoutput.Framework, sta
 	p := runnable(t)
 	image := functionImage(t, p, "ocel-live/"+app, framework, stage(t))
 	spec := serverlessSpecOn(app, image, framework, map[string]string{"MARK": mark})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil, nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {

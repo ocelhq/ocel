@@ -906,21 +906,7 @@ function seedFetch(store: ReturnType<typeof fakeStore>, ageMs: number, tags: str
   });
 }
 
-test("a stale fetch entry is a miss where CPU stops at the response's end", async () => {
-  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
-  const store = fakeStore();
-  seedFetch(store, 120_000);
-
-  const entry = await new OcelCacheHandler().get("abc", {
-    kind: "FETCH",
-    tags: [],
-    revalidate: 60,
-  });
-
-  expect(entry).toBeNull();
-});
-
-test("a stale fetch entry is served where CPU runs past the response's end", async () => {
+test("a stale fetch entry is served while it refreshes", async () => {
   const store = fakeStore();
   seedFetch(store, 120_000);
 
@@ -931,48 +917,4 @@ test("a stale fetch entry is served where CPU runs past the response's end", asy
   });
 
   expect(entry?.value.data.body).toBe("cached");
-});
-
-test("a fetch entry within its window is served where CPU stops at the response's end", async () => {
-  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
-  const store = fakeStore();
-  seedFetch(store, 10_000);
-
-  const entry = await new OcelCacheHandler().get("abc", {
-    kind: "FETCH",
-    tags: [],
-    revalidate: 60,
-  });
-
-  expect(entry?.value.data.body).toBe("cached");
-});
-
-test("a fetch entry that never goes stale by time is served where CPU stops at the response's end", async () => {
-  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
-  const store = fakeStore();
-  seedFetch(store, 120_000);
-  delete store.fetches.get("abc")!.value.revalidate;
-
-  const entry = await new OcelCacheHandler().get("abc", {
-    kind: "FETCH",
-    tags: [],
-    revalidate: false,
-  });
-
-  expect(entry?.value.data.body).toBe("cached");
-});
-
-test("a fetch entry stale by tag is a miss where CPU stops at the response's end", async () => {
-  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
-  const store = fakeStore();
-  fakeSnapshot({ api: { stale: Date.now() } });
-  seedFetch(store, 10_000, ["api"]);
-
-  const entry = await new OcelCacheHandler().get("abc", {
-    kind: "FETCH",
-    tags: ["api"],
-    revalidate: 60,
-  });
-
-  expect(entry).toBeNull();
 });

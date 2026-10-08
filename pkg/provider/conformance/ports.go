@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,11 +13,15 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/realtime"
@@ -845,6 +850,7 @@ func (c *countedImages) Destination() string { return "the counted store" }
 func (c *countedImages) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
 func (c *countedImages) ProbePush(context.Context, string) error { return nil }
+func (c *countedImages) Remove(context.Context, string) error    { return nil }
 
 func (c *countedImages) Push(_ context.Context, _ provider.ImagePush, _ progress.Log) error {
 	c.mu.Lock()
@@ -888,7 +894,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 	t.Run("Destroy of a stack that was never provisioned is a no-op", func(t *testing.T) {
 		absent := ref
 		absent.Name = naming.InfraStack("never-provisioned")
-		if err := stacks.Destroy(ctx, absent, nil); err != nil {
+		if err := stacks.Destroy(ctx, absent, nil, nil); err != nil {
 			t.Fatalf("Destroy() of an absent stack = %v, want nil so a rerun of a teardown is safe", err)
 		}
 	})
@@ -1040,6 +1046,15 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			if err := provider.VerifyProperties(binding); err != nil {
 				t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 			}
+			if binding.Type == provider.BindingCustom {
+				continue
+			}
+			declared := append(stackrecords.ListRecordedProperties(binding.Type), listRedactedProperties(binding.Type)...)
+			for name := range binding.Properties {
+				if !slices.Contains(declared, name) {
+					t.Errorf("Provision() returned binding %s with %q, which bindings.proto does not declare and the stack record does not keep, so no app and no later deploy ever reads it", binding.Name, name)
+				}
+			}
 		}
 
 		if store != nil {
@@ -1052,6 +1067,13 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()
+			raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
+			if err != nil {
+				t.Fatalf("reading the stack record back = %v", err)
+			}
+			for _, fault := range findRecordedSecrets(raw.Value) {
+				t.Error(fault)
+			}
 		}
 
 		removal, err := stacks.PlanDestroy(ctx, ref, nil)
@@ -1069,7 +1091,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			}
 		}
 
-		if err := stacks.Destroy(ctx, ref, nil); err != nil {
+		if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
 			t.Fatalf("Destroy() of the stack just provisioned = %v", err)
 		}
 	})
@@ -1085,7 +1107,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			if len(result.Bindings) == 0 {
 				t.Fatal("Provision() of a primitive this provider does not serve provisioned nothing and refused nothing, so a release reads as done where nothing happened")
 			}
-			if derr := stacks.Destroy(ctx, ref, nil); derr != nil {
+			if derr := stacks.Destroy(ctx, ref, nil, nil); derr != nil {
 				t.Fatal(derr)
 			}
 			t.Skip("this provider provisions a resource of any type, so there is no unserved primitive to refuse")
@@ -1104,4 +1126,35 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)
 		}
 	})
+}
+
+func listRedactedProperties(t provider.BindingType) []string {
+	field := (&bindingsv1.Binding{}).ProtoReflect().Descriptor().Oneofs().ByName("properties").Fields().ByName(protoreflect.Name(t))
+	if field == nil || field.Message() == nil {
+		return nil
+	}
+	var names []string
+	properties := field.Message().Fields()
+	for i := range properties.Len() {
+		if options, _ := properties.Get(i).Options().(*descriptorpb.FieldOptions); options.GetDebugRedact() {
+			names = append(names, properties.Get(i).JSONName())
+		}
+	}
+	return names
+}
+
+func findRecordedSecrets(raw []byte) []string {
+	var recorded stackrecords.Stack
+	if err := json.Unmarshal(raw, &recorded); err != nil {
+		return []string{fmt.Sprintf("the stack record does not decode as stackrecords reads it: %v", err)}
+	}
+	var faults []string
+	for _, binding := range recorded.Bindings {
+		for _, name := range listRedactedProperties(binding.Type) {
+			if _, held := binding.Properties[name]; held {
+				faults = append(faults, fmt.Sprintf("the stack record holds binding %s's %q in clear, which bindings.proto marks debug_redact, and the record store is readable without the sealer", binding.Name, name))
+			}
+		}
+	}
+	return faults
 }

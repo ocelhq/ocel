@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -415,5 +417,60 @@ func TestPropagationIsAbsentFromThePromotionList(t *testing.T) {
 
 	if strings.Contains(stdout.String(), "propagates") {
 		t.Errorf("stdout = %q, want the propagation note only on a promotion line", stdout.String())
+	}
+}
+
+func namingARegistry(t *testing.T, project clitest.FakeProject) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
+};
+`)
+}
+
+func isTheProjectsRegistry(registry *contractv1.ImageRegistry) bool {
+	return registry.GetServer() == "registry.example.com" && registry.GetUsername() == "acme-bot" && registry.GetPassword() == "hunter2"
+}
+
+func TestPruningPromotionsSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItReclaimsGoWithThem(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	project := promotedThrice(t)
+	namingARegistry(t, project)
+	invocation := clitest.NewInvocation()
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+
+	if err := runPromotionsPrune(context.Background(), invocation, project.Root, pruneOptions{keep: 1, yes: true}, &stdout, strings.NewReader("")); err != nil {
+		t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
+	}
+
+	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(requests) != 1 || !isTheProjectsRegistry(requests[0].GetProjectRegistry()) {
+		t.Errorf("the prune sent %d requests, want one naming the project's registry with its secret resolved", len(requests))
+	}
+}
+
+func TestPruningPromotionsWhoseRegistryVariableIsUnsetStillPrunesAndSaysWhatItLeaves(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
+	project := promotedThrice(t)
+	namingARegistry(t, project)
+	invocation := clitest.NewInvocation()
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+
+	if err := runPromotionsPrune(context.Background(), invocation, project.Root, pruneOptions{keep: 1, yes: true}, &stdout, strings.NewReader("")); err != nil {
+		t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
+	}
+
+	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, project.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+	if len(requests) != 1 || requests[0].GetProjectRegistry() != nil {
+		t.Errorf("the prune sent %d requests, want one naming no registry: a token that is gone must not keep promotions from being reclaimed", len(requests))
+	}
+	if out := stdout.String(); !strings.Contains(out, "OCEL_TEST_REGISTRY_TOKEN") {
+		t.Errorf("stdout = %q, want it to say the images stay and name the unset variable", out)
 	}
 }

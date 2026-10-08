@@ -27,7 +27,7 @@ func TestLoadReadsJSONWithoutNode(t *testing.T) {
   // the provider this project deploys into
   "slug": "go-only",
   "provider": { "fake": { "size": "large" } },
-  "apps": [{ "name": "web", "path": "./server", "framework": "go" }],
+  "apps": [{ "name": "web", "path": "./server", "compute": { "serverless": { "framework": "go" } } }],
 }`)
 
 	cfg, err := Load(context.Background(), dir, "")
@@ -203,17 +203,17 @@ func TestLoadRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 		},
 		{
 			name: "an edge nobody fronts with",
-			json: `{"slug":"acme","edge":"unknown-edge"}`,
-			yaml: "slug: acme\nedge: unknown-edge\n",
-			ts:   `export default { slug: "acme", edge: "unknown-edge" };`,
-			want: []string{`"edge" names "unknown-edge", and ocel knows no such edge — name one of `, "relay, direct"},
+			json: `{"slug":"acme","provider":{"fake":{"edge":"unknown-edge"}}}`,
+			yaml: "slug: acme\nprovider:\n  fake:\n    edge: unknown-edge\n",
+			ts:   `export default { slug: "acme", provider: { fake: { edge: "unknown-edge" } } };`,
+			want: []string{`"provider.fake.edge" names "unknown-edge", which fake cannot front deployments with — name one of relay, direct`},
 		},
 		{
 			name: "a dns keyed by nothing ocel writes with",
-			json: `{"slug":"acme","dns":{"unknown-dns":{}}}`,
-			yaml: "slug: acme\ndns:\n  unknown-dns: {}\n",
-			ts:   `export default { slug: "acme", dns: { "unknown-dns": {} } };`,
-			want: []string{`"dns" names "unknown-dns", and ocel knows no such DNS service — name one of `, "zone"},
+			json: `{"slug":"acme","provider":{"fake":{"dns":{"unknown-dns":{}}}}}`,
+			yaml: "slug: acme\nprovider:\n  fake:\n    dns:\n      unknown-dns: {}\n",
+			ts:   `export default { slug: "acme", provider: { fake: { dns: { "unknown-dns": {} } } } };`,
+			want: []string{`"provider.fake.dns" names "unknown-dns", which fake cannot write hostname records with — name one of zone`},
 		},
 	}
 	for _, c := range cases {

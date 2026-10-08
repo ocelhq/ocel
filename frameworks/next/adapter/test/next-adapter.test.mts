@@ -22,11 +22,8 @@ import { defaultImages } from "./fixtures.mts";
 
 let originalCwd: string;
 
-const nextRuntimeDir = "/var/host/next";
-
 beforeEach(() => {
   originalCwd = process.cwd();
-  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", nextRuntimeDir);
 });
 
 afterEach(() => {
@@ -345,7 +342,7 @@ async function partitionFuncDirs(projectDir: string) {
 }
 
 async function readManifest(projectDir: string) {
-  return JSON.parse(await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"));
+  return JSON.parse(await readFile(join(projectDir, ".ocel/output/next-route-table.json"), "utf8"));
 }
 
 async function readLauncher(projectDir: string, bundle = "bundle-0") {
@@ -801,14 +798,14 @@ test("copies public/ files into the static output, recursively", async () => {
   expect(await exists(join(staticDir, "icons/logo.png"))).toBe(true);
 });
 
-test("enumerates public/ files as static in the routing manifest", async () => {
+test("enumerates public/ files as static in the route table", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"),
+    await readFile(join(projectDir, ".ocel/output/next-route-table.json"), "utf8"),
   );
 
   expect(manifest.pathnames).toContain("/next.svg");
@@ -850,6 +847,20 @@ async function withStaticPage(
   const filePath = join(projectDir, ".next/server/pages", `${pathname}.html`);
   await addStaticOutput(args, pathname, filePath, contents);
 }
+
+test("states immutable only the prefixes of next's own static files, never a public/ file that happens to sit under _next/static", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/main.js", "console.log(1)");
+  const nested = join(projectDir, "public/private/_next/static/config.json");
+  await mkdir(dirname(nested), { recursive: true });
+  await writeFile(nested, "{}");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
+  expect(hosting.static.immutablePrefixes).toEqual(["/_next/static/"]);
+});
 
 test("writes the compiled image config and its hash into the manifest", async () => {
   const { projectDir, args } = await synthProject();
@@ -1078,7 +1089,7 @@ test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
   expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
 });
 
-test("passes the app's trailing-slash config into the routing manifest", async () => {
+test("passes the app's trailing-slash config into the route table", async () => {
   const { projectDir, args } = await synthProject();
   args.config = {
     ...args.config,
@@ -1212,7 +1223,7 @@ test("projects a prerender's fallback down to its freshness windows and pprChain
   expect(entry.pprChain).toEqual({ headers: { "next-resume": "1" } });
 });
 
-test("emits no build-machine file paths in the routing manifest", async () => {
+test("emits no build-machine file paths in the route table", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1222,7 +1233,7 @@ test("emits no build-machine file paths in the routing manifest", async () => {
   expect(manifest).not.toContain(projectDir);
 });
 
-test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", async () => {
+test("records the ocel app name (from OCEL_APP_NAME) in the route table", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1237,14 +1248,17 @@ test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", a
   expect(manifest.appName).toBe("marketing");
 });
 
-test("writes the bundle name into its config.json", async () => {
+test("writes the bundle name into its function-config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const config = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
+    await readFile(
+      join(projectDir, ".ocel/output/functions/bundle-0.func/function-config.json"),
+      "utf8",
+    ),
   );
 
   expect(config.id).toBe("bundle-0");
@@ -1252,7 +1266,7 @@ test("writes the bundle name into its config.json", async () => {
   expect(config.framework).toEqual({ name: "next" });
 });
 
-test("records the owning app in each function's config.json", async () => {
+test("records the owning app in each function's function-config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1264,7 +1278,10 @@ test("records the owning app in each function's config.json", async () => {
   }
 
   const config = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
+    await readFile(
+      join(projectDir, ".ocel/output/functions/bundle-0.func/function-config.json"),
+      "utf8",
+    ),
   );
 
   expect(config.app).toBe("marketing");
@@ -1276,26 +1293,7 @@ async function readCacheEntry(projectDir: string, key: string) {
   );
 }
 
-test("copies the cache handler into the app tree and names it there", async () => {
-  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
-  const adapter = await loadAdapterIn(projectDir);
-
-  const config = await adapter.modifyConfig!({} as never, {
-    phase: PHASE_PRODUCTION_BUILD,
-    nextVersion: "16.2.10",
-  });
-
-  const dest = join(projectDir, ".ocel/cache-handler.cjs");
-  expect(config.cacheHandler).toBe(dest);
-  expect(await readFile(dest, "utf8")).toBe(
-    await readFile(
-      fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url)),
-      "utf8",
-    ),
-  );
-});
-
-test("names the singular handler only, never the 'use cache' map", async () => {
+test("the build names no cache handler in its config", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1304,8 +1302,57 @@ test("names the singular handler only, never the 'use cache' map", async () => {
     nextVersion: "16.2.10",
   });
 
+  expect(config.cacheHandler).toBeUndefined();
   expect(config.cacheHandlers).toBeUndefined();
   expect(config.cacheMaxMemorySize).toBe(0);
+});
+
+test.each([
+  [{ cacheHandler: "/app/cache-handler.cjs" }, "cacheHandler", "NEXT_CACHE_HANDLER_PATH"],
+  [
+    { cacheHandlers: { default: "/app/use-cache.cjs" } },
+    "cacheHandlers.default",
+    "NEXT_DEFAULT_CACHE_HANDLER_PATH",
+  ],
+  [
+    { cacheHandlers: { remote: "/app/use-cache.cjs" } },
+    "cacheHandlers.remote",
+    "NEXT_REMOTE_CACHE_HANDLER_PATH",
+  ],
+])(
+  "refuses an app that names its own cache handler in %j, naming the setting and its env var",
+  async (config, setting, envVar) => {
+    const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+    const adapter = await loadAdapterIn(projectDir);
+
+    const run = () =>
+      adapter.modifyConfig!(config as never, {
+        phase: PHASE_PRODUCTION_BUILD,
+        nextVersion: "16.2.10",
+      });
+
+    await expect(run()).rejects.toThrow(setting);
+    await expect(run()).rejects.toThrow(envVar);
+  },
+);
+
+test("builds an app whose cache handlers name only kinds Ocel does not install", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!(
+    {
+      cacheHandler: undefined,
+      cacheHandlers: { default: undefined, remote: undefined, static: "/app/static.cjs" },
+    } as never,
+    { phase: PHASE_PRODUCTION_BUILD, nextVersion: "16.2.10" },
+  );
+
+  expect(config.cacheHandlers).toEqual({
+    default: undefined,
+    remote: undefined,
+    static: "/app/static.cjs",
+  });
 });
 
 test("trusts the host header so a deployed res.revalidate can address itself", async () => {
@@ -1320,50 +1367,6 @@ test("trusts the host header so a deployed res.revalidate can address itself", a
   expect(config.experimental).toEqual({ ppr: true, trustHostHeader: true });
 });
 
-async function modifyOnRefreshingHost(config: object, byRequest: boolean) {
-  if (byRequest) vi.stubEnv("OCEL_NEXT_REFRESHES_BY_REQUEST", "1");
-  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
-  const adapter = await loadAdapterIn(projectDir);
-  return {
-    projectDir,
-    run: () =>
-      adapter.modifyConfig!(config as never, {
-        phase: PHASE_PRODUCTION_BUILD,
-        nextVersion: "16.2.10",
-      }),
-  };
-}
-
-test("refuses partial fallbacks on a host that refreshes by request, naming the setting", async () => {
-  const { projectDir, run } = await modifyOnRefreshingHost(
-    { experimental: { partialFallbacks: true } },
-    true,
-  );
-
-  await expect(run()).rejects.toThrow(/experimental\.partialFallbacks/);
-  await expect(run()).rejects.toThrow(/"compute": "container"/);
-  await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
-});
-
-test("refuses partial prefetching on a host that refreshes by request, naming the setting", async () => {
-  for (const partialPrefetching of [true, "unstable_eager"]) {
-    const { run } = await modifyOnRefreshingHost({ partialPrefetching }, true);
-    await expect(run()).rejects.toThrow(/partialPrefetching/);
-  }
-});
-
-test("keeps partial fallbacks on a host that refreshes in the background", async () => {
-  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: true } }, false);
-
-  expect((await run()).cacheHandler).toBeDefined();
-});
-
-test("builds an app without partial fallbacks on a host that refreshes by request", async () => {
-  const { run } = await modifyOnRefreshingHost({ experimental: { partialFallbacks: false } }, true);
-
-  expect((await run()).cacheHandler).toBeDefined();
-});
-
 test("leaves a non-build phase untouched and writes nothing", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
@@ -1375,10 +1378,9 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
 
   expect(config.cacheHandler).toBeUndefined();
   expect(config.cacheMaxMemorySize).toBe(1);
-  await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 
-test("names the cache handler in the directory the host declares, by absolute path, in required-server-files", async () => {
+test("leaves the cache handlers in required-server-files as Next wrote them", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1387,33 +1389,7 @@ test("names the cache handler in the directory the host declares, by absolute pa
   const manifest = JSON.parse(
     await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
   );
-  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
-  expect(manifest.config.cacheMaxMemorySize).toBe(0);
-  expect(manifest.version).toBe(1);
-});
-
-test("registers the 'use cache' handlers from the host's directory alongside the ISR one", async () => {
-  const { projectDir, args } = await synthPrerenderProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await adapter.onBuildComplete(args as never);
-
-  const manifest = JSON.parse(
-    await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
-  );
-  expect(manifest.config.cacheHandlers).toEqual({
-    default: "/var/host/next/use-cache-default.cjs",
-    remote: "/var/host/next/use-cache-remote.cjs",
-  });
-  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
-});
-
-test("refuses a build whose host names no Next runtime directory", async () => {
-  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", "");
-  const { projectDir, args } = await synthPrerenderProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/OCEL_NEXT_RUNTIME_DIR/);
+  expect(manifest.config).toEqual({ cacheMaxMemorySize: 0, cacheHandlers: {} });
 });
 
 test("regroups a route's prerender outputs into one cache entry", async () => {
@@ -1776,55 +1752,76 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
 
   await adapter.onBuildComplete(args as never);
 
-  expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
-  expect(await exists(join(outputRoot, "serve.json"))).toBe(true);
-  expect(await exists(join(outputRoot, "functions/bundle-0.func/config.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "next-route-table.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "hosting.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "functions/bundle-0.func/function-config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
 });
 
-test("states the runtime and next's own build id in serve.json", async () => {
+test("states the runtime and next's own build id in hosting.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   const manifest = await readManifest(projectDir);
-  expect(serve).toEqual({
+  expect(hosting).toEqual({
+    version: 1,
     framework: "next",
     frameworkBuildId: args.buildId,
-    edgeRouting: true,
-    entry: manifest.entry,
+    rootFunction: manifest.rootFunction,
+    routeTable: "next",
+    static: expect.objectContaining({ immutablePrefixes: expect.any(Array) }),
     needs: {},
   });
-  expect(serve.frameworkBuildId).toBe(manifest.buildId);
+  expect(hosting.frameworkBuildId).toBe(manifest.buildId);
 });
 
-test("names the bundle serving the root route as the entry", async () => {
+test("states next's static dir as immutable under whatever base path the build serves it at", async () => {
+  const { deriveNextStatic } = await import("../src/next-adapter.mts");
+
+  expect(
+    deriveNextStatic([
+      "/docs/_next/static/chunks/main.js",
+      "/docs/_next/static/css/app.css",
+      "/docs/favicon.ico",
+    ]),
+  ).toEqual({
+    immutablePrefixes: ["/docs/_next/static/"],
+    mustRevalidatePrefixes: ["/docs/_next/static/service-worker/"],
+  });
+  expect(deriveNextStatic(["/favicon.ico"])).toEqual({
+    immutablePrefixes: [],
+    mustRevalidatePrefixes: [],
+  });
+});
+
+test("names the bundle serving the root route as the root function", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/"].id).toBe(manifest.entry);
-  expect(await exists(join(projectDir, `.ocel/output/functions/${manifest.entry}.func`))).toBe(
-    true,
-  );
+  expect(manifest.dispatch["/"].id).toBe(manifest.rootFunction);
+  expect(
+    await exists(join(projectDir, `.ocel/output/functions/${manifest.rootFunction}.func`)),
+  ).toBe(true);
 });
 
-test("names no entry when no function serves the root route", async () => {
+test("names the first bundle as the root function when no function serves the root route", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   expect(manifest.dispatch["/"]).toBeUndefined();
-  expect(manifest.entry).toBe("");
-  expect(serve.entry).toBe("");
+  expect(manifest.rootFunction).toBe("bundle-0");
+  expect(hosting.rootFunction).toBe("bundle-0");
   expect(await exists(join(projectDir, ".ocel/output/functions/bundle-0.func"))).toBe(true);
 });
 
@@ -1848,17 +1845,17 @@ test("names the root route's bundle in a build split across several bundles", as
   expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.entry).toBe(manifest.dispatch["/"].id);
-  expect(manifest.entry).not.toBe(manifest.dispatch["/api/documents"].id);
-  expect(Object.keys((await readLauncher(projectDir, manifest.entry)).entries)).toEqual([
+  expect(manifest.rootFunction).toBe(manifest.dispatch["/"].id);
+  expect(manifest.rootFunction).not.toBe(manifest.dispatch["/api/documents"].id);
+  expect(Object.keys((await readLauncher(projectDir, manifest.rootFunction)).entries)).toEqual([
     "/",
     "/_middleware",
   ]);
 });
 
 async function readServeNeeds(projectDir: string) {
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
-  return serve.needs;
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
+  return hosting.needs;
 }
 
 test("declares the edge-middleware need with the matchers behind it", async () => {
@@ -1977,12 +1974,12 @@ test("two apps exposing the same route path do not overwrite each other", async 
   for (const app of ["storefront", "admin"]) {
     const outputRoot = join(outRoot, "apps", app);
     const config = JSON.parse(
-      await readFile(join(outputRoot, "functions/bundle-0.func/config.json"), "utf8"),
+      await readFile(join(outputRoot, "functions/bundle-0.func/function-config.json"), "utf8"),
     );
     expect(config.app).toBe(app);
     expect(config.id).toBe("bundle-0");
 
-    const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
+    const manifest = JSON.parse(await readFile(join(outputRoot, "next-route-table.json"), "utf8"));
     expect(manifest.appName).toBe(app);
     expect(manifest.dispatch["/api/documents"]).toEqual({
       kind: "function",

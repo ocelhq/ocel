@@ -240,7 +240,7 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
 	err := p.RemoveContainers(context.Background(), ref,
-		[]provider.AppContainer{{Name: "web", Physical: "prod-web-r0a1b2c3d-web"}}, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "prod-web-r0a1b2c3d-web"}}, nil, nil)
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

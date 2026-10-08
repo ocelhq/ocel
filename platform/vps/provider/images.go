@@ -40,7 +40,14 @@ func (p pulled) ProbePush(ctx context.Context, repository string) error {
 	return p.from.ProbePush(ctx, repository)
 }
 
+func (p pulled) Remove(ctx context.Context, imageRef string) error {
+	return p.from.Remove(ctx, imageRef)
+}
+
 func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
+	if registered, err := p.from.Has(ctx, push); err != nil || !registered {
+		return false, err
+	}
 	return p.host.HasImage(ctx, push.ImageRef)
 }
 
@@ -63,11 +70,28 @@ func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress prog
 		digest = built.String()
 	}
 	said, err := p.host.PullImage(ctx, p.target, push.ImageRef, digest)
+	if err != nil && present {
+		said, err = p.pushRemovedImage(ctx, push, digest, err, progress)
+	}
 	if err != nil {
 		return err
 	}
 	echo(progress, said)
 	return nil
+}
+
+func (p pulled) pushRemovedImage(ctx context.Context, push provider.ImagePush, digest string, pulling error, progress progress.Log) (string, error) {
+	present, err := p.from.Has(ctx, push)
+	if err != nil || present {
+		return "", pulling
+	}
+	if progress != nil {
+		progress.Warn(fmt.Sprintf("%s left %s between this deploy finding it there and %s pulling it, so it is pushed again", push.ImageRef, p.target.Server, p.at))
+	}
+	if err := p.from.Push(ctx, push, progress); err != nil {
+		return "", err
+	}
+	return p.host.PullImage(ctx, p.target, push.ImageRef, digest)
 }
 
 func echo(progress progress.Log, said string) {

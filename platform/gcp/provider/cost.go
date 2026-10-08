@@ -114,7 +114,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(!gated || app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
 			}
 		}
 		for _, shape := range shapes {

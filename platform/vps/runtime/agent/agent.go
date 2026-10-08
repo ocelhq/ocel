@@ -86,8 +86,13 @@ func ContainerID(cgroup string) (string, bool) {
 	return "", false
 }
 
+type Container struct {
+	Manifest string
+	InitPID  int
+}
+
 type Inspector interface {
-	Manifest(ctx context.Context, container string) (string, error)
+	ReadContainer(ctx context.Context, container string) (Container, error)
 }
 
 type Resolver interface {
@@ -169,14 +174,17 @@ func (s *Server) callerManifest(ctx context.Context) (variables.Manifest, *calle
 	}
 	inspecting, cancel := context.WithTimeout(ctx, inspectWindow)
 	defer cancel()
-	raw, err := s.Inspect.Manifest(inspecting, container)
+	read, err := s.Inspect.ReadContainer(inspecting, container)
 	if err != nil {
 		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, "read the caller's container: " + err.Error()}
 	}
-	if raw == "" {
+	if read.InitPID <= 0 || read.InitPID != caller.pid {
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, fmt.Sprintf("the caller, pid %d, is not its container's init process (pid %d): only a container's init process is answered", caller.pid, read.InitPID)}
+	}
+	if read.Manifest == "" {
 		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's container has no live-value manifest"}
 	}
-	manifest, err := variables.Parse([]byte(raw))
+	manifest, err := variables.Parse([]byte(read.Manifest))
 	if err != nil {
 		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, err.Error()}
 	}
@@ -250,29 +258,32 @@ func NewDocker() (*Docker, error) {
 	return &Docker{host: host, transport: host.Transport()}, nil
 }
 
-func (d *Docker) Manifest(ctx context.Context, container string) (string, error) {
+func (d *Docker) ReadContainer(ctx context.Context, container string) (Container, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+container+"/json", nil)
 	if err != nil {
-		return "", err
+		return Container{}, err
 	}
 	resp, err := (&http.Client{Transport: d.transport}).Do(req)
 	if err != nil {
-		return "", fmt.Errorf("ask the daemon at %s about the container: %w", d.host.Address, err)
+		return Container{}, fmt.Errorf("ask the daemon at %s about the container: %w", d.host.Address, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("the daemon at %s answered %q about the container: %s", d.host.Address, resp.Status, strings.TrimSpace(string(said)))
+		return Container{}, fmt.Errorf("the daemon at %s answered %q about the container: %s", d.host.Address, resp.Status, strings.TrimSpace(string(said)))
 	}
 	var inspected struct {
+		State struct {
+			Pid int `json:"Pid"`
+		} `json:"State"`
 		Config struct {
 			Env []string `json:"Env"`
 		} `json:"Config"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
-		return "", fmt.Errorf("read what the daemon says about the container: %w", err)
+		return Container{}, fmt.Errorf("read what the daemon says about the container: %w", err)
 	}
-	return ManifestIn(inspected.Config.Env), nil
+	return Container{Manifest: ManifestIn(inspected.Config.Env), InitPID: inspected.State.Pid}, nil
 }
 
 func (d *Docker) Address(ctx context.Context, network, container string) (string, error) {

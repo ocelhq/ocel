@@ -36,24 +36,24 @@ type Hooks struct {
 
 type FunctionHooks struct {
 	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error
+	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) error
 	Shared    *SharedHooks[provider.Function]
 }
 
 type ContainerHooks struct {
 	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error
+	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error
 	Shared    *SharedHooks[provider.AppContainer]
 }
 
 type SharedHooks[T any] struct {
 	Name            func(ctx context.Context, spec provider.StackSpec) ([]T, error)
-	RemoveRevisions func(ctx context.Context, ref provider.StackRef, going []T, progress progress.Log) ([]T, error)
+	RemoveRevisions func(ctx context.Context, ref provider.StackRef, going []T, images provider.ImageStore, progress progress.Log) ([]T, error)
 }
 
 type ImageRetentionHooks struct {
-	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error
-	Forget    func(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error
+	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error
+	Forget    func(ctx context.Context, ref provider.StackRef, app string, images provider.ImageStore, progress progress.Log) error
 }
 
 func ServedBindingTypes(hooks Hooks) []provider.BindingType {
@@ -117,7 +117,9 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if spec.App != nil {
-		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, progress) }()
+		defer func() {
+			_ = ReconcileImages(ctx, f.hooks.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
+		}()
 	}
 	if err := f.refuseUnservedResources(spec); err != nil {
 		return provider.StackResult{}, err
@@ -130,7 +132,7 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := f.removeOrphans(ctx, spec, recorded, progress); err != nil {
+	if err := f.removeOrphans(ctx, spec, recorded, spec.Images.Store, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
@@ -231,7 +233,7 @@ func (f *hookStacks) provisionerFor(resource provider.Resource) (provisionFunc, 
 		resource.Name, resource.Type, served(ServedBindingTypes(f.hooks)))
 }
 
-func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err
@@ -241,46 +243,90 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 			return err
 		}
 	}
-	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, progress); err != nil {
+	if len(recorded.Images()) > 0 {
+		if err := stackrecords.ForgetAppImages(ctx, f.keyValues, ref.Tier, ref.Project, ref.Name); err != nil {
+			return err
+		}
+	}
+	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, images, progress); err != nil {
 		return err
 	}
-	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, progress); err != nil {
+	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, images, progress); err != nil {
 		return err
+	}
+	ran := recorded.Containers
+	if recorded.Image != "" && !slices.ContainsFunc(ran, func(container provider.AppContainer) bool { return container.Image == recorded.Image }) {
+		ran = append(slices.Clone(ran), provider.AppContainer{Name: recorded.App, Image: recorded.Image})
 	}
 	var stopped error
-	for _, container := range recorded.Containers {
-		if err := f.forget(ctx, ref, container.Name, progress); err != nil && stopped == nil {
+	for _, container := range ran {
+		if err := ForgetReleases(ctx, f.hooks.Retention, ref, container.Name, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
-	for _, container := range recorded.Containers {
-		if err := f.reconcile(ctx, ref, container.Name, container.Image, progress); err != nil && stopped == nil {
+	for _, container := range ran {
+		if err := ReconcileImages(ctx, f.hooks.Retention, ref, container.Name, container.Image, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
 	return stopped
 }
 
-func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
-	if f.hooks.Retention == nil {
+func ForgetReleases(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app string, images provider.ImageStore, progress progress.Log) error {
+	if h == nil || h.Forget == nil {
 		return nil
 	}
-	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
+	err := h.Forget(ctx, ref, app, images, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's release window in place: %v", app, err))
 	}
 	return err
 }
 
-func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error {
-	if f.hooks.Retention == nil || imageRef == "" {
+func ReconcileImages(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	if h == nil || h.Reconcile == nil || imageRef == "" {
 		return nil
 	}
-	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, progress)
+	err := h.Reconcile(ctx, ref, app, imageRef, images, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}
 	return err
+}
+
+func RemovePushedImages(ctx context.Context, images provider.ImageStore, app string, imageRefs []string, recorded func(context.Context) (map[string]bool, error), progress progress.Log) {
+	for _, image := range imageRefs {
+		if recorded != nil {
+			kept, err := recorded(ctx)
+			if err != nil {
+				if progress != nil {
+					progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, as the images the project's stacks record could not be read again: %v", image, err))
+				}
+				continue
+			}
+			if kept[image] {
+				continue
+			}
+		}
+		if err := images.Remove(ctx, image); err != nil {
+			if progress != nil {
+				progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to: %v", image, err))
+			}
+			continue
+		}
+		if progress != nil {
+			progress.Say("Removed " + app + "'s unused image " + image + " from " + images.Destination())
+		}
+	}
+}
+
+func SayRemovedImages(progress progress.Log, app string, removed []string) {
+	if progress == nil {
+		return
+	}
+	for _, image := range removed {
+		progress.Say("Removed " + app + "'s unused image " + image)
+	}
 }
 
 const (
@@ -288,37 +334,38 @@ const (
 	torn       = "this destroy would take down"
 )
 
-func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef, going []provider.Function, because string, progress progress.Log) error {
+func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef, going []provider.Function, because string, images provider.ImageStore, progress progress.Log) error {
 	if len(going) == 0 {
 		return nil
 	}
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	return removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), progress)
+	return removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), images, progress)
 }
 
-func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, progress progress.Log) error {
+func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, images provider.ImageStore, progress progress.Log) error {
 	if len(going) == 0 {
 		return nil
 	}
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	return removeCompute(ctx, f, ref, going, containerCompute(f.hooks.Containers), progress)
+	return removeCompute(ctx, f, ref, going, containerCompute(f.hooks.Containers), images, progress)
 }
 
 func removeAll[T any](
 	ctx context.Context,
 	ref provider.StackRef,
 	going []T,
-	remove func(context.Context, provider.StackRef, []T, progress.Log) error,
+	remove func(context.Context, provider.StackRef, []T, provider.ImageStore, progress.Log) error,
+	images provider.ImageStore,
 	progress progress.Log,
 ) error {
 	if len(going) == 0 || remove == nil {
 		return nil
 	}
-	return remove(ctx, ref, going, progress)
+	return remove(ctx, ref, going, images, progress)
 }
 
 func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string) error {
@@ -327,7 +374,7 @@ func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string)
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
+func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, images provider.ImageStore, progress progress.Log) error {
 	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
@@ -339,13 +386,13 @@ func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec,
 			return err
 		}
 	}
-	if err := f.removeOrphanFunctions(ctx, spec, recorded, progress); err != nil {
+	if err := f.removeOrphanFunctions(ctx, spec, recorded, images, progress); err != nil {
 		return err
 	}
-	return f.removeOrphanContainers(ctx, spec, recorded, progress)
+	return f.removeOrphanContainers(ctx, spec, recorded, images, progress)
 }
 
-func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
+func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, images provider.ImageStore, progress progress.Log) error {
 	declared := DeclaredFunctions(spec, f.hooks.RecordsWorkers)
 	var orphans []provider.Function
 	for _, function := range recorded.Functions {
@@ -355,10 +402,10 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 		reportUndeclared(progress, "function", function.Name)
 		orphans = append(orphans, function)
 	}
-	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, progress)
+	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, images, progress)
 }
 
-func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
+func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, images provider.ImageStore, progress progress.Log) error {
 	declared := DeclaredContainers(spec, f.hooks.RecordsWorkers)
 	var orphans []provider.AppContainer
 	for _, container := range recorded.Containers {
@@ -368,7 +415,7 @@ func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.S
 		reportUndeclared(progress, "container", container.Name)
 		orphans = append(orphans, container)
 	}
-	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, progress)
+	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, images, progress)
 }
 
 func reportUndeclared(progress progress.Log, kind, name string) {

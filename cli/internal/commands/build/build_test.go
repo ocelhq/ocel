@@ -34,7 +34,7 @@ func TestBuildBakesTheWorkersAnAppHostsIntoItsBuild(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+  apps: [{ name: "api", path: ".", compute: { serverless: { framework: "node" } } }],
 };
 `)
 	source := filepath.Join(root, discovery.DefaultRootDirName, "jobs.ts") + ":4"
@@ -67,7 +67,7 @@ func TestBuildNeedsNoLoginAndNoProvider(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+  apps: [{ name: "api", path: ".", compute: { serverless: { framework: "node" } } }],
 };
 `)
 
@@ -109,7 +109,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "api", framework: "node", compute: "serverless" },
+    { name: "api", path: "api", compute: { serverless: { framework: "node" } } },
     { name: "web", path: "web", compute: "container", arch: "arm64" },
   ],
 };
@@ -229,7 +229,7 @@ func TestBuildBakesEachAppsPlaintextClientValuesAsADeployDoes(t *testing.T) {
 export default {
   slug: "`+clitest.FixtureSlug+`",
   provider: { fake: {} },
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless", domains: { production: ["shop.acme.com"] } }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } }, domains: { production: ["shop.acme.com"] } }],
 };
 `)
 
@@ -248,34 +248,12 @@ export default {
 	}
 }
 
-func TestBuildPointsANextAppAtTheCacheHandlerDirectoryItsProviderDeclares(t *testing.T) {
-	fixture := clitest.SetUpProject(t)
-	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
-	root := fixture.Root
-	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
-	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
-
-	dependencies := newTestDependencies()
-	var host build.Host
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
-		host = handed
-		return build.Output{}, nil
-	}
-
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
-		t.Fatalf("runBuild: %v", err)
-	}
-	if host.NextRuntimeDir != "/var/host/next" {
-		t.Errorf("web was built against the Next runtime directory %q, want the one its provider declares", host.NextRuntimeDir)
-	}
-}
-
 func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testing.T) {
 	fixture := clitest.SetUpProject(t)
-	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.MaxFunctionBytes = 200 << 20 })
 	fixture.Provider.Credentials().(*fake.Credentials).Ask("sign in to fake", provider.Question{Finding: "no session", Prompt: "Sign in?"})
 	root := fixture.Root
-	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", compute: { serverless: { framework: "next" } } }]`)
 	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
 
 	dependencies := newTestDependencies()
@@ -288,19 +266,19 @@ func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testin
 	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v, want the build to read the provider's facts without asking who is signed in", err)
 	}
-	if host.NextRuntimeDir != "/var/host/next" {
-		t.Errorf("web was built against the Next runtime directory %q, want the one its provider declares", host.NextRuntimeDir)
+	if host.MaxFunctionBytes != 200<<20 {
+		t.Errorf("web was built against a size budget of %d bytes, want the one its provider declares", host.MaxFunctionBytes)
 	}
 }
 
-func TestBuildRefusesANextAppWhenNoProviderNamesItsNextRuntimeDirectory(t *testing.T) {
+func TestBuildRefusesANextFunctionAppWhenNoProviderIsConfiguredToReadItsFactsFrom(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless" }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }],
 };
 `)
 
@@ -312,13 +290,8 @@ export default {
 	}
 
 	err := runBuild(context.Background(), dependencies, root)
-	if err == nil {
-		t.Fatal("runBuild = nil error, want web refused: only the provider it deploys through says where its functions load Next's runtime files from")
-	}
-	for _, want := range []string{`"web"`, "provider"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error = %q, missing %q", err, want)
-		}
+	if err == nil || !strings.Contains(err.Error(), "no provider configured") {
+		t.Fatalf("runBuild = %v, want web refused: a Next function app is built against its provider's facts, and none is configured", err)
 	}
 	if built {
 		t.Error("the build ran before the refusal")
@@ -332,7 +305,7 @@ func TestBuildRefusesAnAppNamingNoComputeWhenNoProviderCanChooseOne(t *testing.T
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "node" }],
+  apps: [{ name: "web", path: "." }],
 };
 `)
 

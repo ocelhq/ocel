@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -32,7 +32,7 @@ func reportingDeploy(t *testing.T) (Dependencies, clitest.FakeProject, *clitest.
 	stubBuild(&dependencies, apiFunction())
 	fixture := setUpDeployProject(t)
 	addAppToFixtureConfig(t, fixture.Root)
-	writeServeDescriptor(t, fixture.Root, "api", "bld_api_1")
+	writeHosting(t, fixture.Root, "api", "bld_api_1")
 	fixture.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fixtureTarget})
 	console := clitest.ServeConsole(t)
 	dependencies.Console = clitest.SignedInTo(console.URL)
@@ -188,7 +188,7 @@ func TestADeployWhoseReportCannotBeCompletedStillReportsItsLivePromotion(t *test
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)
 	corrupt := func() {
-		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", edge.ServeDescriptorFile), "{")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", buildoutput.HostingFile), "{")
 	}
 	for _, kind := range []router.Kind{fake.RouterDirect, fake.RouterRelay} {
 		fixture.Provider.Routers().(*fake.Routers).DataPlane(kind).BeforeNextPointerMove(corrupt)

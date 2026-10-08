@@ -25,7 +25,7 @@ import (
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for rel, contents := range withServeDescriptors(t, files) {
+	for rel, contents := range withHostings(t, files) {
 		full := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -191,46 +191,56 @@ func TestUploadArtifact(t *testing.T) {
 	})
 }
 
-func serveDescriptor(t *testing.T, runtime, buildID string) string {
+var nextStatic = &edge.Static{
+	ImmutablePrefixes:      []string{"/_next/static/"},
+	MustRevalidatePrefixes: []string{"/_next/static/service-worker/"},
+}
+
+func hostingJSON(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.ServeDescriptor{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
+	hosting := buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: runtime, FrameworkBuildID: buildID, RootFunction: "/"}
+	if runtime == buildoutput.FrameworkNext {
+		hosting.RouteTable = edge.RouteTableNext
+		hosting.Static = nextStatic
+	}
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(raw)
 }
 
-func buildIDOf(t *testing.T, routingManifest string) string {
+func buildIDOf(t *testing.T, routeTable string) string {
 	t.Helper()
 	var routing struct {
 		BuildID string `json:"buildId"`
 	}
-	if err := json.Unmarshal([]byte(routingManifest), &routing); err != nil {
-		t.Fatalf("parse routing manifest %s: %v", routingManifest, err)
+	if err := json.Unmarshal([]byte(routeTable), &routing); err != nil {
+		t.Fatalf("parse route table %s: %v", routeTable, err)
 	}
 	return routing.BuildID
 }
 
-func withServeDescriptors(t *testing.T, files map[string]string) map[string]string {
+func withHostings(t *testing.T, files map[string]string) map[string]string {
 	t.Helper()
 	out := maps.Clone(files)
 	for rel, contents := range files {
-		app, ok := appOfRoutingManifest(rel)
+		app, ok := appOfRouteTable(rel)
 		if !ok {
 			continue
 		}
-		descriptor := path.Join(appsDirName, app, edge.ServeDescriptorFile)
-		if _, written := out[descriptor]; written {
+		hostingPath := path.Join(appsDirName, app, buildoutput.HostingFile)
+		if _, written := out[hostingPath]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
+		out[hostingPath] = hostingJSON(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
 	}
 	return out
 }
 
-func appOfRoutingManifest(rel string) (string, bool) {
+func appOfRouteTable(rel string) (string, bool) {
 	parts := strings.Split(rel, "/")
-	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.RoutingManifestFile {
+	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.NextRouteTableFile {
 		return "", false
 	}
 	return parts[1], true

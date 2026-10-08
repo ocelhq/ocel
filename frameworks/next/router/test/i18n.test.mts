@@ -37,7 +37,7 @@ function i18nDeps(
   const unlocalized = over.unlocalized ?? [];
   return {
     manifest: {
-      entry: "",
+      rootFunction: "",
       buildId: "b1",
       basePath,
       ...(i18n && { i18n }),

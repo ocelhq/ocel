@@ -73,7 +73,7 @@ func stagedFunctionRelease(t *testing.T, stack edge.EdgeStack, app, build string
 	t.Helper()
 	entry := "ocel-shop-prod-" + app
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.ReleaseRecord{
-		App: app, Release: build, EntryFunction: entry, Framework: framework,
+		App: app, Release: build, RootFunctionPhysical: entry, Framework: framework,
 		IsrPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
 		Revisions: map[string]string{entry: entry + "-" + build},
 	}); err != nil {

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "prerender-bucket",
+  "provider": {
+    "vps": {
+      "ssh": {
+        "host": "${OCEL_VPS_HOST}",
+        "user": "${OCEL_VPS_USER}",
+        "identityFile": "${OCEL_VPS_IDENTITY_FILE}"
+      }
+    }
+  },
+  "apps": [
+    {
+      "name": "web",
+      "path": ".",
+      "compute": { "container": { "health": { "path": "/health" } } }
+    }
+  ]
+}

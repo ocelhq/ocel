@@ -1,7 +1,10 @@
+import type { Static } from "@platform/edge-contract/hosting";
+import {
+  chooseCacheControl,
+  IMMUTABLE_CACHE_CONTROL,
+  isUnderImmutablePrefix,
+} from "@platform/edge-contract/static";
 import type { ResponseCache } from "./http-cache.mjs";
-
-const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
-const REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 
 export interface AssetObject {
   body: ReadableStream | null;
@@ -16,6 +19,7 @@ export interface AssetStoreDeps {
   store?: AssetBucket;
   assetPrefix: string;
   basePath?: string;
+  static?: Static;
   cache: ResponseCache;
   waitUntil: (promise: Promise<unknown>) => void;
 }
@@ -63,20 +67,8 @@ export function contentTypeFor(pathname: string): string {
   return CONTENT_TYPES.get(name.slice(dot)) ?? "application/octet-stream";
 }
 
-const NEXT_STATIC_PREFIX = "/_next/static/";
-const SERVICE_WORKER_PREFIX = "service-worker/";
-
-export function isNextStaticPathname(pathname: string): boolean {
-  return pathname.includes(NEXT_STATIC_PREFIX);
-}
-
-export function cacheControlFor(pathname: string): string {
-  const at = pathname.indexOf(NEXT_STATIC_PREFIX);
-  if (at === -1) return REVALIDATE_CACHE_CONTROL;
-  const itemPath = pathname.slice(at + NEXT_STATIC_PREFIX.length);
-  return itemPath.startsWith(SERVICE_WORKER_PREFIX)
-    ? REVALIDATE_CACHE_CONTROL
-    : IMMUTABLE_CACHE_CONTROL;
+export function isImmutablePathname(deps: AssetStoreDeps, pathname: string): boolean {
+  return isUnderImmutablePrefix(deps.static, pathname);
 }
 
 function storedPathnames(pathname: string, basePath = ""): string[] {
@@ -100,7 +92,8 @@ function plainNotFound(): Response {
 }
 
 async function notFound(deps: AssetStoreDeps, locale?: string): Promise<Response> {
-  const names = locale ? [`/${locale}/404.html`, "/404.html"] : ["/404.html"];
+  const base = deps.basePath ?? "";
+  const names = locale ? [`${base}/${locale}/404.html`, `${base}/404.html`] : [`${base}/404.html`];
   for (const name of names) {
     const page = await deps.store?.get(`${deps.assetPrefix}${name}`);
     if (page?.body) {
@@ -120,7 +113,7 @@ export async function serveStaticAsset(
   locale?: string,
 ): Promise<Response> {
   const miss = () =>
-    isNextStaticPathname(url.pathname) ? plainNotFound() : notFound(deps, locale);
+    isImmutablePathname(deps, url.pathname) ? plainNotFound() : notFound(deps, locale);
 
   if (!deps.store) return miss();
 
@@ -138,7 +131,7 @@ export async function serveStaticAsset(
   if (!hit) return miss();
 
   const { object } = hit;
-  const cacheControl = cacheControlFor(hit.pathname);
+  const cacheControl = chooseCacheControl(deps.static, hit.pathname);
   const headers = new Headers({
     "content-type": contentTypeFor(hit.pathname),
     "cache-control": cacheControl,

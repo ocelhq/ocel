@@ -3,6 +3,11 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -110,6 +115,99 @@ func TestADaemonThatIsDownIsReportedWhenTheDeployLoginIsActedAs(t *testing.T) {
 	for _, command := range rig.commands() {
 		if strings.Contains(command, "docker stop") {
 			t.Errorf("%q ran against a daemon the probe found down", command)
+		}
+	}
+}
+
+func actedAsTheDeployLogin(command string) (string, bool) {
+	return strings.CutPrefix(command, "sudo -n -u "+deployUser+" ")
+}
+
+func ranHereFromAPipeOnlyAnotherLoginCouldReopen(t *testing.T, script, fed string) error {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = read.Close() }()
+	if err := read.Chmod(0); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = io.WriteString(write, fed)
+		_ = write.Close()
+	}()
+	run := exec.Command("sh", "-c", script)
+	run.Stdin = read
+	said, err := run.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, said)
+	}
+	return nil
+}
+
+func TestEveryFileALoginWithSudoWritesAsTheDeployLoginHoldsWhatItWasFed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reopens a pipe whatever its mode, so this machine cannot stand in for the deploy login")
+	}
+	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
+	imaging(rig, "false ")
+	served := rig.answer
+	rig.answer = func(command string) (session.Result, bool) {
+		if !strings.HasPrefix(command, "sudo ") && strings.Contains(command, "install ") && strings.Contains(command, stateRoot+"/") {
+			return session.Result{Code: 1, Stderr: "install: cannot create regular file: Permission denied"}, true
+		}
+		return served(command)
+	}
+	container, resource := valued(), resourced()
+	if err := rig.host().RunContainer(context.Background(), container); err != nil {
+		t.Fatalf("RunContainer() as a login with sudo = %v", err)
+	}
+	if err := rig.host().RunResource(context.Background(), resource, "secret"); err != nil {
+		t.Fatalf("RunResource() as a login with sudo = %v", err)
+	}
+
+	here := t.TempDir()
+	for _, path := range []string{EnvFile(container.Tier, container.Name), EnvFile(resource.Tier, resource.Name)} {
+		if err := os.MkdirAll(filepath.Dir(here+path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	written := map[string]string{
+		EnvFile(container.Tier, container.Name):    "",
+		HandedNote(container.Tier, container.Name): "",
+		EnvFile(resource.Tier, resource.Name):      "",
+	}
+	rig.mu.Lock()
+	ran, fed := append([]string(nil), rig.ran...), append([]string(nil), rig.fed...)
+	rig.mu.Unlock()
+	for at, command := range ran {
+		script, acted := actedAsTheDeployLogin(command)
+		if !acted || fed[at] == "" {
+			continue
+		}
+		for path := range written {
+			if !strings.Contains(script, path) {
+				continue
+			}
+			written[path] = fed[at]
+			if err := ranHereFromAPipeOnlyAnotherLoginCouldReopen(t, strings.ReplaceAll(script, stateRoot, here+stateRoot), fed[at]); err != nil {
+				t.Errorf("writing %s as %s from what ssh feeds it = %v: the pipe ssh feeds is the login's, and %s cannot reopen it by name", path, deployUser, err, deployUser)
+				continue
+			}
+			held, err := os.ReadFile(here + path)
+			if err != nil {
+				t.Errorf("%s was never written: %v", path, err)
+				continue
+			}
+			if string(held) != fed[at] {
+				t.Errorf("%s holds %q, want what it was fed, %q", path, held, fed[at])
+			}
+		}
+	}
+	for path, wrote := range written {
+		if wrote == "" {
+			t.Errorf("nothing wrote %s as %s: %v", path, deployUser, ran)
 		}
 	}
 }

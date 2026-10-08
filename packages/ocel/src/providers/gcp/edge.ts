@@ -1,4 +1,4 @@
-import type { AlbEdgeOptions, EdgeDescriptor } from "../../generated/config.js";
+import type { AlbEdgeOptions } from "../../generated/config.js";
 
 export type { AlbEdgeOptions } from "../../generated/config.js";
 
@@ -13,6 +13,6 @@ export type { AlbEdgeOptions } from "../../generated/config.js";
  * no edge is answered on the URL Cloud Run gives each service, and binds no
  * hostname.
  */
-export function alb(options: AlbEdgeOptions = {}): EdgeDescriptor {
+export function alb(options: AlbEdgeOptions = {}): { alb: AlbEdgeOptions } {
   return { alb: options };
 }

@@ -40,6 +40,8 @@ type projectRemoval struct {
 	infra   []naming.StackName
 	apps    []naming.StackName
 	pointer []string
+
+	images provider.ImageStore
 }
 
 func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectRequest) (*projectRemoval, error) {
@@ -229,6 +231,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return err
 		}
+		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
 		return removal.run(ctx, progress)
 	})
 }
@@ -355,7 +358,7 @@ func (r *projectRemoval) pointers() []string {
 
 func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName, progress progress.Log) error {
 	ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
-	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
+	if err := r.provider.Stacks().Destroy(ctx, ref, r.images, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
 	return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)

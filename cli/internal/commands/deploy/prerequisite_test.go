@@ -61,10 +61,13 @@ func (a *scriptedAnswers) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func withSetups(dependencies *Dependencies) {
+func withSetups(t *testing.T, dependencies *Dependencies) {
 	initDependencies := projectinit.Dependencies{
-		Invocation:        dependencies.Invocation,
-		RunPackageManager: func(context.Context, string, []string, io.Writer) error { return nil },
+		Invocation: dependencies.Invocation,
+		RunPackageManager: func(_ context.Context, dir string, _ []string, _ io.Writer) error {
+			clitest.InstallOcelPackage(t, dir)
+			return nil
+		},
 	}
 	dependencies.Setups = prerequisite.Setups{
 		prerequisite.Project:   projectinit.NewSetup(initDependencies),
@@ -95,8 +98,8 @@ func fakeChoice(t *testing.T) string {
 
 func saveHostname(t *testing.T, root string) func() {
 	return func() {
-		clitest.WriteFile(t, filepath.Join(root, project.DefaultFileName),
-			`{"slug": "shop", "provider": {"fake": {}}, "domains": {"production": "shop.example.com"}}`)
+		clitest.WriteFile(t, filepath.Join(root, project.TSFileName),
+			`export default {"slug": "shop", "provider": {"fake": {}}, "domains": {"production": "shop.example.com"}};`)
 	}
 }
 
@@ -108,7 +111,7 @@ func TestADeployInAnEmptyDirectoryInitializesBootstrapsAndDeploys(t *testing.T) 
 	root, fixture := emptyProjectDir(t)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, rootFunction("shop"))
 
 	stdin := answering(
@@ -124,7 +127,7 @@ func TestADeployInAnEmptyDirectoryInitializesBootstrapsAndDeploys(t *testing.T) 
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(root, project.DefaultFileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(root, project.TSFileName)); err != nil {
 		t.Errorf("no config after the deploy set the project up: %v", err)
 	}
 	var applied []string
@@ -146,7 +149,7 @@ func TestADeployWithNoInfrastructureAndNoTerminalNamesTheBootstrapToRun(t *testi
 	fixture := setUpDeployProject(t)
 	removeBootstrap(t, fixture, environment.TierProduction)
 	dependencies := newTestDependencies()
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, nil)
 
 	var stdout, stderr bytes.Buffer
@@ -173,7 +176,7 @@ export default {
 `)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, nil)
 
 	stdin := answering(answer{line: "", before: func() { writeConfig(t, fixture.Root, "") }})
@@ -212,7 +215,7 @@ func TestADeployUnderJSONOnATerminalOffersNoSetupAndFailsWithTheMissingPrerequis
 			fixture := setUpDeployProject(t)
 			tc.prepare(t, fixture)
 			dependencies := newTestDependencies()
-			withSetups(&dependencies)
+			withSetups(t, &dependencies)
 			stubBuild(&dependencies, nil)
 			tty, screen := clitest.UnderJSONOnATerminal(t, &dependencies.Invocation)
 			var stdout bytes.Buffer
@@ -247,7 +250,7 @@ func TestADeclinedSetupExitsZeroNamingTheCommand(t *testing.T) {
 	removeBootstrap(t, fixture, environment.TierProduction)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, nil)
 
 	var stdout, stderr bytes.Buffer
@@ -268,7 +271,7 @@ func TestAcceptingTheBootstrapOfferShowsItsPlanAndAsksBeforeApplyingIt(t *testin
 	removeBootstrap(t, fixture, environment.TierProduction)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, nil)
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 
@@ -307,7 +310,7 @@ func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
 	removeBootstrap(t, fixture, environment.TierProduction)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, nil)
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 
@@ -331,11 +334,11 @@ func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun
 	fixture := clitest.SetUpProject(t)
 	removeBootstrap(t, fixture, environment.TierProduction)
 	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
-	writeUsageMonorepo(t, fixture.Root, "  edge: \"direct\",\n")
+	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, apiFunction())
 
 	var stdout, stderr bytes.Buffer
@@ -356,11 +359,11 @@ func TestADeployAgainstABootstrapLackingAFeatureItNeedsAddsItAndDeploysInOneRun(
 	fixture := clitest.SetUpProject(t)
 	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
 	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
-	writeUsageMonorepo(t, fixture.Root, "  edge: \"direct\",\n")
+	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	withSetups(&dependencies)
+	withSetups(t, &dependencies)
 	stubBuild(&dependencies, apiFunction())
 
 	var stdout, stderr bytes.Buffer

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -111,6 +112,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		PreviousOriginSecret: params.OriginSecret.Previous,
 
 		Transform: p.transformPass(),
+
+		Retention: &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
 	if params.EdgeCredentialsErr == nil {
 		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID

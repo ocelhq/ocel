@@ -2,9 +2,7 @@ package docsurl
 
 const Origin = "https://ocel.dev"
 
-func FormatSchema(version string) string {
-	return Origin + "/schema/" + version + "/ocel.schema.json"
-}
+const Schema = Origin + "/schema/ocel.schema.json"
 
 func FormatTelemetryPage() string {
 	return Origin + "/docs/telemetry"

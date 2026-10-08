@@ -101,7 +101,7 @@ for (const app of req.apps) {
 `)
 
 	var spans appSpans
-	if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err != nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -134,7 +134,7 @@ process.exitCode = 1;
 `)
 
 	var spans appSpans
-	if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's failure")
 	}
 	err, ok := spans.ended["web"]
@@ -157,7 +157,7 @@ process.exitCode = 1;
 `)
 
 	var spans appSpans
-	err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, map[string]AppVariables{
+	err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, map[string]AppVariables{
 		"web": {Live: map[string]string{"OCEL_SECRET_DB": "postgres://u:hunter2@127.0.0.1/db"}},
 	}, spans.output())
 	if err == nil {
@@ -178,7 +178,7 @@ process.exit(9);
 `)
 
 	var spans appSpans
-	if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want the builder's exit")
 	}
 	if err, ok := spans.ended["web"]; !ok || err == nil {
@@ -194,7 +194,7 @@ process.exit(0);
 `)
 
 	var spans appSpans
-	if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, spans.output()); err == nil {
 		t.Fatal("Build succeeded, want it failed: web's build never ended")
 	}
 	if err, ok := spans.ended["web"]; !ok || err == nil {
@@ -217,7 +217,7 @@ func TestAGoAppCompiledHereBuildsInASpanOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 
 	var spans appSpans
-	err := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, spans.output())
+	err := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}.Build(context.Background(), cfg, nil, spans.output())
 	if err == nil {
 		t.Fatal("Build succeeded, want the compile error")
 	}

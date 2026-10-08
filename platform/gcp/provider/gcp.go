@@ -115,11 +115,9 @@ func (p *Provider) Facts() provider.Facts {
 			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: []provider.Compute{provider.ComputeServerless}},
 			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
 		},
-		DNSKinds:               []provider.DNSKind{dnsCloudflare},
-		StoresArtifacts:        true,
-		WorkerCeilings:         slices.Clone(workerCeilings),
-		NextRefreshesByRequest: true,
-		NextRuntimeDir:         nextRuntimeDir,
+		DNSKinds:        []provider.DNSKind{dnsCloudflare},
+		StoresArtifacts: true,
+		WorkerCeilings:  slices.Clone(workerCeilings),
 	}
 }
 
@@ -132,6 +130,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		CheckBucket:           s3store.Check,
 		ProveIdentity:         ports.ProveIdentity,
 		ForwardPorts:          p.ForwardPorts,
+		ServeBindingProxy:     p.ServeBindingProxy,
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 		ReadNextServerRuntime: p.ReadNextServerRuntime,
@@ -157,6 +156,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 			Remove:    p.RemoveContainers,
 			Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
 		},
+		Retention: &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages},
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
@@ -166,6 +167,33 @@ type GrantStatement struct {
 
 func inCallerAccount() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceAccount": callerAccount}}
+}
+
+const (
+	principalProjectKey = "aws:PrincipalTag/" + registry.ProjectTag
+	principalProject    = "${" + principalProjectKey + "}"
+)
+
+var principalProjectRepositoryARN = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/" + principalProject + images.ProjectSeparator + "*"
+
+func principalUntagged() map[string]any {
+	return map[string]any{"Null": map[string]any{principalProjectKey: "true"}}
+}
+
+func ofPrincipalProject() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + registry.ProjectTag: principalProject}}
+}
+
+func taggedForPrincipalProject() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + registry.ProjectTag: principalProject}}
+}
+
+func ofAProject() map[string]any {
+	return map[string]any{"Null": map[string]any{"aws:ResourceTag/" + registry.ProjectTag: "false"}}
+}
+
+func taggedForAProject() map[string]any {
+	return map[string]any{"Null": map[string]any{"aws:RequestTag/" + registry.ProjectTag: "false"}}
 }
 
 func taggedOnCreate() map[string]any {
@@ -531,18 +559,36 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"ecr:BatchCheckLayerAvailability",
 				"ecr:BatchGetImage",
 				"ecr:CompleteLayerUpload",
-				"ecr:CreateRepository",
 				"ecr:DescribeImages",
 				"ecr:DescribeRepositories",
 				"ecr:GetDownloadUrlForLayer",
 				"ecr:InitiateLayerUpload",
 				"ecr:ListTagsForResource",
 				"ecr:PutImage",
-				"ecr:TagResource",
 				"ecr:UploadLayerPart",
 			},
 			Resources: []string{appRepositoryARN},
 			Condition: inCallerAccount(),
+		},
+		{
+			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
+			Resources: []string{principalProjectRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), taggedForPrincipalProject()),
+		},
+		{
+			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
+			Resources: []string{principalProjectRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), ofPrincipalProject()),
+		},
+		{
+			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
+			Resources: []string{appRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), principalUntagged(), taggedForAProject()),
+		},
+		{
+			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
+			Resources: []string{appRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), principalUntagged(), ofAProject()),
 		},
 		{
 			Actions:   []string{"ecs:CreateCluster"},

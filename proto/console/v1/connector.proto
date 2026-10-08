@@ -107,6 +107,25 @@ message SetConnectorAddressResponse {
   Connector connector = 1;
 }
 
+message HeartbeatConnectorRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+
+  string version = 2 [(buf.validate.field).string.max_len = 64];
+
+  repeated string capabilities = 3 [(buf.validate.field).repeated = {
+    max_items: 64
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+      }
+    }
+  }];
+}
+
+message HeartbeatConnectorResponse {
+}
+
 service ConnectorService {
   rpc Upsert(UpsertConnectorRequest) returns (UpsertConnectorResponse);
 
@@ -115,4 +134,6 @@ service ConnectorService {
   rpc Remove(RemoveConnectorRequest) returns (RemoveConnectorResponse);
 
   rpc SetAddress(SetConnectorAddressRequest) returns (SetConnectorAddressResponse);
+
+  rpc Heartbeat(HeartbeatConnectorRequest) returns (HeartbeatConnectorResponse);
 }

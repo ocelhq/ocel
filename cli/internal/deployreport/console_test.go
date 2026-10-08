@@ -40,6 +40,7 @@ func (f *fakeConsole) Report(ctx context.Context, req *consolev1.ReportRequest) 
 		select {
 		case <-f.hang:
 		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 	if f.answer != nil {

@@ -42,9 +42,6 @@ const (
 	storeSecretLen = host.StoreSecretMax / 2
 
 	storeBucketNameMax = 63
-
-	propertySweepUploads = "sweepUploads"
-	propertyOrigins      = "allowedOrigins"
 )
 
 const storeHealthPath = "/health/ready"
@@ -312,10 +309,10 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyBucket: bucket,
-			provider.PropertyPublic: strconv.FormatBool(public),
-			propertySweepUploads:    strconv.FormatBool(p.stores.sweeping()),
-			propertyOrigins:         strings.Join(declaredOrigins(in.Resource.Bucket), " "),
+			provider.PropertyBucket:             bucket,
+			provider.PropertyPublic:             strconv.FormatBool(public),
+			stackrecords.PropertySweepUploads:   strconv.FormatBool(p.stores.sweeping()),
+			stackrecords.PropertyAllowedOrigins: strings.Join(declaredOrigins(in.Resource.Bucket), " "),
 		},
 	}, nil
 }
@@ -422,7 +419,7 @@ func sweptUploads(app *provider.AppSpec) bool {
 	return slices.ContainsFunc(append(slices.Clone(app.Values.Bindings), app.Grants...),
 		func(binding provider.Binding) bool {
 			return binding.Type == provider.BindingBucket &&
-				binding.Properties[propertySweepUploads] == "true"
+				binding.Properties[stackrecords.PropertySweepUploads] == "true"
 		})
 }
 
@@ -508,7 +505,7 @@ func (p *Provider) applyStackOrigins(ctx context.Context, ref provider.StackRef,
 }
 
 func recordedOrigins(binding provider.Binding) []string {
-	return strings.Fields(binding.Properties[propertyOrigins])
+	return strings.Fields(binding.Properties[stackrecords.PropertyAllowedOrigins])
 }
 
 func declaredPublic(spec *provider.BucketSpec) bool {

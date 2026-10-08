@@ -1,7 +1,9 @@
 package projectinit
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,11 +21,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
+	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -38,9 +42,9 @@ const rustSDKCrate = "ocel-sdk"
 type initOptions struct {
 	provider   string
 	language   string
-	ts         bool
-	yaml       bool
+	format     string
 	configPath string
+	options    []string
 	settings   []providerSetting
 }
 
@@ -74,20 +78,39 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 
 			opts := flags
 			opts.configPath = dependencies.ConfigPath()
+			if opts.settings, err = parseOptionFlags(flags.options); err != nil {
+				return err
+			}
 
-			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.OutOrStdout())
+			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.InOrStdin(), commands.ChooseRunOutput(cmd), cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
 	cmd.Flags().StringVar(&flags.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
-	cmd.Flags().BoolVar(&flags.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
-	cmd.Flags().BoolVar(&flags.yaml, "yaml", false, "Write ocel.yaml instead of ocel.json — the same document, written as YAML")
-	cmd.MarkFlagsMutuallyExclusive("ts", "yaml")
+	cmd.Flags().StringArrayVar(&flags.options, "option", nil, "Provider option whose value is text, as name=value; repeat it for each. On a terminal, init asks for any the provider cannot deploy without")
+	cmd.Flags().StringVar(&flags.format, "format", "", "Write the config as ts, json or yaml — the same document in each; ts needs node, and is the default only in a project built with it")
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
 
-func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdout io.Writer) error {
-	result, err := runInit(ctx, dependencies, cwd, slug, opts)
+func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdin io.Reader, prompts, stdout io.Writer) error {
+	resolved, err := resolveInit(cwd, slug, opts)
+	if err != nil {
+		return err
+	}
+	if len(findMissingOptions(resolved.provider, resolved.settings)) > 0 && dependencies.CanAsk(stdin) {
+		var answered bool
+		err := dependencies.Events.Preamble(ctx).Ask(func() (err error) {
+			resolved.settings, answered, err = askMissingOptions(ctx, terminal.NewPrompt(prompts, stdin), resolved.provider, resolved.settings)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		if !answered {
+			return &exitcode.ExitError{Code: exitcode.Interrupt, Err: errors.New("init was cancelled before every option was given, and wrote nothing")}
+		}
+	}
+	result, err := initProject(ctx, dependencies, resolved)
 	if err != nil {
 		return err
 	}
@@ -98,50 +121,98 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 }
 
 func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) (*resultv1.InitResult, error) {
-	configPath, err := initConfigPath(cwd, opts)
+	resolved, err := resolveInit(cwd, slug, opts)
 	if err != nil {
 		return nil, err
 	}
-	projectDir := filepath.Dir(configPath)
-	name := filepath.Base(configPath)
+	return initProject(ctx, dependencies, resolved)
+}
+
+type resolvedInit struct {
+	configPath string
+	projectDir string
+	slug       string
+	provider   string
+	settings   []providerSetting
+	lang       sdkLanguage
+	detected   bool
+}
+
+func resolveInit(cwd, slug string, opts initOptions) (resolvedInit, error) {
+	if opts.format != "" && !slices.Contains(configFormats, opts.format) {
+		return resolvedInit{}, clierror.NewInputRequired(fmt.Errorf("--format names %q, and ocel writes a config as %s", opts.format, english.Or(configFormats)), "--format <ts|json|yaml>")
+	}
+	configPath, err := initConfigPath(cwd, opts)
+	if err != nil {
+		return resolvedInit{}, err
+	}
+	projectDir := cwd
+	if configPath != "" {
+		projectDir = filepath.Dir(configPath)
+	}
 
 	slug, err = resolveSlug(projectDir, slug)
 	if err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
 
 	provider := strings.TrimSpace(opts.provider)
 	shipped := configdoc.ProviderIDs()
 	if provider == "" {
-		return nil, clierror.NewInputRequired(
+		return resolvedInit{}, clierror.NewInputRequired(
 			fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", ")),
 			"--provider <id>",
 		)
 	}
 	if !slices.Contains(shipped, provider) {
-		return nil, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
+		return resolvedInit{}, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
+	}
+
+	if err := refuseUnknownOptions(provider, opts.settings); err != nil {
+		return resolvedInit{}, err
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
 	if err != nil {
-		return nil, err
+		return resolvedInit{}, err
 	}
+	if configPath == "" {
+		configPath = filepath.Join(projectDir, configFileName(opts, lang))
+	}
+	name := filepath.Base(configPath)
 
 	if _, err := os.Stat(configPath); err == nil {
-		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
+		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("check for existing %s: %w", name, err)
+		return resolvedInit{}, fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
-		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
+		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
+	return resolvedInit{
+		configPath: configPath,
+		projectDir: projectDir,
+		slug:       slug,
+		provider:   provider,
+		settings:   opts.settings,
+		lang:       lang,
+		detected:   detected,
+	}, nil
+}
 
-	completion := newInitCompletion(configPath, provider, projectDir, lang, detected)
+func initProject(ctx context.Context, dependencies Dependencies, resolved resolvedInit) (*resultv1.InitResult, error) {
+	if err := refuseMissingOptions(resolved.provider, resolved.settings); err != nil {
+		return nil, err
+	}
+	configPath, slug, provider, lang := resolved.configPath, resolved.slug, resolved.provider, resolved.lang
+	name := filepath.Base(configPath)
+
+	completion := newInitCompletion(configPath, provider, resolved.projectDir, lang, resolved.detected)
 	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")
 	if err != nil {
 		return nil, err
 	}
-	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
+	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, resolved.settings, lang, resolved.detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
 		dependencies.RecordEvent(completion)
@@ -178,7 +249,9 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return "", fmt.Errorf("create directory for %s: %w", name, err)
 	}
-	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider, settings)), 0o644); err != nil {
+	if err := systemNewFile.create(configPath, []byte(configTemplate(name, slug, provider, settings))); errors.Is(err, fs.ErrExist) {
+		return "", &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
+	} else if err != nil {
 		return "", fmt.Errorf("write %s: %w", name, err)
 	}
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
@@ -194,7 +267,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 
 func initConfigPath(cwd string, opts initOptions) (string, error) {
 	if opts.configPath == "" {
-		return filepath.Join(cwd, configFileName(opts)), nil
+		return "", nil
 	}
 	path := opts.configPath
 	if !filepath.IsAbs(path) {
@@ -204,20 +277,34 @@ func initConfigPath(cwd string, opts initOptions) (string, error) {
 	switch {
 	case !project.IsConfig(name):
 		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, project.DefaultFileName, project.YAMLFileName, project.TSFileName)
-	case opts.ts && !project.IsTypeScript(name):
-		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, project.TSFileName)
-	case opts.yaml && !project.IsYAML(name):
-		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, project.YAMLFileName)
+	case opts.format != "" && formatOfName(name) != opts.format:
+		return "", fmt.Errorf("--format %s writes %s, and %s (from --config / OCEL_CONFIG) is not one: name it that, or drop --format", opts.format, configFileName(opts, sdkLanguage{}), name)
 	}
 	return path, nil
 }
 
-func configFileName(opts initOptions) string {
+var configFormats = []string{"ts", "json", "yaml"}
+
+func formatOfName(name string) string {
 	switch {
-	case opts.ts:
+	case project.IsTypeScript(name):
+		return "ts"
+	case project.IsYAML(name):
+		return "yaml"
+	}
+	return "json"
+}
+
+func configFileName(opts initOptions, lang sdkLanguage) string {
+	switch {
+	case opts.format == "ts":
 		return project.TSFileName
-	case opts.yaml:
+	case opts.format == "json":
+		return project.DefaultFileName
+	case opts.format == "yaml":
 		return project.YAMLFileName
+	case lang.language == language.JS:
+		return project.TSFileName
 	}
 	return project.DefaultFileName
 }
@@ -244,12 +331,31 @@ type providerSetting struct {
 	value string
 }
 
-func settingFields(settings []providerSetting, layout string) []string {
+func settingFields(settings []providerSetting, key func(string) string) []string {
 	fields := make([]string, 0, len(settings))
 	for _, setting := range settings {
-		fields = append(fields, fmt.Sprintf(layout, setting.name, setting.value))
+		fields = append(fields, key(setting.name)+": "+mustQuoteJSON(strings.ReplaceAll(setting.value, "${", "$${")))
 	}
 	return fields
+}
+
+var plainYAMLKey = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+
+func quoteYAMLKey(name string) string {
+	if plainYAMLKey.MatchString(name) {
+		return name
+	}
+	return mustQuoteJSON(name)
+}
+
+func mustQuoteJSON(text string) string {
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(text); err != nil {
+		panic(fmt.Sprintf("a string always encodes as JSON: %v", err))
+	}
+	return strings.TrimSuffix(out.String(), "\n")
 }
 
 func configTemplate(name, slug, provider string, settings []providerSetting) string {
@@ -262,7 +368,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
 	selected := fmt.Sprintf("{ %q: {} }", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, "%q: %q"), ", "))
+		selected = fmt.Sprintf("{ %q: { %s } }", provider, strings.Join(settingFields(settings, mustQuoteJSON), ", "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = strconv.Quote(provider)
 	}
@@ -271,27 +377,27 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
   "slug": %q,
   "provider": %s
 }
-`, docsurl.FormatSchema(version.Version), slug, selected)
+`, docsurl.Schema, slug, selected)
 }
 
 func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
 	switch {
 	case len(settings) > 0:
-		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, "%s: %q"), "\n    "))
+		selected = fmt.Sprintf("\n  %s:\n    %s", provider, strings.Join(settingFields(settings, quoteYAMLKey), "\n    "))
 	case configdoc.ProviderNamedAlone(provider):
 		selected = " " + provider
 	}
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
 provider:%s
-`, docsurl.FormatSchema(version.Version), slug, selected)
+`, docsurl.Schema, slug, selected)
 }
 
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {
 	options := "{}"
 	if len(settings) > 0 {
-		options = "{ " + strings.Join(settingFields(settings, "%q: %q"), ", ") + " }"
+		options = "{ " + strings.Join(settingFields(settings, mustQuoteJSON), ", ") + " }"
 	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";

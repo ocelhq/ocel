@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -18,13 +19,13 @@ var buildSetNames = []string{
 	processenv.AppFolderEnvVar,
 	processenv.PhaseEnvVar,
 	processenv.LiveDirEnvVar,
+	processenv.RuntimeAddressEnvVar,
+	localrpc.SessionTokenEnvVar,
 	"OCEL_APP_NAME",
 	"OCEL_OUTPUT_DIR",
 	"OCEL_EDGE_KIND",
 	"OCEL_ALLOW_DEGRADED",
-	"OCEL_NEXT_RUNTIME_DIR",
 	"OCEL_MAX_FUNCTION_BYTES",
-	"OCEL_NEXT_REFRESHES_BY_REQUEST",
 }
 
 var toolchainNames = []string{"HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP", "NODE_OPTIONS", "NODE_PATH"}
@@ -43,6 +44,18 @@ func refuseReservedNames(app string, values AppVariables) error {
 		}
 		if isToolchainName(key) {
 			return fmt.Errorf("app %q declares %s as sensitive or secret, which keeps it out of the build's environment, and node or cargo reads %s from there; rename it where it is declared", app, key, key)
+		}
+	}
+	return nil
+}
+
+var bindingProxyNames = []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
+
+func RefuseBindingProxyNames(app string, values AppVariables) error {
+	for _, key := range bindingProxyNames {
+		_, plain := values.Env[key]
+		if _, live := values.Live[key]; plain || live {
+			return fmt.Errorf("app %q declares %s, which the binding proxy is delivered under; rename it where it is declared", app, key)
 		}
 	}
 	return nil

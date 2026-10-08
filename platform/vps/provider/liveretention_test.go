@@ -87,7 +87,7 @@ func sweepImages(t *testing.T, vm machine) string {
 
 func sweeping(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
-	if err := p.ReconcileImages(context.Background(), sweepSpec(t, tag).Ref, sweepApp, sweepAt(tag), nil); err != nil {
+	if err := p.ReconcileImages(context.Background(), sweepSpec(t, tag).Ref, sweepApp, sweepAt(tag), nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 }

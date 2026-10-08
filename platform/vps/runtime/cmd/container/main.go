@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
@@ -48,6 +50,9 @@ func main() {
 func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image has no ENTRYPOINT or CMD")
+	}
+	if err := clearDumpable(); err != nil {
+		return fatal(err.Error())
 	}
 	command = chooseCommand(environ, command, isFile)
 	read, env := readFront(environ)
@@ -180,6 +185,13 @@ func chooseCommand(environ, command []string, present func(path string) bool) []
 func isFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+func clearDumpable() error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return fmt.Errorf("keep the app's processes from attaching to the runtime: %w", err)
+	}
+	return nil
 }
 
 func exitCode(exit child.Exit) int {

@@ -11,6 +11,11 @@ import (
 
 func TestMain(m *testing.M) {
 	clitest.AddFakeProviderIDs()
+	configdoc.AddKnownIDs(twoOptionProvider, nil, nil)
+	configdoc.AddKnownProviderOptions(twoOptionProvider, []configdoc.ProviderOption{
+		{Name: "host", Doc: "The host to deploy onto.", Required: true},
+		{Name: "zone", Doc: "The zone to deploy into.", Required: true},
+	})
 	if clitest.IsFakeSession() {
 		os.Exit(clitest.RunFakeSession())
 	}
@@ -21,6 +26,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+const twoOptionProvider = "two-option"
+
 func newTestDependencies() Dependencies {
 	return Dependencies{Invocation: clitest.NewInvocation()}
 }
@@ -30,7 +37,9 @@ func providerNamedAlone() string {
 }
 
 func providerKeyed() string {
-	return providerWhere(func(id string) bool { return !configdoc.ProviderNamedAlone(id) })
+	return providerWhere(func(id string) bool {
+		return !configdoc.ProviderNamedAlone(id) && len(configdoc.RequiredProviderOptions(id)) == 0
+	})
 }
 
 func providerWhere(matches func(id string) bool) string {

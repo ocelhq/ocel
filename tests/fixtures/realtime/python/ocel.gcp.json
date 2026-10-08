@@ -1,8 +1,0 @@
-{
-  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
-  "slug": "realtime-python",
-  "provider": {
-    "gcp": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
-  },
-  "apps": [{ "name": "web", "path": "." }]
-}

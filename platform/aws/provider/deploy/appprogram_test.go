@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -36,19 +37,20 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
-			App:       "web",
-			Framework: buildoutput.FrameworkNext,
-			Router:    router.Kind(cloudfront.Kind),
-			Entry:     "fn--web--entry",
-			BuildID:   "d1",
+			App:          "web",
+			Framework:    buildoutput.FrameworkNext,
+			Router:       router.Kind(cloudfront.Kind),
+			RootFunction: "fn--web--entry",
+			BuildID:      "d1",
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:     &provider.RoutingSpec{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
+			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
 			Bytecode:    &provider.BytecodeSpec{Prefix: "shop/prod/web/r1/bytecode"},
 			AssetPrefix: coord.AssetKey(""),
+			Static:      nextStatic,
 		},
 	}
 	return cfg, spec
@@ -75,8 +77,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	if entry[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the router the spec named", routerKindEnv, entry[routerKindEnv])
 	}
-	if entry[routingManifestEnv] != routingManifestInTask {
-		t.Errorf("%s = %q, want the routing manifest the spec passed", routingManifestEnv, entry[routingManifestEnv])
+	if entry[routeTableEnv] != routeTableInTask {
+		t.Errorf("%s = %q, want the route table the spec passed", routeTableEnv, entry[routeTableEnv])
 	}
 	if entry["OCEL_BUILD_ID"] != "d1" {
 		t.Errorf("OCEL_BUILD_ID = %q, want the build the spec named", entry["OCEL_BUILD_ID"])
@@ -148,7 +150,7 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := appStackSpec(t)
-	spec.App.Guard = &provider.OriginGuard{Entry: "fn--web--entry"}
+	spec.App.Guard = &provider.OriginGuard{RootFunction: "fn--web--entry"}
 	release := releasing(t, cfg)
 
 	if _, err := release.appWork(spec, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
@@ -160,7 +162,7 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() with a secret = %v", err)
 	}
-	if work.functions.Guard == nil || work.functions.Guard.Entry != "fn--web--entry" {
+	if work.functions.Guard == nil || work.functions.Guard.RootFunction != "fn--web--entry" {
 		t.Errorf("Guard = %+v, want the entry route the spec named", work.functions.Guard)
 	}
 }

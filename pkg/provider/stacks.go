@@ -22,7 +22,7 @@ type Stacks interface {
 
 	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Log) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, progress progress.Log) error
+	Destroy(ctx context.Context, ref StackRef, images ImageStore, progress progress.Log) error
 }
 
 type StackRef struct {
@@ -68,13 +68,13 @@ type Bindings interface {
 }
 
 type AppSpec struct {
-	App       string
-	Framework string
-	Entry     string
-	BuildID   string
-	Compute   Compute
-	Router    router.Kind
-	Functions []FunctionSpec
+	App          string
+	Framework    string
+	RootFunction string
+	BuildID      string
+	Compute      Compute
+	Router       router.Kind
+	Functions    []FunctionSpec
 
 	Image                     string
 	HealthCheckPath           string
@@ -94,6 +94,7 @@ type AppSpec struct {
 	Bytecode *BytecodeSpec
 
 	AssetPrefix string
+	Static      *edge.Static
 
 	VendorState any
 
@@ -103,12 +104,12 @@ type AppSpec struct {
 }
 
 type RoutingSpec struct {
-	Entry    string
-	Manifest []byte
+	RootFunction string
+	RouteTable   router.RouteTable
 }
 
 type OriginGuard struct {
-	Entry string
+	RootFunction string
 }
 
 type ISRSpec struct {

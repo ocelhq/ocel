@@ -14,7 +14,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -32,10 +34,11 @@ type Use struct {
 }
 
 type Forwards struct {
-	bindings    map[string]map[string]string
-	unforwarded []string
-	stop        context.CancelFunc
-	ended       chan error
+	bindings        map[string]map[string]string
+	bindingProxyEnv map[string]map[string]string
+	unforwarded     []string
+	stop            context.CancelFunc
+	ended           chan error
 }
 
 func (f *Forwards) Close() error {
@@ -55,6 +58,13 @@ func (f *Forwards) Bindings(app string) map[string]string {
 		return nil
 	}
 	return f.bindings[app]
+}
+
+func (f *Forwards) BindingProxyEnv(app string) map[string]string {
+	if f == nil {
+		return nil
+	}
+	return f.bindingProxyEnv[app]
 }
 
 func (f *Forwards) Apps() []string {
@@ -82,15 +92,18 @@ func ListDeclared(uses []Use) []string {
 	return declared
 }
 
-func listBound(uses []Use) []string {
-	var bound []string
+func listGrants(uses []Use) []*contractv1.ForwardPortsGrant {
+	bound := map[string][]string{}
 	for _, use := range uses {
-		if !slices.Contains(bound, use.Bound) {
-			bound = append(bound, use.Bound)
+		if !slices.Contains(bound[use.App], use.Bound) {
+			bound[use.App] = append(bound[use.App], use.Bound)
 		}
 	}
-	slices.Sort(bound)
-	return bound
+	grants := make([]*contractv1.ForwardPortsGrant, 0, len(bound))
+	for _, app := range slices.Sorted(maps.Keys(bound)) {
+		grants = append(grants, &contractv1.ForwardPortsGrant{Grantee: app, Bindings: slices.Sorted(slices.Values(bound[app]))})
+	}
+	return grants
 }
 
 func FindBound(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
@@ -136,7 +149,7 @@ func readRefusalMessage(err error) string {
 }
 
 func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *environmentv1.Environment, uses []Use, said *run.Span) (*Forwards, error) {
-	req := &contractv1.ForwardPortsRequest{Slug: slug, Environment: env, Bindings: listBound(uses)}
+	req := &contractv1.ForwardPortsRequest{Slug: slug, Environment: env, Grants: listGrants(uses)}
 	streamCtx, stop := context.WithCancel(ctx)
 	answered := make(chan *contractv1.ForwardPortsResponse, 1)
 	ended := make(chan error, 1)
@@ -160,6 +173,13 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 		return nil, errors.Join(err, forwards.Close())
 	}
 	forwards.bindings = byApp
+	forwards.bindingProxyEnv = map[string]map[string]string{}
+	for _, proxy := range resp.GetBindingProxies() {
+		forwards.bindingProxyEnv[proxy.GetGrantee()] = map[string]string{
+			processenv.RuntimeAddressEnvVar: proxy.GetAddress(),
+			localrpc.SessionTokenEnvVar:     proxy.GetSessionToken(),
+		}
+	}
 	return forwards, nil
 }
 

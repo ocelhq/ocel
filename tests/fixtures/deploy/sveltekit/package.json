@@ -1,0 +1,24 @@
+{
+  "name": "@ocel-fixtures/deploy-sveltekit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port ${PORT:-5173} --strictPort",
+    "build": "vite build",
+    "start": "node build"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "ocel": "workspace:^"
+  },
+  "devDependencies": {
+    "@ocel/sveltekit": "workspace:^",
+    "@sveltejs/kit": "3.0.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20",
+    "svelte": "^5.57.1",
+    "vite": "^8.1.3"
+  }
+}

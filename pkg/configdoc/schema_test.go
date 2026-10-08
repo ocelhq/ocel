@@ -2,6 +2,7 @@ package configdoc
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -29,7 +30,7 @@ func TestCoreSchemaDescribesTheDocument(t *testing.T) {
 	if err := json.Unmarshal(generated, &schema); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	for _, key := range []string{"slug", "provider", "edge", "dns", "apps", "$schema"} {
+	for _, key := range []string{"slug", "provider", "apps", "$schema"} {
 		if _, ok := schema.Properties[key]; !ok {
 			t.Fatalf("the schema has no %q property", key)
 		}
@@ -253,27 +254,21 @@ func TestANamedTypeUsedInMoreThanOnePlaceIsDocumentedAsItselfEverywhere(t *testi
 }
 
 func TestCoreSchemaTakesInstanceCountsAsWholeNumbersFromTheirFloor(t *testing.T) {
-	generated, err := Schema()
+	generated, err := json.Marshal(schemaOf(reflect.TypeFor[InstancesConfig]()))
 	if err != nil {
 		t.Fatalf("schema: %v", err)
 	}
 	var schema struct {
-		Properties struct {
-			Apps struct {
-				Items struct {
-					Properties map[string]struct {
-						Type    string `json:"type"`
-						Minimum *int   `json:"minimum"`
-					} `json:"properties"`
-				} `json:"items"`
-			} `json:"apps"`
+		Properties map[string]struct {
+			Type    string `json:"type"`
+			Minimum *int   `json:"minimum"`
 		} `json:"properties"`
 	}
 	if err := json.Unmarshal(generated, &schema); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	for key, floor := range map[string]int{"minInstances": 0, "maxInstances": 1} {
-		property := schema.Properties.Apps.Items.Properties[key]
+	for key, floor := range map[string]int{"min": 0, "max": 1} {
+		property := schema.Properties[key]
 		if property.Type != "integer" || property.Minimum == nil || *property.Minimum != floor {
 			t.Errorf("%s = %+v, want an integer from %d", key, property, floor)
 		}

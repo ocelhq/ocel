@@ -22,21 +22,21 @@ func TestFrameworkBuildID(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "reads the serve descriptor every framework writes",
+			name:     "reads hosting.json every framework writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","frameworkBuildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + buildoutput.HostingFile: `{"version":1,"framework":"node","frameworkBuildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","frameworkBuildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + buildoutput.HostingFile: `{"version":1,"framework":"next","frameworkBuildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
-			name:     "a routing manifest alone answers nothing",
+			name:     "a route table alone answers nothing",
 			app:      "web",
-			contents: map[string]string{"web/routing-manifest.json": `{"buildId":"stale"}`},
+			contents: map[string]string{"web/next-route-table.json": `{"buildId":"stale"}`},
 			want:     "",
 		},
 		{
@@ -64,17 +64,17 @@ func TestFrameworkBuildID(t *testing.T) {
 	}
 }
 
-func TestAnUnreadableServeDescriptorFailsTheFrameworkBuildIDRatherThanReadingAsNone(t *testing.T) {
+func TestAnUnreadableHostingFailsTheFrameworkBuildIDRatherThanReadingAsNone(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte("not json"))
+	writeAppFile(t, root, "api/"+buildoutput.HostingFile, []byte("not json"))
 
 	if got, err := FrameworkBuildID(root, "api"); err == nil {
-		t.Errorf("FrameworkBuildID = %q, nil over a descriptor that is not JSON, want the corruption reported rather than recorded as no build", got)
+		t.Errorf("FrameworkBuildID = %q, nil over a hosting.json that is not JSON, want the corruption reported rather than recorded as no build", got)
 	}
 	if apps, err := EdgeApps(root); err == nil {
-		t.Errorf("EdgeApps = %v, nil over a descriptor that is not JSON, want the corruption reported rather than read as no edge need", apps)
+		t.Errorf("EdgeApps = %v, nil over a hosting.json that is not JSON, want the corruption reported rather than read as no edge need", apps)
 	}
 }
 
@@ -85,13 +85,13 @@ func TestEdgeApps(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
-		writeAppFile(t, root, "admin/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
-		writeAppFile(t, root, "docs/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
-		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"node","needs":{}}`))
+		writeAppFile(t, root, "web/"+buildoutput.HostingFile,
+			[]byte(`{"version":1,"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
+		writeAppFile(t, root, "admin/"+buildoutput.HostingFile,
+			[]byte(`{"version":1,"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
+		writeAppFile(t, root, "docs/"+buildoutput.HostingFile,
+			[]byte(`{"version":1,"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
+		writeAppFile(t, root, "api/"+buildoutput.HostingFile, []byte(`{"version":1,"framework":"node","needs":{}}`))
 
 		apps, err := EdgeApps(root)
 		if err != nil {
@@ -107,7 +107,7 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"framework":"next","needs":{}}`))
+		writeAppFile(t, root, "web/"+buildoutput.HostingFile, []byte(`{"version":1,"framework":"next","needs":{}}`))
 
 		if apps, err := EdgeApps(root); err != nil || len(apps) != 0 {
 			t.Errorf("EdgeApps = %v, want the needs to decide, not the bundle", apps)
@@ -175,9 +175,9 @@ func TestReadFunctions(t *testing.T) {
 		root := t.TempDir()
 		outDir := filepath.Join(root, statedir.Name, "output")
 		writeFuncConfig(t, outDir, "web", "index.func",
-			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 
 		fns, err := ReadFunctions(root)
 		if err != nil {
@@ -211,9 +211,9 @@ func TestReadFunctions(t *testing.T) {
 			name: "nested routes are collected without descending into a function's own tree",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 				writeFuncConfig(t, outDir, "web", "index.func",
-					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 				if err := os.MkdirAll(filepath.Join(outDir, "apps", "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -228,7 +228,7 @@ func TestReadFunctions(t *testing.T) {
 			setup: func(t *testing.T, outDir string) {
 				for _, app := range []string{"admin", "storefront"} {
 					writeFuncConfig(t, outDir, app, filepath.Join("api", "documents.func"),
-						buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: app})
+						buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: app})
 				}
 			},
 			want: []Function{
@@ -252,12 +252,12 @@ func TestReadFunctions(t *testing.T) {
 		})
 	}
 
-	t.Run("config.json id flows into the function", func(t *testing.T) {
+	t.Run("function-config.json id flows into the function", func(t *testing.T) {
 		t.Parallel()
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "documents.func"),
-			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: "web"})
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "route.js", ID: "/api/documents", App: "web"})
 
 		fns, err := readFunctions(outDir)
 		if err != nil {
@@ -267,23 +267,23 @@ func TestReadFunctions(t *testing.T) {
 			t.Fatalf("got %d functions, want 1", len(fns))
 		}
 		if got, want := fns[0].RouteID, "/api/documents"; got != want {
-			t.Errorf("RouteID = %q, want %q (config.json id must flow into the function)", got, want)
+			t.Errorf("RouteID = %q, want %q (function-config.json id must flow into the function)", got, want)
 		}
 	})
 
-	t.Run("config.json app flows into the function", func(t *testing.T) {
+	t.Run("function-config.json app flows into the function", func(t *testing.T) {
 		t.Parallel()
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "storefront", "index.func",
-			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", App: "storefront"})
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", App: "storefront"})
 
 		fns, err := readFunctions(outDir)
 		if err != nil {
 			t.Fatalf("collectFunctions: %v", err)
 		}
 		if got, want := fns[0].App, "storefront"; got != want {
-			t.Errorf("App = %q, want %q (config.json app must flow into the function)", got, want)
+			t.Errorf("App = %q, want %q (function-config.json app must flow into the function)", got, want)
 		}
 	})
 
@@ -295,20 +295,20 @@ func TestReadFunctions(t *testing.T) {
 		wantMsg   string
 	}{
 		{
-			name: "a .func with no config.json errors",
+			name: "a .func with no function-config.json errors",
 			setup: func(t *testing.T, outDir string) {
 				if err := os.MkdirAll(filepath.Join(outDir, "apps", "web", "functions", "api.func"), 0o755); err != nil {
 					t.Fatal(err)
 				}
 			},
-			succeeded: "collectFunctions succeeded on a .func with no config.json, want error",
-			wants:     []string{"api.func", buildoutput.FunctionDescriptorFile},
-			wantMsg:   "want it to name the offending .func and config.json",
+			succeeded: "collectFunctions succeeded on a .func with no function-config.json, want error",
+			wants:     []string{"api.func", buildoutput.FunctionConfigFile},
+			wantMsg:   "want it to name the offending .func and function-config.json",
 		},
 		{
 			name: "a config missing its framework errors",
 			setup: func(t *testing.T, outDir string) {
-				writeFuncConfig(t, outDir, "web", "api.func", buildoutput.FunctionDescriptor{EntryFile: "index.handler", App: "web"})
+				writeFuncConfig(t, outDir, "web", "api.func", buildoutput.FunctionConfig{EntryFile: "index.handler", App: "web"})
 			},
 			succeeded: "collectFunctions succeeded on config missing its framework, want error",
 			wants:     []string{"requires framework, entryFile, and app"},
@@ -318,26 +318,26 @@ func TestReadFunctions(t *testing.T) {
 			name: "a config missing app errors",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", "index.func",
-					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler"})
+					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler"})
 			},
 			succeeded: "collectFunctions succeeded on config missing app, want error",
 			wants:     []string{"requires framework, entryFile, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{
-			name: "invalid config.json JSON errors",
+			name: "invalid function-config.json JSON errors",
 			setup: func(t *testing.T, outDir string) {
 				dir := filepath.Join(outDir, "apps", "web", "functions", "api.func")
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile), []byte("not json"), 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionConfigFile), []byte("not json"), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			},
 			succeeded: "collectFunctions succeeded on invalid JSON, want error",
-			wants:     []string{"invalid " + buildoutput.FunctionDescriptorFile},
-			wantMsg:   "want it to flag invalid config.json",
+			wants:     []string{"invalid " + buildoutput.FunctionConfigFile},
+			wantMsg:   "want it to flag invalid function-config.json",
 		},
 	}
 	for _, tt := range malformed {

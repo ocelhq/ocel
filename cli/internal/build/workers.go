@@ -42,7 +42,7 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 			return image.Image{}, fmt.Errorf("app %q: %w", app.Name, err)
 		}
 	case language.Go:
-		goarch, err := t.architecture(ctx, built.Repository, built.Digest)
+		inspection, err := t.inspection(ctx, built.Repository, built.Digest)
 		if err != nil {
 			return image.Image{}, fmt.Errorf("read the architecture %s's image is built for: %w", app.Name, err)
 		}
@@ -50,7 +50,7 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 		if err != nil {
 			return image.Image{}, err
 		}
-		if err := toolchain.CompileGo(ctx, app.Name, moduleRoot, pkg, filepath.Join(files, buildoutput.GoWorkerBinary), goarch); err != nil {
+		if err := toolchain.CompileGo(ctx, app.Name, moduleRoot, pkg, filepath.Join(files, buildoutput.GoWorkerBinary), inspection.Architecture); err != nil {
 			return image.Image{}, err
 		}
 	case language.Rust:

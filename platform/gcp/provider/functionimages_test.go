@@ -2,10 +2,10 @@ package gcp
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"io"
-	"path"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -126,7 +126,7 @@ func TestARuntimeNoBaseIsShippedForIsRefused(t *testing.T) {
 	}
 }
 
-func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirectoryItsFactsName(t *testing.T) {
+func TestANextFunctionRunsOnThePlainNodeBase(t *testing.T) {
 	p, asked := basedOn(t, v1.Config{Env: []string{"PATH=/usr/bin"}})
 
 	base, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkNext})
@@ -136,12 +136,8 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirectoryItsFactsN
 	if *asked != nodeImage {
 		t.Errorf("FunctionBase(next) read %q, want the node base %q: a Next function runs on node", *asked, nodeImage)
 	}
-	dir := strings.TrimPrefix(p.Facts().NextRuntimeDir, "/")
-	files := filesIn(t, base)
-	for _, want := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		if !slices.Contains(files, dir+"/"+want) {
-			t.Errorf("the Next base holds %v, want %s in %s, where the image boots the Next runtime from and the build points Next's cache handlers", files, want, dir)
-		}
+	if files := filesIn(t, base); len(files) != 0 {
+		t.Errorf("the Next base holds %v, want the node base alone: the Next runtime goes in a layer every function shares", files)
 	}
 	file, err := base.ConfigFile()
 	if err != nil {
@@ -149,12 +145,6 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirectoryItsFactsN
 	}
 	if !slices.ContainsFunc(file.Config.Env, func(entry string) bool { return strings.HasPrefix(entry, "PATH="+nodeBinDir) }) {
 		t.Errorf("the Next base has env %v, and its command is `node`, which is only at %s", file.Config.Env, nodeBinDir)
-	}
-}
-
-func TestCloudRunNamesAnAbsoluteDirectoryForTheNextRuntime(t *testing.T) {
-	if dir := pushing(t, "").Facts().NextRuntimeDir; !path.IsAbs(dir) {
-		t.Errorf("Facts().NextRuntimeDir = %q, want the absolute dir the Next base holds the runtime in", dir)
 	}
 }
 
@@ -200,8 +190,8 @@ func TestTheRuntimeIsShippedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFunctionRuntime(node) = %v", err)
 	}
-	if len(body) == 0 {
-		t.Fatal("ReadFunctionRuntime(node) returned nothing, and a node function boots through it")
+	if len(body["entrypoint.mjs"]) == 0 || len(body) != 1 {
+		t.Fatalf("ReadFunctionRuntime(node) returned %d files, want the entrypoint a node function boots through", len(body))
 	}
 	compiled, err := p.ReadFunctionRuntime(ctx, buildoutput.Framework{Name: buildoutput.FrameworkGo})
 	if err != nil {
@@ -214,7 +204,10 @@ func TestTheRuntimeIsShippedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFunctionRuntime(next) = %v", err)
 	}
-	if len(next) != 0 {
+	if len(next["entrypoint.mjs"]) == 0 || len(next["node_modules/sharp/package.json"]) == 0 {
+		t.Errorf("ReadFunctionRuntime(next) returned %d files, want the Next entrypoint and the sharp it loads", len(next))
+	}
+	if bytes.Equal(next["entrypoint.mjs"], body["entrypoint.mjs"]) {
 		t.Error("ReadFunctionRuntime(next) returned the node runtime for an image that boots the Next runtime")
 	}
 }

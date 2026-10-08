@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const VERSION = readFileSync(join(root, "VERSION"), "utf8").trim();
 
-const SCHEMA_OUT = join(root, "www", "public", "schema", VERSION, "ocel.schema.json");
+const SCHEMA_OUT = join(root, "www", "public", "schema", "ocel.schema.json");
 const TYPES_OUT = join(root, "packages", "ocel", "src", "generated", "config.ts");
 
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -19,7 +19,7 @@ const MESSAGE_SCHEMA_ORIGIN = `https://ocel.dev/schema/${VERSION}/cli`;
 const BUNDLE_SUFFIX = ".jsonschema.bundle.json";
 const DEFINITION_SUFFIX = ".jsonschema.json";
 
-const SCHEMA_URL = `https://ocel.dev/schema/${VERSION}/ocel.schema.json`;
+const SCHEMA_URL = "https://ocel.dev/schema/ocel.schema.json";
 
 const SELECTORS_OUT = join(root, "pkg", "configdoc", "selectors.json");
 
@@ -80,8 +80,7 @@ function keyed(selector, entries) {
   };
 }
 
-function servedBy(fragments, field, selector) {
-  const ids = [...new Set(fragments.flatMap((fragment) => fragment[field]))].sort();
+function servedBy(ids, selector) {
   const options = selector.oneOf[1].additionalProperties;
   return keyed(
     selector,
@@ -89,10 +88,10 @@ function servedBy(fragments, field, selector) {
   );
 }
 
-function servedEdges(fragments, selector) {
+function edgeOptions(fragments) {
   const options = new Map(edgeFragments().map((fragment) => [fragment.id, fragment.options]));
-  const ids = [...new Set(fragments.flatMap((fragment) => fragment.edges))].sort();
-  for (const id of ids) {
+  const served = new Set(fragments.flatMap((fragment) => fragment.edges));
+  for (const id of served) {
     if (!options.has(id)) {
       throw new Error(
         `a provider fronts deployments with the ${id} edge, and no schema.edge.json under platform/ declares its options`,
@@ -100,22 +99,48 @@ function servedEdges(fragments, selector) {
     }
   }
   for (const id of options.keys()) {
-    if (!ids.includes(id)) {
+    if (!served.has(id)) {
       throw new Error(
         `platform/ declares options for the ${id} edge, and no provider fronts deployments with it`,
       );
     }
   }
-  return keyed(
-    selector,
-    ids.map((id) => [id, options.get(id)]),
+  return options;
+}
+
+function titled(selector, title) {
+  return { ...selector, title };
+}
+
+function withEdgeAndDNS(fragment, templates, edges) {
+  const prefix = fragment.id[0].toUpperCase() + fragment.id.slice(1);
+  const edge = keyed(
+    templates.edge,
+    [...fragment.edges].sort().map((id) => [id, edges.get(id)]),
   );
+  const dns = servedBy([...fragment.dns].sort(), templates.dns);
+  const options = fragment.options;
+  return {
+    ...fragment,
+    options: {
+      ...options,
+      properties: {
+        ...options.properties,
+        edge: titled(edge, `${prefix}EdgeDescriptor`),
+        dns: titled(dns, `${prefix}DNSDescriptor`),
+      },
+    },
+  };
 }
 
 function schema() {
   const core = read(join(root, "pkg", "configdoc", "schema.core.json"));
-  const fragments = providerFragments();
-  const { provider, edge, dns } = core.properties;
+  const { provider } = core.properties;
+  const templates = provider.oneOf[1].additionalProperties.properties;
+  const edges = edgeOptions(providerFragments());
+  const fragments = providerFragments().map((fragment) =>
+    withEdgeAndDNS(fragment, templates, edges),
+  );
   return {
     $id: SCHEMA_URL,
     ...core,
@@ -125,8 +150,6 @@ function schema() {
         provider,
         fragments.map((fragment) => [fragment.id, fragment.options]),
       ),
-      edge: servedEdges(fragments, edge),
-      dns: servedBy(fragments, "dns", dns),
     },
   };
 }
@@ -136,26 +159,34 @@ function selectors(merged) {
     ids: Object.keys(selector.oneOf[1].properties),
     shorthand: selector.oneOf[0].enum,
   });
-  const { provider, edge, dns } = merged.properties;
+  const { provider } = merged.properties;
+  const options = Object.entries(provider.oneOf[1].properties);
+  const each = (key) =>
+    Object.fromEntries(options.map(([id, shape]) => [id, selection(shape.properties[key])]));
   return {
-    provider: { ...selection(provider), required: requiredText(provider) },
-    edge: selection(edge),
-    dns: selection(dns),
+    provider: { ...selection(provider), options: textOptions(provider) },
+    edges: each("edge"),
+    dns: each("dns"),
   };
 }
 
-function requiredText(selector) {
+function textOptions(selector) {
+  const selectorKeys = new Set(["edge", "dns"]);
   const acceptsText = (node) =>
     node?.type === "string" || (node?.oneOf ?? []).some((one) => one.type === "string");
   return Object.fromEntries(
     Object.entries(selector.oneOf[1].properties)
       .map(([id, options]) => [
         id,
-        (options.required ?? [])
-          .filter((name) => acceptsText(options.properties?.[name]))
-          .map((name) => ({ name, doc: options.properties[name].description ?? "" })),
+        Object.entries(options.properties ?? {})
+          .filter(([name, node]) => !selectorKeys.has(name) && acceptsText(node))
+          .map(([name, node]) => ({
+            name,
+            doc: node.description ?? "",
+            ...((options.required ?? []).includes(name) && { required: true }),
+          })),
       ])
-      .filter(([, required]) => required.length > 0),
+      .filter(([, listed]) => listed.length > 0),
   );
 }
 
@@ -315,7 +346,9 @@ function quoted(key) {
 
 function types(merged) {
   const emitter = new Emitter();
-  const config = emitter.body(merged, "");
+  const properties = { ...merged.properties };
+  delete properties.$schema;
+  const config = emitter.body({ ...merged, properties }, "");
 
   const header = [
     "// generated by scripts/schema/build.mjs from the committed JSON Schema; do not edit",

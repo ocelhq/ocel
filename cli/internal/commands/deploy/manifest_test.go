@@ -229,39 +229,6 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	return ""
 }
 
-func TestADeployWarnsAboutAStandaloneNextContainerBeforeItBuilds(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "web"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "web", "next.config.mjs"), []byte(`export default { output: "standalone" }`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	dependencies := newTestDependencies()
-	recordBuildApp(&dependencies)
-	s, out := newBuildSpan(t)
-	warned := false
-	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
-		warned = strings.Contains(out.String(), `app "web" sets output: "standalone" in next.config.mjs`)
-		return buildApps(ctx, cfg, variables, archs, workers, host, log)
-	}
-	cfg := &project.Project{
-		Dir:  root,
-		Slug: "standalone",
-		Apps: []project.App{{Name: "web", Path: "web", Compute: provider.ComputeContainer, Container: &project.Container{Framework: buildoutput.FrameworkNext}}},
-	}
-	stubAppImages(&dependencies, "web")
-
-	_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, host: build.Host{ShipsNextServerRuntime: true}})
-	if err != nil {
-		t.Fatalf("collectBuildAndAssemble() error = %v", err)
-	}
-	if !warned {
-		t.Errorf("the build began before the standalone warning, output so far:\n%s", out)
-	}
-}
-
 func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
@@ -930,7 +897,7 @@ func TestADeployAttributesEachFunctionToTheAppThatBuiltIt(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, apiFunction())
 		fixture := setUpDeployProject(t)
-		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node", domains: { production: "Api.Acme.com" } }`)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } }, domains: { production: "Api.Acme.com" } }`)
 		writeAppSource(t, fixture.Root, "api")
 
 		if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
@@ -964,8 +931,8 @@ export default {
   slug: "test-app",
   provider: { fake: {} },
   apps: [
-    { name: "web", path: "apps/web", framework: "node", domains: { production: "acme.com" } },
-    { name: "admin", path: "apps/admin", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "acme.com" } },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } } },
   ],
 };
 `)
@@ -1031,8 +998,8 @@ func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
 	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 	writeAppsConfig(t, fixture.Root, `
-    { name: "web", path: "apps/web", framework: "node" },
-    { name: "api", path: "apps/api", framework: "node" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
   `)
 	writeAppSource(t, fixture.Root, "web", "api")
 	return dependencies, fixture
@@ -1516,7 +1483,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 
 func TestDeployLandsAUsageEdgeForEveryResourceAnAppReaches(t *testing.T) {
 	t.Run("an app that uses a shared resource lands a usage edge naming the files it reaches through", func(t *testing.T) {
-		fixture, out, err := deployUsageMonorepo(t, "")
+		fixture, out, err := deployUsageMonorepo(t, "", "")
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; output=%s", err, out)
 		}
@@ -1571,8 +1538,8 @@ func writeSharedResourceMonorepo(t *testing.T, root string) {
 
 	clitest.WriteUsageMonorepo(t, root)
 	writeAppsConfig(t, root, `
-    { name: "api", path: "apps/api", framework: "node" },
-    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
   `)
 	clitest.WriteFile(t, filepath.Join(root, "shared", "files.ts"), `
 import { declareBucket } from "./declare.js";
@@ -1680,7 +1647,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		stubBuild(&dependencies, apiFunction())
 		fixture := setUpDeployProject(t)
 		clitest.WriteUsageMonorepo(t, fixture.Root)
-		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/ap1", framework: "node" }`)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/ap1", compute: { serverless: { framework: "node" } } }`)
 
 		out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
 		if err == nil {
@@ -1711,7 +1678,7 @@ func TestADeployBuildsWithItsSensitiveAndSecretValuesOutsideTheBuildEnvironment(
   {"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}
 ]`)
 	writeRootApp(t, fixture.Root)
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", framework: "next" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }`)
 	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
@@ -1753,7 +1720,7 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "Cargo.toml"), "[package]\nname = \"jobs\"\nversion = \"0.1.0\"\n\n[workspace]\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "src", "main.rs"), "fn main() {}\n")
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", framework: "next" }, { name: "api", path: "apps/api", framework: "node" }, { name: "jobs", path: "apps/jobs", framework: "rust" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: { serverless: { framework: "next" } } }, { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }, { name: "jobs", path: "apps/jobs", compute: { serverless: { framework: "rust" } } }`)
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 
@@ -1777,7 +1744,7 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 func TestADeployThatCannotRevealASecretStopsBeforeItProvisionsAnything(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[{"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}]`)
 	writeRootApp(t, fixture.Root)
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", framework: "next" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }`)
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 	fixture.Provider.Cipher().(*fake.Cipher).RefuseOpening(errors.New("the deployer may not decrypt"))
 

@@ -321,5 +321,5 @@ func ResolveService(record router.ReleaseRecord) string {
 	if record.Physical != "" {
 		return record.Physical
 	}
-	return record.EntryFunction
+	return record.RootFunctionPhysical
 }

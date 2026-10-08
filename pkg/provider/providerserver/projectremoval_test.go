@@ -530,7 +530,7 @@ func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T)
 		Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.Function, error) {
 			return []provider.Function{{Name: "server", Physical: "shop-web-server", Revision: "shop-web-server-00001"}}, nil
 		},
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, function := range functions {
@@ -542,7 +542,7 @@ func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T)
 			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
 				return []provider.Function{{Name: "server", Physical: "shop-web-server"}}, nil
 			},
-			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Log) ([]provider.Function, error) {
+			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, provider.ImageStore, progress.Log) ([]provider.Function, error) {
 				return nil, nil
 			},
 		},

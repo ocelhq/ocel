@@ -100,8 +100,16 @@ func (s *Service) readSession(ctx context.Context, sessions scope, id string) (s
 	return sess, nil
 }
 
-func (s *Service) anySession(ctx context.Context, id string) (session, error) {
-	return s.readSession(ctx, s.sessions, id)
+func (s *Service) readGrantedSession(ctx context.Context, id string) (session, scope, error) {
+	sess, err := s.readSession(ctx, s.sessions, id)
+	if err != nil {
+		return session{}, scope{}, err
+	}
+	granted, ok := s.granted[sess.Bucket]
+	if !ok {
+		return session{}, scope{}, errSessionNotFound
+	}
+	return sess, granted, nil
 }
 
 func (s *Service) writeSession(ctx context.Context, sess *session) error {

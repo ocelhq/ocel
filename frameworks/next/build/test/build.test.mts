@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { buildProcess } from "@framework/node-build/script";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { buildNext, buildProcess, type NextBuild } from "../src/build.mjs";
+import { buildNext, type NextBuild } from "../src/build.mjs";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -31,7 +32,6 @@ function app(overrides: Partial<NextBuild> = {}): NextBuild {
     cwd: nextApp(),
     outputDir: "/out/apps/web",
     buildId: "0123456789abcdef0123456789abcdef",
-    nextRuntimeDir: "/var/host/next",
     ...overrides,
   };
 }
@@ -86,9 +86,7 @@ describe("buildNext", () => {
     "OCEL_APP_FOLDER",
     "OCEL_EDGE_KIND",
     "OCEL_ALLOW_DEGRADED",
-    "OCEL_NEXT_RUNTIME_DIR",
     "OCEL_MAX_FUNCTION_BYTES",
-    "OCEL_NEXT_REFRESHES_BY_REQUEST",
   ]) {
     it(`refuses a variable declared as ${owned} before anything runs`, async () => {
       let ran = false;
@@ -125,17 +123,6 @@ describe("buildNext", () => {
     expect(env.OCEL_ALLOW_DEGRADED).toBe("");
   });
 
-  it("passes the directory the host loads Next's runtime files from into the build", async () => {
-    const env = await envOf(app({ nextRuntimeDir: "/opt/elsewhere/next" }));
-    expect(env.OCEL_NEXT_RUNTIME_DIR).toBe("/opt/elsewhere/next");
-  });
-
-  it("names no Next runtime directory when the build request names none, for the adapter to refuse", async () => {
-    const { nextRuntimeDir: _, ...unnamed } = app();
-    const env = await envOf(unnamed);
-    expect(env.OCEL_NEXT_RUNTIME_DIR).toBe("");
-  });
-
   it("passes the host's per-function size budget into the build", async () => {
     const env = await envOf(app({ maxFunctionBytes: 209715200 }));
     expect(env.OCEL_MAX_FUNCTION_BYTES).toBe("209715200");
@@ -143,15 +130,6 @@ describe("buildNext", () => {
 
   it("sets no size budget when the host declares none", async () => {
     expect((await envOf(app())).OCEL_MAX_FUNCTION_BYTES).toBe("");
-  });
-
-  it("tells the build when its host refreshes by request", async () => {
-    const env = await envOf(app({ nextRefreshesByRequest: true }));
-    expect(env.OCEL_NEXT_REFRESHES_BY_REQUEST).toBe("1");
-  });
-
-  it("tells the build nothing when its host refreshes in the background", async () => {
-    expect((await envOf(app())).OCEL_NEXT_REFRESHES_BY_REQUEST).toBe("");
   });
 
   it("builds for production whatever NODE_ENV the shell sets", async () => {

@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
@@ -22,19 +23,14 @@ var (
 	realtimeGateway   = load("dist/realtime-gateway-" + ContainerArch)
 	bastion           = load("dist/bastion-" + ContainerArch)
 	nextServerRuntime = loadNextServerRuntime()
+	nextRuntime       = loadNextRuntime()
 )
 
-var nextServerRuntimeFiles = []string{containerimage.NextServerAdapterFile, "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
+var nextServerRuntimeFiles = []string{containerimage.NextServerPreloadFile}
 
 func NodeRuntime() []byte { return nodeRuntime }
 
-func NextRuntime() fs.FS {
-	directory, err := fs.Sub(embedded, "dist/next")
-	if err != nil {
-		panic(fmt.Sprintf("payloads: %v", err))
-	}
-	return directory
-}
+func NextRuntime() map[string][]byte { return nextRuntime }
 
 func NextServerRuntime() map[string][]byte { return nextServerRuntime }
 
@@ -63,6 +59,25 @@ func loadNextServerRuntime() map[string][]byte {
 	files := make(map[string][]byte, len(nextServerRuntimeFiles))
 	for _, name := range nextServerRuntimeFiles {
 		files[name] = load("dist/next/" + name)
+	}
+	return files
+}
+
+func loadNextRuntime() map[string][]byte {
+	files := map[string][]byte{}
+	err := fs.WalkDir(embedded, "dist/next", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		rel := strings.TrimPrefix(name, "dist/next/")
+		if rel == containerimage.NextServerPreloadFile {
+			return nil
+		}
+		files[rel] = load(name)
+		return nil
+	})
+	if err != nil {
+		panic(fmt.Sprintf("payloads: %v", err))
 	}
 	return files
 }

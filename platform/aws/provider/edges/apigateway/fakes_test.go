@@ -165,6 +165,8 @@ type fakeGateway struct {
 	stageErr    error
 	resourceErr error
 
+	deploymentErr error
+
 	deleteErr       error
 	deleteRefused   int
 	deleteDomainErr error
@@ -326,6 +328,31 @@ func (f *fakeGateway) CreateResource(_ context.Context, in *apigateway.CreateRes
 	return &apigateway.CreateResourceOutput{Id: aws.String(id), Path: aws.String(path)}, nil
 }
 
+func (f *fakeGateway) DeleteResource(_ context.Context, in *apigateway.DeleteResourceInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteResourceOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	path, ok := api.resources[aws.ToString(in.ResourceId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no resource")}
+	}
+	f.record("DeleteResource " + path)
+	for id, under := range api.resources {
+		if under == path || strings.HasPrefix(under, path+"/") {
+			delete(api.resources, id)
+			for key := range api.methods {
+				if strings.HasPrefix(key, id+" ") {
+					delete(api.methods, key)
+				}
+			}
+		}
+	}
+	return &apigateway.DeleteResourceOutput{}, nil
+}
+
 func (f *fakeGateway) method(api *fakeAPI, resource, httpMethod string) *fakeMethod {
 	key := resource + " " + httpMethod
 	m, ok := api.methods[key]
@@ -353,6 +380,23 @@ func (f *fakeGateway) PutMethod(_ context.Context, in *apigateway.PutMethodInput
 	}
 	m.open = true
 	return &apigateway.PutMethodOutput{}, nil
+}
+
+func (f *fakeGateway) DeleteMethod(_ context.Context, in *apigateway.DeleteMethodInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteMethodOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	httpMethod := aws.ToString(in.HttpMethod)
+	f.record("DeleteMethod " + api.resources[aws.ToString(in.ResourceId)] + " " + httpMethod)
+	key := aws.ToString(in.ResourceId) + " " + httpMethod
+	if m, ok := api.methods[key]; !ok || !m.open {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method " + httpMethod)}
+	}
+	delete(api.methods, key)
+	return &apigateway.DeleteMethodOutput{}, nil
 }
 
 func (f *fakeGateway) GetMethod(_ context.Context, in *apigateway.GetMethodInput, _ ...func(*apigateway.Options)) (*apigateway.GetMethodOutput, error) {
@@ -509,6 +553,9 @@ func (f *fakeGateway) CreateDeployment(_ context.Context, in *apigateway.CreateD
 		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
 	}
 	f.record("CreateDeployment " + api.name)
+	if f.deploymentErr != nil {
+		return nil, f.deploymentErr
+	}
 	api.stage = aws.ToString(in.StageName)
 	if in.Variables != nil {
 		api.variables = map[string]string{}

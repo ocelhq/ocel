@@ -59,7 +59,7 @@ describe("traceFunction", () => {
 
   it("emits the traced sources at their own paths, not one bundle and no config", () => {
     expect(existsSync(path.join(functionDir, "index.mjs"))).toBe(false);
-    expect(existsSync(path.join(functionDir, "config.json"))).toBe(false);
+    expect(existsSync(path.join(functionDir, "function-config.json"))).toBe(false);
     expect(existsSync(path.join(functionDir, "src", "server.js"))).toBe(true);
     expect(existsSync(path.join(functionDir, "src", "greeting.js"))).toBe(true);
   });
