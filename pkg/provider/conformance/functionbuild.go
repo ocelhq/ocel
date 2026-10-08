@@ -35,7 +35,4 @@ func answersTheFunctionBuildFacts(t *testing.T, suite Suite, configured *contrac
 	if got, want := configured.GetMaxFunctionBytes(), declared.MaxFunctionBytes; got != want {
 		t.Errorf("ConfigureResponse.facts.max_function_bytes = %d, want %d — the RPC answers what Facts().MaxFunctionBytes declares", got, want)
 	}
-	if got, want := configured.GetNextRefreshesByRequest(), declared.NextRefreshesByRequest; got != want {
-		t.Errorf("ConfigureResponse.facts.next_refreshes_by_request = %t, want %t — the RPC answers what Facts().NextRefreshesByRequest declares", got, want)
-	}
 }

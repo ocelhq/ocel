@@ -9,9 +9,9 @@ import (
 func TestReadHostCarriesTheFactsABuildReads(t *testing.T) {
 	t.Parallel()
 
-	got := ReadHost(&contractv1.ProviderFacts{MaxFunctionBytes: 1024, NextRefreshesByRequest: true})
+	got := ReadHost(&contractv1.ProviderFacts{MaxFunctionBytes: 1024})
 
-	if want := (Host{MaxFunctionBytes: 1024, NextRefreshesByRequest: true}); got != want {
+	if want := (Host{MaxFunctionBytes: 1024}); got != want {
 		t.Errorf("ReadHost() = %+v, want %+v", got, want)
 	}
 }

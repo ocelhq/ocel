@@ -8,12 +8,6 @@ func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 	}
 }
 
-func TestCloudRunDeclaresItsNextFunctionsKeepWorkingAfterTheResponse(t *testing.T) {
-	if pushing(t, "").Facts().NextRefreshesByRequest {
-		t.Error("Facts().NextRefreshesByRequest = true, want false: a Next service on Cloud Run is billed per instance and keeps its CPU once the response ends")
-	}
-}
-
 func TestCloudRunSaysItShipsANextServerRuntime(t *testing.T) {
 	if pushing(t, "").Hooks().ReadNextServerRuntime == nil {
 		t.Error("Hooks().ReadNextServerRuntime = nil, want the Next server runtime a Cloud Run Next container loads its cache handlers from")

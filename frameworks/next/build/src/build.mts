@@ -15,7 +15,6 @@ export interface NextBuild {
   edgeKind?: string;
   allowDegraded?: string[];
   maxFunctionBytes?: number;
-  nextRefreshesByRequest?: boolean;
 }
 
 const ADAPTER_PATH_ENV = "NEXT_ADAPTER_PATH";
@@ -57,7 +56,6 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     OCEL_EDGE_KIND: app.edgeKind ?? "",
     OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
     OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
-    OCEL_NEXT_REFRESHES_BY_REQUEST: app.nextRefreshesByRequest ? "1" : "",
     [ADAPTER_PATH_ENV]: adapterPath,
     [DEPLOYMENT_ID_ENV]: app.buildId,
   };

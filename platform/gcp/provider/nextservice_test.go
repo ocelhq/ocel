@@ -599,7 +599,7 @@ func TestANodeFunctionIsToldNoRefreshQueue(t *testing.T) {
 	}
 }
 
-func TestANextContainerIsToldNothingThatRefreshesByRequestOrRoutes(t *testing.T) {
+func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.T) {
 	service, _ := releasedNextContainer(t, nextContainerSpec())
 
 	env := envOf(service.Template.Containers[0])

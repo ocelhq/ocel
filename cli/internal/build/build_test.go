@@ -182,24 +182,6 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("hands each next app whether its host refreshes by request", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeBuildScript(t, root)
-		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
-
-		var got nodeBuildRequest
-		builder := nodeOnly{node: requestOf(&got), host: Host{NextRefreshesByRequest: true}}
-		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-			t.Fatalf("Build: %v", err)
-		}
-
-		if len(got.Apps) != 1 || !got.Apps[0].NextRefreshesByRequest {
-			t.Errorf("request apps = %+v, want web told its host refreshes by request", got.Apps)
-		}
-	})
-
 	t.Run("installs sharp's linux build once for every bundle of a next app", func(t *testing.T) {
 		runs := installLinuxArm64SharpNpm(t)
 

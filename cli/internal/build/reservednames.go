@@ -23,7 +23,6 @@ var buildSetNames = []string{
 	"OCEL_EDGE_KIND",
 	"OCEL_ALLOW_DEGRADED",
 	"OCEL_MAX_FUNCTION_BYTES",
-	"OCEL_NEXT_REFRESHES_BY_REQUEST",
 }
 
 var toolchainNames = []string{"HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP", "NODE_OPTIONS", "NODE_PATH"}

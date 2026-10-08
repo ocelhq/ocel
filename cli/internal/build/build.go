@@ -222,8 +222,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 
-				MaxFunctionBytes:       host.MaxFunctionBytes,
-				NextRefreshesByRequest: host.NextRefreshesByRequest,
+				MaxFunctionBytes: host.MaxFunctionBytes,
 			})
 		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)

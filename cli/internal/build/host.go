@@ -7,14 +7,12 @@ import (
 )
 
 type Host struct {
-	MaxFunctionBytes       int64
-	NextRefreshesByRequest bool
+	MaxFunctionBytes int64
 }
 
 func ReadHost(facts *contractv1.ProviderFacts) Host {
 	return Host{
-		MaxFunctionBytes:       facts.GetMaxFunctionBytes(),
-		NextRefreshesByRequest: facts.GetNextRefreshesByRequest(),
+		MaxFunctionBytes: facts.GetMaxFunctionBytes(),
 	}
 }
 
