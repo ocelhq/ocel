@@ -184,7 +184,7 @@ func (b *box) proxying(command, input string) (session.Result, bool) {
 }
 
 func (b *box) catting(command string) (session.Result, bool) {
-	if named, catted := strings.CutPrefix(command, "cat "); catted {
+	if named, catted := strings.CutPrefix(command, "cat "); catted && !strings.HasPrefix(named, "| ") {
 		var said string
 		for _, path := range strings.Fields(named) {
 			read, found := b.reads[unquoted(path)]
