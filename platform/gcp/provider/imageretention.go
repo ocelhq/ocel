@@ -45,29 +45,10 @@ func artifactTag(image string) (string, bool) {
 }
 
 func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
-	name, tagged := artifactTag(imageRef)
-	if !tagged {
+	if _, tagged := artifactTag(imageRef); !tagged {
 		return p.removeUnusedPushedImage(ctx, app, imageRef, images, progress)
 	}
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	repositories, err := clients.Repositories()
-	if err != nil {
-		return err
-	}
-	at := strings.LastIndex(name, "/tags/")
-	listed, err := listPackageTags(ctx, repositories, name[:at])
-	if err != nil {
-		return fmt.Errorf("list the tags of %s: %w", name[:at], err)
-	}
-	repository := imageRef[:strings.LastIndex(imageRef, ":")]
-	tags := make([]string, 0, len(listed))
-	for _, tag := range listed {
-		tags = append(tags, repository+":"+tag)
-	}
-	p.untagUnusedImages(ctx, tags, progress)
+	p.untagUnusedImages(ctx, []string{imageRef}, progress)
 	return nil
 }
 
@@ -103,25 +84,6 @@ func isRunByARevision(ctx context.Context, revisions *runv1.APIService, project,
 		return false, err
 	}
 	return len(running.Items) > 0, nil
-}
-
-func listPackageTags(ctx context.Context, repositories *artifactregistry.Service, packageName string) ([]string, error) {
-	var tags []string
-	page := ""
-	for {
-		listed, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.ListTagsResponse, error) {
-			return repositories.Projects.Locations.Repositories.Packages.Tags.List(packageName).PageToken(page).Context(ctx).Do(call...)
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, tag := range listed.Tags {
-			tags = append(tags, tag.Name[strings.LastIndex(tag.Name, "/tags/")+len("/tags/"):])
-		}
-		if page = listed.NextPageToken; page == "" {
-			return tags, nil
-		}
-	}
 }
 
 func imagesOf(revisions ...*run.GoogleCloudRunV2Revision) []string {

@@ -113,8 +113,8 @@ func aContainerStack() provider.StackRef {
 	}
 }
 
-func TestAReconcileUntagsEveryTagOfTheAppsPackageNoRevisionRuns(t *testing.T) {
-	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-old", "sha256-new", "sha256-older"}}}
+func TestAReconcileLeavesATagAnotherDeployPushedBeforeItsRevisionExists(t *testing.T) {
+	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-just-pushed", "sha256-new"}}}
 	app := serves("ocel-shop-prod-web")
 	app.image = shopWebImage + "new"
 	released(t, server, app)
@@ -123,14 +123,13 @@ func TestAReconcileUntagsEveryTagOfTheAppsPackageNoRevisionRuns(t *testing.T) {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
-	want := []string{shopWebPackage + "/tags/sha256-old", shopWebPackage + "/tags/sha256-older"}
-	if got := server.untags(); !slices.Equal(got, want) {
-		t.Errorf("the reconcile untagged %v, want %v: the revision that runs sha256-new keeps its tag, and every other tag of the package is one nothing runs, which the repository's cleanup policy deletes only once it is untagged", got, want)
+	if got := server.untags(); len(got) != 0 {
+		t.Errorf("the reconcile untagged %v, want nothing: a preview's image no revision runs yet is one its deploy is about to release, and a wrapped image's tag cannot be put back", got)
 	}
 }
 
 func TestAReconcileOfAReleaseThatNeverStartedUntagsTheImageItPushed(t *testing.T) {
-	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-new"}}}
+	server := &runServer{}
 
 	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
@@ -143,11 +142,10 @@ func TestAReconcileOfAReleaseThatNeverStartedUntagsTheImageItPushed(t *testing.T
 
 func TestAReconcileKeepsATagAServiceElsewhereInTheRegionRuns(t *testing.T) {
 	server := &runServer{
-		tagged:    map[string][]string{shopWebPackage: {"sha256-old"}},
 		elsewhere: map[string]string{"ocel-shop-preview-web-00001": shopWebImage + "old"},
 	}
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
+	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"old", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -157,7 +155,7 @@ func TestAReconcileKeepsATagAServiceElsewhereInTheRegionRuns(t *testing.T) {
 }
 
 func TestAReconcileOfAnImageOutsideArtifactRegistryTouchesNothing(t *testing.T) {
-	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-old"}}}
+	server := &runServer{}
 
 	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", "ghcr.io/acme/shop.web:sha256-new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
@@ -196,18 +194,8 @@ func TestAReconcileKeepsAnImageInTheProjectsRegistryARevisionRuns(t *testing.T) 
 	}
 }
 
-func TestAReconcileThatCannotListTheTagsSaysWhy(t *testing.T) {
-	server := &runServer{refusesList: true}
-
-	err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil)
-
-	if err == nil || !strings.Contains(err.Error(), "artifactregistry.tags.list") {
-		t.Errorf("ReconcileImages() = %v, want the refusal Artifact Registry gave, which names the permission the credential lacks", err)
-	}
-}
-
-func TestDestroyingAContainerUntagsEveryImageOfItsPackageNothingElseRuns(t *testing.T) {
-	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-old", "sha256-new"}}}
+func TestDestroyingAContainerUntagsTheImageItRan(t *testing.T) {
+	server := &runServer{}
 	p := server.open(t)
 	released := newReleasedStacks(p)
 	app := serves("ocel-shop-prod-web")
@@ -223,11 +211,10 @@ func TestDestroyingAContainerUntagsEveryImageOfItsPackageNothingElseRuns(t *test
 
 	released.destroy(t, ref)
 
-	want := []string{shopWebPackage + "/tags/sha256-new", shopWebPackage + "/tags/sha256-old"}
-	got := server.untags()
-	slices.Sort(got)
+	want := []string{shopWebPackage + "/tags/sha256-new"}
+	got := slices.Compact(slices.Sorted(slices.Values(server.untags())))
 	if !slices.Equal(got, want) {
-		t.Errorf("destroying the container untagged %v, want %v: the repository keeps every tagged image a destroyed project ever pushed otherwise", got, want)
+		t.Errorf("destroying the container untagged %v, want %v: the repository keeps every tagged image a destroyed project ran otherwise", got, want)
 	}
 }
 
