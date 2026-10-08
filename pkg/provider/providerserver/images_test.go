@@ -171,6 +171,50 @@ func TestADigestTheRegistryAlreadyHasIsNotPushedAgain(t *testing.T) {
 	}
 }
 
+type recordReadingStacks struct {
+	provider.Stacks
+	store keyvalue.Store
+
+	mu    sync.Mutex
+	named []string
+}
+
+func (s *recordReadingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+	recorded, _, err := stackrecords.Read(ctx, s.store, ref.Tier, ref.Project, ref.Name)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.named = append(s.named, recorded.Image)
+	s.mu.Unlock()
+	return s.Stacks.Destroy(ctx, ref, images, progress)
+}
+
+func TestAFailedDeployDestroysItsAppStackWithARecordNamingTheImageItPushed(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind == provider.StackApp {
+			return errors.New("the app stack failed")
+		}
+		return nil
+	})
+	reading := &recordReadingStacks{Stacks: vendor.Stacks(), store: vendor.KeyValues()}
+	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: reading})
+	bootstrappedOverRPC(t, client)
+
+	if result, _ := deploy(t, client, registryDeployRequest()); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want the app stack to fail it")
+	}
+
+	reading.mu.Lock()
+	defer reading.mu.Unlock()
+	if !slices.Equal(reading.named, []string{pushedCoordinate}) {
+		t.Errorf("the failed deploy destroyed stacks whose records name %q, want %q: the destroy reclaims only the image the record names, and nothing else records it", reading.named, pushedCoordinate)
+	}
+}
+
 func TestTheSameAppInTwoProjectsIsPushedWhereOneProjectsRetentionNeverReachesTheOther(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)

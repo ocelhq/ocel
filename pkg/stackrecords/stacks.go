@@ -35,6 +35,7 @@ type Stack struct {
 	Functions    []provider.Function `json:"functions,omitempty"`
 
 	Containers []provider.AppContainer `json:"containers,omitempty"`
+	Image      string                  `json:"image,omitempty"`
 
 	Resources      []byte `json:"resources,omitempty"`
 	ResourceDigest string `json:"resource_digest,omitempty"`

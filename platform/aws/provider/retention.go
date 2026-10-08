@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,13 +44,13 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 		return err
 	}
 	var pushed, ours []string
-	for _, container := range recorded.Containers {
+	for _, image := range imagesOf(recorded) {
 		switch {
-		case container.Image == "" || kept[container.Image]:
-		case images != nil && strings.HasPrefix(container.Image, images.Destination()+"/"):
-			pushed = append(pushed, container.Image)
+		case kept[image]:
+		case images != nil && strings.HasPrefix(image, images.Destination()+"/"):
+			pushed = append(pushed, image)
 		default:
-			ours = append(ours, container.Image)
+			ours = append(ours, image)
 		}
 	}
 	resources.RemovePushedImages(ctx, images, app, pushed, log)
@@ -82,12 +83,23 @@ func recordedImages(ctx context.Context, store keyvalue.Store, project string, c
 			if !counted(tier, stack.Name) {
 				continue
 			}
-			for _, container := range stack.Containers {
-				if container.Image != "" {
-					recorded[container.Image] = true
-				}
+			for _, image := range imagesOf(stack.Stack) {
+				recorded[image] = true
 			}
 		}
 	}
 	return recorded, nil
+}
+
+func imagesOf(recorded stackrecords.Stack) []string {
+	var images []string
+	if recorded.Image != "" {
+		images = append(images, recorded.Image)
+	}
+	for _, container := range recorded.Containers {
+		if container.Image != "" && !slices.Contains(images, container.Image) {
+			images = append(images, container.Image)
+		}
+	}
+	return images
 }
