@@ -2,17 +2,41 @@
   "provider": {
     "ids": ["aws", "gcp", "vps"],
     "shorthand": ["aws"],
-    "required": {
-      "gcp": [
+    "options": {
+      "aws": [
         {
           "name": "region",
-          "doc": "The region to deploy into. A project spans them all, so this names the one."
+          "doc": "The AWS region to deploy into."
+        },
+        {
+          "name": "variablesKey",
+          "doc": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns."
+        }
+      ],
+      "gcp": [
+        {
+          "name": "project",
+          "doc": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config."
+        },
+        {
+          "name": "region",
+          "doc": "The region to deploy into. A project spans them all, so this names the one.",
+          "required": true
         }
       ],
       "vps": [
         {
+          "name": "deployKey",
+          "doc": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."
+        },
+        {
+          "name": "proxy",
+          "doc": "What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."
+        },
+        {
           "name": "ssh",
-          "doc": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."
+          "doc": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out.",
+          "required": true
         }
       ]
     }

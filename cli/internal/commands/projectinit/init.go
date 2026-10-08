@@ -86,7 +86,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
 	cmd.Flags().StringVar(&flags.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
-	cmd.Flags().StringArrayVar(&flags.options, "option", nil, "Option the provider cannot deploy without, as name=value; repeat it for each (asked for on a terminal when missing)")
+	cmd.Flags().StringArrayVar(&flags.options, "option", nil, "Provider option whose value is text, as name=value; repeat it for each. On a terminal, init asks for any the provider cannot deploy without")
 	cmd.Flags().StringVar(&flags.format, "format", "", "Write the config as ts, json or yaml — the same document in each; ts needs node, and is the default only in a project built with it")
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
@@ -141,6 +141,9 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 		return nil, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
 	}
 
+	if err := refuseUnknownOptions(provider, opts.settings); err != nil {
+		return nil, err
+	}
 	if err := refuseMissingOptions(provider, opts.settings); err != nil {
 		return nil, err
 	}

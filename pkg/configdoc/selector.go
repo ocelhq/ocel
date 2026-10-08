@@ -17,12 +17,13 @@ var selectorsJSON []byte
 type selection struct {
 	IDs       []string                    `json:"ids"`
 	Shorthand []string                    `json:"shorthand"`
-	Required  map[string][]ProviderOption `json:"required,omitempty"`
+	Options   map[string][]ProviderOption `json:"options,omitempty"`
 }
 
 type ProviderOption struct {
-	Name string `json:"name"`
-	Doc  string `json:"doc"`
+	Name     string `json:"name"`
+	Doc      string `json:"doc"`
+	Required bool   `json:"required,omitempty"`
 }
 
 type selections struct {
@@ -46,7 +47,7 @@ func ProviderIDs() []string { return slices.Clone(known.Provider.IDs) }
 func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
 	previous := known
 	known = selections{
-		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand, Required: previous.Provider.Required},
+		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand, Options: previous.Provider.Options},
 		Edges:    maps.Clone(previous.Edges),
 		DNS:      maps.Clone(previous.DNS),
 	}
@@ -55,8 +56,22 @@ func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
 	return func() { known = previous }
 }
 
+func AddKnownProviderOptions(provider string, options []ProviderOption) (restore func()) {
+	previous := known.Provider.Options
+	known.Provider.Options = maps.Clone(previous)
+	if known.Provider.Options == nil {
+		known.Provider.Options = map[string][]ProviderOption{}
+	}
+	known.Provider.Options[provider] = slices.Clone(options)
+	return func() { known.Provider.Options = previous }
+}
+
+func TextProviderOptions(id string) []ProviderOption {
+	return slices.Clone(known.Provider.Options[id])
+}
+
 func RequiredProviderOptions(id string) []ProviderOption {
-	return slices.Clone(known.Provider.Required[id])
+	return slices.DeleteFunc(TextProviderOptions(id), func(option ProviderOption) bool { return !option.Required })
 }
 
 func ProviderNamedAlone(id string) bool { return slices.Contains(known.Provider.Shorthand, id) }
@@ -133,7 +148,7 @@ func (ProviderDescriptor) checkShape(path string, value any) error {
 	}
 	for id, options := range keyed {
 		set, _ := options.(map[string]any)
-		if err := refuseMissingOptions(JoinPath(path, id), set, known.Provider.Required[id]); err != nil {
+		if err := refuseMissingOptions(JoinPath(path, id), set, RequiredProviderOptions(id)); err != nil {
 			return err
 		}
 		if edge, named := set[edgeKey]; named {

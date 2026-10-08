@@ -19,7 +19,7 @@ ocel init my-app --provider vps
 | Flag | What it does |
 | --- | --- |
 | `--provider` | The provider this project deploys through: `aws`, `gcp` or `vps`. Required. |
-| `--option` | An option the provider cannot deploy without, as `name=value`: `region` for `gcp`, `ssh` for `vps`. Repeat it for each. On a terminal, init asks for any you leave out; under `--json` or with no terminal, it fails with [`input_required`](/docs/errors/input_required). |
+| `--option` | A provider option whose value is text, as `name=value`; repeat it for each. `gcp` cannot deploy without `region`, nor `vps` without `ssh`; a name the provider does not take is refused, naming the ones it does. On a terminal, init asks for any you leave out; under `--json` or with no terminal, it fails with [`input_required`](/docs/errors/input_required). |
 | `--lang` | The language of this project (`go`, `rust`, `python`, `node`), when no manifest here says. |
 | `--format` | Write the config as `ts`, `json` or [`yaml`](/docs/configuration#yaml) instead of the default — the same document in each. `ts` needs node. |
 
