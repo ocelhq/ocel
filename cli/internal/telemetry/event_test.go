@@ -193,13 +193,14 @@ func TestAnIdentityCarriesTheInstallIDTheBuildAndTheDetectedAgentAndCI(t *testin
 
 func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testing.T) {
 	event, err := NewEvent(anIdentity, aTime, CommandCompletion{
-		Command:   "env set",
-		Flags:     []string{"config", "json"},
-		ExitCode:  1,
-		ErrorCode: "usage",
-		Duration:  1500 * time.Millisecond,
-		JSON:      true,
-		TTY:       false,
+		Command:        "env set",
+		Flags:          []string{"config", "json"},
+		ExitCode:       1,
+		ErrorCode:      "usage",
+		Duration:       1500 * time.Millisecond,
+		JSON:           true,
+		TTY:            false,
+		SkillInstalled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +226,7 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 			"duration_ms":             float64(1500),
 			"json":                    true,
 			"tty":                     false,
+			"skill_installed":         true,
 			"cli_version":             "1.2.3",
 			"os":                      "linux",
 			"arch":                    "amd64",

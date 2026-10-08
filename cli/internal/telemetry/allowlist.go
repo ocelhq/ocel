@@ -10,6 +10,7 @@ var allowedProperties = []string{
 	"duration_ms",
 	"json",
 	"tty",
+	"skill_installed",
 	"reloads",
 	"resource_kinds",
 	"error_codes",

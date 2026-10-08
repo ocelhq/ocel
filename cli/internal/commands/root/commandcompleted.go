@@ -22,13 +22,14 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 		return
 	}
 	c.recordEvent(telemetry.CommandCompletion{
-		Command:   c.formatCommandPath(),
-		Flags:     c.listSetFlagNames(),
-		ExitCode:  exitCode,
-		ErrorCode: clierror.NewRunError(err).GetCode(),
-		Duration:  elapsed,
-		JSON:      jsonRequested(args),
-		TTY:       terminal.IsTerminal(c.root.OutOrStdout()),
+		Command:        c.formatCommandPath(),
+		Flags:          c.listSetFlagNames(),
+		ExitCode:       exitCode,
+		ErrorCode:      clierror.NewRunError(err).GetCode(),
+		Duration:       elapsed,
+		JSON:           jsonRequested(args),
+		TTY:            terminal.IsTerminal(c.root.OutOrStdout()),
+		SkillInstalled: c.isSkillInstalled(),
 	})
 	c.startFlush(resolution)
 }

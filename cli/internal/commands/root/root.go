@@ -44,8 +44,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -105,6 +107,7 @@ type command struct {
 	preRunReached        bool
 	invoked              *cobra.Command
 	startFlush           func(telemetry.Resolution)
+	isSkillInstalled     func() bool
 }
 
 func Execute() int {
@@ -144,6 +147,7 @@ func newCommand() *command {
 	invocation := newInvocation(c.bus, set)
 	invocation.Setups = prerequisite.Setups{}
 	invocation.RecordEvent = c.recordEvent
+	c.isSkillInstalled = func() bool { return isSkillInstalled(set.explicitConfigPath()) }
 
 	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
@@ -237,6 +241,15 @@ func newCommand() *command {
 
 	installHelpStyle(rootCmd, func() bool { return set.json })
 	return c
+}
+
+func isSkillInstalled(explicitConfigPath string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	root, err := project.FindRoot(cwd, explicitConfigPath)
+	return err == nil && skill.IsInstalled(root)
 }
 
 func startTelemetryFlush(resolution telemetry.Resolution) {
