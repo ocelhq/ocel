@@ -56,7 +56,7 @@ func serveConnectors(t *testing.T, service *connectorService) *Client {
 	return New(srv.URL)
 }
 
-func TestUpsertConnector(t *testing.T) {
+func TestUpsertConnectorRegistersTheTargetAsADialConnectorUnderTheSession(t *testing.T) {
 	t.Parallel()
 
 	var got *consolev1.UpsertConnectorRequest
@@ -84,7 +84,7 @@ func TestUpsertConnector(t *testing.T) {
 	}
 }
 
-func TestListConnectors(t *testing.T) {
+func TestListConnectorsReturnsEveryConnectorAndFindConnectorPicksOneByTarget(t *testing.T) {
 	t.Parallel()
 
 	listed := []*consolev1.Connector{
@@ -117,7 +117,7 @@ func TestListConnectors(t *testing.T) {
 	}
 }
 
-func TestSetConnectorAddress(t *testing.T) {
+func TestSetConnectorAddressSendsOnlyThePartsOfTheAddressTheCallerNamed(t *testing.T) {
 	t.Parallel()
 
 	t.Run("sends the id and only the parts of the address the caller named", func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestComputeNameOfSpellsTheWordsTheProviderUses(t *testing.T) {
 	}
 }
 
-func TestRemoveConnector(t *testing.T) {
+func TestRemoveConnectorRemovesTheConnectorWithThatID(t *testing.T) {
 	t.Parallel()
 
 	var got *consolev1.RemoveConnectorRequest
@@ -231,7 +231,7 @@ func TestAConnectorTheConsoleRefusesToChangeIsPermissionDenied(t *testing.T) {
 	}
 }
 
-func TestLivenessOfAConnector(t *testing.T) {
+func TestLivenessOfIsNeverConnectedOnlineOrOfflineFromWhatTheConsoleRecorded(t *testing.T) {
 	t.Parallel()
 
 	connected := timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
