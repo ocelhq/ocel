@@ -39,6 +39,7 @@ type promoteRequest struct {
 	replaces    string
 	rollsBackTo string
 	promotion   router.Promotion
+	confirm     func(ctx context.Context) error
 }
 
 func (r promoteRequest) record(ctx context.Context, l projectLedger) ([]ledger.RecordedPromotion, error) {
@@ -57,6 +58,11 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 			return nil, err
 		}
 		moves[i] = router.PointerMove{Pointer: pointer, Promotion: promoted, Records: records, Hosts: routed.hosts, Superseded: routed.superseded, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
+	}
+	if req.confirm != nil {
+		if err := req.confirm(ctx); err != nil {
+			return nil, err
+		}
 	}
 	dropped, err := req.record(ctx, l)
 	if err != nil {
