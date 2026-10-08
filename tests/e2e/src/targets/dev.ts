@@ -4,7 +4,7 @@ import { access, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
+import { promisify, stripVTControlCharacters } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { migrates, setsEnv, setsSecret } from "../checks";
 import {
@@ -64,7 +64,9 @@ async function freePort(): Promise<number> {
 }
 
 export function resolvedEnvironment(said: string): boolean {
-  return /✓ (Resolved the app's environment|Connected to the running `ocel dev`)/.test(said);
+  return /✓ (Resolved the app's environment|Connected to the running `ocel dev`)/.test(
+    stripVTControlCharacters(said),
+  );
 }
 
 export function healthDeadline(started: number, resolvedAt: number | undefined): number {
