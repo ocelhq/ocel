@@ -132,6 +132,14 @@ const ZONED_RUN = {
 const skippedBy = (planned: ReturnType<typeof planOn>, cell: string) =>
   (planned.skipped[cell] ?? []).map((gap) => gap.id).sort();
 
+describe("the cloudflare variant on floci's aws", () => {
+  it("skips every cloudflare cell, whatever framework its fixture builds", () => {
+    expect(skippedBy(planOn("aws.floci"), "deploy/sveltekit-cloudflare")).toContain(
+      "no-cloudflare-api",
+    );
+  });
+});
+
 describe("the alb variant", () => {
   it("runs deploy/node behind the load balancer on gcp when the run names a zone", () => {
     const planned = planOn("gcp", ZONED_RUN);
