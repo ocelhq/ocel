@@ -58,7 +58,20 @@ func (o *openForwards) awaitClosed(ctx context.Context) error {
 }
 
 func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsResponse]) error {
-	defer h.forwards.hold()()
+	release := h.forwards.hold()
+	var forwards []provider.PortForward
+	closeInBackground := false
+	defer func() {
+		if closeInBackground {
+			go func() {
+				defer release()
+				closeForwards(forwards)
+			}()
+			return
+		}
+		defer release()
+		closeForwards(forwards)
+	}()
 	p, err := h.session.use()
 	if err != nil {
 		return err
@@ -80,7 +93,6 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
 		return forward == nil || !isReachableByPort(binding)
 	})
-	var forwards []provider.PortForward
 	failed := make(chan error, 1)
 	reportFailure := func(err error) {
 		select {
@@ -93,7 +105,6 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		if err != nil {
 			return provider.RefusalError(err)
 		}
-		defer closeForwards(forwards)
 	}
 	resp, err := forwardedResponse(bindings, forwards)
 	if err != nil {
@@ -109,6 +120,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	case <-ctx.Done():
 		return nil
 	case err := <-failed:
+		closeInBackground = true
 		return provider.RefusalError(err)
 	}
 }

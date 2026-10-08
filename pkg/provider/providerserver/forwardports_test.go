@@ -122,6 +122,64 @@ func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheFo
 	}
 }
 
+func TestForwardPortsEndsTheStreamWithAFailureBeforeItsForwardsFinishClosingAndHoldsADeployUntilTheyHave(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	release := make(chan struct{})
+	var released sync.Once
+	releaseForwards := func() { released.Do(func() { close(release) }) }
+	defer releaseForwards()
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			req.ReportFailure(errors.New("the bastion task stopped: Task stopped by user"))
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	ended := make(chan error, 1)
+	go func() {
+		for stream.Receive() {
+		}
+		ended <- stream.Err()
+	}()
+	select {
+	case err := <-ended:
+		if err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
+			t.Fatalf("ForwardPorts() stream ended with %v, want the failure the provider reported", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream waited for the failed forwards to close before saying they failed, want the failure first, so a caller that leaves meanwhile still hears it")
+	}
+
+	deployed := make(chan struct{})
+	go func() {
+		defer close(deployed)
+		deploying, err := client.Deploy(context.Background(), deployRequest())
+		if err != nil {
+			return
+		}
+		for deploying.Receive() {
+		}
+		deploying.Close()
+	}()
+	select {
+	case <-deployed:
+		t.Fatal("the deploy ran while the provider was still closing the failed forwards, want it held until they are closed")
+	case <-time.After(time.Second):
+	}
+	releaseForwards()
+	select {
+	case <-deployed:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the deploy never ran once the failed forwards were closed")
+	}
+}
+
 func TestForwardPortsOnAProviderThatCannotForwardHandsEveryBindingBackUnforwarded(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
