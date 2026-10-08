@@ -248,9 +248,12 @@ func (hs environmentHolds) context(ctx context.Context) context.Context {
 }
 
 func (hs environmentHolds) explain(err error) error {
+	if err == nil {
+		return nil
+	}
 	for _, hold := range hs {
-		if explained := hold.explain(err); explained != err {
-			return explained
+		if lost := hold.readLoss(); lost != nil {
+			return lost
 		}
 	}
 	return err
