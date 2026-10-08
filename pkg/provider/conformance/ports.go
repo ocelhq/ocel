@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -1069,12 +1070,8 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			if err != nil {
 				t.Fatalf("reading the stack record back = %v", err)
 			}
-			for _, binding := range result.Bindings {
-				for _, name := range listRedactedProperties(binding.Type) {
-					if secret := binding.Properties[name]; secret != "" && bytes.Contains(raw.Value, []byte(secret)) {
-						t.Errorf("the stack record holds binding %s's %q in clear, which bindings.proto marks debug_redact, and the record store is readable without the sealer", binding.Name, name)
-					}
-				}
+			for _, fault := range findRecordedSecrets(raw.Value) {
+				t.Error(fault)
 			}
 		}
 
@@ -1143,4 +1140,20 @@ func listRedactedProperties(t provider.BindingType) []string {
 		}
 	}
 	return names
+}
+
+func findRecordedSecrets(raw []byte) []string {
+	var recorded stackrecords.Stack
+	if err := json.Unmarshal(raw, &recorded); err != nil {
+		return []string{fmt.Sprintf("the stack record does not decode as stackrecords reads it: %v", err)}
+	}
+	var faults []string
+	for _, binding := range recorded.Bindings {
+		for _, name := range listRedactedProperties(binding.Type) {
+			if _, held := binding.Properties[name]; held {
+				faults = append(faults, fmt.Sprintf("the stack record holds binding %s's %q in clear, which bindings.proto marks debug_redact, and the record store is readable without the sealer", binding.Name, name))
+			}
+		}
+	}
+	return faults
 }

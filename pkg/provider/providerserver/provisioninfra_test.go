@@ -112,8 +112,14 @@ func TestProvisionInfraRecordsNoPasswordInTheInfraStackRecord(t *testing.T) {
 		t.Fatal("ProvisionInfra() recorded no stack, so there is no record to hold a password")
 	}
 	for _, entry := range recorded {
-		if strings.Contains(string(entry.Value), "fake-"+provider.PropertyPassword) {
-			t.Errorf("the record %s holds the postgres password in clear: %s", entry.Key, entry.Value)
+		var stack stackrecords.Stack
+		if err := json.Unmarshal(entry.Value, &stack); err != nil {
+			t.Fatalf("decoding the record %s = %v", entry.Key, err)
+		}
+		for _, binding := range stack.Bindings {
+			if _, held := binding.Properties[provider.PropertyPassword]; held {
+				t.Errorf("the record %s holds binding %s's password in clear", entry.Key, binding.Name)
+			}
 		}
 	}
 }
