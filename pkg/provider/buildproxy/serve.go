@@ -2,15 +2,12 @@ package buildproxy
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
-func Serve(ctx context.Context, req provider.BindingProxyRequest, served []provider.BindingType, open func(ctx context.Context, bindings []provider.Binding) (bindingproxy.Services, func(), error)) (provider.BindingProxy, error) {
+func Serve(ctx context.Context, req provider.BindingProxyRequest, served []provider.BindingType, open func(ctx context.Context, bindings []provider.Binding) (provider.BindingProxy, error)) (provider.BindingProxy, error) {
 	var bound []provider.Binding
 	var unserved []string
 	for _, binding := range req.Bindings {
@@ -23,30 +20,10 @@ func Serve(ctx context.Context, req provider.BindingProxyRequest, served []provi
 	if len(bound) == 0 {
 		return provider.BindingProxy{Unserved: unserved}, nil
 	}
-	services, release, err := open(ctx, bound)
+	proxy, err := open(ctx, bound)
 	if err != nil {
 		return provider.BindingProxy{}, err
 	}
-	listening, err := bindingproxy.Serve(services)
-	if err != nil {
-		release()
-		return provider.BindingProxy{}, err
-	}
-	watched := make(chan struct{})
-	go func() {
-		defer close(watched)
-		if err := <-listening.Errs; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			req.ReportFailure(err)
-		}
-	}()
-	return provider.BindingProxy{
-		Address:      listening.Address,
-		SessionToken: listening.Token,
-		Unserved:     unserved,
-		Close: func() {
-			_ = listening.Close()
-			<-watched
-			release()
-		},
-	}, nil
+	proxy.Unserved = unserved
+	return proxy, nil
 }

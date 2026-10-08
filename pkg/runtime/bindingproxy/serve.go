@@ -3,6 +3,7 @@ package bindingproxy
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,13 +18,36 @@ type Served struct {
 	Env     []string
 	Errs    <-chan error
 	server  *http.Server
+	watched <-chan struct{}
 }
 
 func (s Served) Close() error {
 	if s.server == nil {
 		return nil
 	}
-	return s.server.Close()
+	err := s.server.Close()
+	if s.watched != nil {
+		<-s.watched
+	}
+	return err
+}
+
+func ServeReporting(services Services, report func(error)) (Served, error) {
+	served, err := Serve(services)
+	if err != nil {
+		return Served{}, err
+	}
+	errs := served.Errs
+	watched := make(chan struct{})
+	go func() {
+		defer close(watched)
+		if err := <-errs; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			report(err)
+		}
+	}()
+	served.Errs = nil
+	served.watched = watched
+	return served, nil
 }
 
 func Serve(services Services) (Served, error) {
