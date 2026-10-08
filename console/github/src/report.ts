@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const deployResultSchema = z.looseObject({
-  slug: z.string(),
   environment: z.looseObject({
     tier: z.string(),
     identity: z.string().optional(),
@@ -9,17 +8,23 @@ export const deployResultSchema = z.looseObject({
   provider: z.looseObject({
     name: z.string(),
   }),
-  promotionId: z.string(),
-  tag: z.string().optional(),
-  apps: z.array(
-    z.looseObject({
-      name: z.string(),
-      buildId: z.string().optional(),
-      frameworkBuildId: z.string().optional(),
-      urls: z.array(z.string()),
-    }),
-  ),
-  deployedAt: z.string(),
+  promotion: z
+    .looseObject({
+      id: z.string(),
+      tag: z.string().optional(),
+    })
+    .optional(),
+  apps: z
+    .array(
+      z.looseObject({
+        name: z.string(),
+        buildId: z.string().optional(),
+        frameworkBuildId: z.string().optional(),
+        urls: z.array(z.string()).default([]),
+      }),
+    )
+    .default([]),
+  finishedAt: z.string(),
 });
 
 export const phaseSchema = z.enum(["started", "deployed", "failed", "removed"]);

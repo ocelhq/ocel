@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
 import {
   BUILD_LOG_FILE,
-  DEPLOY_RESULT_FILE,
+  DEPLOY_REPORT_FILE,
   lambdaFunctionNames,
   markerLines,
   STATE_FILE,
@@ -22,7 +22,7 @@ const AWS_TIMEOUT_MS = 60_000;
 
 const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
-const result = readJSON(join(appDir, DEPLOY_RESULT_FILE)) ?? {};
+const result = readJSON(join(appDir, DEPLOY_REPORT_FILE)) ?? {};
 
 for (const line of markerLines({ buildId: readFrameworkBuildID(), deploymentId: readBuildID() })) {
   console.log(line);

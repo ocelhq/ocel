@@ -165,7 +165,7 @@ Under `OCEL_BYTECODE_EMBED=1` the last two are complementary and **both must
 run**: embedding makes the S3 rehydrate line `assert-bytecode.mjs` looks for
 false, so it drops that leg and warns, and `assert-embed.mjs` covers it instead.
 Both read slug, environment, app, build id and deploy time from
-`.ocel/deploy-result.json` in the deployed app's directory.
+`.ocel/deploy-report.json` in the deployed app's directory.
 
 ## Repacking the sidecar
 

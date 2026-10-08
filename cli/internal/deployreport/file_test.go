@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
@@ -33,6 +34,23 @@ func TestWriteLeavesTheDeploymentAsProtoJSONInTheProjectStateDir(t *testing.T) {
 	}
 	if !proto.Equal(&read, deployment) {
 		t.Errorf("report = %v, want %v", &read, deployment)
+	}
+}
+
+func TestTheGoldenReportIsADeploymentTheConsoleAccepts(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile(filepath.Join("testdata", "deploy-report.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var golden consolev1.Deployment
+	if err := protojson.Unmarshal(raw, &golden); err != nil {
+		t.Fatalf("the golden is not a deployment's protojson: %v", err)
+	}
+
+	if err := protovalidate.Validate(&golden); err != nil {
+		t.Errorf("the golden is a record the console refuses: %v", err)
 	}
 }
 

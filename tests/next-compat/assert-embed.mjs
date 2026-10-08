@@ -27,7 +27,7 @@ import {
   bytecodeCacheKeyPrefix,
   bytecodeEmbeddedOutcome,
   bytecodeEmbedEnabled,
-  DEPLOY_RESULT_FILE,
+  DEPLOY_REPORT_FILE,
   embeddedArtifactPairs,
   embeddedBytecodePath,
   logWindowVerdict,
@@ -63,7 +63,7 @@ if (!base) {
   fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
 }
 
-const resultPath = join(process.cwd(), DEPLOY_RESULT_FILE);
+const resultPath = join(process.cwd(), DEPLOY_REPORT_FILE);
 if (!existsSync(resultPath)) {
   fail(`${resultPath} not found — run this from the deployed app's directory, after a deploy`);
 }

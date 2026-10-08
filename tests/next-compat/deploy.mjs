@@ -15,7 +15,7 @@ import { join } from "node:path";
 import {
   APP_NAME,
   BUILD_LOG_FILE,
-  DEPLOY_RESULT_FILE,
+  DEPLOY_REPORT_FILE,
   deployPlanProblems,
   deployURL,
   isProductionTarget,
@@ -101,7 +101,7 @@ function deploy() {
     runOcel(adapterDir, ["preview", "up", name, "--prebuilt"]);
   }
 
-  const resultPath = join(appDir, DEPLOY_RESULT_FILE);
+  const resultPath = join(appDir, DEPLOY_REPORT_FILE);
   if (!existsSync(resultPath)) {
     throw new Error(
       `${resultPath} was not written; the deploy reported success but produced no result`,
@@ -150,7 +150,7 @@ function planProduction(adapterDir) {
   runOcel(adapterDir, ["deploy", "--prebuilt", "--dry"]);
   const planned = readFileSync(logPath, "utf8").slice(before);
   const problems = deployPlanProblems(planned, {
-    resultWritten: existsSync(join(appDir, DEPLOY_RESULT_FILE)),
+    resultWritten: existsSync(join(appDir, DEPLOY_REPORT_FILE)),
   });
   if (problems.length > 0) {
     throw new Error(`--dry did not stay a plan:\n  ${problems.join("\n  ")}`);
@@ -166,7 +166,7 @@ function planFirst(adapterDir, name) {
   const listedFrom = readFileSync(logPath, "utf8").length;
   runOcel(adapterDir, ["preview", "ls"]);
   const problems = planProblems(planned, {
-    resultWritten: existsSync(join(appDir, DEPLOY_RESULT_FILE)),
+    resultWritten: existsSync(join(appDir, DEPLOY_REPORT_FILE)),
     listed: readFileSync(logPath, "utf8").slice(listedFrom),
     name,
   });

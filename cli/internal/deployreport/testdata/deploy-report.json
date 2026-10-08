@@ -1,0 +1,38 @@
+{
+  "id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "kind": "DEPLOYMENT_KIND_PREVIEW_UP",
+  "outcome": "DEPLOYMENT_OUTCOME_SUCCEEDED",
+  "environment": {
+    "tier": "TIER_PREVIEW",
+    "identity": "e2e-42"
+  },
+  "provider": {
+    "name": "aws"
+  },
+  "target": "aws/123456789012",
+  "startedAt": "2026-10-07T12:00:00Z",
+  "finishedAt": "2026-10-07T12:01:00Z",
+  "cliVersion": "0.1.0",
+  "promotion": {
+    "id": "dep_abc",
+    "seq": "1791374460000",
+    "tag": "v1"
+  },
+  "apps": [
+    {
+      "name": "web",
+      "compute": "COMPUTE_KIND_SERVERLESS",
+      "buildId": "3f7c1b9a5e2d4c8f",
+      "release": "3f7c1b9a5e2d4c8f~0123456789ab",
+      "urls": [
+        "https://app.example.com"
+      ],
+      "outcome": "APP_OUTCOME_SUCCEEDED",
+      "frameworkBuildId": "bld_1",
+      "storagePrefix": "preview-e2e-42/proj-123/web/r3f7c1b9a/"
+    }
+  ],
+  "trigger": {
+    "kind": "TRIGGER_KIND_CLI"
+  }
+}

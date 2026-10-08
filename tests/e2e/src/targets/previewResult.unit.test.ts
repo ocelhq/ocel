@@ -55,6 +55,6 @@ describe("previewReleasesIn", () => {
         JSON.stringify({ apps: [] }),
         "ocel preview up j",
       ),
-    ).toThrow(/\.ocel\/deploy-result\.json.*web/);
+    ).toThrow(/\.ocel\/deploy-report\.json.*web/);
   });
 });
