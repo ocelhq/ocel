@@ -1810,7 +1810,7 @@ test("names the bundle serving the root route as the entry", async () => {
   );
 });
 
-test("names no entry when no function serves the root route", async () => {
+test("names the first bundle as the entry when no function serves the root route", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1819,8 +1819,8 @@ test("names no entry when no function serves the root route", async () => {
   const manifest = await readManifest(projectDir);
   const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
   expect(manifest.dispatch["/"]).toBeUndefined();
-  expect(manifest.entry).toBe("");
-  expect(serve.entry).toBe("");
+  expect(manifest.entry).toBe("bundle-0");
+  expect(serve.entry).toBe("bundle-0");
   expect(await exists(join(projectDir, ".ocel/output/functions/bundle-0.func"))).toBe(true);
 });
 

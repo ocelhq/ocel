@@ -242,7 +242,10 @@ const adapter = {
 
     const rootPathname = basePath || "/";
     const rootEntryKey = entryKeyByPathname.get(rootPathname);
-    const entry = rootEntryKey === undefined ? "" : bundleNameOf(rootEntryKey, rootPathname);
+    const entry =
+      rootEntryKey === undefined
+        ? (bundles[0]?.name ?? "")
+        : bundleNameOf(rootEntryKey, rootPathname);
 
     const routeKinds = routeKindsById(allRoutes, outputs.prerenders);
 
