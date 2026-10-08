@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -222,5 +223,103 @@ func releasedOn(t *testing.T, p *Provider, s serving) {
 	t.Helper()
 	if _, err := p.deployService(context.Background(), s, nil); err != nil {
 		t.Fatalf("deployService(%s) = %v", s.service, err)
+	}
+}
+
+func recordStartingImage(t *testing.T, p *Provider, ref provider.StackRef, image string) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), p.KeyValues(), ref.Tier, ref.Project, ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, App: ref.Name.App, Image: image}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func aPreviewOfTheSameApp() provider.StackRef {
+	return provider.StackRef{
+		Project: "shop",
+		Tier:    environment.TierPreview,
+		Name:    naming.AppStack("pr-7", "web", naming.NewReleaseToken("d2", "f2")),
+	}
+}
+
+func TestAReconcileKeepsAnImageInTheProjectsRegistryADeployInFlightRecords(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	recordStartingImage(t, p, aPreviewOfTheSameApp(), projectRegistryImage)
+	pushed := fake.NewImages()
+
+	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got := pushed.Removed(); len(got) != 0 {
+		t.Errorf("the reconcile removed %v, want nothing: a deploy records the image it is about to run before its revision exists", got)
+	}
+}
+
+func TestAReconcileLeavesTaggedAnImageADeployInFlightRecords(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	recordStartingImage(t, p, aPreviewOfTheSameApp(), shopWebImage+"new")
+
+	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got := server.untags(); len(got) != 0 {
+		t.Errorf("the reconcile untagged %v, want nothing: a deploy records the image it is about to run before its revision exists", got)
+	}
+}
+
+func TestAReconcileOfAFailedReleaseRemovesTheImageItsOwnRecordNames(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	recordStartingImage(t, p, aContainerStack(), projectRegistryImage)
+	pushed := fake.NewImages()
+
+	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got, want := pushed.Removed(), []string{projectRegistryImage}; !slices.Equal(got, want) {
+		t.Errorf("the reconcile removed %v, want %v: the stack being reconciled is the one that failed to run it", got, want)
+	}
+}
+
+func TestAReconcileLeavesTaggedAnImagePushedSinceItReadTheRecords(t *testing.T) {
+	server := &runServer{updated: map[string]time.Time{shopWebPackage + "/tags/sha256-new": time.Now().Add(time.Hour)}}
+	said := &fake.Log{}
+
+	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, said); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got := server.untags(); len(got) != 0 {
+		t.Errorf("the reconcile untagged %v, want nothing: a tag pushed after the records were read may belong to a deploy those records could not show yet", got)
+	}
+	if !strings.Contains(strings.Join(said.Lines(), "\n"), "sha256-new") {
+		t.Errorf("the reconcile said %v, want a line naming the tag it left", said.Lines())
+	}
+}
+
+func TestPruningASupersededRevisionRemovesTheImageItRanFromTheProjectsRegistry(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	image := fake.RegistryServer + "/acme/shop.web-checkout:sha256-one"
+	first := functionRelease("d1", image)
+	one := released.provision(t, first)
+	active := released.provision(t, functionRelease("d2", fake.RegistryServer+"/acme/shop.web-checkout:sha256-two"))
+	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+	pushed := fake.NewImages()
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, pushed, nil); err != nil {
+		t.Fatalf("RemoveFunctionRevisions = %v", err)
+	}
+
+	if got, want := pushed.Removed(), []string{image}; !slices.Equal(got, want) {
+		t.Errorf("pruning removed %v, want %v: the revision was the last to run it, and the project's registry keeps it forever otherwise", got, want)
 	}
 }

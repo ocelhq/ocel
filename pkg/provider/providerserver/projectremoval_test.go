@@ -542,7 +542,7 @@ func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T)
 			Name: func(context.Context, provider.StackSpec) ([]provider.Function, error) {
 				return []provider.Function{{Name: "server", Physical: "shop-web-server"}}, nil
 			},
-			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, progress.Log) ([]provider.Function, error) {
+			RemoveRevisions: func(context.Context, provider.StackRef, []provider.Function, provider.ImageStore, progress.Log) ([]provider.Function, error) {
 				return nil, nil
 			},
 		},

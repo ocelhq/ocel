@@ -10,16 +10,19 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/googleapi"
 	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func artifactTag(image string) (string, bool) {
@@ -44,34 +47,8 @@ func artifactTag(image string) (string, bool) {
 		segments[0], location, segments[1], url.PathEscape(segments[2]), tag), true
 }
 
-func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
-	if _, tagged := artifactTag(imageRef); !tagged {
-		return p.removeUnusedPushedImage(ctx, app, imageRef, images, progress)
-	}
-	p.untagUnusedImages(ctx, []string{imageRef}, progress)
-	return nil
-}
-
-func (p *Provider) removeUnusedPushedImage(ctx context.Context, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
-	if images == nil || !strings.HasPrefix(imageRef, images.Destination()+"/") {
-		return nil
-	}
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	revisions, err := clients.RunV1()
-	if err != nil {
-		return err
-	}
-	running, err := isRunByARevision(ctx, revisions, clients.project, imageRef)
-	if err != nil {
-		return fmt.Errorf("read whether a revision still runs %s: %w", imageRef, err)
-	}
-	if running {
-		return nil
-	}
-	resources.RemovePushedImages(ctx, images, app, []string{imageRef}, progress)
+func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, _, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	p.removeUnusedImages(ctx, ref, []string{imageRef}, images, progress)
 	return nil
 }
 
@@ -136,24 +113,66 @@ func imageLabelValue(image string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-func (p *Provider) untagUnusedImages(ctx context.Context, images []string, progress progress.Log) {
-	tagged := map[string]string{}
-	for _, image := range images {
-		if name, ok := artifactTag(image); ok {
-			tagged[name] = image
-		}
-	}
-	if len(tagged) == 0 {
+const recordsClockSkew = time.Minute
+
+func (p *Provider) removeUnusedImages(ctx context.Context, ref provider.StackRef, ran []string, images provider.ImageStore, progress progress.Log) {
+	if len(ran) == 0 {
 		return
 	}
+	readAt := time.Now()
+	recorded, err := stackrecords.ListRecordedAppImages(ctx, p.KeyValues(), ref.Project, ref.Name.App, func(tier environment.Tier, name naming.StackName) bool {
+		return tier != ref.Tier || name != ref.Name
+	})
+	if err != nil {
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as the images the project's other stacks record could not be read: %v", strings.Join(ran, ", "), err))
+		return
+	}
+	p.removeUnrunImages(ctx, ref.Name.App, ran, images, recorded, readAt, progress)
+}
+
+func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []string, images provider.ImageStore, recorded map[string]bool, readAt time.Time, progress progress.Log) {
+	tagged := map[string]string{}
+	var pushed []string
+	for _, image := range ran {
+		if name, ok := artifactTag(image); ok {
+			tagged[name] = image
+			continue
+		}
+		if images != nil && strings.HasPrefix(image, images.Destination()+"/") && !slices.Contains(pushed, image) {
+			pushed = append(pushed, image)
+		}
+	}
+	if len(tagged) == 0 && len(pushed) == 0 {
+		return
+	}
+	going := strings.Join(append(slices.Sorted(maps.Values(tagged)), pushed...), ", ")
 	clients, err := p.openClients(ctx)
 	if err != nil {
-		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as what still runs them could not be read: %v", strings.Join(slices.Sorted(maps.Keys(tagged)), ", "), err))
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as what still runs them could not be read: %v", going, err))
 		return
 	}
 	revisions, err := clients.RunV1()
 	if err != nil {
-		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as what still runs them could not be read: %v", strings.Join(slices.Sorted(maps.Keys(tagged)), ", "), err))
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as what still runs them could not be read: %v", going, err))
+		return
+	}
+	unused := func(image string) bool {
+		if recorded[image] {
+			return false
+		}
+		running, err := isRunByARevision(ctx, revisions, clients.project, image)
+		if err != nil {
+			ensureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as whether a revision still runs it could not be read: %v", image, err))
+			return false
+		}
+		return !running
+	}
+	for _, image := range pushed {
+		if unused(image) {
+			resources.RemovePushedImages(ctx, images, app, []string{image}, progress)
+		}
+	}
+	if len(tagged) == 0 {
 		return
 	}
 	repositories, err := clients.Repositories()
@@ -162,27 +181,53 @@ func (p *Provider) untagUnusedImages(ctx context.Context, images []string, progr
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(tagged)) {
-		running, err := isRunByARevision(ctx, revisions, clients.project, tagged[name])
-		if err != nil {
-			ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as whether a revision still runs it could not be read: %v", name, err))
+		if !unused(tagged[name]) {
 			continue
 		}
-		if running {
-			continue
-		}
-		_, err = attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
-			_, err := repositories.Projects.Locations.Repositories.Packages.Tags.Delete(name).Context(ctx).Do(call...)
-			return nil, err
-		})
-		switch {
-		case err == nil, absent(err):
-		case answeredCode(err) == http.StatusForbidden:
-			ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as this credential may not untag it, so the repository keeps the image until it is untagged: "+
-				"grant roles/artifactregistry.repoAdmin on the repository, as `ocel permissions deploy` prints", name))
-		default:
-			ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged after no revision ran it, so the repository keeps the image until it is untagged: %v", name, err))
-		}
+		untagUnlessPushedSince(ctx, repositories, name, readAt.Add(-recordsClockSkew), progress)
 	}
+}
+
+func untagUnlessPushedSince(ctx context.Context, repositories *artifactregistry.Service, name string, since time.Time, progress progress.Log) {
+	pushedAt, err := readTagPushTime(ctx, repositories, name)
+	switch {
+	case absent(err):
+		return
+	case err != nil:
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as when it was pushed could not be read: %v", name, err))
+		return
+	case pushedAt.After(since):
+		ensureProgress(progress).Say(fmt.Sprintf("Left %s tagged, as it was pushed after the stacks that could run it were read", name))
+		return
+	}
+	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
+		_, err := repositories.Projects.Locations.Repositories.Packages.Tags.Delete(name).Context(ctx).Do(call...)
+		return nil, err
+	})
+	switch {
+	case err == nil, absent(err):
+	case answeredCode(err) == http.StatusForbidden:
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as this credential may not untag it, so the repository keeps the image until it is untagged: "+
+			"grant roles/artifactregistry.repoAdmin on the repository, as `ocel permissions deploy` prints", name))
+	default:
+		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged after no revision ran it, so the repository keeps the image until it is untagged: %v", name, err))
+	}
+}
+
+func readTagPushTime(ctx context.Context, repositories *artifactregistry.Service, name string) (time.Time, error) {
+	tag, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
+		return repositories.Projects.Locations.Repositories.Packages.Tags.Get(name).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	version, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Version, error) {
+		return repositories.Projects.Locations.Repositories.Packages.Versions.Get(tag.Version).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339Nano, version.UpdateTime)
 }
 
 const digestTagPrefix = "sha256-"

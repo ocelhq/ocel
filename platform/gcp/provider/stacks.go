@@ -220,7 +220,7 @@ func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, f
 	if err := p.unrouteServiceOriginHosts(ctx, ref.Tier, functions); err != nil {
 		return err
 	}
-	if err := p.tearDownAll(ctx, functionRevisions(functions), progress); err != nil {
+	if err := p.tearDownAll(ctx, ref, functionRevisions(functions), progress); err != nil {
 		return err
 	}
 	c, err := p.openClients(ctx)
@@ -249,8 +249,8 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 	return append(functions, workerFunctions(nameWorkers(names, spec))...), nil
 }
 
-func (p *Provider) RemoveFunctionRevisions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
-	kept, err := p.removeRevisions(ctx, functionRevisions(functions), progress)
+func (p *Provider) RemoveFunctionRevisions(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) ([]provider.Function, error) {
+	kept, err := p.removeRevisions(ctx, ref, functionRevisions(functions), images, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
-	if err := p.tearDownAll(ctx, containerRevisions(containers), progress); err != nil {
+	if err := p.tearDownAll(ctx, ref, containerRevisions(containers), progress); err != nil {
 		return err
 	}
 	c, err := p.openClients(ctx)
@@ -420,8 +420,8 @@ func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) 
 	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, workers...), nil
 }
 
-func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) ([]provider.AppContainer, error) {
-	kept, err := p.removeRevisions(ctx, containerRevisions(containers), progress)
+func (p *Provider) RemoveContainerRevisions(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) ([]provider.AppContainer, error) {
+	kept, err := p.removeRevisions(ctx, ref, containerRevisions(containers), images, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -445,9 +445,9 @@ type serviceRevision struct {
 	revision string
 }
 
-func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, progress progress.Log) error {
+func (p *Provider) tearDownAll(ctx context.Context, ref provider.StackRef, going []serviceRevision, progress progress.Log) error {
 	var ran []string
-	defer func() { p.untagUnusedImages(ctx, ran, progress) }()
+	defer func() { p.removeUnusedImages(ctx, ref, ran, nil, progress) }()
 	for _, each := range going {
 		if each.service == "" {
 			continue
@@ -461,12 +461,12 @@ func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, pro
 	return nil
 }
 
-func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Log) ([]int, error) {
+func (p *Provider) removeRevisions(ctx context.Context, ref provider.StackRef, going []serviceRevision, images provider.ImageStore, progress progress.Log) ([]int, error) {
 	var (
 		kept []int
 		ran  []string
 	)
-	defer func() { p.untagUnusedImages(ctx, ran, progress) }()
+	defer func() { p.removeUnusedImages(ctx, ref, ran, images, progress) }()
 	for at, each := range going {
 		stays, images, err := p.removeRevision(ctx, each.service, each.revision, progress)
 		if err != nil {
