@@ -42,6 +42,9 @@ const (
 	// ConnectorServiceSetAddressProcedure is the fully-qualified name of the ConnectorService's
 	// SetAddress RPC.
 	ConnectorServiceSetAddressProcedure = "/console.v1.ConnectorService/SetAddress"
+	// ConnectorServiceHeartbeatProcedure is the fully-qualified name of the ConnectorService's
+	// Heartbeat RPC.
+	ConnectorServiceHeartbeatProcedure = "/console.v1.ConnectorService/Heartbeat"
 )
 
 // ConnectorServiceClient is a client for the console.v1.ConnectorService service.
@@ -50,6 +53,7 @@ type ConnectorServiceClient interface {
 	List(context.Context, *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error)
 	Remove(context.Context, *v1.RemoveConnectorRequest) (*v1.RemoveConnectorResponse, error)
 	SetAddress(context.Context, *v1.SetConnectorAddressRequest) (*v1.SetConnectorAddressResponse, error)
+	Heartbeat(context.Context, *v1.HeartbeatConnectorRequest) (*v1.HeartbeatConnectorResponse, error)
 }
 
 // NewConnectorServiceClient constructs a client for the console.v1.ConnectorService service. By
@@ -87,6 +91,12 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(connectorServiceMethods.ByName("SetAddress")),
 			connect.WithClientOptions(opts...),
 		),
+		heartbeat: connect.NewClient[v1.HeartbeatConnectorRequest, v1.HeartbeatConnectorResponse](
+			httpClient,
+			baseURL+ConnectorServiceHeartbeatProcedure,
+			connect.WithSchema(connectorServiceMethods.ByName("Heartbeat")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -96,6 +106,7 @@ type connectorServiceClient struct {
 	list       *connect.Client[v1.ListConnectorsRequest, v1.ListConnectorsResponse]
 	remove     *connect.Client[v1.RemoveConnectorRequest, v1.RemoveConnectorResponse]
 	setAddress *connect.Client[v1.SetConnectorAddressRequest, v1.SetConnectorAddressResponse]
+	heartbeat  *connect.Client[v1.HeartbeatConnectorRequest, v1.HeartbeatConnectorResponse]
 }
 
 // Upsert calls console.v1.ConnectorService.Upsert.
@@ -134,12 +145,22 @@ func (c *connectorServiceClient) SetAddress(ctx context.Context, req *v1.SetConn
 	return nil, err
 }
 
+// Heartbeat calls console.v1.ConnectorService.Heartbeat.
+func (c *connectorServiceClient) Heartbeat(ctx context.Context, req *v1.HeartbeatConnectorRequest) (*v1.HeartbeatConnectorResponse, error) {
+	response, err := c.heartbeat.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ConnectorServiceHandler is an implementation of the console.v1.ConnectorService service.
 type ConnectorServiceHandler interface {
 	Upsert(context.Context, *v1.UpsertConnectorRequest) (*v1.UpsertConnectorResponse, error)
 	List(context.Context, *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error)
 	Remove(context.Context, *v1.RemoveConnectorRequest) (*v1.RemoveConnectorResponse, error)
 	SetAddress(context.Context, *v1.SetConnectorAddressRequest) (*v1.SetConnectorAddressResponse, error)
+	Heartbeat(context.Context, *v1.HeartbeatConnectorRequest) (*v1.HeartbeatConnectorResponse, error)
 }
 
 // NewConnectorServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -173,6 +194,12 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		connect.WithSchema(connectorServiceMethods.ByName("SetAddress")),
 		connect.WithHandlerOptions(opts...),
 	)
+	connectorServiceHeartbeatHandler := connect.NewUnaryHandlerSimple(
+		ConnectorServiceHeartbeatProcedure,
+		svc.Heartbeat,
+		connect.WithSchema(connectorServiceMethods.ByName("Heartbeat")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/console.v1.ConnectorService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ConnectorServiceUpsertProcedure:
@@ -183,6 +210,8 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 			connectorServiceRemoveHandler.ServeHTTP(w, r)
 		case ConnectorServiceSetAddressProcedure:
 			connectorServiceSetAddressHandler.ServeHTTP(w, r)
+		case ConnectorServiceHeartbeatProcedure:
+			connectorServiceHeartbeatHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -206,4 +235,8 @@ func (UnimplementedConnectorServiceHandler) Remove(context.Context, *v1.RemoveCo
 
 func (UnimplementedConnectorServiceHandler) SetAddress(context.Context, *v1.SetConnectorAddressRequest) (*v1.SetConnectorAddressResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.ConnectorService.SetAddress is not implemented"))
+}
+
+func (UnimplementedConnectorServiceHandler) Heartbeat(context.Context, *v1.HeartbeatConnectorRequest) (*v1.HeartbeatConnectorResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.ConnectorService.Heartbeat is not implemented"))
 }

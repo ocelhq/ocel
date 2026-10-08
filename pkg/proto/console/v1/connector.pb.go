@@ -669,6 +669,102 @@ func (x *SetConnectorAddressResponse) GetConnector() *Connector {
 	return nil
 }
 
+type HeartbeatConnectorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Capabilities  []string               `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatConnectorRequest) Reset() {
+	*x = HeartbeatConnectorRequest{}
+	mi := &file_console_v1_connector_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatConnectorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatConnectorRequest) ProtoMessage() {}
+
+func (x *HeartbeatConnectorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_console_v1_connector_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatConnectorRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatConnectorRequest) Descriptor() ([]byte, []int) {
+	return file_console_v1_connector_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HeartbeatConnectorRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *HeartbeatConnectorRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *HeartbeatConnectorRequest) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+type HeartbeatConnectorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatConnectorResponse) Reset() {
+	*x = HeartbeatConnectorResponse{}
+	mi := &file_console_v1_connector_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatConnectorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatConnectorResponse) ProtoMessage() {}
+
+func (x *HeartbeatConnectorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_console_v1_connector_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatConnectorResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatConnectorResponse) Descriptor() ([]byte, []int) {
+	return file_console_v1_connector_proto_rawDescGZIP(), []int{11}
+}
+
 var File_console_v1_connector_proto protoreflect.FileDescriptor
 
 const file_console_v1_connector_proto_rawDesc = "" +
@@ -733,16 +829,23 @@ const file_console_v1_connector_proto_rawDesc = "" +
 	"\n" +
 	"\b_tls_pin\"R\n" +
 	"\x1bSetConnectorAddressResponse\x123\n" +
-	"\tconnector\x18\x01 \x01(\v2\x15.console.v1.ConnectorR\tconnector*K\n" +
+	"\tconnector\x18\x01 \x01(\v2\x15.console.v1.ConnectorR\tconnector\"\x8e\x01\n" +
+	"\x19HeartbeatConnectorRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12!\n" +
+	"\aversion\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\aversion\x124\n" +
+	"\fcapabilities\x18\x03 \x03(\tB\x10\xbaH\r\x92\x01\n" +
+	"\x10@\"\x06r\x04\x10\x01\x18@R\fcapabilities\"\x1c\n" +
+	"\x1aHeartbeatConnectorResponse*K\n" +
 	"\x0eConnectorReach\x12\x1f\n" +
 	"\x1bCONNECTOR_REACH_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14CONNECTOR_REACH_DIAL\x10\x012\xe6\x02\n" +
+	"\x14CONNECTOR_REACH_DIAL\x10\x012\xc2\x03\n" +
 	"\x10ConnectorService\x12Q\n" +
 	"\x06Upsert\x12\".console.v1.UpsertConnectorRequest\x1a#.console.v1.UpsertConnectorResponse\x12M\n" +
 	"\x04List\x12!.console.v1.ListConnectorsRequest\x1a\".console.v1.ListConnectorsResponse\x12Q\n" +
 	"\x06Remove\x12\".console.v1.RemoveConnectorRequest\x1a#.console.v1.RemoveConnectorResponse\x12]\n" +
 	"\n" +
-	"SetAddress\x12&.console.v1.SetConnectorAddressRequest\x1a'.console.v1.SetConnectorAddressResponseB7Z5github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1b\x06proto3"
+	"SetAddress\x12&.console.v1.SetConnectorAddressRequest\x1a'.console.v1.SetConnectorAddressResponse\x12Z\n" +
+	"\tHeartbeat\x12%.console.v1.HeartbeatConnectorRequest\x1a&.console.v1.HeartbeatConnectorResponseB7Z5github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1b\x06proto3"
 
 var (
 	file_console_v1_connector_proto_rawDescOnce sync.Once
@@ -757,7 +860,7 @@ func file_console_v1_connector_proto_rawDescGZIP() []byte {
 }
 
 var file_console_v1_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_console_v1_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_console_v1_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_console_v1_connector_proto_goTypes = []any{
 	(ConnectorReach)(0),                 // 0: console.v1.ConnectorReach
 	(*ConnectorDenial)(nil),             // 1: console.v1.ConnectorDenial
@@ -770,31 +873,35 @@ var file_console_v1_connector_proto_goTypes = []any{
 	(*RemoveConnectorResponse)(nil),     // 8: console.v1.RemoveConnectorResponse
 	(*SetConnectorAddressRequest)(nil),  // 9: console.v1.SetConnectorAddressRequest
 	(*SetConnectorAddressResponse)(nil), // 10: console.v1.SetConnectorAddressResponse
-	(*timestamppb.Timestamp)(nil),       // 11: google.protobuf.Timestamp
-	(ComputeKind)(0),                    // 12: console.v1.ComputeKind
+	(*HeartbeatConnectorRequest)(nil),   // 11: console.v1.HeartbeatConnectorRequest
+	(*HeartbeatConnectorResponse)(nil),  // 12: console.v1.HeartbeatConnectorResponse
+	(*timestamppb.Timestamp)(nil),       // 13: google.protobuf.Timestamp
+	(ComputeKind)(0),                    // 14: console.v1.ComputeKind
 }
 var file_console_v1_connector_proto_depIdxs = []int32{
-	11, // 0: console.v1.ConnectorDenial.at:type_name -> google.protobuf.Timestamp
-	12, // 1: console.v1.Connector.compute:type_name -> console.v1.ComputeKind
+	13, // 0: console.v1.ConnectorDenial.at:type_name -> google.protobuf.Timestamp
+	14, // 1: console.v1.Connector.compute:type_name -> console.v1.ComputeKind
 	0,  // 2: console.v1.Connector.reach:type_name -> console.v1.ConnectorReach
-	11, // 3: console.v1.Connector.connected_at:type_name -> google.protobuf.Timestamp
-	11, // 4: console.v1.Connector.last_seen_at:type_name -> google.protobuf.Timestamp
+	13, // 3: console.v1.Connector.connected_at:type_name -> google.protobuf.Timestamp
+	13, // 4: console.v1.Connector.last_seen_at:type_name -> google.protobuf.Timestamp
 	1,  // 5: console.v1.Connector.last_denied:type_name -> console.v1.ConnectorDenial
 	0,  // 6: console.v1.UpsertConnectorRequest.reach:type_name -> console.v1.ConnectorReach
 	2,  // 7: console.v1.UpsertConnectorResponse.connector:type_name -> console.v1.Connector
 	2,  // 8: console.v1.ListConnectorsResponse.connectors:type_name -> console.v1.Connector
-	12, // 9: console.v1.SetConnectorAddressRequest.compute:type_name -> console.v1.ComputeKind
+	14, // 9: console.v1.SetConnectorAddressRequest.compute:type_name -> console.v1.ComputeKind
 	2,  // 10: console.v1.SetConnectorAddressResponse.connector:type_name -> console.v1.Connector
 	3,  // 11: console.v1.ConnectorService.Upsert:input_type -> console.v1.UpsertConnectorRequest
 	5,  // 12: console.v1.ConnectorService.List:input_type -> console.v1.ListConnectorsRequest
 	7,  // 13: console.v1.ConnectorService.Remove:input_type -> console.v1.RemoveConnectorRequest
 	9,  // 14: console.v1.ConnectorService.SetAddress:input_type -> console.v1.SetConnectorAddressRequest
-	4,  // 15: console.v1.ConnectorService.Upsert:output_type -> console.v1.UpsertConnectorResponse
-	6,  // 16: console.v1.ConnectorService.List:output_type -> console.v1.ListConnectorsResponse
-	8,  // 17: console.v1.ConnectorService.Remove:output_type -> console.v1.RemoveConnectorResponse
-	10, // 18: console.v1.ConnectorService.SetAddress:output_type -> console.v1.SetConnectorAddressResponse
-	15, // [15:19] is the sub-list for method output_type
-	11, // [11:15] is the sub-list for method input_type
+	11, // 15: console.v1.ConnectorService.Heartbeat:input_type -> console.v1.HeartbeatConnectorRequest
+	4,  // 16: console.v1.ConnectorService.Upsert:output_type -> console.v1.UpsertConnectorResponse
+	6,  // 17: console.v1.ConnectorService.List:output_type -> console.v1.ListConnectorsResponse
+	8,  // 18: console.v1.ConnectorService.Remove:output_type -> console.v1.RemoveConnectorResponse
+	10, // 19: console.v1.ConnectorService.SetAddress:output_type -> console.v1.SetConnectorAddressResponse
+	12, // 20: console.v1.ConnectorService.Heartbeat:output_type -> console.v1.HeartbeatConnectorResponse
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -814,7 +921,7 @@ func file_console_v1_connector_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_console_v1_connector_proto_rawDesc), len(file_console_v1_connector_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
