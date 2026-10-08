@@ -3,8 +3,10 @@ package projectinit
 import (
 	"errors"
 	"io/fs"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type newFile struct {
@@ -20,15 +22,11 @@ func writeAll(file *os.File, content []byte) error {
 }
 
 func (f newFile) create(path string, content []byte) error {
-	temp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	temp, err := createTemp(path)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(temp.Name())
-	if err := temp.Chmod(0o644); err != nil {
-		temp.Close()
-		return err
-	}
 	if err := f.fill(temp, content); err != nil {
 		return err
 	}
@@ -37,6 +35,16 @@ func (f newFile) create(path string, content []byte) error {
 		return err
 	}
 	return f.createExclusive(path, content)
+}
+
+func createTemp(path string) (*os.File, error) {
+	for {
+		name := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+"."+strconv.FormatUint(rand.Uint64(), 36))
+		file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if !errors.Is(err, fs.ErrExist) {
+			return file, err
+		}
+	}
 }
 
 func (f newFile) createExclusive(path string, content []byte) error {
