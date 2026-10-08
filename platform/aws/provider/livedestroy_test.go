@@ -4,7 +4,6 @@ package aws_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -50,7 +49,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 		t.Errorf("PlanRemove() plans the passphrase as %q, want the last tier on this account to take it", passphrase.Action)
 	}
 	if passphrase.Reason == "" {
-		t.Error("PlanRemove() takes the passphrase with no reason, and every Pulumi state in this account is encrypted under it")
+		t.Error("PlanRemove() takes the passphrase with no reason, and every Pulumi state of this tier is encrypted under it")
 	}
 
 	if err := boot.Remove(ctx, tier, nil); err != nil {
@@ -100,7 +99,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	}
 }
 
-func TestLiveDestroyingOneTierLeavesTheSiblingAndThePassphraseItSharesInPlace(t *testing.T) {
+func TestLiveDestroyingOneTierLeavesTheSiblingAndItsPassphraseInPlace(t *testing.T) {
 	a := live(t)
 	production, preview := environment.TierProduction, environment.TierPreview
 	boot := a.emptied(t, production, preview)
@@ -112,23 +111,29 @@ func TestLiveDestroyingOneTierLeavesTheSiblingAndThePassphraseItSharesInPlace(t 
 		}
 	}
 
+	previewPassphrase := defaultNamespace.PassphraseParamFor(preview)
 	beside, err := boot.PlanRemove(ctx, production)
 	if err != nil {
 		t.Fatalf("PlanRemove(%s) = %v", production, err)
 	}
-	shared := changeFor(groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName), passphraseParam)
-	if shared.Action != provider.ActionKeep {
-		t.Errorf("destroying %s plans the passphrase as %q while %s is still installed on this account", production, shared.Action, preview)
+	params := groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName)
+	if own := changeFor(params, passphraseParam); own.Action != provider.ActionDelete {
+		t.Errorf("destroying %s plans its own passphrase as %q, want it taken with the tier", production, own.Action)
 	}
-	if !strings.Contains(shared.Reason, string(preview)) {
-		t.Errorf("the passphrase is kept with the reason %q, want the sibling that still needs it named", shared.Reason)
+	for _, change := range params.Changes {
+		if change.Name == previewPassphrase {
+			t.Errorf("destroying %s plans %s, the passphrase %s's Pulumi state is encrypted under", production, previewPassphrase, preview)
+		}
 	}
 
 	if err := boot.Remove(ctx, production, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
-	if !a.paramExists(t, passphraseParam) {
-		t.Errorf("the passphrase went with %s, and every Pulumi state %s stores is encrypted under it", production, preview)
+	if !a.paramExists(t, previewPassphrase) {
+		t.Errorf("%s went with %s, and every Pulumi state %s stores is encrypted under it", previewPassphrase, production, preview)
+	}
+	if a.paramExists(t, passphraseParam) {
+		t.Errorf("%s survived the destroy of %s, the only tier encrypted under it", passphraseParam, production)
 	}
 	if status := a.stackStatus(t, previewStackName); status != "CREATE_COMPLETE" {
 		t.Errorf("%s is in state %q after its sibling was destroyed, want CREATE_COMPLETE", previewStackName, status)
@@ -152,14 +157,14 @@ func TestLiveDestroyingOneTierLeavesTheSiblingAndThePassphraseItSharesInPlace(t 
 	if err != nil {
 		t.Fatalf("PlanRemove(%s) = %v", preview, err)
 	}
-	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), passphraseParam)
+	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), previewPassphrase)
 	if alone.Action != provider.ActionDelete {
 		t.Errorf("destroying the last tier plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
 	}
 	if err := boot.Remove(ctx, preview, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
-	if a.paramExists(t, passphraseParam) {
-		t.Error("the passphrase still exists after the last tier on this account went")
+	if a.paramExists(t, previewPassphrase) {
+		t.Errorf("%s still exists after %s went", previewPassphrase, preview)
 	}
 }

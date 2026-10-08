@@ -46,7 +46,9 @@ func (n Namespace) FeatureStackName(name string, tier environment.Tier) string {
 
 func (n Namespace) paramRoot() string { return "/" + string(n) }
 
-func (n Namespace) PassphraseParamName() string { return n.paramRoot() + "/pulumi/passphrase" }
+func (n Namespace) PassphraseParamFor(tier environment.Tier) string {
+	return suffixed(tier, n.paramRoot()+"/pulumi/passphrase")
+}
 
 func (n Namespace) KVTokenRoot() string { return n.paramRoot() + "/kv" }
 

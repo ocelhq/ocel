@@ -144,5 +144,5 @@ var (
 	coreStackName, _    = defaultNamespace.StackNameFor(environment.TierProduction)
 	previewStackName, _ = defaultNamespace.StackNameFor(environment.TierPreview)
 
-	passphraseParam = defaultNamespace.PassphraseParamName()
+	passphraseParam = defaultNamespace.PassphraseParamFor(environment.TierProduction)
 )

@@ -29,7 +29,7 @@ func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, environment.TierProduction, time.Now()); err != nil {
 		t.Fatalf("ensureOriginSecret: %v", err)
 	}
-	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace); err != nil {
+	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace, environment.TierProduction); err != nil {
 		t.Fatalf("ensurePassphrase: %v", err)
 	}
 	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, time.Now()); err != nil {
@@ -276,7 +276,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 	ssmc, iamc := installedParams(t)
 	ssmc.batches = 0
 
-	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, environment.TierProduction, false)
+	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}

@@ -12,5 +12,5 @@ var (
 	coreStackName, _ = defaultNamespace.StackNameFor(environment.TierProduction)
 	edgeUserName, _  = defaultNamespace.EdgeUserNameFor(environment.TierProduction)
 
-	passphraseParam = defaultNamespace.PassphraseParamName()
+	passphraseParam = defaultNamespace.PassphraseParamFor(environment.TierProduction)
 )

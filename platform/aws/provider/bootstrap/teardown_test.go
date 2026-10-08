@@ -371,34 +371,22 @@ func TestTeardownKeepsEverythingWhenTheStackDeleteFails(t *testing.T) {
 	}
 }
 
-func TestTeardownRereadsTheSiblingBeforeDroppingThePassphrase(t *testing.T) {
+func TestTeardownDropsItsOwnTiersPassphraseAndLeavesTheOtherTiers(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name    string
-		sibling teardownStack
-	}{
-		{name: "a sibling bootstrapped mid-teardown", sibling: teardownStack{status: cfntypes.StackStatusCreateComplete}},
-		{name: "a sibling still creating", sibling: teardownStack{status: cfntypes.StackStatusCreateInProgress}},
-		{name: "a sibling that failed to delete", sibling: teardownStack{status: cfntypes.StackStatusDeleteFailed}},
+	apis, stacks, ssmc, _ := teardownFakes(t)
+	previewPassphrase := defaultNamespace.PassphraseParamFor(environment.TierPreview)
+	ssmc.params[previewPassphrase] = "pp-preview"
+	stacks.stacks[previewStackName] = teardownStack{status: cfntypes.StackStatusCreateComplete}
+
+	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			apis, stacks, ssmc, _ := teardownFakes(t)
-			stacks.onDelete = func(c *teardownCFN) { c.stacks[previewStackName] = tc.sibling }
-
-			if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
-				t.Fatalf("Teardown: %v", err)
-			}
-			if _, present := ssmc.params[passphraseParam]; !present {
-				t.Error("the preview bootstrap landed mid-teardown; its Pulumi state is encrypted under the passphrase that was deleted")
-			}
-			if _, present := ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]; present {
-				t.Error("the torn-down bootstrap's own parameters must still go")
-			}
-		})
+	if _, present := ssmc.params[passphraseParam]; present {
+		t.Errorf("%s survived the production teardown, and no bootstrap is left whose state it encrypts", passphraseParam)
+	}
+	if _, present := ssmc.params[previewPassphrase]; !present {
+		t.Errorf("the production teardown deleted %s, which the preview tier's Pulumi state is encrypted under", previewPassphrase)
 	}
 }
 

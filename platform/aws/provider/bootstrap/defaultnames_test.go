@@ -15,5 +15,5 @@ var (
 	originSecretParam, _   = defaultNamespace.OriginSecretParamFor(environment.TierProduction)
 	previewOriginSecret, _ = defaultNamespace.OriginSecretParamFor(environment.TierPreview)
 
-	passphraseParam = defaultNamespace.PassphraseParamName()
+	passphraseParam = defaultNamespace.PassphraseParamFor(environment.TierProduction)
 )

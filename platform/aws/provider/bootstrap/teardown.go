@@ -57,18 +57,6 @@ func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (bool, error) {
-	stackName, err := ns.StackNameFor(tier.Sibling())
-	if err != nil {
-		return false, err
-	}
-	out, err := cfn.StackOutputs(ctx, api, stackName)
-	if err != nil {
-		return false, err
-	}
-	return out != nil, nil
-}
-
 func featureStackNames(ns Namespace, names []string, tier environment.Tier) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
@@ -194,16 +182,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	}
 
 	progress.Say(fmt.Sprintf("Deleting the %s bootstrap's stored parameters (SSM)", tier))
-	shared, err := SiblingSharesPassphrase(ctx, apis.CFN, ns, tier)
-	if err != nil {
-		return err
-	}
-	if shared {
-		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), tier.Sibling()))
-	} else {
-		params = append(params, ns.PassphraseParamName())
-	}
-	for _, name := range params {
+	for _, name := range append(params, ns.PassphraseParamFor(tier)) {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {
 			return err
 		}
