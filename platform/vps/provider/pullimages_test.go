@@ -314,7 +314,8 @@ func underShell(t *testing.T, script string) {
 
 func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	aDaemon(t)
-	server, _ := aRegistry(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine := &box{}
 	target := aTarget(server)
 	push := aPull(target)
@@ -335,9 +336,10 @@ func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	}
 }
 
-func TestADigestTheMachineAlreadyHasIsNeitherPushedNorPulledAgain(t *testing.T) {
+func TestADigestTheMachineAndTheRegistryAlreadyHaveIsNeitherPushedNorPulledAgain(t *testing.T) {
 	daemon := aDaemon(t)
 	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine := &box{hasImage: true}
 	target := aTarget(server)
 	plan := provider.ImagePushes{
@@ -354,8 +356,23 @@ func TestADigestTheMachineAlreadyHasIsNeitherPushedNorPulledAgain(t *testing.T) 
 	if commands := strings.Join(machine.commands(), "\n"); strings.Contains(commands, "docker pull") {
 		t.Errorf("the machine ran %q over a digest it already has", commands)
 	}
-	if len(registry.reads()) != 0 {
-		t.Errorf("the registry was read %v answering a question the machine answers", registry.reads())
+}
+
+func TestADigestTheMachineHasAndTheRegistryLostIsPushedAgain(t *testing.T) {
+	daemon := aDaemon(t)
+	server, _ := aRegistry(t)
+	machine := &box{hasImage: true}
+	target := aTarget(server)
+	plan := provider.ImagePushes{
+		Store:  pulling(t, machine, target),
+		Pushes: []provider.ImagePush{aPull(target)},
+	}
+
+	if err := plan.PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
+	}
+	if pushed := daemon.pushes(); len(pushed) != 1 {
+		t.Errorf("the deploy pushed %v, want the image pushed once: the machine's cache answers for this box alone, and a fresh box pulls from the registry", pushed)
 	}
 }
 
