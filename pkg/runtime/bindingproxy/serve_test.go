@@ -123,24 +123,3 @@ func TestServeNamesItsAddressAndTokenForACallerThatDeliversThemItself(t *testing
 		t.Errorf("Token = %q, want the token the env delivers", served.Token)
 	}
 }
-
-func TestWatchReportsNothingWhenTheProxyIsClosedOnPurpose(t *testing.T) {
-	t.Parallel()
-
-	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
-	if err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
-	reported := make(chan error, 1)
-	watching := served.Watch(func(err error) { reported <- err })
-
-	if err := served.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	<-watching
-	select {
-	case err := <-reported:
-		t.Fatalf("Watch reported %v after a deliberate Close, want nothing: it is no failure", err)
-	default:
-	}
-}

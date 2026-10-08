@@ -102,6 +102,28 @@ func TestTheAWSBindingProxyRefusesACallThatPresentsNoSessionToken(t *testing.T) 
 	}
 }
 
+func TestTheAWSBindingProxyForABuildThatBindsNoBucketServesNothingAndAsksAWSNothing(t *testing.T) {
+	store := &storeSeen{}
+	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(store.serve(t))}
+	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
+
+	proxy, err := p.ServeBindingProxy(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Bindings: []provider.Binding{
+		{Type: provider.BindingTopic, Name: "topic--events"},
+	}}, progress.Discard())
+	if err != nil {
+		t.Fatalf("ServeBindingProxy() error = %v", err)
+	}
+
+	if proxy.Address != "" || proxy.Close != nil {
+		t.Errorf("ServeBindingProxy() = %+v, want no proxy for a build that binds no bucket", proxy)
+	}
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	if len(store.paths) != 0 {
+		t.Errorf("AWS was asked %v, want nothing: the bootstrap is read only to serve a bucket", store.paths)
+	}
+}
+
 func TestTheAWSBindingProxyNamesTheBindingsItHasNoServiceFor(t *testing.T) {
 	proxy, _ := servedProxy(t, []provider.Binding{
 		bucketBinding("bucket--uploads", "shop-uploads"),
