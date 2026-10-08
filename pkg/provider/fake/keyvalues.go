@@ -18,10 +18,11 @@ type KeyValues struct {
 	rows     map[string]keyvalue.Entry
 	refusals map[string]error
 	moving   string
+	hooks    map[string]func()
 }
 
 func NewKeyValues() *KeyValues {
-	return &KeyValues{rows: map[string]keyvalue.Entry{}, refusals: map[string]error{}}
+	return &KeyValues{rows: map[string]keyvalue.Entry{}, refusals: map[string]error{}, hooks: map[string]func(){}}
 }
 
 func encodeKey(key keyvalue.Key) string {
@@ -41,6 +42,22 @@ func (s *KeyValues) MoveBeforeNextWrite(key keyvalue.Key) {
 	s.moving = encodeKey(key)
 }
 
+func (s *KeyValues) BeforeNextWrite(key keyvalue.Key, run func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hooks[encodeKey(key)] = run
+}
+
+func (s *KeyValues) runWriteHook(key keyvalue.Key) {
+	s.mu.Lock()
+	run, ok := s.hooks[encodeKey(key)]
+	delete(s.hooks, encodeKey(key))
+	s.mu.Unlock()
+	if ok {
+		run()
+	}
+}
+
 func (s *KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
 	if err := keyvalue.RefuseMalformedKey(key); err != nil {
 		return keyvalue.Entry{}, err
@@ -58,6 +75,7 @@ func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Rev
 	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
+	s.runWriteHook(entry.Key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if row := encodeKey(entry.Key); row == s.moving {

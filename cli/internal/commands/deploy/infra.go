@@ -28,6 +28,7 @@ type infraProvisioning struct {
 	dry             bool
 	leaseToken      string
 	renewal         time.Duration
+	renewalTimeout  time.Duration
 
 	sent      *contractv1.ProvisionInfraRequest
 	attempted bool
@@ -36,8 +37,8 @@ type infraProvisioning struct {
 }
 
 type leaseRenewal struct {
-	stop chan struct{}
-	done chan struct{}
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 const (
@@ -58,6 +59,7 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		provisions:      !dry && env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		dry:             dry,
 		renewal:         leaseRenewalInterval,
+		renewalTimeout:  leaseRenewalInterval,
 	}
 }
 
@@ -98,22 +100,23 @@ func (i *infraProvisioning) startRenewing() {
 	if i.renewing != nil {
 		return
 	}
-	i.renewing = &leaseRenewal{stop: make(chan struct{}), done: make(chan struct{})}
-	go i.renew(i.renewing)
+	ctx, cancel := context.WithCancel(context.Background())
+	i.renewing = &leaseRenewal{cancel: cancel, done: make(chan struct{})}
+	go i.renew(ctx, i.renewing.done)
 }
 
-func (i *infraProvisioning) renew(renewing *leaseRenewal) {
-	defer close(renewing.done)
+func (i *infraProvisioning) renew(renewing context.Context, done chan<- struct{}) {
+	defer close(done)
 	ticker := time.NewTicker(i.renewal)
 	defer ticker.Stop()
 	req := &contractv1.RenewDeployLeaseRequest{Slug: i.cfg.Slug, Environment: i.env, LeaseToken: i.leaseToken}
 	for {
 		select {
-		case <-renewing.stop:
+		case <-renewing.Done():
 			return
 		case <-ticker.C:
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), i.renewal)
+		ctx, cancel := context.WithTimeout(renewing, i.renewalTimeout)
 		err := i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 			_, err := client.RenewDeployLease(ctx, req)
 			return err
@@ -129,7 +132,7 @@ func (i *infraProvisioning) stopRenewing() {
 	if i == nil || i.renewing == nil {
 		return
 	}
-	close(i.renewing.stop)
+	i.renewing.cancel()
 	<-i.renewing.done
 	i.renewing = nil
 }
