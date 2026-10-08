@@ -58,6 +58,9 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 		live := forwards.Bindings(portforward.WholeProject)
 		hidden := redaction.NewValues(build.SecretValues(live))
 		stdout, stderr := hidden.Writer(opts.Stdout), hidden.Writer(opts.Stderr)
+		if opts.Stdout == opts.Stderr {
+			stderr = stdout
+		}
 		opts.Stdout, opts.Stderr = stdout, stderr
 		ran := dev.RunProjected(ctx, opts, live)
 		return errors.Join(ran, stdout.Flush(), stderr.Flush(), forwards.Close())
