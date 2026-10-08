@@ -37,6 +37,7 @@ const (
 
 	entryVariable  = "entry"
 	assetsVariable = "assets"
+	routesVariable = "routes"
 
 	unsetVariable = "unset"
 )

@@ -2,6 +2,8 @@ package apigateway
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -143,13 +145,24 @@ func staticSegments(prefix string) ([]string, bool) {
 	return segments, true
 }
 
-func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefixes []string) (bool, error) {
+type staticRoutes struct {
+	Reshaped    bool
+	Fingerprint string
+}
+
+func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefixes []string) (staticRoutes, error) {
 	resources, err := apiResources(ctx, c, id)
 	if err != nil {
-		return false, err
+		return staticRoutes{}, err
 	}
 	known := len(resources)
-	routed := map[string]bool{}
+	kept := map[string]bool{
+		rootPath:                 true,
+		rootPath + proxyPathPart: true,
+		rootPath + probeParent:   true,
+		rootPath + probeParent + rootPath + probePathPart: true,
+	}
+	var served []string
 	if spec.assetBucket != "" {
 		for _, prefix := range prefixes {
 			segments, ok := staticSegments(prefix)
@@ -157,35 +170,76 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 				continue
 			}
 			parent := rootPath
-			for _, segment := range segments {
+			for i, segment := range segments {
 				if parent, err = ensureResource(ctx, c, id, resources, parent, segment); err != nil {
-					return false, err
+					return staticRoutes{}, err
+				}
+				kept[parent] = true
+				if err := putRootFunctionRoute(ctx, c, spec, id, resources[parent]); err != nil {
+					return staticRoutes{}, err
+				}
+				if i == len(segments)-1 {
+					break
+				}
+				rest, err := ensureResource(ctx, c, id, resources, parent, proxyPathPart)
+				if err != nil {
+					return staticRoutes{}, err
+				}
+				kept[rest] = true
+				if err := putRootFunctionRoute(ctx, c, spec, id, resources[rest]); err != nil {
+					return staticRoutes{}, err
 				}
 			}
 			leaf, err := ensureResource(ctx, c, id, resources, parent, proxyPathPart)
 			if err != nil {
-				return false, err
+				return staticRoutes{}, err
 			}
-			if err := putStaticRoute(ctx, c, spec, id, resources[leaf], rootPath+strings.Join(segments, rootPath)+rootPath); err != nil {
-				return false, err
+			kept[leaf] = true
+			served = append(served, rootPath+strings.Join(segments, rootPath)+rootPath)
+			if err := putStaticRoute(ctx, c, spec, id, resources[leaf], served[len(served)-1]); err != nil {
+				return staticRoutes{}, err
 			}
-			routed[leaf] = true
 		}
 	}
-	changed := len(resources) != known
+	reshaped := len(resources) != known
+	var removed []string
 	for _, path := range slices.Sorted(maps.Keys(resources)) {
-		if path == rootPath+proxyPathPart || !strings.HasSuffix(path, rootPath+proxyPathPart) || routed[path] {
+		if kept[path] || slices.ContainsFunc(removed, func(gone string) bool { return strings.HasPrefix(path, gone+rootPath) }) {
 			continue
 		}
 		if _, err := c.APIGateway.DeleteResource(ctx, &apigateway.DeleteResourceInput{
 			RestApiId:  aws.String(id),
 			ResourceId: aws.String(resources[path]),
 		}); err != nil && !isNotFound(err) {
-			return false, fmt.Errorf("remove the static route %s, which the release no longer states, from REST API %s: %w", path, id, err)
+			return staticRoutes{}, fmt.Errorf("remove %s, which no static route of the release needs, from REST API %s: %w", path, id, err)
 		}
-		changed = true
+		removed = append(removed, path)
+		reshaped = true
 	}
-	return changed, nil
+	return staticRoutes{Reshaped: reshaped, Fingerprint: routesFingerprint(served)}, nil
+}
+
+func routesFingerprint(served []string) string {
+	if len(served) == 0 {
+		return unsetVariable
+	}
+	sorted := slices.Sorted(slices.Values(served))
+	sum := sha256.Sum256([]byte(strings.Join(sorted, "\n")))
+	return hex.EncodeToString(sum[:8])
+}
+
+func stageVariable(ctx context.Context, c Clients, api, name string) (string, error) {
+	stage, err := c.APIGateway.GetStage(ctx, &apigateway.GetStageInput{
+		RestApiId: aws.String(api),
+		StageName: aws.String(stageName),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read the %s stage of REST API %s: %w", stageName, api, err)
+	}
+	return stage.Variables[name], nil
 }
 
 func apiResources(ctx context.Context, c Clients, api string) (map[string]string, error) {
@@ -441,6 +495,7 @@ func publish(ctx context.Context, c Clients, api string) error {
 func unsetVariables() map[string]string {
 	return map[string]string{
 		entryVariable:  unsetVariable,
+		routesVariable: unsetVariable,
 		assetsVariable: unsetVariable,
 	}
 }
