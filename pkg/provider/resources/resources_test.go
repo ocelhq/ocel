@@ -835,6 +835,50 @@ func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
 	}
 }
 
+func TestDestroyingAStackWhoseReleaseFailedForgetsTheImageItsRecordNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := appRef()
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: testImage}); err != nil {
+		t.Fatal(err)
+	}
+	forgot := 0
+	own := &retaining{buckets: &buckets{}, forgetting: func() error { forgot++; return nil }}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+
+	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+
+	if forgot != 1 {
+		t.Errorf("Destroy() forgot the stack's images %d times, want once: a release that failed recorded the image it pushed and no container, and nothing else ever reclaims that image", forgot)
+	}
+	if !slices.Contains(own.swept, "web "+testImage) {
+		t.Errorf("Destroy() reconciled %v, want web's recorded image", own.swept)
+	}
+}
+
+func TestRemovingPushedImagesLeavesOneARecordNamesByTheTimeItsTurnComes(t *testing.T) {
+	t.Parallel()
+
+	pushed := fake.NewImages()
+	removed := 0
+	recorded := func(context.Context) (map[string]bool, error) {
+		if removed = len(pushed.Removed()); removed == 0 {
+			return nil, nil
+		}
+		return map[string]bool{"r/shop.web:two": true}, nil
+	}
+
+	resources.RemovePushedImages(context.Background(), pushed, "web", []string{"r/shop.web:one", "r/shop.web:two"}, recorded, nil)
+
+	if got, want := pushed.Removed(), []string{"r/shop.web:one"}; !slices.Equal(got, want) {
+		t.Errorf("RemovePushedImages() removed %v, want %v: a deploy that recorded r/shop.web:two after the removal began found it pushed and will pull it", got, want)
+	}
+}
+
 func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testing.T) {
 	t.Parallel()
 

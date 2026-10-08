@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"google.golang.org/api/iamcredentials/v1"
 	runv1 "google.golang.org/api/run/v1"
@@ -55,7 +54,7 @@ type runServer struct {
 	missing   []string
 	retagged  []string
 	versions  map[string]string
-	updated   map[string]time.Time
+	onUntag   func(tag string)
 
 	untagAtRelease    string
 	untagEveryRelease bool
@@ -142,6 +141,9 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.patch(w, r)
 		case r.Method == http.MethodDelete && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
 			s.untagged = append(s.untagged, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
+			if s.onUntag != nil {
+				s.onUntag(strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
+			}
 			writeBody(w, map[string]any{})
 		case r.Method == http.MethodDelete && strings.Contains(path, "/revisions/"):
 			s.deleteRevision(w, revisionName(path))
@@ -151,8 +153,6 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.listLabelled(w, r.URL.Query().Get("labelSelector"))
 		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
 			s.getTag(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
-		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.Contains(path, "/versions/"):
-			s.getVersion(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
 		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.HasSuffix(path, "/tags"):
 			s.listTags(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
 		case r.Method == http.MethodPost && strings.Contains(path, "/packages/") && strings.HasSuffix(path, "/tags"):
@@ -336,17 +336,6 @@ func (s *runServer) getTag(w http.ResponseWriter, name string) {
 		version = unescaped[:at] + "/versions/sha256:" + strings.TrimPrefix(unescaped[at+len("/tags/"):], "sha256-")
 	}
 	writeBody(w, map[string]any{"name": unescaped, "version": version})
-}
-
-func (s *runServer) getVersion(w http.ResponseWriter, name string) {
-	unescaped, _ := url.PathUnescape(name)
-	updated := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	for tag, at := range s.updated {
-		if strings.HasPrefix(unescaped, tag[:strings.LastIndex(tag, "/tags/")]+"/versions/sha256:"+strings.TrimPrefix(tag[strings.LastIndex(tag, "/tags/")+len("/tags/"):], "sha256-")) {
-			updated = at
-		}
-	}
-	writeBody(w, map[string]any{"name": unescaped, "updateTime": updated.Format(time.RFC3339)})
 }
 
 func (s *runServer) listTags(w http.ResponseWriter, parent string) {

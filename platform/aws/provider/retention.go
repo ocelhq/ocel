@@ -15,17 +15,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-const (
-	imageReclaimGrace = 30 * time.Minute
-	recordsClockSkew  = time.Minute
-)
+const imageReclaimGrace = 30 * time.Minute
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, _ provider.ImageStore, log progress.Log) error {
-	kept, err := reconciledKeptImages(ctx, p.KeyValues(), ref)
-	if err != nil {
-		return err
-	}
-	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, kept, time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, otherStacksImages(p.KeyValues(), ref), time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }
@@ -39,8 +32,11 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if err != nil || !found {
 		return err
 	}
-	readAt := time.Now()
-	kept, err := forgottenKeptImages(ctx, store, ref)
+	if registry.HoldsImagesOf(images) {
+		images = nil
+	}
+	keptNow := otherStacksImages(store, ref)
+	kept, err := keptNow(ctx)
 	if err != nil {
 		return err
 	}
@@ -54,19 +50,17 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 			ours = append(ours, image)
 		}
 	}
-	resources.RemovePushedImages(ctx, images, app, pushed, log)
+	resources.RemovePushedImages(ctx, images, app, pushed, keptNow, log)
 	if len(ours) == 0 {
 		return nil
 	}
-	removed, err := registry.Forget(ctx, api, ours, kept, readAt.Add(-recordsClockSkew))
+	removed, err := registry.Forget(ctx, api, ours, keptNow, time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }
 
-func reconciledKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App)
-}
-
-func forgottenKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, ref)
+func otherStacksImages(store keyvalue.Store, ref provider.StackRef) registry.Recorded {
+	return func(ctx context.Context) (map[string]bool, error) {
+		return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, ref)
+	}
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -87,6 +86,11 @@ func Images(target provider.RegistryTarget, api ECRAPI) provider.ImageStore {
 	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target)}
 }
 
+func HoldsImagesOf(store provider.ImageStore) bool {
+	_, ecr := store.(ecrImages)
+	return ecr
+}
+
 func (i ecrImages) String() string {
 	return "images pushed to this account's ECR at " + i.target.Server
 }
@@ -126,7 +130,7 @@ func missingRepository(err error) bool {
 }
 
 func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
-	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil, time.Time{})
+	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil, noneRecorded)
 	return err
 }
 

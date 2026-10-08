@@ -249,13 +249,17 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images 
 	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, images, progress); err != nil {
 		return err
 	}
+	ran := recorded.Containers
+	if recorded.Image != "" && !slices.ContainsFunc(ran, func(container provider.AppContainer) bool { return container.Image == recorded.Image }) {
+		ran = append(slices.Clone(ran), provider.AppContainer{Name: recorded.App, Image: recorded.Image})
+	}
 	var stopped error
-	for _, container := range recorded.Containers {
+	for _, container := range ran {
 		if err := ForgetReleases(ctx, f.hooks.Retention, ref, container.Name, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
-	for _, container := range recorded.Containers {
+	for _, container := range ran {
 		if err := ReconcileImages(ctx, f.hooks.Retention, ref, container.Name, container.Image, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
@@ -285,8 +289,20 @@ func ReconcileImages(ctx context.Context, h *ImageRetentionHooks, ref provider.S
 	return err
 }
 
-func RemovePushedImages(ctx context.Context, images provider.ImageStore, app string, imageRefs []string, progress progress.Log) {
+func RemovePushedImages(ctx context.Context, images provider.ImageStore, app string, imageRefs []string, recorded func(context.Context) (map[string]bool, error), progress progress.Log) {
 	for _, image := range imageRefs {
+		if recorded != nil {
+			kept, err := recorded(ctx)
+			if err != nil {
+				if progress != nil {
+					progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, as the images the project's stacks record could not be read again: %v", image, err))
+				}
+				continue
+			}
+			if kept[image] {
+				continue
+			}
+		}
 		if err := images.Remove(ctx, image); err != nil {
 			if progress != nil {
 				progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to: %v", image, err))
