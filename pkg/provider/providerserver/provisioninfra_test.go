@@ -138,6 +138,27 @@ func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublis
 	}
 }
 
+func TestADeployAfterProvisionInfraGrantsTheBindingWithTheSecretsInfraPublished(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
+	}
+	specs := vendor.FakeStacks().Provisioned()
+	grants := specs[len(specs)-1].App.Grants
+	grant := slices.IndexFunc(grants, func(binding provider.Binding) bool { return binding.Name == "orders" })
+	if grant < 0 {
+		t.Fatalf("the app spec grants %v, want orders", grants)
+	}
+	if got := grants[grant].Properties[provider.PropertyPassword]; got != "fake-"+provider.PropertyPassword {
+		t.Errorf("the app is granted orders with password %q, want the one ProvisionInfra published: a deploy that provisions its own infra grants it whole", got)
+	}
+}
+
 type declaringStacks struct {
 	provider.Stacks
 }
