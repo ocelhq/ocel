@@ -23,7 +23,7 @@ var CONTROL_HEADERS = [
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 
-function underAny(uri, prefixes) {
+function isUnderAnyPrefix(uri, prefixes) {
   if (!prefixes) return false;
   for (let i = 0; i < prefixes.length; i++) {
     if (uri.indexOf(prefixes[i]) === 0) return true;
@@ -133,7 +133,7 @@ async function handler(event) {
     value: cacheKey(route.release, request.uri, request.headers, request.cookies),
   };
 
-  if (route.assets && underAny(request.uri, route.immutable)) {
+  if (route.assets && isUnderAnyPrefix(request.uri, route.immutable)) {
     const assets = {
       domainName: route.assets,
       originAccessControlConfig: {
