@@ -95,10 +95,6 @@ func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
 
 const RuntimeEntrypointFile = "entrypoint.mjs"
 
-func FrameworkRuntimeDir(framework string) string {
-	return path.Join(containerimage.RuntimeRoot, framework)
-}
-
 const HandlerName = "OCEL_HANDLER"
 
 const nodeEnvName = "NODE_ENV"
@@ -136,7 +132,7 @@ func functionCommand(framework buildoutput.Framework, staged buildoutput.Functio
 	case len(staged.Command) > 0:
 		return staged.Command, nil
 	case BootsThroughRuntime(framework):
-		return []string{"node", path.Join(FrameworkRuntimeDir(framework.Name), RuntimeEntrypointFile)}, nil
+		return []string{"node", path.Join(containerimage.FrameworkRuntimeDir(framework.Name), RuntimeEntrypointFile)}, nil
 	default:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %s function staged at %s names no command to run, and only a node or Next function boots through a runtime this image could run in its place",
@@ -145,7 +141,7 @@ func functionCommand(framework buildoutput.Framework, staged buildoutput.Functio
 }
 
 func runtimeLayer(framework buildoutput.Framework, runtime map[string][]byte) ([]byte, error) {
-	dir := FrameworkRuntimeDir(framework.Name)
+	dir := containerimage.FrameworkRuntimeDir(framework.Name)
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
 	for _, name := range sortedNames(runtime) {

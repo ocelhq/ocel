@@ -26,11 +26,10 @@ import (
 )
 
 const (
-	roleVar        = "OCEL_TEST_CONTAINER_ROLE"
-	reportVar      = "OCEL_TEST_CONTAINER_REPORT"
-	nodeOptionsVar = "NODE_OPTIONS"
-	healthPath     = "/_ocel/health"
-	lingerFor      = 400 * time.Millisecond
+	roleVar    = "OCEL_TEST_CONTAINER_ROLE"
+	reportVar  = "OCEL_TEST_CONTAINER_REPORT"
+	healthPath = "/_ocel/health"
+	lingerFor  = 400 * time.Millisecond
 )
 
 type served struct {
@@ -52,7 +51,7 @@ func TestContainerHelper(t *testing.T) {
 	}()
 
 	if role == "report" {
-		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv(nodeOptionsVar)), 0o600); err != nil {
+		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv(containerimage.NodeOptionsEnvVar)), 0o600); err != nil {
 			os.Exit(96)
 		}
 		os.Exit(0)
@@ -338,7 +337,7 @@ func TestRun(t *testing.T) {
 	})
 }
 
-func holding(files ...string) func(string) bool {
+func imageWith(files ...string) func(string) bool {
 	return func(path string) bool { return slices.Contains(files, path) }
 }
 
@@ -358,18 +357,18 @@ func reportedNodeOptions(t *testing.T, present func(string) bool, environ ...str
 
 func TestTheRuntimeRunsANextContainersAppWithTheServerPreloadAfterTheNodeOptionsItIsGiven(t *testing.T) {
 	preload := "--import " + containerimage.NextServerPreloadPath
-	next := holding(containerimage.NextServerPreloadPath)
+	next := imageWith(containerimage.NextServerPreloadPath)
 
 	if got := reportedNodeOptions(t, next); got != preload {
 		t.Errorf("NODE_OPTIONS = %q with none given, want %q", got, preload)
 	}
-	if got, want := reportedNodeOptions(t, next, nodeOptionsVar+"=--max-old-space-size=512"), "--max-old-space-size=512 "+preload; got != want {
+	if got, want := reportedNodeOptions(t, next, containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"), "--max-old-space-size=512 "+preload; got != want {
 		t.Errorf("NODE_OPTIONS = %q, want %q: the image's or the deploy's node options are kept and the preload follows them", got, want)
 	}
 }
 
 func TestTheRuntimeLeavesTheNodeOptionsOfAContainerWithoutTheNextServerPreload(t *testing.T) {
-	if got := reportedNodeOptions(t, holding(), nodeOptionsVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
+	if got := reportedNodeOptions(t, imageWith(), containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
 		t.Errorf("NODE_OPTIONS = %q, want the image's own %q", got, "--max-old-space-size=512")
 	}
 }
@@ -383,8 +382,8 @@ func TestTheRuntimeRunsAWorkerInANextContainerWithoutTheServerPreload(t *testing
 		t.Fatal(err)
 	}
 
-	got := reportedNodeOptions(t, holding(containerimage.NextServerPreloadPath),
-		nodeOptionsVar+"=--max-old-space-size=512", processenv.WorkerEnvVar+"=worker", variables.EnvVar+"="+string(manifest))
+	got := reportedNodeOptions(t, imageWith(containerimage.NextServerPreloadPath),
+		containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512", processenv.WorkerEnvVar+"=worker", variables.EnvVar+"="+string(manifest))
 
 	if got != "--max-old-space-size=512" {
 		t.Errorf("NODE_OPTIONS = %q, want the image's own %q: a worker is not the Next server the preload is for", got, "--max-old-space-size=512")

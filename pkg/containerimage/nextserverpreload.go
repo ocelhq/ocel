@@ -7,12 +7,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const (
-	NextServerPreloadFile = "server-preload.mjs"
-	nodeOptionsVar        = "NODE_OPTIONS"
-)
+const NextServerPreloadFile = "server-preload.mjs"
 
-var NextServerPreloadPath = path.Join(RuntimeRoot, buildoutput.FrameworkNext, NextServerPreloadFile)
+var NextServerPreloadPath = path.Join(FrameworkRuntimeDir(buildoutput.FrameworkNext), NextServerPreloadFile)
 
 func AppendNextServerPreload(present func(file string) bool, env []string) []string {
 	if !present(NextServerPreloadPath) {
@@ -23,15 +20,15 @@ func AppendNextServerPreload(present func(file string) bool, env []string) []str
 	appended := false
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
-		if name != nodeOptionsVar {
+		if name != NodeOptionsEnvVar {
 			out = append(out, entry)
 			continue
 		}
-		out = append(out, nodeOptionsVar+"="+strings.TrimSpace(value+" "+preload))
+		out = append(out, NodeOptionsEnvVar+"="+strings.TrimSpace(value+" "+preload))
 		appended = true
 	}
 	if !appended {
-		out = append(out, nodeOptionsVar+"="+preload)
+		out = append(out, NodeOptionsEnvVar+"="+preload)
 	}
 	return out
 }
