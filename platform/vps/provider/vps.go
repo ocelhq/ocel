@@ -103,6 +103,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		CheckHost:          p.CheckHost,
 		CheckBucket:        s3store.Check,
 		ForwardPorts:       p.ForwardPorts,
+		ServeBindingProxy:  p.ServeBindingProxy,
 	}
 }
 

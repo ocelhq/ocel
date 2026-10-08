@@ -53,12 +53,16 @@ type box struct {
 	follows    func(ctx context.Context, command string, each func(session.Line) error) error
 	forwarded  []string
 	stopped    []string
+	listening  string
 }
 
 func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.forwarded = append(b.forwarded, remote)
+	if b.listening != "" {
+		return b.listening, func() {}, nil
+	}
 	return fmt.Sprintf("127.0.0.1:%d", 41000+len(b.forwarded)), func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
