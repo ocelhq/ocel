@@ -174,7 +174,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		}
 	}
 	if len(proxied) > 0 {
-		served, err := serve(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Grants: proxiedGrants(req.GetGrants(), proxied), ReportFailure: reportFailure}, said)
+		served, err := serve(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Grants: listProxiedGrants(req.GetGrants(), proxied), ReportFailure: reportFailure}, said)
 		if err != nil {
 			return provider.RefusalError(err)
 		}
@@ -220,7 +220,7 @@ func listGrantedNames(grants []*contractv1.ForwardPortsGrant) ([]string, error) 
 	return names, nil
 }
 
-func proxiedGrants(grants []*contractv1.ForwardPortsGrant, proxied []provider.Binding) []provider.BindingGrant {
+func listProxiedGrants(grants []*contractv1.ForwardPortsGrant, proxied []provider.Binding) []provider.BindingGrant {
 	var granted []provider.BindingGrant
 	for _, grant := range grants {
 		var bound []provider.Binding

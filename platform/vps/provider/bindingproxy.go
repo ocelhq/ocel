@@ -2,7 +2,6 @@ package vps
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -42,12 +41,6 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		}
 		served := make([]bindingproxy.Grant, 0, len(grants))
 		for _, grant := range grants {
-			var buckets []string
-			for _, binding := range grant.Bindings {
-				if name := binding.Properties[provider.PropertyBucket]; !slices.Contains(buckets, name) {
-					buckets = append(buckets, name)
-				}
-			}
 			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: s3store.New(s3store.Config{
 				Objects:      store.Client(),
 				Internal:     store.Presigner(),
@@ -55,21 +48,19 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Callbacks:    s3store.HTTPPoster{},
 				PostPolicies: true,
 				Sessions:     s3store.SessionsBucket() + "/" + storeRef(ref).Name.String() + "/" + buildSessions,
-				Granted:      buckets,
+				Granted:      buildproxy.ListBucketNames(grant),
 			})}})
 		}
-		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := buildproxy.ServeGrants(served, req.ReportFailure)
 		if err != nil {
 			stopForward()
 			return provider.BindingProxy{}, err
 		}
-		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
-		for _, session := range proxy.Sessions {
-			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
-		}
-		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() {
-			_ = proxy.Close()
+		closeProxy := proxy.Close
+		proxy.Close = func() {
+			closeProxy()
 			stopForward()
-		}}, nil
+		}
+		return proxy, nil
 	})
 }

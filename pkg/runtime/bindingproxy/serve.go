@@ -52,16 +52,16 @@ func (s ServedGrants) Close() error {
 
 func ServeGrants(grants []Grant, report func(error)) (ServedGrants, error) {
 	sessions := make([]Session, 0, len(grants))
-	tokened := make([]tokenServices, 0, len(grants))
+	muxes := make([]tokenMux, 0, len(grants))
 	for _, grant := range grants {
 		token, err := mintToken()
 		if err != nil {
 			return ServedGrants{}, err
 		}
 		sessions = append(sessions, Session{Grantee: grant.Grantee, Token: token})
-		tokened = append(tokened, tokenServices{token: token, services: grant.Services})
+		muxes = append(muxes, tokenMux{token: token, mux: NewMux(token, grant.Services)})
 	}
-	srv, address, errs, err := listen(newRouter(tokened))
+	srv, address, errs, err := listen(&router{muxes: muxes})
 	if err != nil {
 		return ServedGrants{}, err
 	}

@@ -42,11 +42,6 @@ func NewMux(token string, services Services) *http.ServeMux {
 	return mux
 }
 
-type tokenServices struct {
-	token    string
-	services Services
-}
-
 type router struct {
 	muxes []tokenMux
 }
@@ -54,14 +49,6 @@ type router struct {
 type tokenMux struct {
 	token string
 	mux   http.Handler
-}
-
-func newRouter(grants []tokenServices) http.Handler {
-	r := &router{}
-	for _, grant := range grants {
-		r.muxes = append(r.muxes, tokenMux{token: grant.token, mux: NewMux(grant.token, grant.services)})
-	}
-	return r
 }
 
 func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
