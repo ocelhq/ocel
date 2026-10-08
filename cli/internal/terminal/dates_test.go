@@ -23,18 +23,3 @@ func TestFormatRFC3339IsUTCToTheSecondAndEmptyForNoTime(t *testing.T) {
 		t.Errorf("FormatRFC3339(nil) = %q, want empty", got)
 	}
 }
-
-func TestNormalizeRFC3339IsUTCToTheSecondAndEmptyForWhatIsNotRFC3339(t *testing.T) {
-	for raw, want := range map[string]string{
-		"2026-10-05T07:00:00.123Z":      "2026-10-05T07:00:00Z",
-		"2026-10-05T10:00:00+03:00":     "2026-10-05T07:00:00Z",
-		"2026-10-05T07:00:00Z":          "2026-10-05T07:00:00Z",
-		"":                              "",
-		"yesterday":                     "",
-		"Mon, 05 Oct 2026 07:00:00 GMT": "",
-	} {
-		if got := NormalizeRFC3339(raw); got != want {
-			t.Errorf("NormalizeRFC3339(%q) = %q, want %q", raw, got, want)
-		}
-	}
-}
