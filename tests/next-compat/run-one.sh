@@ -52,7 +52,7 @@ finish() {
       {
         printf 'dir=%s\nname=%s\n' "$dir" "$name"
         node -p "require('$dir/.ocel-e2e.json').slug" | sed 's/^/slug=/'
-        node -p "JSON.parse(require('fs').readFileSync('$dir/.ocel/deploy-result.json')).apps.flatMap((a) => a.urls ?? [])[0]" 2>/dev/null |
+        node -p "JSON.parse(require('fs').readFileSync('$dir/.ocel/deploy-report.json')).apps.flatMap((a) => a.urls ?? [])[0]" 2>/dev/null |
           sed 's/^/url=/'
         printf 'teardown=cd %s && node %s/packages/cli/bin/ocel.js preview rm %s --yes\n' \
           "$dir" "$ADAPTER_DIR" "$name"

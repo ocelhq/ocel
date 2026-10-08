@@ -169,7 +169,7 @@ export function renderComment(phase: Phase, ctx: PreviewInput): string {
 function deployedHeadline(ctx: PreviewInput, result: DeployResult): string {
   const look = PROVIDERS[result.provider.name];
   const where = look?.home ?? result.provider.name;
-  const line = `Deployed ${commitLink(ctx)} to ${where} · ${formatTime(result.deployedAt)}`;
+  const line = `Deployed ${commitLink(ctx)} to ${where} · ${formatTime(result.finishedAt)}`;
   if (!look) return line;
   return `<img src="${LOGO_BASE}/${look.logo}.svg" alt="${look.name}" height="14"> ${line}`;
 }

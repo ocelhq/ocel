@@ -77,7 +77,7 @@ runs:
       if: ${{ success() }}
       continue-on-error: true
       shell: bash
-      run: scripts/preview-report.sh deployed .ocel/deploy-result.json
+      run: scripts/preview-report.sh deployed .ocel/deploy-report.json
 
     - name: Tell the app the preview failed
       id: report-failed
@@ -106,8 +106,8 @@ runs:
         OUTCOME: ${{ steps.up.outcome }}
       run: |
         set -euo pipefail
-        if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-result.json ]; then
-          body=$(scripts/preview-comment.sh deployed .ocel/deploy-result.json)
+        if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-report.json ]; then
+          body=$(scripts/preview-comment.sh deployed .ocel/deploy-report.json)
         else
           ERROR=$(scripts/preview-error.sh)
           body=$(ERROR="$ERROR" scripts/preview-comment.sh failed)
@@ -126,6 +126,6 @@ runs:
       with:
         name: preview-result
         path: |
-          .ocel/deploy-result.json
+          .ocel/deploy-report.json
           ${{ runner.temp }}/preview.log
         if-no-files-found: warn

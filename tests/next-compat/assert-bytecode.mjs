@@ -23,7 +23,7 @@ import {
   bytecodeCacheKeyPrefix,
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
-  DEPLOY_RESULT_FILE,
+  DEPLOY_REPORT_FILE,
   storageCoordinate,
   strongestCoverage,
   summarizeOutcomes,
@@ -48,7 +48,7 @@ if (!base) {
   fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
 }
 
-const resultPath = join(process.cwd(), DEPLOY_RESULT_FILE);
+const resultPath = join(process.cwd(), DEPLOY_REPORT_FILE);
 if (!existsSync(resultPath)) {
   fail(`${resultPath} not found — run this from the deployed app's directory, after a deploy`);
 }
@@ -57,10 +57,10 @@ const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
 if (!coordinate) {
   fail(`${resultPath} records no storage prefix for its app: ${JSON.stringify(result)}`);
 }
-const deployedAt = Date.parse(result.deployedAt ?? "");
-if (!Number.isFinite(deployedAt)) {
+const finishedAt = Date.parse(result.finishedAt ?? "");
+if (!Number.isFinite(finishedAt)) {
   fail(
-    `${resultPath} has no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`,
+    `${resultPath} has no readable finishedAt (${JSON.stringify(result.finishedAt)}) — nothing here can say when the warm pass ran`,
   );
 }
 
@@ -109,7 +109,7 @@ if (candidates.length === 0) {
 const key = keyPrefix + candidates[0];
 log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
 
-const warmLogStart = deployedAt - WARM_LOG_LOOKBACK_MS;
+const warmLogStart = finishedAt - WARM_LOG_LOOKBACK_MS;
 log(
   `polling CloudWatch for the deploy's warm summary since ${new Date(warmLogStart).toISOString()}`,
 );

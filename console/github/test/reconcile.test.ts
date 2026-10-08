@@ -63,12 +63,11 @@ const base: PreviewInput = {
 };
 
 const result: DeployResult = {
-  slug: "ocelhq",
-  environment: { tier: "preview" },
+  environment: { tier: "TIER_PREVIEW" },
   provider: { name: "aws" },
-  promotionId: "prom_1",
+  promotion: { id: "prom_1" },
   apps: [{ name: "web", urls: ["https://web.preview.example"] }],
-  deployedAt: "2026-09-06T10:11:12Z",
+  finishedAt: "2026-09-06T10:11:12Z",
 };
 
 test("started then deployed reuses one deployment and updates one comment", async () => {

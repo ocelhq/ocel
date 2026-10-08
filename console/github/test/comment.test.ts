@@ -5,15 +5,14 @@ import type { DeployResult } from "../src/report";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 const result: DeployResult = {
-  slug: "ocelhq",
-  environment: { tier: "preview", identity: "pr-7" },
+  environment: { tier: "TIER_PREVIEW", identity: "pr-7" },
   provider: { name: "aws" },
-  promotionId: "prom_1",
+  promotion: { id: "prom_1" },
   apps: [
     { name: "web", urls: ["https://web.preview.example"] },
     { name: "worker", urls: [] },
   ],
-  deployedAt: "2026-09-06T10:11:12Z",
+  finishedAt: "2026-09-06T10:11:12Z",
 };
 
 const base: PreviewInput = {

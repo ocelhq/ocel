@@ -38,7 +38,7 @@ export function previewReleasesIn(
     }
     const buildId = recorded.find((each) => each.name === app)?.buildId;
     if (!buildId) {
-      throw new Error(`the record in .ocel/deploy-result.json holds no build id for ${app}`);
+      throw new Error(`the record in .ocel/deploy-report.json holds no build id for ${app}`);
     }
     return { app, urls: one.urls ?? [], deploymentUrl: one.deploymentUrl, buildId };
   });

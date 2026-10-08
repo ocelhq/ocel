@@ -7,7 +7,7 @@ export const STATE_FILE = ".ocel-e2e.json";
 
 export const BUILD_LOG_FILE = ".adapter-build.log";
 
-export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
+export const DEPLOY_REPORT_FILE = join(".ocel", "deploy-report.json");
 
 const LOCAL_RUN_ID = "local";
 
@@ -777,7 +777,7 @@ export function deployPlanProblems(output, { resultWritten }) {
     problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
   }
   if (resultWritten) {
-    problems.push(`${DEPLOY_RESULT_FILE} was written by a run that was only ever supposed to plan`);
+    problems.push(`${DEPLOY_REPORT_FILE} was written by a run that was only ever supposed to plan`);
   }
   return problems;
 }

@@ -421,7 +421,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       ["preview", "up", name, "--yes", "--json"],
       childEnv(dir),
     );
-    const record = await readFile(path.join(dir, ".ocel", "deploy-result.json"), "utf8");
+    const record = await readFile(path.join(dir, ".ocel", "deploy-report.json"), "utf8");
     return previewReleasesIn(ran.stdout, record, `ocel preview up ${name}`);
   }
 
