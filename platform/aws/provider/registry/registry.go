@@ -104,7 +104,7 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 }
 
 func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
-	_, err := Release(ctx, i.api, i.target, []string{imageRef}, nil)
+	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil)
 	return err
 }
 

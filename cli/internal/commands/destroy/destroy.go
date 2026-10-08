@@ -199,9 +199,9 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 		return nil, nil
 	}
 
-	registry, left := readiness.RemovalRegistry(cfg)
-	if left != "" {
-		planning.Warn(left)
+	registry, warning := readiness.RemovalRegistry(cfg)
+	if warning != "" {
+		planning.Warn(warning)
 	}
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
 	if policy.DryRun {
