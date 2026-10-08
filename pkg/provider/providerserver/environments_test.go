@@ -428,6 +428,75 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	}
 }
 
+func seedRemovablePreview(t *testing.T, vendor *fake.Provider) {
+	t.Helper()
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
+	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7))), naming.InfraStack("pr-7"))
+	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecyclePersistent)
+}
+
+func removePersistentPreview(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
+	t.Helper()
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop",
+		Environment: &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Identity:  "pr-7",
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestRemoveEnvironmentIsRefusedWhileADeployHoldsIt(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	seedRemovablePreview(t, vendor)
+	recordLease(t, vendor.KeyValues(), environment.TierPreview, "pr-7", otherEnvironmentLease)
+
+	result := removePersistentPreview(t, client)
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "a deploy to pr-7 is running: remove it again once it ends") {
+		t.Fatalf("RemoveEnvironment() = %q, want it refused while a deploy holds pr-7", result.GetError())
+	}
+	history, err := ledger.New(vendor.KeyValues(), environment.TierPreview, "shop").History(context.Background(), "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) == 0 {
+		t.Error("the refused removal dropped pr-7's promotions")
+	}
+}
+
+func TestRemoveEnvironmentHoldsThePreviewWhileItRemovesItAndLeavesNoLeaseBehind(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	seedRemovablePreview(t, vendor)
+	var during error
+	relayPlane(vendor).BeforeNextPointerRemoval(func() {
+		during = takeLeaseAsDeploy(vendor.KeyValues(), environment.TierPreview, "pr-7")
+	})
+
+	if result := removePersistentPreview(t, client); !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, want pr-7 removed", result.GetError())
+	}
+
+	if during == nil || !strings.Contains(during.Error(), "a removal of pr-7 is running") {
+		t.Errorf("a deploy taking pr-7 while it was removed = %v, want it refused because the removal holds pr-7", during)
+	}
+	if isLeaseHeld(t, vendor.KeyValues(), environment.TierPreview, "pr-7") {
+		t.Error("pr-7 still records a lease after its removal, want nothing left behind")
+	}
+}
+
 func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
