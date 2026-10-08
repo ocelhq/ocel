@@ -49,7 +49,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 	}
 	config := file.Config
 	if next != nil {
-		if err := checkNextServerRuntime(next); err != nil {
+		if err := refuseNextServerRuntimeWithoutPreload(next); err != nil {
 			return nil, err
 		}
 	}
@@ -89,7 +89,7 @@ func newBytesLayer(packed []byte) (v1.Layer, error) {
 	})
 }
 
-func checkNextServerRuntime(next *NextServerRuntime) error {
+func refuseNextServerRuntimeWithoutPreload(next *NextServerRuntime) error {
 	if _, ok := next.Files[containerimage.NextServerPreloadFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the provider's Next server runtime holds no %s, so next start has no preload to run in front of it", containerimage.NextServerPreloadFile)
