@@ -20,6 +20,18 @@ function postForm(ctx: CheckContext, origin: string): Promise<Response> {
   });
 }
 
+export const publicOriginFormActionCheck: Check = {
+  title: "a form action posted from the app's public origin runs",
+  run: async (ctx) => {
+    const res = await postForm(ctx, new URL(ctx.baseUrl).origin);
+    const text = await res.text();
+    assert.equal(res.status, 200, text);
+    const result = JSON.parse(text) as { type: string; data: string };
+    assert.equal(result.type, "success", text);
+    assert.match(result.data, /from-the-journey/);
+  },
+};
+
 export const svelteKitChecks: Check[] = [
   {
     title: "GET / is rendered on the server",
@@ -71,17 +83,7 @@ export const svelteKitChecks: Check[] = [
       assert.doesNotMatch(await res.text(), /<html/i);
     },
   },
-  {
-    title: "a form action posted from the app's public origin runs",
-    run: async (ctx) => {
-      const res = await postForm(ctx, new URL(ctx.baseUrl).origin);
-      const text = await res.text();
-      assert.equal(res.status, 200, text);
-      const result = JSON.parse(text) as { type: string; data: string };
-      assert.equal(result.type, "success", text);
-      assert.match(result.data, /from-the-journey/);
-    },
-  },
+  publicOriginFormActionCheck,
   {
     title: "a form action posted from another origin is refused",
     run: async (ctx) => {

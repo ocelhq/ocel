@@ -10,10 +10,12 @@ import {
   malformedQueryCheck,
   nextCacheChecks,
   nextDataCacheChecks,
+  nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   nodeRuntimeChecks,
   orderedKeysInParallelCheck,
   publicOriginCheck,
+  publicOriginFormActionCheck,
   realtimeAppOriginCheck,
   realtimeConnectTokenVectorsCheck,
   realtimeEventSizeCheck,
@@ -31,6 +33,7 @@ import {
   sseCheck,
   sseSilenceCheck,
   streamCheck,
+  streamPageCheck,
   taskConcurrencyCheck,
   todoAndDocumentChecks,
 } from "../checks";
@@ -68,6 +71,8 @@ const EVERY_NEXT_BEARING = [...DEPLOY_NEXT_BEARING, lifecycle.next, ...SDK_NEXT_
 const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
+const SERVED_FROM_NEXT_CACHE =
+  /serves a static page|keeps an ISR page|revalidating a path|draft mode makes/;
 
 export const gaps: Gap[] = [
   {
@@ -139,6 +144,17 @@ export const gaps: Gap[] = [
           check(corsCheck),
           check(publicOriginCheck),
         ],
+      },
+      {
+        on: ["gcp.floci"],
+        fixtures: [deploy.next],
+        fails: [check(streamPageCheck)],
+      },
+      {
+        on: ["gcp.floci"],
+        fixtures: [deploy.sveltekit],
+        variants: [container],
+        fails: [check(publicOriginFormActionCheck)],
       },
       {
         on: ["gcp.floci"],
@@ -440,7 +456,37 @@ export const gaps: Gap[] = [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next, lifecycle.next, sdk.next],
+        variants: [defaults, alb, cloudflareOnGoogleCloud],
         fails: [check(runtimeStampCheck)],
+      },
+    ],
+  },
+  {
+    id: "gcp-next-container-is-never-seeded",
+    reason:
+      "a Next container on Cloud Run reads its pages from the store ocel seeds, and nothing seeds it, so the first request renders a prerendered page",
+    issue: 1815,
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [deploy.next],
+        variants: [container],
+        fails: [
+          check(nextOriginCacheChecks.filter((one) => SERVED_FROM_NEXT_CACHE.test(one.title))),
+        ],
+      },
+    ],
+  },
+  {
+    id: "gcp-next-container-withholds-from-cloud-cdn",
+    reason:
+      "a Next container on Cloud Run makes every s-maxage response private, so Cloud CDN never stores a page it cannot invalidate",
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [deploy.next],
+        variants: [container],
+        fails: [check(nextOriginCacheChecks.filter((one) => one.title.includes("a prefetch")))],
       },
     ],
   },

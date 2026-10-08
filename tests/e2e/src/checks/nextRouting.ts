@@ -41,6 +41,19 @@ export const runtimeStampCheck: Check = {
   },
 };
 
+export const streamPageCheck: Check = {
+  title: "the stream page sends its shell before its deferred body",
+  run: async (ctx) => {
+    const res = await ctx.fetch(`${ctx.baseUrl}/stream`);
+    assert.equal(res.status, 200);
+    const chunks = await chunksOf(res);
+    assert.ok(
+      firstChunkWith(chunks, "ocel-shell") < firstChunkWith(chunks, "ocel-deferred"),
+      "ocel-deferred did not arrive after ocel-shell",
+    );
+  },
+};
+
 export const nextRoutingChecks: Check[] = [
   {
     title: "the next handler answers every method with the body it was sent",
@@ -272,18 +285,7 @@ export const nextRoutingChecks: Check[] = [
       assert.equal(marker(html, "cookie:mw-2"), "value-2");
     },
   },
-  {
-    title: "the stream page sends its shell before its deferred body",
-    run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/stream`);
-      assert.equal(res.status, 200);
-      const chunks = await chunksOf(res);
-      assert.ok(
-        firstChunkWith(chunks, "ocel-shell") < firstChunkWith(chunks, "ocel-deferred"),
-        "ocel-deferred did not arrive after ocel-shell",
-      );
-    },
-  },
+  streamPageCheck,
   runtimeStampCheck,
 ];
 
