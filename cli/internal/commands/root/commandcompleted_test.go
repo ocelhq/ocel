@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -13,8 +15,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -406,5 +410,33 @@ func TestTheEventNamesTheDetectedAgentAndCIAndNothingWhenNoneIsDetected(t *testi
 	}
 	if event := theOnlyEvent(t, detected); event.Properties["agent"] != "gemini-cli" || event.Properties["ci"] != "gitlab" {
 		t.Errorf("properties = %v, want gemini-cli and gitlab", event.Properties)
+	}
+}
+
+func TestTheSkillInstalledPropertyIsWhetherTheProjectHoldsTheOcelSkill(t *testing.T) {
+	for i, dir := range []string{"", ".claude", ".agents"} {
+		t.Run("skill in "+dir, func(t *testing.T) {
+			debugTelemetry(t)
+			root := clitest.SetUpProject(t).Root
+			nested := filepath.Join(root, "nested")
+			if err := os.MkdirAll(nested, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(nested)
+			if dir != "" {
+				if err := skill.Write(skill.Dirs(root)[i-1], "1.0.0"); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			_, _, stderr := executeAndReportRoot(t, "--help")
+
+			if got := theOnlyEvent(t, stderr).Properties["skill_installed"]; got != (dir != "") {
+				t.Errorf("skill_installed = %#v, want %v", got, dir != "")
+			}
+			if line := eventLine(t, stderr); strings.Contains(line, root) {
+				t.Errorf("event %s names the project's path", line)
+			}
+		})
 	}
 }
