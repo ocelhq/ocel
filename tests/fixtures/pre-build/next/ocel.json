@@ -1,0 +1,7 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "pre-build-next",
+  "provider": "aws",
+  "apps": [{ "name": "web", "path": "." }],
+  "lifecycle": { "preBuild": "pnpm migrate" }
+}

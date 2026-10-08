@@ -26,8 +26,8 @@ sensitive and a secret value at import deploys, leaving neither in `.ocel/output
 or a live dir, from `fixtures/build-variables/`; `prerender` asks whether `ocel deploy` hands
 a build the bindings of the postgres it reads while prerendering, over a port forward, from
 `fixtures/prerender/`; `pre-build` asks whether `lifecycle.preBuild` runs a migration against the
-deployed postgres before the app is built, and whether a command that fails stops the deploy there,
-from `fixtures/pre-build/`; `kv` asks whether a kv store behaves as the map in #1474 says on
+deployed postgres before the app is built, whether a Next build then prerenders the rows only that
+migration creates, and whether a command that fails stops the deploy there, from `fixtures/pre-build/`; `kv` asks whether a kv store behaves as the map in #1474 says on
 a target, from `fixtures/kv/`, restarting what the app declared and, where the target keeps
 releases, redeploying it to see its data survive; `tasks` asks whether topics, tasks and
 workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `realtime` asks

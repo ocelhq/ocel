@@ -16,6 +16,7 @@ import {
   nodeRuntimeChecks,
   overlapRefusal,
   preBuildChecks,
+  preBuildPrerenderChecks,
   prerenderChecks,
   realtimeChecks,
   staticChecks,
@@ -229,6 +230,11 @@ export const preBuild = {
   node: fixture("pre-build/node", {
     apps: ["web"],
     checks: [...healthChecks, ...preBuildChecks],
+    on: { vps: [defaults] },
+  }),
+  next: fixture("pre-build/next", {
+    apps: ["web"],
+    checks: [...healthChecks, ...preBuildPrerenderChecks],
     on: { vps: [defaults] },
   }),
   failing: fixture("pre-build/failing", {
