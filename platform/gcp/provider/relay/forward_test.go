@@ -268,6 +268,59 @@ func TestAConnectionThroughAnOpenForwardThatFailsIsWarnedOfOnceAndNamesTheTarget
 	}
 }
 
+func TestAConnectionThroughAnOpenForwardWhoseBastionIsGoneReportsTheForwardFailedOnceNamingTheTarget(t *testing.T) {
+	t.Parallel()
+	target := echoing(t)
+	var mutex sync.Mutex
+	admitted := 1
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mutex.Lock()
+		admit := admitted > 0
+		admitted--
+		mutex.Unlock()
+		if !admit {
+			http.NotFound(w, r)
+			return
+		}
+		relay.NewHandler(destinationsOf(t, target)).ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	failed := make(chan error, 4)
+	warned := make(chan string, 4)
+	forward, err := relay.OpenForward(context.Background(), relay.Link{URL: front.URL, Target: target, Token: tokenOf("id-token"),
+		Warn: func(message string) { warned <- message }, ReportFailure: func(err error) { failed <- err }})
+	if err != nil {
+		t.Fatalf("OpenForward() = %v", err)
+	}
+	defer forward.Close()
+
+	for range 2 {
+		conn, err := net.Dial("tcp", forward.Address())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := conn.Read(make([]byte, 1)); err == nil {
+			t.Error("a connection to a bastion that is gone still reads, want it closed")
+		}
+		_ = conn.Close()
+	}
+	forward.Close()
+
+	close(failed)
+	close(warned)
+	var reported []error
+	for err := range failed {
+		reported = append(reported, err)
+	}
+	if len(reported) != 1 || !strings.Contains(reported[0].Error(), target) || !strings.Contains(reported[0].Error(), "404") {
+		t.Errorf("the forward reported %v, want one failure naming %s and that the bastion is gone", reported, target)
+	}
+	for message := range warned {
+		t.Errorf("the forward warned %q, want the failure reported instead", message)
+	}
+}
+
 func TestAnIdentityTokenNeverReachesARefusalMessage(t *testing.T) {
 	t.Parallel()
 	target := echoing(t)
