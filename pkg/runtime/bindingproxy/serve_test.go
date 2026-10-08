@@ -106,3 +106,20 @@ func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 		t.Fatal("two proxies were handed the same token, so one deployment's credential opens the other")
 	}
 }
+
+func TestServeNamesItsAddressAndTokenForACallerThatDeliversThemItself(t *testing.T) {
+	t.Parallel()
+
+	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	t.Cleanup(func() { served.Close() })
+
+	if want := envValue(t, served.Env, processenv.RuntimeAddressEnvVar); served.Address != want {
+		t.Errorf("Address = %q, want %q: the address the env delivers", served.Address, want)
+	}
+	if want := envValue(t, served.Env, localrpc.SessionTokenEnvVar); served.Token != want {
+		t.Errorf("Token = %q, want the token the env delivers", served.Token)
+	}
+}
