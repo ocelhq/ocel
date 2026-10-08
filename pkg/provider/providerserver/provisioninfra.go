@@ -34,11 +34,12 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 		if err != nil {
 			return nil, err
 		}
-		if err := h.holdEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
+		taken, err := h.holdEnvironment(ctx, spec, req.GetLeaseToken())
+		if err != nil {
 			return nil, err
 		}
 		result, err := h.provisionInfraOver(ctx, req, spec, sender)
-		if err != nil {
+		if err != nil && taken {
 			h.releaseEnvironment(ctx, spec, req.GetLeaseToken())
 		}
 		return result, err

@@ -61,7 +61,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 					return nil, err
 				}
 			}
-			if err := h.holdEnvironment(ctx, spec, token); err != nil {
+			if _, err := h.holdEnvironment(ctx, spec, token); err != nil {
 				return nil, err
 			}
 			defer h.releaseEnvironment(ctx, spec, token)
