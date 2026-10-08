@@ -403,6 +403,22 @@ func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	}
 }
 
+func TestARollbackShowsWhatTheProviderSaysWhileItMovesProduction(t *testing.T) {
+	project := promotedTwice(t)
+	const said = "waiting on the router to pick up the pointer"
+	project.Provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).SayOnPointerMove(said)
+	invocation := clitest.NewInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, said) || !strings.Contains(out, "Rolled back to promotion promo-1") {
+		t.Errorf("stdout = %q, want the rollback reported with the line %q the pointer move said", out, said)
+	}
+}
+
 var propagationCases = []struct {
 	name        string
 	propagation router.Propagation

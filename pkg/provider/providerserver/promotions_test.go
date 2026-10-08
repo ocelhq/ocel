@@ -20,6 +20,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -86,18 +87,17 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
-	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	promoted := rolled.GetPromoted()
-	if id := promoted.GetPromotionId(); id == "p1" || id == "p2" {
+	if id := rolled.promotionID(); id == "p1" || id == "p2" {
 		t.Errorf("Rollback() promoted %q, want a new promotion rather than one the history already records", id)
 	}
-	if build := promoted.GetReleases()["web"]; build != releaseFor(0) {
+	if build := rolled.release("web"); build != releaseFor(0) {
 		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, releaseFor(0))
 	}
-	if promoted.GetPropagation() == nil {
+	if rolled.result.GetPropagation() == nil {
 		t.Error("Rollback() reported no propagation, so nothing tells the user how long the pointer move takes")
 	}
 
@@ -109,7 +109,7 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	for _, entry := range listed.GetPromotions() {
 		ids = append(ids, entry.GetPromotion().GetPromotionId())
 	}
-	if want := []string{promoted.GetPromotionId(), "p2", "p1"}; !slices.Equal(ids, want) {
+	if want := []string{rolled.promotionID(), "p2", "p1"}; !slices.Equal(ids, want) {
 		t.Errorf("after the rollback the history reads %v, want %v", ids, want)
 	}
 	if !listed.GetPromotions()[0].GetActive() {
@@ -442,24 +442,72 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	}
 }
 
-func TestTheRollbackPointerMoveIsHandedProgressThatDiscards(t *testing.T) {
+func TestTheRollbackPointerMoveSpeaksThroughTheRollbacksOwnSpan(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
-	plane := relayPlane(provider)
-	plane.SayOnPointerMove("the pointer move said this into a rollback that streams nothing")
+	const marker = "the pointer move said this through the reporter it was handed"
+	relayPlane(provider).SayOnPointerMove(marker)
 
-	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
+	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	moved := plane.PointerMoveProgress()
-	if moved == nil {
-		t.Fatal("the rollback never reached the router's pointer move")
+	titles := map[string]string{}
+	for _, scope := range startedSpans(rolled.events) {
+		titles[scope.id] = scope.title
 	}
-	if moved != progress.Discard() {
-		t.Errorf("the rollback handed the pointer move %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", moved)
+	spoke, said := "", false
+	for _, event := range rolled.events {
+		if saidLine(event) == marker {
+			spoke, said = titles[string(event.GetSpanId())], true
+		}
 	}
+	if !said {
+		t.Fatal("nothing the pointer move said reached the stream, so a rollback reports nothing of the pointer move it waits on")
+	}
+	if want := "Switching production traffic back to promotion p1"; spoke != want {
+		t.Errorf("the pointer move spoke on span %q, want %q", spoke, want)
+	}
+}
+
+type rolledBack struct {
+	result *progressv1.OperationResult
+	events []*progressv1.OperationEvent
+}
+
+func (r rolledBack) promotionID() string { return r.result.GetPromotionId() }
+
+func (r rolledBack) release(app string) string {
+	for _, outcome := range r.result.GetApps() {
+		if outcome.GetApp() == app {
+			return outcome.GetRelease()
+		}
+	}
+	return ""
+}
+
+func (r rolledBack) warnings() []string { return said(r.events, progressv1.Level_LEVEL_WARN) }
+
+func rollBack(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.RollbackRequest) (rolledBack, error) {
+	stream, err := client.Rollback(ctx, req)
+	if err != nil {
+		return rolledBack{}, err
+	}
+	rolled := rolledBack{events: recorded(stream)}
+	if err := stream.Err(); err != nil {
+		return rolled, err
+	}
+	for _, event := range rolled.events {
+		if result := event.GetResult(); result != nil {
+			rolled.result = result
+		}
+	}
+	if !rolled.result.GetSuccess() {
+		return rolled, fmt.Errorf("rollback failed: %s", rolled.result.GetError())
+	}
+	return rolled, nil
 }
 
 func seedTakenBack(t *testing.T, provider *fake.Provider) {
@@ -505,11 +553,11 @@ func TestRollbackPassesOverAPromotionTakenBack(t *testing.T) {
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedTakenBack(t, provider)
 
-	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	if build := rolled.GetPromoted().GetReleases()["web"]; build != releaseFor(0) {
+	if build := rolled.release("web"); build != releaseFor(0) {
 		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 served: p2 was taken back and never served", build, releaseFor(0))
 	}
 }
@@ -520,7 +568,7 @@ func TestRollbackToAPromotionTakenBackIsRefused(t *testing.T) {
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedTakenBack(t, provider)
 
-	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p2"})
+	_, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", To: "p2"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "p2") {
 		t.Fatalf("Rollback() to p2 = %v, want it refused as an invalid argument naming p2, which was taken back", err)
 	}
@@ -532,7 +580,7 @@ func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1")
 
-	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p9"})
+	_, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", To: "p9"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("Rollback() = %v, want it refused as an invalid argument", err)
 	}
@@ -547,7 +595,7 @@ func TestARollbackWhosePointerWriteLostToAChangeThatLeftItsPromotionActiveLands(
 	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", router.DefaultPointer)
 	provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(pointer)
 
-	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
 	if err != nil {
 		t.Fatalf("Rollback() against a pointer rewritten with p2 still active = %v, want it to land", err)
 	}
@@ -555,8 +603,8 @@ func TestARollbackWhosePointerWriteLostToAChangeThatLeftItsPromotionActiveLands(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if active != rolled.GetPromoted().GetPromotionId() {
-		t.Errorf("the pointer names %q, want %q, the promotion the rollback made", active, rolled.GetPromoted().GetPromotionId())
+	if active != rolled.promotionID() {
+		t.Errorf("the pointer names %q, want %q, the promotion the rollback made", active, rolled.promotionID())
 	}
 }
 
@@ -757,7 +805,7 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	releases := seedKept(t, provider)
 
-	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
@@ -891,11 +939,11 @@ func TestARollbackWhoseDroppedBuildCannotBeReclaimedServesAndWarns(t *testing.T)
 	seedKept(t, vendor)
 	vendor.FakeStacks().RefuseNextDestroy(errors.New("the stack is locked by another run"))
 
-	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("Rollback() whose reclaim failed = %v, want it to succeed: its promotion serves", err)
 	}
-	if warned := strings.Join(rolled.GetWarnings(), "\n"); !strings.Contains(warned, "the stack is locked by another run") {
+	if warned := strings.Join(rolled.warnings(), "\n"); !strings.Contains(warned, "the stack is locked by another run") {
 		t.Errorf("Rollback() warned %q, want the destroy that failed named", warned)
 	}
 }
@@ -924,7 +972,7 @@ func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt
 		replaces = promotion.PromotionID
 	}
 
-	rolled, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"})
+	rolled, err := rollBack(ctx, client, &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
@@ -935,7 +983,7 @@ func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt
 	if _, found, err := releases.Record(ctx, "api", "garbage"); err != nil || !found {
 		t.Errorf("the record naming no build = found %v, %v, want it kept: nothing names the stack it would free", found, err)
 	}
-	if warned := strings.Join(rolled.GetWarnings(), "\n"); !strings.Contains(warned, "garbage") {
+	if warned := strings.Join(rolled.warnings(), "\n"); !strings.Contains(warned, "garbage") {
 		t.Errorf("Rollback() warned %q, want the record it could not reclaim named", warned)
 	}
 }
@@ -976,7 +1024,7 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheContainerBuildItDropped(t 
 	releases := seedKeptContainers(t, vendor)
 	ctx := context.Background()
 
-	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+	if _, err := rollBack(ctx, client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
@@ -997,7 +1045,7 @@ func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToAPr
 	releases := seedKeptContainers(t, vendor)
 	ctx := context.Background()
 
-	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+	if _, err := rollBack(ctx, client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
@@ -1048,7 +1096,7 @@ func TestRollingBackToAnEarlierDeployOfTheSameImageServesTheOriginThatDeployProv
 		t.Fatalf("both deploys provisioned origin %s, so nothing tells their records apart", origins[0])
 	}
 
-	if _, err := client.Rollback(ctx, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+	if _, err := rollBack(ctx, client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
@@ -1063,7 +1111,7 @@ func TestARollbackDestroysTheBuildItDroppedWithTheStoreOfTheRegistryTheProjectNa
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	seedKeptContainers(t, vendor)
 
-	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry}); err != nil {
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
@@ -1124,12 +1172,12 @@ func TestARollbackWarnsOfTheImagesItsReclaimLeftInTheProjectsRegistry(t *testing
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	seedKeptContainers(t, vendor)
 
-	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry})
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", ProjectRegistry: projectRegistry})
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
-	if !slices.ContainsFunc(rolled.GetWarnings(), func(warning string) bool { return strings.Contains(warning, "UNSUPPORTED") }) {
-		t.Errorf("the rollback warned %q, want what its reclaim left in the project's registry", rolled.GetWarnings())
+	if !slices.ContainsFunc(rolled.warnings(), func(warning string) bool { return strings.Contains(warning, "UNSUPPORTED") }) {
+		t.Errorf("the rollback warned %q, want what its reclaim left in the project's registry", rolled.warnings())
 	}
 }

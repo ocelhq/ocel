@@ -51,7 +51,7 @@ service ProviderService {
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
-    rpc Rollback(RollbackRequest) returns (RollbackResponse);
+    rpc Rollback(RollbackRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -789,11 +789,6 @@ message RollbackRequest {
   EdgeSelection edge = 4;
 
   ImageRegistry project_registry = 5;
-}
-
-message RollbackResponse {
-  Promotion promoted = 1;
-  repeated string warnings = 2;
 }
 
 message RemoveStalePromotionsRequest {
