@@ -1,6 +1,7 @@
 package deployreport
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -16,10 +17,11 @@ import (
 
 func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult, tier environmentv1.Tier, frameworkBuildID func(app string) (string, error)) ([]*consolev1.App, error) {
 	apps := make([]*consolev1.App, 0, len(manifest.GetApps()))
+	var unread []error
 	for _, built := range manifest.GetApps() {
 		buildID, err := frameworkBuildID(built.GetName())
 		if err != nil {
-			return nil, fmt.Errorf("app %s: %w", built.GetName(), err)
+			unread = append(unread, fmt.Errorf("app %s: %w", built.GetName(), err))
 		}
 		app := &consolev1.App{
 			Name:             built.GetName(),
@@ -41,7 +43,7 @@ func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult
 		}
 		apps = append(apps, app)
 	}
-	return apps, nil
+	return apps, errors.Join(unread...)
 }
 
 func applyResult(app *consolev1.App, result *progressv1.AppResult) {
@@ -63,10 +65,12 @@ func applyResult(app *consolev1.App, result *progressv1.AppResult) {
 
 func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consolev1.App, error) {
 	apps := make([]*consolev1.App, 0, len(releases))
+	var unparsed []error
 	for _, name := range slices.Sorted(maps.Keys(releases)) {
 		release, err := provider.ParseRelease(releases[name])
 		if err != nil {
-			return nil, fmt.Errorf("app %s: %w", name, err)
+			unparsed = append(unparsed, fmt.Errorf("app %s: %w", name, err))
+			continue
 		}
 		at := slices.IndexFunc(cfg.Apps, func(a project.App) bool { return a.Name == name })
 		if at < 0 {
@@ -84,7 +88,7 @@ func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consol
 		}
 		apps = append(apps, app)
 	}
-	return apps, nil
+	return apps, errors.Join(unparsed...)
 }
 
 func computeKind(compute provider.Compute) consolev1.ComputeKind {

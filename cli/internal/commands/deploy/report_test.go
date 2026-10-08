@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,10 +15,13 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const fixtureTarget = "fake/box"
@@ -177,6 +181,34 @@ func TestAFailedDeployReportsAFailedDeploymentThatMadeNothingLive(t *testing.T) 
 	got := reports[0].GetDeployment()
 	if got.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_FAILED || got.GetPromotion() != nil || !strings.Contains(got.GetError(), "simulated deploy failure") {
 		t.Errorf("deployment = %v, want failed with the error and no promotion", got)
+	}
+}
+
+func TestADeployWhoseReportCannotBeCompletedStillReportsItsLivePromotion(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+	corrupt := func() {
+		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", edge.ServeDescriptorFile), "{")
+	}
+	for _, kind := range []router.Kind{fake.RouterDirect, fake.RouterRelay} {
+		fixture.Provider.Routers().(*fake.Routers).DataPlane(kind).BeforeNextPointerMove(corrupt)
+	}
+
+	_, _, err := deployOnce(t, dependencies, fixture, deployOptions{})
+
+	live := activePromotion(t, fixture, environment.TierProduction, router.DefaultPointer)
+	if err == nil || !strings.Contains(err.Error(), "deploy report") || !strings.Contains(err.Error(), live) {
+		t.Errorf("runDeploy err = %v, want one saying promotion %s is live but its deploy report is incomplete", err, live)
+	}
+	reports := console.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("the console received %d reports, want 1", len(reports))
+	}
+	if got := reports[0].GetDeployment(); got.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED || got.GetPromotion().GetId() != live {
+		t.Errorf("deployment = %v, want succeeded with the live promotion %s", got, live)
+	}
+	if got := readDeployReport(t, fixture.Root); got.GetPromotion().GetId() != live {
+		t.Errorf("the local report holds %v, want the live promotion", got)
 	}
 }
 
