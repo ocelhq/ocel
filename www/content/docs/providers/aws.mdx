@@ -8,6 +8,9 @@ ocel init --provider aws
 ```
 
 Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
+`ocel permissions deploy` prints the policy they need. Tag the user or role with
+`ocel:project` set to the project's slug, and that policy lets it delete container images only
+in that project's ECR repositories.
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
