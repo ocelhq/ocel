@@ -114,17 +114,20 @@ func (l *streamLog) Span(string, time.Time, time.Time, error, ...progress.Attr) 
 func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsEvent]) error {
 	release := h.forwards.hold()
 	var forwards []provider.PortForward
+	var proxy *provider.BindingProxy
 	closeInBackground := false
 	defer func() {
 		if closeInBackground {
 			go func() {
 				defer release()
 				closeForwards(forwards)
+				closeProxy(proxy)
 			}()
 			return
 		}
 		defer release()
 		closeForwards(forwards)
+		closeProxy(proxy)
 	}()
 	p, err := h.session.use()
 	if err != nil {
@@ -147,6 +150,10 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
 		return forward == nil || !isReachableByPort(binding)
 	})
+	serve := p.Hooks().ServeBindingProxy
+	proxied := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
+		return serve == nil || !isReachableByProxy(binding)
+	})
 	said := &streamLog{stream: stream}
 	defer said.close()
 	failed := make(chan error, 1)
@@ -162,14 +169,21 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 			return provider.RefusalError(err)
 		}
 	}
-	resp, err := forwardedResponse(bindings, forwards)
+	if len(proxied) > 0 {
+		served, err := serve(ctx, provider.BindingProxyRequest{Tier: tier, Bindings: proxied, ReportFailure: reportFailure}, said)
+		if err != nil {
+			return provider.RefusalError(err)
+		}
+		proxy = &served
+	}
+	resp, err := forwardedResponse(bindings, forwards, proxied, proxy)
 	if err != nil {
 		return provider.RefusalError(err)
 	}
 	if err := said.send(&contractv1.ForwardPortsEvent{Body: &contractv1.ForwardPortsEvent_Response{Response: resp}}); err != nil {
 		return err
 	}
-	if len(forwards) == 0 {
+	if len(forwards) == 0 && proxy == nil {
 		return nil
 	}
 	select {
@@ -189,6 +203,20 @@ func isReachableByPort(binding provider.Binding) bool {
 		return binding.Properties[provider.PropertyURL] == ""
 	}
 	return false
+}
+
+func isReachableByProxy(binding provider.Binding) bool {
+	switch binding.Type {
+	case provider.BindingBucket, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime:
+		return true
+	}
+	return false
+}
+
+func closeProxy(proxy *provider.BindingProxy) {
+	if proxy != nil && proxy.Close != nil {
+		proxy.Close()
+	}
 }
 
 func closeForwards(forwards []provider.PortForward) {
@@ -221,9 +249,20 @@ func readPublishedBindings(ctx context.Context, p provider.Provider, spec provid
 	return bindings, nil
 }
 
-func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForward) (*contractv1.ForwardPortsResponse, error) {
+func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForward, proxied []provider.Binding, proxy *provider.BindingProxy) (*contractv1.ForwardPortsResponse, error) {
 	resp := &contractv1.ForwardPortsResponse{}
+	if proxy != nil {
+		resp.BindingProxy = &contractv1.BindingProxy{Address: proxy.Address, SessionToken: proxy.SessionToken}
+	}
 	for _, binding := range bindings {
+		if slices.ContainsFunc(proxied, func(served provider.Binding) bool { return served.Name == binding.Name }) {
+			message, err := provider.BindingMessage(binding)
+			if err != nil {
+				return nil, err
+			}
+			resp.Bindings = append(resp.Bindings, message)
+			continue
+		}
 		at := slices.IndexFunc(forwards, func(forward provider.PortForward) bool { return forward.Binding == binding.Name })
 		if at < 0 {
 			resp.Unforwarded = append(resp.Unforwarded, binding.Name)
