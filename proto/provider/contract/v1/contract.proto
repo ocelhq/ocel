@@ -539,7 +539,6 @@ message RemoveEnvironmentRequest {
 
   EdgeSelection edge = 3;
 
-  // The registry the project pushes its images to, so the removal can delete what the deploys pushed there.
   ImageRegistry project_registry = 4;
 }
 
@@ -553,7 +552,6 @@ message ProjectRequest {
   // A removal that sends a consented plan refuses work that plan never showed.
   common.plan.v1.ChangePlan consented = 4;
 
-  // The registry the project pushes its images to, so the removal can delete what the deploys pushed there.
   ImageRegistry project_registry = 5;
 }
 
