@@ -133,3 +133,22 @@ func TestAPreviewUpAttemptRecordsThePreviewEnvironmentAndItsEdge(t *testing.T) {
 		t.Errorf("environment = %v, want preview pr-12", deployment.GetEnvironment())
 	}
 }
+
+func TestAnEnvironmentEventIsARecordTheConsoleAccepts(t *testing.T) {
+	t.Parallel()
+	ci := &consolev1.CI{Name: "ci"}
+
+	preview := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
+		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}, traceID, finishedAt, ci, nil)
+	destroyed := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED,
+		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, traceID, finishedAt, nil, &consolev1.Source{Commit: "0123456789abcdef"})
+
+	for _, event := range []*consolev1.EnvironmentEvent{preview, destroyed} {
+		if err := protovalidate.Validate(event); err != nil {
+			t.Errorf("event %v is one the console refuses: %v", event, err)
+		}
+	}
+	if preview.GetId() != traceID || !preview.GetAt().AsTime().Equal(finishedAt) || preview.GetCi().GetName() != "ci" {
+		t.Errorf("event = %v, want the run's trace id, its time and its CI", preview)
+	}
+}

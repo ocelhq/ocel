@@ -20,6 +20,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -65,7 +66,7 @@ func newProductionCommand(invocation commands.Invocation) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runDestroyProduction(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
+			return runDestroyProduction(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	commands.AddYesFlag(cmd, &yes)
@@ -89,7 +90,7 @@ func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runDestroyPreviewProject(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.InOrStdin())
+			return runDestroyPreviewProject(cmd.Context(), invocation, cwd, yes, dry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	commands.AddYesFlag(cmd, &yes)
@@ -97,7 +98,7 @@ func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
-func runDestroyProduction(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
+func runDestroyProduction(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -119,10 +120,10 @@ func runDestroyProduction(ctx context.Context, invocation commands.Invocation, c
 	policy := consent.NewPlanPolicy("ocel destroy production", yes || bypass, invocation.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
-	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice)
+	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PRODUCTION, notice, stderr)
 }
 
-func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := invocation.LoadProject(ctx, cwd)
 	if err != nil {
 		return err
@@ -130,20 +131,28 @@ func runDestroyPreviewProject(ctx context.Context, invocation commands.Invocatio
 
 	policy := consent.NewPlanPolicy("ocel destroy preview", yes, invocation.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = dry
-	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "")
+	return destroyProject(ctx, invocation, cfg, policy, environmentv1.Tier_TIER_PREVIEW, "", stderr)
 }
 
-func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (err error) {
+func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string, stderr io.Writer) error {
+	destroyed, err := destroyTier(ctx, invocation, cfg, policy, tier, bypassNotice)
+	if destroyed != nil {
+		invocation.DeploymentReports.ReportEnvironmentEvent(ctx, cfg.Dir, destroyed, stderr)
+	}
+	return err
+}
+
+func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *project.Project, policy consent.Policy, tier environmentv1.Tier, bypassNotice string) (destroyed *consolev1.EnvironmentEvent, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := policy.Refuse(); err != nil {
-		return err
+		return nil, err
 	}
 
 	ctx, run, err := invocation.Events.Begin(ctx, policy.Command, cfg.Dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer run.End(&err)
 
@@ -154,7 +163,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Features})
 	check.End(err)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer provider.Close()
 
@@ -181,27 +190,27 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	})
 	span.End(err)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(plan.GetGroups()) == 0 {
 		run.Succeed(fmt.Sprintf("Nothing to destroy: %s has nothing in %s", cfg.Slug, place))
-		return nil
+		return nil, nil
 	}
 
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
 	if policy.DryRun {
 		planning.Say("Run without --dry to destroy.")
 		run.Succeed(fmt.Sprintf("Planned the destroy of what %s has in %s", cfg.Slug, place))
-		return nil
+		return nil, nil
 	}
 	granted, err := policy.ConfirmPlanByName(ctx, planning, consented, "project name", plan.GetSubject())
 	planning.End(err)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !granted {
 		run.Succeed(fmt.Sprintf("Nothing destroyed: what %s has in %s stays", cfg.Slug, place))
-		return nil
+		return nil, nil
 	}
 
 	req := &contractv1.ProjectRequest{
@@ -211,14 +220,15 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 		Consented:   consented,
 	}
 	if _, err := providerprocess.Stream(ctx, provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
-		return err
+		return nil, err
 	}
+	destroyed = commands.NewEnvironmentEvent(run, cfg.Dir, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: tier})
 	if preview {
 		run.Succeed(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
-		return nil
+		return destroyed, nil
 	}
 	run.Succeed(fmt.Sprintf("Destroyed project %s", cfg.Slug))
-	return nil
+	return destroyed, nil
 }
 
 func showDestroyPlan(planning *run.Span, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {

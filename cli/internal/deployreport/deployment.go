@@ -80,3 +80,14 @@ func lastRunes(text string, limit int) string {
 	}
 	return string(runes[len(runes)-limit:])
 }
+
+func NewEnvironmentEvent(kind consolev1.EnvironmentEventKind, env *environmentv1.Environment, traceID string, at time.Time, ci *consolev1.CI, source *consolev1.Source) *consolev1.EnvironmentEvent {
+	return &consolev1.EnvironmentEvent{
+		Id:          traceID,
+		Kind:        kind,
+		Environment: env,
+		At:          timestamppb.New(at),
+		Ci:          ci,
+		Source:      source,
+	}
+}
