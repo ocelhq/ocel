@@ -136,21 +136,28 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return refusal.Refuse(refusal.CodeInvalid,
 				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
 		}
-		session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
+		if req.GetSlug() == "" {
+			return errUnnamedProject
+		}
+		vendor, err := h.session.use()
 		if err != nil {
 			return err
 		}
 		preview := environmentScope{tier: environment.TierPreview, slug: req.GetSlug(), env: pointer}
-		holds, err := h.leases.takeEach(ctx, session.provider.KeyValues(), []environmentScope{preview}, stackrecords.LeaseRemoval)
+		hold, err := h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), preview, stackrecords.LeaseRemoval)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = holds.release(ctx) }()
-		return holds.explain(removePreview(holds.context(ctx), session, req, pointer, progress))
+		defer func() { _ = hold.release(ctx) }()
+		return hold.explain(h.removePreview(hold.context(ctx), req, pointer, progress))
 	})
 }
 
-func removePreview(ctx context.Context, session *edgeSession, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
+func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
+	session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
+	if err != nil {
+		return err
+	}
 	if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
 		return err
 	}

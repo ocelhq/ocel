@@ -828,3 +828,24 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 		t.Errorf("the removal said %q, want %q among it", said, web)
 	}
 }
+
+func TestRemoveEnvironmentKeepsTheAppsADeployRoutedBeforeItTookThePreview(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	seedRemovablePreview(t, vendor)
+	var routed error
+	vendor.KeyValues().(*fake.KeyValues).BeforeNextWrite(stackrecords.EnvironmentLeaseKey(environment.TierPreview, "shop", "pr-7"), func() {
+		routed = routeAnotherApp(vendor.KeyValues(), environment.TierPreview, "docs")
+	})
+
+	if result := removePersistentPreview(t, client); !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q, want pr-7 removed", result.GetError())
+	}
+
+	if routed != nil {
+		t.Fatal(routed)
+	}
+	if _, kept := readRoutedApps(t, vendor.KeyValues(), environment.TierPreview)["docs"]; !kept {
+		t.Error("removing pr-7 dropped docs, which a deploy routed before the removal took pr-7: it wrote back what it read before it held the lease")
+	}
+}

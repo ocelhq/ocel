@@ -1226,3 +1226,25 @@ func TestARollbackWarnsOfTheImagesItsReclaimLeftInTheProjectsRegistry(t *testing
 		t.Errorf("the rollback warned %q, want what its reclaim left in the project's registry", rolled.warnings())
 	}
 }
+
+func TestARollbackKeepsTheAppsADeployRoutedBeforeItTookProduction(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
+	var routed error
+	provider.KeyValues().(*fake.KeyValues).BeforeNextWrite(stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv), func() {
+		routed = routeAnotherApp(provider.KeyValues(), environment.TierProduction, "docs")
+	})
+
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if routed != nil {
+		t.Fatal(routed)
+	}
+	if _, kept := readRoutedApps(t, provider.KeyValues(), environment.TierProduction)["docs"]; !kept {
+		t.Error("the rollback dropped docs, which a deploy routed before the rollback took production: it wrote back what it read before it held the lease")
+	}
+}
