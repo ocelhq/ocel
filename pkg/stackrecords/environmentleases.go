@@ -15,8 +15,43 @@ import (
 )
 
 type EnvironmentLease struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expiresAt"`
+	Token     string      `json:"token"`
+	Holder    LeaseHolder `json:"holder"`
+	ExpiresAt int64       `json:"expiresAt"`
+}
+
+type LeaseHolder string
+
+const (
+	LeaseDeploy   LeaseHolder = "deploy"
+	LeaseRollback LeaseHolder = "rollback"
+	LeaseRemoval  LeaseHolder = "removal"
+)
+
+func (h LeaseHolder) describe(env string, beside LeaseHolder) string {
+	article := "a"
+	if h == beside {
+		article = "another"
+	}
+	switch h {
+	case LeaseRollback:
+		return article + " rollback of " + env
+	case LeaseRemoval:
+		return article + " removal of " + env
+	default:
+		return article + " deploy to " + env
+	}
+}
+
+func (h LeaseHolder) describeRetry() string {
+	switch h {
+	case LeaseRollback:
+		return "roll back"
+	case LeaseRemoval:
+		return "remove it"
+	default:
+		return "deploy"
+	}
 }
 
 type LeaseTerms struct {
@@ -44,7 +79,7 @@ func EnvironmentLeaseKey(tier environment.Tier, slug, env string) keyvalue.Key {
 
 const leaseWriteAttempts = 5
 
-func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, terms LeaseTerms) (held bool, err error) {
+func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, holder LeaseHolder, terms LeaseTerms) (held bool, err error) {
 	name := EnvironmentLeaseKey(tier, slug, env)
 	var (
 		watching     bool
@@ -64,9 +99,9 @@ func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier enviro
 		switch {
 		case current.Token == "" || current.Token == token:
 		case watching && recorded.Revision != watched:
-			return false, refuseHeldLease(env, current)
+			return false, refuseHeldLease(env, current, holder)
 		case !watching && terms.Now().Before(time.Unix(current.ExpiresAt, 0)):
-			return false, refuseHeldLease(env, current)
+			return false, refuseHeldLease(env, current, holder)
 		case !watching:
 			watching, watched, watchedSince = true, recorded.Revision, terms.Now()
 			if err := terms.Wait(ctx, min(terms.Watch, terms.TTL)); err != nil {
@@ -79,7 +114,7 @@ func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier enviro
 			}
 			continue
 		}
-		err = writeEnvironmentLease(ctx, store, recorded, token, terms)
+		err = writeEnvironmentLease(ctx, store, recorded, token, holder, terms)
 		if errors.Is(err, keyvalue.ErrStale) && stale < leaseWriteAttempts {
 			stale++
 			continue
@@ -91,13 +126,13 @@ func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier enviro
 	}
 }
 
-func refuseHeldLease(env string, held EnvironmentLease) error {
+func refuseHeldLease(env string, held EnvironmentLease, taker LeaseHolder) error {
 	return refusal.Refuse(refusal.CodeBusy,
-		"another deploy to %s is running: deploy again once it ends, or once its lease runs out at %s if it was interrupted",
-		env, time.Unix(held.ExpiresAt, 0).UTC().Format(time.DateTime+" MST"))
+		"%s is running: %s again once it ends, or once its lease runs out at %s if it was interrupted",
+		held.Holder.describe(env, taker), taker.describeRetry(), time.Unix(held.ExpiresAt, 0).UTC().Format(time.DateTime+" MST"))
 }
 
-func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, terms LeaseTerms) error {
+func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, holder LeaseHolder, terms LeaseTerms) error {
 	name := EnvironmentLeaseKey(tier, slug, env)
 	return keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		current, err := decodeEnvironmentLease(name, recorded)
@@ -106,15 +141,15 @@ func RenewEnvironmentLease(ctx context.Context, store keyvalue.Store, tier envir
 		}
 		if current.Token == "" {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
-				"this deploy holds no lease on %s: it ran out and was freed, or was never taken, so another deploy may have changed %s since: deploy again",
-				env, env)
+				"this %s holds no lease on %s: it ran out and was freed, or was never taken, so something else may have changed %s since: %s again",
+				holder, env, env, holder.describeRetry())
 		}
 		if current.Token != token {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
-				"another deploy to %s is running, and took over the lease this deploy held, so this deploy stopped: deploy again once that deploy ends",
-				env)
+				"%s is running, and took over the lease this %s held, so this %s stopped: %s again once it ends",
+				current.Holder.describe(env, holder), holder, holder, holder.describeRetry())
 		}
-		value, err := encodeEnvironmentLease(name, token, terms)
+		value, err := encodeEnvironmentLease(name, token, holder, terms)
 		return value, err == nil, err
 	})
 }
@@ -127,8 +162,8 @@ func ForgetEnvironmentLease(ctx context.Context, store keyvalue.Store, tier envi
 	})
 }
 
-func writeEnvironmentLease(ctx context.Context, store keyvalue.Store, recorded keyvalue.Entry, token string, terms LeaseTerms) error {
-	value, err := encodeEnvironmentLease(recorded.Key, token, terms)
+func writeEnvironmentLease(ctx context.Context, store keyvalue.Store, recorded keyvalue.Entry, token string, holder LeaseHolder, terms LeaseTerms) error {
+	value, err := encodeEnvironmentLease(recorded.Key, token, holder, terms)
 	if err != nil {
 		return err
 	}
@@ -137,8 +172,8 @@ func writeEnvironmentLease(ctx context.Context, store keyvalue.Store, recorded k
 	return err
 }
 
-func encodeEnvironmentLease(name keyvalue.Key, token string, terms LeaseTerms) ([]byte, error) {
-	value, err := json.Marshal(EnvironmentLease{Token: token, ExpiresAt: terms.Now().Add(terms.TTL).Unix()})
+func encodeEnvironmentLease(name keyvalue.Key, token string, holder LeaseHolder, terms LeaseTerms) ([]byte, error) {
+	value, err := json.Marshal(EnvironmentLease{Token: token, Holder: holder, ExpiresAt: terms.Now().Add(terms.TTL).Unix()})
 	if err != nil {
 		return nil, fmt.Errorf("record %s: %w", name, err)
 	}
