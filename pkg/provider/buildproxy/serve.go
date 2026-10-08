@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 func Serve(ctx context.Context, req provider.BindingProxyRequest, served []provider.BindingType, open func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error)) (provider.BindingProxy, error) {
@@ -35,16 +34,4 @@ func Serve(ctx context.Context, req provider.BindingProxyRequest, served []provi
 	}
 	proxy.Unserved = unserved
 	return proxy, nil
-}
-
-func ServeGrants(grants []bindingproxy.Grant, report func(error)) (provider.BindingProxy, error) {
-	served, err := bindingproxy.ServeGrants(grants, report)
-	if err != nil {
-		return provider.BindingProxy{}, err
-	}
-	sessions := make([]provider.BindingSession, 0, len(served.Sessions))
-	for _, session := range served.Sessions {
-		sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
-	}
-	return provider.BindingProxy{Address: served.Address, Sessions: sessions, Close: func() { _ = served.Close() }}, nil
 }

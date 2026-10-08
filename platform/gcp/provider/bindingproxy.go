@@ -42,6 +42,14 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			}
 			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: buckets}})
 		}
-		return buildproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
+		if err != nil {
+			return provider.BindingProxy{}, err
+		}
+		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
+		for _, session := range proxy.Sessions {
+			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
+		}
+		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() { _ = proxy.Close() }}, nil
 	})
 }
