@@ -40,7 +40,11 @@ pub struct Infra {
 let infra = Infra::load()?;
 ```
 
-The version defaults to `17`.
+The version defaults to `17`. In TypeScript, `pg` is a peer dependency the app installs
+itself (`npm install pg`).
+
+Discovery runs the declaring file before the database exists, so create tables in a
+migration or on first use, never at the declaring file's top level.
 
 ## Migrations
 
