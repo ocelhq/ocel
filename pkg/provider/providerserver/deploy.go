@@ -1175,6 +1175,9 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
 				return err
 			}
+			if err := pushRemovedImages(ctx, images, progress); err != nil {
+				return err
+			}
 			address, deployment := findOwnAddresses(entry, facts, result)
 			r.recordAddress(entry.App, address)
 			r.recordDeploymentAddress(entry.App, deployment)
