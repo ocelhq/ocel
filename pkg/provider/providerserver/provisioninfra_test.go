@@ -255,8 +255,8 @@ func TestADeployRefusesInfraProvisionedWhenNoneWas(t *testing.T) {
 	req := deployRequest()
 	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	result, _ := deploy(t, client, req)
-	if result.GetSuccess() || !strings.Contains(result.GetError(), "was never provisioned") {
-		t.Fatalf("Deploy() = %q, want it refused: no infra stack was provisioned for it", result.GetError())
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "holds no lease on prod") {
+		t.Fatalf("Deploy() = %q, want it refused: no ProvisionInfra took a lease under its token, so none provisioned infra for it", result.GetError())
 	}
 	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
 		t.Errorf("the refused deploy provisioned %d stacks, want none", len(specs))
