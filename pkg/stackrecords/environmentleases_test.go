@@ -276,3 +276,50 @@ func TestTakeEnvironmentLeaseRefusalNamesWhatHoldsTheEnvironmentAndWhatToRunAgai
 		t.Errorf("TakeEnvironmentLease = %v, want the refusal to say a rollback of production holds it and to remove it again once that ends", err)
 	}
 }
+
+func takeProjectLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
+	_, err := stackrecords.TakeProjectLease(context.Background(), store, environment.TierProduction, "shop", token, stackrecords.LeaseRemoval, terms)
+	return err
+}
+
+func TestAnEnvironmentLeaseIsRefusedWhileARemovalHoldsItsProject(t *testing.T) {
+	store := fake.NewKeyValues()
+	clock := clockAt(leaseStart)
+	if err := takeProjectLease(store, otherLease, clock.terms()); err != nil {
+		t.Fatal(err)
+	}
+
+	err := takeLease(store, firstLease, clock.terms())
+
+	if err == nil || !strings.Contains(err.Error(), "a removal of shop in production is running: deploy again once it ends") {
+		t.Fatalf("TakeEnvironmentLease() = %v, want it refused while a removal holds shop", err)
+	}
+	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the refused deploy's lease = %v, want nothing left behind", err)
+	}
+}
+
+func TestTheRemovalHoldingAProjectTakesTheLeasesOfItsEnvironments(t *testing.T) {
+	store := fake.NewKeyValues()
+	clock := clockAt(leaseStart)
+	if err := takeProjectLease(store, firstLease, clock.terms()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := takeLease(store, firstLease, clock.terms()); err != nil {
+		t.Fatalf("TakeEnvironmentLease() under the removal's own token = %v, want it taken", err)
+	}
+}
+
+func TestAnEnvironmentLeaseIsTakenOnceTheRemovalHoldingItsProjectRanOut(t *testing.T) {
+	store := fake.NewKeyValues()
+	clock := clockAt(leaseStart)
+	if err := takeProjectLease(store, otherLease, clock.terms()); err != nil {
+		t.Fatal(err)
+	}
+	clock.now = clock.now.Add(leaseTTL)
+
+	if err := takeLease(store, firstLease, clock.terms()); err != nil {
+		t.Fatalf("TakeEnvironmentLease() after the removal's lease ran out = %v, want it taken", err)
+	}
+}

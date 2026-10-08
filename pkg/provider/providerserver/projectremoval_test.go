@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -652,4 +653,48 @@ func execDescriptor(t *testing.T) envsource.Descriptor {
 		t.Fatal(err)
 	}
 	return descriptor
+}
+
+func TestRemoveProjectDestroysAStackRecordedBeforeItTookTheProject(t *testing.T) {
+	client, vendor := deployedProject(t)
+	late := naming.AppStack(stackrecords.ProductionEnv, "docs", releaseOf(t, releaseFor(9)))
+	var recorded error
+	vendor.KeyValues().(*fake.KeyValues).BeforeNextWrite(stackrecords.ProjectLeaseKey(environment.TierProduction, "shop"), func() {
+		recorded = stackrecords.Write(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", late, stackrecords.Stack{Kind: provider.StackApp})
+	})
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+
+	if recorded != nil {
+		t.Fatal(recorded)
+	}
+	if entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop"); err != nil || len(entries) != 0 {
+		t.Errorf("after the removal %d stacks are still recorded (%v), want %s, recorded before the removal took the project, destroyed with the rest", len(entries), err, late)
+	}
+}
+
+func TestRemovingEveryPreviewRefusesAFirstDeployToANewPreviewUntilItEnds(t *testing.T) {
+	client, vendor := deployedProject(t)
+	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecyclePersistent)
+	var during error
+	vendor.KeyValues().(*fake.KeyValues).BeforeNextWrite(stackrecords.EnvironmentLeaseKey(environment.TierPreview, "shop", "pr-7"), func() {
+		during = takeLeaseAsDeploy(vendor.KeyValues(), environment.TierPreview, "pr-9")
+	})
+
+	removeProject(t, client, &contractv1.ProjectRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+	})
+
+	if during == nil || !strings.Contains(during.Error(), "a removal of shop in preview is running") {
+		t.Errorf("a first deploy to pr-9 while every preview was removed = %v, want it refused because the removal holds every preview of shop", during)
+	}
+	if isLeaseHeld(t, vendor.KeyValues(), environment.TierPreview, "pr-9") {
+		t.Error("the refused deploy left a lease on pr-9")
+	}
+	if _, err := vendor.KeyValues().Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierPreview, "shop")); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the removal's lease on shop after it ended = %v, want it freed", err)
+	}
 }
