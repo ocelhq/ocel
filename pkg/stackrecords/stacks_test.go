@@ -3,7 +3,10 @@ package stackrecords_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -13,6 +16,119 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
+
+type listedEntries struct {
+	keyvalue.Store
+	mu     sync.Mutex
+	listed int
+}
+
+func (l *listedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	entries, err := l.Store.List(ctx, in, under...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.listed += len(entries)
+	return entries, err
+}
+
+func writeStack(t *testing.T, store keyvalue.Store, tier environment.Tier, name naming.StackName, recorded stackrecords.Stack) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), store, tier, "shop", name, recorded); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheImagesAStackRecordsAreTheImageItStartsAndThoseItsContainersRun(t *testing.T) {
+	t.Parallel()
+
+	recorded := stackrecords.Stack{
+		Image:      "r/shop.web:new",
+		Containers: []provider.AppContainer{{Name: "web", Image: "r/shop.web:new"}, {Name: "web-worker", Image: "r/shop.web:worker"}},
+	}
+
+	want := []string{"r/shop.web:new", "r/shop.web:worker"}
+	if got := recorded.Images(); !slices.Equal(got, want) {
+		t.Errorf("Images() = %v, want %v", got, want)
+	}
+}
+
+func TestTheImagesOfAnAppAreReadFromItsOwnStacksInATier(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	web := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	writeStack(t, store, environment.TierPreview, web, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+	writeStack(t, store, environment.TierPreview, naming.AppStack("pr-7", "api", naming.NewReleaseToken("b1", "")),
+		stackrecords.Stack{Kind: provider.StackApp, App: "api", Image: "r/shop.api:b1"})
+
+	got, err := stackrecords.ListAppImages(ctx, store, environment.TierPreview, "shop", "web")
+	if err != nil {
+		t.Fatalf("ListAppImages() = %v", err)
+	}
+
+	want := map[naming.StackName][]string{web: {"r/shop.web:b1"}}
+	if !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("ListAppImages() = %v, want %v", got, want)
+	}
+}
+
+func TestReadingAnAppsImagesReadsNoEntryOfAnotherApp(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := &listedEntries{Store: fake.NewKeyValues()}
+	for i := range 40 {
+		app := fmt.Sprintf("app%d", i)
+		writeStack(t, store, environment.TierPreview, naming.AppStack("pr-7", app, naming.NewReleaseToken("b1", "")),
+			stackrecords.Stack{Kind: provider.StackApp, App: app, Image: "r/shop." + app + ":b1"})
+	}
+	writeStack(t, store, environment.TierPreview, naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", "")),
+		stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+	store.listed = 0
+
+	if _, err := stackrecords.ListAppImages(ctx, store, environment.TierPreview, "shop", "web"); err != nil {
+		t.Fatalf("ListAppImages() = %v", err)
+	}
+
+	if store.listed != 1 {
+		t.Errorf("ListAppImages() read %d entries, want 1: the read grows with the app's own stacks, never with the project's", store.listed)
+	}
+}
+
+func TestAForgottenStackNamesNoImage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	web := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
+	writeStack(t, store, environment.TierProduction, web, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+
+	if err := stackrecords.Forget(ctx, store, environment.TierProduction, "shop", web); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := stackrecords.ListAppImages(ctx, store, environment.TierProduction, "shop", "web")
+	if err != nil || len(got) != 0 {
+		t.Errorf("ListAppImages() = %v, %v, want none once the stack is forgotten", got, err)
+	}
+	if left, _ := store.List(ctx, stackrecords.StacksPartition(environment.TierProduction, "shop")); len(left) != 0 {
+		t.Errorf("forgetting the stack left %d entries behind", len(left))
+	}
+}
+
+func TestTheImageListOfAnAppLeavesTheStacksOfTheProjectAsTheyWere(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	web := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
+	writeStack(t, store, environment.TierProduction, web, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+
+	stacks, err := stackrecords.List(ctx, store, environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stacks) != 1 || stacks[0].Name != web {
+		t.Errorf("List() = %v, want only %s", stacks, web)
+	}
+}
 
 func decodedRecord(t *testing.T, raw []byte) stackrecords.Stack {
 	t.Helper()

@@ -132,6 +132,35 @@ func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) 
 	}
 }
 
+type countedEntries struct {
+	keyvalue.Store
+	listed int
+}
+
+func (c *countedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	entries, err := c.Store.List(ctx, in, under...)
+	c.listed += len(entries)
+	return entries, err
+}
+
+func TestAReconcileReadsTheStacksOfItsOwnAppAlone(t *testing.T) {
+	t.Parallel()
+
+	store, own := shopStacks(t)
+	for _, app := range []string{"api", "admin", "docs", "jobs"} {
+		recordImage(t, store, environment.TierPreview, "shop", naming.AppStack("pr-7", app, naming.NewReleaseToken("b3", "")), "ecr/ocel/shop."+app+":sha256-x")
+	}
+	counted := &countedEntries{Store: store}
+
+	if _, err := reconciledKeptImages(context.Background(), counted, own); err != nil {
+		t.Fatalf("reconciledKeptImages() = %v", err)
+	}
+
+	if counted.listed != 3 {
+		t.Errorf("reconciledKeptImages() read %d entries, want the 3 stacks of web: the read grows with the app whose repository it sweeps, never with the project's other apps", counted.listed)
+	}
+}
+
 func TestAProjectNothingRecordsKeepsNoImage(t *testing.T) {
 	t.Parallel()
 
