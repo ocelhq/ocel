@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -159,7 +160,7 @@ func pushSet(ctx context.Context, set *assetSet, err error) error {
 	return set.push(ctx, quietProgress{})
 }
 
-func pushStaticAssetSet(ctx context.Context, cfg Config, app string, static *buildoutput.Static, coord naming.Coordinate) error {
+func pushStaticAssetSet(ctx context.Context, cfg Config, app string, static *edge.Static, coord naming.Coordinate) error {
 	set, err := staticAssetSet(cfg, app, static, coord)
 	return pushSet(ctx, set, err)
 }

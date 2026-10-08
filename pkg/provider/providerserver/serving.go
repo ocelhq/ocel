@@ -37,7 +37,7 @@ type AppServing struct {
 	ISR            *provider.ISRSpec
 	Bytecode       *provider.BytecodeSpec
 	AssetPrefix    string
-	Static         *buildoutput.Static
+	Static         *edge.Static
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
@@ -112,8 +112,8 @@ func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*
 	}, nil
 }
 
-var routeTableFiles = map[buildoutput.RouteTableFormat]string{
-	buildoutput.RouteTableNext: edge.NextRouteTableFile,
+var routeTableFiles = map[edge.RouteTableFormat]string{
+	edge.RouteTableNext: edge.NextRouteTableFile,
 }
 
 func withoutSlash(prefix string) string {

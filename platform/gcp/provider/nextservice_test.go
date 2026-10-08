@@ -119,7 +119,7 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 
 func routedNextSpec() provider.StackSpec {
 	spec := nextSpec()
-	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: buildoutput.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
+	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
 	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
 	spec.App.AssetPrefix = "prod/shop/web/r1/assets"
 	return spec

@@ -94,7 +94,7 @@ type AppSpec struct {
 	Bytecode *BytecodeSpec
 
 	AssetPrefix string
-	Static      *buildoutput.Static
+	Static      *edge.Static
 
 	VendorState any
 

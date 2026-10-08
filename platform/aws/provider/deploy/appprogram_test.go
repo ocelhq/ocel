@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -45,7 +46,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: buildoutput.RouteTableNext, Table: []byte(routedManifest)}},
+			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
 			Bytecode:    &provider.BytecodeSpec{Prefix: "shop/prod/web/r1/bytecode"},
 			AssetPrefix: coord.AssetKey(""),

@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -599,7 +598,7 @@ func TestAPromotedRouteSendsTheImmutablePrefixesTheBuildNamedToTheBucket(t *test
 		RootFunctionPhysical: entryFunction,
 		FunctionURLs:         map[string]string{"/": fakeEntryURL},
 		AssetPrefix:          fakeAssetPrefix,
-		Static:               &buildoutput.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}},
+		Static:               &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}},
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)

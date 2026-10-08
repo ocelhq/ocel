@@ -191,7 +191,7 @@ func TestUploadArtifact(t *testing.T) {
 	})
 }
 
-var nextStatic = &buildoutput.Static{
+var nextStatic = &edge.Static{
 	ImmutablePrefixes:      []string{"/_next/static/"},
 	MustRevalidatePrefixes: []string{"/_next/static/service-worker/"},
 }
@@ -200,7 +200,7 @@ func hostingJSON(t *testing.T, runtime, buildID string) string {
 	t.Helper()
 	hosting := buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: runtime, FrameworkBuildID: buildID, RootFunction: "/"}
 	if runtime == buildoutput.FrameworkNext {
-		hosting.RouteTable = buildoutput.RouteTableNext
+		hosting.RouteTable = edge.RouteTableNext
 		hosting.Static = nextStatic
 	}
 	raw, err := json.Marshal(hosting)
