@@ -14,7 +14,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -33,6 +35,7 @@ type Use struct {
 
 type Forwards struct {
 	bindings    map[string]map[string]string
+	runtimeEnv  map[string]string
 	unforwarded []string
 	stop        context.CancelFunc
 	ended       chan error
@@ -55,6 +58,13 @@ func (f *Forwards) Bindings(app string) map[string]string {
 		return nil
 	}
 	return f.bindings[app]
+}
+
+func (f *Forwards) RuntimeEnv() map[string]string {
+	if f == nil {
+		return nil
+	}
+	return f.runtimeEnv
 }
 
 func (f *Forwards) Apps() []string {
@@ -160,6 +170,12 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 		return nil, errors.Join(err, forwards.Close())
 	}
 	forwards.bindings = byApp
+	if proxy := resp.GetBindingProxy(); proxy != nil {
+		forwards.runtimeEnv = map[string]string{
+			processenv.RuntimeAddressEnvVar: proxy.GetAddress(),
+			localrpc.SessionTokenEnvVar:     proxy.GetSessionToken(),
+		}
+	}
 	return forwards, nil
 }
 

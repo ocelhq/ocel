@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -238,26 +239,31 @@ func TestAProviderThatForwardsNoPortIsNotAskedToAndOpensNoForwardingStep(t *test
 	}
 }
 
-func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(t *testing.T) {
-	dependencies := newTestDependencies()
-	fixture := setUpDeployProject(t)
-	writeNextUsageProject(t, fixture.Root, "")
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "storage.ts"), `
+func writeNextDatabaseAndBucketProject(t *testing.T, root string) {
+	t.Helper()
+	writeNextUsageProject(t, root, "")
+	clitest.WriteFile(t, filepath.Join(root, "shared", "storage.ts"), `
 import { declareBucket } from "./declare.js";
 
 export const files = declareBucket("files");
 `)
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "shared", "index.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
 export * from "./db.js";
 export * from "./storage.js";
 `)
-	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), `
 import { db, files } from "../../../shared/index.js";
 
 export function handler() {
   return db.name + files.name;
 }
 `)
+}
+
+func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
 	forwardingPorts(t, fixture)
 	built := capturingBuild(t, &dependencies)
 
@@ -431,5 +437,70 @@ func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortFo
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
 	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
 		t.Errorf("the CLI asked to forward %v, want the one binding the image build uses", sent)
+	}
+}
+
+func servingBindingProxy(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
+	t.Helper()
+	seen := forwardingPorts(t, fixture)
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			seen.mutex.Lock()
+			defer seen.mutex.Unlock()
+			seen.open++
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", SessionToken: "proxy-token", Close: func() {
+				time.Sleep(forwardTeardown)
+				seen.mutex.Lock()
+				defer seen.mutex.Unlock()
+				seen.open--
+			}}, nil
+		}
+	})
+	return seen
+}
+
+func TestADeployBuildsAnAppWithTheBindingProxyAndTheBucketRecordItBindsAndClosesTheProxyBeforeItDeploys(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	seen := servingBindingProxy(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	wantRuntime := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-token"}
+	if !maps.Equal(built.RuntimeEnv, wantRuntime) {
+		t.Errorf("the build was handed the runtime env %v, want the binding proxy the provider served", built.RuntimeEnv)
+	}
+	if _, ok := built.Live["OCEL_RESOURCE_BUCKET_files"]; !ok {
+		t.Errorf("the build was handed %v to read from its live dir, want the files bucket beside main", slices.Sorted(maps.Keys(built.Live)))
+	}
+	if strings.Contains(said, "goes without the bindings of files") {
+		t.Errorf("the deploy said %q, want no bucket left out of the build", said)
+	}
+	if strings.Contains(said, "proxy-token") {
+		t.Errorf("the deploy said %q, want the session token never shown", said)
+	}
+	seen.mutex.Lock()
+	deployedWith := slices.Clone(seen.openAtDeploy)
+	seen.mutex.Unlock()
+	if !slices.Equal(deployedWith, []int{0}) {
+		t.Errorf("the deploy began with %v forwards or proxies still open, want it to begin after the build closed them", deployedWith)
+	}
+}
+
+func TestAnAppWhoseBuildTakesNoBindingsIsHandedNoBindingProxy(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless", build: { bindings: false } }],
+`)
+	servingBindingProxy(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	if len(built.RuntimeEnv) != 0 {
+		t.Errorf("an app that opted out was handed the runtime env %v", built.RuntimeEnv)
 	}
 }
