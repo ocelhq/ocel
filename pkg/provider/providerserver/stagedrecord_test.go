@@ -65,7 +65,7 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 
 func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", edge.Hosting{Entry: "/"}, nil)
+	builtRoutingApp(t, "web", buildoutput.Hosting{Entry: "/"}, nil)
 	client, provider := deployServed(t)
 	stager := staging(t, provider)
 
@@ -208,7 +208,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 
 func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
@@ -235,7 +235,7 @@ func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t
 
 func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

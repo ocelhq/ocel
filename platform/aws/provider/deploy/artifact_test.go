@@ -193,7 +193,7 @@ func TestUploadArtifact(t *testing.T) {
 
 func hostingJSON(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.Hosting{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
+	raw, err := json.Marshal(buildoutput.Hosting{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func withHostings(t *testing.T, files map[string]string) map[string]string {
 		if !ok {
 			continue
 		}
-		hostingPath := path.Join(appsDirName, app, edge.HostingFile)
+		hostingPath := path.Join(appsDirName, app, buildoutput.HostingFile)
 		if _, written := out[hostingPath]; written {
 			continue
 		}

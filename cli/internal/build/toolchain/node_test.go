@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func elfAddon(architecture, tag string) string {
@@ -132,25 +131,25 @@ func TestBundle(t *testing.T) {
 			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionConfigFile, cfg, want)
 		}
 
-		var hosting edge.Hosting
-		hostingPath := filepath.Join(l.appDir, edge.HostingFile)
+		var hosting buildoutput.Hosting
+		hostingPath := filepath.Join(l.appDir, buildoutput.HostingFile)
 		if err := json.Unmarshal([]byte(readFile(t, hostingPath)), &hosting); err != nil {
 			t.Fatal(err)
 		}
 		if hosting.Framework != "node" {
-			t.Errorf("%s runtime = %q, want node", edge.HostingFile, hosting.Framework)
+			t.Errorf("%s runtime = %q, want node", buildoutput.HostingFile, hosting.Framework)
 		}
 		if len(hosting.FrameworkBuildID) != buildIDLength {
-			t.Errorf("%s frameworkBuildId = %q, want %d hex characters", edge.HostingFile, hosting.FrameworkBuildID, buildIDLength)
+			t.Errorf("%s frameworkBuildId = %q, want %d hex characters", buildoutput.HostingFile, hosting.FrameworkBuildID, buildIDLength)
 		}
 		if hosting.Needs == nil {
-			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.HostingFile, readFile(t, hostingPath))
+			t.Errorf("%s = %s, want needs stated as an empty object, not null", buildoutput.HostingFile, readFile(t, hostingPath))
 		}
 		if hosting.Entry != cfg.ID {
-			t.Errorf("%s entry = %q, want the sole function's route id %q", edge.HostingFile, hosting.Entry, cfg.ID)
+			t.Errorf("%s entry = %q, want the sole function's route id %q", buildoutput.HostingFile, hosting.Entry, cfg.ID)
 		}
-		if _, err := os.Stat(filepath.Join(l.functionDir, edge.HostingFile)); err == nil {
-			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.HostingFile)
+		if _, err := os.Stat(filepath.Join(l.functionDir, buildoutput.HostingFile)); err == nil {
+			t.Errorf("%s landed inside the function directory, want it in the app artifact root", buildoutput.HostingFile)
 		}
 
 		if got := runNode(t, l.functionDir); !strings.Contains(got, "lib:cjs") {
@@ -344,8 +343,8 @@ func TestBundle(t *testing.T) {
 			if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 				t.Fatalf("Bundle: %v", err)
 			}
-			var hosting edge.Hosting
-			if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.appDir, edge.HostingFile))), &hosting); err != nil {
+			var hosting buildoutput.Hosting
+			if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.appDir, buildoutput.HostingFile))), &hosting); err != nil {
 				t.Fatal(err)
 			}
 			return hosting.FrameworkBuildID

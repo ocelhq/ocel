@@ -85,11 +85,11 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 	if err != nil {
 		return err
 	}
-	return writeJSON(filepath.Join(appDir, edge.HostingFile), edge.Hosting{
+	return writeJSON(filepath.Join(appDir, buildoutput.HostingFile), buildoutput.Hosting{
 		Framework:        framework.Name,
 		FrameworkBuildID: buildID,
 		Entry:            entryRouteID,
-		Needs:            map[edge.Need]edge.NeedDetail{},
+		Needs:            map[edge.Need]buildoutput.NeedDetail{},
 	})
 }
 

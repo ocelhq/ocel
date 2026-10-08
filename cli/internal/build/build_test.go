@@ -605,7 +605,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if hosting.Framework != "node" || len(hosting.FrameworkBuildID) != 16 || hosting.Entry != "/" || hosting.Needs == nil || hosting.EdgeRouting {
 			t.Errorf("hosting.json = %+v, want a node app's hosting", hosting)
 		}
-		if _, err := os.Stat(filepath.Join(functionDir, edge.HostingFile)); err == nil {
+		if _, err := os.Stat(filepath.Join(functionDir, buildoutput.HostingFile)); err == nil {
 			t.Error("hosting.json landed inside the function directory")
 		}
 	})

@@ -1,9 +1,11 @@
-package edge
+package buildoutput
 
 import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestHostingRoundTripsNeeds(t *testing.T) {
@@ -25,12 +27,12 @@ func TestHostingRoundTripsNeeds(t *testing.T) {
 		Framework:        "next",
 		FrameworkBuildID: "b1",
 		EdgeRouting:      true,
-		Needs: map[Need]NeedDetail{
-			NeedEdgeMiddleware: {Count: 1, Matchers: []string{"^/dashboard(?:/(.*))?$"}},
-			NeedEdgeRuntime:    {Count: 2, Routes: []string{"/edgy", "/api/stream"}},
-			NeedPPRResume:      {Count: 1, Routes: []string{"/"}},
-			NeedEdgeCache:      {Count: 3},
-			NeedStreaming:      {Count: 2},
+		Needs: map[edge.Need]NeedDetail{
+			edge.NeedEdgeMiddleware: {Count: 1, Matchers: []string{"^/dashboard(?:/(.*))?$"}},
+			edge.NeedEdgeRuntime:    {Count: 2, Routes: []string{"/edgy", "/api/stream"}},
+			edge.NeedPPRResume:      {Count: 1, Routes: []string{"/"}},
+			edge.NeedEdgeCache:      {Count: 3},
+			edge.NeedStreaming:      {Count: 2},
 		},
 	}
 	if !reflect.DeepEqual(hosting, want) {

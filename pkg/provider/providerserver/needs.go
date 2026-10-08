@@ -31,7 +31,7 @@ func (e *UnknownNeedError) Error() string {
 	return fmt.Sprintf(
 		"app %s declares the need %q, which no edge knows: the needs an app may declare are %s. "+
 			"Rebuild the app with a CLI that speaks the same need set, or drop it from its %s",
-		e.App, e.Need, strings.Join(edge.NeedNames(edge.AllNeeds()), ", "), edge.HostingFile,
+		e.App, e.Need, strings.Join(edge.NeedNames(edge.AllNeeds()), ", "), buildoutput.HostingFile,
 	)
 }
 
@@ -39,7 +39,7 @@ type UnsupportedNeedError struct {
 	App    string
 	Need   edge.Need
 	Edge   edge.Kind
-	Detail edge.NeedDetail
+	Detail buildoutput.NeedDetail
 }
 
 func (e *UnsupportedNeedError) Error() string {
@@ -79,7 +79,7 @@ func (e *EdgeEntitlementError) Error() string {
 
 func (e *EdgeEntitlementError) Unwrap() error { return e.Err }
 
-func affected(detail edge.NeedDetail) string {
+func affected(detail buildoutput.NeedDetail) string {
 	if len(detail.Routes) > 0 {
 		return "routes " + strings.Join(detail.Routes, ", ")
 	}
@@ -138,7 +138,7 @@ func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (
 
 func (c EdgeNeedCheck) forApp(
 	name string,
-	hosting edge.Hosting,
+	hosting buildoutput.Hosting,
 	entitles bool,
 	entitlement func() (edge.CodeEntitlement, error),
 ) (AppNeedVerdict, error) {
@@ -185,7 +185,7 @@ func (c EdgeNeedCheck) isRouted(app string, need edge.Need) bool {
 	return router.Supports(c.Router(app), need)
 }
 
-func declaredNeeds(hosting edge.Hosting) []edge.Need {
+func declaredNeeds(hosting buildoutput.Hosting) []edge.Need {
 	ordered := make([]edge.Need, 0, len(hosting.Needs))
 	for _, need := range edge.AllNeeds() {
 		if _, declared := hosting.Needs[need]; declared {
