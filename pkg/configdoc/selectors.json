@@ -5,10 +5,6 @@
     "required": {
       "gcp": [
         {
-          "name": "project",
-          "doc": "The Google Cloud project to deploy into."
-        },
-        {
           "name": "region",
           "doc": "The region to deploy into. A project spans them all, so this names the one."
         }
