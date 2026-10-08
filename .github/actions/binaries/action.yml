@@ -2,8 +2,8 @@ name: binaries
 description: >-
   What the Build workflow's Binaries job uploaded, put back in the tree: the
   snapshot CLI under dist/e2e, the providers of its version under
-  dist/providers, and the node bundles of ocel, @ocel/transforms, @ocel/sst
-  and @ocel/pulumi under their dist directories. A job that does its own slow
+  dist/providers, and the node bundles of ocel, @ocel/transforms, @ocel/sst,
+  @ocel/pulumi and @ocel/sveltekit under their dist directories. A job that does its own slow
   setup first waits here for the upload, and fails as soon as the Binaries job
   of its run has failed instead. OCEL_BIN and OCEL_PROVIDERS_DIR name what it
   put back. The job needs actions: read.

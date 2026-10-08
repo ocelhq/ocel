@@ -37,7 +37,7 @@ runs:
     - name: Build the node halves the binaries embed
       if: inputs.source != 'prebuilt'
       shell: bash
-      run: pnpm turbo run build --filter=ocel
+      run: pnpm turbo run build --filter=ocel --filter=@ocel/sveltekit
 
     - uses: ./.github/actions/goreleaser
       if: inputs.source == 'head'

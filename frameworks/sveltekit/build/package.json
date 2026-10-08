@@ -1,9 +1,9 @@
 {
-  "name": "@framework/next-build",
+  "name": "@framework/sveltekit-build",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "the build-time step that runs an app's own Next build through the ocel adapter",
+  "description": "the build-time step that runs an app's own SvelteKit build through the @ocel/sveltekit adapter",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/build.mts"
