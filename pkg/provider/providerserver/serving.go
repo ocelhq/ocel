@@ -39,7 +39,7 @@ type AppServing struct {
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
-	desc, present, err := buildoutput.ReadServeDescriptor(q.Root, q.App)
+	hosting, present, err := buildoutput.ReadHosting(q.Root, q.App)
 	if err != nil {
 		return AppServing{}, err
 	}
@@ -48,7 +48,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		Bytecode:    &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
 	}
 	if present {
-		facts.Entry = desc.Entry
+		facts.Entry = hosting.Entry
 	}
 	if q.Framework == buildoutput.FrameworkNext {
 		facts.ISR = &provider.ISRSpec{
@@ -57,7 +57,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		}
 	}
 	if q.Compute != provider.ComputeContainer {
-		routing, err := routingFor(q, desc, present)
+		routing, err := routingFor(q, hosting, present)
 		if err != nil {
 			return AppServing{}, err
 		}
@@ -67,26 +67,26 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 			facts.OriginDispatch = routing
 		}
 	}
-	facts.Guard = guardFor(q, desc, present)
+	facts.Guard = guardFor(q, hosting, present)
 	return facts, nil
 }
 
-func guardFor(q AppServingInput, desc edge.ServeDescriptor, present bool) *provider.OriginGuard {
-	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || desc.Entry == "" {
+func guardFor(q AppServingInput, hosting edge.Hosting, present bool) *provider.OriginGuard {
+	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || hosting.Entry == "" {
 		return nil
 	}
-	return &provider.OriginGuard{Entry: desc.Entry}
+	return &provider.OriginGuard{Entry: hosting.Entry}
 }
 
 func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Binding) bool {
 	return slices.ContainsFunc(grants, func(binding provider.Binding) bool { return proxied(binding.Type) })
 }
 
-func routingFor(q AppServingInput, desc edge.ServeDescriptor, present bool) (*provider.RoutingSpec, error) {
-	if !present || !desc.EdgeRouting {
+func routingFor(q AppServingInput, hosting edge.Hosting, present bool) (*provider.RoutingSpec, error) {
+	if !present || !hosting.EdgeRouting {
 		return nil, nil
 	}
-	if desc.Entry == "" {
+	if hosting.Entry == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
 	}
@@ -98,7 +98,7 @@ func routingFor(q AppServingInput, desc edge.ServeDescriptor, present bool) (*pr
 	if err != nil {
 		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
 	}
-	return &provider.RoutingSpec{Entry: desc.Entry, Manifest: raw}, nil
+	return &provider.RoutingSpec{Entry: hosting.Entry, Manifest: raw}, nil
 }
 
 func withoutSlash(prefix string) string {

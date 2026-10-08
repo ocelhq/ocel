@@ -57,12 +57,12 @@ func EdgeApps(projectDir string) ([]string, error) {
 
 	var apps []string
 	for _, name := range names {
-		desc, _, err := buildoutput.ReadServeDescriptor(root, name)
+		hosting, _, err := buildoutput.ReadHosting(root, name)
 		if err != nil {
 			return nil, err
 		}
 		if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
-			_, ok := desc.Needs[need]
+			_, ok := hosting.Needs[need]
 			return ok
 		}) {
 			apps = append(apps, name)
@@ -76,8 +76,8 @@ func FrameworkBuildID(projectDir, app string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	desc, _, err := buildoutput.ReadServeDescriptor(root, app)
-	return desc.FrameworkBuildID, err
+	hosting, _, err := buildoutput.ReadHosting(root, app)
+	return hosting.FrameworkBuildID, err
 }
 
 func builtApps(root string) ([]string, error) {
@@ -163,21 +163,21 @@ func readFunction(outputDir, functionsDir, functionDir string) (Function, error)
 	}
 	route := strings.TrimSuffix(filepath.ToSlash(routeRel), functionDirSuffix)
 
-	configPath := filepath.Join(functionDir, buildoutput.FunctionDescriptorFile)
+	configPath := filepath.Join(functionDir, buildoutput.FunctionConfigFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return Function{}, fmt.Errorf("%s: missing %s", functionDir, buildoutput.FunctionDescriptorFile)
+			return Function{}, fmt.Errorf("%s: missing %s", functionDir, buildoutput.FunctionConfigFile)
 		}
 		return Function{}, err
 	}
 
-	var fc buildoutput.FunctionDescriptor
+	var fc buildoutput.FunctionConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
-		return Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, buildoutput.FunctionDescriptorFile, err)
+		return Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, buildoutput.FunctionConfigFile, err)
 	}
 	if fc.Framework.Name == "" || fc.EntryFile == "" || fc.App == "" {
-		return Function{}, fmt.Errorf("%s: %s requires framework, entryFile, and app", configPath, buildoutput.FunctionDescriptorFile)
+		return Function{}, fmt.Errorf("%s: %s requires framework, entryFile, and app", configPath, buildoutput.FunctionConfigFile)
 	}
 
 	return Function{

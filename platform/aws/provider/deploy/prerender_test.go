@@ -42,9 +42,9 @@ func nodeManifest() *contractv1.Manifest {
 func nodeAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/api/serve.json":  serveDescriptor(t, "express", "a1b2c3d4e5f60718"),
-		"apps/api/index.mjs":   "export default {}",
-		"apps/api/config.json": `{"framework":{"name":"node"},"entryFile":"index.mjs","app":"api"}`,
+		"apps/api/hosting.json":         hostingJSON(t, "express", "a1b2c3d4e5f60718"),
+		"apps/api/index.mjs":            "export default {}",
+		"apps/api/function-config.json": `{"framework":{"name":"node"},"entryFile":"index.mjs","app":"api"}`,
 	})
 }
 
@@ -430,8 +430,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("no prerenders", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":            `{"buildId":"BID","appName":"web"}`,
-			"apps/web/functions/index.func/config.json": `{"id":"/"}`,
+			"apps/web/routing-manifest.json":                     `{"buildId":"BID","appName":"web"}`,
+			"apps/web/functions/index.func/function-config.json": `{"id":"/"}`,
 		})
 		f := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: f}

@@ -679,13 +679,13 @@ func declaresNeed(t *testing.T, app string, need edge.Need) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(edge.ServeDescriptor{
+	raw, err := json.Marshal(edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{need: {Routes: []string{"/feed"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, edge.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

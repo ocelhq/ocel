@@ -1234,14 +1234,17 @@ test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", a
   expect(manifest.appName).toBe("marketing");
 });
 
-test("writes the bundle name into its config.json", async () => {
+test("writes the bundle name into its function-config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const config = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
+    await readFile(
+      join(projectDir, ".ocel/output/functions/bundle-0.func/function-config.json"),
+      "utf8",
+    ),
   );
 
   expect(config.id).toBe("bundle-0");
@@ -1249,7 +1252,7 @@ test("writes the bundle name into its config.json", async () => {
   expect(config.framework).toEqual({ name: "next" });
 });
 
-test("records the owning app in each function's config.json", async () => {
+test("records the owning app in each function's function-config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1261,7 +1264,10 @@ test("records the owning app in each function's config.json", async () => {
   }
 
   const config = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
+    await readFile(
+      join(projectDir, ".ocel/output/functions/bundle-0.func/function-config.json"),
+      "utf8",
+    ),
   );
 
   expect(config.app).toBe("marketing");
@@ -1733,28 +1739,28 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
   await adapter.onBuildComplete(args as never);
 
   expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
-  expect(await exists(join(outputRoot, "serve.json"))).toBe(true);
-  expect(await exists(join(outputRoot, "functions/bundle-0.func/config.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "hosting.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "functions/bundle-0.func/function-config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
 });
 
-test("states the runtime and next's own build id in serve.json", async () => {
+test("states the runtime and next's own build id in hosting.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   const manifest = await readManifest(projectDir);
-  expect(serve).toEqual({
+  expect(hosting).toEqual({
     framework: "next",
     frameworkBuildId: args.buildId,
     edgeRouting: true,
     entry: manifest.entry,
     needs: {},
   });
-  expect(serve.frameworkBuildId).toBe(manifest.buildId);
+  expect(hosting.frameworkBuildId).toBe(manifest.buildId);
 });
 
 test("names the bundle serving the root route as the entry", async () => {
@@ -1777,10 +1783,10 @@ test("names the first bundle as the entry when no function serves the root route
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   expect(manifest.dispatch["/"]).toBeUndefined();
   expect(manifest.entry).toBe("bundle-0");
-  expect(serve.entry).toBe("bundle-0");
+  expect(hosting.entry).toBe("bundle-0");
   expect(await exists(join(projectDir, ".ocel/output/functions/bundle-0.func"))).toBe(true);
 });
 
@@ -1813,8 +1819,8 @@ test("names the root route's bundle in a build split across several bundles", as
 });
 
 async function readServeNeeds(projectDir: string) {
-  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
-  return serve.needs;
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
+  return hosting.needs;
 }
 
 test("declares the edge-middleware need with the matchers behind it", async () => {
@@ -1933,7 +1939,7 @@ test("two apps exposing the same route path do not overwrite each other", async 
   for (const app of ["storefront", "admin"]) {
     const outputRoot = join(outRoot, "apps", app);
     const config = JSON.parse(
-      await readFile(join(outputRoot, "functions/bundle-0.func/config.json"), "utf8"),
+      await readFile(join(outputRoot, "functions/bundle-0.func/function-config.json"), "utf8"),
     );
     expect(config.app).toBe(app);
     expect(config.id).toBe("bundle-0");

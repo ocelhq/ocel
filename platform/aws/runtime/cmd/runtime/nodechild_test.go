@@ -149,7 +149,7 @@ func TestEntrypointPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			if tc.config != "" {
-				if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(tc.config), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, "function-config.json"), []byte(tc.config), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}

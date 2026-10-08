@@ -20,18 +20,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) string {
+func servingRoot(t *testing.T, app string, hosting edge.Hosting, manifest []byte) string {
 	t.Helper()
 	root := t.TempDir()
 	dir := buildoutput.AppRoot(root, app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(desc)
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, edge.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if manifest != nil {
@@ -91,7 +91,7 @@ func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 
 func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, manifest)
 
 	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
@@ -110,7 +110,7 @@ func TestAnAppDispatchingAtItsOriginIncludesTheManifestItDispatchesBy(t *testing
 
 func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, manifest)
 	query := servingQuery(root, "web", buildoutput.FrameworkNext)
 	query.EdgeRunsCode = true
 
@@ -127,7 +127,7 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 }
 
 func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{"routes":[]}`))
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, []byte(`{"routes":[]}`))
 	for name, runsCode := range map[string]bool{"an edge that runs code": true, "an edge that runs none": false} {
 		t.Run(name, func(t *testing.T) {
 			query := servingQuery(root, "web", buildoutput.FrameworkNext)
@@ -146,7 +146,7 @@ func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) 
 }
 
 func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, nil)
 	query := servingQuery(root, "web", buildoutput.FrameworkNext)
 	query.Compute = provider.ComputeContainer
 
@@ -156,7 +156,7 @@ func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
 }
 
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 
 	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 }
 
 func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index"}, nil)
 
 	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), edge.RoutingManifestFile) {
@@ -177,7 +177,7 @@ func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 }
 
 func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true}, []byte(`{}`))
+	root := servingRoot(t, "web", edge.Hosting{EdgeRouting: true}, []byte(`{}`))
 
 	_, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), "entry route") {
@@ -185,17 +185,17 @@ func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	}
 }
 
-func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
+func builtRoutingApp(t *testing.T, app string, hosting edge.Hosting, manifest []byte) {
 	t.Helper()
 	dir := filepath.Join(workingOutputRoot(t), "apps", app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(desc)
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, edge.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if manifest != nil {
@@ -208,7 +208,7 @@ func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manife
 func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
 
 	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
@@ -243,7 +243,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

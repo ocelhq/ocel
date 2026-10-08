@@ -1,6 +1,6 @@
 package edge
 
-const ServeDescriptorFile = "serve.json"
+const HostingFile = "hosting.json"
 
 const RoutingManifestFile = "routing-manifest.json"
 
@@ -14,7 +14,7 @@ type NeedDetail struct {
 	Matchers []string `json:"matchers,omitempty"`
 }
 
-type ServeDescriptor struct {
+type Hosting struct {
 	Framework        string              `json:"framework"`
 	FrameworkBuildID string              `json:"frameworkBuildId"`
 	EdgeRouting      bool                `json:"edgeRouting"`

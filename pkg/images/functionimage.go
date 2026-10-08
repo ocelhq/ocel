@@ -81,14 +81,14 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	return mutate.Config(appended, config)
 }
 
-func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile))
+func functionStaging(dir string) (buildoutput.FunctionConfig, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, buildoutput.FunctionConfigFile))
 	if err != nil {
-		return buildoutput.FunctionDescriptor{}, err
+		return buildoutput.FunctionConfig{}, err
 	}
-	var staged buildoutput.FunctionDescriptor
+	var staged buildoutput.FunctionConfig
 	if err := json.Unmarshal(raw, &staged); err != nil {
-		return buildoutput.FunctionDescriptor{}, err
+		return buildoutput.FunctionConfig{}, err
 	}
 	return staged, nil
 }
@@ -103,7 +103,7 @@ func BootsThroughRuntime(framework buildoutput.Framework) bool {
 	return framework.Name == buildoutput.FrameworkNode || framework.Name == buildoutput.FrameworkNext
 }
 
-func servedHandler(staged buildoutput.FunctionDescriptor) string {
+func servedHandler(staged buildoutput.FunctionConfig) string {
 	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.EntryFile)
 }
 
@@ -127,7 +127,7 @@ func boundPort(env []string) []string {
 	return append(kept, containerimage.PortEnvVar+"="+containerimage.PortText)
 }
 
-func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor) ([]string, error) {
+func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil

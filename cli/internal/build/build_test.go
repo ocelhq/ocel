@@ -46,7 +46,7 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg buildoutput.FunctionDescriptor) {
+func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg buildoutput.FunctionConfig) {
 	t.Helper()
 	dir := filepath.Join(outDir, "apps", app, functionsDirName, funcRel)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -56,7 +56,7 @@ func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg buildoutput.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionDescriptorFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionConfigFile), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -115,7 +115,7 @@ func TestBuild(t *testing.T) {
 			}
 			for _, app := range got.Apps {
 				writeFuncConfig(t, filepath.Dir(filepath.Dir(app.OutputDir)), app.Name, "index.func",
-					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: app.Name})
+					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: app.Name})
 			}
 			return nil
 		}}
@@ -200,7 +200,7 @@ func TestBuild(t *testing.T) {
 			out := got.Apps[0].OutputDir
 			for _, bundle := range []string{"bundle-0.func", "bundle-1.func"} {
 				writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", bundle,
-					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 				functionDir := filepath.Join(out, functionsDirName, bundle)
 				writeDarwinSharp(t, functionDir)
 				functionDirs = append(functionDirs, functionDir)
@@ -240,7 +240,7 @@ func TestBuild(t *testing.T) {
 			}
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
-				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 			functionDir = filepath.Join(out, functionsDirName, "bundle-0.func")
 			writeDarwinSharp(t, functionDir)
 			return nil
@@ -268,7 +268,7 @@ func TestBuild(t *testing.T) {
 			}
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
-				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 			functionDir := filepath.Join(out, functionsDirName, "bundle-0.func")
 			writeDarwinSharp(t, functionDir)
 			writeFile(t, filepath.Join(functionDir, "server.js"), strings.Repeat("x", 1500))
@@ -301,7 +301,7 @@ func TestBuild(t *testing.T) {
 			}
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
-				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 			writeDarwinSharp(t, filepath.Join(out, functionsDirName, "bundle-0.func"))
 			return nil
 		}}
@@ -351,7 +351,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		writeFuncConfig(t, outputRoot(t, root), "stale", "index.func",
-			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h", App: "stale"})
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h", App: "stale"})
 
 		ran := false
 		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
@@ -598,15 +598,15 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: "arm64"}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		desc, found, err := buildoutput.ReadServeDescriptor(outputRoot(t, root), "api")
+		hosting, found, err := buildoutput.ReadHosting(outputRoot(t, root), "api")
 		if err != nil || !found {
-			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
+			t.Fatalf("ReadHosting = %v, %v", found, err)
 		}
-		if desc.Framework != "node" || len(desc.FrameworkBuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
-			t.Errorf("serve descriptor = %+v, want a node app's descriptor", desc)
+		if hosting.Framework != "node" || len(hosting.FrameworkBuildID) != 16 || hosting.Entry != "/" || hosting.Needs == nil || hosting.EdgeRouting {
+			t.Errorf("hosting.json = %+v, want a node app's hosting", hosting)
 		}
-		if _, err := os.Stat(filepath.Join(functionDir, edge.ServeDescriptorFile)); err == nil {
-			t.Error("the serve descriptor landed inside the function directory")
+		if _, err := os.Stat(filepath.Join(functionDir, edge.HostingFile)); err == nil {
+			t.Error("hosting.json landed inside the function directory")
 		}
 	})
 

@@ -436,7 +436,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func entrypointPath(a buildoutput.FunctionDescriptor) string {
+func entrypointPath(a buildoutput.FunctionConfig) string {
 	if a.Framework.Name == "next" {
 		return path.Join(awsports.NextRuntimeDir, "entrypoint.mjs")
 	}

@@ -74,7 +74,7 @@ func stagedProject(t *testing.T, apps ...string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "config.json"), raw, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "function-config.json"), raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -246,7 +246,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "function-config.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	served, vendor := imagingServed(t)
@@ -284,7 +284,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *te
 
 func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, []byte(`{"entry":"index"}`))
+	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, []byte(`{"entry":"index"}`))
 	app := filepath.Join(workingOutputRoot(t), "apps", "web")
 	for rel, body := range map[string]string{
 		"static/_next/static/app.js": "chunk",

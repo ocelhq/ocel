@@ -632,7 +632,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.HostingFile),
 		`{"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
 }
 

@@ -98,9 +98,9 @@ function verify() {
 }
 
 function readBundle(dir, name) {
-  const configPath = join(dir, "config.json");
+  const configPath = join(dir, "function-config.json");
   if (!existsSync(configPath)) {
-    failures.push(`${name}: no config.json`);
+    failures.push(`${name}: no function-config.json`);
     return null;
   }
   const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -131,11 +131,11 @@ function verifyBundle({
 }) {
   check(
     config.id === name,
-    `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
+    `${name}: function-config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
   );
   check(
     config.framework?.name === "next",
-    `${name}: config.json.framework is ${JSON.stringify(config.framework)}`,
+    `${name}: function-config.json.framework is ${JSON.stringify(config.framework)}`,
   );
 
   const appRelDir = dirname(launcherRel);

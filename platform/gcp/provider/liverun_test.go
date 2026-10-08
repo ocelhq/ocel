@@ -107,13 +107,13 @@ func asked(t *testing.T, uri string) (int, string) {
 
 func staged(t *testing.T, dir string, framework buildoutput.Framework, entryFile string, command []string, files map[string]string) string {
 	t.Helper()
-	config, err := json.Marshal(buildoutput.FunctionDescriptor{
+	config, err := json.Marshal(buildoutput.FunctionConfig{
 		Framework: framework, EntryFile: entryFile, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	files[buildoutput.FunctionDescriptorFile] = string(config)
+	files[buildoutput.FunctionConfigFile] = string(config)
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)

@@ -90,9 +90,9 @@ func tarNames(t *testing.T, layer v1.Layer) []string {
 
 func TestFunctionImageIncludesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":    "export const handler = () => {}",
-		"lib/deep.mjs": "export const deep = 1",
-		"config.json":  functionConfig(t, nil),
+		"index.mjs":            "export const handler = () => {}",
+		"lib/deep.mjs":         "export const deep = 1",
+		"function-config.json": functionConfig(t, nil),
 	})
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
@@ -108,7 +108,7 @@ func TestFunctionImageIncludesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *tes
 		t.Fatalf("FunctionImage() appended %d layers, want the one containing the function's tree", len(layers))
 	}
 	names := tarNames(t, layers[0])
-	want := []string{"ocel/app/config.json", "ocel/app/index.mjs", "ocel/app/lib/deep.mjs"}
+	want := []string{"ocel/app/function-config.json", "ocel/app/index.mjs", "ocel/app/lib/deep.mjs"}
 	if !slices.Equal(names, want) {
 		t.Errorf("the layer contains %v, want the staged tree under %s: %v", names, images.FunctionImageRoot, want)
 	}
@@ -120,8 +120,8 @@ func TestFunctionImageRunsAFrameworkRuntimeFromItsRuntimeDirectory(t *testing.T)
 		nextRuntime: {"node", "/ocel/runtime/next/entrypoint.mjs"},
 	} {
 		dir := stagedFunc(t, map[string]string{
-			"index.mjs":   "module.exports = {}",
-			"config.json": frameworkConfig(t, framework.Name, nil),
+			"index.mjs":            "module.exports = {}",
+			"function-config.json": frameworkConfig(t, framework.Name, nil),
 		})
 
 		image, err := images.FunctionImage(empty.Image, framework, dir, images.FunctionImageOptions{})
@@ -141,8 +141,8 @@ func TestFunctionImageRunsAFrameworkRuntimeFromItsRuntimeDirectory(t *testing.T)
 
 func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "module.exports = {}",
-		"config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+		"index.mjs":            "module.exports = {}",
+		"function-config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
 	})
 	app := t.TempDir()
 	for rel, body := range map[string]string{
@@ -192,8 +192,8 @@ func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t
 
 func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"server":      "a built binary",
-		"config.json": frameworkConfig(t, buildoutput.FrameworkGo, nil),
+		"server":               "a built binary",
+		"function-config.json": frameworkConfig(t, buildoutput.FrameworkGo, nil),
 	})
 
 	_, err := images.FunctionImage(empty.Image, goRuntime, dir, images.FunctionImageOptions{})
@@ -207,8 +207,8 @@ func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime
 
 func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"server":      "a built binary",
-		"config.json": frameworkConfig(t, buildoutput.FrameworkNode, nil),
+		"server":               "a built binary",
+		"function-config.json": frameworkConfig(t, buildoutput.FrameworkNode, nil),
 	})
 
 	_, err := images.FunctionImage(empty.Image, goRuntime, dir, images.FunctionImageOptions{})
@@ -226,8 +226,8 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export const handler = () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export const handler = () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 
 	image, err := images.FunctionImage(base, nodeRuntime, dir, images.FunctionImageOptions{})
@@ -263,8 +263,8 @@ func builtDigest(t *testing.T, files map[string]string) string {
 
 func TestFunctionImageOfTheSameFunctionGetsTheSameDigest(t *testing.T) {
 	files := map[string]string{
-		"index.mjs":   "export const handler = () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export const handler = () => {}",
+		"function-config.json": functionConfig(t, nil),
 	}
 
 	first, second := builtDigest(t, files), builtDigest(t, files)
@@ -273,8 +273,8 @@ func TestFunctionImageOfTheSameFunctionGetsTheSameDigest(t *testing.T) {
 	}
 
 	changed := map[string]string{
-		"index.mjs":   "export const handler = () => 1",
-		"config.json": files["config.json"],
+		"index.mjs":            "export const handler = () => 1",
+		"function-config.json": files["function-config.json"],
 	}
 	if builtDigest(t, changed) == first {
 		t.Error("a changed function digests the same as the one it replaces, so the release would run the code it was meant to replace")
@@ -292,8 +292,8 @@ func configOf(t *testing.T, image v1.Image) v1.Config {
 
 func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"server":      "a built binary",
-		"config.json": functionConfig(t, []string{"./server"}),
+		"server":               "a built binary",
+		"function-config.json": functionConfig(t, []string{"./server"}),
 	})
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
@@ -312,8 +312,8 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 
 func TestFunctionImageIncludesTheRuntimeInTheDirectoryItBootsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 	runtime := map[string][]byte{
 		"entrypoint.mjs": []byte("export const runtime = 1"),
@@ -359,8 +359,8 @@ func TestFunctionImagePutsTheRuntimeInALayerEveryFunctionShares(t *testing.T) {
 	runtime := map[string][]byte{"entrypoint.mjs": []byte("export const runtime = 1"), "sharp/sharp.node": bytes.Repeat([]byte{7}, 4096)}
 	var runtimeLayers []string
 	for _, files := range []map[string]string{
-		{"index.mjs": "export const first = 1", "config.json": functionConfig(t, nil)},
-		{"index.mjs": "export const second = 2", "lib/more.mjs": "export {}", "config.json": functionConfig(t, nil)},
+		{"index.mjs": "export const first = 1", "function-config.json": functionConfig(t, nil)},
+		{"index.mjs": "export const second = 2", "lib/more.mjs": "export {}", "function-config.json": functionConfig(t, nil)},
 	} {
 		image, err := images.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), images.FunctionImageOptions{Runtime: runtime})
 		if err != nil {
@@ -391,8 +391,8 @@ func TestFunctionImagePutsTheRuntimeInALayerEveryFunctionShares(t *testing.T) {
 
 func TestFunctionImageRefusesARuntimeFileThatWritesOutsideItsDirectory(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 
 	for _, name := range []string{"/etc/passwd", "../../../etc/passwd", "../next/entrypoint.mjs"} {
@@ -409,8 +409,8 @@ func TestFunctionImageRefusesARuntimeFileThatWritesOutsideItsDirectory(t *testin
 
 func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
@@ -427,8 +427,8 @@ func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 
 func TestFunctionImageRunsANodeFunctionInProductionUnlessTheBaseNamesItsOwnNodeEnv(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 	staging, err := mutate.Config(empty.Image, v1.Config{Env: []string{"NODE_ENV=staging"}})
 	if err != nil {
@@ -457,8 +457,8 @@ func TestFunctionImageRunsANodeFunctionInProductionUnlessTheBaseNamesItsOwnNodeE
 
 func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunction(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 
 	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/runtimes/entrypoint.mjs", "/ocel/runtime/node/entrypoint.mjs"} {
@@ -484,8 +484,8 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 	}
 
 	dir := stagedFunc(t, map[string]string{
-		"index.mjs":   "export default () => {}",
-		"config.json": functionConfig(t, nil),
+		"index.mjs":            "export default () => {}",
+		"function-config.json": functionConfig(t, nil),
 	})
 	if _, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 		images.FunctionImageOptions{Overlay: map[string][]byte{containerimage.RuntimePath: []byte("theirs")}}); err == nil {

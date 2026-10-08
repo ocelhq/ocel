@@ -177,7 +177,7 @@ func TestAnAppWhoseFrameworkBuildIDCannotBeReadIsRecordedWithoutItAndNamedInTheE
 
 	apps, err := AppsDeployed(deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(app string) (string, error) {
 		if app == "web" {
-			return "", errors.New("unparseable serve descriptor")
+			return "", errors.New("unparseable hosting.json")
 		}
 		return "fw-" + app, nil
 	})
