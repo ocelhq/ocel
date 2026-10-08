@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -118,7 +119,7 @@ func missingRepository(err error) bool {
 }
 
 func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
-	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil)
+	_, err := removeImages(ctx, i.api, i.target, []string{imageRef}, nil, time.Time{})
 	return err
 }
 
