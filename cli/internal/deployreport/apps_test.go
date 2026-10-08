@@ -1,7 +1,9 @@
 package deployreport
 
 import (
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -45,7 +47,7 @@ func TestADeployedAppRecordsWhatTheManifestBuiltAndTheProviderMadeLive(t *testin
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Release: "a1b2c3d4e5f60718~0123456789ab"},
 	}
 
-	apps := AppsDeployed(deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(app string) string { return "fw-" + app })
+	apps := mustAppsDeployed(t, deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(app string) (string, error) { return "fw-" + app, nil })
 
 	want := []*consolev1.App{
 		{
@@ -77,7 +79,7 @@ func TestADeployedAppRecordsWhatTheManifestBuiltAndTheProviderMadeLive(t *testin
 func TestAPreviewAppRecordsThePreviewHostnamesOnly(t *testing.T) {
 	t.Parallel()
 
-	apps := AppsDeployed(deployedManifest(), nil, environmentv1.Tier_TIER_PREVIEW, func(string) string { return "" })
+	apps := mustAppsDeployed(t, deployedManifest(), nil, environmentv1.Tier_TIER_PREVIEW, func(string) (string, error) { return "", nil })
 
 	if !slices.Equal(apps[0].GetHostnames(), []string{"*.preview.example.com"}) {
 		t.Errorf("hostnames = %v, want the preview wildcard", apps[0].GetHostnames())
@@ -91,7 +93,7 @@ func TestAnAppTheProviderNeverReachedIsSkippedAndAFailedOneNamesItsError(t *test
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN},
 	}
 
-	apps := AppsDeployed(deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(string) string { return "" })
+	apps := mustAppsDeployed(t, deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(string) (string, error) { return "", nil })
 
 	if apps[0].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_FAILED || apps[0].GetError() != "the function was refused" {
 		t.Errorf("web = %v, want failed with the provider's error", apps[0])
@@ -99,7 +101,7 @@ func TestAnAppTheProviderNeverReachedIsSkippedAndAFailedOneNamesItsError(t *test
 	if apps[1].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_SKIPPED {
 		t.Errorf("api outcome = %v, want skipped", apps[1].GetOutcome())
 	}
-	none := AppsDeployed(deployedManifest(), nil, environmentv1.Tier_TIER_PRODUCTION, func(string) string { return "" })
+	none := mustAppsDeployed(t, deployedManifest(), nil, environmentv1.Tier_TIER_PRODUCTION, func(string) (string, error) { return "", nil })
 	if none[0].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_SKIPPED {
 		t.Errorf("an app with no result has outcome %v, want skipped", none[0].GetOutcome())
 	}
@@ -109,7 +111,7 @@ func TestAnAppSucceedsOnlyWhenItsBuildAndReleaseAreKnown(t *testing.T) {
 	t.Parallel()
 	results := []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED}}
 
-	apps := AppsDeployed(deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(string) string { return "" })
+	apps := mustAppsDeployed(t, deployedManifest(), results, environmentv1.Tier_TIER_PRODUCTION, func(string) (string, error) { return "", nil })
 
 	if apps[0].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_FAILED {
 		t.Errorf("web outcome = %v, want failed: the provider named no release for it", apps[0].GetOutcome())
@@ -148,5 +150,24 @@ func TestARollbackToAReleaseNoBuildNamesIsRefused(t *testing.T) {
 
 	if _, err := AppsRolledBack(&project.Project{}, map[string]string{"web": "no-separator"}); err == nil {
 		t.Fatal("AppsRolledBack() = nil, want an error for a release that names no build")
+	}
+}
+
+func mustAppsDeployed(t *testing.T, manifest *contractv1.Manifest, results []*progressv1.AppResult, tier environmentv1.Tier, frameworkBuildID func(string) (string, error)) []*consolev1.App {
+	t.Helper()
+	apps, err := AppsDeployed(manifest, results, tier, frameworkBuildID)
+	if err != nil {
+		t.Fatalf("AppsDeployed() error = %v", err)
+	}
+	return apps
+}
+
+func TestAnAppWhoseFrameworkBuildIDCannotBeReadFailsTheRecord(t *testing.T) {
+	t.Parallel()
+
+	_, err := AppsDeployed(deployedManifest(), nil, environmentv1.Tier_TIER_PRODUCTION, func(app string) (string, error) { return "", errors.New("no serve descriptor") })
+
+	if err == nil || !strings.Contains(err.Error(), "web") {
+		t.Fatalf("AppsDeployed() error = %v, want one naming the app", err)
 	}
 }

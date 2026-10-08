@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -29,6 +29,7 @@ import (
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -199,12 +200,14 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	}
 
 	if !opts.dry {
-		if err := deployrecord.Clear(cfg.Dir); err != nil {
+		if err := deployreport.Clear(cfg.Dir); err != nil {
 			return err
 		}
 	}
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, telemetry.DeployTargetPreview, opts.dry)
+	var attempt *deployreport.Attempt
+	var report *consolev1.Deployment
 	err = dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
@@ -224,6 +227,10 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			}
 		}()
 		cfg = facts.project
+		if !opts.dry {
+			begun := p.BeginAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP, cfg, env, dependencies.DiscoverPRNumber())
+			attempt = &begun
+		}
 
 		browser := dependencies.IsBrowserReachable(stdin)
 		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PREVIEW, env.GetIdentity())
@@ -263,6 +270,9 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
+		if attempt != nil {
+			attempt.Apps, _ = deployreport.AppsDeployed(manifest, nil, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
+		}
 
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
@@ -286,23 +296,23 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 
 		out, err := streamDeploy(ctx, provider, req)
+		if attempt != nil {
+			attempt.Apps, _ = deployreport.AppsDeployed(manifest, out.apps, env.GetTier(), lenientFrameworkBuildID(cfg.Dir))
+		}
 		if err != nil {
 			return err
 		}
 		deployed = true
 		deployTelemetry.noteDeployed()
 
-		record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
-		if err != nil {
-			return err
-		}
-		if err := deployrecord.Write(cfg.Dir, record); err != nil {
+		if report, err = reportDeployed(cfg, manifest, env, *attempt, out); err != nil {
 			return err
 		}
 		run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
 		return nil
 	})
 	deployTelemetry.record(dependencies.RecordEvent, err)
+	fileReport(ctx, dependencies, cfg.Dir, attempt, report, err, stderr)
 	return err
 }
 

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
@@ -75,7 +75,7 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	if !strings.Contains(out, "✓ Planned the deploy of "+clitest.FixtureSlug+" to production in ") {
 		t.Errorf("stdout = %q, want the run to end naming what it planned and where", out)
 	}
-	if !absent(t, deployrecord.Path(root)) {
+	if !absent(t, deployreport.Path(root)) {
 		t.Error("a dry deploy wrote the deploy result, want a run that records nothing it did not do")
 	}
 	if promoted := activePromotion(t, fixture, environment.TierProduction, router.DefaultPointer); promoted != "" {
@@ -108,7 +108,7 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	if strings.Count(out, "assigned on its first deploy") != 1 || regexp.MustCompile(`staging-[a-z2-7]{24}`).MatchString(out) {
 		t.Errorf("stdout = %q, want it saying once that a new preview's hostname is assigned on its first deploy, and no hostname: one signed now would never exist", out)
 	}
-	if !absent(t, deployrecord.Path(root)) {
+	if !absent(t, deployreport.Path(root)) {
 		t.Error("a dry preview up wrote the deploy result, want a run that records nothing it did not do")
 	}
 }

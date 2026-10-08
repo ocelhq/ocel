@@ -3,7 +3,6 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -13,10 +12,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -169,30 +169,27 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		got := readDeployRecord(t, fixture.Root)
-		if got.Slug != "test-app" {
-			t.Errorf("slug = %q, want the resolved config's", got.Slug)
+		got := readDeployReport(t, fixture.Root)
+		if got.GetEnvironment().GetTier() != environmentv1.Tier_TIER_PRODUCTION {
+			t.Errorf("environment.tier = %v, want production", got.GetEnvironment().GetTier())
 		}
-		if got.Environment.Tier != "production" {
-			t.Errorf("environment.tier = %q, want %q", got.Environment.Tier, "production")
+		if got.GetProvider().GetName() != "fake" {
+			t.Errorf("provider = %v, want the config's provider", got.GetProvider())
 		}
-		if got.Provider.Name != "fake" {
-			t.Errorf("provider = %+v, want the config's provider", got.Provider)
+		if want := activePromotion(t, fixture, environment.TierProduction, router.DefaultPointer); want == "" || got.GetPromotion().GetId() != want {
+			t.Errorf("promotion = %q, want the %q production now serves", got.GetPromotion().GetId(), want)
 		}
-		if want := activePromotion(t, fixture, environment.TierProduction, router.DefaultPointer); want == "" || got.PromotionID != want {
-			t.Errorf("promotionId = %q, want the %q production now serves", got.PromotionID, want)
+		if got.GetPromotion().GetTag() != "v9" {
+			t.Errorf("tag = %q, want %q", got.GetPromotion().GetTag(), "v9")
 		}
-		if got.Tag != "v9" {
-			t.Errorf("tag = %q, want %q", got.Tag, "v9")
+		if len(got.GetApps()) != 1 || got.GetApps()[0].GetName() != "api" || got.GetApps()[0].GetFrameworkBuildId() != "bld_api_1" {
+			t.Errorf("apps = %v, want one api app with framework build id bld_api_1", got.GetApps())
 		}
-		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].FrameworkBuildID != "bld_api_1" {
-			t.Errorf("apps = %+v, want one api app with framework build id bld_api_1", got.Apps)
+		if len(got.GetApps()) == 1 && !slices.Contains(got.GetApps()[0].GetUrls(), "https://"+productionDomain) {
+			t.Errorf("apps = %v, want api's URLs to include the hostname it serves on", got.GetApps())
 		}
-		if len(got.Apps) == 1 && !slices.Contains(got.Apps[0].URLs, "https://"+productionDomain) {
-			t.Errorf("apps = %+v, want api's URLs to include the hostname it serves on", got.Apps)
-		}
-		if got.DeployedAt.IsZero() {
-			t.Error("deployedAt is zero, want the completion time")
+		if got.GetFinishedAt().AsTime().IsZero() {
+			t.Error("finishedAt is zero, want the completion time")
 		}
 	})
 
@@ -200,7 +197,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, nil)
 		fixture := setUpDeployProject(t)
-		if err := deployrecord.Write(fixture.Root, deployrecord.Record{PromotionID: "prm_previous_run"}); err != nil {
+		if err := deployreport.Write(fixture.Root, &consolev1.Deployment{Id: "4bf92f3577b34da6a3ce929d0e0e4736"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
 		}
 		fixture.Provider.FakeStacks().Entering(func(provider.StackSpec) error { return errors.New("simulated deploy failure") })
@@ -212,8 +209,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 			t.Fatalf("runDeploy err = nil, want the simulated failure; stdout=%s", stdout.String())
 		}
 
-		if _, statErr := os.Stat(deployrecord.Path(fixture.Root)); !errors.Is(statErr, fs.ErrNotExist) {
-			t.Errorf("stat %s = %v, want no result file after a failed deploy", deployrecord.Path(fixture.Root), statErr)
+		if _, statErr := os.Stat(deployreport.Path(fixture.Root)); !errors.Is(statErr, fs.ErrNotExist) {
+			t.Errorf("stat %s = %v, want no result file after a failed deploy", deployreport.Path(fixture.Root), statErr)
 		}
 	})
 
@@ -230,30 +227,17 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		got := readDeployRecord(t, fixture.Root)
-		if got.Environment.Tier != "preview" || got.Environment.Identity != "e2e-42" {
-			t.Errorf("environment = %+v, want the named preview", got.Environment)
+		got := readDeployReport(t, fixture.Root)
+		if got.GetKind() != consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP || got.GetEnvironment().GetTier() != environmentv1.Tier_TIER_PREVIEW || got.GetEnvironment().GetIdentity() != "e2e-42" {
+			t.Errorf("deployment is a %v in %v, want a preview up of the named preview", got.GetKind(), got.GetEnvironment())
 		}
-		if want := activePromotion(t, fixture, environment.TierPreview, "e2e-42"); want == "" || got.PromotionID != want {
-			t.Errorf("promotionId = %q, want the %q the preview now serves", got.PromotionID, want)
+		if want := activePromotion(t, fixture, environment.TierPreview, "e2e-42"); want == "" || got.GetPromotion().GetId() != want {
+			t.Errorf("promotion = %q, want the %q the preview now serves", got.GetPromotion().GetId(), want)
 		}
-		if len(got.Apps) != 1 || len(got.Apps[0].URLs) == 0 {
-			t.Errorf("apps = %+v, want api with the URLs the preview serves it on", got.Apps)
+		if len(got.GetApps()) != 1 || len(got.GetApps()[0].GetUrls()) == 0 {
+			t.Errorf("apps = %v, want api with the URLs the preview serves it on", got.GetApps())
 		}
 	})
-}
-
-func readDeployRecord(t *testing.T, root string) deployrecord.Record {
-	t.Helper()
-	raw, err := os.ReadFile(deployrecord.Path(root))
-	if err != nil {
-		t.Fatalf("read deploy result: %v", err)
-	}
-	var got deployrecord.Record
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("deploy result is not valid JSON: %v", err)
-	}
-	return got
 }
 
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
