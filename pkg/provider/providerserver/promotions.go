@@ -41,24 +41,30 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
-		session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
+		if req.GetSlug() == "" {
+			return nil, errUnnamedProject
+		}
+		vendor, err := h.session.use()
 		if err != nil {
 			return nil, err
 		}
 		production := environmentScope{tier: environment.TierProduction, slug: req.GetSlug(), env: stackrecords.ProductionEnv}
-		hold, err := h.leases.takeUnderNewToken(ctx, session.provider.KeyValues(), production, stackrecords.LeaseRollback)
+		hold, err := h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), production, stackrecords.LeaseRollback)
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = hold.release(ctx) }()
-		result, err := rollBack(ctx, hold, session, req, sender)
+		result, err := h.rollBack(hold.context(ctx), hold, req, sender)
 		return result, hold.explain(err)
 	})
 }
 
-func rollBack(ctx context.Context, hold *environmentHold, session *edgeSession, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
-	leased := hold.context(ctx)
-	current, err := session.ledger.Read(leased, "")
+func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
+	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
+	current, err := session.ledger.Read(ctx, "")
 	if err != nil {
 		return nil, err
 	}

@@ -110,13 +110,15 @@ func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection)
 	return p.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
+var errUnnamedProject = refusal.Refuse(refusal.CodeInvalid, "this call names no project, and what it changes belongs to one")
+
 func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
 	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
 	if slug == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and an edge stack belongs to one")
+		return nil, errUnnamedProject
 	}
 	front, err := h.edgeFor(vendor, sel)
 	if err != nil {

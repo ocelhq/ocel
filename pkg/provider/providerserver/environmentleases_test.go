@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/ocelhq/ocel/pkg/router"
 	"strings"
 	"sync"
 	"testing"
@@ -386,4 +387,36 @@ func TestAbandonDeployReportsALeaseItCouldNotFree(t *testing.T) {
 	if err == nil {
 		t.Error("AbandonDeploy() succeeded though the lease is still recorded, want the failure reported")
 	}
+}
+
+func routeAnotherApp(store keyvalue.Store, tier environment.Tier, app string) error {
+	ctx := context.Background()
+	name := stackrecords.EdgeStackKey(tier, "shop")
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	if err != nil {
+		return err
+	}
+	var state stackrecords.EdgeState
+	if err := json.Unmarshal(recorded.Value, &state); err != nil {
+		return err
+	}
+	state.Apps[app] = fake.RouterRelay
+	if recorded.Value, err = json.Marshal(state); err != nil {
+		return err
+	}
+	_, err = store.Write(ctx, recorded)
+	return err
+}
+
+func readRoutedApps(t *testing.T, store keyvalue.Store, tier environment.Tier) map[string]router.Kind {
+	t.Helper()
+	recorded, err := store.Read(context.Background(), stackrecords.EdgeStackKey(tier, "shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state stackrecords.EdgeState
+	if err := json.Unmarshal(recorded.Value, &state); err != nil {
+		t.Fatal(err)
+	}
+	return state.Apps
 }
