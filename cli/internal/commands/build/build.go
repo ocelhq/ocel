@@ -65,12 +65,8 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	if declared.Provider == nil {
-		resolved, err := declared.ResolveDeclaredComputes()
-		if err != nil {
+		if _, err := declared.ResolveDeclaredComputes(); err != nil {
 			return fmt.Errorf("%w: give each a `compute` under `apps`, or name the provider in %s", err, filepath.Base(declared.Path))
-		}
-		if err := build.RefuseNextFunctionsWithoutRuntimeDir(resolved, build.Host{}); err != nil {
-			return err
 		}
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -28,9 +29,10 @@ const (
 )
 
 type NextServerRuntime struct {
-	Dir   string
 	Files map[string][]byte
 }
+
+var NextServerAdapterPath = path.Join(FrameworkRuntimeDir(buildoutput.FrameworkNext), containerimage.NextServerAdapterFile)
 
 func ContainerPlatform(arch string) string { return "linux/" + arch }
 
@@ -73,7 +75,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 			return nil, err
 		}
 		addenda = append(addenda, mutate.Addendum{Layer: nextLayer})
-		config.Env = append(append([]string{}, config.Env...), containerimage.NextAdapterPathVar+"="+path.Join(next.Dir, containerimage.NextServerAdapterFile))
+		config.Env = append(append([]string{}, config.Env...), containerimage.NextAdapterPathVar+"="+NextServerAdapterPath)
 	}
 	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
@@ -91,10 +93,6 @@ func newBytesLayer(packed []byte) (v1.Layer, error) {
 }
 
 func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
-	if !path.IsAbs(next.Dir) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the provider names %q as the directory of its Next server runtime, and NEXT_ADAPTER_PATH only finds the adapter at an absolute path", next.Dir)
-	}
 	if _, ok := next.Files[containerimage.NextServerAdapterFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the provider's Next server runtime holds no %s, so next start has no adapter to load", containerimage.NextServerAdapterFile)
@@ -102,7 +100,7 @@ func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
 	for _, entry := range env {
 		if name, value, _ := strings.Cut(entry, "="); name == containerimage.NextAdapterPathVar {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"the image sets %s=%s and ocel sets it to load the cache handlers its provider ships: remove it from the image",
+				"the image sets %s=%s and ocel sets it to load the server adapter its provider ships: remove it from the image",
 				containerimage.NextAdapterPathVar, value)
 		}
 	}
@@ -121,15 +119,16 @@ func sortedNames(files map[string][]byte) []string {
 func packNextServerLayer(next *NextServerRuntime) ([]byte, error) {
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
+	dir := FrameworkRuntimeDir(buildoutput.FrameworkNext)
 	if err := archive.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeDir,
-		Name:     strings.TrimPrefix(next.Dir, "/") + "/",
+		Name:     strings.TrimPrefix(dir, "/") + "/",
 		Mode:     0o755,
 	}); err != nil {
 		return nil, err
 	}
 	for _, name := range sortedNames(next.Files) {
-		if err := tarBody(archive, path.Join(next.Dir, name), next.Files[name], 0o644); err != nil {
+		if err := tarBody(archive, path.Join(dir, name), next.Files[name], 0o644); err != nil {
 			return nil, err
 		}
 	}
@@ -170,7 +169,6 @@ func RuntimeTag(digest string, runtime []byte, next *NextServerRuntime) string {
 	hash.Write(runtime)
 	if next != nil {
 		hash.Write([]byte{0})
-		hash.Write([]byte(next.Dir))
 		for _, name := range sortedNames(next.Files) {
 			body := next.Files[name]
 			fmt.Fprintf(hash, "\x00%d:%s\x00%d:", len(name), name, len(body))

@@ -41,5 +41,5 @@ type CostHooks struct {
 
 type FunctionImageHooks struct {
 	ResolveBase func(ctx context.Context, framework buildoutput.Framework) (v1.Image, error)
-	ReadRuntime func(ctx context.Context, framework buildoutput.Framework) ([]byte, error)
+	ReadRuntime func(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error)
 }

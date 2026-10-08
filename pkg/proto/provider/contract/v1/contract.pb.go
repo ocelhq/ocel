@@ -508,7 +508,6 @@ type ProviderFacts struct {
 	PricesDeploys          bool                   `protobuf:"varint,1,opt,name=prices_deploys,json=pricesDeploys,proto3" json:"prices_deploys,omitempty"`
 	Computes               []string               `protobuf:"bytes,2,rep,name=computes,proto3" json:"computes,omitempty"`
 	WorkerCeilings         []*WorkerCeiling       `protobuf:"bytes,3,rep,name=worker_ceilings,json=workerCeilings,proto3" json:"worker_ceilings,omitempty"`
-	NextRuntimeDir         string                 `protobuf:"bytes,4,opt,name=next_runtime_dir,json=nextRuntimeDir,proto3" json:"next_runtime_dir,omitempty"`
 	MaxFunctionBytes       int64                  `protobuf:"varint,5,opt,name=max_function_bytes,json=maxFunctionBytes,proto3" json:"max_function_bytes,omitempty"`
 	NextRefreshesByRequest bool                   `protobuf:"varint,6,opt,name=next_refreshes_by_request,json=nextRefreshesByRequest,proto3" json:"next_refreshes_by_request,omitempty"`
 	ShipsNextServerRuntime bool                   `protobuf:"varint,7,opt,name=ships_next_server_runtime,json=shipsNextServerRuntime,proto3" json:"ships_next_server_runtime,omitempty"`
@@ -566,13 +565,6 @@ func (x *ProviderFacts) GetWorkerCeilings() []*WorkerCeiling {
 		return x.WorkerCeilings
 	}
 	return nil
-}
-
-func (x *ProviderFacts) GetNextRuntimeDir() string {
-	if x != nil {
-		return x.NextRuntimeDir
-	}
-	return ""
 }
 
 func (x *ProviderFacts) GetMaxFunctionBytes() int64 {
@@ -6330,12 +6322,11 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x10ConfigureRequest\x12D\n" +
 	"\x06config\x18\x01 \x01(\v2$.provider.contract.v1.ProviderConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"N\n" +
 	"\x11ConfigureResponse\x129\n" +
-	"\x05facts\x18\x01 \x01(\v2#.provider.contract.v1.ProviderFactsR\x05facts\"\x9e\x03\n" +
+	"\x05facts\x18\x01 \x01(\v2#.provider.contract.v1.ProviderFactsR\x05facts\"\xf4\x02\n" +
 	"\rProviderFacts\x12%\n" +
 	"\x0eprices_deploys\x18\x01 \x01(\bR\rpricesDeploys\x12\x1a\n" +
 	"\bcomputes\x18\x02 \x03(\tR\bcomputes\x12L\n" +
-	"\x0fworker_ceilings\x18\x03 \x03(\v2#.provider.contract.v1.WorkerCeilingR\x0eworkerCeilings\x12(\n" +
-	"\x10next_runtime_dir\x18\x04 \x01(\tR\x0enextRuntimeDir\x125\n" +
+	"\x0fworker_ceilings\x18\x03 \x03(\v2#.provider.contract.v1.WorkerCeilingR\x0eworkerCeilings\x125\n" +
 	"\x12max_function_bytes\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x10maxFunctionBytes\x129\n" +
 	"\x19next_refreshes_by_request\x18\x06 \x01(\bR\x16nextRefreshesByRequest\x129\n" +
 	"\x19ships_next_server_runtime\x18\a \x01(\bR\x16shipsNextServerRuntime\x12%\n" +

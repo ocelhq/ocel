@@ -3,7 +3,6 @@ package payloads
 import (
 	"bytes"
 	"debug/elf"
-	"io/fs"
 	"strings"
 	"testing"
 
@@ -22,13 +21,20 @@ func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
 	}
 }
 
-func TestTheNextRuntimeShipsItsEntrypoint(t *testing.T) {
-	body, err := fs.ReadFile(NextRuntime(), "entrypoint.mjs")
-	if err != nil {
-		t.Fatalf("NextRuntime() holds no entrypoint.mjs: %v", err)
+func TestTheNextRuntimeShipsItsEntrypointAndSharpButNotTheServerAdapter(t *testing.T) {
+	files := NextRuntime()
+	for _, name := range []string{"entrypoint.mjs", "node_modules/sharp/package.json"} {
+		if len(files[name]) == 0 {
+			t.Errorf("NextRuntime() holds no bytes for %s", name)
+		}
 	}
-	if len(body) == 0 {
-		t.Error("NextRuntime()'s entrypoint.mjs is empty")
+	if _, shipped := files[containerimage.NextServerAdapterFile]; shipped {
+		t.Errorf("NextRuntime() holds %s, which only a Next container loads", containerimage.NextServerAdapterFile)
+	}
+	for name := range files {
+		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
+			t.Errorf("NextRuntime() names %q, want a path inside the runtime directory", name)
+		}
 	}
 }
 

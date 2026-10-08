@@ -42,7 +42,6 @@ type Facts struct {
 	WorkerCeilings    []WorkerCeiling
 
 	RetainsContainerReleases bool
-	NextRuntimeDir           string
 	MaxFunctionBytes         int64
 	NextRefreshesByRequest   bool
 }

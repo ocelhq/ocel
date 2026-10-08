@@ -28,7 +28,7 @@ func TestANextBuildThatPrintsABindingsPasswordAloneSaysItNowhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	var shared bytes.Buffer
-	builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, _ []byte, log Log) error {
+	builder := nodeOnly{node: func(_ context.Context, _ string, _ []byte, log Log) error {
 		_, err := io.WriteString(log.shared(), "connecting as app with pg-forwarded-password\n")
 		return err
 	}}

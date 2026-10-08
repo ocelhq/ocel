@@ -119,7 +119,6 @@ func (p *Provider) Facts() provider.Facts {
 		StoresArtifacts:        true,
 		WorkerCeilings:         slices.Clone(workerCeilings),
 		NextRefreshesByRequest: true,
-		NextRuntimeDir:         nextRuntimeDir,
 	}
 }
 

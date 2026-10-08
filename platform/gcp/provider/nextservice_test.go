@@ -642,7 +642,7 @@ func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 func TestANextContainerCarriesOcelsServerAdapterPath(t *testing.T) {
 	service, _ := releasedNextContainer(t, nextContainerSpec())
 
-	want := path.Join(nextRuntimeDir, containerimage.NextServerAdapterFile)
+	want := "/ocel/runtime/next/" + containerimage.NextServerAdapterFile
 	if got := envOf(service.Template.Containers[0])[containerimage.NextAdapterPathVar]; got != want {
 		t.Errorf("a Next container is told %s = %q, want %q", containerimage.NextAdapterPathVar, got, want)
 	}

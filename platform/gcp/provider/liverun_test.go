@@ -192,18 +192,11 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework b
 	if err != nil {
 		t.Fatalf("read the base a %s function is built on: %v", framework.Name, err)
 	}
-	payload, err := p.ReadFunctionRuntime(ctx, framework)
+	runtime, err := p.ReadFunctionRuntime(ctx, framework)
 	if err != nil {
 		t.Fatal(err)
 	}
-	overlay := map[string][]byte{}
-	if len(payload) > 0 {
-		overlay[images.NodeRuntimePath] = payload
-	}
-	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
-		Overlay:        overlay,
-		NextRuntimeDir: p.Facts().NextRuntimeDir,
-	})
+	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{Runtime: runtime})
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}

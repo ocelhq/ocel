@@ -50,7 +50,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	}
 
 	ran := false
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -108,7 +108,7 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 		Apps: []project.App{{Name: "worker", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAGoAppWhoseDiscoveryFolderIsAModuleOfItsOwnCarriesNoWorkerAndGetsNothin
 		Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 
 	ran := false
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -210,7 +210,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	root, cfg := writeRustApp(t, "")
 
 	ran := false
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -288,7 +288,7 @@ func TestARustBuildThatPrintsASecretAndFailsSaysItNowhere(t *testing.T) {
 	var ended error
 	log := Log{AppLog: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
 
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	err := builder.Build(context.Background(), cfg, map[string]AppVariables{"api": {Live: map[string]string{"SESSION_SECRET": "ss_live_secret"}}}, log)
 	if err == nil {
 		t.Fatal("Build err = nil, want the failed build.rs")
@@ -317,7 +317,7 @@ func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShe
 		Live: map[string]string{"SESSION_SECRET": "ss_live", "STRIPE_API_KEY": "sk_live"},
 	}}
 
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	if err := builder.Build(context.Background(), cfg, values, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestARustBuildLinksWithTheLinkerAPlaintextValueNames(t *testing.T) {
 	_, cfg := writeRustApp(t, "")
 	values := map[string]AppVariables{"api": {Env: map[string]string{"CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER": "/nonexistent/ocel-test-linker"}}}
 
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	err := builder.Build(context.Background(), cfg, values, Log{})
 	if err == nil || !strings.Contains(err.Error(), "/nonexistent/ocel-test-linker") {
 		t.Errorf("Build err = %v, want cargo to have run the linker the value names", err)
@@ -360,7 +360,7 @@ func TestACancelledRustBuildReturnsOnceEveryProcessCargoStartedIsGone(t *testing
 }
 `, pidFile))
 	ctx, cancel := context.WithCancel(context.Background())
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	done := make(chan error, 1)
 	go func() { done <- builder.Build(ctx, cfg, nil, Log{}) }()
 	var pid int

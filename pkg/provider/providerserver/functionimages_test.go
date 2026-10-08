@@ -56,8 +56,8 @@ func (i imaging) ResolveBase(context.Context, buildoutput.Framework) (v1.Image, 
 	return empty.Image, nil
 }
 
-func (imaging) ReadRuntime(context.Context, buildoutput.Framework) ([]byte, error) {
-	return []byte("export const runtime = 1"), nil
+func (imaging) ReadRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
+	return map[string][]byte{"entrypoint.mjs": []byte("export const runtime = 1")}, nil
 }
 
 func stagedProject(t *testing.T, apps ...string) {
@@ -228,13 +228,13 @@ func TestANodeFunctionsImageIncludesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	for _, layer := range layers {
 		names = append(names, tarNames(t, layer)...)
 	}
-	want := strings.TrimPrefix(images.NodeRuntimePath, "/")
+	want := "ocel/runtime/node/entrypoint.mjs"
 	if !slices.Contains(names, want) {
-		t.Errorf("the image contains %v and nothing at %s, so nothing serves the node function it was built for", names, images.NodeRuntimePath)
+		t.Errorf("the image contains %v and nothing at /%s, so nothing serves the node function it was built for", names, want)
 	}
 }
 
-func TestANextFunctionsImageBootsTheNextRuntimeInTheDirectoryTheProviderNames(t *testing.T) {
+func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	dir := filepath.Join(workingOutputRoot(t), filepath.FromSlash(appArtifactPath("web")))
 	raw, err := json.Marshal(map[string]any{
@@ -263,17 +263,22 @@ func TestANextFunctionsImageBootsTheNextRuntimeInTheDirectoryTheProviderNames(t 
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
 	config := configOf(t, pushed[0].Built)
-	if want := []string{"node", vendor.Facts().NextRuntimeDir + "/entrypoint.mjs"}; !slices.Equal(config.Cmd, want) {
-		t.Errorf("the image runs %v, want %v: a Next function boots the Next runtime from the directory its provider names", config.Cmd, want)
+	if want := []string{"node", "/ocel/runtime/next/entrypoint.mjs"}; !slices.Equal(config.Cmd, want) {
+		t.Errorf("the image runs %v, want %v: a Next function boots the Next runtime its provider reads", config.Cmd, want)
 	}
 	layers, err := pushed[0].Built.Layers()
 	if err != nil {
 		t.Fatal(err)
 	}
+	var names []string
 	for _, layer := range layers {
-		if slices.Contains(tarNames(t, layer), strings.TrimPrefix(images.NodeRuntimePath, "/")) {
-			t.Errorf("the image includes the node runtime at %s, which a Next function never boots", images.NodeRuntimePath)
-		}
+		names = append(names, tarNames(t, layer)...)
+	}
+	if !slices.Contains(names, "ocel/runtime/next/entrypoint.mjs") {
+		t.Errorf("the image contains %v and nothing at /ocel/runtime/next/entrypoint.mjs, so nothing serves the Next function it was built for", names)
+	}
+	if slices.Contains(names, "ocel/runtime/node/entrypoint.mjs") {
+		t.Error("the image includes the node runtime, which a Next function never boots")
 	}
 }
 
@@ -333,7 +338,7 @@ func (w imagingWithoutRuntime) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (imagingWithoutRuntime) ReadRuntime(context.Context, buildoutput.Framework) ([]byte, error) {
+func (imagingWithoutRuntime) ReadRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
 	return nil, nil
 }
 
@@ -349,6 +354,34 @@ func TestANodeFunctionIsRefusedWhereTheProviderShipsNoRuntime(t *testing.T) {
 	for _, want := range []string{"runtime", "node"} {
 		if !strings.Contains(result.GetError(), want) {
 			t.Errorf("the refusal reads %q and never names %q", result.GetError(), want)
+		}
+	}
+}
+
+type imagingWithoutEntrypoint struct{ imaging }
+
+func (w imagingWithoutEntrypoint) Hooks() provider.Hooks {
+	hooks := w.imaging.Hooks()
+	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
+	return hooks
+}
+
+func (imagingWithoutEntrypoint) ReadRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
+	return map[string][]byte{"serve.mjs": []byte("export const runtime = 1")}, nil
+}
+
+func TestANodeFunctionIsRefusedWhereTheProvidersRuntimeHasNoEntrypoint(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served := servedBy(t, imagingWithoutEntrypoint{imaging{Provider: fake.NewProvider(fake.Options{})}})
+	bootstrappedOverRPC(t, served)
+
+	_, _, err := deployStream(t, served, imagingDeployRequest())
+	if err == nil {
+		t.Fatal("Deploy() shipped a node function whose runtime holds no entrypoint, want it refused: the image would run node over a file that is not there")
+	}
+	for _, want := range []string{"entrypoint.mjs", "node"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal reads %q and never names %q", err, want)
 		}
 	}
 }
@@ -409,20 +442,20 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 	if !slices.Equal(config.Entrypoint, []string{containerimage.RuntimePath}) {
 		t.Errorf("the function's image enters at %v, want the runtime: it is what reads the function's secrets live", config.Entrypoint)
 	}
-	if !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
+	if !slices.Equal(config.Cmd, []string{"node", "/ocel/runtime/node/entrypoint.mjs"}) {
 		t.Errorf("the runtime runs %v, want the node runtime the function is served through", config.Cmd)
 	}
 	files := regularFiles(t, pushed[0].Built)
 	for _, want := range []string{
-		strings.TrimPrefix(images.NodeRuntimePath, "/"),
+		"ocel/runtime/node/entrypoint.mjs",
 		strings.TrimPrefix(containerimage.RuntimePath, "/"),
 	} {
 		if !slices.Contains(files, want) {
 			t.Errorf("the image contains %v and nothing at /%s", files, want)
 		}
 	}
-	if slices.Contains(files, strings.TrimPrefix(images.NodeRuntimeRoot, "/")) {
-		t.Errorf("the image contains a file at %s, where the node runtime's directory belongs, and a file over a directory cannot be loaded", images.NodeRuntimeRoot)
+	if slices.Contains(files, strings.TrimPrefix(images.RuntimeRoot, "/")) {
+		t.Errorf("the image contains a file at %s, where the runtimes' directories belong, and a file over a directory cannot be loaded", images.RuntimeRoot)
 	}
 	if asked := vendor.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)
