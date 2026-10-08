@@ -133,6 +133,9 @@ func (ProviderDescriptor) checkShape(path string, value any) error {
 	}
 	for id, options := range keyed {
 		set, _ := options.(map[string]any)
+		if err := refuseMissingOptions(JoinPath(path, id), set, known.Provider.Required[id]); err != nil {
+			return err
+		}
 		if edge, named := set[edgeKey]; named {
 			at := JoinPath(JoinPath(path, id), edgeKey)
 			if err := refuseUnserved(at, id, "front deployments with", edge, known.Edges[id]); err != nil {
@@ -150,6 +153,18 @@ func (ProviderDescriptor) checkShape(path string, value any) error {
 			if err := checkSelector(at, dns, "DNS service", known.DNS[id], reflect.TypeFor[DNSOptions]()); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func refuseMissingOptions(path string, set map[string]any, required []ProviderOption) error {
+	if set == nil {
+		return nil
+	}
+	for _, option := range required {
+		if set[option.Name] == nil {
+			return fmt.Errorf("%s needs %q: %s", PathName(path), option.Name, strings.TrimSpace(option.Doc))
 		}
 	}
 	return nil
