@@ -154,23 +154,48 @@ func pull(target provider.RegistryTarget, imageRef, digest string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	steps := []string{"set -e"}
-	if target.Password != "" {
-		if err := CheckLogin(target); err != nil {
-			return "", err
-		}
-		steps = append(steps,
-			`config=$(mktemp -d `+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")+`)`,
-			`trap 'rm -rf "$config"; docker logout `+quoted(target.Server)+` >/dev/null 2>&1 || true' EXIT`,
-			`export DOCKER_CONFIG="$config"`,
-			"docker login --username "+quoted(target.Username)+" --password-stdin "+quoted(target.Server),
-		)
+	steps, err := loggedIn(target)
+	if err != nil {
+		return "", err
 	}
 	steps = append(steps,
 		"docker pull "+quoted(pinned),
 		"docker tag "+quoted(pinned)+" "+quoted(imageRef),
 	)
 	return strings.Join(steps, "\n"), nil
+}
+
+func loggedIn(target provider.RegistryTarget) ([]string, error) {
+	steps := []string{"set -e"}
+	if target.Password == "" {
+		return steps, nil
+	}
+	if err := CheckLogin(target); err != nil {
+		return nil, err
+	}
+	return append(steps,
+		`config=$(mktemp -d `+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")+`)`,
+		`trap 'rm -rf "$config"; docker logout `+quoted(target.Server)+` >/dev/null 2>&1 || true' EXIT`,
+		`export DOCKER_CONFIG="$config"`,
+		"docker login --username "+quoted(target.Username)+" --password-stdin "+quoted(target.Server),
+	), nil
+}
+
+func (h *Host) PushImage(ctx context.Context, target provider.RegistryTarget, imageRef string) error {
+	steps, err := loggedIn(target)
+	if err != nil {
+		return err
+	}
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	var secret io.Reader
+	if target.Password != "" {
+		secret = strings.NewReader(target.Password)
+	}
+	_, err = h.ran(ctx, "push "+imageRef+" to "+target.Server, strings.Join(append(steps, "docker push "+quoted(imageRef)), "\n"), secret, elevation)
+	return err
 }
 
 func pinnedTo(imageRef, digest string) (string, error) {

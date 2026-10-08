@@ -3,9 +3,18 @@ package vps_test
 import (
 	"context"
 	"errors"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/registry"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -266,8 +275,8 @@ func TestASweepLeavesInTheRegistryARefADeployClaimedAfterTheBoxReportedIt(t *tes
 	if got, want := settledRefs(machine), []string{going}; !slices.Equal(got, want) {
 		t.Errorf("the sweep settled %v, want %v: a ref claimed again is not a ref the registry removed", got, want)
 	}
-	if asked := helperCalls(machine, "claimed"); len(asked) != 2 {
-		t.Errorf("the sweep asked the box %d times what is claimed, want once before each registry delete", len(asked))
+	if asked := helperCalls(machine, "claimed"); len(asked) != 3 {
+		t.Errorf("the sweep asked the box %d times what is claimed, want once before each registry delete and once after the one it made", len(asked))
 	}
 }
 
@@ -405,5 +414,150 @@ func TestASweepWhoseRegistryRefusesTheDeleteSucceedsAndNamesTheImageItLeft(t *te
 		if !strings.Contains(joined, want) {
 			t.Errorf("the sweep said %q, want a warning that names %q", joined, want)
 		}
+	}
+}
+
+type racedSweep struct {
+	machine *box
+	store   provider.ImageStore
+	tag     name.Tag
+	push    provider.ImagePush
+	claimed *atomic.Bool
+}
+
+func aSweepRacingADeploy(t *testing.T, claimsDuringTheDelete, boxHolds bool) racedSweep {
+	t.Helper()
+	claimed := &atomic.Bool{}
+	inner := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inner.ServeHTTP(w, r)
+		if r.Method == http.MethodDelete && claimsDuringTheDelete {
+			claimed.Store(true)
+		}
+	}))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	built := wrapped(t)
+	ref := server + "/acme/shop.web:sha256-old"
+	tag, err := name.NewTag(ref, name.Insecure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.Write(tag, built); err != nil {
+		t.Fatal(err)
+	}
+	machine := &box{hasImage: boxHolds}
+	machine.refuses = func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, "/usr/local/lib/ocel/releases") && strings.Contains(command, "'reconcile'"):
+			return session.Result{Stdout: "unused " + ref + "\n"}, true
+		case strings.Contains(command, "/usr/local/lib/ocel/releases") && strings.Contains(command, "'claimed'"):
+			if claimed.Load() {
+				return session.Result{Stdout: ref + "\n"}, true
+			}
+			return session.Result{}, true
+		case strings.Contains(command, "docker push"):
+			if !boxHolds {
+				return session.Result{Code: 1, Stderr: "An image does not exist locally with the tag: " + ref}, true
+			}
+			if err := remote.Write(tag, built); err != nil {
+				return session.Result{Code: 1, Stderr: err.Error()}, true
+			}
+			return session.Result{}, true
+		}
+		return session.Result{}, false
+	}
+	store, err := over(machine).OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server, Username: "ada", Password: "s3cret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return racedSweep{
+		machine: machine,
+		store:   store,
+		tag:     tag,
+		push:    provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: built},
+		claimed: claimed,
+	}
+}
+
+func TestASweepPushesBackFromTheBoxARefADeployClaimedWhileTheRegistryDeletedIt(t *testing.T) {
+	t.Parallel()
+
+	raced := aSweepRacingADeploy(t, true, true)
+	said := &fake.Log{}
+
+	if err := over(raced.machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, raced.store, said); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if _, err := remote.Head(raced.tag); err != nil {
+		t.Errorf("the registry does not hold %s after the sweep: %v; a deploy claimed it while the delete was in flight, and a fresh box pulls it from the registry", raced.tag, err)
+	}
+	if got := settledRefs(raced.machine); len(got) != 0 {
+		t.Errorf("the sweep settled %v, want nothing: a ref the registry holds again is not a ref it removed", got)
+	}
+	var pushed string
+	for _, command := range raced.machine.commands() {
+		if strings.Contains(command, "docker push") {
+			pushed = command
+		}
+	}
+	if !strings.Contains(pushed, "docker login") || strings.Contains(pushed, "s3cret") {
+		t.Errorf("the box pushed as %q, want it logged in to the registry with the password on stdin", pushed)
+	}
+	joined := strings.Join(said.Lines(), "\n")
+	for _, want := range []string{"WARN", raced.push.ImageRef, "pushed it back"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep said %q, want a warning that names %q", joined, want)
+		}
+	}
+}
+
+func TestASweepWarnsOfARefADeployClaimedWhileTheRegistryDeletedItThatTheBoxNoLongerHolds(t *testing.T) {
+	t.Parallel()
+
+	raced := aSweepRacingADeploy(t, true, false)
+	said := &fake.Log{}
+
+	if err := over(raced.machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, raced.store, said); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	joined := strings.Join(said.Lines(), "\n")
+	for _, want := range []string{"WARN", raced.push.ImageRef, "neither"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep said %q, want a warning that names %q", joined, want)
+		}
+	}
+	if got := settledRefs(raced.machine); len(got) != 0 {
+		t.Errorf("the sweep settled %v, want nothing: a claimed ref is never one the sweep is done with", got)
+	}
+}
+
+func TestADeployWhoseClaimLandsAfterTheSweepLooksAgainFindsTheRegistryLostItAndPushesIt(t *testing.T) {
+	t.Parallel()
+
+	raced := aSweepRacingADeploy(t, false, true)
+
+	if err := over(raced.machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, raced.store, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+	if got, want := settledRefs(raced.machine), []string{raced.push.ImageRef}; !slices.Equal(got, want) {
+		t.Fatalf("the sweep settled %v, want %v: nothing claimed it when the sweep looked again", got, want)
+	}
+	raced.claimed.Store(true)
+
+	held, err := raced.store.Has(context.Background(), raced.push)
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if held {
+		t.Fatal("Has() = true after the sweep deleted the registry tag, so the deploy's check after provisioning would push nothing")
+	}
+	if err := (provider.ImagePushes{Store: raced.store, Pushes: []provider.ImagePush{raced.push}}).PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
+	}
+	if _, err := remote.Head(raced.tag); err != nil {
+		t.Errorf("the registry does not hold %s after the deploy's check pushed it: %v", raced.tag, err)
 	}
 }

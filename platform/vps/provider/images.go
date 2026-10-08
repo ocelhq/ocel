@@ -44,6 +44,14 @@ func (p pulled) Remove(ctx context.Context, imageRef string) error {
 	return p.from.Remove(ctx, imageRef)
 }
 
+func (p pulled) restore(ctx context.Context, imageRef string) (bool, error) {
+	held, err := p.host.HasImage(ctx, imageRef)
+	if err != nil || !held {
+		return false, err
+	}
+	return true, p.host.PushImage(ctx, p.target, imageRef)
+}
+
 func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	if registered, err := p.from.Has(ctx, push); err != nil || !registered {
 		return false, err
