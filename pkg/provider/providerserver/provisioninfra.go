@@ -186,8 +186,22 @@ func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
 		return err
 	}
 	r.infraHoldsUndeclared = len(undeclared) > 0
-	r.bindings = recorded.Bindings
+	published, err := r.publishedBindings().Published(ctx)
+	if err != nil {
+		return err
+	}
+	r.bindings = mergePublishedProperties(recorded.Bindings, published)
 	return nil
+}
+
+func mergePublishedProperties(recorded, published []provider.Binding) []provider.Binding {
+	bindings := slices.Clone(recorded)
+	for i, binding := range bindings {
+		if at := slices.IndexFunc(published, func(p provider.Binding) bool { return p.Name == binding.Name }); at >= 0 {
+			bindings[i].Properties = published[at].Properties
+		}
+	}
+	return bindings
 }
 
 func (r *deployRun) forgetInfraDigest(ctx context.Context, holds []byte) error {
