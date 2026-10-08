@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 
 	connect "connectrpc.com/connect"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -190,18 +192,25 @@ func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.bindings = mergePublishedProperties(recorded.Bindings, published)
-	return nil
+	r.bindings, err = mergePublishedProperties(r.spec.Infra, recorded.Bindings, published)
+	return err
 }
 
-func mergePublishedProperties(recorded, published []provider.Binding) []provider.Binding {
+func mergePublishedProperties(infra naming.StackName, recorded, published []provider.Binding) ([]provider.Binding, error) {
 	bindings := slices.Clone(recorded)
 	for i, binding := range bindings {
-		if at := slices.IndexFunc(published, func(p provider.Binding) bool { return p.Name == binding.Name }); at >= 0 {
-			bindings[i].Properties = published[at].Properties
+		at := slices.IndexFunc(published, func(p provider.Binding) bool { return p.Name == binding.Name && p.Type == binding.Type })
+		if at < 0 {
+			return nil, refusal.Refuse(refusal.CodeNotReady,
+				"%s records %s binding %s, and no %s binding named %s is published any more, so this deploy has none of the secrets the record never keeps to grant its apps: "+
+					"deploy again, and the infra is provisioned and published before the build",
+				infra, binding.Type, binding.Name, binding.Type, binding.Name)
 		}
+		bindings[i].Properties = map[string]string{}
+		maps.Copy(bindings[i].Properties, binding.Properties)
+		maps.Copy(bindings[i].Properties, published[at].Properties)
 	}
-	return bindings
+	return bindings, nil
 }
 
 func (r *deployRun) forgetInfraDigest(ctx context.Context, holds []byte) error {

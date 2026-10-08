@@ -159,6 +159,27 @@ func TestADeployAfterProvisionInfraGrantsTheBindingWithTheSecretsInfraPublished(
 	}
 }
 
+func TestADeployAfterProvisionInfraRefusesARecordedBindingNoLongerPublished(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	if removed, err := store.RemoveBinding(context.Background(), scope, storedBindings(t, vendor)["orders"].Environment, "orders"); err != nil || !removed {
+		t.Fatalf("RemoveBinding(orders) = %v, %v", removed, err)
+	}
+
+	req.InfraProvisioned = true
+	result, _ := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, granting orders as the stack record holds it, without the password the record never keeps")
+	}
+	if !strings.Contains(result.GetError(), "orders") {
+		t.Errorf("Deploy() = %q, want it to name orders, the binding no longer published", result.GetError())
+	}
+}
+
 type declaringStacks struct {
 	provider.Stacks
 }
