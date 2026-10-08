@@ -3,6 +3,7 @@ package stackrecords_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -52,23 +53,43 @@ func TestTheImagesAStackRecordsAreTheImageItStartsAndThoseItsContainersRun(t *te
 	}
 }
 
-func TestTheImagesOfAnAppAreReadFromItsOwnStacksInATier(t *testing.T) {
+func TestTheImagesOfAnAppAreReadFromItsOwnStacksInEveryTier(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	web := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
-	writeStack(t, store, environment.TierPreview, web, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+	writeStack(t, store, environment.TierPreview, naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", "")),
+		stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+	writeStack(t, store, environment.TierProduction, naming.AppStack("prod", "web", naming.NewReleaseToken("b0", "")),
+		stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b0"})
 	writeStack(t, store, environment.TierPreview, naming.AppStack("pr-7", "api", naming.NewReleaseToken("b1", "")),
 		stackrecords.Stack{Kind: provider.StackApp, App: "api", Image: "r/shop.api:b1"})
 
-	got, err := stackrecords.ListAppImages(ctx, store, environment.TierPreview, "shop", "web")
+	got, err := stackrecords.ListRecordedAppImages(ctx, store, "shop", "web")
 	if err != nil {
-		t.Fatalf("ListAppImages() = %v", err)
+		t.Fatalf("ListRecordedAppImages() = %v", err)
 	}
 
-	want := map[naming.StackName][]string{web: {"r/shop.web:b1"}}
-	if !maps.EqualFunc(got, want, slices.Equal) {
-		t.Errorf("ListAppImages() = %v, want %v", got, want)
+	want := map[string]bool{"r/shop.web:b1": true, "r/shop.web:b0": true}
+	if !maps.Equal(got, want) {
+		t.Errorf("ListRecordedAppImages() = %v, want %v", got, want)
+	}
+}
+
+func TestTheImagesOfAnAppLeaveOutTheStackTheyAreReadFor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	own := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	writeStack(t, store, environment.TierPreview, own, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+	writeStack(t, store, environment.TierProduction, own, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b0"})
+
+	got, err := stackrecords.ListRecordedAppImages(ctx, store, "shop", "web", provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: own})
+	if err != nil {
+		t.Fatalf("ListRecordedAppImages() = %v", err)
+	}
+
+	if want := map[string]bool{"r/shop.web:b0": true}; !maps.Equal(got, want) {
+		t.Errorf("ListRecordedAppImages() = %v, want %v: the same stack name in another tier is another stack", got, want)
 	}
 }
 
@@ -85,12 +106,12 @@ func TestReadingAnAppsImagesReadsNoEntryOfAnotherApp(t *testing.T) {
 		stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
 	store.listed = 0
 
-	if _, err := stackrecords.ListAppImages(ctx, store, environment.TierPreview, "shop", "web"); err != nil {
-		t.Fatalf("ListAppImages() = %v", err)
+	if _, err := stackrecords.ListRecordedAppImages(ctx, store, "shop", "web"); err != nil {
+		t.Fatalf("ListRecordedAppImages() = %v", err)
 	}
 
 	if store.listed != 1 {
-		t.Errorf("ListAppImages() read %d entries, want 1: the read grows with the app's own stacks, never with the project's", store.listed)
+		t.Errorf("ListRecordedAppImages() read %d entries, want 1: the read grows with the app's own stacks, never with the project's", store.listed)
 	}
 }
 
@@ -105,9 +126,9 @@ func TestAForgottenStackNamesNoImage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := stackrecords.ListAppImages(ctx, store, environment.TierProduction, "shop", "web")
+	got, err := stackrecords.ListRecordedAppImages(ctx, store, "shop", "web")
 	if err != nil || len(got) != 0 {
-		t.Errorf("ListAppImages() = %v, %v, want none once the stack is forgotten", got, err)
+		t.Errorf("ListRecordedAppImages() = %v, %v, want none once the stack is forgotten", got, err)
 	}
 	if left, _ := store.List(ctx, stackrecords.StacksPartition(environment.TierProduction, "shop")); len(left) != 0 {
 		t.Errorf("forgetting the stack left %d entries behind", len(left))
@@ -127,6 +148,46 @@ func TestTheImageListOfAnAppLeavesTheStacksOfTheProjectAsTheyWere(t *testing.T) 
 	}
 	if len(stacks) != 1 || stacks[0].Name != web {
 		t.Errorf("List() = %v, want only %s", stacks, web)
+	}
+}
+
+type refusingRemoval struct {
+	keyvalue.Store
+	refused func(keyvalue.Key) bool
+}
+
+func (r refusingRemoval) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+	if r.refused(key) {
+		return errors.New("the store refused the removal")
+	}
+	return r.Store.Remove(ctx, key, expected)
+}
+
+func TestAForgetThatFailsLeavesTheRecordARetryFinds(t *testing.T) {
+	t.Parallel()
+	web := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
+	for name, refused := range map[string]func(keyvalue.Key) bool{
+		"the record": func(key keyvalue.Key) bool {
+			return key.String() == stackrecords.StackKey(environment.TierProduction, "shop", web).String()
+		},
+		"the images entry": func(key keyvalue.Key) bool {
+			return key.String() != stackrecords.StackKey(environment.TierProduction, "shop", web).String()
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			base := fake.NewKeyValues()
+			writeStack(t, base, environment.TierProduction, web, stackrecords.Stack{Kind: provider.StackApp, App: "web", Image: "r/shop.web:b1"})
+			store := refusingRemoval{Store: base, refused: refused}
+
+			if err := stackrecords.Forget(ctx, store, environment.TierProduction, "shop", web); err == nil {
+				t.Fatal("Forget() = nil though the store refused a removal")
+			}
+
+			if _, found, err := stackrecords.Read(ctx, base, environment.TierProduction, "shop", web); err != nil || !found {
+				t.Errorf("Read() = %t, %v after a failed Forget, want the record still there: an images entry without its record keeps its images forever, as no retry ever finds the stack again", found, err)
+			}
+		})
 	}
 }
 

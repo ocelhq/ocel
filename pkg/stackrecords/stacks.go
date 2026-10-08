@@ -144,16 +144,18 @@ func ListRecordedProperties(t provider.BindingType) []string {
 }
 
 func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
-	if err := keyvalue.Forget(ctx, store, StackKey(tier, slug, stack)); err != nil || stack.IsInfra() {
-		return err
+	if !stack.IsInfra() {
+		if err := keyvalue.Forget(ctx, store, appImagesKey(tier, slug, stack)); err != nil {
+			return err
+		}
 	}
-	return keyvalue.Forget(ctx, store, appImagesKey(tier, slug, stack))
+	return keyvalue.Forget(ctx, store, StackKey(tier, slug, stack))
 }
 
-func ListAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, app string) (map[naming.StackName][]string, error) {
+func listAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, app string) (map[naming.StackName][]string, error) {
 	listed, err := store.List(ctx, StacksPartition(tier, slug), appImagesSegment, app)
 	if err != nil {
-		return nil, fmt.Errorf("read the images %s's %s stacks record: %w", slug, app, err)
+		return nil, fmt.Errorf("read the images %s's %s stacks record in %s: %w", slug, app, tier, err)
 	}
 	recorded := make(map[naming.StackName][]string, len(listed))
 	for _, entry := range listed {
@@ -173,15 +175,15 @@ func ListAppImages(ctx context.Context, store keyvalue.Store, tier environment.T
 	return recorded, nil
 }
 
-func ListRecordedAppImages(ctx context.Context, store keyvalue.Store, slug, app string, counted func(environment.Tier, naming.StackName) bool) (map[string]bool, error) {
+func ListRecordedAppImages(ctx context.Context, store keyvalue.Store, slug, app string, except ...provider.StackRef) (map[string]bool, error) {
 	recorded := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		stacks, err := ListAppImages(ctx, store, tier, slug, app)
+		stacks, err := listAppImages(ctx, store, tier, slug, app)
 		if err != nil {
 			return nil, err
 		}
 		for name, images := range stacks {
-			if !counted(tier, name) {
+			if slices.ContainsFunc(except, func(ref provider.StackRef) bool { return ref.Tier == tier && ref.Name == name }) {
 				continue
 			}
 			for _, image := range images {

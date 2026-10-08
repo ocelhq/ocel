@@ -7,9 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -66,11 +64,9 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 }
 
 func reconciledKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, func(environment.Tier, naming.StackName) bool { return true })
+	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App)
 }
 
 func forgottenKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, func(tier environment.Tier, name naming.StackName) bool {
-		return tier != ref.Tier || name != ref.Name
-	})
+	return stackrecords.ListRecordedAppImages(ctx, store, ref.Project, ref.Name.App, ref)
 }
