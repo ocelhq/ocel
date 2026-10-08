@@ -64,9 +64,15 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime directory holds the entrypoint and the server preload, with the cache handlers inside them", async () => {
+test("the runtime directory holds the entrypoint and the server preload, with the cache handlers inside them, and libvips's notices", async () => {
   const own = (await shippedFiles()).filter((file) => !file.startsWith("node_modules/"));
-  expect(own).toEqual(["entrypoint.mjs", "server-preload.mjs"]);
+  expect(own).toEqual([
+    "GPL-3.0.txt",
+    "LGPL-3.0.txt",
+    "THIRD_PARTY_NOTICES",
+    "entrypoint.mjs",
+    "server-preload.mjs",
+  ]);
 });
 
 test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
