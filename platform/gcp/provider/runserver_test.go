@@ -7,6 +7,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -333,7 +334,8 @@ func (s *runServer) listTags(w http.ResponseWriter, parent string) {
 	var tags []map[string]string
 	for _, tag := range s.tagged[strings.TrimSuffix(parent, "/tags")] {
 		name := strings.TrimSuffix(parent, "/tags") + "/tags/" + tag
-		if !slices.Contains(s.untagged, name) {
+		unescaped, _ := url.PathUnescape(name)
+		if !slices.Contains(s.missing, unescaped) && !slices.Contains(s.untagged, name) {
 			tags = append(tags, map[string]string{"name": name})
 		}
 	}
@@ -581,4 +583,35 @@ func (s *runServer) happened() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.events)
+}
+
+func TestTheFakeRegistryListsNoTagItAnswersAsNotFound(t *testing.T) {
+	gone := shopWebPackage + "/tags/sha256-gone"
+	server := &runServer{
+		tagged:  map[string][]string{shopWebPackage: {"sha256-kept", "sha256-gone"}},
+		missing: []string{gone},
+	}
+	serve := server.serve(t)
+
+	read := httptest.NewRecorder()
+	serve(read, httptest.NewRequest(http.MethodGet, "/v1/"+gone, nil))
+	if read.Code != http.StatusNotFound {
+		t.Errorf("GET %s = %d, want %d for a tag a release pruned", gone, read.Code, http.StatusNotFound)
+	}
+
+	list := httptest.NewRecorder()
+	serve(list, httptest.NewRequest(http.MethodGet, "/v1/"+shopWebPackage+"/tags", nil))
+	var listed struct {
+		Tags []struct{ Name string } `json:"tags"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, tag := range listed.Tags {
+		names = append(names, tag.Name)
+	}
+	if want := []string{shopWebPackage + "/tags/sha256-kept"}; !slices.Equal(names, want) {
+		t.Errorf("the tag listing = %v, want %v: a tag its GET answers 404 for is not listed either", names, want)
+	}
 }
