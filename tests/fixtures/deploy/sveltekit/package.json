@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port ${PORT:-5173} --strictPort",
+    "dev": "vite dev --host 127.0.0.1 --port ${PORT:-5173} --strictPort",
     "build": "vite build",
     "start": "node build"
   },
