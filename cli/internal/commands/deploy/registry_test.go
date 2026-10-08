@@ -42,6 +42,7 @@ func registryProject(t *testing.T, registry string) (Dependencies, clitest.FakeP
 }
 
 func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
 	dependencies, fixture, built := registryProject(t, `
   registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
@@ -370,6 +371,7 @@ func TestRemovingAPreviewSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWit
 }
 
 func TestRemovingAPreviewWhoseRegistryVariableIsUnsetStillRemovesItAndSaysWhatItLeft(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
 	fixture := setUpPreviewProject(t)
 	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
 	dependencies := previewDependencies("feature/login", "")

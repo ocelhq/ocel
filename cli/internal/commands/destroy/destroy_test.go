@@ -517,6 +517,7 @@ func TestDestroyingSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t 
 }
 
 func TestDestroyingWhoseRegistryVariableIsUnsetStillDestroysAndSaysWhatItLeft(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "")
 	project := deployedToProduction(t)
 	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), registryConfig)
 	invocation := clitest.NewInvocation()
