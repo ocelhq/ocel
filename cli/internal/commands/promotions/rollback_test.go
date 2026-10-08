@@ -17,6 +17,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -463,5 +464,23 @@ func assertPropagationNote(t *testing.T, out, want string, absent []string) {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("output = %q, want no %q", out, unwanted)
 		}
+	}
+}
+
+func TestARollbackSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItDropsGoWithThem(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	project := promotedTwice(t)
+	namingARegistry(t, project)
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	reqs := clitest.RequestsTo[*contractv1.RollbackRequest](t, project.Requests, contractv1connect.ProviderServiceRollbackProcedure)
+	if len(reqs) != 1 || !isTheProjectsRegistry(reqs[0].GetProjectRegistry()) {
+		t.Errorf("the rollback sent %d requests, want one naming the project's registry with its secret resolved", len(reqs))
 	}
 }
