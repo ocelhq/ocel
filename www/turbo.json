@@ -9,7 +9,8 @@
         "$TURBO_ROOT$/cli/internal/commands/logs/logs.go",
         "$TURBO_ROOT$/cli/internal/commands/logs/output.go",
         "$TURBO_ROOT$/cli/internal/commands/root/root.go",
-        "$TURBO_ROOT$/platform/vps/provider/host/containers.go"
+        "$TURBO_ROOT$/platform/vps/provider/host/containers.go",
+        "$TURBO_ROOT$/packages/ocel/package.json"
       ]
     }
   }
