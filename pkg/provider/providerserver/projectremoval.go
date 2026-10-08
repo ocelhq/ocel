@@ -518,6 +518,15 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress prog
 		return nil
 	}
 	progress.Say(fmt.Sprintf("Forgetting %s in %s: nothing of it is left", r.slug, r.tier))
+	environments, err := r.provider.KeyValues().List(ctx, stackrecords.EnvironmentsPartition(r.tier, r.slug))
+	if err != nil {
+		return err
+	}
+	for _, recorded := range environments {
+		if err := keyvalue.Forget(ctx, r.provider.KeyValues(), recorded.Key); err != nil {
+			return err
+		}
+	}
 	if err := keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.EdgeStackKey(r.tier, r.slug)); err != nil {
 		return err
 	}
