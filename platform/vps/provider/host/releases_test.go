@@ -287,13 +287,16 @@ func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
 	}
 }
 
-func TestForgettingATierLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) {
+func TestForgettingATierAndReconcilingLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
 	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
 	if _, code := releases(t, root, "", "shop/web", "forget", "production"); code != 0 {
 		t.Fatalf("forget exited %d", code)
+	}
+	if _, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
+		t.Fatalf("reconcile exited %d", code)
 	}
 	for _, left := range []string{filepath.Join(root, "shop", "web"), filepath.Join(root, "shop")} {
 		if _, err := os.Stat(left); !os.IsNotExist(err) {
@@ -613,4 +616,58 @@ func joined(lines []string) string {
 		return ""
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func TestARefAPromoteDropsPastTheWindowIsReportedByTheNextReconcileEvenOnceTheBoxHasNoCopy(t *testing.T) {
+	root := releasesDir(t)
+	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
+		promote(t, root, "shop/web", "production", ref)
+	}
+
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"})
+	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+
+	if swept(rendered) != "ocel/shop/web:one" {
+		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the window dropped it, and the registry keeps its copy forever unless it is reported", swept(rendered))
+	}
+	if again, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); again != "" {
+		t.Errorf("a second reconcile reported %q, want nothing: a dropped ref is reported once", again)
+	}
+}
+
+func TestARefOneTierDropsAndAnotherStillNamesIsNotReported(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
+	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
+		promote(t, root, "shop/web", "production", ref)
+	}
+
+	rendered, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web")
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+
+	if rendered != "" {
+		t.Errorf("reconcile reported %q, want nothing: the preview window still names the ref production dropped", rendered)
+	}
+}
+
+func TestTheRefsOfAForgottenTierAreReportedByTheNextReconcileEvenOnceTheBoxHasNoCopy(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+
+	rendered, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web")
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+
+	if swept(rendered) != "ocel/shop/web:one" {
+		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the destroyed tier named it, and its registry copy goes with it", swept(rendered))
+	}
 }

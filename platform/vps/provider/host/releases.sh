@@ -43,10 +43,24 @@ root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
 reached "$root"
 [ -d "$root" ] || abort "$root is missing; run ocel bootstrap"
 
+dir="$root/$project/$app"
+dropped="$dir/.dropped"
+
 lock() {
-	mkdir -p "$root/$project/$app"
-	exec 9<"$root/$project/$app"
-	flock -x 9
+	while :; do
+		mkdir -p "$dir"
+		exec 9<"$dir"
+		flock -x 9
+		[ "$(stat -c %i "$dir" 2>/dev/null)" = "$(stat -L -c %i /proc/self/fd/9)" ] && return
+		exec 9<&-
+	done
+}
+
+remove_emptied_scope() {
+	if [ -z "$(find "$dir" -type f)" ]; then
+		rmdir "$dir" 2>/dev/null || true
+		rmdir "$root/$project" 2>/dev/null || true
+	fi
 }
 
 coordinate() {
@@ -57,7 +71,7 @@ coordinate() {
 
 scratch="$root/.staging.$$"
 clean() {
-	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged
+	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed
 }
 trap clean EXIT
 trap 'clean; exit 129' HUP
@@ -83,13 +97,16 @@ promote)
 	esac
 	coordinate "$ref"
 	lock
-	file="$root/$project/$app/$tier"
+	file="$dir/$tier"
 	: >>"$file"
 	{
 		printf '%s\n' "$ref"
 		grep -F -x -v -e "$ref" "$file" || true
-	} | head -n $keep >"$scratch".staged
-	mv -f "$scratch".staged "$file"
+	} >"$scratch".staged
+	tail -n +$((keep + 1)) "$scratch".staged >>"$dropped"
+	head -n $keep "$scratch".staged >"$scratch".kept
+	mv -f "$scratch".kept "$file"
+	[ -s "$dropped" ] || rm -f "$dropped"
 	;;
 forget)
 	[ $# -eq 1 ] || usage
@@ -98,9 +115,12 @@ forget)
 	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 	esac
 	lock
-	rm -f "$root/$project/$app/$tier"
-	rmdir "$root/$project/$app" 2>/dev/null || true
-	rmdir "$root/$project" 2>/dev/null || true
+	if [ -f "$dir/$tier" ]; then
+		cat "$dir/$tier" >>"$dropped"
+	fi
+	rm -f "$dir/$tier"
+	[ -s "$dropped" ] || rm -f "$dropped"
+	remove_emptied_scope
 	;;
 reconcile)
 	[ $# -eq 1 ] || usage
@@ -109,9 +129,7 @@ reconcile)
 	lock
 
 	: >"$scratch".desired
-	if [ -d "$root/$project/$app" ]; then
-		find "$root/$project/$app" -type f -exec cat {} + >>"$scratch".desired
-	fi
+	find "$dir" -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
 
 	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
 	while IFS= read -r running; do
@@ -127,6 +145,17 @@ reconcile)
 		docker rmi "$going" >/dev/null 2>&1 || continue
 		printf '%s\n' "$going"
 	done <"$scratch".going
+
+	if [ -f "$dropped" ]; then
+		grep -F -x -v -f "$scratch".desired "$dropped" | sort -u >"$scratch".unnamed || true
+		while IFS= read -r going; do
+			[ -n "$going" ] || continue
+			grep -F -x -q -e "$going" "$scratch".actual && continue
+			printf '%s\n' "$going"
+		done <"$scratch".unnamed
+		rm -f "$dropped"
+	fi
+	remove_emptied_scope
 	;;
 *)
 	usage
