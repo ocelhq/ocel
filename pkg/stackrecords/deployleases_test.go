@@ -3,6 +3,7 @@ package stackrecords_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,21 @@ func TestTakeDeployLeaseIsRefusedWhileAnotherDeployHoldsTheEnvironment(t *testin
 
 	if !isBusy(err) {
 		t.Errorf("TakeDeployLease = %v, want a busy refusal: another deploy holds production", err)
+	}
+}
+
+func TestTakeDeployLeaseRefusalNamesWhenTheLeaseRunsOutInUTC(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart, leaseTTL); err != nil {
+		t.Fatal(err)
+	}
+
+	err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", otherLease, leaseStart.Add(time.Minute), leaseTTL)
+
+	if err == nil || !strings.Contains(err.Error(), "2023-11-14 22:18:20 UTC") {
+		t.Errorf("TakeDeployLease = %v, want the refusal to name 2023-11-14 22:18:20 UTC, when the lease runs out, whatever the deployer's time zone", err)
 	}
 }
 

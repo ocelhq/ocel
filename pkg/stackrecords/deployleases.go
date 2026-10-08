@@ -34,7 +34,7 @@ func TakeDeployLease(ctx context.Context, store keyvalue.Store, tier environment
 		if held.Token != "" && held.Token != token && now.Before(time.Unix(held.ExpiresAt, 0)) {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
 				"another deploy to %s is running: deploy again once it ends, or once its lease runs out at %s if it was interrupted",
-				env, time.Unix(held.ExpiresAt, 0).Format(time.TimeOnly))
+				env, time.Unix(held.ExpiresAt, 0).UTC().Format(time.DateTime+" MST"))
 		}
 		value, err := json.Marshal(DeployLease{Token: token, ExpiresAt: now.Add(ttl).Unix()})
 		if err != nil {
