@@ -25,5 +25,6 @@ type BindingProxyRequest struct {
 type BindingProxy struct {
 	Address      string
 	SessionToken string
+	Unserved     []string
 	Close        func()
 }
