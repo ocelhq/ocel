@@ -82,6 +82,12 @@ describe("selectGoModules", () => {
     ]);
   });
 
+  it("selects the cli module for a file of the skill it embeds", () => {
+    assert.deepEqual(selectGoModules(["skills/ocel/references/kv.md"], modules), [
+      { dir: "cli", reason: "changed skills/ocel/references/kv.md" },
+    ]);
+  });
+
   it("selects every module when the workspace or the lint config changes", () => {
     for (const file of ["go.work", "go.work.sum", ".golangci.yml"]) {
       const selected = selectGoModules([file], modules);
