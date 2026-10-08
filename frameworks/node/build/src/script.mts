@@ -18,19 +18,19 @@ export interface BuildNode {
   readsLiveDir: boolean;
 }
 
-export const buildProcess = { spawn: spawnBuild, node: nodeOf };
+export const buildProcess = { spawn: spawnBuild, node: readBuildNode };
 
-async function nodeOf(cwd: string, env: Record<string, string>): Promise<BuildNode> {
+async function readBuildNode(cwd: string, env: Record<string, string>): Promise<BuildNode> {
   const { stdout } = await promisify(execFile)(
     "node",
     ["-p", 'process.versions.node + " " + typeof process.getBuiltinModule'],
-    { cwd, env: { ...env, PATH: scriptPath(cwd, env.PATH) } },
+    { cwd, env: { ...env, PATH: prependScriptBins(cwd, env.PATH) } },
   );
   const [version = "", builtin] = stdout.trim().split(" ");
   return { version, readsLiveDir: builtin === "function" };
 }
 
-function scriptPath(cwd: string, inherited = ""): string {
+function prependScriptBins(cwd: string, inherited = ""): string {
   const bins: string[] = [];
   for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
     bins.push(path.join(dir, "node_modules", ".bin"));
@@ -51,14 +51,14 @@ export async function runBuildScript(
     }
   }
 
-  const pkg = JSON.parse(readFileSync(path.join(app.cwd, "package.json"), "utf8"));
-  if (!pkg.scripts?.build) {
+  const manifest = JSON.parse(readFileSync(path.join(app.cwd, "package.json"), "utf8"));
+  if (!manifest.scripts?.build) {
     throw new Error(`ocel: app "${app.name}" has no "build" script in package.json`);
   }
 
   const detected = await detect({ cwd: app.cwd });
-  const cmd = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
-  if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${app.name}"`);
+  const resolved = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
+  if (!resolved) throw new Error(`ocel: could not resolve a build command for app "${app.name}"`);
 
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -75,7 +75,7 @@ export async function runBuildScript(
       );
     }
   }
-  await buildProcess.spawn(cmd.command, cmd.args, app.cwd, env);
+  await buildProcess.spawn(resolved.command, resolved.args, app.cwd, env);
 }
 
 async function spawnBuild(

@@ -10,24 +10,24 @@ const CLIENT_ADDRESS = "x-ocel-client-address";
 
 const root = fileURLToPath(new URL("./static", import.meta.url));
 
-const stream = (file) => Readable.toWeb(createReadStream(file));
+const openStream = (file) => Readable.toWeb(createReadStream(file));
 
 await server.init({
   env: process.env,
-  read: (file) => stream(`${root}${served.base}/${file}`),
+  read: (file) => openStream(`${root}${served.base}/${file}`),
 });
 
 function isImmutable(pathname) {
   return served.immutable.some((prefix) => pathname.startsWith(prefix));
 }
 
-function clientAddress(request) {
+function readClientAddress(request) {
   const forwarded = request.headers.get(CLIENT_ADDRESS);
   if (forwarded) return forwarded;
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 }
 
-function decoded(pathname) {
+function decodePathname(pathname) {
   try {
     return decodeURIComponent(pathname);
   } catch {
@@ -35,7 +35,7 @@ function decoded(pathname) {
   }
 }
 
-function fromDisk(request, pathname) {
+function serveFromDisk(request, pathname) {
   const redirect = served.redirects[pathname];
   if (redirect) {
     return new Response(null, {
@@ -60,16 +60,16 @@ function fromDisk(request, pathname) {
   if (request.headers.get("if-none-match") === asset.etag) {
     return new Response(null, { status: 304, headers });
   }
-  const body = request.method === "HEAD" ? null : stream(`${root}${served.base}/${asset.file}`);
+  const body = request.method === "HEAD" ? null : openStream(`${root}${served.base}/${asset.file}`);
   return new Response(body, { status: 200, headers });
 }
 
 export default {
   async fetch(request) {
     if (request.method === "GET" || request.method === "HEAD") {
-      const answered = fromDisk(request, decoded(new URL(request.url).pathname));
+      const answered = serveFromDisk(request, decodePathname(new URL(request.url).pathname));
       if (answered) return answered;
     }
-    return server.respond(request, { getClientAddress: () => clientAddress(request) });
+    return server.respond(request, { getClientAddress: () => readClientAddress(request) });
   },
 };

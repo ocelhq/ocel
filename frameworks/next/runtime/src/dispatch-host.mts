@@ -96,7 +96,7 @@ const staticRulesVar = "OCEL_STATIC_RULES";
 
 type Static = NonNullable<AssetStoreDeps["static"]>;
 
-export function staticRules(declared: string | undefined): Static | undefined {
+export function parseStaticRules(declared: string | undefined): Static | undefined {
   if (!declared) return undefined;
   const parsed = JSON.parse(declared) as Partial<Static> | null;
   if (!parsed || !Array.isArray(parsed.immutablePrefixes)) {
@@ -142,7 +142,7 @@ export function readDispatchHost(
     app: env.OCEL_APP ?? manifest.appName ?? "",
     appBuildId: env.OCEL_BUILD_ID ?? "",
     assetPrefix: env.OCEL_ASSET_PREFIX ?? "",
-    ...(env[staticRulesVar] ? { static: staticRules(env[staticRulesVar]) } : {}),
+    ...(env[staticRulesVar] ? { static: parseStaticRules(env[staticRulesVar]) } : {}),
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
     ...(access.imageOrigin ? { imageOrigin: access.imageOrigin } : {}),

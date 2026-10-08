@@ -9,7 +9,7 @@ export function isImmutable(rules: Static | undefined, pathname: string): boolea
   return rules.immutablePrefixes.some(under) && !(rules.mustRevalidatePrefixes ?? []).some(under);
 }
 
-export function cacheControlFor(rules: Static | undefined, pathname: string): string {
+export function chooseCacheControl(rules: Static | undefined, pathname: string): string {
   return isImmutable(rules, pathname) ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL;
 }
 

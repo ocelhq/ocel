@@ -14,7 +14,7 @@ const ADAPTER = "@ocel/sveltekit";
 
 const HOSTING_VERSION = 1;
 
-function unadapted(app: SvelteKitBuild, why: string): Error {
+function refuseUnadapted(app: SvelteKitBuild, why: string): Error {
   return new Error(
     `ocel: app "${app.name}" built, but ${why}, so its build did not run through ${ADAPTER}. ` +
       `Add it with \`pnpm add -D ${ADAPTER}\` and name it as the adapter: ` +
@@ -35,12 +35,12 @@ export async function buildSvelteKit(app: SvelteKitBuild): Promise<void> {
     hosting = JSON.parse(readFileSync(path.join(app.outputDir, HOSTING_FILE), "utf8"));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      throw unadapted(app, `nothing wrote ${HOSTING_FILE} to ${app.outputDir}`);
+      throw refuseUnadapted(app, `nothing wrote ${HOSTING_FILE} to ${app.outputDir}`);
     }
     throw err;
   }
   if (hosting.framework !== "sveltekit") {
-    throw unadapted(
+    throw refuseUnadapted(
       app,
       `the ${HOSTING_FILE} it wrote names framework ${JSON.stringify(hosting.framework)}`,
     );

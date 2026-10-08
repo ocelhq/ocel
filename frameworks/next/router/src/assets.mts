@@ -1,6 +1,6 @@
 import type { Static } from "@platform/edge-contract/hosting";
 import {
-  cacheControlFor,
+  chooseCacheControl,
   IMMUTABLE_CACHE_CONTROL,
   isUnderImmutablePrefix,
 } from "@platform/edge-contract/static";
@@ -130,7 +130,7 @@ export async function serveStaticAsset(
   if (!hit) return miss();
 
   const { object } = hit;
-  const cacheControl = cacheControlFor(deps.static, hit.pathname);
+  const cacheControl = chooseCacheControl(deps.static, hit.pathname);
   const headers = new Headers({
     "content-type": contentTypeFor(hit.pathname),
     "cache-control": cacheControl,
