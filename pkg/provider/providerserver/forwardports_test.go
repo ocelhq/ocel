@@ -14,6 +14,9 @@ import (
 
 	"google.golang.org/protobuf/types/descriptorpb"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -570,5 +573,39 @@ func TestForwardPortsOnAProviderThatServesNoBindingProxyLeavesProxiedBindingsUnf
 	}
 	if len(responses) != 1 || responses[0].GetBindingProxy() != nil || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
 		t.Errorf("ForwardPorts() sent %d responses, want one naming uploads unforwarded with no proxy", len(responses))
+	}
+}
+
+func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorProxyServesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	props := &bindingsv1.BucketProperties{Bucket: "acme", Endpoint: "https://s3.example.com", AccessKeyId: "AKID", SecretAccessKey: inlinePassword}
+	if result, _ := deploy(t, client, inlineBucketRequest(&resourcesv1.BucketConfig{}, props)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the inline record published", result.GetError())
+	}
+	var asked []provider.Binding
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			asked = req.Bindings
+			return provider.BindingProxy{Address: "http://127.0.0.1:41999", SessionToken: "token-1"}, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest(inlineUploads))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v", err)
+	}
+	if len(asked) != 0 {
+		t.Errorf("the hook was asked to proxy %v, want nothing: the vendor's proxy serves the vendor's own buckets, not a store the config addresses", asked)
+	}
+	if len(responses) != 1 || len(responses[0].GetBindings()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{inlineUploads}) {
+		t.Errorf("ForwardPorts() sent %d responses, want one leaving %s unforwarded", len(responses), inlineUploads)
 	}
 }
