@@ -19,3 +19,6 @@ goes under **Found, not fixed** in the PR, and a maintainer decides.
 | origin | the cloud an app runs in | |
 | edge | what serves and routes requests in front of an origin | |
 | console | Ocel's optional hosted control plane | a cloud |
+| runtime | the layer between an app's code and the target it runs on, which turns Ocel's contracts into that target's implementation; also the code shipped alongside it | the language or framework an app is written in |
+| framework | what a build targets: a language (`go`, `python`, `rust`, `node`) or a JS framework (`next`); one field, never split into language and runtime, since every JS framework implies node | a runtime |
+| hosting | what a build states for whoever serves it, in `hosting.json`: its framework, entry, edge routing and needs | a serve descriptor |
