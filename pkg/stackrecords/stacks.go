@@ -144,12 +144,17 @@ func ListRecordedProperties(t provider.BindingType) []string {
 }
 
 func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
-	if !stack.IsInfra() {
-		if err := keyvalue.Forget(ctx, store, appImagesKey(tier, slug, stack)); err != nil {
-			return err
-		}
+	if err := ForgetAppImages(ctx, store, tier, slug, stack); err != nil {
+		return err
 	}
 	return keyvalue.Forget(ctx, store, StackKey(tier, slug, stack))
+}
+
+func ForgetAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
+	if stack.IsInfra() {
+		return nil
+	}
+	return keyvalue.Forget(ctx, store, appImagesKey(tier, slug, stack))
 }
 
 func listAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, app string) (map[naming.StackName][]string, error) {

@@ -1457,3 +1457,84 @@ func TestAReleaseOfAProviderThatReconcilesNothingStillProvisions(t *testing.T) {
 		t.Fatalf("Provision() = %v", err)
 	}
 }
+
+type interleavedEntries struct {
+	keyvalue.Store
+	tier    environment.Tier
+	between func()
+}
+
+func (i *interleavedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	entries, err := i.Store.List(ctx, in, under...)
+	if run := i.between; run != nil && in.Tier == i.tier {
+		i.between = nil
+		run()
+	}
+	return entries, err
+}
+
+type claimedImages struct {
+	*buckets
+	store     keyvalue.Store
+	reclaimed []string
+}
+
+func (c *claimedImages) hooks() resources.Hooks {
+	hooks := c.buckets.hooks()
+	hooks.Containers = &resources.ContainerHooks{
+		Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.AppContainer, error) {
+			return nil, nil
+		},
+		Remove: c.RemoveContainers,
+	}
+	return hooks
+}
+
+func (c *claimedImages) RemoveContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
+	kept, err := stackrecords.ListRecordedAppImages(ctx, c.store, ref.Project, ref.Name.App, ref)
+	if err != nil {
+		return err
+	}
+	for _, container := range going {
+		if !kept[container.Image] {
+			c.reclaimed = append(c.reclaimed, container.Image)
+		}
+	}
+	return nil
+}
+
+func TestTwoPreviewsSharingAnImageTornDownTogetherLeaveNoImageBehind(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	first := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-7", "web", naming.NewReleaseToken("d1", "f1"))}
+	second := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-8", "web", naming.NewReleaseToken("d1", "f1"))}
+	for _, ref := range []provider.StackRef{first, second} {
+		if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+			Kind:       provider.StackApp,
+			App:        "web",
+			Containers: []provider.AppContainer{{Name: "web", Physical: ref.Name.String() + "-web", Image: testImage}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	destroy := func(store keyvalue.Store, ref provider.StackRef, own *claimedImages) {
+		if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil, nil); err != nil {
+			t.Errorf("Destroy(%s) = %v", ref.Name, err)
+		}
+		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
+			t.Errorf("stackrecords.Forget(%s) = %v", ref.Name, err)
+		}
+	}
+	secondOwn := &claimedImages{buckets: &buckets{}, store: store}
+	interleaved := &interleavedEntries{Store: store, tier: environment.TierPreview}
+	firstOwn := &claimedImages{buckets: &buckets{}, store: interleaved}
+	interleaved.between = func() { destroy(store, second, secondOwn) }
+
+	destroy(interleaved, first, firstOwn)
+
+	if reclaimed := slices.Concat(firstOwn.reclaimed, secondOwn.reclaimed); !slices.Contains(reclaimed, testImage) {
+		t.Errorf("the two teardowns reclaimed %v, want %s: each read the other's image while the other was going, and once both records are gone no stack is left to reclaim it", reclaimed, testImage)
+	}
+}
