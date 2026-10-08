@@ -14,7 +14,7 @@ const (
 
 	tagInvalidatorLabel = "tag invalidator"
 
-	tagInvalidatorRuntime      = "nodejs22.x"
+	tagInvalidatorRuntime      = "nodejs24.x"
 	tagInvalidatorArchitecture = "arm64"
 	tagInvalidatorHandler      = "index.handler"
 	tagInvalidatorMemoryMB     = 512

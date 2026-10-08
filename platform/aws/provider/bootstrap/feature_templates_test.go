@@ -92,6 +92,26 @@ func TestFeatureTemplates(t *testing.T) {
 						}
 					}
 				})
+
+				t.Run("every node function runs nodejs24.x, the runtime app functions run", func(t *testing.T) {
+					for key, node := range tmpl.Resources {
+						var declared struct {
+							Type       string `yaml:"Type"`
+							Properties struct {
+								Runtime string `yaml:"Runtime"`
+							} `yaml:"Properties"`
+						}
+						if err := node.Decode(&declared); err != nil {
+							t.Fatalf("resource %s does not decode: %v", key, err)
+						}
+						if declared.Type != "AWS::Lambda::Function" || !strings.HasPrefix(declared.Properties.Runtime, "nodejs") {
+							continue
+						}
+						if declared.Properties.Runtime != "nodejs24.x" {
+							t.Errorf("%s runs %s, want nodejs24.x: the runtime app functions run and CI tests on", key, declared.Properties.Runtime)
+						}
+					}
+				})
 			})
 		}
 	}

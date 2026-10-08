@@ -13,7 +13,7 @@ const (
 
 	tagPublisherLabel = "tag publisher"
 
-	tagPublisherRuntime      = "nodejs22.x"
+	tagPublisherRuntime      = "nodejs24.x"
 	tagPublisherArchitecture = "arm64"
 	tagPublisherHandler      = "index.handler"
 	tagPublisherMemoryMB     = 512

@@ -89,6 +89,20 @@ func TestThePublicFrontAnswersTLSOnlyFromTheRangesItsEdgeForwardsFrom(t *testing
 	}
 }
 
+func TestThePublicFrontsLivenessAnswerRunsTheRuntimeAppFunctionsRun(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	function := recordedNamed(t, rec, "aws:lambda/function:Function", "public-liveness")
+	if got := function["runtime"].StringValue(); got != defaultFunctionRuntime {
+		t.Errorf("the liveness function runs %s, want %s, the runtime app functions run", got, defaultFunctionRuntime)
+	}
+}
+
 func TestThePublicFrontRedirectsPlainHTTPToHTTPSForwardingNothing(t *testing.T) {
 	t.Parallel()
 

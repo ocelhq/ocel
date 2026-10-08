@@ -17,7 +17,7 @@ const (
 
 	revalidatorLabel = "revalidator"
 
-	revalidatorRuntime      = "nodejs22.x"
+	revalidatorRuntime      = "nodejs24.x"
 	revalidatorArchitecture = "arm64"
 	revalidatorHandler      = "index.handler"
 	revalidatorMemoryMB     = 512

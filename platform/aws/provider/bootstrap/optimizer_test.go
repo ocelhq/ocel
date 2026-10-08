@@ -188,8 +188,8 @@ func TestStackTemplateOptimizer(t *testing.T) {
 					t.Errorf("ImageOptimizer is a %s", fn.Type)
 				}
 				p := fn.Properties
-				if p.Runtime != "nodejs22.x" {
-					t.Errorf("Runtime = %q, want nodejs22.x", p.Runtime)
+				if p.Runtime != "nodejs24.x" {
+					t.Errorf("Runtime = %q, want nodejs24.x", p.Runtime)
 				}
 				if len(p.Architectures) != 1 || p.Architectures[0] != "arm64" {
 					t.Errorf("Architectures = %v, want [arm64] — the payload ships arm64 sharp binaries", p.Architectures)

@@ -29,7 +29,7 @@ import (
 const (
 	lambdaPrincipal       = "lambda.amazonaws.com"
 	balancerPrincipal     = "elasticloadbalancing.amazonaws.com"
-	livenessRuntime       = "nodejs22.x"
+	livenessRuntime       = "nodejs24.x"
 	livenessRulePriority  = 1
 	publicTLSPolicy       = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 	defaultCertificateAge = 10 * 365 * 24 * time.Hour
