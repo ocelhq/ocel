@@ -217,7 +217,7 @@ func TestForgettingDeletesTheImagesAStackRanThatNoRecordedReleaseRuns(t *testing
 
 	removed, err := Forget(context.Background(), api,
 		[]string{ref("sha256-one"), ref("sha256-shared"), "ghcr.io/acme/shop.web:sha256-elsewhere"},
-		map[string]bool{ref("sha256-shared"): true})
+		map[string]bool{ref("sha256-shared"): true}, now)
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
@@ -227,5 +227,64 @@ func TestForgettingDeletesTheImagesAStackRanThatNoRecordedReleaseRuns(t *testing
 	}
 	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-shared", "sha256-other"}) {
 		t.Errorf("the repository holds %v, want the image a stack still runs and the one nobody named", got)
+	}
+}
+
+func TestForgettingTheLastImagesOfARepositoryDeletesTheRepository(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-leaked"}}
+	api.pushedAt = pushedLongAgo("sha256-one", "sha256-leaked")
+
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, nil, now)
+	if err != nil {
+		t.Fatalf("Forget() = %v", err)
+	}
+
+	if want := []string{ref("sha256-one"), ref("sha256-leaked")}; !slices.Equal(removed, want) {
+		t.Errorf("Forget() removed %v, want %v: once no stack of the project runs an image from the repository, an image no record names is one nothing will run", removed, want)
+	}
+	if want := []string{shopWeb}; !slices.Equal(api.deletedRepositories, want) {
+		t.Errorf("Forget() deleted the repositories %v, want %v: an empty repository left after the project's last stack is a husk every destroyed project adds", api.deletedRepositories, want)
+	}
+}
+
+func TestForgettingKeepsARepositoryAnotherStackStillRunsAnImageFrom(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-kept", "sha256-leaked"}}
+	api.pushedAt = pushedLongAgo("sha256-one", "sha256-kept", "sha256-leaked")
+
+	removed, err := Forget(context.Background(), api, []string{ref("sha256-one")}, map[string]bool{ref("sha256-kept"): true}, now)
+	if err != nil {
+		t.Fatalf("Forget() = %v", err)
+	}
+
+	if want := []string{ref("sha256-one")}; !slices.Equal(removed, want) {
+		t.Errorf("Forget() removed %v, want %v: the repository's next reconcile reclaims the rest", removed, want)
+	}
+	if len(api.deletedRepositories) != 0 {
+		t.Errorf("Forget() deleted %v, a repository a preview still pulls from", api.deletedRepositories)
+	}
+}
+
+func TestForgettingLeavesARepositoryHoldingAnImageAnotherDeployJustPushed(t *testing.T) {
+	t.Parallel()
+
+	api := aLoggedInECR()
+	api.tagged = map[string][]string{shopWeb: {"sha256-one", "sha256-just-pushed"}}
+	api.pushedAt = map[string]time.Time{"sha256-one": longAgo, "sha256-just-pushed": now.Add(5 * time.Minute)}
+
+	if _, err := Forget(context.Background(), api, []string{ref("sha256-one")}, nil, now); err != nil {
+		t.Fatalf("Forget() = %v, want nothing: ECR refusing to delete a repository that still holds an image is the repository staying", err)
+	}
+
+	if got := api.tagged[shopWeb]; !slices.Equal(got, []string{"sha256-just-pushed"}) {
+		t.Errorf("the repository holds %v, want the image a deploy pushed before it recorded the release that runs it", got)
+	}
+	if len(api.deletedRepositories) != 0 {
+		t.Errorf("Forget() deleted %v while it held an image", api.deletedRepositories)
 	}
 }

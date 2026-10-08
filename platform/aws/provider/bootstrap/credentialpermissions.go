@@ -533,6 +533,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"ecr:BatchGetImage",
 				"ecr:CompleteLayerUpload",
 				"ecr:CreateRepository",
+				"ecr:DeleteRepository",
 				"ecr:DescribeImages",
 				"ecr:DescribeRepositories",
 				"ecr:GetDownloadUrlForLayer",

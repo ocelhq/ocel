@@ -27,6 +27,7 @@ const (
 type ECRAPI interface {
 	DescribeImages(ctx context.Context, in *ecr.DescribeImagesInput, opts ...func(*ecr.Options)) (*ecr.DescribeImagesOutput, error)
 	BatchDeleteImage(ctx context.Context, in *ecr.BatchDeleteImageInput, opts ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error)
+	DeleteRepository(ctx context.Context, in *ecr.DeleteRepositoryInput, opts ...func(*ecr.Options)) (*ecr.DeleteRepositoryOutput, error)
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
@@ -97,8 +98,16 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 	if err != nil {
 		return err
 	}
-	if err := ensure(ctx, i.api, repository); err != nil {
+	if _, err := ensure(ctx, i.api, repository); err != nil {
 		return err
+	}
+	pushErr := i.pushed.Push(ctx, push, progress)
+	if pushErr == nil {
+		return nil
+	}
+	created, err := ensure(ctx, i.api, repository)
+	if err != nil || !created {
+		return pushErr
 	}
 	return i.pushed.Push(ctx, push, progress)
 }
@@ -131,7 +140,7 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 	return repository, nil
 }
 
-func ensure(ctx context.Context, api ECRAPI, name string) error {
+func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:             aws.String(name),
 		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
@@ -140,10 +149,10 @@ func ensure(ctx context.Context, api ECRAPI, name string) error {
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("create the image repository %s: %w", name, err)
+		return false, fmt.Errorf("create the image repository %s: %w", name, err)
 	}
-	return nil
+	return true, nil
 }

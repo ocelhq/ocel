@@ -56,7 +56,7 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if len(ours) == 0 {
 		return nil
 	}
-	removed, err := registry.Forget(ctx, api, ours, kept)
+	removed, err := registry.Forget(ctx, api, ours, kept, time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }
