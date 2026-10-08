@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { contentTypeFor } from "../src/assets.mjs";
+import { type AssetStoreDeps, contentTypeFor, serveStaticAsset } from "../src/assets.mjs";
 
 describe("contentTypeFor", () => {
   it("infers content-type from the file extension", () => {
@@ -38,5 +38,47 @@ describe("contentTypeFor", () => {
 
   it("reads the extension off the file name alone", () => {
     expect(contentTypeFor("/v1.0/README")).toBe("application/octet-stream");
+  });
+});
+
+function basePathStoreServing(files: Record<string, string>): AssetStoreDeps {
+  return {
+    store: {
+      async get(key) {
+        const body = files[key];
+        return body === undefined ? null : { body: new Blob([body]).stream() };
+      },
+    },
+    assetPrefix: "assets/p/app/b1",
+    basePath: "/docs",
+    static: { immutablePrefixes: ["/docs/_next/static/"] },
+    cache: { match: async () => undefined, put: async () => {} },
+    waitUntil: () => {},
+  };
+}
+
+describe("serveStaticAsset under a basePath", () => {
+  it("serves the 404 page the build stored under the basePath when a page misses", async () => {
+    const url = new URL("https://app.example/docs/missing");
+    const deps = basePathStoreServing({ "assets/p/app/b1/docs/404.html": "<h1>gone</h1>" });
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>gone</h1>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("serves the locale's 404 page the build stored under the basePath", async () => {
+    const url = new URL("https://app.example/docs/fr/missing");
+    const deps = basePathStoreServing({
+      "assets/p/app/b1/docs/fr/404.html": "<h1>introuvable</h1>",
+      "assets/p/app/b1/docs/404.html": "<h1>gone</h1>",
+    });
+
+    const res = await serveStaticAsset(new Request(url), url, deps, "fr");
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>introuvable</h1>");
   });
 });
