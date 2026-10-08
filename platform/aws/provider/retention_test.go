@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -23,9 +24,8 @@ func recordImage(t *testing.T, store keyvalue.Store, tier environment.Tier, proj
 	}
 }
 
-func TestTheStandingImagesAreWhatEveryOtherStackOfTheProjectRuns(t *testing.T) {
-	t.Parallel()
-
+func shopStacks(t *testing.T) (keyvalue.Store, provider.StackRef) {
+	t.Helper()
 	store := fake.NewKeyValues()
 	own := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
 	previous := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
@@ -34,30 +34,63 @@ func TestTheStandingImagesAreWhatEveryOtherStackOfTheProjectRuns(t *testing.T) {
 	recordImage(t, store, environment.TierProduction, "shop", previous, "ecr/ocel/shop.web:sha256-previous")
 	recordImage(t, store, environment.TierPreview, "shop", preview, "ecr/ocel/shop.web:sha256-preview")
 	recordImage(t, store, environment.TierProduction, "blog", previous, "ecr/ocel/blog.web:sha256-other")
+	return store, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}
+}
 
-	standing, err := standingImages(context.Background(), store, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own})
+func TestAReconcileKeepsTheImageItsOwnStackStillRecords(t *testing.T) {
+	t.Parallel()
+
+	store, own := shopStacks(t)
+
+	kept, err := reconciledKeptImages(context.Background(), store, own)
 	if err != nil {
-		t.Fatalf("standingImages() = %v", err)
+		t.Fatalf("reconciledKeptImages() = %v", err)
 	}
 
-	want := map[string]bool{"ecr/ocel/shop.web:sha256-previous": true, "ecr/ocel/shop.web:sha256-preview": true}
-	if len(standing) != len(want) {
-		t.Fatalf("standingImages() = %v, want %v: the stack being reconciled is not standing, a preview and an earlier release are, and another project's stacks are not listed at all", standing, want)
-	}
-	for image := range want {
-		if !standing[image] {
-			t.Errorf("standingImages() = %v, missing %s", standing, image)
-		}
+	if !kept["ecr/ocel/shop.web:sha256-own"] {
+		t.Errorf("reconciledKeptImages() = %v, want the image the reconciled stack records: a release that failed leaves its record naming the image the service still runs", kept)
 	}
 }
 
-func TestTheStandingImagesOfAProjectNothingRecordsAreNone(t *testing.T) {
+func TestTheImagesAReconcileKeepsAreWhatEveryStackOfTheProjectRecords(t *testing.T) {
 	t.Parallel()
 
-	standing, err := standingImages(context.Background(), fake.NewKeyValues(), provider.StackRef{
+	store, own := shopStacks(t)
+
+	kept, err := reconciledKeptImages(context.Background(), store, own)
+	if err != nil {
+		t.Fatalf("reconciledKeptImages() = %v", err)
+	}
+
+	want := map[string]bool{"ecr/ocel/shop.web:sha256-own": true, "ecr/ocel/shop.web:sha256-previous": true, "ecr/ocel/shop.web:sha256-preview": true}
+	if !maps.Equal(kept, want) {
+		t.Errorf("reconciledKeptImages() = %v, want %v: another project's stacks are not listed at all", kept, want)
+	}
+}
+
+func TestTheImagesAForgetKeepsAreWhatEveryOtherStackOfTheProjectRecords(t *testing.T) {
+	t.Parallel()
+
+	store, own := shopStacks(t)
+
+	kept, err := forgottenKeptImages(context.Background(), store, own)
+	if err != nil {
+		t.Fatalf("forgottenKeptImages() = %v", err)
+	}
+
+	want := map[string]bool{"ecr/ocel/shop.web:sha256-previous": true, "ecr/ocel/shop.web:sha256-preview": true}
+	if !maps.Equal(kept, want) {
+		t.Errorf("forgottenKeptImages() = %v, want %v: the stack being destroyed runs nothing once it is gone", kept, want)
+	}
+}
+
+func TestAProjectNothingRecordsKeepsNoImage(t *testing.T) {
+	t.Parallel()
+
+	kept, err := reconciledKeptImages(context.Background(), fake.NewKeyValues(), provider.StackRef{
 		Project: "shop", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", naming.NewReleaseToken("b1", "")),
 	})
-	if err != nil || len(standing) != 0 {
-		t.Errorf("standingImages() = %v, %v, want none", standing, err)
+	if err != nil || len(kept) != 0 {
+		t.Errorf("reconciledKeptImages() = %v, %v, want none", kept, err)
 	}
 }

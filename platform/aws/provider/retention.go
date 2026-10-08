@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -17,11 +18,11 @@ import (
 const imageReclaimGrace = 30 * time.Minute
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, _ provider.ImageStore, log progress.Log) error {
-	standing, err := standingImages(ctx, p.KeyValues(), ref)
+	kept, err := reconciledKeptImages(ctx, p.KeyValues(), ref)
 	if err != nil {
 		return err
 	}
-	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, standing, time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, kept, time.Now().Add(-imageReclaimGrace))
 	sayRemoved(log, app, removed)
 	return err
 }
@@ -40,34 +41,44 @@ func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, ap
 	if len(images) == 0 {
 		return nil
 	}
-	standing, err := standingImages(ctx, p.KeyValues(), ref)
+	kept, err := forgottenKeptImages(ctx, p.KeyValues(), ref)
 	if err != nil {
 		return err
 	}
-	removed, err := registry.Forget(ctx, ecr.NewFromConfig(p.aws), images, standing)
+	removed, err := registry.Forget(ctx, ecr.NewFromConfig(p.aws), images, kept)
 	sayRemoved(log, app, removed)
 	return err
 }
 
-func standingImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
-	standing := map[string]bool{}
+func reconciledKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
+	return recordedImages(ctx, store, ref.Project, func(environment.Tier, naming.StackName) bool { return true })
+}
+
+func forgottenKeptImages(ctx context.Context, store keyvalue.Store, ref provider.StackRef) (map[string]bool, error) {
+	return recordedImages(ctx, store, ref.Project, func(tier environment.Tier, name naming.StackName) bool {
+		return tier != ref.Tier || name != ref.Name
+	})
+}
+
+func recordedImages(ctx context.Context, store keyvalue.Store, project string, counted func(environment.Tier, naming.StackName) bool) (map[string]bool, error) {
+	recorded := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		stacks, err := stackrecords.List(ctx, store, tier, ref.Project)
+		stacks, err := stackrecords.List(ctx, store, tier, project)
 		if err != nil {
 			return nil, err
 		}
 		for _, stack := range stacks {
-			if tier == ref.Tier && stack.Name == ref.Name {
+			if !counted(tier, stack.Name) {
 				continue
 			}
 			for _, container := range stack.Containers {
 				if container.Image != "" {
-					standing[container.Image] = true
+					recorded[container.Image] = true
 				}
 			}
 		}
 	}
-	return standing, nil
+	return recorded, nil
 }
 
 func sayRemoved(log progress.Log, app string, removed []string) {
