@@ -213,8 +213,11 @@ func TestAManifestNamingNothingLiveResolvesToNoValuesAndNoDirectory(t *testing.T
 
 func TestTheRuntimeLeavesNoProcessInItsContainerAbleToTraceItOrReadItsMemory(t *testing.T) {
 	t.Cleanup(func() { _ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0) })
-	if err := clearDumpable(); err != nil {
-		t.Fatalf("clearDumpable() = %v", err)
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if code := run(context.Background(), []string{"true"}, []string{boxlive.EnvVar + "={"}); code == 0 {
+		t.Fatalf("run() with an unreadable manifest = %d, want it to stop before starting the app", code)
 	}
 	dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
 	if err != nil {
