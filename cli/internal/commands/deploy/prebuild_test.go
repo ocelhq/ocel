@@ -529,6 +529,27 @@ func TestAPreBuildNamingAnAppAlsoReceivesThatAppsVariables(t *testing.T) {
 	}
 }
 
+func TestAPreBuildNamingAnAppThatDeclaresANameTheBindingProxyIsDeliveredUnderIsRefusedBeforeItRuns(t *testing.T) {
+	fixture := setUpVariablesProject(t, fmt.Sprintf(`[{"key":%q,"class":"VARIABLE_CLASS_PLAIN","required":true}]`, localrpc.SessionTokenEnvVar))
+	envSet(t, fixture, localrpc.SessionTokenEnvVar, "mine", envOptions{})
+	writeRootApp(t, fixture.Root)
+	ran := filepath.Join(t.TempDir(), "ran")
+	writeConfig(t, fixture.Root, fmt.Sprintf(`  lifecycle: { preBuild: { app: %q, command: "touch %s" } },
+`, clitest.FixtureSlug, ran))
+
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+
+	if err == nil || !strings.Contains(err.Error(), localrpc.SessionTokenEnvVar) {
+		t.Errorf("runDeploy err = %v, want the preBuild refused by the name it would lose to the binding proxy; out=%s", err, out)
+	}
+	if _, statErr := os.Stat(ran); statErr == nil {
+		t.Error("the preBuild ran though its app declares a name the binding proxy is delivered under")
+	}
+}
+
 func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing.T) {
 	p := setUpPreBuildProject(t, `"true"`)
 	servingBindingProxy(t, p.fixture)

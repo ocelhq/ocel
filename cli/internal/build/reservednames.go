@@ -51,10 +51,11 @@ func refuseReservedNames(app string, values AppVariables) error {
 
 var bindingProxyNames = []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
 
-func refuseBindingProxyNames(app string, values AppVariables) error {
-	for _, key := range slices.Sorted(maps.Keys(values.Live)) {
-		if slices.Contains(bindingProxyNames, key) {
-			return fmt.Errorf("app %q declares %s, which the build is handed the binding proxy under; rename it where it is declared", app, key)
+func RefuseBindingProxyNames(app string, values AppVariables) error {
+	for _, key := range bindingProxyNames {
+		_, plain := values.Env[key]
+		if _, live := values.Live[key]; plain || live {
+			return fmt.Errorf("app %q declares %s, which the binding proxy is delivered under; rename it where it is declared", app, key)
 		}
 	}
 	return nil

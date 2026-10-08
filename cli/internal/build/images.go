@@ -24,7 +24,7 @@ import (
 func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
 	apps := ImageApps(cfg.Apps)
 	for _, app := range apps {
-		if err := refuseBindingProxyNames(app.Name, variables[app.Name]); err != nil {
+		if err := RefuseBindingProxyNames(app.Name, variables[app.Name]); err != nil {
 			return nil, err
 		}
 	}

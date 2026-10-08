@@ -50,6 +50,9 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
 	maps.Copy(env, forwards.BindingProxyEnv())
 	if command.App != "" {
+		if err := build.RefuseBindingProxyNames(command.App, values[command.App]); err != nil {
+			return fmt.Errorf("%s: %w", preBuildName, err)
+		}
 		maps.Copy(env, values[command.App].Env)
 		maps.Copy(live, values[command.App].Live)
 	}
