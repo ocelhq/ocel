@@ -65,9 +65,10 @@ of memory. An instance keeps its CPU after it answers, so the work Next runs aft
 The catch is the bill. Cloud Run charges an instance for its whole life, idle time included, and
 keeps an idle instance for up to 15 minutes after its last request. At list prices one instance costs
 about $0.08 an hour, so traffic that never pauses for 15 minutes keeps one alive all month, about $58,
-where billing per request would charge only the seconds spent answering. Steady traffic costs less
-this way, because the per-instance rate is lower and has no per-request fee. `ocel cost` prices the
-services this way.
+where billing per request would charge only the seconds spent answering. The per-instance rate is
+about a quarter lower and has no per-request fee, so it costs less only for an instance that spends
+most of its life, roughly three quarters or more, answering requests. `ocel cost` prices the services
+this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
