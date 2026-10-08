@@ -187,6 +187,7 @@ describe("the needs a Google Cloud origin does not serve", () => {
     "deploy/next": ["edge-runtime", "edge-cache"],
     "lifecycle/next": ["edge-runtime", "edge-cache"],
     "sdk/next": ["edge-runtime", "edge-cache"],
+    "prerender/next-bucket": ["edge-runtime", "edge-cache"],
     "deploy/workspace": ["edge-cache"],
     "sdk/workspace": ["edge-cache"],
   };
