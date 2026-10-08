@@ -131,6 +131,8 @@ func TestDecodeRefusesASelectorThatIsNotOneKnownIdentifier(t *testing.T) {
 		{"a provider whose options are required, as a string", `"provider":"gcp"`, []string{`"gcp"`, `{ "gcp": {`, "aws"}},
 		{"a provider whose required option is left out", `"provider":{"vps":{}}`, []string{`"provider.vps"`, `"ssh"`, "The machine to deploy onto"}},
 		{"a provider whose required option is null", `"provider":{"vps":{"ssh":null}}`, []string{`"provider.vps"`, `"ssh"`}},
+		{"a provider whose required option is empty", `"provider":{"vps":{"ssh":""}}`, []string{`"provider.vps"`, `"ssh"`}},
+		{"a provider whose required option is only whitespace", `"provider":{"gcp":{"region":"  "}}`, []string{`"provider.gcp"`, `"region"`}},
 		{"a provider missing one of its required options", `"provider":{"gcp":{"project":"p"}}`, []string{`"provider.gcp"`, `"region"`}},
 		{"a provider whose options are required, set to null", `"provider":{"vps":null}`, []string{`"provider.vps" must be an object of options`}},
 		{"a provider that may be named alone, set to null", `"provider":{"aws":null}`, []string{`"provider.aws" must be an object of options`}},
