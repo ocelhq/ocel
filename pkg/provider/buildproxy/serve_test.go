@@ -6,8 +6,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/buildproxy"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 var buckets = []provider.BindingType{provider.BindingBucket}
@@ -100,5 +102,27 @@ func TestEachGranteeIsOpenedWithOnlyItsOwnServedBindingsAndAGranteeBindingNothin
 	}
 	if !slices.Equal(proxy.Unserved, []string{"topic--events"}) {
 		t.Errorf("Unserved = %v, want the topic named once", proxy.Unserved)
+	}
+}
+
+func TestServedGrantsAnswerOneSessionPerGranteeAtOneAddress(t *testing.T) {
+	proxy, err := buildproxy.ServeGrants([]bindingproxy.Grant{
+		{Grantee: "web", Services: bindingproxy.Services{Topics: topicv1connect.UnimplementedTopicServiceHandler{}}},
+		{Grantee: "", Services: bindingproxy.Services{Topics: topicv1connect.UnimplementedTopicServiceHandler{}}},
+	}, func(error) {})
+	if err != nil {
+		t.Fatalf("ServeGrants() = %v", err)
+	}
+	t.Cleanup(proxy.Close)
+
+	if proxy.Address == "" {
+		t.Error("Address is empty, want the proxy's listener")
+	}
+	tokens := map[string]string{}
+	for _, session := range proxy.Sessions {
+		tokens[session.Grantee] = session.SessionToken
+	}
+	if len(tokens) != 2 || tokens["web"] == "" || tokens[""] == "" || tokens["web"] == tokens[""] {
+		t.Errorf("Sessions = %+v, want a distinct token for web and the project", proxy.Sessions)
 	}
 }

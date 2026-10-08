@@ -29,12 +29,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		presigner := s3.NewPresignClient(objects)
 		served := make([]bindingproxy.Grant, 0, len(grants))
 		for _, grant := range grants {
-			var buckets []string
-			for _, binding := range grant.Bindings {
-				if name := binding.Properties[provider.PropertyBucket]; !slices.Contains(buckets, name) {
-					buckets = append(buckets, name)
-				}
-			}
+			buckets := buildproxy.ListBucketNames(grant)
 			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: bucket.New(bucket.Config{
 				DDB:              table,
 				Presigner:        presigner,
@@ -44,14 +39,6 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Granted:          func() []string { return slices.Clone(buckets) },
 			})}})
 		}
-		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
-		if err != nil {
-			return provider.BindingProxy{}, err
-		}
-		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
-		for _, session := range proxy.Sessions {
-			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
-		}
-		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() { _ = proxy.Close() }}, nil
+		return buildproxy.ServeGrants(served, req.ReportFailure)
 	})
 }
