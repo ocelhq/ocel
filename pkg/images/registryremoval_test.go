@@ -70,6 +70,36 @@ func TestARegistryThatRefusesTagDeletesHasTheManifestTheTagNamesDeletedByDigest(
 	}
 }
 
+func TestARegistryThatAnswersATagDelete404WhileTheTagStillResolvesHasItDeletedByDigest(t *testing.T) {
+	var asked []string
+	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/" {
+			asked = append(asked, r.Method+" "+r.URL.Path)
+		}
+		switch {
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/sha256-abc"):
+			http.Error(w, `{"errors":[{"code":"MANIFEST_UNKNOWN","message":"manifest unknown"}]}`, http.StatusNotFound)
+		case r.Method == http.MethodHead:
+			answerWithManifest(w)
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	})
+
+	if err := store.Remove(context.Background(), push.ImageRef); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+
+	want := []string{
+		"DELETE /v2/acme/web/manifests/sha256-abc",
+		"HEAD /v2/acme/web/manifests/sha256-abc",
+		"DELETE /v2/acme/web/manifests/" + aManifestDigest,
+	}
+	if !slices.Equal(asked, want) {
+		t.Errorf("Remove() asked %v, want %v: a registry that deletes only by digest may answer a tag delete 404, and taking that as removed leaks the image", asked, want)
+	}
+}
+
 func TestRemovingATagTheRegistryDoesNotHaveIsDone(t *testing.T) {
 	var deleted bool
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
