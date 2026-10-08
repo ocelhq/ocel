@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
@@ -67,7 +68,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Ref:    provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind:   provider.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: provider.ImagePushes{Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
+		Images: provider.ImagePushes{Store: fake.NewImages(), Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &provider.AppSpec{
 			App:             "web",
 			BuildID:         "d1",

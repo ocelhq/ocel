@@ -14,8 +14,12 @@ import (
 )
 
 func (f *fakeECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageInput, _ ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error) {
+	f.deleteCalls++
 	if f.deleteErr != nil {
 		return nil, f.deleteErr
+	}
+	if len(in.ImageIds) > 100 {
+		return nil, errors.New("InvalidParameterException: imageIds can hold at most 100 images")
 	}
 	repository := aws.ToString(in.RepositoryName)
 	var out ecr.BatchDeleteImageOutput

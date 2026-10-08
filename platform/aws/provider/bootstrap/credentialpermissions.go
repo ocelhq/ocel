@@ -529,6 +529,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions: []string{
 				"ecr:BatchCheckLayerAvailability",
+				"ecr:BatchDeleteImage",
 				"ecr:BatchGetImage",
 				"ecr:CompleteLayerUpload",
 				"ecr:CreateRepository",

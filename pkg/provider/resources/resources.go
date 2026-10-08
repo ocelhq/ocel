@@ -262,21 +262,29 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 }
 
 func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
-	if f.hooks.Retention == nil || f.hooks.Retention.Forget == nil {
+	return f.hooks.Retention.ForgetReleases(ctx, ref, app, progress)
+}
+
+func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	return f.hooks.Retention.ReconcileImages(ctx, ref, app, imageRef, images, progress)
+}
+
+func (h *ImageRetentionHooks) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
+	if h == nil || h.Forget == nil {
 		return nil
 	}
-	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
+	err := h.Forget(ctx, ref, app, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's release window in place: %v", app, err))
 	}
 	return err
 }
 
-func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
-	if f.hooks.Retention == nil || f.hooks.Retention.Reconcile == nil || imageRef == "" {
+func (h *ImageRetentionHooks) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	if h == nil || h.Reconcile == nil || imageRef == "" {
 		return nil
 	}
-	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, images, progress)
+	err := h.Reconcile(ctx, ref, app, imageRef, images, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}

@@ -459,6 +459,9 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	r.realized.mark(naming.Sanitize(spec.Ref.Project), spec.Ref.Name)
 	if runsContainer(spec) {
+		defer func() {
+			_ = r.cfg.Retention.ReconcileImages(ctx, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
+		}()
 		return r.provisionContainer(ctx, spec, progress)
 	}
 	prepared, work, err := r.prepare(ctx, spec, runProvision)
@@ -607,7 +610,13 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 			return err
 		}
 	}
-	return r.releaseContainerInfra(ctx, opened.cfg.KeyValues, ref, progress)
+	if err := r.releaseContainerInfra(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+		return err
+	}
+	if ref.Name.IsInfra() {
+		return nil
+	}
+	return opened.cfg.Retention.ForgetReleases(ctx, ref, ref.Name.App, progress)
 }
 
 func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {
