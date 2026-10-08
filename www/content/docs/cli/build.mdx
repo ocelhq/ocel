@@ -1,8 +1,22 @@
 ---
-title: ocel build
-description: Dummy description for ocel build.
+title: "ocel build"
+description: "Build every app in your project without deploying."
 ---
 
 ```bash
 ocel build
 ```
+
+Build every app in your project without deploying: a serverless app's functions
+into .ocel/output, and a container app's image into the local docker daemon.
+`ocel deploy --prebuilt` deploys what this built.
+
+Express, Fastify and Hono servers are bundled, so only what the entrypoint imports
+reaches the function: static directories, view templates and files read at run
+time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency
+tree instead.
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema build` prints the JSON Schema of one line.

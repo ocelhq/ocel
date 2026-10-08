@@ -1,0 +1,4 @@
+{
+  "title": "ocel bindings",
+  "pages": ["index", "generate", "ls", "rm", "set"]
+}

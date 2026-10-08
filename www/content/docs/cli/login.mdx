@@ -1,8 +1,21 @@
 ---
-title: ocel login
-description: Dummy description for ocel login.
+title: "ocel login"
+description: "Log in to the Ocel console."
 ---
 
 ```bash
-ocel login
+ocel login [flags]
 ```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--force` | `bool` | `false` | Log in again even if already logged in |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema login` prints.

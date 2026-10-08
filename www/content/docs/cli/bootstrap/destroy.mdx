@@ -1,0 +1,31 @@
+---
+title: "ocel bootstrap destroy"
+description: "Tear down an environment with nothing deployed in it."
+---
+
+```bash
+ocel bootstrap destroy <production|preview> [flags]
+```
+
+Refuses while anything is still deployed there, and lists what has to go first. Irreversible: requires typing the environment name to confirm; `--yes` skips that, and `--dry` prints what would go and stops.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<production\|preview>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print what would be removed and stop, removing nothing |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema bootstrap destroy` prints the JSON Schema of one line.

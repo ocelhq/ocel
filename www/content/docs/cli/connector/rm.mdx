@@ -1,0 +1,23 @@
+---
+title: "ocel connector rm"
+description: "Take the connector off this target and forget it in the console."
+---
+
+```bash
+ocel connector rm [flags]
+```
+
+<include>../../../cli/connector/rm.mdx</include>
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--target` | `string` |  | The fingerprint ocel connector status prints, to forget a connector whose target will not answer |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema connector rm` prints the JSON Schema of one line.

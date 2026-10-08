@@ -1,0 +1,30 @@
+```bash
+ocel init --provider aws
+```
+
+Writes the [config](/docs/configuration) here, naming the provider you gave and a slug — this
+directory's name unless you pass one — and adds the ocel SDK with your language's own package
+manager. A project built with node gets `ocel.config.ts`, and any other gets `ocel.json`. It
+runs entirely offline: it neither signs you in nor contacts the console.
+
+```bash
+ocel init my-app --provider vps
+```
+
+`--provider` is required: `aws`, `gcp` or `vps`. `--format` writes the config as
+[`yaml`](/docs/configuration#yaml), `json` or `ts` instead of the default.
+
+`--option` takes a provider option whose value is text, as `name=value`; repeat it for each.
+`gcp` cannot deploy without `region`, nor `vps` without `ssh`, and a name the provider does not
+take is refused, naming the ones it does. On a terminal, init asks for any you leave out; under
+`--json` or with no terminal, it fails with [`input_required`](/docs/errors/input_required).
+
+```bash
+ocel init --provider gcp --option region=europe-west1
+```
+
+Then pin the providers this CLI runs, and commit the result:
+
+```bash
+ocel lock
+```

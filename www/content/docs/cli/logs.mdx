@@ -1,187 +1,39 @@
 ---
-title: ocel logs
-description: Read and tail what your apps print, from any provider.
+title: "ocel logs"
+description: "Print the logs of this project's apps."
 ---
 
 ```bash
-ocel logs
-ocel logs web --since 15m --level warn
-ocel logs --tail
-ocel logs --preview --grep timeout
+ocel logs [app...] [flags]
 ```
 
-`ocel logs` prints what your apps wrote to stdout and stderr, read from your own provider
-account. It works the same on every provider, so you don't look up which Lambda, Cloud Run
-revision or container belongs to which app and release.
+<include>../../cli/logs.mdx</include>
 
-It needs a project, because its config says which provider, account and region your apps run
-in. Credentials come from your shell, as each [provider's page](/docs/providers/aws) describes.
-From outside the project directory, point it at the config with `-c`/`--config`.
+## Arguments
 
-## What it reads
-
-Name no app and it reads every app in the project, wherever you run it from. Name some and it
-reads only those:
-
-```bash
-ocel logs web worker
-```
-
-A name that isn't deployed is refused, and the error lists the apps that are.
-
-For each app it reads the release that app is serving. `--all-releases` adds releases that are
-still running but no longer promoted.
-
-Production is the default. `--preview` reads a preview instead: the one the current branch names,
-as [`ocel preview`](/docs/cli/preview) resolves it, or the one `--environment` names.
+| Argument | Takes |
+| --- | --- |
+| `[app]...` | Optional, and repeatable |
 
 ## Flags
 
-| Flag | What it does |
-| --- | --- |
-| `--preview` | Read a preview instead of production. |
-| `--environment <name>` | Read this named preview instead of the current branch's. Needs `--preview`. |
-| `--all-releases` | Include releases still running but no longer promoted. |
-| `-n, --lines <N>` | Read the newest `N` entries of the window. Default 100, at most 10000. |
-| `--since <time>` | Start of the window: a duration back from now (`15m`, `2h`) or an RFC3339 time. Default `1h`. |
-| `--until <time>` | End of the window, in the same forms. Default now. Refused with `--tail`. |
-| `-t, --tail` | Keep streaming new entries after the history. |
-| `--for <duration>` | Stop a `--tail` after this long (`30s`, `5m`). Needs `--tail`. |
-| `--level <level>` | Print only entries at this level or above: `debug`, `info`, `warn` or `error`. |
-| `--grep <text>` | Print only entries containing this text. The provider does the matching where it can. |
-| `--raw` | Print messages as the app sent them, without reading a level or fields out of them. |
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--all-releases` | `bool` | `false` | Include releases still running but no longer promoted |
+| `--environment` | `string` |  | Read this named preview environment instead of the one the current branch names (with `--preview`) |
+| `--for` | `string` |  | Stop a `--tail` after this duration (30s, 5m) |
+| `--grep` | `string` |  | Print only entries containing this text |
+| `--level` | `string` |  | Minimum level to print: debug, info, warn or error |
+| `-n, --lines` | `int` | `100` | Newest N entries to read, before `--level` is applied |
+| `--preview` | `bool` | `false` | Read a preview instead of production |
+| `--raw` | `bool` | `false` | Print messages as sent, without reading a level or fields out of them |
+| `--since` | `string` | `1h` | Start of the window: a duration back from now (15m, 2h) or an RFC3339 time |
+| `-t, --tail` | `bool` | `false` | Keep streaming new entries after the history |
+| `--until` | `string` |  | End of the window, as `--since` (default: now) |
 
-Entries print oldest first.
+Every command also takes the [global flags](/docs/cli#global-flags).
 
-`--tail` takes no value. `ocel logs --tail 50` reads `50` as an app name and is refused, because
-no app has that name. The line count is `-n`.
+## Behaviour
 
-`--level` is applied after `-n` has picked its lines, so it can leave you fewer than `-n`. It
-drops a line whose level can't be told. A line's level is the one its message names, or else
-the severity the provider recorded. With `--raw` it is the provider's alone.
-
-## Global flags
-
-Every `ocel` command takes these.
-
-| Flag | What it does |
-| --- | --- |
-| `-c, --config <file>` | Use this project config. Default `$OCEL_CONFIG`, else the nearest `ocel.config.ts`, `ocel.json`, `ocel.yaml` or `ocel.yml`. |
-| `--json` | Print machine output: `ocel logs` writes one JSON object per line, as [Agents and CI](#agents-and-ci) describes. Setting `OCEL_JSON=1` does the same. |
-| `-v, --verbose` | Expand every entry on a terminal and show full field values. Setting `OCEL_DEBUG=1` does the same. |
-
-## Tailing
-
-`--tail` prints the history, then keeps streaming. On a terminal, a live line marks the switch.
-Ctrl-C stops it, and so does reaching `--for`. Both exit 0, because that is how a tail normally
-ends.
-
-Notices that entries were left out, or that the stream reconnected, go to stderr, so stdout
-stays entries only. With `--json` they are `notice` objects on stdout instead.
-
-## Reading entries
-
-On a terminal, each entry is one coloured line stamped in local time. Errors are boxed, long
-field values are shortened, and a stack trace whose lines arrive as separate entries shows as
-one. Pass `-v` to expand every entry.
-
-Piped, or with `--raw`, each entry is one plain line: the time in UTC, then the app, then the
-level (`-` when it can't be told), the message, and any fields as JSON. When the entry names a
-source, the app prints as `app/source`: `web/http` for what the app serves, or `web/<worker>`
-for one of its workers.
-
-Your app needs no logging library. One parser reads what pino, bunyan, winston, slog, zap,
-structlog, tracing and logfmt write, so every provider looks the same. A line in no known format
-shows as it is.
-
-Providers drop the lines their platform writes for itself, such as Lambda's `START`, `END` and
-`REPORT`, and report the ones that mean a failure, such as a timeout or running out of memory,
-as entries at error level.
-
-## Agents and CI
-
-`--json`, or `OCEL_JSON=1` in the environment, prints one object per line, and nothing else goes
-to stdout. What the run reports on stderr, such as reaching the provider, is NDJSON too. Each
-object's `type` says which of two shapes it is.
-
-An entry:
-
-```json
-{"type":"entry","time":"2026-10-04T09:12:03.512Z","app":"web","source":"http","release":"<release>","instance":"<instance>","stream":"stderr","level":"error","message":"{\"level\":\"error\",\"msg\":\"payment failed\",\"user\":\"u_42\"}","fields":{"user":"u_42"},"failure":false}
-```
-
-| Field | What it holds |
-| --- | --- |
-| `type` | `entry`. |
-| `time` | When the line was written, in UTC with milliseconds. |
-| `app` | The app's name. |
-| `source` | `http` for what the app serves, or the name of one of its workers. |
-| `release` | The release that wrote it. |
-| `instance` | The function instance or container that wrote it. |
-| `stream` | `stdout` or `stderr`, or empty when the provider doesn't record which. |
-| `level` | `debug`, `info`, `warn` or `error`. Left out when the level can't be told. |
-| `message` | The line exactly as the app wrote it. |
-| `fields` | The fields read out of the message, as an object. Left out when there are none. |
-| `failure` | `true` when the provider reported the line as a failure, such as a timeout. |
-
-A notice:
-
-```json
-{"type":"notice","kind":"sampled","message":"120 entries were left out because the log store sampled them","omitted":120}
-```
-
-| Field | What it holds |
-| --- | --- |
-| `type` | `notice`. |
-| `kind` | `caught_up`, `sampled`, `source_gone` or `reconnected`. |
-| `message` | The notice in words. |
-| `omitted` | How many entries a `sampled` notice left out. `0` for the other kinds. |
-
-A `caught_up` notice marks the end of the history. A read without `--tail` stops right after
-it, and a tail keeps streaming new entries after it. `source_gone` means a release's function or
-container no longer exists, and its logs went with it. `reconnected` means the stream to the
-provider dropped and was opened again, so entries written in between may be missing.
-
-Read the recent errors and stop:
-
-```bash
-ocel logs --json --level error --since 30m
-```
-
-Watch for a fixed time, such as through a smoke test, and stop on its own with exit 0:
-
-```bash
-ocel logs --json --tail --for 60s
-```
-
-Give a tail in a script a `--for`, or it runs until something kills it.
-
-## Provider limits
-
-### VPS
-
-Logs live on the box, in Docker's `local` log driver. Each container keeps at most 100 MB:
-5 files of 20 MB, oldest dropped first. A release's logs go when its container is pruned.
-
-### AWS
-
-Lambda functions and workers log to CloudWatch Logs, and containers to a log group shared by
-the tier. Reads and tails both call CloudWatch's `FilterLogEvents`, which AWS allows 5 to 25
-times a second per account and region, depending on the region (10 in most). Everyone reading
-logs in that account and region shares that rate, the AWS console included.
-
-`--tail` polls CloudWatch every 2 seconds, backing off to as much as 10 seconds when CloudWatch
-throttles it, so a new line can take a couple of seconds to show.
-
-### Google Cloud
-
-Cloud Run services and workers log to Cloud Logging in your project. A read pages through
-Cloud Logging's `entries.list`, which Google allows 60 times a minute per project. A tail
-reads its history the same way, then holds one live tail session open. Google
-allows 10 open sessions per project, shared by everyone tailing that project, the Cloud
-console included. When Cloud Logging refuses a read or a tail for quota, `ocel logs` retries it
-three times with backoff, then stops with the error.
-
-A live tail delivers at most 60,000 entries a minute. When Cloud Logging skips entries, because
-they came faster than that or faster than the tail read them, `ocel logs` prints a notice saying
-how many were left out (`sampled` under `--json`) and carries on.
+- Read-only: it changes nothing.
+- Prints data on stdout.

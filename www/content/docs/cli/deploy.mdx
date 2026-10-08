@@ -1,8 +1,29 @@
 ---
-title: ocel deploy
-description: Dummy description for ocel deploy.
+title: "ocel deploy"
+description: "Deploy this project to your own infrastructure."
 ---
 
 ```bash
-ocel deploy
+ocel deploy [flags]
 ```
+
+Provisions the resources the project declares, builds the apps, and releases the result into your provider account. Every deploy is kept: list them with `ocel promotions ls`, return to one with `ocel rollback`.
+
+`--dry` builds, then prints every change the deploy would make to your account and stops.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
+| `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |
+| `--tag` | `string` |  | Mark this deploy with an immutable label to roll back to by name (ocel rollback `--tag`) |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema deploy` prints the JSON Schema of one line.

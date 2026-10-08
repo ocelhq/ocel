@@ -1,0 +1,25 @@
+---
+title: "ocel cost scan"
+description: "Estimate the monthly bill for what a deploy would provision."
+---
+
+```bash
+ocel cost scan [flags]
+```
+
+Reads the project's config and declarations, asks the provider what a deploy would create and what each piece costs, and prints the estimate. Nothing is built and no credentials are read. Fixed costs accrue whether or not traffic arrives; usage costs follow the profile, or the quantities a usage file sets per resource.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--env` | `string` | `production` | Environment to price: production or preview |
+| `--profile` | `string` | `moderate` | Usage assumptions for the usage-based rows: light, moderate, heavy |
+| `--usage` | `string` |  | YAML or JSON file of monthly quantities keyed by resource id, overriding the profile |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema cost scan` prints.

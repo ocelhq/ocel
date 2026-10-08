@@ -1,0 +1,31 @@
+---
+title: "ocel bindings set"
+description: "Publish one binding, read as JSON on stdin."
+---
+
+```bash
+ocel bindings set [flags]
+```
+
+The binding is a common.bindings.v1.Binding in protobuf JSON, and it includes its own name, so there is nothing to name on the command line:
+
+```bash
+ocel bindings set < binding.json
+```
+
+A name belongs to whoever published it. Publishing over a name another publisher owns is refused rather than handing every app bound to that name another resource's values; pass `--owner` to publish as that publisher.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Address the binding this named preview environment has instead of the one bound to all environments |
+| `--owner` | `string` | `cli` | Publish under this publisher's name |
+| `--preview` | `bool` | `false` | Act on the preview bootstrap instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema bindings set` prints.

@@ -1,0 +1,37 @@
+---
+title: "ocel preview up"
+description: "Deploy or refresh a preview."
+---
+
+```bash
+ocel preview up [name] [flags]
+```
+
+Without a name the preview is the current branch's: deploying the same branch again replaces it, and `ocel preview rm` tears it down. A name addresses one preview from any branch. A name is a DNS label with no `--`.
+
+A preview is ephemeral: it gets no infrastructure of its own, only what bindings share, and is torn down without a question. `--persistent` deploys one with its own infrastructure that asks before it is torn down — a staging environment. A preview keeps the lifecycle it was created with.
+
+`--dry` builds, then prints every change the preview would make to your account and stops.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[name]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
+| `--persistent` | `bool` | `false` | Deploy a persistent preview: its own infrastructure, and a confirmation before it is torn down |
+| `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema preview up` prints the JSON Schema of one line.

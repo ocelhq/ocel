@@ -1,0 +1,15 @@
+---
+title: "ocel lock"
+description: "Pin the provider binaries this CLI version runs."
+---
+
+```bash
+ocel lock
+```
+
+Writes ocel.lock beside the project config, recording this CLI's version and the sha256 of every provider archive of that release on every platform. Commit it: every machine and every CI run then fetches the same bytes. Run it again after changing CLI version.
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema lock` prints.

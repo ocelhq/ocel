@@ -1,0 +1,23 @@
+---
+title: "ocel domain release"
+description: "Tear down the edge's preview routing and stop serving previews on the global domain."
+---
+
+```bash
+ocel domain release [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the preview tier (required) |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema domain release` prints the JSON Schema of one line.

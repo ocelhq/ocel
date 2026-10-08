@@ -1,0 +1,29 @@
+---
+title: "ocel env set"
+description: "Set a value."
+---
+
+```bash
+ocel env set <KEY=VALUE>... [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<KEY=VALUE>...` | Required, and repeatable |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Use this named preview environment; requires `--preview` |
+| `--folder` | `string` |  | Use the value in this folder |
+| `--preview` | `bool` | `false` | Use preview values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout.

@@ -1,0 +1,22 @@
+---
+title: "ocel bindings ls"
+description: "List the published bindings, without revealing what they contain."
+---
+
+```bash
+ocel bindings ls [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Address the binding this named preview environment has instead of the one bound to all environments |
+| `--preview` | `bool` | `false` | Act on the preview bootstrap instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema bindings ls` prints.

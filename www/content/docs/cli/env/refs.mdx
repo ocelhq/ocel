@@ -1,0 +1,28 @@
+---
+title: "ocel env refs"
+description: "List references to a value."
+---
+
+```bash
+ocel env refs <KEY> [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<KEY>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--folder` | `string` |  | Use the value in this folder |
+| `--preview` | `bool` | `false` | Use preview values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema env refs` prints.

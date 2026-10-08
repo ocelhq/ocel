@@ -1,8 +1,52 @@
 ---
-title: CLI
-description: The ocel binary.
+title: "CLI"
+description: "The ocel binary."
 ---
 
 ```bash
 ocel --help
 ```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel bindings`](/docs/cli/bindings) | Manage the bindings this project's apps resolve |
+| [`ocel bootstrap`](/docs/cli/bootstrap) | Set up the shared infrastructure deploys run on |
+| [`ocel build`](/docs/cli/build) | Build every app in your project without deploying |
+| [`ocel connector`](/docs/cli/connector) | Manage the connector the console reads this target's variables through |
+| [`ocel cost`](/docs/cli/cost) | Estimate what this project costs to run |
+| [`ocel deploy`](/docs/cli/deploy) | Deploy this project to your own infrastructure |
+| [`ocel destroy`](/docs/cli/destroy) | Permanently destroy this project's deployment of one tier |
+| [`ocel dev`](/docs/cli/dev) | Run your project in development mode |
+| [`ocel doctor`](/docs/cli/doctor) | Check that everything is good to go |
+| [`ocel domain`](/docs/cli/domain) | Manage this project's production hostnames, and the domain every project's previews are served on |
+| [`ocel env`](/docs/cli/env) | Manage this project's variable values |
+| [`ocel generate`](/docs/cli/generate) | Generate the app-side files ocel derives from your declarations |
+| [`ocel init`](/docs/cli/init) | Make this directory deployable |
+| [`ocel link`](/docs/cli/link) | Link this directory to a console project |
+| [`ocel lock`](/docs/cli/lock) | Pin the provider binaries this CLI version runs |
+| [`ocel login`](/docs/cli/login) | Log in to the Ocel console |
+| [`ocel logout`](/docs/cli/logout) | Log out of the Ocel console |
+| [`ocel logs`](/docs/cli/logs) | Print the logs of this project's apps |
+| [`ocel permissions`](/docs/cli/permissions) | Print the permissions bootstrap or deploy credentials need |
+| [`ocel preview`](/docs/cli/preview) | Deploy a preview of the current branch |
+| [`ocel promotions`](/docs/cli/promotions) | Manage production promotions |
+| [`ocel rollback`](/docs/cli/rollback) | Roll production back to a previous deployment |
+| [`ocel run`](/docs/cli/run) | Run a one-off command with your project's resource connections |
+| [`ocel schema`](/docs/cli/schema) | Print the JSON Schema of what a command prints |
+| [`ocel unlink`](/docs/cli/unlink) | Unlink this directory from its console project |
+
+## Machine output
+
+Under `--json`, a command that returns data prints one result envelope, and a command that runs prints its run events as NDJSON, one per line. `ocel schema` lists every command that has a schema, and `ocel schema <command>` prints its JSON Schema.
+
+## Global flags
+
+Every command takes these.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `-c, --config` | `string` |  | Project config file (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts) |
+| `--json` | `bool` | `false` | Write the run's events as NDJSON instead of the human view (also $OCEL_JSON) |
+| `-v, --verbose` | `bool` | `false` | Stream full logs instead of the progress view (also $OCEL_DEBUG) |

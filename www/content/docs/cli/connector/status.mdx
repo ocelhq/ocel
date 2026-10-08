@@ -1,0 +1,15 @@
+---
+title: "ocel connector status"
+description: "Say what the console has registered for the connectors of this organization."
+---
+
+```bash
+ocel connector status
+```
+
+<include>../../../cli/connector/status.mdx</include>
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema connector status` prints.

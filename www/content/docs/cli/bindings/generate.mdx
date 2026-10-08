@@ -1,0 +1,26 @@
+---
+title: "ocel bindings generate"
+description: "Write the transform types for the bindings published to one coordinate."
+---
+
+```bash
+ocel bindings generate [flags]
+```
+
+Reads the records published to production, or to the preview coordinate `--preview` and `--environment` name, and writes ocel-bindings.d.ts beside your ocel config. The file names each record and the properties it has, so `bindings.<type>.<name>.<property>` in a transform is checked where it is written instead of at the deploy. Check it in, and run this again when what you publish changes.
+
+This reads the published records, so it logs in and runs the provider.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Address the binding this named preview environment has instead of the one bound to all environments |
+| `--preview` | `bool` | `false` | Act on the preview bootstrap instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema bindings generate` prints.

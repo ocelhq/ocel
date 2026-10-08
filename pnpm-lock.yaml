@@ -1142,6 +1142,8 @@ importers:
 
   scripts/release: {}
 
+  scripts/schema: {}
+
   tests/e2e:
     dependencies:
       '@ocel-tests/shared':

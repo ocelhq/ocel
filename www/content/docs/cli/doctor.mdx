@@ -1,8 +1,15 @@
 ---
-title: ocel doctor
-description: Dummy description for ocel doctor.
+title: "ocel doctor"
+description: "Check that everything is good to go."
 ---
 
 ```bash
 ocel doctor
 ```
+
+Reads the project, the cloud credentials it reaches with, and what production and preview have set up, then names the fix for anything in the way. Nothing is created or changed.
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema doctor` prints.

@@ -1,8 +1,15 @@
 ---
-title: ocel generate
-description: Dummy description for ocel generate.
+title: "ocel generate"
+description: "Generate the app-side files ocel derives from your declarations."
 ---
 
 ```bash
 ocel generate
 ```
+
+Writes each app's client accessor and points that app's 'ocel/env/client' imports at it, which `ocel dev` and `ocel deploy` also do. When the project declares realtime resources, it also writes ocel-realtime.d.ts beside your ocel config: the channel types a browser's realtime client is typed from, for a backend in any language; check it in, and run this again when your channels change. It reads declarations only — no login, no provider and no network — so it can run in CI before a typecheck, or from a postinstall on a fresh clone.
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema generate` prints.

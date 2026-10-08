@@ -1,0 +1,23 @@
+---
+title: "ocel domain"
+description: "Manage this project's production hostnames, and the domain every project's previews are served on."
+---
+
+```bash
+ocel domain
+```
+
+Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.
+
+`add`, `rm`, `ls` and `status` are project-scoped and read domains.production, which is the declaration: no command edits it. `use` and `release` take `--preview` and act on the bootstrap, where the edge serves every project bootstrapped into the preview tier on one wildcard, at "&lt;project&gt;--&lt;preview&gt;[--&lt;app&gt;].&lt;domain&gt;". A project that declares its own domains.preview keeps it and ignores this one.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel domain add`](/docs/cli/domain/add) | Provision the certificate, the edge surface and the DNS for this project's production hostnames |
+| [`ocel domain ls`](/docs/cli/domain/ls) | List this project's production hostnames, or with `--preview` the global domain and the projects served on it |
+| [`ocel domain release`](/docs/cli/domain/release) | Tear down the edge's preview routing and stop serving previews on the global domain |
+| [`ocel domain rm`](/docs/cli/domain/rm) | Unbind production hostnames this project no longer declares, and remove what ocel created for them |
+| [`ocel domain status`](/docs/cli/domain/status) | Show, per production hostname, its certificate, the records it needs, what last answered for it and what is still outstanding |
+| [`ocel domain use`](/docs/cli/domain/use) | Install (or upgrade) the edge's preview routing and serve every project's previews on this wildcard |

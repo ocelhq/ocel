@@ -1,0 +1,21 @@
+---
+title: "ocel env source"
+description: "Show where a tier's values are read from, and how its last sync went."
+---
+
+```bash
+ocel env source [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Use preview values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema env source` prints.

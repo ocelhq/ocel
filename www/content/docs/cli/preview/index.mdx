@@ -1,0 +1,36 @@
+---
+title: "ocel preview"
+description: "Deploy a preview of the current branch."
+---
+
+```bash
+ocel preview [flags]
+```
+
+<include>../../../cli/preview.mdx</include>
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel preview ls`](/docs/cli/preview/ls) | List this project's previews |
+| [`ocel preview prune`](/docs/cli/preview/prune) | Delete a preview's old deployments |
+| [`ocel preview rm`](/docs/cli/preview/rm) | Tear down a preview |
+| [`ocel preview up`](/docs/cli/preview/up) | Deploy or refresh a preview |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
+| `--persistent` | `bool` | `false` | Deploy a persistent preview: its own infrastructure, and a confirmation before it is torn down |
+| `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema preview` prints the JSON Schema of one line.

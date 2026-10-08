@@ -1,0 +1,23 @@
+---
+title: "ocel connector add"
+description: "Put a connector on this target and pair it with the console."
+---
+
+```bash
+ocel connector add [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--allow-reveal` | `bool` | `false` | Let the console read secret values back in the clear |
+| `--allow-write` | `bool` | `true` | Let the console write values |
+| `--compute` | `string` |  | What the connector runs on: serverless or container, and the provider's own default when this names neither |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema connector add` prints the JSON Schema of one line.

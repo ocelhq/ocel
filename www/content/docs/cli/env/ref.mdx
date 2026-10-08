@@ -1,0 +1,36 @@
+---
+title: "ocel env ref"
+description: "Read a value stored elsewhere."
+---
+
+```bash
+ocel env ref <KEY> [flags]
+```
+
+Read a value stored under another project, folder, or key.
+
+Updates to the stored value reach every reference.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<KEY>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Use this named preview environment; requires `--preview` |
+| `--folder` | `string` |  | Use the value in this folder |
+| `--preview` | `bool` | `false` | Use preview values |
+| `--target-folder` | `string` |  | Read from a folder in the target project |
+| `--target-key` | `string` |  | Read a different target key |
+| `--target-project` | `string` |  | Read from another project |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout.

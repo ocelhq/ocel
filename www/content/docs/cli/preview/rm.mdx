@@ -1,0 +1,30 @@
+---
+title: "ocel preview rm"
+description: "Tear down a preview."
+---
+
+```bash
+ocel preview rm [name] [flags]
+```
+
+Without a name it takes down the current branch's preview. A persistent preview asks for confirmation first; `--yes` skips that, and without a terminal to ask on it is required.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[name]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema preview rm` prints the JSON Schema of one line.

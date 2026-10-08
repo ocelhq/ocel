@@ -1,8 +1,27 @@
 ---
-title: ocel rollback
-description: Dummy description for ocel rollback.
+title: "ocel rollback"
+description: "Roll production back to a previous deployment."
 ---
 
 ```bash
-ocel rollback
+ocel rollback [flags]
 ```
+
+Every run prints the promotion that is live and the promotion it would put in its place before asking to proceed; `--dry` prints it and stops.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print what would be rolled back and stop, rolling back nothing |
+| `--tag` | `string` |  | Roll back to the promotion with this tag (mutually exclusive with `--to`) |
+| `--to` | `string` |  | Roll back to a specific promotion id instead of the immediately previous one |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema rollback` prints the JSON Schema of one line.

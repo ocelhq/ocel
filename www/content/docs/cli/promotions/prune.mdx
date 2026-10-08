@@ -1,0 +1,23 @@
+---
+title: "ocel promotions prune"
+description: "Reclaim old production promotions."
+---
+
+```bash
+ocel promotions prune [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--keep` | `int` | `10` | Number of most recent promotions to keep, always additionally pinning the active one |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema promotions prune` prints the JSON Schema of one line.

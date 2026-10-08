@@ -1,8 +1,27 @@
 ---
-title: ocel dev
-description: Dummy description for ocel dev.
+title: "ocel dev"
+description: "Run your project in development mode."
 ---
 
 ```bash
-ocel dev
+ocel dev -- <command> [args...] [flags]
 ```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<command>` | Required |
+| `[args]...` | Optional, and repeatable |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--reset` | `bool` | `false` | Wipe the data this project's dev resources have kept, then start from empty ones |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
