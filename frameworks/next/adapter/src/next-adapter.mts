@@ -543,7 +543,7 @@ const adapter = {
       frameworkBuildId: buildId,
       rootFunction,
       routeTable: "next",
-      static: nextStatic(staticAssets.map(([pathname]) => pathname)),
+      static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
       needs,
     };
     writeFileSync(join(outputRoot, "hosting.json"), JSON.stringify(hosting));
@@ -1296,7 +1296,7 @@ function nextDataPathnameOf(pageKey: string, buildId: string, basePath: string):
 
 const NEXT_STATIC_SEGMENT = "/_next/static/";
 
-export function nextStatic(pathnames: string[]): NonNullable<Hosting["static"]> {
+export function deriveNextStatic(pathnames: string[]): NonNullable<Hosting["static"]> {
   const immutablePrefixes = [
     ...new Set(
       pathnames.flatMap((pathname) => {

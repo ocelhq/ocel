@@ -848,6 +848,20 @@ async function withStaticPage(
   await addStaticOutput(args, pathname, filePath, contents);
 }
 
+test("states immutable only the prefixes of next's own static files, never a public/ file that happens to sit under _next/static", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/main.js", "console.log(1)");
+  const nested = join(projectDir, "public/private/_next/static/config.json");
+  await mkdir(dirname(nested), { recursive: true });
+  await writeFile(nested, "{}");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
+  expect(hosting.static.immutablePrefixes).toEqual(["/_next/static/"]);
+});
+
 test("writes the compiled image config and its hash into the manifest", async () => {
   const { projectDir, args } = await synthProject();
   args.config.images = {
@@ -1766,10 +1780,10 @@ test("states the runtime and next's own build id in hosting.json", async () => {
 });
 
 test("states next's static dir as immutable under whatever base path the build serves it at", async () => {
-  const { nextStatic } = await import("../src/next-adapter.mts");
+  const { deriveNextStatic } = await import("../src/next-adapter.mts");
 
   expect(
-    nextStatic([
+    deriveNextStatic([
       "/docs/_next/static/chunks/main.js",
       "/docs/_next/static/css/app.css",
       "/docs/favicon.ico",
@@ -1778,7 +1792,7 @@ test("states next's static dir as immutable under whatever base path the build s
     immutablePrefixes: ["/docs/_next/static/"],
     mustRevalidatePrefixes: ["/docs/_next/static/service-worker/"],
   });
-  expect(nextStatic(["/favicon.ico"])).toEqual({
+  expect(deriveNextStatic(["/favicon.ico"])).toEqual({
     immutablePrefixes: [],
     mustRevalidatePrefixes: [],
   });
