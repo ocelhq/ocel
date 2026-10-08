@@ -557,7 +557,7 @@ func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, i
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ provider.ImageStore, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)

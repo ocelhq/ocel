@@ -53,7 +53,7 @@ type SharedHooks[T any] struct {
 
 type ImageRetentionHooks struct {
 	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error
-	Forget    func(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error
+	Forget    func(ctx context.Context, ref provider.StackRef, app string, images provider.ImageStore, progress progress.Log) error
 }
 
 func ServedBindingTypes(hooks Hooks) []provider.BindingType {
@@ -117,7 +117,9 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if spec.App != nil {
-		defer func() { _ = ReconcileImages(ctx, f.hooks.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress) }()
+		defer func() {
+			_ = ReconcileImages(ctx, f.hooks.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
+		}()
 	}
 	if err := f.refuseUnservedResources(spec); err != nil {
 		return provider.StackResult{}, err
@@ -249,7 +251,7 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images 
 	}
 	var stopped error
 	for _, container := range recorded.Containers {
-		if err := ForgetReleases(ctx, f.hooks.Retention, ref, container.Name, progress); err != nil && stopped == nil {
+		if err := ForgetReleases(ctx, f.hooks.Retention, ref, container.Name, images, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
@@ -261,11 +263,11 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images 
 	return stopped
 }
 
-func ForgetReleases(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app string, progress progress.Log) error {
+func ForgetReleases(ctx context.Context, h *ImageRetentionHooks, ref provider.StackRef, app string, images provider.ImageStore, progress progress.Log) error {
 	if h == nil || h.Forget == nil {
 		return nil
 	}
-	err := h.Forget(ctx, ref, app, progress)
+	err := h.Forget(ctx, ref, app, images, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's release window in place: %v", app, err))
 	}
@@ -281,6 +283,29 @@ func ReconcileImages(ctx context.Context, h *ImageRetentionHooks, ref provider.S
 		progress.Warn(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}
 	return err
+}
+
+func RemovePushedImages(ctx context.Context, images provider.ImageStore, app string, imageRefs []string, progress progress.Log) {
+	for _, image := range imageRefs {
+		if err := images.Remove(ctx, image); err != nil {
+			if progress != nil {
+				progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to: %v", image, err))
+			}
+			continue
+		}
+		if progress != nil {
+			progress.Say("Removed " + app + "'s unused image " + image + " from " + images.Destination())
+		}
+	}
+}
+
+func SayRemovedImages(progress progress.Log, app string, removed []string) {
+	if progress == nil {
+		return
+	}
+	for _, image := range removed {
+		progress.Say("Removed " + app + "'s unused image " + image)
+	}
 }
 
 const (

@@ -20,6 +20,7 @@ type retaining struct {
 	reconciled []string
 	stores     []provider.ImageStore
 	forgotten  []string
+	forgetting []provider.ImageStore
 	refusal    error
 }
 
@@ -32,10 +33,11 @@ func (r *retaining) hooks() *resources.ImageRetentionHooks {
 			r.stores = append(r.stores, images)
 			return r.refusal
 		},
-		Forget: func(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
+		Forget: func(_ context.Context, _ provider.StackRef, app string, images provider.ImageStore, _ progress.Log) error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			r.forgotten = append(r.forgotten, app)
+			r.forgetting = append(r.forgetting, images)
 			return r.refusal
 		},
 	}
@@ -121,7 +123,7 @@ func TestADeployThatRunsNoContainerReconcilesNoImage(t *testing.T) {
 	}
 }
 
-func TestDestroyingAContainerStackForgetsItsApp(t *testing.T) {
+func TestDestroyingAContainerStackForgetsItsAppThroughTheStoreItWasHanded(t *testing.T) {
 	t.Parallel()
 
 	stacks, _, retained, spec := retainingContainers(t)
@@ -129,13 +131,17 @@ func TestDestroyingAContainerStackForgetsItsApp(t *testing.T) {
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
+	pushed := fake.NewImages()
 
-	if err := stacks.Destroy(ctx, spec.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, spec.Ref, pushed, progress.Discard()); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
 	if want := []string{"web"}; !slices.Equal(retained.forgotten, want) {
 		t.Errorf("the destroy forgot %v, want %v: the images the stack ran are reclaimed once it no longer runs them", retained.forgotten, want)
+	}
+	if len(retained.forgetting) != 1 || retained.forgetting[0] != provider.ImageStore(pushed) {
+		t.Errorf("the forget was handed %v, want the store the destroy was handed: an image in the project's registry is removed through it", retained.forgetting)
 	}
 }
 

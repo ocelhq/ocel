@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 )
 
 func artifactTag(image string) (string, bool) {
@@ -43,10 +44,10 @@ func artifactTag(image string) (string, bool) {
 		segments[0], location, segments[1], url.PathEscape(segments[2]), tag), true
 }
 
-func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, _, imageRef string, _ provider.ImageStore, progress progress.Log) error {
+func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
 	name, tagged := artifactTag(imageRef)
 	if !tagged {
-		return nil
+		return p.removeUnusedPushedImage(ctx, app, imageRef, images, progress)
 	}
 	clients, err := p.openClients(ctx)
 	if err != nil {
@@ -62,12 +63,46 @@ func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, _, 
 		return fmt.Errorf("list the tags of %s: %w", name[:at], err)
 	}
 	repository := imageRef[:strings.LastIndex(imageRef, ":")]
-	images := make([]string, 0, len(listed))
+	tags := make([]string, 0, len(listed))
 	for _, tag := range listed {
-		images = append(images, repository+":"+tag)
+		tags = append(tags, repository+":"+tag)
 	}
-	p.untagUnusedImages(ctx, images, progress)
+	p.untagUnusedImages(ctx, tags, progress)
 	return nil
+}
+
+func (p *Provider) removeUnusedPushedImage(ctx context.Context, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	if images == nil || !strings.HasPrefix(imageRef, images.Destination()+"/") {
+		return nil
+	}
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	revisions, err := clients.RunV1()
+	if err != nil {
+		return err
+	}
+	running, err := isRunByARevision(ctx, revisions, clients.project, imageRef)
+	if err != nil {
+		return fmt.Errorf("read whether a revision still runs %s: %w", imageRef, err)
+	}
+	if running {
+		return nil
+	}
+	resources.RemovePushedImages(ctx, images, app, []string{imageRef}, progress)
+	return nil
+}
+
+func isRunByARevision(ctx context.Context, revisions *runv1.APIService, project, image string) (bool, error) {
+	running, err := attempted(ctx, func(call ...googleapi.CallOption) (*runv1.ListRevisionsResponse, error) {
+		return revisions.Namespaces.Revisions.List("namespaces/" + project).
+			LabelSelector(imageLabel + "=" + imageLabelValue(image)).Limit(1).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(running.Items) > 0, nil
 }
 
 func listPackageTags(ctx context.Context, repositories *artifactregistry.Service, packageName string) ([]string, error) {
@@ -165,15 +200,12 @@ func (p *Provider) untagUnusedImages(ctx context.Context, images []string, progr
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(tagged)) {
-		running, err := attempted(ctx, func(call ...googleapi.CallOption) (*runv1.ListRevisionsResponse, error) {
-			return revisions.Namespaces.Revisions.List("namespaces/" + clients.project).
-				LabelSelector(imageLabel + "=" + imageLabelValue(tagged[name])).Limit(1).Context(ctx).Do(call...)
-		})
+		running, err := isRunByARevision(ctx, revisions, clients.project, tagged[name])
 		if err != nil {
 			ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as whether a revision still runs it could not be read: %v", name, err))
 			continue
 		}
-		if len(running.Items) > 0 {
+		if running {
 			continue
 		}
 		_, err = attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {

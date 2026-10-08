@@ -1075,7 +1075,7 @@ func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app,
 	return nil
 }
 
-func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ progress.Log) error {
+func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ provider.ImageStore, _ progress.Log) error {
 	if r.forgetting != nil {
 		if err := r.forgetting(); err != nil {
 			return err
