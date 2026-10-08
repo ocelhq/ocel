@@ -14,7 +14,7 @@ import (
 func rendered(t *testing.T, purpose edge.CredentialPurpose) edge.CredentialDocument {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}})
-	document, err := p.Credentials().Permissions(purpose)
+	document, err := p.Credentials().Permissions(purpose, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(%q) = %v", purpose, err)
 	}
@@ -62,7 +62,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Alias: "prod-box"}})
-	document, err := p.Credentials().Permissions(edge.PurposeBootstrap)
+	document, err := p.Credentials().Permissions(edge.PurposeBootstrap, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestTheDeployDocumentNamesTheCaddyReloadLineOnlyBehindACaddyService(t *test
 		{Caddy: &vps.Caddy{Preset: "coolify"}}:                                                  false,
 	} {
 		p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: proxy})
-		document, err := p.Credentials().Permissions(edge.PurposeDeploy)
+		document, err := p.Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Permissions(deploy) = %v", err)
 		}
@@ -206,7 +206,7 @@ func TestCredentialsThatAreNeitherPurposeAreRefused(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	if _, err := p.Credentials().Permissions("admin"); err == nil {
+	if _, err := p.Credentials().Permissions("admin", environment.TierProduction); err == nil {
 		t.Error("Permissions() rendered a document for a purpose this provider has no credentials for")
 	}
 }

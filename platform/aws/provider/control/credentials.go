@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -66,16 +68,16 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	}, nil
 }
 
-func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environment.Tier) (edge.CredentialDocument, error) {
 	var (
 		document string
 		err      error
 	)
 	switch purpose {
 	case edge.PurposeBootstrap:
-		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace)
+		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace, tier)
 	case edge.PurposeDeploy:
-		document, err = bootstrap.DeployCredentialPermissions(c.Namespace)
+		document, err = bootstrap.DeployCredentialPermissions(c.Namespace, tier)
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
@@ -83,7 +85,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 	if err != nil {
 		return edge.CredentialDocument{}, err
 	}
-	return edge.CredentialDocument{Heading: credentialHeading, Document: document}, nil
+	return edge.CredentialDocument{Heading: fmt.Sprintf("%s for the %s tier", credentialHeading, tier), Document: document}, nil
 }
 
 func refuseCallerIdentity(err error) error {

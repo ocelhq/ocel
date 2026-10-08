@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -16,7 +17,7 @@ func (permissionsPort) Whoami(context.Context) (provider.Principal, error) {
 	return provider.Principal{Vendor: "test"}, nil
 }
 
-func (s permissionsPort) Permissions(edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (s permissionsPort) Permissions(edge.CredentialPurpose, environment.Tier) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{}, s.err
 }
 
@@ -30,12 +31,13 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 		"a document":                 {err: nil, named: true},
 		"none written yet":           {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), named: true},
 		"a purpose it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such purpose"), named: false},
+		"a tier it will not name":    {err: refusal.Refuse(refusal.CodeInvalid, "no such tier"), named: false},
 		"something broken":           {err: errors.New("the document would not render"), named: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := permissionsRendered(permissionsPort{err: tc.err}, edge.PurposeBootstrap)
+			err := permissionsRendered(permissionsPort{err: tc.err}, edge.PurposeBootstrap, environment.TierPreview)
 			if named := err == nil; named != tc.named {
 				t.Errorf("permissionsRendered() = %v, want named = %v", err, tc.named)
 			}

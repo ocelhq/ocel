@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Credentials interface {
 	Whoami(ctx context.Context) (Principal, error)
 
-	Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error)
+	Permissions(purpose edge.CredentialPurpose, tier environment.Tier) (edge.CredentialDocument, error)
 }
 
 type Principal struct {

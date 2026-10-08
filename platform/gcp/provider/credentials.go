@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -152,7 +153,7 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 	return said.Email, resp.StatusCode, nil
 }
 
-func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.Tier) (edge.CredentialDocument, error) {
 	switch purpose {
 	case edge.PurposeBootstrap, edge.PurposeDeploy:
 		project, err := c.Project.Project(context.Background())

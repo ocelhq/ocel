@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -69,7 +70,7 @@ func named(details []provider.PrincipalDetail) []provider.PrincipalDetail {
 	return out
 }
 
-func (c credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (c credentials) Permissions(purpose edge.CredentialPurpose, _ environment.Tier) (edge.CredentialDocument, error) {
 	switch purpose {
 	case edge.PurposeBootstrap:
 		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil

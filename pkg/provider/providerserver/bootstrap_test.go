@@ -564,7 +564,7 @@ func TestGetCredentialPermissionsRendersEitherPurpose(t *testing.T) {
 		contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP: string(edge.PurposeBootstrap),
 		contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY:    string(edge.PurposeDeploy),
 	} {
-		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Purpose: purpose})
+		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Purpose: purpose, Tier: environmentv1.Tier_TIER_PRODUCTION})
 		if err != nil {
 			t.Fatalf("GetCredentialPermissions(%v) error = %v", purpose, err)
 		}
@@ -580,9 +580,44 @@ func TestGetCredentialPermissionsRendersEitherPurpose(t *testing.T) {
 		}
 	}
 
-	_, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{})
+	_, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("GetCredentialPermissions() naming no purpose: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+}
+
+func TestGetCredentialPermissionsRendersTheTierItIsAskedFor(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	for tier, want := range map[environmentv1.Tier]string{
+		environmentv1.Tier_TIER_PRODUCTION: string(environment.TierProduction),
+		environmentv1.Tier_TIER_PREVIEW:    string(environment.TierPreview),
+	} {
+		permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
+			Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+			Tier:    tier,
+		})
+		if err != nil {
+			t.Fatalf("GetCredentialPermissions(%v) error = %v", tier, err)
+		}
+		if got := permissions.GetGroups()[0].GetDocument(); !strings.HasSuffix(got, "in "+want) {
+			t.Errorf("GetCredentialPermissions(%v) = %q, want the vendor asked for the %s tier", tier, got, want)
+		}
+	}
+}
+
+func TestGetCredentialPermissionsRefusesARequestNamingNoTier(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	_, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
+		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("GetCredentialPermissions() naming no tier: code = %v (%v), want %v: it would render production's credential for a caller that asked for none", got, err, connect.CodeInvalidArgument)
 	}
 }
 
@@ -594,6 +629,7 @@ func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 
 	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
 		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Edge:    &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	if err != nil {
@@ -623,6 +659,7 @@ func TestGetCredentialPermissionsRefusesAnOptionTheEdgeDoesNotTake(t *testing.T)
 
 	_, err = client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
 		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Edge:    &contractv1.EdgeSelection{Kind: string(fake.KindDirect), Options: options},
 	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
@@ -641,6 +678,7 @@ func TestGetCredentialPermissionsRendersOnlyTheVendorsGroupForAnEdgeTheProviderD
 
 	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
 		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Edge:    &contractv1.EdgeSelection{Kind: "elsewhere"},
 	})
 	if err != nil {
