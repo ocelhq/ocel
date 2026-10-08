@@ -104,6 +104,9 @@ which are tooling.
   `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that set
   it up before bootstrap, check it after, and take it down, and the `proxy` option its
   projects set. Both the live suite and the e2e harness drive them.
+- **`skills/`** — the agent skills Ocel publishes for its users, one directory per skill:
+  installed with `npx skills add ocelhq/ocel` or `ocel skill install`, and embedded in the
+  `ocel` binary. The repo's own maintainer skills stay in `.claude/skills/`, marked internal.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changes/`** — the release mechanism; the workflow runs the
