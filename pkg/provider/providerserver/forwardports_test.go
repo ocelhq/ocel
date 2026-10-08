@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func forwardPortsRequest(names ...string) *contractv1.ForwardPortsRequest {
@@ -525,6 +526,9 @@ func TestForwardPortsServesTheBindingProxyForBindingsNoPortReachesAndHoldsItUnti
 	}
 	served := stream.Msg().GetResponse()
 
+	if asked.Slug != "shop" || asked.Env != stackrecords.ProductionEnv || asked.Tier != environment.TierProduction {
+		t.Errorf("the hook was asked to proxy for %q in %q at tier %q, want shop in production: its sessions and tasks live under that scope", asked.Slug, asked.Env, asked.Tier)
+	}
 	if len(asked.Bindings) != 1 || asked.Bindings[0].Name != "uploads" || asked.Bindings[0].Type != provider.BindingBucket {
 		t.Errorf("the hook was asked to proxy %+v, want the published uploads bucket", asked.Bindings)
 	}

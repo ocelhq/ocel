@@ -15,7 +15,9 @@ type PortForward struct {
 }
 
 type BindingProxyRequest struct {
+	Slug          string
 	Tier          environment.Tier
+	Env           string
 	Bindings      []Binding
 	ReportFailure func(error)
 }
