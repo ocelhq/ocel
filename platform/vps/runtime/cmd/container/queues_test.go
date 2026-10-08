@@ -34,7 +34,7 @@ func (a *agentTasks) Trigger(_ context.Context, req *taskv1.TriggerRequest) (*ta
 	return &taskv1.TriggerResponse{Id: "01JABCDEFGHJKMNPQRSTVWXYZ0"}, nil
 }
 
-func agentServing(t *testing.T, values map[string]string, tasks *agentTasks, callerSecret string) string {
+func agentServing(t *testing.T, values map[string]string, tasks *agentTasks) string {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "values.sock")
 	ln, err := net.Listen("unix", socket)
@@ -45,14 +45,7 @@ func agentServing(t *testing.T, values map[string]string, tasks *agentTasks, cal
 	mux.HandleFunc(boxlive.ValuesPath, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(boxlive.Answer{Values: values})
 	})
-	tasksPath, tasksHandler := taskv1connect.NewTaskServiceHandler(tasks)
-	mux.Handle(tasksPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !localrpc.VerifyAuthHeader(r.Header.Get("Authorization"), callerSecret) {
-			http.Error(w, "the box agent was shown no caller secret for this deployment", http.StatusUnauthorized)
-			return
-		}
-		tasksHandler.ServeHTTP(w, r)
-	}))
+	mux.Handle(taskv1connect.NewTaskServiceHandler(tasks))
 	server := &http.Server{Handler: mux}
 	go func() { _ = server.Serve(ln) }()
 	t.Cleanup(func() { _ = server.Close() })
@@ -68,7 +61,7 @@ func (w withToken) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
 	manifest := boxlive.Manifest{
-		Slug: "shop", Tier: "production", Queue: "prod", QueueCallerSecret: "kept-caller-secret",
+		Slug: "shop", Tier: "production", Queue: "prod",
 		Bindings: []live.Binding{{Name: "task--send-email", Key: "OCEL_RESOURCE_TASK_send-email", Type: bindingsv1.BindingType_BINDING_TYPE_TASK}},
 	}
 	rendered, err := boxlive.Render(manifest)
@@ -76,7 +69,7 @@ func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
 		t.Fatal(err)
 	}
 	tasks := &agentTasks{}
-	socket := agentServing(t, map[string]string{"OCEL_RESOURCE_TASK_send-email": `{"name":"task--send-email","task":{}}`}, tasks, "kept-caller-secret")
+	socket := agentServing(t, map[string]string{"OCEL_RESOURCE_TASK_send-email": `{"name":"task--send-email","task":{}}`}, tasks)
 	values, err := resolve(context.Background(), string(rendered), socket, filepath.Join(t.TempDir(), "live"))
 	if err != nil {
 		t.Fatalf("resolve() = %v", err)

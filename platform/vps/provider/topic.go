@@ -14,7 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -158,21 +157,6 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	return nil
 }
 
-func nameCallerSecret(queue host.ResourceContainer) string {
-	return queue.Name + "-" + live.QueueCallerSecretName
-}
-
-func (p *Provider) ensureCallerSecret(ctx context.Context, ref provider.StackRef) (string, error) {
-	queue := provider.StackRef{Project: ref.Project, Tier: ref.Tier, Name: naming.InfraStack(ref.Name.Env)}
-	spec := newQueueContainer(queue)
-	bound, err := live.NewQueueCallerSecretAssociatedData(queue.Project, queue.Tier, queue.Name.String())
-	if err != nil {
-		return "", err
-	}
-	_, secret, err := p.keptSealed(ctx, queue.Tier, nameCallerSecret(spec), spec.Resource, bound, mintResourceSecret)
-	return secret, err
-}
-
 func nameDeliverySecret(queue host.ResourceContainer) string {
 	return queue.Name + "-" + live.QueueDeliverySecretName
 }
@@ -197,7 +181,7 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 	if err := p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: spec.Resource, Name: spec.Name}); err != nil {
 		return err
 	}
-	if err := p.host.ForgetKept(ctx, ref.Tier, []string{nameDeliverySecret(spec), nameCallerSecret(spec)}); err != nil {
+	if err := p.host.ForgetKept(ctx, ref.Tier, []string{nameDeliverySecret(spec)}); err != nil {
 		return err
 	}
 	p.queues.Lock()

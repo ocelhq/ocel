@@ -8,7 +8,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/localrpc"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -25,21 +24,12 @@ var (
 )
 
 func (s *Server) mountQueues(mux *http.ServeMux) {
-	authorization := connect.WithInterceptors(connect.UnaryInterceptorFunc(carryAuthorization))
-	mux.Handle(taskv1connect.NewTaskServiceHandler(callerTasks{s}, authorization))
-	mux.Handle(topicv1connect.NewTopicServiceHandler(callerTopics{s}, authorization))
-}
-
-type authorizationKey struct{}
-
-func carryAuthorization(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(context.WithValue(ctx, authorizationKey{}, req.Header().Get("Authorization")), req)
-	}
+	mux.Handle(taskv1connect.NewTaskServiceHandler(callerTasks{s}))
+	mux.Handle(topicv1connect.NewTopicServiceHandler(callerTopics{s}))
 }
 
 func (s *Server) callerQueue(ctx context.Context) (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler, error) {
-	manifest, refused := s.callerManifest(ctx)
+	caller, refused := s.identifyCaller(ctx)
 	if refused != nil {
 		code := connect.CodeUnavailable
 		switch refused.status {
@@ -50,14 +40,14 @@ func (s *Server) callerQueue(ctx context.Context) (taskv1connect.TaskServiceHand
 		}
 		return nil, nil, connect.NewError(code, refused)
 	}
+	if !caller.isInit {
+		return nil, nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("only the runtime of the caller's container, which serves its binding proxy, may call its queue: a process the app started may not"))
+	}
+	manifest := caller.manifest
 	if manifest.Queue == "" {
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("this deployment declares no task or topic, so there is nothing to trigger or send to"))
-	}
-	header, _ := ctx.Value(authorizationKey{}).(string)
-	if manifest.QueueCallerSecret == "" || !localrpc.VerifyAuthHeader(header, manifest.QueueCallerSecret) {
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			errors.New("this call does not carry the binding proxy's caller secret for this deployment"))
 	}
 	tasks, topics, served := s.Queues.Served(environment.Tier(manifest.Tier), manifest.Slug, manifest.Queue)
 	if !served {
