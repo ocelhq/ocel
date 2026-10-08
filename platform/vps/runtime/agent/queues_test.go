@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/images"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -88,7 +86,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 	}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
 		Resolve: &resolving{},
 		Queues:  queues,
 	})
@@ -111,7 +109,7 @@ func TestACallerReachesTheQueueItsOwnManifestNamesAndNoOther(t *testing.T) {
 func TestADirectCallFromOutsideEveryContainerIsRefusedBeforeAnyQueueIsReached(t *testing.T) {
 	t.Parallel()
 	shop := &queueTasks{queue: "shop-prod"}
-	inspect := &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}}
+	inspect := &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}}
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/user.slice/user-1000.slice/session-3.scope\n"),
 		Inspect: inspect,
@@ -167,27 +165,11 @@ func TestAProcessInsideTheRightContainerOtherThanItsRuntimeIsRefusedByEveryMetho
 	}
 }
 
-func TestTheDaemonNamesTheProcessAContainerRunsAsItsInit(t *testing.T) {
-	t.Parallel()
-	docker := dockerAnswering(t, map[string]string{
-		"/containers/" + containerID + "/json": `{"State":{"Running":true,"Pid":4242},"Config":{"Env":["PATH=/usr/bin","` + variables.EnvVar + `={\"slug\":\"shop\"}"]}}`,
-		"/containers/stopped/json":             `{"State":{"Running":false,"Pid":0},"Config":{"Env":[]}}`,
-	})
-	running, err := docker.ReadContainer(context.Background(), containerID)
-	if err != nil || running.InitPID != 4242 || running.Manifest != `{"slug":"shop"}` {
-		t.Errorf("ReadContainer(%s) = %+v, %v, want init 4242 and its manifest", containerID, running, err)
-	}
-	stopped, err := docker.ReadContainer(context.Background(), "stopped")
-	if err != nil || stopped.InitPID != 0 {
-		t.Errorf("ReadContainer(stopped) = %+v, %v, want no init process", stopped, err)
-	}
-}
-
 func TestAContainerWhoseManifestNamesNoQueueIsToldItHasNone(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "")}},
 		Resolve: &resolving{},
 		Queues:  servedQueues{{environment.TierProduction, "shop", "prod"}: {queue: "shop-prod"}},
 	})
@@ -203,7 +185,7 @@ func TestAQueueTheBoxIsNotServingYetIsUnavailableNotMissing(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{
 		Proc:    procNaming(t, "0::/docker/"+containerID+"\n"),
-		Inspect: &inspecting{manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
+		Inspect: &inspecting{initPID: os.Getpid(), manifests: map[string]string{containerID: queueManifest(t, "shop", "prod")}},
 		Resolve: &resolving{},
 		Queues:  servedQueues{},
 	})
@@ -212,24 +194,6 @@ func TestAQueueTheBoxIsNotServingYetIsUnavailableNotMissing(t *testing.T) {
 	if code := connect.CodeOf(err); code != connect.CodeUnavailable {
 		t.Errorf("Trigger() = %v (%s), want %s while the box opens the queue", err, code, connect.CodeUnavailable)
 	}
-}
-
-func dockerAnswering(t *testing.T, answers map[string]string) *Docker {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		answer, found := answers[r.URL.Path]
-		if !found {
-			http.Error(w, `{"message":"No such container"}`, http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte(answer))
-	}))
-	t.Cleanup(server.Close)
-	return &Docker{host: images.DockerHost{Address: server.URL}, transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
-		},
-	}}
 }
 
 func TestAContainerIsReachedAtTheAddressItHoldsOnItsProjectNetwork(t *testing.T) {

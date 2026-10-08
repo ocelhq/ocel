@@ -179,7 +179,7 @@ func (s *Server) callerManifest(ctx context.Context) (variables.Manifest, *calle
 		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, "read the caller's container: " + err.Error()}
 	}
 	if read.InitPID <= 0 || read.InitPID != caller.pid {
-		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, "only the runtime of the caller's container, which serves its binding proxy, is answered: a process the app started is not"}
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, fmt.Sprintf("the caller, pid %d, is not its container's init process (pid %d): only a container's init process is answered", caller.pid, read.InitPID)}
 	}
 	if read.Manifest == "" {
 		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's container has no live-value manifest"}
