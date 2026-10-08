@@ -103,3 +103,23 @@ func TestTheJSONSinkWritesEachEventAsOneLineTheMomentItLands(t *testing.T) {
 		t.Errorf("after two events the sink wrote %q, want the second as its own line", out.String())
 	}
 }
+
+func TestASummaryWhoseDetailIsNotValidUTF8StillEndsTheNDJSONStream(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	NewJSONLines(&out).Receive(&streamv1.RunEvent{
+		Operation: &progressv1.OperationEvent{Message: "read \xffconfig"},
+		Cli:       &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "no \xff.json"}},
+	})
+	got := parseNDJSON(t, out.String())
+	if len(got) != 1 {
+		t.Fatalf("ndjson = %q, want the summary as one line", out.String())
+	}
+	if detail := got[0].GetSummary().GetDetail(); detail != "no �.json" {
+		t.Errorf("summary.detail = %q, want the invalid byte replaced by U+FFFD", detail)
+	}
+	if message := got[0].GetOperation().GetMessage(); message != "read �config" {
+		t.Errorf("operation.message = %q, want the invalid byte replaced by U+FFFD", message)
+	}
+}
