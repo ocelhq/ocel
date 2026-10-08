@@ -52,7 +52,7 @@ type heldItem struct {
 
 type compute[T any] struct {
 	kind   string
-	remove func(context.Context, provider.StackRef, []T, progress.Log) error
+	remove func(context.Context, provider.StackRef, []T, provider.ImageStore, progress.Log) error
 	shared *SharedHooks[T]
 	held   func(T) heldItem
 	item   func(heldItem) T
@@ -171,7 +171,7 @@ func recordPlanned[T any](ctx context.Context, f *hookStacks, spec provider.Stac
 
 func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, going []T, c compute[T], images provider.ImageStore, progress progress.Log) error {
 	if c.shared == nil {
-		return removeAll(ctx, ref, going, c.remove, progress)
+		return removeAll(ctx, ref, going, c.remove, images, progress)
 	}
 	var batch []T
 	var whole []heldItem
@@ -198,7 +198,7 @@ func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.Stack
 		}
 	}
 	if len(batch) > 0 {
-		removed := removeAll(ctx, ref, batch, c.remove, progress)
+		removed := removeAll(ctx, ref, batch, c.remove, images, progress)
 		failed = errors.Join(failed, removed)
 		for _, held := range whole {
 			failed = errors.Join(failed, f.finishRemoval(ctx, ref, held, removed == nil))

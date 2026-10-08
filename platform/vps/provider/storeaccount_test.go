@@ -90,7 +90,7 @@ func TestRemovingOneProjectsAppNeverReachesAnotherProjectsStoreAccount(t *testin
 	machine := &box{kept: sealedRootKey()}
 	blog := provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: aStackName(t)}
 	err := over(machine).RemoveContainers(context.Background(), blog,
-		[]provider.AppContainer{{Name: "web", Physical: "blog-prod-web-r0a1b2c3d-web"}}, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "blog-prod-web-r0a1b2c3d-web"}}, nil, nil)
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

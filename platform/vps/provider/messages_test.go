@@ -97,7 +97,7 @@ func TestStartingAndRemovingAnAppNameItsContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if err := over(&box{}).RemoveContainers(context.Background(), provider.StackRef{}, started, progress); err != nil {
+	if err := over(&box{}).RemoveContainers(context.Background(), provider.StackRef{}, started, nil, progress); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	heardAll(t, progress,
