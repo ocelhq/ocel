@@ -2,8 +2,6 @@ package deploy
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 
 	"google.golang.org/protobuf/proto"
 
@@ -16,6 +14,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type infraProvisioning struct {
@@ -37,7 +36,6 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		return nil
 	}
 	return &infraProvisioning{
-		leaseToken:      newLeaseToken(),
 		providerProcess: providerProcess,
 		cfg:             facts.project,
 		env:             env,
@@ -55,6 +53,11 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 	assembled, err := i.assemble(resources)
 	if err != nil {
 		return err
+	}
+	if i.leaseToken == "" {
+		if i.leaseToken, err = stackrecords.NewDeployLeaseToken(); err != nil {
+			return err
+		}
 	}
 	req := &contractv1.ProvisionInfraRequest{
 		Manifest:       assembled,
@@ -109,10 +112,4 @@ func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
 		_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
 		return err
 	})
-}
-
-func newLeaseToken() string {
-	token := make([]byte, 16)
-	_, _ = rand.Read(token)
-	return hex.EncodeToString(token)
 }
