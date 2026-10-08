@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository>" >&2
+	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>..." >&2
 	exit 2
 }
 
@@ -47,9 +47,16 @@ dir="$root/$project/$app"
 dropped="$dir/.dropped"
 
 lock() {
+	tries=0
 	while :; do
-		mkdir -p "$dir"
-		exec 9<"$dir"
+		tries=$((tries + 1))
+		if [ "$tries" -gt 50 ]; then
+			mkdir -p "$dir"
+			command exec 9<"$dir"
+			abort "$dir kept vanishing before it could be locked"
+		fi
+		mkdir -p "$dir" 2>/dev/null || continue
+		command exec 9<"$dir" 2>/dev/null || continue
 		flock -x 9
 		[ "$(stat -c %i "$dir" 2>/dev/null)" = "$(stat -L -c %i /proc/self/fd/9)" ] && return
 		exec 9<&-
@@ -71,7 +78,8 @@ coordinate() {
 
 scratch="$root/.staging.$$"
 clean() {
-	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed
+	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed \
+		"$scratch".removed "$scratch".pending "$scratch".settled
 }
 trap clean EXIT
 trap 'clean; exit 129' HUP
@@ -140,20 +148,40 @@ reconcile)
 	docker images --filter "reference=$repository:*" --format '{{.Repository}}:{{.Tag}}' >"$scratch".actual
 	grep -F -x -v -f "$scratch".desired "$scratch".actual >"$scratch".going || true
 
+	: >"$scratch".removed
 	while IFS= read -r going; do
 		case $going in '' | *'<none>'*) continue ;; esac
 		docker rmi "$going" >/dev/null 2>&1 || continue
-		printf '%s\n' "$going"
+		printf '%s\n' "$going" >>"$scratch".removed
+		printf 'removed %s\n' "$going"
 	done <"$scratch".going
 
+	: >>"$dropped"
+	cat "$dropped" "$scratch".removed | grep -F -x -v -f "$scratch".desired | sort -u >"$scratch".unnamed || true
+	: >"$scratch".pending
+	while IFS= read -r going; do
+		[ -n "$going" ] || continue
+		if grep -F -x -q -e "$going" "$scratch".actual && ! grep -F -x -q -e "$going" "$scratch".removed; then
+			continue
+		fi
+		printf '%s\n' "$going" >>"$scratch".pending
+		printf 'unused %s\n' "$going"
+	done <"$scratch".unnamed
+	mv -f "$scratch".pending "$dropped"
+	[ -s "$dropped" ] || rm -f "$dropped"
+	remove_emptied_scope
+	;;
+settle)
+	[ $# -ge 1 ] || usage
+	for ref in "$@"; do
+		coordinate "$ref"
+	done
+	lock
 	if [ -f "$dropped" ]; then
-		grep -F -x -v -f "$scratch".desired "$dropped" | sort -u >"$scratch".unnamed || true
-		while IFS= read -r going; do
-			[ -n "$going" ] || continue
-			grep -F -x -q -e "$going" "$scratch".actual && continue
-			printf '%s\n' "$going"
-		done <"$scratch".unnamed
-		rm -f "$dropped"
+		printf '%s\n' "$@" >"$scratch".settled
+		grep -F -x -v -f "$scratch".settled "$dropped" >"$scratch".kept || true
+		mv -f "$scratch".kept "$dropped"
+		[ -s "$dropped" ] || rm -f "$dropped"
 	fi
 	remove_emptied_scope
 	;;

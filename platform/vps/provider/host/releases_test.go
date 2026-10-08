@@ -298,6 +298,7 @@ func TestForgettingATierAndReconcilingLeavesTheBoxAsItWasBeforeTheFirstPromote(t
 	if _, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
+	settle(t, root, "shop/web", "ocel/shop/web:one")
 	for _, left := range []string{filepath.Join(root, "shop", "web"), filepath.Join(root, "shop")} {
 		if _, err := os.Stat(left); !os.IsNotExist(err) {
 			t.Errorf("%s remains after the last tier was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", left, err)
@@ -381,8 +382,8 @@ func TestOneAppsWindowsAreReadTogetherAndAnothersAreNeverRead(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
-	if swept(rendered) != "ocel/shop/web:gone" {
-		t.Errorf("reconcile removed %q, want ocel/shop/web:gone alone: preview churn cannot evict what production still names", swept(rendered))
+	if removedFromBox(rendered) != "ocel/shop/web:gone" {
+		t.Errorf("reconcile removed %q, want ocel/shop/web:gone alone: preview churn cannot evict what production still names", removedFromBox(rendered))
 	}
 	if said := dock.listed(t); !strings.Contains(said, "reference=ocel/shop/web:*") {
 		t.Errorf("the image listing ran as %q, and actual is one listing filtered to a single app", said)
@@ -401,8 +402,8 @@ func TestARefOnlyARunningContainerNamesIsNeverRemoved(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
-	if swept(rendered) != "ocel/shop/web:orphan" {
-		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: a ref no window names is still used by the container serving it", swept(rendered))
+	if removedFromBox(rendered) != "ocel/shop/web:orphan" {
+		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: a ref no window names is still used by the container serving it", removedFromBox(rendered))
 	}
 }
 
@@ -435,8 +436,8 @@ func TestASecondReconcileRemovesNothing(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
-	if rendered != "" {
-		t.Errorf("a second reconcile with no deploy between removed %q, want nothing", rendered)
+	if removedFromBox(rendered) != "" {
+		t.Errorf("a second reconcile with no deploy between removed %q, want nothing", removedFromBox(rendered))
 	}
 	if got := dock.forced(t); got != "" {
 		t.Errorf("the sweep ran %q: removal is never forced and never a prune", got)
@@ -474,8 +475,8 @@ func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppInPlace(t *te
 	if code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
-	if swept(rendered) != "ocel/shop/web:live" {
-		t.Errorf("shop's teardown removed %q, want ocel/shop/web:live alone: two projects that each name an app web shared one repository and one window, and shop's sweep took blog's image out from under a load still importing it", swept(rendered))
+	if removedFromBox(rendered) != "ocel/shop/web:live" {
+		t.Errorf("shop's teardown removed %q, want ocel/shop/web:live alone: two projects that each name an app web shared one repository and one window, and shop's sweep took blog's image out from under a load still importing it", removedFromBox(rendered))
 	}
 	if got := window(t, root, "blog/web", "production"); strings.Join(got, ",") != "ocel/blog/web:next,ocel/blog/web:live" {
 		t.Errorf("blog's window reads %v after shop was torn down, want both refs it promoted", got)
@@ -495,8 +496,8 @@ func TestOneProjectsRunningContainerIsNeverReadAsAnothersUnderTheSameAppName(t *
 	if code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
-	if swept(rendered) != "ocel/shop/web:orphan" {
-		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: the running set is read over both labels, and a container of another project named web keeps nothing of shop's alive", swept(rendered))
+	if removedFromBox(rendered) != "ocel/shop/web:orphan" {
+		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: the running set is read over both labels, and a container of another project named web keeps nothing of shop's alive", removedFromBox(rendered))
 	}
 }
 
@@ -537,7 +538,19 @@ func unreachable(t *testing.T, script []byte, env string, args ...string) string
 	return string(said)
 }
 
-func swept(rendered string) string { return strings.TrimSpace(rendered) }
+func reported(rendered, kind string) string {
+	var refs []string
+	for line := range strings.Lines(rendered) {
+		if ref, found := strings.CutPrefix(strings.TrimSpace(line), kind+" "); found {
+			refs = append(refs, ref)
+		}
+	}
+	return strings.Join(refs, "\n")
+}
+
+func removedFromBox(rendered string) string { return reported(rendered, "removed") }
+
+func unused(rendered string) string { return reported(rendered, "unused") }
 
 type dockerStub struct{ dir string }
 
@@ -630,11 +643,12 @@ func TestARefAPromoteDropsPastTheWindowIsReportedByTheNextReconcileEvenOnceTheBo
 		t.Fatalf("reconcile exited %d", code)
 	}
 
-	if swept(rendered) != "ocel/shop/web:one" {
-		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the window dropped it, and the registry keeps its copy forever unless it is reported", swept(rendered))
+	if unused(rendered) != "ocel/shop/web:one" {
+		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the window dropped it, and the registry keeps its copy forever unless it is reported", unused(rendered))
 	}
+	settle(t, root, "shop/web", "ocel/shop/web:one")
 	if again, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); again != "" {
-		t.Errorf("a second reconcile reported %q, want nothing: a dropped ref is reported once", again)
+		t.Errorf("a reconcile after the ref settled reported %q, want nothing", again)
 	}
 }
 
@@ -667,7 +681,97 @@ func TestTheRefsOfAForgottenTierAreReportedByTheNextReconcileEvenOnceTheBoxHasNo
 		t.Fatalf("reconcile exited %d", code)
 	}
 
-	if swept(rendered) != "ocel/shop/web:one" {
-		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the destroyed tier named it, and its registry copy goes with it", swept(rendered))
+	if unused(rendered) != "ocel/shop/web:one" {
+		t.Errorf("reconcile reported %q, want ocel/shop/web:one: the destroyed tier named it, and its registry copy goes with it", unused(rendered))
+	}
+}
+
+func racingMkdir(t *testing.T, race string) string {
+	t.Helper()
+	real, err := exec.LookPath("mkdir")
+	if err != nil {
+		t.Skip("no mkdir on this machine")
+	}
+	dir := t.TempDir()
+	raced := filepath.Join(dir, "raced")
+	var body string
+	switch race {
+	case "the scope went before it was opened":
+		body = "for last; do :; done\n" + real + " \"$@\"\n" +
+			"if [ ! -e " + raced + " ]; then : >" + raced + "; rmdir \"$last\"; fi\n"
+	case "the project went before the app was made":
+		body = "if [ ! -e " + raced + " ]; then : >" + raced + "; echo \"mkdir: cannot create directory: No such file or directory\" >&2; exit 1; fi\n" +
+			"exec " + real + " \"$@\"\n"
+	}
+	executable(t, filepath.Join(dir, "mkdir"), "#!/bin/sh\n"+body)
+	return dir
+}
+
+func TestALockWhoseScopeAnotherHelperRemovedIsTakenAgain(t *testing.T) {
+	for _, race := range []string{"the scope went before it was opened", "the project went before the app was made"} {
+		t.Run(race, func(t *testing.T) {
+			root := releasesDir(t)
+
+			if _, code := releases(t, root, racingMkdir(t, race), "shop/web", "promote", "production", "ocel/shop/web:one"); code != 0 {
+				t.Fatalf("promote exited %d, want the lock taken again: a helper that emptied the scope removed it between this one making and opening it", code)
+			}
+
+			if got := window(t, root, "shop/web", "production"); !slices.Equal(got, []string{"ocel/shop/web:one"}) {
+				t.Errorf("the window holds %v, want the promoted ref", got)
+			}
+		})
+	}
+}
+
+func settle(t *testing.T, root, scope string, refs ...string) {
+	t.Helper()
+	if _, code := releases(t, root, "", scope, append([]string{"settle"}, refs...)...); code != 0 {
+		t.Fatalf("settle %v exited %d", refs, code)
+	}
+}
+
+func TestARefWhoseRegistryCopyWasNotRemovedIsReportedAgainUntilItIsSettled(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:two")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+	dock := fakeDocker(t, nil, nil)
+	if first, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); unused(first) != "ocel/shop/web:one\nocel/shop/web:two" {
+		t.Fatalf("the first reconcile reported %q", unused(first))
+	}
+	settle(t, root, "shop/web", "ocel/shop/web:two")
+
+	again, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+
+	if unused(again) != "ocel/shop/web:one" {
+		t.Errorf("the next reconcile reported %q, want ocel/shop/web:one alone: its registry removal was refused, and a ref reported once and then forgotten keeps its registry copy forever", unused(again))
+	}
+	settle(t, root, "shop/web", "ocel/shop/web:one")
+	if last, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); last != "" {
+		t.Errorf("a reconcile after every ref settled reported %q, want nothing", last)
+	}
+	if _, err := os.Stat(filepath.Join(root, "shop")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the scope stays once every ref settled and no tier is left: %v", err)
+	}
+}
+
+func TestARefTheBoxRemovesIsReportedForTheRegistryUntilItIsSettled(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:named", "ocel/shop/web:orphan"})
+
+	first, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+	again, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+
+	if removedFromBox(first) != "ocel/shop/web:orphan" || unused(first) != "ocel/shop/web:orphan" {
+		t.Errorf("the first reconcile reported %q, want ocel/shop/web:orphan removed from the box and handed on for the registry", first)
+	}
+	if removedFromBox(again) != "" || unused(again) != "ocel/shop/web:orphan" {
+		t.Errorf("the second reconcile reported %q, want ocel/shop/web:orphan handed on again and nothing removed from the box: its registry copy was never settled", again)
 	}
 }

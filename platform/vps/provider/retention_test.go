@@ -227,8 +227,67 @@ func sweepingOff(removed ...string) *box {
 		if !strings.Contains(command, "/usr/local/lib/ocel/releases") || !strings.Contains(command, "'reconcile'") {
 			return session.Result{}, false
 		}
-		return session.Result{Stdout: strings.Join(removed, "\n") + "\n"}, true
+		var said strings.Builder
+		for _, image := range removed {
+			said.WriteString("removed " + image + "\nunused " + image + "\n")
+		}
+		return session.Result{Stdout: said.String()}, true
 	}}
+}
+
+func settledRefs(machine *box) []string {
+	var settled []string
+	for _, command := range helperCalls(machine, "settle") {
+		_, refs, _ := strings.Cut(command, "'settle'")
+		for _, ref := range strings.Fields(refs) {
+			settled = append(settled, strings.Trim(ref, "'"))
+		}
+	}
+	return settled
+}
+
+func TestASweepSettlesOnlyTheRefsTheRegistryRemoved(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff("registry.example.com/acme/shop.web:sha256-old")
+	store := fake.NewImages()
+	store.FailRemovals(errors.New("UNSUPPORTED: The operation is unsupported."))
+
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got := settledRefs(machine); len(got) != 0 {
+		t.Errorf("the sweep settled %v, want nothing: the registry refused the delete, and a settled ref is never reported again", got)
+	}
+}
+
+func TestASweepSettlesARefOnceTheRegistryRemovedIt(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff("registry.example.com/acme/shop.web:sha256-old")
+
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, fake.NewImages(), nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got, want := settledRefs(machine), []string{"registry.example.com/acme/shop.web:sha256-old"}; !slices.Equal(got, want) {
+		t.Errorf("the sweep settled %v, want %v", got, want)
+	}
+}
+
+func TestASweepWithNoRegistryToReachSettlesOnlyTheRefsNoRegistryHolds(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff("ocel/shop-web:1111", "registry.example.com/acme/shop.web:sha256-old")
+
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", loadedImageRef, nil, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got, want := settledRefs(machine), []string{"ocel/shop-web:1111"}; !slices.Equal(got, want) {
+		t.Errorf("the sweep settled %v, want %v: a removal run without the registry password must leave the registry's copy for one that has it", got, want)
+	}
 }
 
 func TestASweepRemovesFromTheRegistryEveryImageItDroppedFromTheBox(t *testing.T) {
