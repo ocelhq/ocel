@@ -324,6 +324,9 @@ func (r *deployRun) reportApps(result *progressv1.OperationResult) {
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
+	if r.images != nil {
+		ctx = provider.WithImageStore(ctx, r.images)
+	}
 	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
 		return env.phase(func(progress progress.Log) error {
 			return r.prepare(ctx, progress)

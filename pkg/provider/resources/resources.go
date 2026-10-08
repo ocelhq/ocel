@@ -52,7 +52,7 @@ type SharedHooks[T any] struct {
 }
 
 type ImageRetentionHooks struct {
-	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error
+	Reconcile func(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error
 	Forget    func(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error
 }
 
@@ -117,7 +117,7 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
 	if spec.App != nil {
-		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, progress) }()
+		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress) }()
 	}
 	if err := f.refuseUnservedResources(spec); err != nil {
 		return provider.StackResult{}, err
@@ -254,7 +254,7 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 		}
 	}
 	for _, container := range recorded.Containers {
-		if err := f.reconcile(ctx, ref, container.Name, container.Image, progress); err != nil && stopped == nil {
+		if err := f.reconcile(ctx, ref, container.Name, container.Image, provider.ImageStoreFrom(ctx), progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
@@ -262,7 +262,7 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 }
 
 func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app string, progress progress.Log) error {
-	if f.hooks.Retention == nil {
+	if f.hooks.Retention == nil || f.hooks.Retention.Forget == nil {
 		return nil
 	}
 	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
@@ -272,11 +272,11 @@ func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app stri
 	return err
 }
 
-func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, progress progress.Log) error {
-	if f.hooks.Retention == nil || imageRef == "" {
+func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, progress progress.Log) error {
+	if f.hooks.Retention == nil || f.hooks.Retention.Reconcile == nil || imageRef == "" {
 		return nil
 	}
-	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, progress)
+	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, images, progress)
 	if err != nil && progress != nil {
 		progress.Warn(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}

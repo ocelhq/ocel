@@ -39,27 +39,28 @@ func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app s
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Log) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress progress.Log) ([]string, error) {
 	repository, named := Repository(imageRef)
 	if !named {
-		return refusal.Refuse(refusal.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
 	said, err := h.releases(ctx, "reconcile "+app+"'s images", Scope(project, app), "reconcile", repository)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if progress == nil {
-		return nil
-	}
+	var removed []string
 	for line := range strings.Lines(said) {
-		removed := strings.TrimSpace(line)
-		if removed == "" {
-			continue
+		if image := strings.TrimSpace(line); image != "" {
+			removed = append(removed, image)
 		}
-		progress.Say("Removed " + app + "'s unused image " + removed)
 	}
-	return nil
+	for _, image := range removed {
+		if progress != nil {
+			progress.Say("Removed " + app + "'s unused image " + image)
+		}
+	}
+	return removed, nil
 }
 
 func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {

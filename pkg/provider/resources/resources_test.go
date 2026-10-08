@@ -1002,6 +1002,7 @@ func TestAReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T) {
 type retaining struct {
 	*buckets
 	swept        []string
+	sweptWith    []provider.ImageStore
 	taken        []string
 	window       map[string][]string
 	retained     map[string]bool
@@ -1058,8 +1059,9 @@ func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionR
 	return r.buckets.ProvisionBucket(ctx, in, progress)
 }
 
-func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Log) error {
+func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, images provider.ImageStore, _ progress.Log) error {
 	r.swept = append(r.swept, app+" "+imageRef)
+	r.sweptWith = append(r.sweptWith, images)
 	if r.sweeping != nil {
 		if err := r.sweeping(); err != nil {
 			return err
@@ -1090,7 +1092,7 @@ func (r refusingImages) Has(context.Context, provider.ImagePush) (bool, error) {
 func (refusingImages) Destination() string { return "the refusing registry" }
 
 func (refusingImages) ProbePush(context.Context, string) error { return nil }
-func (refusingImages) Remove(context.Context, string) error { return nil }
+func (refusingImages) Remove(context.Context, string) error    { return nil }
 
 func (r refusingImages) Push(context.Context, provider.ImagePush, progress.Log) error {
 	return r.err
@@ -1309,5 +1311,105 @@ func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
 				t.Errorf("the teardown said %q, want %q: what a failed sweep leaves on the box is a degraded state, not tool output", lines, tc.want)
 			}
 		})
+	}
+}
+
+func TestAReleaseHandsTheStoreItPushedToTheReconcile(t *testing.T) {
+	t.Parallel()
+
+	own := &retaining{buckets: &buckets{}}
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	pushed := fake.NewImages()
+	spec := containerSpec()
+	spec.Images = provider.ImagePushes{Store: pushed, Pushes: []provider.ImagePush{{App: "web", ImageRef: testImage}}}
+
+	if _, err := stacks.Provision(context.Background(), spec, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.sweptWith) != 1 || own.sweptWith[0] != provider.ImageStore(pushed) {
+		t.Errorf("the reconcile was handed %v, want the store the release pushed to: it is where the images it sweeps were sent", own.sweptWith)
+	}
+}
+
+func TestATeardownHandsTheStoreItWasGivenToTheReconcile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := appRef()
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:       provider.StackApp,
+		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	own := &retaining{buckets: &buckets{}}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	given := fake.NewImages()
+
+	if err := stacks.Destroy(provider.WithImageStore(ctx, given), ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.sweptWith) != 1 || own.sweptWith[0] != provider.ImageStore(given) {
+		t.Errorf("the reconcile was handed %v, want the store the removal opened: the images a stack pushed live there, and a destroy that never reaches it leaves them", own.sweptWith)
+	}
+}
+
+func TestATeardownGivenNoStoreReconcilesWithNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := appRef()
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:       provider.StackApp,
+		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	own := &retaining{buckets: &buckets{}}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+
+	if err := stacks.Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.sweptWith) != 1 || own.sweptWith[0] != nil {
+		t.Errorf("the reconcile was handed %v, want no store", own.sweptWith)
+	}
+}
+
+func TestATeardownReconcilesWithAProviderThatKeepsNoReleaseWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := appRef()
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:       provider.StackApp,
+		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	own := &retaining{buckets: &buckets{}}
+	hooks := own.hooks()
+	hooks.Retention.Forget = nil
+
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.swept) != 1 {
+		t.Errorf("the teardown swept %v, want one reconcile: a provider with no window to forget still has images to reclaim", own.swept)
+	}
+}
+
+func TestAReleaseOfAProviderThatReconcilesNothingStillProvisions(t *testing.T) {
+	t.Parallel()
+
+	own := &retaining{buckets: &buckets{}}
+	hooks := own.hooks()
+	hooks.Retention.Reconcile = nil
+
+	if _, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), hooks).Provision(context.Background(), containerSpec(), nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
 	}
 }

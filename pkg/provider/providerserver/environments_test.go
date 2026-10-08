@@ -550,7 +550,7 @@ func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provide
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ progress.Log) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ provider.ImageStore, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)

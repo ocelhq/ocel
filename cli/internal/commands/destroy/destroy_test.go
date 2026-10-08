@@ -469,3 +469,85 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		})
 	}
 }
+
+const registryConfig = `
+export default {
+  slug: "test-app",
+  provider: { fake: {} },
+  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
+};
+`
+
+func TestDestroyingSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	for name, destroy := range map[string]func(commands.Invocation, string, *bytes.Buffer) error{
+		"production": func(invocation commands.Invocation, root string, stdout *bytes.Buffer) error {
+			return runDestroyProduction(context.Background(), invocation, root, true, false, stdout, io.Discard, strings.NewReader(""))
+		},
+		"preview": func(invocation commands.Invocation, root string, stdout *bytes.Buffer) error {
+			return runDestroyPreviewProject(context.Background(), invocation, root, true, false, stdout, io.Discard, strings.NewReader(""))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			deployed := deployedToProduction
+			if name == "preview" {
+				deployed = deployedToPreview
+			}
+			project := deployed(t)
+			clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), registryConfig)
+
+			invocation := clitest.NewInvocation()
+			var stdout bytes.Buffer
+			clitest.AttachTerminalSink(invocation, &stdout)
+			if err := destroy(invocation, project.Root, &stdout); err != nil {
+				t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+			}
+
+			_, removed := removals(t, project)
+			if len(removed) != 1 {
+				t.Fatalf("the provider was asked to remove %v, want one removal", removed)
+			}
+			registry := removed[0].GetProjectRegistry()
+			if registry.GetServer() != "registry.example.com" || registry.GetUsername() != "acme-bot" || registry.GetPassword() != "hunter2" {
+				t.Errorf("the removal named registry %q as %q with password %q, want the project's registry with its secret resolved: it is how the images a deploy pushed there are deleted",
+					registry.GetServer(), registry.GetUsername(), registry.GetPassword())
+			}
+		})
+	}
+}
+
+func TestDestroyingWhoseRegistryVariableIsUnsetStillDestroysAndSaysWhatItLeft(t *testing.T) {
+	project := deployedToProduction(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), registryConfig)
+	invocation := clitest.NewInvocation()
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
+		t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+	}
+
+	_, removed := removals(t, project)
+	if len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
+		t.Fatalf("the provider was asked to remove %v, want the project removed with no registry: a token that is gone must not keep a project undeletable", removed)
+	}
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to say the images in the registry stay and name %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestDestroyingAProjectThatNamesNoRegistrySendsNone(t *testing.T) {
+	project := deployedToProduction(t)
+	invocation := clitest.NewInvocation()
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, io.Discard, strings.NewReader("")); err != nil {
+		t.Fatalf("destroy err = %v; stdout=%s", err, stdout.String())
+	}
+	if _, removed := removals(t, project); len(removed) != 1 || removed[0].GetProjectRegistry() != nil {
+		t.Errorf("the provider was asked to remove %v, want no registry", removed)
+	}
+}

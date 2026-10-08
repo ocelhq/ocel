@@ -24,11 +24,12 @@ type Stacks struct {
 	journal    *Journal
 	refusal    error
 
-	mu          sync.Mutex
-	stacks      map[string]provider.StackResult
-	provisioned []provider.StackSpec
-	taken       []string
-	entered     func(provider.StackSpec) error
+	mu            sync.Mutex
+	stacks        map[string]provider.StackResult
+	provisioned   []provider.StackSpec
+	taken         []string
+	destroyedWith []provider.ImageStore
+	entered       func(provider.StackSpec) error
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
@@ -114,10 +115,17 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) DestroyedWith() []provider.ImageStore {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.destroyedWith)
+}
+
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.destroyedWith = append(r.destroyedWith, provider.ImageStoreFrom(ctx))
 	if r.refusal != nil {
 		refused := r.refusal
 		r.refusal = nil

@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -341,5 +342,47 @@ func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T)
 	}
 	if built() {
 		t.Error("a --prebuilt deploy built the app")
+	}
+}
+
+func removedWithRegistry(t *testing.T, fixture clitest.FakeProject) []*contractv1.ImageRegistry {
+	t.Helper()
+	var registries []*contractv1.ImageRegistry
+	for _, req := range clitest.RequestsTo[*contractv1.RemoveEnvironmentRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveEnvironmentProcedure) {
+		registries = append(registries, req.GetProjectRegistry())
+	}
+	return registries
+}
+
+func TestRemovingAPreviewSendsTheRegistryTheProjectNamesSoTheImagesItPushedGoWithIt(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	previewRemove(t, fixture, dependencies, previewRemoveOptions{})
+
+	registries := removedWithRegistry(t, fixture)
+	if len(registries) != 1 || registries[0].GetServer() != "registry.example.com" || registries[0].GetUsername() != "acme-bot" || registries[0].GetPassword() != "hunter2" {
+		t.Errorf("the removal named %v, want the project's registry with its secret resolved: it is how the images the preview pushed there are deleted", registries)
+	}
+}
+
+func TestRemovingAPreviewWhoseRegistryVariableIsUnsetStillRemovesItAndSaysWhatItLeft(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	writeConfig(t, fixture.Root, `  registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`+"\n")
+	dependencies := previewDependencies("feature/login", "")
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	out := previewRemove(t, fixture, dependencies, previewRemoveOptions{})
+
+	if registries := removedWithRegistry(t, fixture); len(registries) != 1 || registries[0] != nil {
+		t.Fatalf("the removal named %v, want none: a token that is gone must not keep a preview from being torn down", registries)
+	}
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "registry.example.com"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want it to say the images stay in the registry and name %q", out, want)
+		}
 	}
 }

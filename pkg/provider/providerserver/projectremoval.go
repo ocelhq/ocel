@@ -229,7 +229,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return err
 		}
-		return removal.run(ctx, progress)
+		return removal.run(withRemovalImages(ctx, removal.provider, req.GetProjectRegistry(), progress), progress)
 	})
 }
 
