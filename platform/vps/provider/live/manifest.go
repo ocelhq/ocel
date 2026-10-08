@@ -51,6 +51,7 @@ type Manifest struct {
 	Bindings           []live.Binding `json:"bindings,omitempty"`
 	Store              *Store         `json:"store,omitempty"`
 	Queue              string         `json:"queue,omitempty"`
+	QueueCallerSecret  string         `json:"queueCallerSecret,omitempty"`
 	RealtimePublishURL string         `json:"realtimePublishUrl,omitempty"`
 }
 

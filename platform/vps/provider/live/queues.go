@@ -15,6 +15,7 @@ const (
 	QueueSecretName   = "queue-password"
 
 	QueueDeliverySecretName = "delivery-secret"
+	QueueCallerSecretName   = "caller-secret"
 
 	queueDatabaseEntry = "database"
 	queueTopicsEntry   = "topics"
@@ -74,6 +75,10 @@ func NewQueueSecretAssociatedData(project string, tier environment.Tier, stack s
 
 func NewQueueDeliverySecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
 	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueDeliverySecretName)
+}
+
+func NewQueueCallerSecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
+	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueCallerSecretName)
 }
 
 type queueKey struct{ project, env string }
