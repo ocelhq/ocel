@@ -161,7 +161,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
   dns: { zone: { zone: "acme.com" } },
 `)
 		writeAppSource(t, fixture.Root, "api")
-		writeServeDescriptor(t, fixture.Root, "api", "bld_api_1")
+		writeHosting(t, fixture.Root, "api", "bld_api_1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -219,7 +219,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		stubBuild(&dependencies, apiFunction())
 		fixture := setUpPreviewProject(t)
 		addAppToFixtureConfig(t, fixture.Root)
-		writeServeDescriptor(t, fixture.Root, "api", "bld_api_1")
+		writeHosting(t, fixture.Root, "api", "bld_api_1")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -240,9 +240,9 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 	})
 }
 
-func writeServeDescriptor(t *testing.T, root, app, buildID string) {
+func writeHosting(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.HostingFile),
 		`{"framework":"node","frameworkBuildId":"`+buildID+`"}`)
 }
 

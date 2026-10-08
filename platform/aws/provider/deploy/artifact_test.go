@@ -25,7 +25,7 @@ import (
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for rel, contents := range withServeDescriptors(t, files) {
+	for rel, contents := range withHostings(t, files) {
 		full := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -191,9 +191,9 @@ func TestUploadArtifact(t *testing.T) {
 	})
 }
 
-func serveDescriptor(t *testing.T, runtime, buildID string) string {
+func hostingJSON(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.ServeDescriptor{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
+	raw, err := json.Marshal(edge.Hosting{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func buildIDOf(t *testing.T, routingManifest string) string {
 	return routing.BuildID
 }
 
-func withServeDescriptors(t *testing.T, files map[string]string) map[string]string {
+func withHostings(t *testing.T, files map[string]string) map[string]string {
 	t.Helper()
 	out := maps.Clone(files)
 	for rel, contents := range files {
@@ -219,11 +219,11 @@ func withServeDescriptors(t *testing.T, files map[string]string) map[string]stri
 		if !ok {
 			continue
 		}
-		descriptor := path.Join(appsDirName, app, edge.ServeDescriptorFile)
-		if _, written := out[descriptor]; written {
+		hostingPath := path.Join(appsDirName, app, edge.HostingFile)
+		if _, written := out[hostingPath]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
+		out[hostingPath] = hostingJSON(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
 	}
 	return out
 }

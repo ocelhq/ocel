@@ -64,7 +64,7 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), config, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "function-config.json"), config, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

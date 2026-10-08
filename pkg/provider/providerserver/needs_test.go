@@ -18,18 +18,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func servedDescriptor(t *testing.T, app string, desc edge.ServeDescriptor) string {
+func hostedApp(t *testing.T, app string, hosting edge.Hosting) string {
 	t.Helper()
 	root := t.TempDir()
 	dir := buildoutput.AppRoot(root, app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(desc)
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, edge.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -53,7 +53,7 @@ func (n narrowEdge) Facts() edge.Facts {
 func TestNeedCheckRecordsWhatTheEdgeServes(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Count: 3}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -76,7 +76,7 @@ func TestNeedCheckRecordsWhatTheEdgeServes(t *testing.T) {
 func TestNeedCheckRefusesANeedTheEdgeDoesNotServe(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Routes: []string{"/feed"}}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -97,7 +97,7 @@ func TestNeedCheckRefusesANeedTheEdgeDoesNotServe(t *testing.T) {
 func TestNeedCheckDegradesAWaivedNeedRatherThanRefusing(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedStreaming: {Count: 1}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -127,7 +127,7 @@ func TestNeedCheckDegradesAWaivedNeedRatherThanRefusing(t *testing.T) {
 func TestNeedCheckRefusesANeedNoEdgeKnows(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{"teleportation": {Count: 1}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -152,7 +152,7 @@ func TestNeedCheckPassesAnAppThatShipsNoDescriptor(t *testing.T) {
 
 	records, err := providerserver.EdgeNeedCheck{Edge: front, Router: routedWithEveryNeed, Root: t.TempDir()}.Run(context.Background(), oneApp())
 	if err != nil {
-		t.Fatalf("Run() over an app with no serve descriptor = %v, want it to pass", err)
+		t.Fatalf("Run() over an app with no hosting.json = %v, want it to pass", err)
 	}
 	if len(records) != 0 {
 		t.Errorf("Run() recorded %v for an app that declares nothing", records)
@@ -175,7 +175,7 @@ func (e entitlingEdge) Hooks() edge.Hooks {
 func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -198,7 +198,7 @@ func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *t
 func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
@@ -234,7 +234,7 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 func TestNeedCheckWarnsOnceNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t *testing.T) {
 	t.Parallel()
 
-	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+	root := hostedApp(t, "web", edge.Hosting{
 		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
 	})
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)

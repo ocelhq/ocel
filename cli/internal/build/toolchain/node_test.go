@@ -96,7 +96,7 @@ const appPkg = `{"name":"api","type":"module"}`
 func TestBundle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("emits one module, a config and a serve descriptor", func(t *testing.T) {
+	t.Run("emits one module, function-config.json and hosting.json", func(t *testing.T) {
 		t.Parallel()
 
 		l := newLayout(t, tree{
@@ -120,37 +120,37 @@ func TestBundle(t *testing.T) {
 			names = append(names, entry.Name())
 		}
 		if len(names) != 2 {
-			t.Errorf("function directory contains %v, want only the bundle and %s", names, buildoutput.FunctionDescriptorFile)
+			t.Errorf("function directory contains %v, want only the bundle and %s", names, buildoutput.FunctionConfigFile)
 		}
 
-		var cfg buildoutput.FunctionDescriptor
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
+		var cfg buildoutput.FunctionConfig
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: entryRouteID, App: "api"}
+		want := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
-			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionDescriptorFile, cfg, want)
+			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionConfigFile, cfg, want)
 		}
 
-		var descriptor edge.ServeDescriptor
-		descriptorPath := filepath.Join(l.appDir, edge.ServeDescriptorFile)
-		if err := json.Unmarshal([]byte(readFile(t, descriptorPath)), &descriptor); err != nil {
+		var hosting edge.Hosting
+		hostingPath := filepath.Join(l.appDir, edge.HostingFile)
+		if err := json.Unmarshal([]byte(readFile(t, hostingPath)), &hosting); err != nil {
 			t.Fatal(err)
 		}
-		if descriptor.Framework != "node" {
-			t.Errorf("%s runtime = %q, want node", edge.ServeDescriptorFile, descriptor.Framework)
+		if hosting.Framework != "node" {
+			t.Errorf("%s runtime = %q, want node", edge.HostingFile, hosting.Framework)
 		}
-		if len(descriptor.FrameworkBuildID) != buildIDLength {
-			t.Errorf("%s frameworkBuildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.FrameworkBuildID, buildIDLength)
+		if len(hosting.FrameworkBuildID) != buildIDLength {
+			t.Errorf("%s frameworkBuildId = %q, want %d hex characters", edge.HostingFile, hosting.FrameworkBuildID, buildIDLength)
 		}
-		if descriptor.Needs == nil {
-			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.ServeDescriptorFile, readFile(t, descriptorPath))
+		if hosting.Needs == nil {
+			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.HostingFile, readFile(t, hostingPath))
 		}
-		if descriptor.Entry != cfg.ID {
-			t.Errorf("%s entry = %q, want the sole function's route id %q", edge.ServeDescriptorFile, descriptor.Entry, cfg.ID)
+		if hosting.Entry != cfg.ID {
+			t.Errorf("%s entry = %q, want the sole function's route id %q", edge.HostingFile, hosting.Entry, cfg.ID)
 		}
-		if _, err := os.Stat(filepath.Join(l.functionDir, edge.ServeDescriptorFile)); err == nil {
-			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.ServeDescriptorFile)
+		if _, err := os.Stat(filepath.Join(l.functionDir, edge.HostingFile)); err == nil {
+			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.HostingFile)
 		}
 
 		if got := runNode(t, l.functionDir); !strings.Contains(got, "lib:cjs") {
@@ -175,12 +175,12 @@ func TestBundle(t *testing.T) {
 		if err := Bundle(context.Background(), target); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		var cfg buildoutput.FunctionDescriptor
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
+		var cfg buildoutput.FunctionConfig
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
 		if want := []string{"node", workerFile}; !reflect.DeepEqual(cfg.Worker, want) {
-			t.Errorf("%s worker = %v, want %v", buildoutput.FunctionDescriptorFile, cfg.Worker, want)
+			t.Errorf("%s worker = %v, want %v", buildoutput.FunctionConfigFile, cfg.Worker, want)
 		}
 		if _, err := exec.LookPath("node"); err != nil {
 			t.Skip("node not on PATH")
@@ -344,11 +344,11 @@ func TestBundle(t *testing.T) {
 			if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 				t.Fatalf("Bundle: %v", err)
 			}
-			var descriptor edge.ServeDescriptor
-			if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.appDir, edge.ServeDescriptorFile))), &descriptor); err != nil {
+			var hosting edge.Hosting
+			if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.appDir, edge.HostingFile))), &hosting); err != nil {
 				t.Fatal(err)
 			}
-			return descriptor.FrameworkBuildID
+			return hosting.FrameworkBuildID
 		}
 
 		first, again := build(t, ""), build(t, "")

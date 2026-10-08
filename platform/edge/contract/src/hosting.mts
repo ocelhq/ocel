@@ -6,7 +6,7 @@ export type NeedDetail = {
   matchers?: string[];
 };
 
-export type ServeDescriptor = {
+export type Hosting = {
   framework: string;
   frameworkBuildId: string;
   edgeRouting: boolean;

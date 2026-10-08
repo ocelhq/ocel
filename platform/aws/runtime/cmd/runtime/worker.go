@@ -35,7 +35,7 @@ func workerCommand(declared []string) []string {
 	return command
 }
 
-func runWorker(ctx context.Context, worker string, served buildoutput.FunctionDescriptor, values liveValues, prefetch <-chan error, bakedEnv []string, cfg proxyConfig) {
+func runWorker(ctx context.Context, worker string, served buildoutput.FunctionConfig, values liveValues, prefetch <-chan error, bakedEnv []string, cfg proxyConfig) {
 	if len(served.Worker) == 0 {
 		fatalInit(fmt.Sprintf("this function runs worker %q, and its app's build carries no worker entry to start", worker))
 	}

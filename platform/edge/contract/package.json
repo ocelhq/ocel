@@ -11,7 +11,7 @@
     "./empty-body": "./src/empty-body.mts",
     "./isr-writer": "./src/isr-writer.mts",
     "./revalidation": "./src/revalidation.mts",
-    "./serve": "./src/serve.mts",
+    "./hosting": "./src/hosting.mts",
     "./revalidation/sample": "./src/revalidation-sample.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json"
   },

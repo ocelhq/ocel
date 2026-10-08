@@ -1,8 +1,8 @@
 package buildoutput
 
-const FunctionDescriptorFile = "config.json"
+const FunctionConfigFile = "function-config.json"
 
-type FunctionDescriptor struct {
+type FunctionConfig struct {
 	Framework Framework `json:"framework"`
 	EntryFile string    `json:"entryFile"`
 	Command   []string  `json:"command,omitempty"`

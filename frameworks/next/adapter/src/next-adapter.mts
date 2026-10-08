@@ -19,7 +19,7 @@ import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import type { ServeDescriptor } from "@platform/edge-contract/serve";
+import type { Hosting } from "@platform/edge-contract/hosting";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { compileImageConfig, imageConfigHash, serializeImageConfig } from "./image-config.mjs";
@@ -288,7 +288,7 @@ const adapter = {
         );
 
         await writeFile(
-          join(funcDir, "config.json"),
+          join(funcDir, "function-config.json"),
           JSON.stringify({
             framework: { name: "next" },
             entryFile: launcherRel,
@@ -513,7 +513,7 @@ const adapter = {
     const cachedRoutes = outputs.prerenders.filter((p) => isUserFacingPathname(p.pathname));
     const streamedRoutes = outputs.appPages.filter((p) => isUserFacingPathname(p.pathname));
     const edgeNeedRoutes = edgeRoutes.filter((r) => isUserFacingPathname(r.pathname));
-    const needs: ServeDescriptor["needs"] = {
+    const needs: Hosting["needs"] = {
       ...(middleware?.runtime === "edge" && {
         "edge-middleware": {
           count: 1,
@@ -537,14 +537,14 @@ const adapter = {
       }),
     };
 
-    const serve: ServeDescriptor = {
+    const hosting: Hosting = {
       framework: "next",
       frameworkBuildId: buildId,
       edgeRouting: true,
       entry,
       needs,
     };
-    writeFileSync(join(outputRoot, "serve.json"), JSON.stringify(serve));
+    writeFileSync(join(outputRoot, "hosting.json"), JSON.stringify(hosting));
 
     if (images) {
       await writeFile(join(outputRoot, "image-config.json"), serializeImageConfig(images));

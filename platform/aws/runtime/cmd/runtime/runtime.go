@@ -114,7 +114,7 @@ func primeBytecode(p *bytecode.Priming) primer {
 
 type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
 
-func bringUp(ctx context.Context, served buildoutput.FunctionDescriptor, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
+func bringUp(ctx context.Context, served buildoutput.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
 	if executable(served) {
 		return bringUpChild(func() (*execChild, error) {
 			return startExecutable(served.Command, containerimage.Port, env, spawnBudget(start))
@@ -502,16 +502,16 @@ func supervise(what string, exited <-chan error) {
 	os.Exit(1)
 }
 
-func executable(a buildoutput.FunctionDescriptor) bool { return len(a.Command) > 0 }
+func executable(a buildoutput.FunctionConfig) bool { return len(a.Command) > 0 }
 
-func readArtifact() buildoutput.FunctionDescriptor {
-	var a buildoutput.FunctionDescriptor
-	data, err := os.ReadFile(filepath.Join(taskRoot(), buildoutput.FunctionDescriptorFile))
+func readArtifact() buildoutput.FunctionConfig {
+	var a buildoutput.FunctionConfig
+	data, err := os.ReadFile(filepath.Join(taskRoot(), buildoutput.FunctionConfigFile))
 	if err != nil {
 		return a
 	}
 	if json.Unmarshal(data, &a) != nil {
-		return buildoutput.FunctionDescriptor{}
+		return buildoutput.FunctionConfig{}
 	}
 	return a
 }

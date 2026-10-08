@@ -29,17 +29,17 @@ func AppsRoot(root string) string { return filepath.Join(root, appsDir) }
 
 func AppRoot(root, app string) string { return filepath.Join(AppsRoot(root), app) }
 
-func ReadServeDescriptor(root, app string) (edge.ServeDescriptor, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(AppRoot(root, app), edge.ServeDescriptorFile))
+func ReadHosting(root, app string) (edge.Hosting, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(AppRoot(root, app), edge.HostingFile))
 	if errors.Is(err, fs.ErrNotExist) {
-		return edge.ServeDescriptor{}, false, nil
+		return edge.Hosting{}, false, nil
 	}
 	if err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("read serve descriptor for %s: %w", app, err)
+		return edge.Hosting{}, false, fmt.Errorf("read hosting.json of %s: %w", app, err)
 	}
-	var desc edge.ServeDescriptor
-	if err := json.Unmarshal(raw, &desc); err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("parse serve descriptor for %s: %w", app, err)
+	var hosting edge.Hosting
+	if err := json.Unmarshal(raw, &hosting); err != nil {
+		return edge.Hosting{}, false, fmt.Errorf("parse hosting.json of %s: %w", app, err)
 	}
-	return desc, true, nil
+	return hosting, true, nil
 }

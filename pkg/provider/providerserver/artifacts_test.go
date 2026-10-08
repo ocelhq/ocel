@@ -291,7 +291,7 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", edge.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
 
 	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
 	client := servedBy(t, vendor)
