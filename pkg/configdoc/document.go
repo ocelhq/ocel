@@ -35,6 +35,10 @@ type LifecycleCommand struct {
 
 func (LifecycleCommand) AlsoAString() {}
 
+func (LifecycleCommand) Doc() string {
+	return "A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs."
+}
+
 func (c *LifecycleCommand) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) > 0 && trimmed[0] == '"' {
