@@ -135,7 +135,7 @@ func shapeAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
 
 var pathPartPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-func staticSegments(prefix string) ([]string, bool) {
+func splitStaticPrefix(prefix string) ([]string, bool) {
 	segments := strings.Split(strings.Trim(prefix, rootPath), rootPath)
 	for _, segment := range segments {
 		if !pathPartPattern.MatchString(segment) {
@@ -156,6 +156,7 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 		return staticRoutes{}, err
 	}
 	known := len(resources)
+	reshaped := false
 	kept := map[string]bool{
 		rootPath:                 true,
 		rootPath + proxyPathPart: true,
@@ -165,7 +166,7 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 	var served []string
 	if spec.assetBucket != "" {
 		for _, prefix := range prefixes {
-			segments, ok := staticSegments(prefix)
+			segments, ok := splitStaticPrefix(prefix)
 			if !ok {
 				continue
 			}
@@ -189,6 +190,11 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 				if err := putRootFunctionRoute(ctx, c, spec, id, resources[rest]); err != nil {
 					return staticRoutes{}, err
 				}
+				stale, err := removeStaticMethod(ctx, c, id, resources[rest])
+				if err != nil {
+					return staticRoutes{}, err
+				}
+				reshaped = reshaped || stale
 			}
 			leaf, err := ensureResource(ctx, c, id, resources, parent, proxyPathPart)
 			if err != nil {
@@ -201,7 +207,7 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 			}
 		}
 	}
-	reshaped := len(resources) != known
+	reshaped = reshaped || len(resources) != known
 	var removed []string
 	for _, path := range slices.Sorted(maps.Keys(resources)) {
 		if kept[path] || slices.ContainsFunc(removed, func(gone string) bool { return strings.HasPrefix(path, gone+rootPath) }) {
@@ -216,10 +222,31 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 		removed = append(removed, path)
 		reshaped = true
 	}
-	return staticRoutes{Reshaped: reshaped, Fingerprint: routesFingerprint(served)}, nil
+	return staticRoutes{Reshaped: reshaped, Fingerprint: fingerprintRoutes(served)}, nil
 }
 
-func routesFingerprint(served []string) string {
+func removeStaticMethod(ctx context.Context, c Clients, api, resource string) (bool, error) {
+	if _, err := c.APIGateway.GetMethod(ctx, &apigateway.GetMethodInput{
+		RestApiId:  aws.String(api),
+		ResourceId: aws.String(resource),
+		HttpMethod: aws.String(getMethod),
+	}); err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read the static-asset method on REST API %s: %w", api, err)
+	}
+	if _, err := c.APIGateway.DeleteMethod(ctx, &apigateway.DeleteMethodInput{
+		RestApiId:  aws.String(api),
+		ResourceId: aws.String(resource),
+		HttpMethod: aws.String(getMethod),
+	}); err != nil && !isNotFound(err) {
+		return false, fmt.Errorf("remove the static-asset method of a prefix the release no longer states from REST API %s: %w", api, err)
+	}
+	return true, nil
+}
+
+func fingerprintRoutes(served []string) string {
 	if len(served) == 0 {
 		return unsetVariable
 	}
@@ -228,7 +255,7 @@ func routesFingerprint(served []string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-func stageVariable(ctx context.Context, c Clients, api, name string) (string, error) {
+func readStageVariable(ctx context.Context, c Clients, api, name string) (string, error) {
 	stage, err := c.APIGateway.GetStage(ctx, &apigateway.GetStageInput{
 		RestApiId: aws.String(api),
 		StageName: aws.String(stageName),

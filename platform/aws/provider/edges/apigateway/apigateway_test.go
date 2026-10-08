@@ -1171,3 +1171,29 @@ func TestAPromotionPublishesTheStaticRoutesAPromotionThatFailedAfterShapingThemN
 		t.Errorf("deployments = %d, want one more than %d: the routes the failed promotion shaped were never published", got, deployments)
 	}
 }
+
+func TestAPromotionSendsTheGetRequestsOfAResourceThatStoppedServingAPrefixToTheRootFunction(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	api, stack := promotedWithStatic(t, w, "/a/")
+	if methodOn(api, "/a/{proxy+}", getMethod) == nil {
+		t.Fatal("the first promotion routed no /a/; the change this test covers cannot happen")
+	}
+	deployments := w.gateway.count("CreateDeployment " + api.name)
+
+	promote(t, stack, router.ReleaseRecord{
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		Static: &edge.Static{ImmutablePrefixes: []string{"/a/b/"}},
+	}, "p2", 2)
+
+	if methodOn(api, "/a/{proxy+}", getMethod) != nil {
+		t.Error("GET /a/page still reaches the bucket under the release that states only /a/b/, instead of the root function")
+	}
+	if methodOn(api, "/a/b/{proxy+}", getMethod) == nil {
+		t.Error("/a/b/ reaches no bucket")
+	}
+	if got := w.gateway.count("CreateDeployment " + api.name); got != deployments+1 {
+		t.Errorf("deployments = %d, want one more than %d: the stage serves the routes it was last deployed with", got, deployments)
+	}
+}

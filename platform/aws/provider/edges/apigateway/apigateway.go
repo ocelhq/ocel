@@ -51,6 +51,7 @@ type APIGatewayAPI interface {
 	DeleteResource(context.Context, *apigateway.DeleteResourceInput, ...func(*apigateway.Options)) (*apigateway.DeleteResourceOutput, error)
 	GetMethod(context.Context, *apigateway.GetMethodInput, ...func(*apigateway.Options)) (*apigateway.GetMethodOutput, error)
 	PutMethod(context.Context, *apigateway.PutMethodInput, ...func(*apigateway.Options)) (*apigateway.PutMethodOutput, error)
+	DeleteMethod(context.Context, *apigateway.DeleteMethodInput, ...func(*apigateway.Options)) (*apigateway.DeleteMethodOutput, error)
 	PutIntegration(context.Context, *apigateway.PutIntegrationInput, ...func(*apigateway.Options)) (*apigateway.PutIntegrationOutput, error)
 	GetMethodResponse(context.Context, *apigateway.GetMethodResponseInput, ...func(*apigateway.Options)) (*apigateway.GetMethodResponseOutput, error)
 	PutMethodResponse(context.Context, *apigateway.PutMethodResponseInput, ...func(*apigateway.Options)) (*apigateway.PutMethodResponseOutput, error)
