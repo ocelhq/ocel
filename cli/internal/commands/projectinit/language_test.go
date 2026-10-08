@@ -44,7 +44,10 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			dependencies := newTestDependencies()
 			argv := stubPackageManager(&dependencies, nil)
 			if want.manifest == "package.json" {
-				installOcelPackage(t, dir)
+				if _, err := exec.LookPath("node"); err != nil {
+					t.Skip("node not found on PATH")
+				}
+				clitest.InstallOcelPackage(t, dir)
 			}
 
 			var stdout bytes.Buffer
@@ -64,26 +67,6 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 				t.Fatalf("added the sdk with %v, want %v", *argv, want.add)
 			}
 		})
-	}
-}
-
-func installOcelPackage(t *testing.T, dir string) {
-	t.Helper()
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skip("node not found on PATH")
-	}
-	pkg := filepath.Join(dir, "node_modules", "ocel")
-	if err := os.MkdirAll(pkg, 0o755); err != nil {
-		t.Fatalf("create %s: %v", pkg, err)
-	}
-	for name, contents := range map[string]string{
-		"package.json": `{"name":"ocel","type":"module","exports":{"./config":"./config.js","./providers/fake":"./fake.js"}}`,
-		"config.js":    `export const defineConfig = (config) => config;`,
-		"fake.js":      `export default (options) => ({ fake: options });`,
-	} {
-		if err := os.WriteFile(filepath.Join(pkg, name), []byte(contents), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
 	}
 }
 
