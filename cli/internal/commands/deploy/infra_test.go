@@ -206,9 +206,9 @@ func TestAPrebuiltDeploySendsNoLeaseTokenForTheProviderToMint(t *testing.T) {
 	}
 }
 
-func deployLeaseHeld(t *testing.T, fixture clitest.FakeProject) bool {
+func environmentLeaseHeld(t *testing.T, fixture clitest.FakeProject) bool {
 	t.Helper()
-	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv))
+	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv))
 	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
@@ -232,7 +232,7 @@ func TestADeployWhoseBuildFailsAfterItsInfraFreesTheEnvironmentItHeld(t *testing
 	if len(sentProvisionInfras(t, fixture)) != 1 {
 		t.Fatal("the build failed before ProvisionInfra ran, so this test holds no lease to free")
 	}
-	if deployLeaseHeld(t, fixture) {
+	if environmentLeaseHeld(t, fixture) {
 		t.Error("the environment still holds the lease of a deploy whose build failed, want it abandoned so the next deploy is not refused until it expires")
 	}
 }
@@ -244,7 +244,7 @@ func TestASucceededDeployLeavesNoLeaseBehind(t *testing.T) {
 
 	deployed(t, dependencies, fixture, deployOptions{yes: true})
 
-	if deployLeaseHeld(t, fixture) {
+	if environmentLeaseHeld(t, fixture) {
 		t.Error("the environment still holds a deploy lease after the deploy succeeded")
 	}
 }

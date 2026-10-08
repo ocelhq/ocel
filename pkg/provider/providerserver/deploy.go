@@ -57,7 +57,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		var token string
 		if !req.GetDry() {
 			if token = req.GetLeaseToken(); token == "" {
-				if token, err = stackrecords.NewDeployLeaseToken(); err != nil {
+				if token, err = stackrecords.NewEnvironmentLeaseToken(); err != nil {
 					return nil, err
 				}
 			}
@@ -207,7 +207,7 @@ type deployRun struct {
 	infraProvisioned     bool
 	infraHoldsUndeclared bool
 
-	leases     *deployLeases
+	leases     *environmentLeases
 	leaseToken string
 
 	dry           bool
@@ -373,7 +373,7 @@ func (r *deployRun) confirmLease(ctx context.Context) error {
 	if r.leaseToken == "" {
 		return nil
 	}
-	return r.leases.confirm(ctx, r.provider.KeyValues(), scopeOf(r.spec), r.leaseToken)
+	return r.leases.confirm(ctx, r.provider.KeyValues(), newEnvironmentScope(r.spec), r.leaseToken)
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {

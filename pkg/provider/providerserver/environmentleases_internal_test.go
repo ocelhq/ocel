@@ -20,28 +20,28 @@ const (
 
 var shopProduction = environmentScope{tier: environment.TierProduction, slug: "shop", env: stackrecords.ProductionEnv}
 
-func quickLeases() *deployLeases {
-	return &deployLeases{ttl: 3 * time.Second, renewal: 20 * time.Millisecond, renewing: map[heldLease]*leaseRenewal{}}
+func quickLeases() *environmentLeases {
+	return &environmentLeases{ttl: 3 * time.Second, renewal: 20 * time.Millisecond, renewing: map[heldLease]*leaseRenewal{}}
 }
 
 func takeAs(ctx context.Context, store keyvalue.Store, token string, now time.Time) error {
-	return stackrecords.TakeDeployLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, token, now, time.Hour)
+	return stackrecords.TakeEnvironmentLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, token, now, time.Hour)
 }
 
 func readLeaseExpiry(t *testing.T, store keyvalue.Store) int64 {
 	t.Helper()
-	recorded, err := store.Read(context.Background(), stackrecords.DeployLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
+	recorded, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
 	if err != nil {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
-	var held stackrecords.DeployLease
+	var held stackrecords.EnvironmentLease
 	if err := json.Unmarshal(recorded.Value, &held); err != nil {
 		t.Fatal(err)
 	}
 	return held.ExpiresAt
 }
 
-func TestAHeldDeployLeaseIsRenewedWhileItsDeployRuns(t *testing.T) {
+func TestAHeldEnvironmentLeaseIsRenewedWhileItsDeployRuns(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
@@ -77,7 +77,7 @@ func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
 	lost := leases.renewing[heldLease{scope: shopProduction, token: renewedLease}]
 	leases.mu.Unlock()
 	<-lost.done
-	if err := stackrecords.ForgetDeployLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
+	if err := stackrecords.ForgetEnvironmentLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,13 +115,13 @@ func TestADeployThatLostItsLeaseDoesNotRenewItOverTheDeployThatTookItOver(t *tes
 	case <-time.After(10 * time.Second):
 		t.Fatal("the deploy that lost its lease kept renewing it")
 	}
-	if err := stackrecords.ForgetDeployLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
+	if err := stackrecords.ForgetEnvironmentLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
-	_, err := store.Read(ctx, stackrecords.DeployLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
+	_, err := store.Read(ctx, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
 	if !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("reading the lease after the deploy that took it over ended = %v, want none: the deploy that lost it must not take it back", err)
 	}

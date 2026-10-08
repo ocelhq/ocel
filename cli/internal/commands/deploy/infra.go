@@ -55,7 +55,7 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 		return err
 	}
 	if i.leaseToken == "" {
-		if i.leaseToken, err = stackrecords.NewDeployLeaseToken(); err != nil {
+		if i.leaseToken, err = stackrecords.NewEnvironmentLeaseToken(); err != nil {
 			return err
 		}
 	}
