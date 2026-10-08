@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/environment"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -270,6 +271,42 @@ func TestAPreBuildWhoseForwardIsRefusedStopsTheDeployBeforeItRunsAndNamesTheReso
 	}
 	if *p.built {
 		t.Error("the apps were built after the preBuild was refused its bindings")
+	}
+	if slices.Contains(p.procedures(), contractv1connect.ProviderServiceDeployProcedure) {
+		t.Errorf("the provider was called %v, want nothing promoted", p.procedures())
+	}
+}
+
+func TestAPreBuildAsksForTheForwardsOfTheDeploysTierAndAWayToReportOneThatFails(t *testing.T) {
+	p := setUpPreBuildProject(t, `"true"`)
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	p.seen.mutex.Lock()
+	defer p.seen.mutex.Unlock()
+	if len(p.seen.asked) != 1 || p.seen.asked[0].Tier != environment.TierProduction || p.seen.asked[0].ReportFailure == nil {
+		t.Fatalf("the provider was asked %d times to forward, want once in production with a way to report a failed forward", len(p.seen.asked))
+	}
+}
+
+func TestAPreBuildWhoseForwardFailsWhileItRunsStopsTheDeployBeforeAnythingIsPromotedAndSaysWhy(t *testing.T) {
+	p := setUpPreBuildProject(t, `"sleep 1"`)
+	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		forward := h.ForwardPorts
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			forwards, err := forward(ctx, req)
+			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
+			return forwards, err
+		}
+	})
+
+	out, err := p.deploy(t, deployOptions{yes: true})
+
+	if err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
+		t.Fatalf("runDeploy err = %v, want the failed forward's reason; out=%s", err, out)
 	}
 	if slices.Contains(p.procedures(), contractv1connect.ProviderServiceDeployProcedure) {
 		t.Errorf("the provider was called %v, want nothing promoted", p.procedures())
