@@ -45,13 +45,29 @@ func (b bearer) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func servedProxy(t *testing.T, bindings []provider.Binding) (provider.BindingProxy, *listedBuckets) {
 	t.Helper()
+	return servedGrants(t, provider.BindingGrant{Grantee: "web", Bindings: bindings})
+}
+
+func tokenOf(t *testing.T, proxy provider.BindingProxy, grantee string) string {
+	t.Helper()
+	for _, session := range proxy.Sessions {
+		if session.Grantee == grantee {
+			return session.SessionToken
+		}
+	}
+	t.Fatalf("the proxy minted no token for %q: %+v", grantee, proxy.Sessions)
+	return ""
+}
+
+func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.BindingProxy, *listedBuckets) {
+	t.Helper()
 	store := &listedBuckets{}
 	p := pushing(t, store.serve(t))
 	serve := p.Hooks().ServeBindingProxy
 	if serve == nil {
 		t.Fatal("the gcp provider sets no ServeBindingProxy hook, so a build never reaches a bucket")
 	}
-	proxy, err := serve(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Bindings: bindings}, progress.Discard())
+	proxy, err := serve(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Grants: grants}, progress.Discard())
 	if err != nil {
 		t.Fatalf("ServeBindingProxy() error = %v", err)
 	}
@@ -65,7 +81,7 @@ func bucketBinding(name, bucket string) provider.Binding {
 
 func TestTheGCPBindingProxyServesTheBucketsABuildBindsAndNoOtherBucket(t *testing.T) {
 	proxy, store := servedProxy(t, []provider.Binding{bucketBinding("bucket--uploads", "shop-uploads")})
-	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(proxy.SessionToken)}, proxy.Address)
+	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(proxy.Sessions[0].SessionToken)}, proxy.Address)
 
 	if _, err := client.List(context.Background(), &bucketv1.ListRequest{Bucket: "shop-uploads"}); err != nil {
 		t.Fatalf("List of the bound bucket = %v, want it answered", err)
@@ -103,5 +119,37 @@ func TestTheGCPBindingProxyNamesTheBindingsItHasNoServiceFor(t *testing.T) {
 
 	if want := []string{"realtime--chat", "topic--events"}; !slices.Equal(slices.Sorted(slices.Values(proxy.Unserved)), want) {
 		t.Errorf("Unserved = %v, want %v: the build is not handed a record nothing answers for", proxy.Unserved, want)
+	}
+}
+
+func TestTheGCPBindingProxyGrantsEachGranteeOnlyItsOwnBucketsAndAProjectWideGrantEveryBucket(t *testing.T) {
+	proxy, _ := servedGrants(t,
+		provider.BindingGrant{Grantee: "web", Bindings: []provider.Binding{bucketBinding("bucket--uploads", "shop-uploads")}},
+		provider.BindingGrant{Grantee: "docs", Bindings: []provider.Binding{bucketBinding("bucket--manuals", "shop-manuals")}},
+		provider.BindingGrant{Grantee: "", Bindings: []provider.Binding{bucketBinding("bucket--uploads", "shop-uploads"), bucketBinding("bucket--manuals", "shop-manuals")}},
+	)
+	web := tokenOf(t, proxy, "web")
+	docs := tokenOf(t, proxy, "docs")
+	project := tokenOf(t, proxy, "")
+	if web == docs || web == project || docs == project {
+		t.Fatalf("the grantees share a token: %+v", proxy.Sessions)
+	}
+	as := func(token string) bucketv1connect.BucketServiceClient {
+		return bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(token)}, proxy.Address)
+	}
+
+	if _, err := as(web).List(context.Background(), &bucketv1.ListRequest{Bucket: "shop-uploads"}); err != nil {
+		t.Errorf("web reaching its own bucket = %v, want it answered", err)
+	}
+	if _, err := as(web).List(context.Background(), &bucketv1.ListRequest{Bucket: "shop-manuals"}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("web reaching docs' bucket = %v, want it refused: a build gets only the buckets its own app binds", err)
+	}
+	if _, err := as(docs).List(context.Background(), &bucketv1.ListRequest{Bucket: "shop-uploads"}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("docs reaching web's bucket = %v, want it refused", err)
+	}
+	for _, bucket := range []string{"shop-uploads", "shop-manuals"} {
+		if _, err := as(project).List(context.Background(), &bucketv1.ListRequest{Bucket: bucket}); err != nil {
+			t.Errorf("the project-wide grant reaching %s = %v, want it answered: the preBuild is meant to reach every bucket", bucket, err)
+		}
 	}
 }

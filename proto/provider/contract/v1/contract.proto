@@ -957,7 +957,13 @@ message ForwardPortsRequest {
 
   common.environment.v1.Environment environment = 2;
 
-  repeated string bindings = 3 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
+  repeated ForwardPortsGrant grants = 3 [(buf.validate.field).repeated = {min_items: 1}];
+}
+
+message ForwardPortsGrant {
+  string grantee = 1;
+
+  repeated string bindings = 2 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
 }
 
 message ForwardPortsEvent {
@@ -974,11 +980,13 @@ message ForwardPortsResponse {
 
   repeated string unforwarded = 2;
 
-  BindingProxy binding_proxy = 3 [debug_redact = true];
+  repeated BindingProxy binding_proxies = 3 [debug_redact = true];
 }
 
 message BindingProxy {
-  string address = 1 [(buf.validate.field).string.min_len = 1];
+  string grantee = 1;
 
-  string session_token = 2 [(buf.validate.field).string.min_len = 1];
+  string address = 2 [(buf.validate.field).string.min_len = 1];
+
+  string session_token = 3 [(buf.validate.field).string.min_len = 1];
 }

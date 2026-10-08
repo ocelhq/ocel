@@ -16,13 +16,7 @@ import (
 const buildSessions = "build"
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
-	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (provider.BindingProxy, error) {
-		var buckets []string
-		for _, binding := range bindings {
-			if name := binding.Properties[provider.PropertyBucket]; !slices.Contains(buckets, name) {
-				buckets = append(buckets, name)
-			}
-		}
+	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error) {
 		ref := provider.StackRef{Project: req.Slug, Tier: req.Tier, Name: naming.InfraStack(req.Env)}
 		container := p.stores.shape()
 		if container == nil {
@@ -46,21 +40,35 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			SecretAccessKey: root.secret,
 			PathStyle:       true,
 		}
-		served, err := bindingproxy.ServeReporting(bindingproxy.Services{Buckets: s3store.New(s3store.Config{
-			Objects:      store.Client(),
-			Internal:     store.Presigner(),
-			External:     func(context.Context) (s3store.PresignAPI, string) { return store.Presigner(), store.Endpoint },
-			Callbacks:    s3store.HTTPPoster{},
-			PostPolicies: true,
-			Sessions:     s3store.SessionsBucket() + "/" + storeRef(ref).Name.String() + "/" + buildSessions,
-			Granted:      buckets,
-		})}, req.ReportFailure)
+		served := make([]bindingproxy.Grant, 0, len(grants))
+		for _, grant := range grants {
+			var buckets []string
+			for _, binding := range grant.Bindings {
+				if name := binding.Properties[provider.PropertyBucket]; !slices.Contains(buckets, name) {
+					buckets = append(buckets, name)
+				}
+			}
+			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: s3store.New(s3store.Config{
+				Objects:      store.Client(),
+				Internal:     store.Presigner(),
+				External:     func(context.Context) (s3store.PresignAPI, string) { return store.Presigner(), store.Endpoint },
+				Callbacks:    s3store.HTTPPoster{},
+				PostPolicies: true,
+				Sessions:     s3store.SessionsBucket() + "/" + storeRef(ref).Name.String() + "/" + buildSessions,
+				Granted:      buckets,
+			})}})
+		}
+		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
 		if err != nil {
 			stopForward()
 			return provider.BindingProxy{}, err
 		}
-		return provider.BindingProxy{Address: served.Address, SessionToken: served.Token, Close: func() {
-			_ = served.Close()
+		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
+		for _, session := range proxy.Sessions {
+			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
+		}
+		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() {
+			_ = proxy.Close()
 			stopForward()
 		}}, nil
 	})

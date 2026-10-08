@@ -18,26 +18,53 @@ type Served struct {
 	Env     []string
 	Errs    <-chan error
 	server  *http.Server
-	watched <-chan struct{}
 }
 
 func (s Served) Close() error {
 	if s.server == nil {
 		return nil
 	}
+	return s.server.Close()
+}
+
+type Grant struct {
+	Grantee  string
+	Services Services
+}
+
+type Session struct {
+	Grantee string
+	Token   string
+}
+
+type ServedGrants struct {
+	Address  string
+	Sessions []Session
+	server   *http.Server
+	watched  <-chan struct{}
+}
+
+func (s ServedGrants) Close() error {
 	err := s.server.Close()
-	if s.watched != nil {
-		<-s.watched
-	}
+	<-s.watched
 	return err
 }
 
-func ServeReporting(services Services, report func(error)) (Served, error) {
-	served, err := Serve(services)
-	if err != nil {
-		return Served{}, err
+func ServeGrants(grants []Grant, report func(error)) (ServedGrants, error) {
+	sessions := make([]Session, 0, len(grants))
+	tokened := make([]tokenServices, 0, len(grants))
+	for _, grant := range grants {
+		token, err := mintToken()
+		if err != nil {
+			return ServedGrants{}, err
+		}
+		sessions = append(sessions, Session{Grantee: grant.Grantee, Token: token})
+		tokened = append(tokened, tokenServices{token: token, services: grant.Services})
 	}
-	errs := served.Errs
+	srv, address, errs, err := listen(newRouter(tokened))
+	if err != nil {
+		return ServedGrants{}, err
+	}
 	watched := make(chan struct{})
 	go func() {
 		defer close(watched)
@@ -45,9 +72,7 @@ func ServeReporting(services Services, report func(error)) (Served, error) {
 			report(err)
 		}
 	}()
-	served.Errs = nil
-	served.watched = watched
-	return served, nil
+	return ServedGrants{Address: address, Sessions: sessions, server: srv, watched: watched}, nil
 }
 
 func Serve(services Services) (Served, error) {
@@ -56,16 +81,11 @@ func Serve(services Services) (Served, error) {
 		return Served{}, err
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	srv, address, errs, err := listen(NewMux(token, services))
 	if err != nil {
-		return Served{}, fmt.Errorf("bind the proxy listener: %w", err)
+		return Served{}, err
 	}
 
-	srv := &http.Server{Handler: NewMux(token, services)}
-	errs := make(chan error, 1)
-	go func() { errs <- srv.Serve(ln) }()
-
-	address := "http://" + ln.Addr().String()
 	return Served{
 		Address: address,
 		Token:   token,
@@ -76,6 +96,17 @@ func Serve(services Services) (Served, error) {
 		Errs:   errs,
 		server: srv,
 	}, nil
+}
+
+func listen(handler http.Handler) (*http.Server, string, <-chan error, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("bind the proxy listener: %w", err)
+	}
+	srv := &http.Server{Handler: handler}
+	errs := make(chan error, 1)
+	go func() { errs <- srv.Serve(ln) }()
+	return srv, "http://" + ln.Addr().String(), errs, nil
 }
 
 func mintToken() (string, error) {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
@@ -121,8 +123,8 @@ func TestAPreBuildIsHandedTheBindingsOfEveryResourceTheProjectProvisionsWhetherO
 	}
 
 	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, p.fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
-	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
-		t.Errorf("the CLI asked to forward %v, want db--main though no app of this project builds with bindings", sent)
+	if len(sent) != 1 || !maps.EqualFunc(grantedBindings(sent[0]), map[string][]string{portforward.WholeProject: {"db--main"}}, slices.Equal) {
+		t.Errorf("the CLI asked to forward %v, want db--main granted to the project though no app of this project builds with bindings", sent)
 	}
 }
 
@@ -562,7 +564,7 @@ func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing
 		t.Fatalf("runDeploy err = %v; out=%s", err, out)
 	}
 
-	if got := strings.TrimSpace(readOrEmpty(t, seen)); got != "http://127.0.0.1:41999 proxy-token" {
+	if got := strings.TrimSpace(readOrEmpty(t, seen)); got != "http://127.0.0.1:41999 proxy-token-project" {
 		t.Errorf("the preBuild saw the runtime env %q, want the binding proxy the provider served", got)
 	}
 	if strings.Contains(out, "proxy-token") {

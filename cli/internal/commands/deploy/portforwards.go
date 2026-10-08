@@ -28,7 +28,7 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 		}
 		delivered := values[app]
 		maps.Copy(delivered.Live, f.Bindings(app))
-		delivered.BindingProxyEnv = f.BindingProxyEnv()
+		delivered.BindingProxyEnv = f.BindingProxyEnv(app)
 		values[app] = delivered
 	}
 }

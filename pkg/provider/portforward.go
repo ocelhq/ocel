@@ -18,13 +18,23 @@ type BindingProxyRequest struct {
 	Slug          string
 	Tier          environment.Tier
 	Env           string
-	Bindings      []Binding
+	Grants        []BindingGrant
 	ReportFailure func(error)
 }
 
+type BindingGrant struct {
+	Grantee  string
+	Bindings []Binding
+}
+
 type BindingProxy struct {
-	Address      string
+	Address  string
+	Sessions []BindingSession
+	Unserved []string
+	Close    func()
+}
+
+type BindingSession struct {
+	Grantee      string
 	SessionToken string
-	Unserved     []string
-	Close        func()
 }

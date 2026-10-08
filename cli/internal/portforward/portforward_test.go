@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,5 +47,34 @@ func TestClosingTheForwardsIsNoFailureWhenTheirStreamEndedBecauseItWasClosed(t *
 
 	if err := forwards.Close(); err != nil {
 		t.Errorf("Close() = %v, want nil: closing the forwards is what ended their stream", err)
+	}
+}
+
+func TestEachAppIsGrantedItsOwnBoundNamesOnceAndTheProjectItsOwn(t *testing.T) {
+	grants := listGrants([]Use{
+		{App: "web", Bound: "bucket--files"},
+		{App: "web", Bound: "db--main"},
+		{App: "web", Bound: "bucket--files"},
+		{App: "admin", Bound: "bucket--reports"},
+		{App: WholeProject, Bound: "bucket--reports"},
+		{App: WholeProject, Bound: "bucket--files"},
+	})
+
+	got := map[string][]string{}
+	for _, grant := range grants {
+		got[grant.GetGrantee()] = grant.GetBindings()
+	}
+	want := map[string][]string{
+		"web":        {"bucket--files", "db--main"},
+		"admin":      {"bucket--reports"},
+		WholeProject: {"bucket--files", "bucket--reports"},
+	}
+	if len(grants) != len(want) {
+		t.Fatalf("listGrants() = %v, want one grant for each of %d grantees", grants, len(want))
+	}
+	for grantee, bindings := range want {
+		if !slices.Equal(got[grantee], bindings) {
+			t.Errorf("%q was granted %v, want %v", grantee, got[grantee], bindings)
+		}
 	}
 }

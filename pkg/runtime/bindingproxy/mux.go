@@ -6,6 +6,7 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
@@ -39,4 +40,37 @@ func NewMux(token string, services Services) *http.ServeMux {
 		mux.Handle(realtimev1connect.NewRealtimeServiceHandler(services.Realtime, gated))
 	}
 	return mux
+}
+
+type tokenServices struct {
+	token    string
+	services Services
+}
+
+type router struct {
+	muxes []tokenMux
+}
+
+type tokenMux struct {
+	token string
+	mux   http.Handler
+}
+
+func newRouter(grants []tokenServices) http.Handler {
+	r := &router{}
+	for _, grant := range grants {
+		r.muxes = append(r.muxes, tokenMux{token: grant.token, mux: NewMux(grant.token, grant.services)})
+	}
+	return r
+}
+
+func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Authorization")
+	for _, candidate := range r.muxes {
+		if localrpc.VerifyAuthHeader(header, candidate.token) {
+			candidate.mux.ServeHTTP(w, req)
+			return
+		}
+	}
+	http.Error(w, "missing or invalid session token", http.StatusUnauthorized)
 }
