@@ -33,8 +33,11 @@ export const preBuildChecks: Check[] = [
   runsAgainstTheDeployedEnvironmentCheck,
 ];
 
-const NOTE = /prerendered note (?:<!-- -->)?([^<]+)</g;
-const PRERENDERED_AT = /prerendered at (?:<!-- -->)?([^<]+)</;
+const NOTE = /<li>prerendered note (?:<!-- -->)?([^<]+)<\/li>/g;
+const PRERENDERED_AT = /<p id="at">prerendered at (?:<!-- -->)?([^<]+)<\/p>/;
+
+export const prerenderedNotes = (page: string): string[] =>
+  [...page.matchAll(NOTE)].map((found) => found[1]);
 
 export const prerenderedFromTheMigrationCheck: Check = {
   title:
@@ -47,9 +50,9 @@ export const prerenderedFromTheMigrationCheck: Check = {
     };
     const first = await read();
     assert.deepEqual(
-      [...first.matchAll(NOTE)].map((found) => found[1]),
+      prerenderedNotes(first),
       ["first", "second"],
-      `the prerendered page lists no notes lifecycle.preBuild migrated:\n${first}`,
+      `the prerendered page lists other notes than lifecycle.preBuild migrated:\n${first}`,
     );
     const at = PRERENDERED_AT.exec(first)?.[1];
     assert.ok(at, `the home page names no time it was prerendered at:\n${first}`);
