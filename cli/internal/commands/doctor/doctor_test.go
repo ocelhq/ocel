@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -246,6 +247,26 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 	}, "\n")
 	if got := rendered(t, stdout.String()); got != want {
 		t.Errorf("stdout:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRunDoctorWarnsOfAStaleProjectSkillWithItsFix(t *testing.T) {
+	project := healthyProject(t)
+	if err := skill.Write(skill.Dirs(project.Root)[0], "0.0.0-old"); err != nil {
+		t.Fatal(err)
+	}
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	want := "  ⚠ ocel skill is stale — " + filepath.Join(".claude", "skills", "ocel") + " is for ocel 0.0.0-old, this CLI is " + version.Version + "\n" +
+		"    → run `ocel skill install --yes`\n"
+	if got := stdout.String(); !strings.Contains(got, want) || !strings.HasSuffix(got, "1 warning.\n") {
+		t.Errorf("stdout:\n%s\nwant it to hold:\n%s", got, want)
 	}
 }
 
