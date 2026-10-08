@@ -18,7 +18,7 @@ export function background(task: () => Promise<unknown>): void {
   else void deferred.catch(() => {});
 }
 
-export function holdEnd<T>(task: Promise<T>): Promise<T> {
+export function keptUntilSettled<T>(task: Promise<T>): Promise<T> {
   storage.getStore()?.(task);
   return task;
 }

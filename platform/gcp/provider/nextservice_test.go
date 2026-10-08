@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -62,7 +61,7 @@ func releasedNext(t *testing.T, spec provider.StackSpec) *run.GoogleCloudRunV2Co
 	return server.created[0].Template.Containers[0]
 }
 
-func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerRequest(t *testing.T) {
+func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerInstance(t *testing.T) {
 	container := releasedNext(t, nextSpec())
 
 	if got := container.Resources.Limits["memory"]; got != "2048Mi" {
@@ -71,8 +70,8 @@ func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerRequest(t *testing.T) {
 	if got := container.Resources.Limits["cpu"]; got != revisionCPU {
 		t.Errorf("a Next service asks for %q CPU, want %q, which Cloud Run pairs with up to 4 GiB", got, revisionCPU)
 	}
-	if !container.Resources.CpuIdle {
-		t.Error("a Next service keeps its CPU between requests, and a serverless app is billed per request")
+	if container.Resources.CpuIdle {
+		t.Error("a Next service idles its CPU once a response ends, want it kept: work Next hands waitUntil runs after the response")
 	}
 }
 
@@ -261,19 +260,6 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	}
 	if got, told := envOf(server.created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
 		t.Errorf("a Next service behind an edge that routes reads %s=%q", edge.OriginDispatchVar, got)
-	}
-}
-
-func TestANextServiceBilledPerRequestFinishesItsWorkBeforeItsResponseEnds(t *testing.T) {
-	container := releasedNext(t, routedNextSpec())
-
-	capMs, err := strconv.Atoi(envOf(container)[finishBeforeResponseEnvVar])
-	if err != nil || capMs <= 0 {
-		t.Fatalf("the Next service reads %s=%q, want a cap in milliseconds: Cloud Run takes an instance's CPU away once a request billed per request is answered",
-			finishBeforeResponseEnvVar, envOf(container)[finishBeforeResponseEnvVar])
-	}
-	if limit := int(nextRequestTimeout.Milliseconds()); capMs >= limit {
-		t.Errorf("the Next service holds its response's end for up to %dms, want well under the %dms Cloud Run lets a request run", capMs, limit)
 	}
 }
 
@@ -618,7 +604,7 @@ func TestANextContainerIsToldNothingThatRefreshesByRequestOrRoutes(t *testing.T)
 
 	env := envOf(service.Template.Containers[0])
 	for _, name := range []string{
-		finishBeforeResponseEnvVar, routingManifestEnvVar, routerKindEnvVar, staticDirEnvVar,
+		routingManifestEnvVar, routerKindEnvVar, staticDirEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {
@@ -714,26 +700,18 @@ func TestANextPreviewBehindIdentityAwareProxyRefreshesOnItsOwnRatherThanByTask(t
 		t.Error("a Next preview behind Identity-Aware Proxy refreshes by task, but Cloud Tasks' token cannot pass the proxy")
 	}
 	if !refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, false) {
-		t.Error("a Next app billed per request that is not gated refreshes on its own, want the tier's queue")
+		t.Error("a Next app that is not gated refreshes on its own, want the tier's queue")
 	}
 }
 
-func TestANextServiceBilledPerInstanceIsToldNoResponseEndHoldAndNoRefreshQueue(t *testing.T) {
+func TestANextServiceGivenNoRefreshQueueIsToldNone(t *testing.T) {
 	spec := routedNextSpec()
 
-	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: true}, nextCache{}, nil)
-	if got, told := env[finishBeforeResponseEnvVar]; told {
-		t.Errorf("a Next service billed per instance reads %s=%q, want no hold: its cpu outlives the response", finishBeforeResponseEnvVar, got)
-	}
+	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{}, nil)
 	for _, name := range refreshEnvVars {
 		if got, told := env[name]; told {
-			t.Errorf("a Next service billed per instance reads %s=%q, want no refresh queue", name, got)
+			t.Errorf("a Next service given no refresh queue reads %s=%q", name, got)
 		}
-	}
-
-	billedPerRequest := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: false}, nextCache{}, nil)
-	if _, told := billedPerRequest[finishBeforeResponseEnvVar]; !told {
-		t.Errorf("a Next service billed per request reads no %s, so billing is not what decides it", finishBeforeResponseEnvVar)
 	}
 }
 

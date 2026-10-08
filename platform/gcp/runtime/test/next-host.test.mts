@@ -224,17 +224,6 @@ test("the GCP host refreshes a stale page through the queue its deploy named", a
   }
 });
 
-test("a GCP host billed per request that routes its own requests refuses to start without a refresh queue", () => {
-  expect(() =>
-    newGcpNextHost({
-      PORT: "8080",
-      OCEL_ORIGIN_DISPATCH: "1",
-      OCEL_FINISH_BEFORE_RESPONSE_MS: "10000",
-      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
-    }),
-  ).toThrow(/Cloud Tasks queue/);
-});
-
 test("a GCP host told a refresh url but no queue refuses to start", () => {
   expect(() =>
     newGcpNextHost({
@@ -277,7 +266,6 @@ test("the GCP host takes its refresh secret out of the environment the app sees"
 test("a GCP host that does not dispatch at its origin schedules no refresh", () => {
   const host = newGcpNextHost({
     PORT: "8080",
-    OCEL_FINISH_BEFORE_RESPONSE_MS: "10000",
     OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
   });
 

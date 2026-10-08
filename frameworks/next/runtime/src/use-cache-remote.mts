@@ -1,4 +1,4 @@
-import { holdEnd } from "@framework/node-runtime/background";
+import { keptUntilSettled } from "@framework/node-runtime/background";
 import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
 import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
 
@@ -34,7 +34,7 @@ const handler = {
   },
 
   async set(cacheKey: string, pendingEntry: Promise<CacheEntry>): Promise<void> {
-    await holdEnd(
+    await keptUntilSettled(
       pending.run(cacheKey, async () => {
         try {
           const store = await useCacheStore();
