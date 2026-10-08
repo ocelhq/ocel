@@ -76,6 +76,27 @@ test("a SIGTERM lets work handed to waitUntil after the response finish before t
   expect({ code, signal }).toEqual({ code: null, signal: "SIGTERM" });
 });
 
+test("a SIGTERM lets a request still being answered finish, and the work it hands waitUntil", async () => {
+  const { child, port, out } = await serving(
+    `const invoke = (_req, res, ocel) => {\n` +
+      `  console.log("answering");\n` +
+      `  setTimeout(() => {\n` +
+      `    ocel.waitUntil(new Promise((r) => setTimeout(() => { console.log("drained"); r(); }, 200)));\n` +
+      `    res.end("late");\n` +
+      `  }, 300);\n` +
+      `};`,
+  );
+
+  const answered = get(port);
+  while (!out.includes("answering")) await new Promise((wait) => setTimeout(wait, 10));
+  child.kill("SIGTERM");
+
+  expect(await answered).toBe("late");
+  const [code, signal] = await once(child, "exit");
+  expect(out).toContain("drained");
+  expect({ code, signal }).toEqual({ code: null, signal: "SIGTERM" });
+});
+
 test("a SIGTERM with no work outstanding exits at once", async () => {
   const { child, port } = await serving(`const invoke = (_req, res) => res.end("ok");`);
 

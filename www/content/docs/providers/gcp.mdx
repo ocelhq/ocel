@@ -450,8 +450,8 @@ Google's first 7 days, and one whose permissions drifted is put back.
 Each app runs as a service account of its own, which a deploy creates the first time the app
 ships to a tier and grants only what the app's runtime reads: the namespace's database, the
 tier's key, for a Next app the tier's tags database, and for an app that reaches topics, tasks or
-workers the tier's task database, the delay queue and its topics, and for a Next app billed per
-request the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
+workers the tier's task database, the delay queue and its topics, and for a serverless Next app
+the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
 a deploy holds it under a condition that lets it grant and revoke the four roles an app needs and
 the custom role that clears Cloud CDN, and no others:
 

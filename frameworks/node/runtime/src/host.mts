@@ -259,6 +259,13 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
       pending.push(Promise.resolve(p));
     };
 
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    draining.add(completed);
+    void completed.then(() => draining.delete(completed));
+
     let finalized = false;
     const finalize = (): void => {
       if (finalized) return;
@@ -269,11 +276,11 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
         status: res.statusCode,
         durationMs: performance.now() - start,
       });
-      const drained = drainWaitUntil(pending).then(() => {
-        sendControl("invocation-complete", { requestId });
-      });
-      draining.add(drained);
-      void drained.finally(() => draining.delete(drained));
+      void drainWaitUntil(pending)
+        .then(() => {
+          sendControl("invocation-complete", { requestId });
+        })
+        .finally(complete);
     };
     res.once("finish", finalize);
     res.once("close", finalize);
