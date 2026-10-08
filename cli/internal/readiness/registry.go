@@ -23,6 +23,23 @@ func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	}, nil
 }
 
+func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, left string) {
+	if cfg.Registry == nil {
+		return nil, ""
+	}
+	password, err := projectRegistryPassword(cfg)
+	if err != nil {
+		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
+			"its password is read from %s, which is unset here", cfg.Registry.Server, cfg.Registry.Password)
+	}
+	return &contractv1.ImageRegistry{
+		Server:    cfg.Registry.Server,
+		Namespace: cfg.Registry.Namespace,
+		Username:  cfg.Registry.Username,
+		Password:  password,
+	}, ""
+}
+
 func projectRegistryPassword(cfg *project.Project) (string, error) {
 	lookup, err := project.EnvLookup(cfg.Dir)
 	if err != nil {

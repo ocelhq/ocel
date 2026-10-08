@@ -408,12 +408,17 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		}
 		env.Lifecycle = recorded.GetLifecycle()
 
+		registry, left := readiness.RemovalRegistry(cfg)
+		if left != "" {
+			check.Warn(left)
+		}
 		check.End(nil)
 
 		req := &contractv1.RemoveEnvironmentRequest{
-			Environment: env,
-			Slug:        cfg.Slug,
-			Edge:        cfg.EdgeSelection(),
+			Environment:     env,
+			Slug:            cfg.Slug,
+			Edge:            cfg.EdgeSelection(),
+			ProjectRegistry: registry,
 		}
 		if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 			return err

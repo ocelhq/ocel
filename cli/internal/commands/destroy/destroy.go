@@ -199,6 +199,10 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 		return nil, nil
 	}
 
+	registry, left := readiness.RemovalRegistry(cfg)
+	if left != "" {
+		planning.Warn(left)
+	}
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
 	if policy.DryRun {
 		planning.Say("Run without --dry to destroy.")
@@ -216,10 +220,11 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 	}
 
 	req := &contractv1.ProjectRequest{
-		Slug:        cfg.Slug,
-		Environment: env,
-		Edge:        cfg.EdgeSelection(),
-		Consented:   consented,
+		Slug:            cfg.Slug,
+		Environment:     env,
+		Edge:            cfg.EdgeSelection(),
+		Consented:       consented,
+		ProjectRegistry: registry,
 	}
 	if _, err := providerprocess.Stream(ctx, provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 		return nil, err

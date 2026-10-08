@@ -850,7 +850,7 @@ func (c *countedImages) Destination() string { return "the counted store" }
 func (c *countedImages) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
 func (c *countedImages) ProbePush(context.Context, string) error { return nil }
-func (c *countedImages) Remove(context.Context, string) error { return nil }
+func (c *countedImages) Remove(context.Context, string) error    { return nil }
 
 func (c *countedImages) Push(_ context.Context, _ provider.ImagePush, _ progress.Log) error {
 	c.mu.Lock()

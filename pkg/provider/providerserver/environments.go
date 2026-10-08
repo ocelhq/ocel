@@ -158,7 +158,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, progress); err != nil {
+		if err := ReclaimPreview(withRemovalImages(ctx, session.provider, req.GetProjectRegistry(), progress), session.provider, req.GetSlug(), pointer, removed, progress); err != nil {
 			return err
 		}
 		if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {

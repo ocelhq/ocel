@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -98,14 +99,30 @@ func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageReg
 	return nil
 }
 
+func registryTargetOf(project *contractv1.ImageRegistry) provider.RegistryTarget {
+	return provider.RegistryTarget{
+		Server:    project.GetServer(),
+		Namespace: project.GetNamespace(),
+		Username:  project.GetUsername(),
+		Password:  project.GetPassword(),
+	}
+}
+
+func withRemovalImages(ctx context.Context, p provider.Provider, project *contractv1.ImageRegistry, log progress.Log) context.Context {
+	if project.GetServer() == "" {
+		return ctx
+	}
+	store, err := imageStoreFor(ctx, p, registryTargetOf(project))
+	if err != nil {
+		log.Warn(fmt.Sprintf("Left the images this project pushed to %s in place, as the registry could not be opened: %v", project.GetServer(), err))
+		return ctx
+	}
+	return provider.WithImageStore(ctx, store)
+}
+
 func (r *deployRun) registryTarget(ctx context.Context, project *contractv1.ImageRegistry) (provider.RegistryTarget, error) {
 	if project.GetServer() != "" {
-		return provider.RegistryTarget{
-			Server:    project.GetServer(),
-			Namespace: project.GetNamespace(),
-			Username:  project.GetUsername(),
-			Password:  project.GetPassword(),
-		}, nil
+		return registryTargetOf(project), nil
 	}
 	ensure := r.provider.Hooks().EnsureImageRegistry
 	if ensure == nil || len(r.spec.Apps) == 0 {

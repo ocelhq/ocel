@@ -36,6 +36,17 @@ type ImageStore interface {
 	Remove(ctx context.Context, imageRef string) error
 }
 
+type imageStoreKey struct{}
+
+func WithImageStore(ctx context.Context, store ImageStore) context.Context {
+	return context.WithValue(ctx, imageStoreKey{}, store)
+}
+
+func ImageStoreFrom(ctx context.Context) ImageStore {
+	store, _ := ctx.Value(imageStoreKey{}).(ImageStore)
+	return store
+}
+
 type ImagePushes struct {
 	Store  ImageStore
 	Pushes []ImagePush

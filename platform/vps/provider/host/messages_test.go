@@ -149,8 +149,12 @@ func TestReconcilingAnAppsImagesNamesEveryImageItRemoved(t *testing.T) {
 	}
 	progress := &fake.Log{}
 
-	if err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333", progress); err != nil {
+	removed, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333", progress)
+	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
+	}
+	if want := []string{"ocel/shop-web:1111", "ocel/shop-web:2222"}; !slices.Equal(removed, want) {
+		t.Errorf("Reconcile() removed %v, want %v: they are the tags to delete from the registry the box pulled them from", removed, want)
 	}
 	heardAll(t, progress,
 		"INFO Removed web's unused image ocel/shop-web:1111",

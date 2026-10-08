@@ -146,3 +146,36 @@ func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
 		t.Error("ProjectRegistry() sent the .env's password, want the shell's: the shell wins, as it does for every ${} in the config")
 	}
 }
+
+func TestARemovalSendsTheRegistryEvenWhenTheConfigNamesNoAppAnyMore(t *testing.T) {
+	t.Setenv("REGISTRY_TOKEN", "hunter2")
+	cfg := registryConfig(&project.Registry{Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: "REGISTRY_TOKEN"})
+	cfg.Apps = nil
+
+	registry, left := RemovalRegistry(cfg)
+	if left != "" {
+		t.Fatalf("RemovalRegistry() left %q", left)
+	}
+	if registry.GetServer() != "registry.example.com" || registry.GetPassword() != "hunter2" {
+		t.Errorf("RemovalRegistry() = %q with password %q, want the project's registry: the images it holds outlive the apps that pushed them", registry.GetServer(), registry.GetPassword())
+	}
+}
+
+func TestARemovalOfAProjectNamingNoRegistrySendsNone(t *testing.T) {
+	registry, left := RemovalRegistry(registryConfig(nil))
+	if registry != nil || left != "" {
+		t.Errorf("RemovalRegistry() = %v, %q, want nothing", registry, left)
+	}
+}
+
+func TestARemovalWhoseRegistryVariableIsUnsetSendsNoneAndNamesWhatStays(t *testing.T) {
+	registry, left := RemovalRegistry(registryConfig(&project.Registry{Server: "registry.example.com", Password: "REGISTRY_TOKEN"}))
+	if registry != nil {
+		t.Errorf("RemovalRegistry() = %v, want none: a token that is gone must not keep a project from being removed", registry)
+	}
+	for _, want := range []string{"REGISTRY_TOKEN", "registry.example.com"} {
+		if !strings.Contains(left, want) {
+			t.Errorf("RemovalRegistry() left %q, want it to name %q", left, want)
+		}
+	}
+}

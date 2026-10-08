@@ -2,10 +2,13 @@ package vps_test
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -142,7 +145,7 @@ func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	called := helperCalls(machine, "reconcile")
@@ -167,7 +170,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 	for _, app := range []string{"web; rm -rf /", "$(id)", "'; docker rmi $(docker images -q); #"} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil)
+		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil, nil)
 		quotedCommands := 0
 		for _, command := range machine.commands() {
 			if !strings.Contains(command, app) {
@@ -196,7 +199,7 @@ func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		err := over(machine).ReconcileImages(context.Background(), ref, "web", imageRef, nil)
+		err := over(machine).ReconcileImages(context.Background(), ref, "web", imageRef, nil, nil)
 		if err == nil {
 			t.Errorf("%s swept anyway, and a filter that names anything but one repository removes the wrong thing", imageRef)
 		}
@@ -216,3 +219,79 @@ func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
 }
 
 func quoted(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
+
+const registryImageRef = "registry.example.com/acme/shop.web:sha256-new"
+
+func sweepingOff(removed ...string) *box {
+	return &box{refuses: func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "/usr/local/lib/ocel/releases") || !strings.Contains(command, "'reconcile'") {
+			return session.Result{}, false
+		}
+		return session.Result{Stdout: strings.Join(removed, "\n") + "\n"}, true
+	}}
+}
+
+func TestASweepRemovesFromTheRegistryEveryImageItDroppedFromTheBox(t *testing.T) {
+	t.Parallel()
+
+	dropped := []string{"registry.example.com/acme/shop.web:sha256-old", "registry.example.com/acme/shop.web:sha256-older"}
+	machine := sweepingOff(dropped...)
+	store := fake.NewImages()
+	ref := aStack(t, anApp()).Ref
+
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+	if got := store.Removed(); !slices.Equal(got, dropped) {
+		t.Errorf("the registry was asked to remove %v, want what the box dropped %v: a tag the box no longer holds is a tag nothing will ever pull again", got, dropped)
+	}
+}
+
+func TestASweepRemovesNothingFromTheRegistryWhenTheBoxDroppedNothing(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff()
+	store := fake.NewImages()
+	ref := aStack(t, anApp()).Ref
+
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+	if got := store.Removed(); len(got) != 0 {
+		t.Errorf("the registry was asked to remove %v, want nothing: the window and the running containers still name every image it holds", got)
+	}
+}
+
+func TestASweepOverNoRegistryDropsTheBoxImagesAndRemovesNothingElsewhere(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff(loadedImageRef)
+	ref := aStack(t, anApp()).Ref
+
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+	if len(helperCalls(machine, "reconcile")) != 1 {
+		t.Error("the sweep never ran on the box")
+	}
+}
+
+func TestASweepWhoseRegistryRefusesTheDeleteSucceedsAndNamesTheImageItLeft(t *testing.T) {
+	t.Parallel()
+
+	machine := sweepingOff("registry.example.com/acme/shop.web:sha256-old")
+	store := fake.NewImages()
+	store.FailRemovals(errors.New("UNSUPPORTED: The operation is unsupported."))
+	log := &fake.Log{}
+	ref := aStack(t, anApp()).Ref
+
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, log); err != nil {
+		t.Fatalf("ReconcileImages() = %v, want nothing: the box was swept, and the registry refusing a delete is not the box failing", err)
+	}
+	joined := strings.Join(log.Lines(), "\n")
+	for _, want := range []string{"WARN", "registry.example.com/acme/shop.web:sha256-old", "UNSUPPORTED"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep said %q, want a warning that names %q", joined, want)
+		}
+	}
+}
