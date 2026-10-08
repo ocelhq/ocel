@@ -48,6 +48,22 @@ func (b bearer) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func servedProxy(t *testing.T, bindings []provider.Binding) (provider.BindingProxy, *storeSeen, *box) {
 	t.Helper()
+	return servedGrants(t, provider.BindingGrant{Grantee: "web", Bindings: bindings})
+}
+
+func tokenOf(t *testing.T, proxy provider.BindingProxy, grantee string) string {
+	t.Helper()
+	for _, session := range proxy.Sessions {
+		if session.Grantee == grantee {
+			return session.SessionToken
+		}
+	}
+	t.Fatalf("the proxy minted no token for %q: %+v", grantee, proxy.Sessions)
+	return ""
+}
+
+func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.BindingProxy, *storeSeen, *box) {
+	t.Helper()
 	store := &storeSeen{}
 	machine := &box{kept: sealedRootKey(), listening: store.serve(t), refuses: func(command string) (session.Result, bool) {
 		if strings.Contains(command, "docker inspect") {
@@ -59,7 +75,7 @@ func servedProxy(t *testing.T, bindings []provider.Binding) (provider.BindingPro
 	if serve == nil {
 		t.Fatal("the vps provider sets no ServeBindingProxy hook, so a build never reaches a bucket")
 	}
-	proxy, err := serve(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Bindings: bindings}, progress.Discard())
+	proxy, err := serve(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Grants: grants}, progress.Discard())
 	if err != nil {
 		t.Fatalf("ServeBindingProxy() error = %v", err)
 	}
@@ -69,7 +85,7 @@ func servedProxy(t *testing.T, bindings []provider.Binding) (provider.BindingPro
 
 func TestTheVPSBindingProxyServesTheBucketsABuildBindsThroughAForwardToTheBoxsStoreAndNoOtherBucket(t *testing.T) {
 	proxy, store, machine := servedProxy(t, []provider.Binding{bindingBucket()})
-	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(proxy.SessionToken)}, proxy.Address)
+	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(proxy.Sessions[0].SessionToken)}, proxy.Address)
 
 	if _, err := client.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "prod-web-r0a1b2c3d-uploads", Key: "a.png"}); err != nil {
 		t.Fatalf("Head of the bound bucket = %v, want it answered", err)
@@ -110,5 +126,41 @@ func TestTheVPSBindingProxyNamesTheBindingsItHasNoServiceFor(t *testing.T) {
 
 	if want := []string{"events", "resize"}; !slices.Equal(slices.Sorted(slices.Values(proxy.Unserved)), want) {
 		t.Errorf("Unserved = %v, want %v: the build is not handed a record nothing answers for", proxy.Unserved, want)
+	}
+}
+
+func TestTheVPSBindingProxyGrantsEachGranteeOnlyItsOwnBucketsAndAProjectWideGrantEveryBucket(t *testing.T) {
+	manuals := provider.Binding{
+		Type: provider.BindingBucket, Name: "manuals", Resource: "manuals",
+		Properties: map[string]string{provider.PropertyBucket: "prod-web-r0a1b2c3d-manuals"},
+	}
+	proxy, _, _ := servedGrants(t,
+		provider.BindingGrant{Grantee: "web", Bindings: []provider.Binding{bindingBucket()}},
+		provider.BindingGrant{Grantee: "docs", Bindings: []provider.Binding{manuals}},
+		provider.BindingGrant{Grantee: "", Bindings: []provider.Binding{bindingBucket(), manuals}},
+	)
+	web := tokenOf(t, proxy, "web")
+	docs := tokenOf(t, proxy, "docs")
+	project := tokenOf(t, proxy, "")
+	if web == docs || web == project || docs == project {
+		t.Fatalf("the grantees share a token: %+v", proxy.Sessions)
+	}
+	as := func(token string) bucketv1connect.BucketServiceClient {
+		return bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearer(token)}, proxy.Address)
+	}
+
+	if _, err := as(web).Head(context.Background(), &bucketv1.HeadRequest{Bucket: "prod-web-r0a1b2c3d-uploads", Key: "a.png"}); err != nil {
+		t.Errorf("web reaching its own bucket = %v, want it answered", err)
+	}
+	if _, err := as(web).Head(context.Background(), &bucketv1.HeadRequest{Bucket: "prod-web-r0a1b2c3d-manuals", Key: "a.png"}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("web reaching docs' bucket = %v, want it refused: a build gets only the buckets its own app binds", err)
+	}
+	if _, err := as(docs).Head(context.Background(), &bucketv1.HeadRequest{Bucket: "prod-web-r0a1b2c3d-uploads", Key: "a.png"}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("docs reaching web's bucket = %v, want it refused", err)
+	}
+	for _, bucket := range []string{"prod-web-r0a1b2c3d-uploads", "prod-web-r0a1b2c3d-manuals"} {
+		if _, err := as(project).Head(context.Background(), &bucketv1.HeadRequest{Bucket: bucket, Key: "a.png"}); err != nil {
+			t.Errorf("the project-wide grant reaching %s = %v, want it answered: the preBuild is meant to reach every bucket", bucket, err)
+		}
 	}
 }

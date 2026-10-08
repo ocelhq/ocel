@@ -13,19 +13,7 @@ import (
 )
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
-	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, bindings []provider.Binding) (provider.BindingProxy, error) {
-		messages := make([]*bindingsv1.Binding, 0, len(bindings))
-		for _, binding := range bindings {
-			message, err := provider.BindingMessage(binding)
-			if err != nil {
-				return provider.BindingProxy{}, err
-			}
-			messages = append(messages, message)
-		}
-		records, err := s3store.NewStaticRecords(messages...)
-		if err != nil {
-			return provider.BindingProxy{}, err
-		}
+	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error) {
 		c, err := p.openClients(ctx)
 		if err != nil {
 			return provider.BindingProxy{}, err
@@ -34,14 +22,34 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}
-		buckets, err := bucket.NewDispatch(ctx, store, records, s3store.HTTPPoster{})
+		served := make([]bindingproxy.Grant, 0, len(grants))
+		for _, grant := range grants {
+			messages := make([]*bindingsv1.Binding, 0, len(grant.Bindings))
+			for _, binding := range grant.Bindings {
+				message, err := provider.BindingMessage(binding)
+				if err != nil {
+					return provider.BindingProxy{}, err
+				}
+				messages = append(messages, message)
+			}
+			records, err := s3store.NewStaticRecords(messages...)
+			if err != nil {
+				return provider.BindingProxy{}, err
+			}
+			buckets, err := bucket.NewDispatch(ctx, store, records, s3store.HTTPPoster{})
+			if err != nil {
+				return provider.BindingProxy{}, err
+			}
+			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: buckets}})
+		}
+		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}
-		served, err := bindingproxy.ServeReporting(bindingproxy.Services{Buckets: buckets}, req.ReportFailure)
-		if err != nil {
-			return provider.BindingProxy{}, err
+		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
+		for _, session := range proxy.Sessions {
+			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
 		}
-		return provider.BindingProxy{Address: served.Address, SessionToken: served.Token, Close: func() { _ = served.Close() }}, nil
+		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() { _ = proxy.Close() }}, nil
 	})
 }
