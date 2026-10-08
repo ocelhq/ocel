@@ -169,6 +169,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/pre-build/next",
 		"tests/fixtures/pre-build/node",
 		"tests/fixtures/prerender/next",
+		"tests/fixtures/prerender/next-bucket",
 		"tests/fixtures/prerender/next-dockerfile",
 		"tests/fixtures/realtime/go",
 		"tests/fixtures/realtime/node",

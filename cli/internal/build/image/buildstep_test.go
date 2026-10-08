@@ -12,6 +12,9 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	railpack "github.com/railwayapp/railpack/buildkit"
 	railpackplan "github.com/railwayapp/railpack/core/plan"
+
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 const hyphenatedKey = "OCEL_RESOURCE_POSTGRES_my-db"
@@ -138,7 +141,7 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 
 func TestOnlyTheBuildStepsCommandsReadTheBindingProxyAndFromTheirEnvironment(t *testing.T) {
 	original, plan := defineRailpackBuild(t, "a live hash")
-	proxy := []string{"OCEL_RUNTIME_ADDRESS", "OCEL_SESSION_TOKEN"}
+	proxy := []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
 
 	rewritten, err := mountLiveValues(original, nil, proxy)
 	if err != nil {

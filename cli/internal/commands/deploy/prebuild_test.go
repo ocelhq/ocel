@@ -20,6 +20,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -532,7 +534,7 @@ func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing
 	servingBindingProxy(t, p.fixture)
 	writeNextDatabaseAndBucketProject(t, p.fixture.Root)
 	seen := filepath.Join(t.TempDir(), "runtime")
-	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf("%q", fmt.Sprintf(`echo "$OCEL_RUNTIME_ADDRESS $OCEL_SESSION_TOKEN" > %s; echo "token is $OCEL_SESSION_TOKEN"`, seen)))
+	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf("%q", fmt.Sprintf(`echo "$%s $%s" > %s; echo "token is $%s"`, processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar, seen, localrpc.SessionTokenEnvVar)))
 
 	out, err := p.deploy(t, deployOptions{yes: true})
 	if err != nil {

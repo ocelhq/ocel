@@ -533,10 +533,10 @@ func TestForwardPortsServesTheBindingProxyForBindingsNoPortReachesAndHoldsItUnti
 		t.Errorf("the hook was asked to proxy %+v, want the published uploads bucket", asked.Bindings)
 	}
 	if got := served.GetBindingProxy(); got.GetAddress() != "http://127.0.0.1:41999" || got.GetSessionToken() != "token-1" {
-		t.Errorf("ForwardPorts() answered the proxy %v, want the address and token the hook served", got)
+		t.Errorf("ForwardPorts() answered the proxy at %q, want the address and token the hook served", got.GetAddress())
 	}
 	if len(served.GetBindings()) != 1 || served.GetBindings()[0].GetName() != "uploads" || served.GetBindings()[0].GetBucket() == nil {
-		t.Errorf("ForwardPorts() handed back %v, want the uploads bucket binding as published", served.GetBindings())
+		t.Errorf("ForwardPorts() handed back %d bindings, want the uploads bucket binding as published", len(served.GetBindings()))
 	}
 	if len(served.GetUnforwarded()) != 0 {
 		t.Errorf("ForwardPorts() left %v unforwarded, want none", served.GetUnforwarded())
@@ -638,7 +638,7 @@ func TestForwardPortsHoldsNoBindingProxyWhenTheVendorServesNoneOfTheBindings(t *
 		t.Fatalf("ForwardPorts() stream error = %v, want the stream ended at once since nothing is held open", err)
 	}
 	if len(responses) != 1 || responses[0].GetBindingProxy() != nil || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
-		t.Errorf("ForwardPorts() sent %v, want one response naming uploads unforwarded, with no proxy, and the stream ended since nothing is held open", responses)
+		t.Errorf("ForwardPorts() sent %d responses, want one naming uploads unforwarded, with no proxy, and the stream ended since nothing is held open", len(responses))
 	}
 }
 
@@ -664,6 +664,6 @@ func TestForwardPortsLeavesUnforwardedTheProxiedBindingsTheProxyReportsItDoesNot
 	}
 	served := stream.Msg().GetResponse()
 	if len(served.GetBindings()) != 0 || !slices.Equal(served.GetUnforwarded(), []string{"uploads"}) {
-		t.Errorf("ForwardPorts() handed back %v and left %v unforwarded, want uploads unforwarded since the proxy does not serve it", served.GetBindings(), served.GetUnforwarded())
+		t.Errorf("ForwardPorts() handed back %d bindings and left %v unforwarded, want uploads unforwarded since the proxy does not serve it", len(served.GetBindings()), served.GetUnforwarded())
 	}
 }
