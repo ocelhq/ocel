@@ -369,20 +369,13 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: EVERY_NEXT_BEARING,
-        variants: [cloudflare],
+        variants: [cloudflare, cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         fails: [step.deploy],
         skipsCell: true,
       },
       {
         on: ["gcp.floci"],
         variants: [cloudflareOnGoogleCloud, alb],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-      {
-        on: ["aws.floci"],
-        variants: [cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         fails: [step.deploy],
         skipsCell: true,
       },
