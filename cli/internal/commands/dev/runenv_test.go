@@ -5,6 +5,7 @@ package dev
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,6 +213,50 @@ func TestRunInAnEnvironmentOfAProviderThatForwardsNoPortSaysSoAndRunsNothing(t *
 	}
 	if _, statErr := os.Stat(ran); statErr == nil {
 		t.Error("the command ran without a way to reach the environment")
+	}
+}
+
+func TestRunInADeployedEnvironmentAsksForTheForwardsOfThatEnvironmentsTier(t *testing.T) {
+	fixture := setUpDeployedProject(t)
+	forwardingPorts(t, fixture)
+	deployProject(t, fixture, clitest.NewInvocation())
+	asked := make(chan provider.PortForwardRequest, 1)
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		forward := h.ForwardPorts
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			asked <- req
+			return forward(ctx, req)
+		}
+	})
+
+	got, err := runInEnvironment(t, fixture, clitest.NewInvocation(), "--env", "production", "--", "true")
+
+	if err != nil {
+		t.Fatalf("ocel run err = %v; out=%s", err, got)
+	}
+	req := <-asked
+	if req.Tier != environment.TierProduction || req.ReportFailure == nil {
+		t.Errorf("the provider was asked to forward in tier %q with ReportFailure set = %v, want production and a way to report a failed forward", req.Tier, req.ReportFailure != nil)
+	}
+}
+
+func TestRunInADeployedEnvironmentWhoseForwardFailsWhileTheCommandRunsFailsAndSaysWhy(t *testing.T) {
+	fixture := setUpDeployedProject(t)
+	forwardingPorts(t, fixture)
+	deployProject(t, fixture, clitest.NewInvocation())
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		forward := h.ForwardPorts
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			forwards, err := forward(ctx, req)
+			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
+			return forwards, err
+		}
+	})
+
+	got, err := runInEnvironment(t, fixture, clitest.NewInvocation(), "--env", "production", "--", "sleep", "1")
+
+	if err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
+		t.Fatalf("ocel run err = %v, want the failed forward's reason; out=%s", err, got)
 	}
 }
 
