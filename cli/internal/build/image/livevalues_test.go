@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 var machineKey = []byte("a machine's key")
 
 func hashValues(values map[string]string) string {
-	return NewLiveValues(values, machineKey).Hash
+	return NewLiveValues(values, nil, machineKey).Hash
 }
 
 func TestTheLiveHashChangesWhenAValueDoesAndWhenAKeyDoes(t *testing.T) {
@@ -38,7 +39,7 @@ func TestTheLiveHashChangesWhenAValueDoesAndWhenAKeyDoes(t *testing.T) {
 func TestTheLiveHashOfTheSameValuesDiffersFromOneMachinesKeyToAnother(t *testing.T) {
 	values := map[string]string{"OCEL_SECRET_PIN": "1234"}
 
-	if NewLiveValues(values, []byte("one machine")).Hash == NewLiveValues(values, []byte("another machine")).Hash {
+	if NewLiveValues(values, nil, []byte("one machine")).Hash == NewLiveValues(values, nil, []byte("another machine")).Hash {
 		t.Error("the hash is the same under two keys, so anyone who reads it can try every short value until one matches")
 	}
 }
@@ -52,13 +53,13 @@ func TestTheLiveHashHoldsNoValue(t *testing.T) {
 }
 
 func TestNoLiveValuesHaveNoHash(t *testing.T) {
-	if got := NewLiveValues(nil, machineKey); got.Hash != "" || got.hasValues() {
+	if got := NewLiveValues(nil, nil, machineKey); got.Hash != "" || got.hasValues() {
 		t.Errorf("NewLiveValues(nil) = %+v, want none", got)
 	}
 }
 
 func TestTheSessionAnswersEachSecretWithItsValueAndNoOtherID(t *testing.T) {
-	attachables := NewLiveValues(map[string]string{"OCEL_RESOURCE_POSTGRES_my-db": "postgres://127.0.0.1:5000"}, machineKey).newSecretsSession()
+	attachables := NewLiveValues(map[string]string{"OCEL_RESOURCE_POSTGRES_my-db": "postgres://127.0.0.1:5000"}, nil, machineKey).newSecretsSession()
 
 	if len(attachables) != 1 {
 		t.Fatalf("the session attaches %d providers, want the one holding the secrets", len(attachables))
@@ -73,6 +74,28 @@ func TestTheSessionAnswersEachSecretWithItsValueAndNoOtherID(t *testing.T) {
 	}
 	if _, err := server.GetSecret(context.Background(), &secrets.GetSecretRequest{ID: "HOME"}); err == nil {
 		t.Error("the session answered a secret nobody gave it")
+	}
+}
+
+func TestABuildHandedOnlyTheBindingProxyAttachesItAsSecretsOnTheHostNetworkAndRehashesWhenItChanges(t *testing.T) {
+	proxy := NewLiveValues(nil, map[string]string{"OCEL_SESSION_TOKEN": "token-1"}, machineKey)
+	if proxy.Hash == "" || proxy.Hash == NewLiveValues(nil, map[string]string{"OCEL_SESSION_TOKEN": "token-2"}, machineKey).Hash {
+		t.Error("the live hash stayed the same when the session token changed, so a cached step keeps a token whose proxy has closed")
+	}
+	if proxy.Hash == NewLiveValues(map[string]string{"OCEL_SESSION_TOKEN": "token-1"}, nil, machineKey).Hash {
+		t.Error("a value in the environment hashes as the same value in the live dir, so moving it would not rebuild")
+	}
+
+	server, ok := proxy.newSecretsSession()[0].(secrets.SecretsServer)
+	if !ok {
+		t.Fatal("the session serves no secrets")
+	}
+	if got, err := server.GetSecret(context.Background(), &secrets.GetSecretRequest{ID: "OCEL_SESSION_TOKEN"}); err != nil || string(got.Data) != "token-1" {
+		t.Errorf("GetSecret(OCEL_SESSION_TOKEN) = %q, %v, want the token", got.GetData(), err)
+	}
+	opt := solveFor(t, newRailpackRecipe(t), proxy)
+	if !slices.Equal(opt.AllowedEntitlements, []string{"network.host"}) {
+		t.Errorf("the solve asks for %v, want network.host, where the binding proxy listens", opt.AllowedEntitlements)
 	}
 }
 
@@ -112,7 +135,7 @@ func TestABuildWithNoLiveValuesAttachesNoSessionAndAsksForNoEntitlement(t *testi
 }
 
 func TestABuildWithLiveValuesAttachesThemAndAsksForHostNetworkSoItsStepsReachTheForwards(t *testing.T) {
-	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, machineKey)
+	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, nil, machineKey)
 	for name, recipe := range map[string]Recipe{"dockerfile": newDockerfileRecipe(t), "railpack": newRailpackRecipe(t)} {
 		t.Run(name, func(t *testing.T) {
 			opt := solveFor(t, recipe, live)
@@ -128,7 +151,7 @@ func TestABuildWithLiveValuesAttachesThemAndAsksForHostNetworkSoItsStepsReachThe
 }
 
 func TestEachBuilderIsHandedTheLiveHashAsTheBuildArgItBustsItsCacheWith(t *testing.T) {
-	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, machineKey)
+	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, nil, machineKey)
 	for recipe, arg := range map[string]string{"railpack": "build-arg:secrets-hash", "dockerfile": "build-arg:OCEL_LIVE_HASH"} {
 		t.Run(recipe, func(t *testing.T) {
 			chosen := map[string]Recipe{"dockerfile": newDockerfileRecipe(t), "railpack": newRailpackRecipe(t)}[recipe]
@@ -146,7 +169,7 @@ func TestEachBuilderIsHandedTheLiveHashAsTheBuildArgItBustsItsCacheWith(t *testi
 }
 
 func TestTheLiveHashKeepsThePlatformABuildIsPinnedTo(t *testing.T) {
-	opt, done, err := newRailpackRecipe(t).solve("arm64", NewLiveValues(map[string]string{"K": "v"}, machineKey))
+	opt, done, err := newRailpackRecipe(t).solve("arm64", NewLiveValues(map[string]string{"K": "v"}, nil, machineKey))
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}
@@ -158,7 +181,7 @@ func TestTheLiveHashKeepsThePlatformABuildIsPinnedTo(t *testing.T) {
 }
 
 func TestAFailedBuildWithBindingsOnADaemonOnAnotherMachineSaysTheForwardsAreOutOfItsReach(t *testing.T) {
-	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, machineKey)
+	live := NewLiveValues(map[string]string{"OCEL_BINDING_DB": "x"}, nil, machineKey)
 	failed := errors.New("connection refused")
 	for address, elsewhere := range map[string]bool{
 		"10.0.0.5:2375":   true,

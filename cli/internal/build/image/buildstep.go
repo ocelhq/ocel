@@ -14,12 +14,13 @@ const railpackSecretsHashMount = "/secrets-hash"
 
 type liveGateway struct {
 	client.Client
-	keys []string
+	keys    []string
+	envKeys []string
 }
 
 func (g liveGateway) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
-	if req.Definition != nil && len(g.keys) > 0 {
-		rewritten, err := mountLiveValues(req.Definition, g.keys)
+	if req.Definition != nil && len(g.keys)+len(g.envKeys) > 0 {
+		rewritten, err := mountLiveValues(req.Definition, g.keys, g.envKeys)
 		if err != nil {
 			return nil, err
 		}
@@ -40,9 +41,11 @@ func hasLiveSecretEnv(exec *pb.ExecOp, keys []string) bool {
 	return slices.ContainsFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
 }
 
-func giveLiveValues(exec *pb.ExecOp, keys []string) {
+func giveLiveValues(exec *pb.ExecOp, keys, envKeys []string) {
 	exec.Network = pb.NetMode_HOST
-	exec.Meta.Env = append(exec.Meta.Env, liveDirEnv+"="+buildLiveDir)
+	if len(keys) > 0 {
+		exec.Meta.Env = append(exec.Meta.Env, liveDirEnv+"="+buildLiveDir)
+	}
 	for _, key := range keys {
 		exec.Mounts = append(exec.Mounts, &pb.Mount{
 			Input:     int64(pb.Empty),
@@ -51,9 +54,13 @@ func giveLiveValues(exec *pb.ExecOp, keys []string) {
 			SecretOpt: &pb.SecretOpt{ID: key, Mode: secretFileMode},
 		})
 	}
+	for _, key := range envKeys {
+		exec.Secretenv = append(exec.Secretenv, &pb.SecretEnv{ID: key, Name: key})
+	}
 }
 
-func mountLiveValues(definition *pb.Definition, keys []string) (*pb.Definition, error) {
+func mountLiveValues(definition *pb.Definition, keys, envKeys []string) (*pb.Definition, error) {
+	secrets := slices.Concat(keys, envKeys)
 	renamed := map[string]string{}
 	rewritten := &pb.Definition{
 		Def:      make([][]byte, len(definition.Def)),
@@ -73,12 +80,12 @@ func mountLiveValues(definition *pb.Definition, keys []string) (*pb.Definition, 
 				touched = true
 			}
 		}
-		if exec := operation.GetExec(); exec != nil && hasLiveSecretEnv(exec, keys) {
-			exec.Secretenv = slices.DeleteFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
+		if exec := operation.GetExec(); exec != nil && hasLiveSecretEnv(exec, secrets) {
+			exec.Secretenv = slices.DeleteFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(secrets, env.ID) })
 			touched = true
 		}
 		if isBuildStepCommand(&operation) {
-			giveLiveValues(operation.GetExec(), keys)
+			giveLiveValues(operation.GetExec(), keys, envKeys)
 			touched = true
 		}
 		if touched {

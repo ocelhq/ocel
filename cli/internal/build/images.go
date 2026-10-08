@@ -40,7 +40,7 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 			return nil, err
 		}
 		appLog, ended := log.App(app.Name)
-		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, hashKey), appLog)
+		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, variables[app.Name].BindingProxyEnv, hashKey), appLog)
 		if sources, hosts := workers[app.Name]; hosts && err == nil {
 			built, err = t.addWorkerEntry(ctx, cfg, app, built, archs[app.Name], sources, appLog)
 		}
@@ -61,7 +61,7 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 
 func (t tools) ensureLiveHashKey(apps []project.App, variables map[string]AppVariables) ([]byte, error) {
 	for _, app := range apps {
-		if len(variables[app.Name].Live) > 0 {
+		if len(variables[app.Name].Live) > 0 || len(variables[app.Name].BindingProxyEnv) > 0 {
 			return t.liveHashKey()
 		}
 	}

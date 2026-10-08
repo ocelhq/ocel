@@ -440,6 +440,37 @@ func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortFo
 	}
 }
 
+func TestANextAppBuiltAsAnImageIsHandedTheBindingProxyAndTheBindingsItsBuildReads(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextDatabaseAndBucketProject(t, fixture.Root)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
+`)
+	servingBindingProxy(t, fixture)
+	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
+	var built *build.AppVariables
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		web := variables["web"]
+		built = &web
+		return build.Output{}, errors.New("the image is not built in this test")
+	}
+
+	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
+
+	if built == nil {
+		t.Fatal("the deploy never reached the build")
+	}
+	wantProxy := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-token"}
+	if !maps.Equal(built.BindingProxyEnv, wantProxy) {
+		t.Errorf("the image build was handed the binding proxy %v, want the one the provider served", built.BindingProxyEnv)
+	}
+	for _, key := range []string{forwardedPostgresKey, "OCEL_RESOURCE_BUCKET_files"} {
+		if _, ok := built.Live[key]; !ok {
+			t.Errorf("the image build was handed %v to read, want %s", slices.Sorted(maps.Keys(built.Live)), key)
+		}
+	}
+}
+
 func servingBindingProxy(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	t.Helper()
 	seen := forwardingPorts(t, fixture)
