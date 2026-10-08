@@ -84,6 +84,36 @@ export const imageShowsNoBindingCheck: Check = {
   },
 };
 
+const BUCKET = /prerendered from a bucket holding (?:<!-- -->)?(\d+)(?:<!-- -->)? objects/;
+const MISSING = /and (?:<!-- -->)?no(?:<!-- -->)? object at a key nothing wrote/;
+
+export const prerenderedFromTheBucketCheck: Check = {
+  title: "GET / answers the page next build prerendered from the deployed bucket, once",
+  run: async (ctx) => {
+    const first = await page(ctx, "/");
+    assert.equal(first.res.status, 200);
+    assert.ok(
+      BUCKET.test(first.body),
+      `the home page names no bucket it was prerendered from, so the build never reached it:\n${first.body}`,
+    );
+    assert.ok(
+      MISSING.test(first.body),
+      `the home page found an object at a key nothing wrote:\n${first.body}`,
+    );
+    const at = AT.exec(first.body)?.[1];
+    assert.ok(at, `the home page names no time it was prerendered at:\n${first.body}`);
+
+    const second = await page(ctx, "/");
+    assert.equal(
+      AT.exec(second.body)?.[1],
+      at,
+      "the home page was rendered again for a second request, so it read the bucket at request time rather than at build",
+    );
+  },
+};
+
+export const prerenderBucketChecks: Check[] = [prerenderedFromTheBucketCheck];
+
 export const prerenderChecks: Check[] = [
   prerenderedFromTheDatabaseCheck,
   staticParamsFromTheDatabaseCheck,

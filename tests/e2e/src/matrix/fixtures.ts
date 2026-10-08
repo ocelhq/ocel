@@ -17,6 +17,7 @@ import {
   overlapRefusal,
   preBuildChecks,
   preBuildPrerenderChecks,
+  prerenderBucketChecks,
   prerenderChecks,
   realtimeChecks,
   staticChecks,
@@ -224,6 +225,11 @@ export const prerender = {
     apps: ["web"],
     checks: [...healthChecks, ...prerenderChecks],
     on: { vps: [defaults] },
+  }),
+  nextBucket: fixture("prerender/next-bucket", {
+    apps: ["web"],
+    checks: [...healthChecks, ...prerenderBucketChecks],
+    on: { aws: [defaults], gcp: [defaults], vps: [defaults] },
   }),
   nextDockerfile: fixture("prerender/next-dockerfile", {
     apps: ["web"],
