@@ -406,7 +406,7 @@ func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWh
 	}
 }
 
-func TestANextAppBuiltAsAnImageForwardsNoPort(t *testing.T) {
+func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortForwards(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	clitest.WriteUsageMonorepo(t, fixture.Root)
@@ -414,18 +414,22 @@ func TestANextAppBuiltAsAnImageForwardsNoPort(t *testing.T) {
 `)
 	forwardingPorts(t, fixture)
 	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
-	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
-		built = true
+	var live map[string]string
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		live = variables["web"].Live
 		return build.Output{}, errors.New("the image is not built in this test")
 	}
 
 	deployErr := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, io.Discard, io.Discard, strings.NewReader(""))
 
-	if !built {
-		t.Fatalf("the deploy never reached the build, so it never decided whether to forward: %v", deployErr)
+	if live == nil {
+		t.Fatalf("the deploy never reached the build with a live value: %v", deployErr)
 	}
-	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
-		t.Errorf("the CLI forwarded ports for %v, want none for an image build, which never reads the live directory", sent)
+	if _, ok := live[forwardedPostgresKey]; !ok {
+		t.Errorf("the image build was handed %v to read from its live dir, want %s", slices.Sorted(maps.Keys(live)), forwardedPostgresKey)
+	}
+	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
+	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) {
+		t.Errorf("the CLI asked to forward %v, want the one binding the image build uses", sent)
 	}
 }

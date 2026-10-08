@@ -83,7 +83,7 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 
 func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (buildUses, preBuildUses []portforward.Use, err error) {
 	built := map[string]bool{}
-	for _, app := range build.FunctionApps(cfg.Apps) {
+	for _, app := range cfg.Apps {
 		if app.BuildsWithBindings && app.Framework() == buildoutput.FrameworkNext {
 			built[app.Name] = true
 		}
