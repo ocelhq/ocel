@@ -57,6 +57,9 @@ type runServer struct {
 	untagAtRelease    string
 	untagEveryRelease bool
 
+	tagged      map[string][]string
+	refusesList bool
+
 	signed []signedJWT
 }
 
@@ -146,6 +149,8 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.listLabelled(w, r.URL.Query().Get("labelSelector"))
 		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
 			s.getTag(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
+		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.HasSuffix(path, "/tags"):
+			s.listTags(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
 		case r.Method == http.MethodPost && strings.Contains(path, "/packages/") && strings.HasSuffix(path, "/tags"):
 			s.createTag(w, r)
 		case r.Method == http.MethodGet && strings.HasSuffix(path, "/revisions"):
@@ -322,6 +327,24 @@ func (s *runServer) getTag(w http.ResponseWriter, name string) {
 		return
 	}
 	writeBody(w, map[string]any{"name": unescaped, "version": s.versions[unescaped]})
+}
+
+func (s *runServer) listTags(w http.ResponseWriter, parent string) {
+	if s.refusesList {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":403,"message":"Permission 'artifactregistry.tags.list' denied"}}`))
+		return
+	}
+	listed := map[string]any{}
+	var tags []map[string]string
+	for _, tag := range s.tagged[strings.TrimSuffix(parent, "/tags")] {
+		name := strings.TrimSuffix(parent, "/tags") + "/tags/" + tag
+		if !slices.Contains(s.untagged, name) {
+			tags = append(tags, map[string]string{"name": name})
+		}
+	}
+	listed["tags"] = tags
+	writeBody(w, listed)
 }
 
 func (s *runServer) createTag(w http.ResponseWriter, r *http.Request) {
