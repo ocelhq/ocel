@@ -558,9 +558,9 @@ describe("the pre-build concern", () => {
       .cells.map((cell) => cell.name)
       .filter((name) => name.startsWith("pre-build/"));
 
-  it("migrates and refuses on either box, the only target that forwards a port", () => {
+  it("migrates, prerenders what it migrated and refuses on either box, the only target that forwards a port", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
-      expect(cellsOn(lane)).toEqual(["pre-build/node", "pre-build/failing"]);
+      expect(cellsOn(lane)).toEqual(["pre-build/node", "pre-build/next", "pre-build/failing"]);
     }
   });
 
