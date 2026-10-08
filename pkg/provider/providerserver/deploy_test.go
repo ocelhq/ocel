@@ -488,7 +488,7 @@ func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Lo
 	return nil
 }
 
-func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
+func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsItsBindings(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
 	client := servedBy(t, refusingStacks{Provider: base, stacks: halfBindingStacks{}})
@@ -508,8 +508,14 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := stackrecords.List(context.Background(), base.KeyValues(), environment.TierProduction, "shop"); rerr != nil || len(entries) != 0 {
-		t.Errorf("the refused deploy recorded %v, want nothing written for a binding providerserver would not accept", entries)
+	entries, err := stackrecords.List(context.Background(), base.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if len(entry.Bindings) != 0 || entry.ResourceDigest != "" {
+			t.Errorf("the refused deploy recorded %s with bindings %v and digest %q, want neither written for a binding providerserver would not accept", entry.Name, entry.Bindings, entry.ResourceDigest)
+		}
 	}
 }
 

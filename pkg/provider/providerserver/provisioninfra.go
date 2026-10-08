@@ -214,10 +214,13 @@ func mergePublishedProperties(infra naming.StackName, recorded, published []prov
 	return bindings, nil
 }
 
-func (r *deployRun) forgetInfraDigest(ctx context.Context, holds []byte) error {
+func (r *deployRun) recordInfraStack(ctx context.Context, holds []byte) error {
 	recorded, found, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
-	if err != nil || !found {
+	if err != nil {
 		return err
+	}
+	if !found {
+		recorded = stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: provider.WrittenByVersion("")}
 	}
 	recorded.Resources, recorded.ResourceDigest = holds, ""
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, recorded)
