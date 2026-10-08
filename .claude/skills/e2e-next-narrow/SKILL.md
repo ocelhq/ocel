@@ -2,6 +2,8 @@
 name: e2e-next-narrow
 description: Drive tests/next-compat/baseline-manifest.json down — verify its entries, cluster what is still red, fix and promote. Usage — /e2e-next-narrow [focus and notes]
 disable-model-invocation: true
+metadata:
+  internal: true
 ---
 
 # e2e-next-narrow

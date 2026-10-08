@@ -2,6 +2,8 @@
 name: e2e-next-fix
 description: Debug, fix and verify Next.js deploy-adapter e2e failures from a next-compat run. Usage — /e2e-next-fix <github run id> [notes]
 disable-model-invocation: true
+metadata:
+  internal: true
 ---
 
 # e2e-next-fix
