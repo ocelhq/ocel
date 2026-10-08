@@ -108,3 +108,25 @@ func TestRemovingATagAsksTheRegistryForATokenThatMayDelete(t *testing.T) {
 		t.Errorf("the token was bought for %q, want a scope that includes delete", bought)
 	}
 }
+
+func TestRemovingAnImageUnderAnotherRegistryAsksNoRegistryAndKeepsThePasswordHome(t *testing.T) {
+	var asked bool
+	store, _ := registryServing(t, func(w http.ResponseWriter, r *http.Request) { asked = true })
+
+	err := store.Remove(context.Background(), "ghcr.io/acme/web:sha256-abc")
+
+	if err == nil || !strings.Contains(err.Error(), "not under") {
+		t.Errorf("Remove() = %v, want a refusal that says the image is not under the store's registry", err)
+	}
+	if asked {
+		t.Error("Remove() asked the project's registry about an image that lives elsewhere")
+	}
+}
+
+func TestRemovingAnImageNamingNoRegistryIsRefusedRatherThanAskedOfDockerHub(t *testing.T) {
+	store, _ := registryServing(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	if err := store.Remove(context.Background(), "ocel/shop/web:sha256-abc"); err == nil || !strings.Contains(err.Error(), "not under") {
+		t.Errorf("Remove() = %v, want a refusal for a coordinate that names no registry: a registry client resolves it to Docker Hub and would send the project's credentials there", err)
+	}
+}
