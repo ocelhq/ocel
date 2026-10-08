@@ -9,8 +9,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
+const connectPrefix = "/api/connect"
+
 func (c *Client) deployments(accessToken string) consolev1connect.DeploymentServiceClient {
-	return consolev1connect.NewDeploymentServiceClient(c.http, c.baseURL, connect.WithInterceptors(connect.UnaryInterceptorFunc(
+	return consolev1connect.NewDeploymentServiceClient(c.http, c.baseURL+connectPrefix, connect.WithInterceptors(connect.UnaryInterceptorFunc(
 		func(next connect.UnaryFunc) connect.UnaryFunc {
 			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 				req.Header().Set("Authorization", "Bearer "+accessToken)

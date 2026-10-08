@@ -33,7 +33,7 @@ func ServeConsole(t *testing.T) *FakeConsole {
 	fake := &FakeConsole{}
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, connect.WithInterceptors(connectvalidate.NewInterceptor()))
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	fake.URL = srv.URL

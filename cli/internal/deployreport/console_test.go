@@ -62,12 +62,12 @@ func serveConsole(t *testing.T, fake *fakeConsole) string {
 	t.Helper()
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, connect.WithInterceptors(connectvalidate.NewInterceptor()))
 	mux := http.NewServeMux()
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.mu.Lock()
 		fake.auth = append(fake.auth, r.Header.Get("Authorization"))
 		fake.mu.Unlock()
 		handler.ServeHTTP(w, r)
-	}))
+	})))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL

@@ -56,13 +56,13 @@ func serveDeployments(t *testing.T, service *recordedReports) string {
 	t.Helper()
 	path, handler := consolev1connect.NewDeploymentServiceHandler(service)
 	mux := http.NewServeMux()
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		service.mu.Lock()
 		service.auth = append(service.auth, r.Header.Get("Authorization"))
 		service.agents = append(service.agents, r.Header.Get("User-Agent"))
 		service.mu.Unlock()
 		handler.ServeHTTP(w, r)
-	}))
+	})))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
