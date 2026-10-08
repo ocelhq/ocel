@@ -370,7 +370,7 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 			if g.resource == appRoleARN && strings.Contains(g.condition, `"aws:ResourceTag/ocel:managed-by":"ocel"`) {
 				continue
 			}
-			passed = g.resource == defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRole
+			passed = slices.Contains(defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRoles, g.resource)
 			if !passed {
 				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes or an app role Ocel tagged", g.resource)
 			}
