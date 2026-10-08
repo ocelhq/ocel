@@ -25,6 +25,9 @@ func (r registryStore) Remove(ctx context.Context, imageRef string) error {
 	if served, err := name.NewRegistry(r.target.Server, options...); err != nil || tag.RegistryStr() != served.RegistryStr() {
 		return fmt.Errorf("%s is not under %s, the registry this store holds credentials for", imageRef, r.target.Server)
 	}
+	if r.target.Server == gitHubContainerRegistry {
+		return r.removePackageVersion(ctx, tag)
+	}
 	called := []remote.Option{
 		remote.WithContext(ctx),
 		remote.WithRetryStatusCodes(http.StatusRequestTimeout, http.StatusTooManyRequests,
