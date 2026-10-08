@@ -197,7 +197,7 @@ func TestAFirstDeployOfAPreviewRefusedBeforeItProvisionsLeavesTheNameFreeForTheO
 	}
 }
 
-func TestADeployRacingTheFirstDeployOfAPreviewWithTheOtherLifecycleIsRefusedBeforeItProvisions(t *testing.T) {
+func TestADeployRacingTheFirstDeployOfAPreviewIsRefusedBeforeItProvisions(t *testing.T) {
 	client, vendor := servePreview(t)
 	var raced sync.Once
 	var said string
@@ -219,8 +219,8 @@ func TestADeployRacingTheFirstDeployOfAPreviewWithTheOtherLifecycleIsRefusedBefo
 		t.Fatalf("Deploy() = %q, want the persistent deploy that claimed pr-7 first to succeed", result.GetError())
 	}
 
-	if !strings.Contains(said, "created persistent") {
-		t.Errorf("the racing ephemeral Deploy() said %q, want it refused because pr-7 was claimed persistent", said)
+	if !strings.Contains(said, "another deploy to pr-7 is running") {
+		t.Errorf("the racing ephemeral Deploy() said %q, want it refused because the persistent deploy holds pr-7", said)
 	}
 	if provisionedByRacer != 0 {
 		t.Errorf("the racing ephemeral deploy provisioned %d stacks, want none", provisionedByRacer)

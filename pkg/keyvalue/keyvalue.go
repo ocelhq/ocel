@@ -37,6 +37,7 @@ const (
 	RootProjects           Root = "projects"
 	RootStacks             Root = "stacks"
 	RootEnvironments       Root = "environments"
+	RootDeployLeases       Root = "deployleases"
 	RootBootstrap          Root = "bootstrap"
 	RootEdgeStacks         Root = "edgestacks"
 	RootWildcard           Root = "wildcard"

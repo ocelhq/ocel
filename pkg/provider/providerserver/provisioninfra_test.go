@@ -24,6 +24,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
+const infraLease = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
 func infraRequest(req *contractv1.DeployRequest) *contractv1.ProvisionInfraRequest {
 	manifest := req.GetManifest()
 	return &contractv1.ProvisionInfraRequest{
@@ -36,6 +38,7 @@ func infraRequest(req *contractv1.DeployRequest) *contractv1.ProvisionInfraReque
 		Environment:    req.GetEnvironment(),
 		Edge:           req.GetEdge(),
 		InlineBindings: req.GetInlineBindings(),
+		LeaseToken:     infraLease,
 	}
 }
 
@@ -130,7 +133,7 @@ func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublis
 	req := deployRequest()
 	provisionedInfra(t, client, infraRequest(req))
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
@@ -150,7 +153,7 @@ func TestADeployAfterProvisionInfraGrantsTheBindingWithTheSecretsInfraPublished(
 	req := deployRequest()
 	provisionedInfra(t, client, infraRequest(req))
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
 	}
@@ -176,7 +179,7 @@ func TestADeployAfterProvisionInfraRefusesARecordedBindingNoLongerPublished(t *t
 		t.Fatalf("RemoveBinding(orders) = %v, %v", removed, err)
 	}
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	result, _ := deploy(t, client, req)
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded, granting orders as the stack record holds it, without the password the record never keeps")
@@ -210,7 +213,7 @@ func TestADeployAfterProvisionInfraGrantsTheResourceItsBindingWasProvisionedFor(
 	req.Manifest.Usages[0].Resource = "postgres--orders"
 	provisionedInfra(t, client, infraRequest(req))
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed over the infra ProvisionInfra provisioned", result.GetError())
 	}
@@ -231,7 +234,7 @@ func TestADeployRefusesInfraProvisionedFromOtherResources(t *testing.T) {
 	req := deployRequest()
 	provisionedInfra(t, client, infraRequest(req))
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
 		LogicalName: "uploads",
 		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads"},
@@ -250,7 +253,7 @@ func TestADeployRefusesInfraProvisionedWhenNoneWas(t *testing.T) {
 	client, vendor := deployServed(t)
 
 	req := deployRequest()
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	result, _ := deploy(t, client, req)
 	if result.GetSuccess() || !strings.Contains(result.GetError(), "was never provisioned") {
 		t.Fatalf("Deploy() = %q, want it refused: no infra stack was provisioned for it", result.GetError())
@@ -366,7 +369,7 @@ func TestProvisionInfraKeepsAResourceNoLongerDeclaredUntilTheDeployOverItRemoves
 	before := deployRequest()
 	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
 	provisionedInfra(t, client, infraRequest(before))
-	before.InfraProvisioned = true
+	before.InfraProvisioned, before.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, before); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -381,7 +384,7 @@ func TestProvisionInfraKeepsAResourceNoLongerDeclaredUntilTheDeployOverItRemoves
 		t.Error("ProvisionInfra() pruned legacy's binding, which the live release still reads until a deploy replaces it")
 	}
 
-	after.InfraProvisioned = true
+	after.InfraProvisioned, after.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, after); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -413,7 +416,7 @@ func TestProvisionInfraKeepsAResourceDeclaredAsAnotherTypeUntilTheDeployOverItRe
 	before := deployRequest()
 	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
 	provisionedInfra(t, client, infraRequest(before))
-	before.InfraProvisioned = true
+	before.InfraProvisioned, before.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, before); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -429,7 +432,7 @@ func TestProvisionInfraKeepsAResourceDeclaredAsAnotherTypeUntilTheDeployOverItRe
 		t.Errorf("ProvisionInfra() left the infra stack holding legacy as %v, want the postgres kept: a build that fails next leaves the live release reading it", held)
 	}
 
-	after.InfraProvisioned = true
+	after.InfraProvisioned, after.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, after); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -444,7 +447,7 @@ func TestADeployOverInfraHoldingOnlyWhatItDeclaresProvisionsNoInfra(t *testing.T
 	req := deployRequest()
 	provisionedInfra(t, client, infraRequest(req))
 
-	req.InfraProvisioned = true
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -519,7 +522,7 @@ func TestADeployOverInfraWhoseLastProvisioningFailedIsRefused(t *testing.T) {
 		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
 	}
 
-	earlier.InfraProvisioned = true
+	earlier.InfraProvisioned, earlier.LeaseToken = true, infraLease
 	result, _ := deploy(t, client, earlier)
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded over infra a failed provisioning changed after the earlier one, want it refused: the stack no longer holds what the apps were built against")

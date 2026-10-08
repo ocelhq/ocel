@@ -1,0 +1,216 @@
+package providerserver_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	connect "connectrpc.com/connect"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+)
+
+const otherDeployLease = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+func abandonDeploy(t *testing.T, client contractv1connect.ProviderServiceClient, token string) {
+	t.Helper()
+	_, err := client.AbandonDeploy(context.Background(), &contractv1.AbandonDeployRequest{
+		Slug:        "shop",
+		Environment: deployRequest().GetEnvironment(),
+		LeaseToken:  token,
+	})
+	if err != nil {
+		t.Fatalf("AbandonDeploy() error = %v", err)
+	}
+}
+
+func refusedBusy(t *testing.T, result *progressv1.OperationResult, what string) {
+	t.Helper()
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "another deploy to prod is running") {
+		t.Fatalf("%s = %q, want it refused because another deploy holds prod", what, result.GetError())
+	}
+}
+
+func readDeployLease(t *testing.T, vendor *fake.Provider) (held bool) {
+	t.Helper()
+	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.DeployLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
+	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Fatalf("reading the deploy lease = %v", err)
+	}
+	return err == nil
+}
+
+func TestProvisionInfraRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	req := infraRequest(deployRequest())
+	req.LeaseToken = otherDeployLease
+	result, _ := provisionInfraStream(t, client, req)
+
+	refusedBusy(t, result, "ProvisionInfra()")
+}
+
+func TestADeployRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	provisioned := len(vendor.FakeStacks().Provisioned())
+
+	result, _ := deploy(t, client, deployRequest())
+
+	refusedBusy(t, result, "Deploy()")
+	if specs := vendor.FakeStacks().Provisioned(); len(specs) != provisioned {
+		t.Errorf("the refused deploy provisioned %d more stacks, want none: it never held the environment", len(specs)-provisioned)
+	}
+}
+
+func TestADeployOverTheInfraItsLeaseProvisionedFreesTheEnvironmentWhenItEnds(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed over the lease ProvisionInfra took", result.GetError())
+	}
+
+	if readDeployLease(t, vendor) {
+		t.Error("the environment still holds a deploy lease after the deploy ended, want it freed")
+	}
+	next := infraRequest(deployRequest())
+	next.LeaseToken = otherDeployLease
+	provisionedInfra(t, client, next)
+}
+
+func TestARefusedDeployFreesTheEnvironmentItHeld(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	req.InfraProvisioned, req.LeaseToken = true, infraLease
+
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded over infra that was never provisioned, want it refused")
+	}
+	if readDeployLease(t, vendor) {
+		t.Error("the environment still holds the lease of a deploy that was refused, want it freed")
+	}
+}
+
+func TestADeployWithNoLeaseHoldsTheEnvironmentOnlyForItsOwnRun(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	if readDeployLease(t, vendor) {
+		t.Error("the environment still holds a deploy lease after a deploy that brought none ended, want it freed")
+	}
+}
+
+func TestADeployOverProvisionedInfraRefusesToRunWithoutTheLeaseThatProvisionedIt(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	_, _, err := deployStream(t, client, req)
+
+	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid {
+		t.Fatalf("Deploy() = %v, want it refused as invalid: infra provisioned before the build is shipped under the lease that provisioned it", err)
+	}
+}
+
+func TestProvisionInfraRefusesARequestWithNoLeaseToken(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	req := infraRequest(deployRequest())
+	req.LeaseToken = ""
+	_, err := provisionInfraStream(t, client, req)
+
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("ProvisionInfra() = %v, want it rejected as invalid: nothing could name the lease that holds the environment", err)
+	}
+	if readDeployLease(t, vendor) {
+		t.Error("the rejected ProvisionInfra took a lease")
+	}
+}
+
+func TestAbandonDeployFreesTheEnvironmentItsLeaseHeld(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	abandonDeploy(t, client, infraLease)
+
+	if readDeployLease(t, vendor) {
+		t.Error("the environment still holds the abandoned deploy's lease, want it freed")
+	}
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Errorf("Deploy() = %q, want it to succeed once the deploy that held the environment was abandoned", result.GetError())
+	}
+}
+
+func TestAbandonDeployKeepsALeaseAnotherDeployHolds(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	abandonDeploy(t, client, otherDeployLease)
+
+	if !readDeployLease(t, vendor) {
+		t.Error("abandoning a lease it never held freed the lease of the deploy that holds the environment")
+	}
+}
+
+func TestAbandonDeployOfALeaseNothingHoldsSucceeds(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	abandonDeploy(t, client, infraLease)
+}
+
+func TestProvisionInfraFreesTheEnvironmentWhenItFails(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+
+	result, _ := provisionInfraStream(t, client, infraRequest(deployRequest()))
+
+	if result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded on a provider that was never bootstrapped, want it refused")
+	}
+	if readDeployLease(t, vendor) {
+		t.Error("the environment still holds the lease of a ProvisionInfra that failed, want it freed")
+	}
+}
+
+func TestADryDeployNeverWaitsOnTheDeployHoldingTheEnvironment(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	req := deployRequest()
+	req.Dry = true
+	result, _ := deploy(t, client, req)
+
+	if strings.Contains(result.GetError(), "another deploy") {
+		t.Fatalf("Deploy() = %q, want a dry deploy planned beside the deploy that holds the environment: it writes nothing", result.GetError())
+	}
+}

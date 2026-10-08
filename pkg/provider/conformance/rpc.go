@@ -180,6 +180,7 @@ func refusesAppsToProvisionInfra(t *testing.T, client contractv1connect.Provider
 			Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
 		}}},
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		LeaseToken:  "cccccccccccccccccccccccccccccccc",
 	})
 	if err != nil {
 		t.Fatalf("ProvisionInfra() error = %v", err)

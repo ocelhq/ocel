@@ -34,18 +34,29 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 		if err != nil {
 			return nil, err
 		}
-		run, err := h.openDeploy(ctx, &contractv1.DeployRequest{
-			Manifest:       req.GetManifest(),
-			Environment:    req.GetEnvironment(),
-			Edge:           req.GetEdge(),
-			InlineBindings: req.GetInlineBindings(),
-			AliasToken:     req.GetAliasToken(),
-		}, spec, sender)
-		if err != nil {
+		if err := h.holdEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
 			return nil, err
 		}
-		return run.executeInfra(ctx)
+		result, err := h.provisionInfraOver(ctx, req, spec, sender)
+		if err != nil {
+			h.releaseEnvironment(ctx, spec, req.GetLeaseToken())
+		}
+		return result, err
 	})
+}
+
+func (h *handlers) provisionInfraOver(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*progressv1.OperationEvent, error) {
+	run, err := h.openDeploy(ctx, &contractv1.DeployRequest{
+		Manifest:       req.GetManifest(),
+		Environment:    req.GetEnvironment(),
+		Edge:           req.GetEdge(),
+		InlineBindings: req.GetInlineBindings(),
+		AliasToken:     req.GetAliasToken(),
+	}, spec, sender)
+	if err != nil {
+		return nil, err
+	}
+	return run.executeInfra(ctx)
 }
 
 func refuseInfraRequest(req *contractv1.ProvisionInfraRequest) error {
@@ -78,6 +89,10 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 	if ephemeral(req.GetEnvironment()) {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"an ephemeral preview has no infra stack of its own, so no infra was provisioned for this deploy")
+	}
+	if req.GetLeaseToken() == "" {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"this deploy says its infra was provisioned, and names no lease token: the infra is shipped over under the lease that provisioned it")
 	}
 	return nil
 }

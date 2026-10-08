@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 
 	"google.golang.org/protobuf/proto"
 
@@ -24,8 +26,10 @@ type infraProvisioning struct {
 	workerCeilings  []provider.WorkerCeiling
 	provisions      bool
 	dry             bool
+	leaseToken      string
 
-	sent *contractv1.ProvisionInfraRequest
+	sent    *contractv1.ProvisionInfraRequest
+	shipped bool
 }
 
 func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, dry, prebuilt bool) *infraProvisioning {
@@ -33,6 +37,7 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		return nil
 	}
 	return &infraProvisioning{
+		leaseToken:      newLeaseToken(),
 		providerProcess: providerProcess,
 		cfg:             facts.project,
 		env:             env,
@@ -57,6 +62,7 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 		Edge:           i.cfg.EdgeSelection(),
 		InlineBindings: inline,
 		AliasToken:     i.aliasToken,
+		LeaseToken:     i.leaseToken,
 	}
 	if proto.Equal(req, i.sent) {
 		return nil
@@ -79,4 +85,34 @@ func (i *infraProvisioning) assemble(resources []declaration.Resource) (*contrac
 
 func (i *infraProvisioning) isProvisioned() bool {
 	return i != nil && i.sent != nil
+}
+
+func (i *infraProvisioning) readLeaseToken() string {
+	if !i.isProvisioned() {
+		return ""
+	}
+	return i.leaseToken
+}
+
+func (i *infraProvisioning) markShipped() {
+	if i != nil {
+		i.shipped = true
+	}
+}
+
+func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
+	if !i.isProvisioned() || i.shipped {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
+		return err
+	})
+}
+
+func newLeaseToken() string {
+	token := make([]byte, 16)
+	_, _ = rand.Read(token)
+	return hex.EncodeToString(token)
 }
