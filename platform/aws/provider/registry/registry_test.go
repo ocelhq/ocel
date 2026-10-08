@@ -19,6 +19,9 @@ type fakeECR struct {
 	existing []string
 	token    string
 	endpoint string
+
+	tagged    map[string][]string
+	deleteErr error
 }
 
 func (f *fakeECR) CreateRepository(_ context.Context, in *ecr.CreateRepositoryInput, _ ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error) {

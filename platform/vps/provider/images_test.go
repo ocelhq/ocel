@@ -17,10 +17,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -485,5 +487,54 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker pull "+quote(server+"/shop/web@"+digest.String())) {
 		t.Errorf("the machine ran:\n%s\nwant a pull pinned to the digest of the wrapped image, which is what the registry now has", commands)
+	}
+}
+
+func TestAnImagePulledOntoTheMachineIsRemovedFromTheRegistryItWasPushedTo(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: wrapped(t)}
+	if err := store.Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+
+	if err := store.Remove(context.Background(), push.ImageRef); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+
+	digest, err := push.Built.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := name.NewDigest(server+"/shop/web@"+digest.String(), name.Insecure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := remote.Head(pinned); err == nil {
+		t.Errorf("the registry still answers for %s after Remove()", pinned)
+	}
+}
+
+func TestAnImageLoadedOntoTheMachineHasNothingInARegistryToRemove(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	if err := directImagesOn(t, machine).Remove(context.Background(), loadedImageRef); err != nil {
+		t.Errorf("Remove() = %v, want nothing: an image loaded over SSH lives on the machine alone, which its release window sweeps", err)
+	}
+	if ran := machine.commands(); len(ran) != 0 {
+		t.Errorf("Remove() ran %v on the machine, and the window sweeps it", ran)
 	}
 }

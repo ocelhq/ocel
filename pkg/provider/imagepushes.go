@@ -32,6 +32,8 @@ type ImageStore interface {
 	Push(ctx context.Context, push ImagePush, progress progress.Log) error
 
 	ProbePush(ctx context.Context, repository string) error
+
+	Remove(ctx context.Context, imageRef string) error
 }
 
 type ImagePushes struct {

@@ -25,6 +25,7 @@ const (
 )
 
 type ECRAPI interface {
+	BatchDeleteImage(ctx context.Context, in *ecr.BatchDeleteImageInput, opts ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error)
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
@@ -99,6 +100,43 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 		return err
 	}
 	return i.pushed.Push(ctx, push, progress)
+}
+
+func (i ecrImages) Remove(ctx context.Context, imageRef string) error {
+	repository, err := repositoryOf(i.target, imageRef)
+	if err != nil {
+		return err
+	}
+	tag, err := tagOf(imageRef)
+	if err != nil {
+		return err
+	}
+	out, err := i.api.BatchDeleteImage(ctx, &ecr.BatchDeleteImageInput{
+		RepositoryName: aws.String(repository),
+		ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(tag)}},
+	})
+	var gone *ecrtypes.RepositoryNotFoundException
+	if errors.As(err, &gone) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("remove %s from this account's ECR: %w", imageRef, err)
+	}
+	for _, failure := range out.Failures {
+		if failure.FailureCode == ecrtypes.ImageFailureCodeImageNotFound {
+			continue
+		}
+		return fmt.Errorf("remove %s from this account's ECR: %s: %s", imageRef, failure.FailureCode, aws.ToString(failure.FailureReason))
+	}
+	return nil
+}
+
+func tagOf(imageRef string) (string, error) {
+	at := strings.LastIndex(imageRef, ":")
+	if at < strings.LastIndex(imageRef, "/") || at+1 == len(imageRef) {
+		return "", fmt.Errorf("%s names no tag to remove", imageRef)
+	}
+	return imageRef[at+1:], nil
 }
 
 func repositoryOf(target provider.RegistryTarget, imageRef string) (string, error) {

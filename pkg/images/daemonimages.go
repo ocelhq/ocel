@@ -3,6 +3,7 @@ package images
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 
@@ -38,6 +39,31 @@ func (daemonStore) Has(ctx context.Context, push provider.ImagePush) (bool, erro
 		return false, fmt.Errorf("ask the local docker daemon for %s: %w", push.ImageRef, err)
 	}
 	return true, nil
+}
+
+func (daemonStore) Remove(ctx context.Context, imageRef string) error {
+	host, err := DockerHostFromEnv()
+	if err != nil {
+		return err
+	}
+	transport := host.Transport()
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/images/"+imageRef, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("remove %s from the daemon at %s: %w", imageRef, host.Address, err)
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNotFound:
+		return nil
+	}
+	return fmt.Errorf("the daemon at %s answered %q removing %s: %s", host.Address, resp.Status, imageRef, readErrorBody(resp.Body))
 }
 
 func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ progress.Log) error {
