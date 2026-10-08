@@ -446,6 +446,7 @@ func TestCopyingEveryIntervalPollsUntilItsContextEnds(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
 	sync.Interval = 100 * time.Millisecond
+	sync.Now = time.Now
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -458,6 +459,40 @@ func TestCopyingEveryIntervalPollsUntilItsContextEnds(t *testing.T) {
 		select {
 		case <-deadline:
 			t.Fatal("CopyScheduledEveryInterval() never polled twice")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+}
+
+func TestCopyingEveryIntervalReadsASourceAgainAfterAReadOverranItsShare(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	sync.Interval = 100 * time.Millisecond
+	sync.Now = time.Now
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	fake.hangList.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		sync.CopyScheduledEveryInterval(ctx, func(err error) { t.Errorf("CopyScheduledEveryInterval() reported %v", err) })
+		close(done)
+	}()
+	deadline := time.After(10 * time.Second)
+	for statusOf(t, store, registration).LastError == "" {
+		select {
+		case <-deadline:
+			t.Fatal("CopyScheduledEveryInterval() never recorded the overrun read")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	fake.hangList.Store(false)
+	for len(fake.listedPaths()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("CopyScheduledEveryInterval() never read the source again after a read overran its share")
 		case <-time.After(time.Millisecond):
 		}
 	}
