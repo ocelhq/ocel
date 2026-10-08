@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -26,6 +25,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/r2"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
+	"github.com/ocelhq/ocel/pkg/contenttype"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/bundles"
@@ -489,10 +489,7 @@ func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) (
 	w := multipart.NewWriter(buf)
 	for _, hash := range bucket {
 		asset := assetByHash[hash]
-		contentType := mime.TypeByExtension(path.Ext(asset.Path))
-		if contentType == "" {
-			contentType = "application/null"
-		}
+		contentType := contenttype.Infer(asset.Path)
 		encoded := base64.StdEncoding.EncodeToString(asset.Content)
 		if err := writePart(w, hash, hash, contentType, []byte(encoded)); err != nil {
 			return nil, "", err

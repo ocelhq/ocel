@@ -7,64 +7,19 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/contenttype"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-var assetContentTypes = map[string]string{
-	".html":        "text/html; charset=utf-8",
-	".js":          "text/javascript; charset=utf-8",
-	".mjs":         "text/javascript; charset=utf-8",
-	".css":         "text/css; charset=utf-8",
-	".json":        "application/json; charset=utf-8",
-	".map":         "application/json; charset=utf-8",
-	".svg":         "image/svg+xml",
-	".png":         "image/png",
-	".jpg":         "image/jpeg",
-	".jpeg":        "image/jpeg",
-	".gif":         "image/gif",
-	".webp":        "image/webp",
-	".avif":        "image/avif",
-	".ico":         "image/x-icon",
-	".woff":        "font/woff",
-	".woff2":       "font/woff2",
-	".ttf":         "font/ttf",
-	".eot":         "application/vnd.ms-fontobject",
-	".txt":         "text/plain; charset=utf-8",
-	".xml":         "application/xml",
-	".webmanifest": "application/manifest+json",
-	".wasm":        "application/wasm",
-}
-
-var metadataContentTypes = map[string]string{
-	"robots.txt":    "text/plain",
-	"manifest.json": "application/manifest+json",
-}
-
-func assetContentType(rel string) string {
-	name := strings.ToLower(rel[strings.LastIndex(rel, "/")+1:])
-	if ct, ok := metadataContentTypes[name]; ok {
-		return ct
-	}
-	dot := strings.LastIndex(name, ".")
-	if dot == -1 {
-		return "application/octet-stream"
-	}
-	if ct, ok := assetContentTypes[name[dot:]]; ok {
-		return ct
-	}
-	return "application/octet-stream"
-}
-
 func assetHeaders(static *edge.Static, rel string) objectHeaders {
-	return objectHeaders{contentType: assetContentType(rel), cacheControl: static.CacheControl("/" + rel)}
+	return objectHeaders{contentType: contenttype.Infer(rel), cacheControl: static.CacheControl("/" + rel)}
 }
 
 const imageConfigFile = "image-config.json"

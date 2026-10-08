@@ -22,6 +22,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/buildoutput":         true,
 	"github.com/ocelhq/ocel/pkg/configdoc":           true,
 	"github.com/ocelhq/ocel/pkg/containerimage":      true,
+	"github.com/ocelhq/ocel/pkg/contenttype":         true,
 	"github.com/ocelhq/ocel/pkg/cron":                true,
 	"github.com/ocelhq/ocel/pkg/dotenv":              true,
 	"github.com/ocelhq/ocel/pkg/edge":                true,
