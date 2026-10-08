@@ -154,6 +154,10 @@ func runsTheBastion(definition *ecstypes.TaskDefinition, roleARN string) bool {
 	if definition == nil || aws.ToString(definition.TaskRoleArn) != roleARN || definition.ExecutionRoleArn != nil || len(definition.ContainerDefinitions) != 1 {
 		return false
 	}
+	if definition.NetworkMode != ecstypes.NetworkModeAwsvpc || !slices.Contains(definition.RequiresCompatibilities, ecstypes.CompatibilityFargate) ||
+		aws.ToString(definition.Cpu) != taskCPU || aws.ToString(definition.Memory) != taskMemoryMiB {
+		return false
+	}
 	container := definition.ContainerDefinitions[0]
 	return aws.ToString(container.Name) == containerName && aws.ToString(container.Image) == image &&
 		slices.Equal(container.Command, []string{"sh", "-c", "sleep " + taskLifetimeSeconds})
