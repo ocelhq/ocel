@@ -457,3 +457,17 @@ enum CommandOutput {
   COMMAND_OUTPUT_RESULT = 1;
   COMMAND_OUTPUT_RUN_EVENTS = 2;
 }
+
+message SkillInstallResult {
+  bool written = 1;
+
+  string ocel_version = 2;
+
+  repeated SkillTarget targets = 3;
+}
+
+message SkillTarget {
+  string dir = 1;
+
+  repeated string files = 2;
+}
