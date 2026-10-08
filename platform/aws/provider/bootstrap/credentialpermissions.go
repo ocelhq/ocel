@@ -168,6 +168,19 @@ func inCallerAccount() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceAccount": callerAccount}}
 }
 
+const principalProject = "${aws:PrincipalTag/" + registry.ProjectTag + ", '*'}"
+
+func ofPrincipalProject() map[string]any {
+	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + registry.ProjectTag: principalProject}}
+}
+
+func taggedForPrincipalProject() map[string]any {
+	return map[string]any{
+		"StringLike":         map[string]any{"aws:RequestTag/" + registry.ProjectTag: principalProject},
+		"StringLikeIfExists": map[string]any{"aws:ResourceTag/" + registry.ProjectTag: principalProject},
+	}
+}
+
 func taggedOnCreate() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + managedByTagKey: managedByTagValue}}
 }
@@ -529,22 +542,28 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions: []string{
 				"ecr:BatchCheckLayerAvailability",
-				"ecr:BatchDeleteImage",
 				"ecr:BatchGetImage",
 				"ecr:CompleteLayerUpload",
-				"ecr:CreateRepository",
-				"ecr:DeleteRepository",
 				"ecr:DescribeImages",
 				"ecr:DescribeRepositories",
 				"ecr:GetDownloadUrlForLayer",
 				"ecr:InitiateLayerUpload",
 				"ecr:ListTagsForResource",
 				"ecr:PutImage",
-				"ecr:TagResource",
 				"ecr:UploadLayerPart",
 			},
 			Resources: []string{appRepositoryARN},
 			Condition: inCallerAccount(),
+		},
+		{
+			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
+			Resources: []string{appRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), taggedForPrincipalProject()),
+		},
+		{
+			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
+			Resources: []string{appRepositoryARN},
+			Condition: mergeConditions(inCallerAccount(), ofPrincipalProject()),
 		},
 		{
 			Actions:   []string{"ecs:CreateCluster"},
