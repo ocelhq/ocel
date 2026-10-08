@@ -2969,15 +2969,16 @@ func (x *GenerateResult) GetClientVariableCount() int32 {
 }
 
 type InitResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ConfigPath    string                 `protobuf:"bytes,1,opt,name=config_path,json=configPath,proto3" json:"config_path,omitempty"`
-	Format        ConfigFormat           `protobuf:"varint,2,opt,name=format,proto3,enum=cli.result.v1.ConfigFormat" json:"format,omitempty"`
-	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	Provider      string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
-	Language      string                 `protobuf:"bytes,5,opt,name=language,proto3" json:"language,omitempty"`
-	SdkPackage    *string                `protobuf:"bytes,6,opt,name=sdk_package,json=sdkPackage,proto3,oneof" json:"sdk_package,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConfigPath     string                 `protobuf:"bytes,1,opt,name=config_path,json=configPath,proto3" json:"config_path,omitempty"`
+	Format         ConfigFormat           `protobuf:"varint,2,opt,name=format,proto3,enum=cli.result.v1.ConfigFormat" json:"format,omitempty"`
+	Slug           string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Provider       string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
+	Language       string                 `protobuf:"bytes,5,opt,name=language,proto3" json:"language,omitempty"`
+	SdkPackage     *string                `protobuf:"bytes,6,opt,name=sdk_package,json=sdkPackage,proto3,oneof" json:"sdk_package,omitempty"`
+	SkillInstalled bool                   `protobuf:"varint,7,opt,name=skill_installed,json=skillInstalled,proto3" json:"skill_installed,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InitResult) Reset() {
@@ -3050,6 +3051,13 @@ func (x *InitResult) GetSdkPackage() string {
 		return *x.SdkPackage
 	}
 	return ""
+}
+
+func (x *InitResult) GetSkillInstalled() bool {
+	if x != nil {
+		return x.SkillInstalled
+	}
+	return false
 }
 
 type SchemaListResult struct {
@@ -3550,7 +3558,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
 	"\x0eGenerateResult\x12\x14\n" +
 	"\x05files\x18\x01 \x03(\tR\x05files\x122\n" +
-	"\x15client_variable_count\x18\x02 \x01(\x05R\x13clientVariableCount\"\xe4\x01\n" +
+	"\x15client_variable_count\x18\x02 \x01(\x05R\x13clientVariableCount\"\x8d\x02\n" +
 	"\n" +
 	"InitResult\x12\x1f\n" +
 	"\vconfig_path\x18\x01 \x01(\tR\n" +
@@ -3560,7 +3568,8 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\bprovider\x18\x04 \x01(\tR\bprovider\x12\x1a\n" +
 	"\blanguage\x18\x05 \x01(\tR\blanguage\x12$\n" +
 	"\vsdk_package\x18\x06 \x01(\tH\x00R\n" +
-	"sdkPackage\x88\x01\x01B\x0e\n" +
+	"sdkPackage\x88\x01\x01\x12'\n" +
+	"\x0fskill_installed\x18\a \x01(\bR\x0eskillInstalledB\x0e\n" +
 	"\f_sdk_package\"L\n" +
 	"\x10SchemaListResult\x128\n" +
 	"\bcommands\x18\x01 \x03(\v2\x1c.cli.result.v1.ListedCommandR\bcommands\"?\n" +
