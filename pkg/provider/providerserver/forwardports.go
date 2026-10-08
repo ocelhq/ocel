@@ -174,7 +174,11 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		if err != nil {
 			return provider.RefusalError(err)
 		}
-		proxy = &served
+		if served.Address == "" {
+			proxied = nil
+		} else {
+			proxy = &served
+		}
 	}
 	resp, err := forwardedResponse(bindings, forwards, proxied, proxy)
 	if err != nil {
@@ -208,7 +212,7 @@ func isReachableByPort(binding provider.Binding) bool {
 func isReachableByProxy(binding provider.Binding) bool {
 	switch binding.Type {
 	case provider.BindingBucket:
-		return binding.Properties[provider.PropertyEndpoint] == ""
+		return !binding.Endpointed()
 	case provider.BindingTopic, provider.BindingTask, provider.BindingRealtime:
 		return true
 	}

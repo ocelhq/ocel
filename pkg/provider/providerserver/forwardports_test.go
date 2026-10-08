@@ -614,6 +614,34 @@ func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorP
 	}
 }
 
+func TestForwardPortsHoldsNoBindingProxyWhenTheVendorServesNoneOfTheBindings(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(twoAppRequest()))
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+			return provider.BindingProxy{Unserved: []string{req.Bindings[0].Name}}, nil
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("uploads"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var responses []*contractv1.ForwardPortsResponse
+	for stream.Receive() {
+		responses = append(responses, stream.Msg().GetResponse())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("ForwardPorts() stream error = %v, want the stream ended at once since nothing is held open", err)
+	}
+	if len(responses) != 1 || responses[0].GetBindingProxy() != nil || !slices.Equal(responses[0].GetUnforwarded(), []string{"uploads"}) {
+		t.Errorf("ForwardPorts() sent %v, want one response naming uploads unforwarded, with no proxy, and the stream ended since nothing is held open", responses)
+	}
+}
+
 func TestForwardPortsLeavesUnforwardedTheProxiedBindingsTheProxyReportsItDoesNotServe(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

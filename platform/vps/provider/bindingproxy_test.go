@@ -102,14 +102,13 @@ func TestTheVPSBindingProxyRefusesACallThatPresentsNoSessionToken(t *testing.T) 
 }
 
 func TestTheVPSBindingProxyNamesTheBindingsItHasNoServiceFor(t *testing.T) {
-	endpointed := provider.Binding{Type: provider.BindingBucket, Name: "external", Properties: map[string]string{provider.PropertyBucket: "acme", provider.PropertyEndpoint: "https://s3.example.com"}}
 	proxy, _, _ := servedProxy(t, []provider.Binding{
 		bindingBucket(),
 		{Type: provider.BindingTopic, Name: "events"},
-		endpointed,
+		{Type: provider.BindingTask, Name: "resize"},
 	})
 
-	if want := []string{"events", "external"}; !slices.Equal(slices.Sorted(slices.Values(proxy.Unserved)), want) {
+	if want := []string{"events", "resize"}; !slices.Equal(slices.Sorted(slices.Values(proxy.Unserved)), want) {
 		t.Errorf("Unserved = %v, want %v: the build is not handed a record nothing answers for", proxy.Unserved, want)
 	}
 }
