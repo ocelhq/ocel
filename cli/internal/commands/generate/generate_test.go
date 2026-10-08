@@ -59,7 +59,7 @@ func TestGenerateWritesTheClientAccessorWithoutALoginOrAProvider(t *testing.T) {
 		root := setUpGenerateFixture(t, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next" }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }],
 };
 `, "{\n  \"compilerOptions\": {}\n}\n")
 
@@ -222,7 +222,7 @@ func TestGenerateAsJSONPrintsTheFilesItWrote(t *testing.T) {
 	root := setUpGenerateFixture(t, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next" }],
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }],
 };
 `, "{}\n")
 	dependencies := newTestDependencies()

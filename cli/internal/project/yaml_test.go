@@ -18,7 +18,9 @@ provider:
 apps:
   - name: web
     path: ./server
-    framework: go
+    compute:
+      serverless:
+        framework: go
 `)
 	t.Setenv("PATH", "")
 
@@ -97,7 +99,9 @@ apps:
   - &app
     name: web
     path: ./server
-    framework: go
+    compute:
+      serverless:
+        framework: go
   - <<: *app
     name: worker
 `)
@@ -286,21 +290,21 @@ provider:
 
 func TestLoadReadsYAMLSelectorsNamedAloneOrKeyed(t *testing.T) {
 	dir := t.TempDir()
-	namedAlone := providerNamedAlone()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
-provider: `+namedAlone+`
-edge: relay
-dns:
-  zone:
-    zone: example.com
+provider:
+  fake:
+    edge: relay
+    dns:
+      zone:
+        zone: example.com
 `)
 
 	cfg, err := Load(context.Background(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cfg.Provider == nil || cfg.Provider.ID != namedAlone || string(cfg.Provider.Options) != `{}` {
-		t.Fatalf("provider = %+v, want %s with no options", cfg.Provider, namedAlone)
+	if cfg.Provider == nil || cfg.Provider.ID != "fake" || string(cfg.Provider.Options) != `{}` {
+		t.Fatalf("provider = %+v, want fake with no options of its own", cfg.Provider)
 	}
 	if cfg.EdgeKind() != "relay" {
 		t.Fatalf("edge = %q, want relay", cfg.EdgeKind())

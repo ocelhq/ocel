@@ -22,7 +22,7 @@ func ChooseRecipe(app App) (Recipe, error) {
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
-			return Recipe{}, fmt.Errorf("app %q sets build.dockerfile to %q, and %s is not a file to build from: build.dockerfile resolves against the app's own directory, and may point outside it", app.Name, app.Dockerfile, path)
+			return Recipe{}, fmt.Errorf("app %q sets image.dockerfile to %q, and %s is not a file to build from: image.dockerfile resolves against the app's own directory, and may point outside it", app.Name, app.Dockerfile, path)
 		}
 		return Recipe{App: app, Dockerfile: path}, nil
 	}
@@ -47,7 +47,7 @@ func (r Recipe) Notice() string {
 	case r.Dockerfile == "":
 		return ""
 	case r.App.Dockerfile != "":
-		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", r.App.Name, r.Dockerfile, r.App.Workspace.Root)
+		return fmt.Sprintf("%s builds from %s, the image.dockerfile it names — its build context is still %s", r.App.Name, r.Dockerfile, r.App.Workspace.Root)
 	case r.App.Workspace.Member:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack, and copies from the workspace root %s, which is its build context — rename or remove %s to go back", r.App.Name, DockerfileName, r.App.Workspace.Root, r.Dockerfile)
 	default:

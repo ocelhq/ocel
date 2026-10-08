@@ -77,7 +77,7 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 			t.Fatalf("Open(%s) = %v, %v, want an invalid refusal", named, opened, err)
 		}
-		if !strings.Contains(rejection.Message, string(named)) || !strings.Contains(rejection.Message, "leave `edge` out") {
+		if !strings.Contains(rejection.Message, string(named)) || !strings.Contains(rejection.Message, "leave `provider.vps.edge` out") {
 			t.Errorf("Open(%s) refused with %q, want it to name the edge asked for and say to leave the edge out", named, rejection.Message)
 		}
 		if strings.Contains(strings.ToLower(rejection.Message), "rout") {

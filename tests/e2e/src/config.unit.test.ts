@@ -230,8 +230,8 @@ describe("overlayFor", () => {
       OCEL_E2E_ZONE: "j.example",
     });
     expect(overlay).toMatchObject({ edge: "cloudflare", tunnel: true, dns: "cloudflare" });
-    expect(renderConfig(TS_BASE, overlay)).toContain("  edge: cloudflare({ tunnel: true }),");
-    expect(JSON.parse(renderJsonConfig("{}", overlay)).edge).toEqual({
+    expect(renderConfig(TS_BASE, overlay)).toContain("    edge: cloudflare({ tunnel: true }),");
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).provider.vps.edge).toEqual({
       cloudflare: { tunnel: true },
     });
   });
@@ -262,23 +262,25 @@ describe("overlayFor", () => {
     expect(overlayFor(cell(deploy.next, alb), "gcp", {}).previewDomain).toBeUndefined();
   });
 
-  it("renders the alb edge from the gcp edge module", () => {
+  it("renders the alb edge from the gcp edge module, inside the gcp provider", () => {
     const rendered = renderConfig(
       TS_BASE,
       overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" }),
     );
 
     expect(rendered).toContain('import { alb } from "ocel/providers/gcp/edge";');
-    expect(rendered).toContain("  edge: alb(),");
-    expect(rendered).toContain("  dns: cloudflareDns(),");
+    expect(rendered).toContain(
+      "  provider: gcpProvider({ project: gcp.OCEL_GCP_PROJECT, region: gcp.OCEL_GCP_REGION, edge: alb(), dns: cloudflareDns() }),",
+    );
   });
 
-  it("writes the alb edge into a JSON config by its name", () => {
+  it("writes the alb edge into a JSON config's gcp provider by its name", () => {
     const written = JSON.parse(
       renderJsonConfig("{}", overlayFor(cell(deploy.node, alb), "gcp", {})),
     );
 
-    expect(written.edge).toBe("alb");
+    expect(written.provider.gcp.edge).toBe("alb");
+    expect(written).not.toHaveProperty("edge");
   });
 
   it("names hostnames and Cloudflare DNS for an alb cell when a zone is set", () => {
@@ -374,16 +376,26 @@ describe("overlayFor", () => {
 const ARCHED_JSON_BASE = `{
   "slug": "go",
   "provider": "aws",
-  "apps": [{ "name": "web", "path": "./server", "framework": "go", "arch": "arm64" }]
+  "apps": [
+    { "name": "web", "path": "./server", "compute": { "serverless": { "framework": "go" } }, "arch": "arm64" }
+  ]
 }
 `;
 
 describe("a container cell", () => {
-  it("sets no framework on any target, because a container runs the image it is given", () => {
+  it("replaces the fixture's compute on every target, so no framework survives into a container", () => {
     for (const target of ["aws", "gcp", "vps"] as const) {
-      expect(
-        renderConfig(TS_BASE, { target, slug: "j-1-deploy-node", compute: "container" }),
-      ).toContain("framework: undefined,");
+      const rendered = renderConfig(TS_BASE, {
+        target,
+        slug: "j-1-deploy-node",
+        compute: "container",
+      });
+      expect(rendered).toContain(
+        target === "vps"
+          ? `    compute: { container: { health: { path: "/health" } } },`
+          : `    compute: "container",`,
+      );
+      expect(rendered).not.toContain("framework");
     }
   });
 
@@ -395,7 +407,7 @@ describe("a container cell", () => {
     }
   });
 
-  it("writes neither key as data, whatever the fixture declared", () => {
+  it("writes neither a framework nor an arch as data, whatever the fixture declared", () => {
     const written = JSON.parse(
       renderJsonConfig(ARCHED_JSON_BASE, {
         target: "aws",
@@ -403,7 +415,7 @@ describe("a container cell", () => {
         compute: "container",
       }),
     ) as { apps: Record<string, unknown>[] };
-    expect(written.apps[0]).not.toHaveProperty("framework");
+    expect(written.apps[0]?.compute).toBe("container");
     expect(written.apps[0]).not.toHaveProperty("arch");
   });
 
@@ -414,7 +426,7 @@ describe("a container cell", () => {
       computes: { express: "container" },
     });
     expect(rendered).toContain(
-      `...(app.name === "express" ? { compute: "container", framework: undefined, arch: undefined } : {}),`,
+      `...(app.name === "express" ? { compute: "container", arch: undefined } : {}),`,
     );
     expect(rendered).not.toContain("    compute:");
     const written = JSON.parse(
@@ -425,13 +437,24 @@ describe("a container cell", () => {
       }),
     ) as { apps: Record<string, unknown>[] };
     expect(written.apps[0]).toMatchObject({ compute: "container" });
-    expect(written.apps[0]).not.toHaveProperty("framework");
+    expect(written.apps[0]).not.toHaveProperty("arch");
   });
 
-  it("leaves the framework the fixture declares where the cell runs serverless", () => {
+  it("keeps the serverless options the fixture declares where the cell runs serverless", () => {
     expect(
       renderConfig(TS_BASE, { target: "gcp", slug: "j-1-deploy-node", compute: "serverless" }),
-    ).not.toContain("framework:");
+    ).toContain(
+      `    compute: { serverless: { ...(typeof app.compute === "object" ? app.compute.serverless : {}) } },`,
+    );
+    expect(
+      JSON.parse(
+        renderJsonConfig(ARCHED_JSON_BASE, {
+          target: "gcp",
+          slug: "j-1-go",
+          compute: "serverless",
+        }),
+      ).apps[0].compute,
+    ).toEqual({ serverless: { framework: "go" } });
   });
 });
 
@@ -483,8 +506,7 @@ export default defineConfig({
   }),
   apps: base.apps?.map((app) => ({
     ...app,
-    compute: "container",
-    health: { path: "/health" },
+    compute: { container: { health: { path: "/health" } } },
   })),
 });
 `,
@@ -517,12 +539,12 @@ export default defineConfig({
       target: "vps",
       slug: "j-1-go",
       allowDegraded: ["edge-cache"],
-      apps: { web: { path: "./server", entrypoint: undefined } },
+      apps: { web: { path: "./server", arch: undefined } },
     });
 
     expect(rendered).toContain(`  allowDegraded: ["edge-cache"],`);
     expect(rendered).toContain(
-      `    ...(app.name === "web" ? { path: "./server", entrypoint: undefined } : {}),`,
+      `    ...(app.name === "web" ? { path: "./server", arch: undefined } : {}),`,
     );
   });
 
@@ -571,12 +593,10 @@ const hostnames: Record<string, string> = {"web":"web-j-1-node.j.example"};
 export default defineConfig({
   ...base,
   slug: "j-1-node",
-  edge: cloudflare(),
-  dns: cloudflareDns(),
+  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), edge: cloudflare(), dns: cloudflareDns() } },
   apps: base.apps?.map((app) => ({
     ...app,
     compute: "container",
-    framework: undefined,
     arch: undefined,
     ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),
   })),
@@ -596,7 +616,7 @@ const COMMENTED_JSON_BASE = `{
       "path": "./server",
       // The architecture the binary is built for, x86_64 unless named:
       // "arch": "arm64",
-      "framework": "go"
+      "compute": { "serverless": { "framework": "go" } }
     }
   ]
 }
@@ -610,7 +630,7 @@ describe("renderJsonConfig", () => {
       $schema: "https://ocel.dev/schema/ocel.schema.json",
       slug: "j-1-go",
       provider: "aws",
-      apps: [{ name: "web", path: "./server", framework: "go" }],
+      apps: [{ name: "web", path: "./server", compute: { serverless: { framework: "go" } } }],
     });
   });
 
@@ -630,9 +650,9 @@ describe("renderJsonConfig", () => {
     ).toEqual({
       $schema: "https://ocel.dev/schema/ocel.schema.json",
       slug: "j-1-go",
-      provider: { aws: { variablesKey: "arn:aws:kms:key/k" } },
-      edge: "api-gateway",
-      dns: "cloudflare",
+      provider: {
+        aws: { variablesKey: "arn:aws:kms:key/k", edge: "api-gateway", dns: "cloudflare" },
+      },
       apps: [
         {
           name: "web",
@@ -698,9 +718,7 @@ describe("renderJsonConfig", () => {
       {
         name: "web",
         path: "./server",
-        framework: "go",
-        compute: "container",
-        health: { path: "/health" },
+        compute: { container: { health: { path: "/health" } } },
       },
     ]);
   });
@@ -725,16 +743,11 @@ describe("renderJsonConfig", () => {
   });
 
   it("moves a go app on vps to its server directory, since a container takes no entrypoint", () => {
-    const base = `{"slug":"go","provider":"aws","apps":[{"name":"web","path":".","entrypoint":"./server"}]}`;
+    const base = `{"slug":"go","provider":"aws","apps":[{"name":"web","path":".","compute":{"serverless":{"entrypoint":"./server"}}}]}`;
     const written = JSON.parse(renderJsonConfig(base, overlayFor(cell(realtime.go), "vps", {})));
 
-    expect(written.apps[0]).toMatchObject({
-      name: "web",
-      path: "./server",
-      compute: "container",
-      health: { path: "/health" },
-    });
-    expect(written.apps[0]).not.toHaveProperty("entrypoint");
+    expect(written.apps[0]).toMatchObject({ name: "web", path: "./server" });
+    expect(written.apps[0].compute).toEqual({ container: { health: { path: "/health" } } });
     expect(overlayFor(cell(realtime.go), "gcp", {}).apps).toBeUndefined();
   });
 
@@ -747,7 +760,7 @@ describe("renderJsonConfig", () => {
           compute: "serverless",
         }),
       ).apps[0].compute,
-    ).toBe("serverless");
+    ).toEqual({ serverless: { framework: "go" } });
   });
 
   it("seals variables under aws when the fixture's provider is null", () => {

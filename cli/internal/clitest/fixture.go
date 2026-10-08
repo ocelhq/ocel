@@ -193,7 +193,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
 };
 `)
 	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
@@ -247,16 +247,16 @@ export function handler() {
 `)
 }
 
-func writeEdgeConfig(t *testing.T, root, declaration string) {
+func writeEdgeConfig(t *testing.T, root, providerOptions string) {
 	t.Helper()
 
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { fake: {} },
+  provider: { fake: { `+providerOptions+` } },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "node" }],
-`+declaration+`};
+  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+};
 `)
 }
 

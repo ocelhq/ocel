@@ -148,9 +148,9 @@ func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *te
 
 	err := RefuseUnbuildableImages(context.Background(), rep, cfg, nil)
 	if err == nil {
-		t.Fatal("RefuseUnbuildableImages() accepted a build.dockerfile naming nothing")
+		t.Fatal("RefuseUnbuildableImages() accepted a image.dockerfile naming nothing")
 	}
-	if !strings.Contains(err.Error(), "build.dockerfile") || !strings.Contains(err.Error(), "web") {
+	if !strings.Contains(err.Error(), "image.dockerfile") || !strings.Contains(err.Error(), "web") {
 		t.Errorf("RefuseUnbuildableImages() = %v, want the app and the key it got wrong named", err)
 	}
 	if strings.Contains(err.Error(), images.DockerHostEnv) {

@@ -96,7 +96,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
-		"this provider cannot front deployments with the %q edge: leave `edge` out, and each service answers on the url Cloud Run gives it, "+
+		"this provider cannot front deployments with the %q edge: leave `provider.gcp.edge` out, and each service answers on the url Cloud Run gives it, "+
 			"or name %s, which provisions one load balancer per bootstrap tier at %s",
 		kind, alb.Kind, alb.BaselineCost)
 }

@@ -32,12 +32,11 @@ either.
 `slug` is the project's identity in your provider account. Every stack and resource ocel
 creates is keyed on it, so changing it forks a new project.
 
-`provider`, `edge` and `dns` each name one choice. In `ocel.config.ts` it is a function that
-takes the choice's options, such as `awsProvider({ region: "us-east-1" })`. In `ocel.json` it
-is an object keyed by its identifier and containing its options, such as
-`{ "aws": { "region": "us-east-1" } }`, or the identifier alone when it needs none, as `"aws"`
-is above. Each edge takes options of its own: `tunnel` is the Cloudflare edge's, and
-CloudFront, API Gateway and the load balancer take none.
+`provider` names one choice. In `ocel.config.ts` it is a function that takes the choice's
+options, such as `awsProvider({ region: "us-east-1" })`. In `ocel.json` it is an object keyed
+by its identifier and containing its options, such as `{ "aws": { "region": "us-east-1" } }`,
+or the identifier alone when it needs none, as `"aws"` is above. The provider's
+[edge and DNS](#provider) and an app's [compute](#compute) are named the same way.
 
 One project reads one config: a directory containing two of `ocel.config.ts`, `ocel.json`,
 `ocel.yaml` and `ocel.yml` is refused, and so is one containing two forms of the same target,
@@ -49,7 +48,8 @@ such as `ocel.vps.config.ts` and `ocel.vps.json`.
 which form you chose. `defineConfig` comes from `ocel/config`, each provider from
 `ocel/providers/<name>`, the Cloudflare edge from `ocel/edge` and Cloudflare DNS from
 `ocel/dns`. An edge or DNS that belongs to one provider comes from beside it, such as
-`cloudfront` from `ocel/providers/aws/edge`.
+`cloudfront` from `ocel/providers/aws/edge`. Each goes inside the provider's function:
+`awsProvider({ edge: cloudfront() })`.
 
 ### What it costs
 
@@ -183,6 +183,372 @@ A project with no `ocel.lock` gets one the first time a command fetches its prov
 A `--dry` run writes none: with no `ocel.lock`, or one another version wrote, it pins the
 providers for that run alone.
 
+## provider
+
+The provider `ocel deploy` provisions into. Its options also name the edge in front of the
+origin and the DNS service hostname records are written into:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+import { route53 } from "ocel/providers/aws/dns";
+import { cloudfront } from "ocel/providers/aws/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ edge: cloudfront(), dns: route53({ zone: "example.com" }) }),
+  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "aws": { "edge": "cloudfront", "dns": { "route53": { "zone": "example.com" } } }
+  },
+  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
+}
+```
+
+A provider named alone, as `"aws"`, has no edge and no DNS of your choosing. The rest of each
+provider's options are on its page: [AWS](/docs/providers/aws),
+[Google Cloud](/docs/providers/gcp) and [VPS](/docs/providers/vps).
+
+### edge
+
+What serves the project's hostnames in front of the origin. Each provider takes only the edges
+it can be fronted by, and the config is refused when it is read if it names another, with the
+ones the provider takes.
+
+| Provider | Edges | Left off |
+| --- | --- | --- |
+| AWS | `cloudfront`, `api-gateway`, [`cloudflare`](/docs/providers/cloudflare) | CloudFront |
+| Google Cloud | `alb`, [`cloudflare`](/docs/providers/cloudflare) | No edge: each service is answered on the URL Cloud Run gives it |
+| VPS | [`cloudflare`](/docs/providers/cloudflare) | No edge |
+
+Each edge takes options of its own: `tunnel` is the Cloudflare edge's, and CloudFront, API
+Gateway and the load balancer take none.
+
+### dns
+
+Where the project's hostname records are written. Left off, they go into the origin
+provider's own DNS.
+
+| Provider | DNS |
+| --- | --- |
+| AWS | `route53`, [`cloudflare`](/docs/providers/cloudflare) |
+| Google Cloud | [`cloudflare`](/docs/providers/cloudflare) |
+| VPS | [`cloudflare`](/docs/providers/cloudflare) |
+
+Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
+
+## apps
+
+The apps this project deploys. Left off, ocel detects one at the project root. Each names
+itself with `name`, a DNS label, and its directory with `path`, relative to the config.
+
+### compute
+
+What the app runs on: `serverless`, functions packed per route that scale themselves, or
+`container`, one image serving every route. Named alone, or keyed with its options as the
+value:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [
+    { name: "web", path: "web", compute: "serverless" },
+    { name: "api", path: "api", compute: { container: { health: { path: "/up" } } } },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    { "name": "web", "path": "web", "compute": "serverless" },
+    {
+      "name": "api",
+      "path": "api",
+      "compute": { "container": { "health": { "path": "/up" } } }
+    }
+  ]
+}
+```
+
+Left off, the app runs on the first compute its provider runs. Each compute takes only its own
+options: a container option on a serverless app, or the other way round, is a key the config
+does not have, and is refused when it is read.
+
+### serverless
+
+#### framework
+
+What a serverless app is built with, when ocel is not to read it off the app's own directory.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "compute": { "serverless": { "framework": "next" } } }]
+}
+```
+
+One of `node`, `next`, `go`, `python` or `rust`. Left off, ocel reads the app's directory: a
+`package.json` that names `next` as a dependency or sits beside a `next.config.*` is next,
+a `package.json` on its own is node, a `go.mod` is go, a `pyproject.toml` or
+`requirements.txt` is python, and a `Cargo.toml` is rust. A `Cargo.toml` beside a
+`package.json`, `pyproject.toml` or `requirements.txt` builds that app's native extension,
+so the app is node, next or python.
+
+A container takes no framework. ocel detects a Next app on its own, from a `next.config.*` or
+`next` in the app's `package.json`, and builds every other container app as the image it
+describes.
+
+A rust app's crate builds one binary. ocel compiles it with `cargo` for the app's `arch`
+as a static musl binary, so the matching target must be installed:
+`rustup target add x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`.
+
+That is enough for a pure-Rust crate. A crate that compiles C, through `ring`, `aws-lc-rs` or
+`openssl-sys`, also needs a musl C cross toolchain for the target, most of all for `arm64`
+built on an x86_64 machine. Name its compiler with `CC_aarch64_unknown_linux_musl`, and its
+linker in `.cargo/config.toml`:
+
+```toml title=".cargo/config.toml"
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+```
+
+or with `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. ocel links with `rust-lld` only when
+neither names a linker for the target.
+
+#### entrypoint
+
+Where a node or go serverless app starts, when it is not where ocel would look: the file a
+node app is served from, or the directory of a go app's main package.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [
+    {
+      name: "web",
+      path: ".",
+      compute: { serverless: { framework: "go", entrypoint: "./cmd/web" } },
+    },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    {
+      "name": "web",
+      "path": ".",
+      "compute": { "serverless": { "framework": "go", "entrypoint": "./cmd/web" } }
+    }
+  ]
+}
+```
+
+### container
+
+#### image
+
+How a container app's image is built.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [
+    {
+      name: "api",
+      path: "api",
+      compute: { container: { image: { dockerfile: "Dockerfile.prod", context: "." } } },
+    },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    {
+      "name": "api",
+      "path": "api",
+      "compute": { "container": { "image": { "dockerfile": "Dockerfile.prod", "context": "." } } }
+    }
+  ]
+}
+```
+
+| Field | Means |
+| --- | --- |
+| `dockerfile` | The Dockerfile to build from, relative to the app's directory. Left off, the `Dockerfile` beside the app, or none. |
+| `context` | The directory the image is built from, relative to the project. Left off, the workspace root the app belongs to. |
+| `command` | The command that builds the app inside the image. Left off, the app's own build script. |
+
+#### health
+
+The path a container app is checked on before a release of it serves traffic. Any 2xx
+answer means it is up.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "api", path: "api", compute: { container: { health: { path: "/health" } } } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    {
+      "name": "api",
+      "path": "api",
+      "compute": { "container": { "health": { "path": "/health" } } }
+    }
+  ]
+}
+```
+
+The path starts with `/` and has no query or fragment. A path you set is always the one
+checked. Left off, the provider picks one:
+
+| Provider | With no `health.path` |
+| --- | --- |
+| AWS | The load balancer checks `/`. |
+| Google Cloud | Cloud Run's startup probe requests `/`. |
+| VPS | The first deploy of the app finds the path by probing, and later deploys reuse it. See [Health checks](/docs/providers/vps#health-checks). |
+
+#### instances
+
+How many instances of a container app run: at least `min`, however quiet it is, and at most
+`max`, however busy.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [
+    { name: "api", path: "api", compute: { container: { instances: { min: 2, max: 10 } } } },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    {
+      "name": "api",
+      "path": "api",
+      "compute": { "container": { "instances": { "min": 2, "max": 10 } } }
+    }
+  ]
+}
+```
+
+Both are whole numbers: `min` from 0, `max` from 1, and `min` no more than `max`. Left off,
+`min` is 1 and `max` is `min`, or 1 when that is 0. A container app that sets neither runs
+exactly one instance on every provider, and never scales.
+
+Each instance kept running is billed whether it serves a request or not. The two numbers are
+set once per app, with no override for a tier or a preview, so every preview keeps the same
+`min` running as production does, and each one is billed for them.
+
+What the two numbers do depends on the provider:
+
+| Provider | Between the two |
+| --- | --- |
+| AWS | The ECS service starts at `min`. When `max` is higher, it adds tasks when the load balancer counts more than 1,000 requests a minute per task, and removes them when the count falls. `min` must be at least 1. |
+| Google Cloud | Cloud Run's `min-instances` and `max-instances`. Cloud Run scales on concurrent requests, and a `min` of 0 lets the service scale to zero. |
+| VPS | A box runs one container per app, so both must be 1 or left off. |
+
+A serverless app scales itself and takes no `instances`.
+
+### arch
+
+The processor architecture an app's functions or container image are built for.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", arch: "arm64" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "arch": "arm64" }]
+}
+```
+
+Either `x86_64` or `arm64`. Left off, it is what your provider runs the app on. A provider
+that cannot run the one you name refuses the deploy before anything is built.
+
+### buildWithResources
+
+Lets the app's build reach the resources it uses in the deployed environment, so a page
+prerendered at build time reads them. Left off, `true`. Set `false` to build as if no resource
+were provisioned:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", buildWithResources: false }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "buildWithResources": false }]
+}
+```
+
+Only a Next app's build reaches them, on serverless or container compute, and only the resources
+ocel provisions for it: postgres databases and kv stores over ports `ocel deploy` forwards on your
+machine, and buckets through a binding proxy the provider serves. A provider that serves neither
+builds the app without them, and the deploy says so. Any other build goes without.
+
 ## discovery.paths
 
 The folders discovery runs to collect your resource declarations.
@@ -212,159 +578,6 @@ source file under that folder runs during discovery.
 Each folder's language is the one the source files in it are written in, not the one a
 manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, `.js`,
 `.jsx`, `.mjs` or `.cjs` is js. A folder containing two of them is an error.
-
-## framework
-
-What an app is built with, when ocel is not to read it off the app's own directory.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  apps: [{ name: "web", path: ".", framework: "next" }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "apps": [{ "name": "web", "path": ".", "framework": "next" }]
-}
-```
-
-One of `node`, `next`, `go`, `python` or `rust`. Left off, ocel reads the app's directory: a
-`package.json` that names `next` as a dependency or sits beside a `next.config.*` is next,
-a `package.json` on its own is node, a `go.mod` is go, a `pyproject.toml` or
-`requirements.txt` is python, and a `Cargo.toml` is rust. A `Cargo.toml` beside a
-`package.json`, `pyproject.toml` or `requirements.txt` builds that app's native extension,
-so the app is node, next or python.
-
-On container compute only `next` may be named, or is read off the directory; the other
-frameworks are serverless-only, and a container app declaring one is refused.
-
-A rust app's crate builds one binary. ocel compiles it with `cargo` for the app's `arch`
-as a static musl binary, so the matching target must be installed:
-`rustup target add x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`.
-
-That is enough for a pure-Rust crate. A crate that compiles C, through `ring`, `aws-lc-rs` or
-`openssl-sys`, also needs a musl C cross toolchain for the target, most of all for `arm64`
-built on an x86_64 machine. Name its compiler with `CC_aarch64_unknown_linux_musl`, and its
-linker in `.cargo/config.toml`:
-
-```toml title=".cargo/config.toml"
-[target.aarch64-unknown-linux-musl]
-linker = "aarch64-linux-musl-gcc"
-```
-
-or with `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. ocel links with `rust-lld` only when
-neither names a linker for the target.
-
-## arch
-
-The processor architecture an app's functions or container image are built for.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  apps: [{ name: "web", path: ".", arch: "arm64" }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "apps": [{ "name": "web", "path": ".", "arch": "arm64" }]
-}
-```
-
-Either `x86_64` or `arm64`. Left off, it is what your provider runs the app on. A provider
-that cannot run the one you name refuses the deploy before anything is built.
-
-## minInstances and maxInstances
-
-How many instances of a container app run: at least `minInstances`, however quiet it is, and
-at most `maxInstances`, however busy.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  apps: [
-    { name: "api", path: "api", compute: "container", minInstances: 2, maxInstances: 10 },
-  ],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "apps": [
-    { "name": "api", "path": "api", "compute": "container", "minInstances": 2, "maxInstances": 10 }
-  ]
-}
-```
-
-Both are whole numbers: `minInstances` from 0, `maxInstances` from 1, and `minInstances` no
-more than `maxInstances`. Left off, `minInstances` is 1 and `maxInstances` is `minInstances`,
-or 1 when that is 0. A container app that sets neither runs exactly one instance on every
-provider, and never scales.
-
-Each instance kept running is billed whether it serves a request or not. The two numbers are
-set once per app, with no override for a tier or a preview, so every preview keeps the same
-`minInstances` running as production does, and each one is billed for them.
-
-What the two numbers do depends on the provider:
-
-| Provider | Between the two |
-| --- | --- |
-| AWS | The ECS service starts at `minInstances`. When `maxInstances` is higher, it adds tasks when the load balancer counts more than 1,000 requests a minute per task, and removes them when the count falls. `minInstances` must be at least 1. |
-| Google Cloud | Cloud Run's `min-instances` and `max-instances`. Cloud Run scales on concurrent requests, and a `minInstances` of 0 lets the service scale to zero. |
-| VPS | A box runs one container per app, so both must be 1 or left off. |
-
-A serverless app scales itself, so either field on one is refused. The same goes for an app
-whose provider runs it on functions because it names no `compute`.
-
-## health
-
-The path a container app is checked on before a release of it serves traffic. Any 2xx
-answer means it is up.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  apps: [{ name: "api", path: "api", compute: "container", health: { path: "/health" } }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "apps": [
-    { "name": "api", "path": "api", "compute": "container", "health": { "path": "/health" } }
-  ]
-}
-```
-
-The path starts with `/` and has no query or fragment. A path you set is always the one
-checked. Left off, the provider picks one:
-
-| Provider | With no `health.path` |
-| --- | --- |
-| AWS | The load balancer checks `/`. |
-| Google Cloud | Cloud Run's startup probe requests `/`. |
-| VPS | The first deploy of the app finds the path by probing, and later deploys reuse it. See [Health checks](/docs/providers/vps#health-checks). |
-
-A serverless app runs no process to check, so `health` on one is refused.
 
 ## bindings
 

@@ -190,7 +190,7 @@ export default {
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "next", Detected: true}); *got != *want {
+		if got, want := cfg.Apps[0].Serverless, (&Serverless{Framework: "next"}); *got != *want {
 			t.Fatalf("Apps[0].Serverless = %+v, want %+v: the app's own manifest says what it is, and the config never named it", got, want)
 		}
 	})
@@ -202,7 +202,7 @@ export default {
 		writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: "services/web", framework: "node" }],
+  apps: [{ name: "web", path: "services/web", compute: { serverless: { framework: "node" } } }],
 };
 `)
 		writeFile(t, filepath.Join(root, "services", "web", "package.json"), nextManifest)
@@ -346,50 +346,6 @@ export default {
 		_, err := Load(context.Background(), root, "")
 		if err == nil || !strings.Contains(err.Error(), "package.json") {
 			t.Fatalf("Load = %v, want the unreadable package.json refused: a Next app would otherwise deploy without its adapter", err)
-		}
-	})
-
-	t.Run("a container app declaring next is read as next", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeConfig(t, root, `
-export default {
-  slug: "test-app",
-  apps: [{ name: "web", path: "services/web", compute: "container", framework: "next" }],
-};
-`)
-		writeFile(t, filepath.Join(root, "services", "web", "Dockerfile"), "FROM scratch\n")
-
-		cfg, err := Load(context.Background(), root, "")
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if got := cfg.Apps[0]; got.Serverless != nil || got.Framework() != "next" {
-			t.Fatalf("Apps[0] = %+v, want a container that keeps next", got)
-		}
-	})
-
-	t.Run("a container app declaring another framework is refused naming container compute", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		writeConfig(t, root, `
-export default {
-  slug: "test-app",
-  apps: [{ name: "web", path: "services/web", compute: "container", framework: "node" }],
-};
-`)
-		writeFile(t, filepath.Join(root, "services", "web", "package.json"), `{}`)
-
-		_, err := Load(context.Background(), root, "")
-		if err == nil {
-			t.Fatal("Load = nil error, want the refusal")
-		}
-		for _, want := range []string{`"web"`, "`framework`", "serverless", `"container"`, `"next"`} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error = %q, missing %q", err, want)
-			}
 		}
 	})
 }

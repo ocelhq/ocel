@@ -496,7 +496,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless}}}
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
-		if err == nil || !strings.Contains(err.Error(), `"framework"`) {
+		if err == nil || !strings.Contains(err.Error(), "compute: { serverless: { framework: … } }") {
 			t.Errorf("Build err = %v, want the app told to state its framework", err)
 		}
 	})

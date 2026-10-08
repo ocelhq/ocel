@@ -284,7 +284,7 @@ export const tasks = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: TASKS_GO_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
-    configOn: { vps: { apps: { web: { path: "./server", entrypoint: undefined } } } },
+    configOn: { vps: { apps: { web: { path: "./server" } } } },
   }),
 };
 
@@ -299,7 +299,7 @@ export const realtime = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: REALTIME_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-    configOn: { vps: { apps: { web: { path: "./server", entrypoint: undefined } } } },
+    configOn: { vps: { apps: { web: { path: "./server" } } } },
   }),
   python: fixture("realtime/python", {
     apps: ["web"],

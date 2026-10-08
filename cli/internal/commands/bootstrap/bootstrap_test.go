@@ -527,7 +527,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("the selected edge is listed beside the stacks, in its own vocabulary", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "  edge: \"relay\",\n", featureISR)
+		project, invocation := bootstrapProject(t, "edge: \"relay\"", featureISR)
 		project.Provider.FakeBootstrap().PlansWith(withRelayEdge(mixedPlan()))
 
 		var stdout, stderr bytes.Buffer
@@ -556,7 +556,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("credentials the plan cannot reach stop the run before it prints half a plan", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "  edge: \"relay\",\n", featureISR)
+		project, invocation := bootstrapProject(t, "edge: \"relay\"", featureISR)
 		project.Provider.FakeBootstrap().RefusePlan(errors.New("plan the relay edge bootstrap: FAKE_RELAY_ACCOUNT is not set; export it and re-run"))
 
 		var stdout, stderr bytes.Buffer
@@ -890,7 +890,7 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 		},
 		{
 			name:  "features the edge pulls in",
-			edge:  "  edge: \"relay\",\n",
+			edge:  "edge: \"relay\"",
 			opts:  Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true},
 			wants: []string{"Also adding feature relay-edge to the production bootstrap: this project's edge needs it", "Also adding feature isr to the production bootstrap: relay-edge needs it"},
 		},
@@ -1012,7 +1012,7 @@ func TestBootstrapSendsRepairOnDeploy(t *testing.T) {
 
 func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 	t.Run("a relay project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "  edge: \"relay\",\n")
+		project, invocation := bootstrapProject(t, "edge: \"relay\"")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
@@ -1040,7 +1040,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 	})
 
 	t.Run("a set that names everything applied says nothing", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "  edge: \"relay\",\n")
+		project, invocation := bootstrapProject(t, "edge: \"relay\"")
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
@@ -1060,7 +1060,7 @@ func TestBootstrapSendsTheFeatureSetItWasGiven(t *testing.T) {
 		features    string
 		want        string
 	}{
-		{"a named set reaches the provider whole", "  edge: \"relay\",\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
+		{"a named set reaches the provider whole", "edge: \"relay\"", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
 		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,variables-key,relay-edge,direct-edge force=false acceptReplacements=true"},
 		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}

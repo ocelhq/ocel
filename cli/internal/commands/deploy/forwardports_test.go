@@ -85,10 +85,10 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	return seen
 }
 
-func writeNextUsageProject(t *testing.T, root, build string) {
+func writeNextUsageProject(t *testing.T, root, appFields string) {
 	t.Helper()
 	clitest.WriteUsageMonorepo(t, root)
-	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless"`+build+` }],
+	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }`+appFields+` }],
 `)
 }
 
@@ -147,7 +147,7 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 func TestAnAppWhoseBuildTakesNoBindingsIsBuiltWithoutForwardingAPort(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
-	writeNextUsageProject(t, fixture.Root, `, build: { bindings: false }`)
+	writeNextUsageProject(t, fixture.Root, `, buildWithResources: false`)
 	forwardingPorts(t, fixture)
 	built := capturingBuild(t, &dependencies)
 
@@ -416,7 +416,8 @@ func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortFo
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	clitest.WriteUsageMonorepo(t, fixture.Root)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), `{"name":"api","dependencies":{"next":"16.0.0"}}`)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: "container" }],
 `)
 	forwardingPorts(t, fixture)
 	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
@@ -444,7 +445,8 @@ func TestANextAppBuiltAsAnImageIsHandedTheBindingProxyAndTheBindingsItsBuildRead
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	writeNextDatabaseAndBucketProject(t, fixture.Root)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "container" }],
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), `{"name":"api","dependencies":{"next":"16.0.0"}}`)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: "container" }],
 `)
 	servingBindingProxy(t, fixture)
 	dependencies.RefuseUnbuildableImages = func(context.Context, *run.Span, *project.Project, map[string]string) error { return nil }
@@ -524,7 +526,7 @@ func TestAnAppWhoseBuildTakesNoBindingsIsHandedNoBindingProxy(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	writeNextDatabaseAndBucketProject(t, fixture.Root)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless", build: { bindings: false } }],
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }, buildWithResources: false }],
 `)
 	servingBindingProxy(t, fixture)
 	built := capturingBuild(t, &dependencies)

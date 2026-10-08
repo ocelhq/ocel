@@ -251,7 +251,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				return err
 			}
 		default:
-			return fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
+			return fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
 		}
 	}
 

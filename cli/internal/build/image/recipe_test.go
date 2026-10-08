@@ -230,9 +230,9 @@ func TestAConfiguredDockerfileThatIsNotThereRefusesTheBuildByName(t *testing.T) 
 
 	_, err := image.ChooseRecipe(image.App{Name: "api", Workspace: standalone(t, dir), Dockerfile: "build/Dockerfile"})
 	if err == nil {
-		t.Fatal("ChooseRecipe() accepted a build.dockerfile naming nothing, so the deploy would reach the solve before finding out")
+		t.Fatal("ChooseRecipe() accepted a image.dockerfile naming nothing, so the deploy would reach the solve before finding out")
 	}
-	for _, want := range []string{"api", "build/Dockerfile", "build.dockerfile"} {
+	for _, want := range []string{"api", "build/Dockerfile", "image.dockerfile"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("ChooseRecipe() = %v, and the reason never names %s", err, want)
 		}

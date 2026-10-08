@@ -2,54 +2,117 @@ import { describe, it } from "vitest";
 
 import { defineConfig } from "./config.js";
 
-describe("an app's framework", () => {
-  it("names what a serverless app is built with", () => {
+describe("an app's compute", () => {
+  it("is named alone", () => {
     defineConfig({
       slug: "shop",
-      apps: [{ name: "api", path: "services/api", compute: "serverless", framework: "node" }],
+      apps: [{ name: "api", path: "services/api", compute: "container" }],
     });
   });
 
-  it("names an architecture alongside it", () => {
-    defineConfig({
-      slug: "shop",
-      apps: [
-        {
-          name: "web",
-          path: "apps/web",
-          compute: "serverless",
-          framework: "next",
-          arch: "arm64",
-        },
-      ],
-    });
-  });
-
-  it("is left off by a serverless app that lets ocel read it off the app", () => {
-    defineConfig({
-      slug: "shop",
-      apps: [{ name: "api", path: "services/api", compute: "serverless" }],
-    });
-  });
-
-  it("is left off by an app that names no compute", () => {
+  it("is left off by an app that runs on what the provider runs", () => {
     defineConfig({
       slug: "shop",
       apps: [{ name: "api", path: "services/api" }],
     });
   });
-});
 
-describe("an app's build", () => {
-  it("points a container app at a dockerfile outside its own directory", () => {
+  it("is refused keyed by two computes", () => {
     defineConfig({
       slug: "shop",
       apps: [
         {
           name: "api",
           path: "services/api",
-          compute: "container",
-          build: { dockerfile: "../shared/Dockerfile" },
+          // @ts-expect-error an app runs on one compute
+          compute: { serverless: {}, container: {} },
+        },
+      ],
+    });
+  });
+
+  it("is refused when ocel runs no such compute", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error edge is no compute
+      apps: [{ name: "api", path: "services/api", compute: "edge" }],
+    });
+  });
+});
+
+describe("a serverless app", () => {
+  it("names what it is built with", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } } }],
+    });
+  });
+
+  it("names the main package of a go app", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          compute: { serverless: { framework: "go", entrypoint: "cmd/server" } },
+        },
+      ],
+    });
+  });
+
+  it("names an architecture beside its compute", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "web",
+          path: "apps/web",
+          compute: { serverless: { framework: "next" } },
+          arch: "arm64",
+        },
+      ],
+    });
+  });
+
+  it("is refused a health check, since it runs no process to probe", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          // @ts-expect-error health gates a container release and nothing else
+          compute: { serverless: { health: { path: "/up" } } },
+        },
+      ],
+    });
+  });
+
+  it("is refused instance counts, since it scales itself", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          // @ts-expect-error instance counts size a container app and nothing else
+          compute: { serverless: { instances: { min: 1 } } },
+        },
+      ],
+    });
+  });
+});
+
+describe("a container app", () => {
+  it("points at a dockerfile outside its own directory", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          compute: { container: { image: { dockerfile: "../shared/Dockerfile" } } },
         },
       ],
     });
@@ -62,10 +125,76 @@ describe("an app's build", () => {
         {
           name: "api",
           path: "services/api",
-          compute: "container",
-          build: { context: ".", command: "turbo run build --filter=api" },
+          compute: {
+            container: { image: { context: ".", command: "turbo run build --filter=api" } },
+          },
         },
       ],
+    });
+  });
+
+  it("takes a health check and instance counts", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          compute: { container: { health: { path: "/up" }, instances: { min: 1, max: 4 } } },
+        },
+      ],
+    });
+  });
+
+  it("is refused a framework, which ocel reads off the app", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          // @ts-expect-error a container runs the image it is given
+          compute: { container: { framework: "next" } },
+        },
+      ],
+    });
+  });
+
+  it("is refused an entrypoint, which the image decides", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          // @ts-expect-error the image's own command starts the app
+          compute: { container: { entrypoint: "server.js" } },
+        },
+      ],
+    });
+  });
+
+  it("is refused instance counts on the app itself", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          compute: "container",
+          // @ts-expect-error instance counts sit under the container
+          minInstances: 1,
+        },
+      ],
+    });
+  });
+});
+
+describe("an app's build", () => {
+  it("goes without the resources it uses", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [{ name: "web", path: "apps/web", buildWithResources: false }],
     });
   });
 });
@@ -170,24 +299,27 @@ describe("a project's provider", () => {
   });
 });
 
-describe("a project's edge", () => {
+describe("a provider's edge", () => {
   it("is named alone", () => {
-    defineConfig({ slug: "shop", edge: "cloudfront" });
+    defineConfig({ slug: "shop", provider: { aws: { edge: "cloudfront" } } });
   });
 
   it("is keyed by its identifier", () => {
-    defineConfig({ slug: "shop", edge: { "api-gateway": {} } });
+    defineConfig({ slug: "shop", provider: { aws: { edge: { "api-gateway": {} } } } });
   });
 
   it("takes a tunnel keyed by cloudflare", () => {
-    defineConfig({ slug: "shop", edge: { cloudflare: { tunnel: true } } });
+    defineConfig({
+      slug: "shop",
+      provider: { vps: { ssh: "box", edge: { cloudflare: { tunnel: true } } } },
+    });
   });
 
   it("is refused a tunnel keyed by an edge other than cloudflare", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error tunnel is an option of the cloudflare edge alone
-      edge: { cloudfront: { tunnel: true } },
+      provider: { aws: { edge: { cloudfront: { tunnel: true } } } },
     });
   });
 
@@ -195,7 +327,15 @@ describe("a project's edge", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error a project is fronted by one edge
-      edge: { cloudflare: {}, cloudfront: {} },
+      provider: { aws: { edge: { cloudflare: {}, cloudfront: {} } } },
+    });
+  });
+
+  it("is refused when the provider cannot front deployments with it", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error cloudfront fronts aws alone
+      provider: { gcp: { project: "acme-prod", region: "europe-west1", edge: "cloudfront" } },
     });
   });
 
@@ -203,7 +343,7 @@ describe("a project's edge", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error fastly is not an edge ocel fronts with
-      edge: "fastly",
+      provider: { aws: { edge: "fastly" } },
     });
   });
 
@@ -211,25 +351,44 @@ describe("a project's edge", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error the identifier is the key, not a kind field
-      edge: { kind: "cloudflare" },
+      provider: { aws: { edge: { kind: "cloudflare" } } },
+    });
+  });
+
+  it("is refused at the top of the config", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error the edge is the provider's
+      edge: "cloudfront",
     });
   });
 });
 
-describe("a project's dns", () => {
+describe("a provider's dns", () => {
   it("is keyed by its identifier, mapping to its zone", () => {
-    defineConfig({ slug: "shop", dns: { route53: { zone: "example.com" } } });
+    defineConfig({
+      slug: "shop",
+      provider: { aws: { dns: { route53: { zone: "example.com" } } } },
+    });
   });
 
   it("is named alone when it picks the zone itself", () => {
-    defineConfig({ slug: "shop", dns: "cloudflare" });
+    defineConfig({ slug: "shop", provider: { aws: { dns: "cloudflare" } } });
   });
 
   it("is refused keyed by two dns services", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error records are written into one dns
-      dns: { route53: {}, cloudflare: {} },
+      provider: { aws: { dns: { route53: {}, cloudflare: {} } } },
+    });
+  });
+
+  it("is refused when the provider cannot write records with it", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error route53 writes records for aws alone
+      provider: { vps: { ssh: "box", dns: "route53" } },
     });
   });
 
@@ -237,7 +396,7 @@ describe("a project's dns", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error the zone sits under the identifier
-      dns: { kind: "route53", zone: "example.com" },
+      provider: { aws: { dns: { kind: "route53", zone: "example.com" } } },
     });
   });
 });

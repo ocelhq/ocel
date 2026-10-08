@@ -759,13 +759,19 @@ describe("the fixtures a lane deploys", () => {
           continue;
         }
         const config = JSON.parse(stripJsonComments(readFileSync(base, "utf8"))) as {
-          apps?: { name: string; path: string; framework?: string }[];
+          apps?: {
+            name: string;
+            path: string;
+            compute?: string | { serverless?: { framework?: string } };
+          }[];
         };
         const changed = fixtures.find((one) => one.name === cell.fixture)?.configOn?.[target]?.apps;
         for (const declared of config.apps ?? []) {
           const app = { ...declared, ...changed?.[declared.name] };
           const appDir = path.join(dir, app.path ?? ".");
-          if (!app.framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
+          const framework =
+            typeof app.compute === "object" ? app.compute.serverless?.framework : undefined;
+          if (!framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
             undetectable.add(`${lane}: ${cell.fixture} on ${target} app ${app.name}`);
           }
         }

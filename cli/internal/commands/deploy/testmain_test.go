@@ -88,10 +88,15 @@ func removeBootstrap(t *testing.T, fixture clitest.FakeProject, tier environment
 
 func writeConfig(t *testing.T, root, fields string) {
 	t.Helper()
+	writeConfigWithProvider(t, root, "", fields)
+}
+
+func writeConfigWithProvider(t *testing.T, root, providerOptions, fields string) {
+	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
-  provider: { fake: {} },
+  provider: { fake: { `+providerOptions+` } },
   domains: { production: "`+productionDomain+`", preview: "*.preview.acme.com" },
 `+fields+`};
 `)
@@ -104,7 +109,7 @@ func writeAppsConfig(t *testing.T, root, apps string) {
 
 func addAppToFixtureConfig(t *testing.T, root string) {
 	t.Helper()
-	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node" }`)
+	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }`)
 	writeAppSource(t, root, "api")
 }
 
@@ -126,8 +131,13 @@ func writeRootApp(t *testing.T, root string) {
 
 func writeUsageMonorepo(t *testing.T, root, fields string) {
 	t.Helper()
+	writeUsageMonorepoWithProvider(t, root, "", fields)
+}
+
+func writeUsageMonorepoWithProvider(t *testing.T, root, providerOptions, fields string) {
+	t.Helper()
 	clitest.WriteUsageMonorepo(t, root)
-	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+	writeConfigWithProvider(t, root, providerOptions, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
 `+fields)
 }
 

@@ -26,9 +26,9 @@ type ProviderOption struct {
 }
 
 type selections struct {
-	Provider selection `json:"provider"`
-	Edge     selection `json:"edge"`
-	DNS      selection `json:"dns"`
+	Provider selection            `json:"provider"`
+	Edges    map[string]selection `json:"edges"`
+	DNS      map[string]selection `json:"dns"`
 }
 
 var known = mustSelections(selectorsJSON)
@@ -47,9 +47,11 @@ func AddKnownIDs(provider string, edges, dns []string) (restore func()) {
 	previous := known
 	known = selections{
 		Provider: selection{IDs: append(slices.Clone(previous.Provider.IDs), provider), Shorthand: previous.Provider.Shorthand, Required: previous.Provider.Required},
-		Edge:     selection{IDs: slices.Concat(previous.Edge.IDs, edges), Shorthand: slices.Concat(previous.Edge.Shorthand, edges)},
-		DNS:      selection{IDs: slices.Concat(previous.DNS.IDs, dns), Shorthand: slices.Concat(previous.DNS.Shorthand, dns)},
+		Edges:    maps.Clone(previous.Edges),
+		DNS:      maps.Clone(previous.DNS),
 	}
+	known.Edges[provider] = selection{IDs: slices.Clone(edges), Shorthand: slices.Clone(edges)}
+	known.DNS[provider] = selection{IDs: slices.Clone(dns), Shorthand: slices.Clone(dns)}
 	return func() { known = previous }
 }
 
@@ -73,24 +75,122 @@ func (s *Selector[O]) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(options, &s.Options)
 }
 
+const (
+	edgeKey = "edge"
+	dnsKey  = "dns"
+)
+
+const edgeDoc = "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS."
+
+const dnsDoc = "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone."
+
 type ProviderDescriptor struct {
 	Selector[json.RawMessage]
+	Edge *EdgeDescriptor
+	DNS  *DNSDescriptor
+}
+
+func (p *ProviderDescriptor) UnmarshalJSON(data []byte) error {
+	if err := p.Selector.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	var options map[string]json.RawMessage
+	if err := json.Unmarshal(p.Options, &options); err != nil {
+		return err
+	}
+	if raw, set := options[edgeKey]; set {
+		p.Edge = &EdgeDescriptor{}
+		if err := json.Unmarshal(raw, p.Edge); err != nil {
+			return err
+		}
+	}
+	if raw, set := options[dnsKey]; set {
+		p.DNS = &DNSDescriptor{}
+		if err := json.Unmarshal(raw, p.DNS); err != nil {
+			return err
+		}
+	}
+	if p.Edge == nil && p.DNS == nil {
+		return nil
+	}
+	delete(options, edgeKey)
+	delete(options, dnsKey)
+	rest, err := json.Marshal(options)
+	if err != nil {
+		return err
+	}
+	p.Options = rest
+	return nil
 }
 
 func (ProviderDescriptor) checkShape(path string, value any) error {
-	return checkSelector(path, value, "provider", known.Provider, reflect.TypeFor[json.RawMessage]())
+	if err := checkSelector(path, value, "provider", known.Provider, reflect.TypeFor[json.RawMessage]()); err != nil {
+		return err
+	}
+	keyed, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for id, options := range keyed {
+		set, _ := options.(map[string]any)
+		if edge, named := set[edgeKey]; named {
+			at := JoinPath(JoinPath(path, id), edgeKey)
+			if err := refuseUnserved(at, id, "front deployments with", edge, known.Edges[id]); err != nil {
+				return err
+			}
+			if err := checkSelector(at, edge, "edge", known.Edges[id], reflect.TypeFor[json.RawMessage]()); err != nil {
+				return err
+			}
+		}
+		if dns, named := set[dnsKey]; named {
+			at := JoinPath(JoinPath(path, id), dnsKey)
+			if err := refuseUnserved(at, id, "write hostname records with", dns, known.DNS[id]); err != nil {
+				return err
+			}
+			if err := checkSelector(at, dns, "DNS service", known.DNS[id], reflect.TypeFor[DNSOptions]()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func refuseUnserved(path, provider, serves string, value any, of selection) error {
+	var id string
+	switch typed := value.(type) {
+	case string:
+		id = typed
+	case map[string]any:
+		keys := keysOf(typed)
+		if len(keys) != 1 {
+			return nil
+		}
+		id = keys[0]
+	default:
+		return nil
+	}
+	if slices.Contains(of.IDs, id) {
+		return nil
+	}
+	if len(of.IDs) == 0 {
+		return fmt.Errorf("%s names %q, and %s can %s nothing — leave it out", PathName(path), id, provider, serves)
+	}
+	return fmt.Errorf("%s names %q, which %s cannot %s — name one of %s", PathName(path), id, provider, serves, strings.Join(of.IDs, ", "))
 }
 
 func (ProviderDescriptor) jsonSchema() object {
-	return selectorSchema("ProviderDescriptor", schemaOf(reflect.TypeFor[json.RawMessage]()))
+	options := object{
+		"type": "object",
+		"properties": object{
+			edgeKey: describedAs(EdgeDescriptor{}.jsonSchema(), edgeDoc),
+			dnsKey:  describedAs(DNSDescriptor{}.jsonSchema(), dnsDoc),
+		},
+	}
+	return selectorSchema("ProviderDescriptor", options)
 }
 
 type EdgeDescriptor struct {
 	Selector[json.RawMessage]
-}
-
-func (EdgeDescriptor) checkShape(path string, value any) error {
-	return checkSelector(path, value, "edge", known.Edge, reflect.TypeFor[json.RawMessage]())
 }
 
 func (EdgeDescriptor) jsonSchema() object {
@@ -103,10 +203,6 @@ type DNSDescriptor struct {
 
 type DNSOptions struct {
 	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
-}
-
-func (DNSDescriptor) checkShape(path string, value any) error {
-	return checkSelector(path, value, "DNS service", known.DNS, reflect.TypeFor[DNSOptions]())
 }
 
 func (DNSDescriptor) jsonSchema() object {

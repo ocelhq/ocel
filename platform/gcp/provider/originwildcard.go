@@ -110,7 +110,7 @@ func (w originWildcards) ensure(ctx context.Context, tier environment.Tier, base
 	recorded, err := w.update(ctx, tier, func(held *originWildcard) error {
 		if held.BaseDomain != "" && held.BaseDomain != base {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"tier %s already reaches its deployments under %s, and one tier has one origin domain: set edge.cloudflare.originDomain to %s, or take this tier's Cloudflare edge bootstrap down to change it",
+				"tier %s already reaches its deployments under %s, and one tier has one origin domain: set provider.gcp.edge.cloudflare.originDomain to %s, or take this tier's Cloudflare edge bootstrap down to change it",
 				tier, held.BaseDomain, held.BaseDomain)
 		}
 		held.BaseDomain = base

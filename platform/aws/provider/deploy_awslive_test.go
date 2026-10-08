@@ -61,7 +61,7 @@ postgres("main", { version: "15" });
 export default {
   slug: "test-app",
   provider: { aws: {} },
-  apps: [{ name: %q, path: %q, framework: "node" }],
+  apps: [{ name: %q, path: %q, compute: { serverless: { framework: "node" } } }],
 };
 `, appName, filepath.ToSlash(appPath)))
 		resourceModule, err := filepath.Rel(filepath.Join(deploying.project, "infra"), filepath.Join(fixtureDir, "infra", "index"))

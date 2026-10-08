@@ -111,7 +111,7 @@ func refuseScaledContainers(spec provider.DeploySpec) error {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s asks for minInstances %d and maxInstances %d, and a box runs one container per app behind its proxy: set both to 1, or leave them off",
+			"app %s asks for instances.min %d and instances.max %d, and a box runs one container per app behind its proxy: set both to 1, or leave them off",
 			app.App, app.Instances.Min, app.Instances.Max)
 	}
 	return nil

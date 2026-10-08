@@ -28,7 +28,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		return cloudflare.NewProxy(namespace.String(), decoded), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
-		"edge %q is not supported: leave `edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
+		"edge %q is not supported: leave `provider.vps.edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
 }
 
 func (p *Provider) box() *box.Edge {

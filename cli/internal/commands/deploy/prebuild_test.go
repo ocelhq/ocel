@@ -437,8 +437,8 @@ func TestADeployWarnsOnceThatNpmRunsAPrebuildScriptPerAppWhenAPreBuildIsSet(t *t
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "package.json"), `{"scripts":{"prebuild":"drizzle-kit migrate"}}`)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "worker", "package.json"), `{"scripts":{"prebuild":"drizzle-kit migrate"}}`)
 	writeConfig(t, root, `  apps: [
-    { name: "api", path: "apps/api", framework: "node" },
-    { name: "worker", path: "apps/worker", framework: "node" },
+    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "worker", path: "apps/worker", compute: { serverless: { framework: "node" } } },
   ],
   lifecycle: { preBuild: "true" },
 `)
@@ -490,7 +490,7 @@ func TestAFailedPreBuildLeavesNoLiveDirectoryBehind(t *testing.T) {
 
 func writeConfigWithLifecycle(t *testing.T, root, preBuild string) {
 	t.Helper()
-	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", framework: "node" }],
+	writeConfig(t, root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
   lifecycle: { preBuild: `+preBuild+` },
 `)
 }

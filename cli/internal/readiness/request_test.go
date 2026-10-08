@@ -85,8 +85,8 @@ func TestAnAppThatDeclaresAContainerSendsNoFramework(t *testing.T) {
 	t.Parallel()
 
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Compute: "container", Serverless: &project.Serverless{Framework: "next", Detected: true}},
-		{Name: "api", Serverless: &project.Serverless{Framework: "node", Detected: true}},
+		{Name: "web", Compute: "container", Serverless: &project.Serverless{Framework: "next"}},
+		{Name: "api", Serverless: &project.Serverless{Framework: "node"}},
 	}}
 	if got := frameworks(cfg); !reflect.DeepEqual(got, []string{"node"}) {
 		t.Errorf("frameworks() = %v, want [node]: web runs its container, so no bootstrap feature its framework needs applies to it", got)

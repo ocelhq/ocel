@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -30,12 +29,11 @@ type App struct {
 	Container         *Container
 	undetected        error
 
-	BuildsWithBindings bool
+	BuildsWithResources bool
 }
 
 type Serverless struct {
 	Framework  string
-	Detected   bool
 	Entrypoint string
 }
 
@@ -57,10 +55,6 @@ func (c *Container) Instances() provider.Instances {
 		instances.Max = *c.MaxInstances
 	}
 	return instances
-}
-
-func (c *Container) namesInstances() bool {
-	return c.MinInstances != nil || c.MaxInstances != nil
 }
 
 type Build struct {
@@ -169,7 +163,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 			Arch:              architecture,
 			ProductionDomains: domains,
 
-			BuildsWithBindings: a.Build == nil || a.Build.Bindings == nil || *a.Build.Bindings,
+			BuildsWithResources: a.BuildWithResources == nil || *a.BuildWithResources,
 		}
 		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path))); err != nil {
 			return nil, err
@@ -181,60 +175,44 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 }
 
 func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
-	compute := provider.Compute(strings.TrimSpace(a.Compute))
-	if compute != "" && !provider.KnownCompute(string(compute)) {
-		return newInvalidConfigError(fmt.Errorf("app %q asks for compute %q, which ocel does not know: the computes are %s", a.Name, compute, english.Or(english.Quoted(provider.ComputeNames(provider.Computes())))), "")
+	var compute configdoc.ComputeDescriptor
+	if a.Compute != nil {
+		compute = *a.Compute
 	}
-	app.Compute = compute
-
-	build, err := normalizeBuild(a)
-	if err != nil {
-		return newInvalidConfigError(err, "")
-	}
-	health, err := normalizeHealth(a)
-	if err != nil {
-		return newInvalidConfigError(err, "")
-	}
-	container := &Container{Build: build, Health: health, MinInstances: a.MinInstances, MaxInstances: a.MaxInstances}
-	if err := refuseImpossibleInstances(a.Name, container); err != nil {
-		return newInvalidConfigError(err, "")
-	}
-	if compute != provider.ComputeServerless {
-		app.Container = container
-	}
-
-	named := strings.TrimSpace(a.Framework)
-	if compute == provider.ComputeContainer {
-		if named != "" && named != buildoutput.FrameworkNext {
-			return newInvalidConfigError(frameworkOnContainer(a.Name, named, compute), "")
+	switch {
+	case compute.Container != nil:
+		app.Compute = provider.ComputeContainer
+		container, err := normalizeContainer(a.Name, compute.Container)
+		if err != nil {
+			return newInvalidConfigError(err, "")
 		}
-		framework := named
-		if framework == "" && isDir(dir) {
-			detected, _, err := language.DetectFramework(dir)
+		if isDir(dir) {
+			framework, _, err := language.DetectFramework(dir)
 			if err != nil {
 				return fmt.Errorf("app %q: %w", a.Name, err)
 			}
-			framework = detected
+			if framework == buildoutput.FrameworkNext {
+				container.Framework = framework
+			}
 		}
-		if framework == buildoutput.FrameworkNext {
-			container.Framework = framework
+		app.Container = container
+	case compute.Serverless != nil:
+		app.Compute = provider.ComputeServerless
+		named := strings.TrimSpace(compute.Serverless.Framework)
+		framework, err := frameworkOf(a.Name, dir, named)
+		if err != nil {
+			return err
 		}
-		return nil
-	}
-
-	framework, err := frameworkOf(a.Name, dir, named)
-	switch {
-	case err != nil && compute == "" && named == "":
-		app.undetected = err
-	case err != nil:
-		return err
-	case framework != "":
-		app.Serverless = &Serverless{Framework: framework, Detected: named == "", Entrypoint: a.Entrypoint}
-	}
-	if compute == provider.ComputeServerless {
-		if err := refuseContainerConfig(*app, compute, container); err != nil {
-			return newInvalidConfigError(err, "")
+		app.Serverless = &Serverless{Framework: framework, Entrypoint: compute.Serverless.Entrypoint}
+	default:
+		framework, err := frameworkOf(a.Name, dir, "")
+		switch {
+		case err != nil:
+			app.undetected = err
+		case framework != "":
+			app.Serverless = &Serverless{Framework: framework}
 		}
+		app.Container = &Container{}
 	}
 	return nil
 }
@@ -247,55 +225,67 @@ func rootApp(name, dir string) ([]App, error) {
 	return []App{{
 		Name:       name,
 		Path:       ".",
-		Serverless: &Serverless{Framework: framework, Detected: true},
+		Serverless: &Serverless{Framework: framework},
 		Container:  &Container{},
 
-		BuildsWithBindings: true,
+		BuildsWithResources: true,
 	}}, nil
 }
 
-func normalizeBuild(a configdoc.AppConfig) (*Build, error) {
-	if a.Build == nil || a.Build.Dockerfile == "" && a.Build.Context == "" && a.Build.Command == "" {
+func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {
+	build, err := normalizeImage(app, raw.Image)
+	if err != nil {
+		return nil, err
+	}
+	health, err := normalizeHealth(app, raw.Health)
+	if err != nil {
+		return nil, err
+	}
+	container := &Container{Build: build, Health: health}
+	if raw.Instances != nil {
+		container.MinInstances, container.MaxInstances = raw.Instances.Min, raw.Instances.Max
+	}
+	if err := refuseImpossibleInstances(app, container); err != nil {
+		return nil, err
+	}
+	return container, nil
+}
+
+func normalizeImage(app string, image *configdoc.ImageConfig) (*Build, error) {
+	if image == nil || image.Dockerfile == "" && image.Context == "" && image.Command == "" {
 		return nil, nil
 	}
-	dockerfile := strings.TrimSpace(a.Build.Dockerfile)
-	if dockerfile == "" && a.Build.Dockerfile != "" {
-		return nil, fmt.Errorf("app %q sets build.dockerfile to %q, which names no file: give it the path to a Dockerfile, or drop build.dockerfile to build %q from the Dockerfile beside it or from no configuration at all", a.Name, a.Build.Dockerfile, a.Name)
+	dockerfile := strings.TrimSpace(image.Dockerfile)
+	if dockerfile == "" && image.Dockerfile != "" {
+		return nil, fmt.Errorf("app %q sets image.dockerfile to %q, which names no file: give it the path to a Dockerfile, or drop image.dockerfile to build %q from the Dockerfile beside it or from no configuration at all", app, image.Dockerfile, app)
 	}
-	context := strings.TrimSpace(a.Build.Context)
-	if context == "" && a.Build.Context != "" {
-		return nil, fmt.Errorf("app %q sets build.context to %q, which names no directory: give it the directory the image is built from, or drop build.context to build %q from the workspace root its own directory sits in", a.Name, a.Build.Context, a.Name)
+	context := strings.TrimSpace(image.Context)
+	if context == "" && image.Context != "" {
+		return nil, fmt.Errorf("app %q sets image.context to %q, which names no directory: give it the directory the image is built from, or drop image.context to build %q from the workspace root its own directory sits in", app, image.Context, app)
 	}
-	command := strings.TrimSpace(a.Build.Command)
-	if command == "" && a.Build.Command != "" {
-		return nil, fmt.Errorf("app %q sets build.command to %q, which names no command: give it the command that builds %q inside the image, or drop build.command to run the app's own build script", a.Name, a.Build.Command, a.Name)
+	command := strings.TrimSpace(image.Command)
+	if command == "" && image.Command != "" {
+		return nil, fmt.Errorf("app %q sets image.command to %q, which names no command: give it the command that builds %q inside the image, or drop image.command to run the app's own build script", app, image.Command, app)
 	}
 	return &Build{Dockerfile: dockerfile, Context: context, Command: command}, nil
 }
 
-func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
-	if a.Health == nil {
+func normalizeHealth(app string, health *configdoc.HealthConfig) (*Health, error) {
+	if health == nil {
 		return nil, nil
 	}
-	path := strings.TrimSpace(a.Health.Path)
+	path := strings.TrimSpace(health.Path)
 	if path != "" && !strings.HasPrefix(path, "/") {
-		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have the provider choose %q's health check", a.Name, a.Health.Path, "/", a.Name)
+		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have the provider choose %q's health check", app, health.Path, "/", app)
 	}
 	if path != "" && !containerimage.IsHealthCheckPath(path) {
-		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")
+		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", app, health.Path, app, "?", "#")
 	}
 	return &Health{Path: path}, nil
 }
 
-func frameworkOnContainer(app, framework string, compute provider.Compute) error {
-	return fmt.Errorf(
-		"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: on container compute only \"next\" changes how the image serves, so no other framework may be named there — give %q `compute: \"serverless\"`, or remove its `framework`",
-		app, framework, compute, app,
-	)
-}
-
 func refuseImpossibleInstances(app string, container *Container) error {
-	for key, count := range map[string]*int{"minInstances": container.MinInstances, "maxInstances": container.MaxInstances} {
+	for key, count := range map[string]*int{"instances.min": container.MinInstances, "instances.max": container.MaxInstances} {
 		if count != nil && *count > math.MaxInt32 {
 			return fmt.Errorf("app %q sets %s %d, and no provider runs more than %d instances of an app: lower it", app, key, *count, math.MaxInt32)
 		}
@@ -304,34 +294,7 @@ func refuseImpossibleInstances(app string, container *Container) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"app %q sets minInstances %d and maxInstances %d, and an app cannot keep more instances running than it may run at once: raise maxInstances to at least %d, or lower minInstances",
+		"app %q sets instances.min %d and instances.max %d, and an app cannot keep more instances running than it may run at once: raise instances.max to at least %d, or lower instances.min",
 		app, *container.MinInstances, *container.MaxInstances, *container.MinInstances,
 	)
-}
-
-func refuseContainerConfig(app App, compute provider.Compute, container *Container) error {
-	build, health := container.Build, container.Health
-	if build != nil {
-		return fmt.Errorf(
-			"app %q configures an image `build`, and it runs on %q compute, which builds no image: `build.dockerfile`, `build.context` and `build.command` configure a container image and nothing else — give %q `compute: \"container\"`, or remove them from its `build`",
-			app.Name, compute, app.Name,
-		)
-	}
-	if health != nil {
-		return fmt.Errorf(
-			"app %q configures a `health` check, and it runs on %q compute, which runs no process to probe: `health` gates a container release and nothing else — give %q `compute: \"container\"`, or remove its `health`",
-			app.Name, compute, app.Name,
-		)
-	}
-	if container.namesInstances() {
-		key := "minInstances"
-		if container.MinInstances == nil {
-			key = "maxInstances"
-		}
-		return fmt.Errorf(
-			"app %q sets `%s`, and it runs on %q compute, which scales itself: instance counts size a container app and nothing else — give %q `compute: \"container\"`, or remove its `minInstances` and `maxInstances`",
-			app.Name, key, compute, app.Name,
-		)
-	}
-	return nil
 }

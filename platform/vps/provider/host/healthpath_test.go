@@ -86,7 +86,7 @@ func TestAnAppAnsweringEveryCandidateAsAbsentIsRefusedWithWhatEachAnsweredAndHow
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("FindHealthPath() = %v, want an invalid refusal", err)
 	}
-	for _, want := range []string{"/up answered 404", "/health answered 404", "/healthz answered 405", "/ answered 404", `"health.path"`, `"health": { "path": "/health" }`} {
+	for _, want := range []string{"/up answered 404", "/health answered 404", "/healthz answered 405", "/ answered 404", `"compute.container.health.path"`, healthPathExample} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal reads\n%s\nand never says %q", err, want)
 		}

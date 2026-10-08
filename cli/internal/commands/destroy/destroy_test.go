@@ -106,9 +106,8 @@ func TestDestroyingPreviewTakesTheWholePreviewFootprintOnceConsented(t *testing.
 		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { fake: {} },
+  provider: { fake: { dns: "zone" } },
   domains: { preview: "*.preview.acme.com" },
-  dns: "zone",
 };
 `)
 		invocation := clitest.NewInvocation()
@@ -440,8 +439,8 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		planned     string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "", "relay"},
-		{"a declared direct edge names it", "  edge: \"direct\",\n", "direct", "direct"},
-		{"a declared relay edge names it", "  edge: \"relay\",\n", "relay", "relay"},
+		{"a declared direct edge names it", "edge: \"direct\"", "direct", "direct"},
+		{"a declared relay edge names it", "edge: \"relay\"", "relay", "relay"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -83,9 +83,6 @@ func (a App) runningOn(compute provider.Compute) (App, error) {
 	a.Compute = compute
 	if compute == provider.ComputeContainer {
 		keepsNext := a.Serverless != nil && a.Serverless.Framework == buildoutput.FrameworkNext
-		if a.Serverless != nil && !a.Serverless.Detected && !keepsNext {
-			return App{}, frameworkOnContainer(a.Name, a.Serverless.Framework, compute)
-		}
 		a.Serverless = nil
 		container := Container{}
 		if a.Container != nil {
@@ -101,12 +98,7 @@ func (a App) runningOn(compute provider.Compute) (App, error) {
 		if a.undetected != nil {
 			return App{}, a.undetected
 		}
-		return App{}, fmt.Errorf("app %q: nothing in %s says what it is built with; set \"framework\" in the app config", a.Name, a.Path)
-	}
-	if a.Container != nil {
-		if err := refuseContainerConfig(a, compute, a.Container); err != nil {
-			return App{}, err
-		}
+		return App{}, fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, a.Path)
 	}
 	a.Container = nil
 	return a, nil
