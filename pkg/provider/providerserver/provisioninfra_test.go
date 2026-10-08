@@ -98,6 +98,26 @@ func TestProvisionInfraProvisionsTheInfraStackAloneAndPublishesItsBindings(t *te
 	}
 }
 
+func TestProvisionInfraRecordsNoPasswordInTheInfraStackRecord(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	recorded, err := vendor.KeyValues().List(context.Background(), stackrecords.StacksPartition(environment.TierProduction, "shop"))
+	if err != nil {
+		t.Fatalf("listing the stack records = %v", err)
+	}
+	if len(recorded) == 0 {
+		t.Fatal("ProvisionInfra() recorded no stack, so there is no record to hold a password")
+	}
+	for _, entry := range recorded {
+		if strings.Contains(string(entry.Value), "fake-"+provider.PropertyPassword) {
+			t.Errorf("the record %s holds the postgres password in clear: %s", entry.Key, entry.Value)
+		}
+	}
+}
+
 func TestADeployAfterProvisionInfraProvisionsOnlyItsAppsAndGrantsWhatInfraPublished(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

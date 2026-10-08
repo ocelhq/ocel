@@ -1052,6 +1052,17 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()
+			raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
+			if err != nil {
+				t.Fatalf("reading the stack record back = %v", err)
+			}
+			for _, binding := range result.Bindings {
+				for _, name := range provider.SecretProperties(binding.Type) {
+					if secret := binding.Properties[name]; secret != "" && bytes.Contains(raw.Value, []byte(secret)) {
+						t.Errorf("the stack record holds binding %s's %q in clear, and the record store is readable without the sealer", binding.Name, name)
+					}
+				}
+			}
 		}
 
 		removal, err := stacks.PlanDestroy(ctx, ref, nil)
