@@ -12,7 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 type fakeECR struct {
@@ -28,6 +30,26 @@ type fakeECR struct {
 	describeErr error
 	deleteCalls int
 	described   int
+
+	deletedRepositories []string
+}
+
+func (f *fakeECR) DeleteRepository(_ context.Context, in *ecr.DeleteRepositoryInput, _ ...func(*ecr.Options)) (*ecr.DeleteRepositoryOutput, error) {
+	name := aws.ToString(in.RepositoryName)
+	if in.Force {
+		return nil, errors.New("a forced delete takes the images a concurrent deploy just pushed with it")
+	}
+	tags, found := f.tagged[name]
+	if !found && !slices.Contains(f.existing, name) {
+		return nil, &ecrtypes.RepositoryNotFoundException{Message: aws.String(name + " is gone")}
+	}
+	if len(tags) > 0 {
+		return nil, &ecrtypes.RepositoryNotEmptyException{Message: aws.String(name + " still holds images")}
+	}
+	delete(f.tagged, name)
+	f.existing = slices.DeleteFunc(f.existing, func(each string) bool { return each == name })
+	f.deletedRepositories = append(f.deletedRepositories, name)
+	return &ecr.DeleteRepositoryOutput{}, nil
 }
 
 func (f *fakeECR) CreateRepository(_ context.Context, in *ecr.CreateRepositoryInput, _ ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error) {
@@ -107,11 +129,11 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	}
 
 	api := &fakeECR{existing: []string{"ocel/api"}}
-	if err := ensure(context.Background(), api, "ocel/api"); err != nil || len(api.created) != 0 {
-		t.Errorf("ensure of an existing repository = %v, created %v; want a no-op", err, api.created)
+	if created, err := ensure(context.Background(), api, "ocel/api"); err != nil || created || len(api.created) != 0 {
+		t.Errorf("ensure of an existing repository = %v, %v, created %v; want a no-op", created, err, api.created)
 	}
-	if err := ensure(context.Background(), api, "ocel/web"); err != nil || !slices.Equal(api.created, []string{"ocel/web"}) {
-		t.Errorf("ensure of a new repository = %v, created %v; want it created immutable under the namespace", err, api.created)
+	if created, err := ensure(context.Background(), api, "ocel/web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/web"}) {
+		t.Errorf("ensure of a new repository = %v, %v, created %v; want it created immutable under the namespace", created, err, api.created)
 	}
 }
 
@@ -196,5 +218,54 @@ func TestRemovingAnImageUnderAnotherRegistryIsRefused(t *testing.T) {
 
 	if err := anECRStore(&fakeECR{}).Remove(context.Background(), "ghcr.io/acme/web:sha256-abc"); err == nil {
 		t.Error("Remove() accepted a coordinate under another registry, which no repository of this account's holds")
+	}
+}
+
+type pushedOnceRepositoryReturns struct {
+	provider.ImageStore
+	api    *fakeECR
+	pushes int
+}
+
+func (p *pushedOnceRepositoryReturns) Push(context.Context, provider.ImagePush, progress.Log) error {
+	p.pushes++
+	if p.pushes == 1 {
+		p.api.existing = nil
+		return errors.New("NAME_UNKNOWN: The repository with name 'ocel/shop.web' does not exist in the registry")
+	}
+	return nil
+}
+
+func TestAPushWhoseRepositoryADestroyDeletedMidwayCreatesItAgainAndPushesAgain(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{}
+	pushed := &pushedOnceRepositoryReturns{api: api}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	store := ecrImages{api: api, target: target, pushed: pushed}
+
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
+		t.Fatalf("Push() = %v, want the push to land: a destroy of the project's last stack deletes its empty repository, and a deploy racing it creates the repository again", err)
+	}
+	if want := []string{"ocel/shop.web", "ocel/shop.web"}; !slices.Equal(api.created, want) || pushed.pushes != 2 {
+		t.Errorf("Push() created %v and pushed %d times, want %v and 2", api.created, pushed.pushes, want)
+	}
+}
+
+func TestAPushThatFailsWhileItsRepositoryStandsIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{}
+	failing := fake.NewImages()
+	failing.FailPushes(errors.New("denied"))
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	store := ecrImages{api: api, target: target, pushed: failing}
+	api.existing = []string{"ocel/shop.web"}
+
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err == nil {
+		t.Fatal("Push() = nil for a push the registry denied")
+	}
+	if got := failing.Pushed(); len(got) != 0 {
+		t.Errorf("Push() pushed %v", got)
 	}
 }

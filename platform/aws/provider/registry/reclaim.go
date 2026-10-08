@@ -23,6 +23,10 @@ func sweep(ctx context.Context, api ECRAPI, target provider.RegistryTarget, imag
 	if err != nil {
 		return nil, err
 	}
+	return sweepRepository(ctx, api, target, repository, kept, pushedBefore)
+}
+
+func sweepRepository(ctx context.Context, api ECRAPI, target provider.RegistryTarget, repository string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
 	var unkept []string
 	var token *string
 	for {
@@ -125,7 +129,7 @@ func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded map[st
 	return sweep(ctx, api, target, imageRef, kept, pushedBefore)
 }
 
-func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string]bool) ([]string, error) {
+func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string]bool, pushedBefore time.Time) ([]string, error) {
 	target, err := Resolve(ctx, api)
 	if err != nil {
 		return nil, err
@@ -136,5 +140,46 @@ func Forget(ctx context.Context, api ECRAPI, imageRefs []string, kept map[string
 			ours = append(ours, imageRef)
 		}
 	}
-	return removeImages(ctx, api, target, ours, kept)
+	removed, err := removeImages(ctx, api, target, ours, kept)
+	if err != nil {
+		return removed, err
+	}
+	for _, repository := range unkeptRepositories(target, ours, kept) {
+		swept, err := sweepRepository(ctx, api, target, repository, kept, pushedBefore)
+		removed = append(removed, swept...)
+		if err != nil {
+			return removed, err
+		}
+		if err := deleteEmptyRepository(ctx, api, repository); err != nil {
+			return removed, err
+		}
+	}
+	return removed, nil
+}
+
+func unkeptRepositories(target provider.RegistryTarget, imageRefs []string, kept map[string]bool) []string {
+	pulled := map[string]bool{}
+	for image := range kept {
+		if repository, err := repositoryOf(target, image); err == nil {
+			pulled[repository] = true
+		}
+	}
+	var unkept []string
+	for _, imageRef := range imageRefs {
+		repository, err := repositoryOf(target, imageRef)
+		if err == nil && !pulled[repository] && !slices.Contains(unkept, repository) {
+			unkept = append(unkept, repository)
+		}
+	}
+	return unkept
+}
+
+func deleteEmptyRepository(ctx context.Context, api ECRAPI, repository string) error {
+	_, err := api.DeleteRepository(ctx, &ecr.DeleteRepositoryInput{RepositoryName: aws.String(repository)})
+	var occupied *ecrtypes.RepositoryNotEmptyException
+	var gone *ecrtypes.RepositoryNotFoundException
+	if err == nil || errors.As(err, &occupied) || errors.As(err, &gone) {
+		return nil
+	}
+	return fmt.Errorf("delete the image repository %s, which no stack of the project pulls from any more: %w", repository, err)
 }
