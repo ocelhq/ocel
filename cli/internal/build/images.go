@@ -97,12 +97,12 @@ func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map
 
 func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) error {
 	repository, digest, _ := strings.Cut(ref, "@")
-	holds, err := t.architecture(ctx, repository, digest)
+	built, err := t.inspection(ctx, repository, digest)
 	if err != nil {
 		return fmt.Errorf("app %q was prebuilt into the image %s, and the docker daemon cannot hand it over: %w; run `ocel build` again, or deploy without --prebuilt", app, ref, err)
 	}
-	if arch != "" && holds != arch {
-		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(holds), images.ContainerPlatform(arch), arch, app)
+	if arch != "" && built.Architecture != arch {
+		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(arch), arch, app)
 	}
 	return nil
 }

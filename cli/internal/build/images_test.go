@@ -199,15 +199,17 @@ func builtImage(t *testing.T, cfg *project.Project) Output {
 	return built
 }
 
-func daemonHolding(architecture string) func(context.Context, string, string) (string, error) {
-	return func(context.Context, string, string) (string, error) { return architecture, nil }
+func daemonHolding(architecture string) builtImageInspection {
+	return func(context.Context, string, string) (images.ImageInspection, error) {
+		return images.ImageInspection{Architecture: architecture}, nil
+	}
 }
 
 func TestAPrebuiltImageIsReadBackRatherThanBuiltAgain(t *testing.T) {
 	cfg := containerProject(t, "")
 	built := builtImage(t, cfg)
 
-	prebuilt, err := tools{architecture: daemonHolding("arm64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
+	prebuilt, err := tools{inspection: daemonHolding("arm64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
 	if err != nil {
 		t.Fatalf("readPrebuilt() = %v", err)
 	}
@@ -222,7 +224,7 @@ func TestAPrebuiltContainerAppWithNoImageRecordedIsRefusedByName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := tools{architecture: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, nil)
+	_, err := tools{inspection: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, nil)
 	if err == nil {
 		t.Fatal("readPrebuilt() deployed a container app the prebuilt output holds no image for")
 	}
@@ -237,10 +239,10 @@ func TestAPrebuiltImageTheDaemonNoLongerHoldsIsRefused(t *testing.T) {
 	cfg := containerProject(t, "")
 	builtImage(t, cfg)
 
-	gone := func(context.Context, string, string) (string, error) {
-		return "", errors.New("the daemon answered \"404 Not Found\"")
+	gone := func(context.Context, string, string) (images.ImageInspection, error) {
+		return images.ImageInspection{}, errors.New("the daemon answered \"404 Not Found\"")
 	}
-	_, err := tools{architecture: gone}.readPrebuilt(context.Background(), cfg, nil)
+	_, err := tools{inspection: gone}.readPrebuilt(context.Background(), cfg, nil)
 	if err == nil {
 		t.Fatal("readPrebuilt() accepted an image the daemon no longer holds, so the push fails after the deploy has started")
 	}
@@ -253,7 +255,7 @@ func TestAPrebuiltImageBuiltForAnotherArchitectureThanTheTargetRunsIsRefused(t *
 	cfg := containerProject(t, "")
 	builtImage(t, cfg)
 
-	_, err := tools{architecture: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
+	_, err := tools{inspection: daemonHolding("amd64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "arm64"})
 	if err == nil {
 		t.Fatal("readPrebuilt() accepted an amd64 image for a target that runs arm64")
 	}

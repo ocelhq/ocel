@@ -87,19 +87,19 @@ type nodeRun func(ctx context.Context, scriptPath string, request []byte, log Lo
 
 type imageBuild func(ctx context.Context, app image.App, arch string, live image.LiveValues, progress io.Writer) (image.Image, error)
 
-type builtArchitecture func(ctx context.Context, repository, digest string) (string, error)
+type builtImageInspection func(ctx context.Context, repository, digest string) (images.ImageInspection, error)
 
 type fileAddition func(ctx context.Context, base image.Image, slug, app, files, dst, arch string, progress io.Writer) (image.Image, error)
 
 type tools struct {
-	node         nodeRun
-	image        imageBuild
-	architecture builtArchitecture
-	addFiles     fileAddition
-	liveHashKey  func() ([]byte, error)
+	node        nodeRun
+	image       imageBuild
+	inspection  builtImageInspection
+	addFiles    fileAddition
+	liveHashKey func() ([]byte, error)
 }
 
-var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
+var installed = tools{node: runNode, image: image.Build, inspection: images.InspectBuiltImage, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
 
 func Apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	return installed.apps(ctx, cfg, variables, archs, workers, host, log)

@@ -2,9 +2,12 @@ package images
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -89,29 +92,65 @@ func (d DockerHost) Export(ctx context.Context, client *http.Client, ref string)
 	return resp.Body, nil
 }
 
-func (d DockerHost) Architecture(ctx context.Context, client *http.Client, ref string) (string, error) {
+type ImageInspection struct {
+	Architecture  string
+	ContentDigest string
+}
+
+type imageDescription struct {
+	Architecture string         `json:"Architecture"`
+	Variant      string         `json:"Variant"`
+	OS           string         `json:"Os"`
+	OSVersion    string         `json:"OsVersion"`
+	Config       map[string]any `json:"Config"`
+	RootFS       struct {
+		Layers []string `json:"Layers"`
+	} `json:"RootFS"`
+}
+
+func (d DockerHost) Inspect(ctx context.Context, client *http.Client, ref string) (ImageInspection, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+ref+"/json", nil)
 	if err != nil {
-		return "", err
+		return ImageInspection{}, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("inspect %s in the daemon at %s: %w", ref, d.Address, err)
+		return ImageInspection{}, fmt.Errorf("inspect %s in the daemon at %s: %w", ref, d.Address, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("the daemon at %s answered %q inspecting %s: %s", d.Address, resp.Status, ref, readErrorBody(resp.Body))
+		return ImageInspection{}, fmt.Errorf("the daemon at %s answered %q inspecting %s: %s", d.Address, resp.Status, ref, readErrorBody(resp.Body))
 	}
-	var inspected struct {
-		Architecture string `json:"Architecture"`
+	var described imageDescription
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&described); err != nil {
+		return ImageInspection{}, fmt.Errorf("read what the daemon at %s said about %s: %w", d.Address, ref, err)
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&inspected); err != nil {
-		return "", fmt.Errorf("read what the daemon at %s said about %s: %w", d.Address, ref, err)
+	if described.Architecture == "" {
+		return ImageInspection{}, fmt.Errorf("the daemon at %s names no architecture for %s", d.Address, ref)
 	}
-	if inspected.Architecture == "" {
-		return "", fmt.Errorf("the daemon at %s names no architecture for %s", d.Address, ref)
+	digest, err := contentDigest(described)
+	if err != nil {
+		return ImageInspection{}, fmt.Errorf("digest the content of %s as the daemon at %s describes it: %w", ref, d.Address, err)
 	}
-	return inspected.Architecture, nil
+	return ImageInspection{Architecture: described.Architecture, ContentDigest: digest}, nil
+}
+
+func contentDigest(described imageDescription) (string, error) {
+	config := maps.Clone(described.Config)
+	delete(config, "Image")
+	encoded, err := json.Marshal(struct {
+		Architecture string         `json:"architecture"`
+		Variant      string         `json:"variant,omitempty"`
+		OS           string         `json:"os"`
+		OSVersion    string         `json:"os_version,omitempty"`
+		Config       map[string]any `json:"config"`
+		Layers       []string       `json:"layers"`
+	}{described.Architecture, described.Variant, described.OS, described.OSVersion, config, described.RootFS.Layers})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func (d DockerHost) Tag(ctx context.Context, client *http.Client, source, repository, tag string) error {

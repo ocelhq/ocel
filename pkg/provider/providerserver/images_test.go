@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -37,7 +38,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
+const builtContentDigest = "sha256:18f506afda961821b6026743c6309340f89b9b842bf994d53c1d6e6119199165"
+
+var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -358,7 +361,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
+var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
 
 type loadingProvider struct {
 	*fake.Provider
@@ -422,6 +425,55 @@ func TestADigestTheBoxAlreadyHasIsNotSentAgain(t *testing.T) {
 	}
 	if handed := vendor.direct.Pushed(); len(handed) != 0 {
 		t.Errorf("the redeploy sent %v again over a box that already has the digest", handed)
+	}
+}
+
+func rebuiltContainerRequest() *contractv1.DeployRequest {
+	req := containerDeployRequest("/")
+	req.Manifest.Apps[0].Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+		Image:           "ocel/shop/web@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+		HealthCheckPath: "/",
+		MinInstances:    1,
+		MaxInstances:    1,
+	}}
+	return req
+}
+
+func TestARebuildOfUnchangedContentIsHeldByTheBoxThatHasTheImageItShipped(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := loadServed(t)
+	vendor.direct.Preload(loadedCoordinate)
+
+	req := rebuiltContainerRequest()
+	req.Dry = true
+	_, events := deploy(t, client, req)
+	rows := imageRows(lastPlan(events))
+	if len(rows) != 1 || rows[0].GetAction() != planv1.Change_ACTION_KEEP {
+		t.Errorf("the plan shows %v for a rebuild of content the box already holds, want one %q row: the build's digest differs on every build, so a row keyed by it is never standing", rows, provider.ActionKeep)
+	}
+
+	result, _ := deploy(t, client, rebuiltContainerRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if handed := vendor.direct.Pushed(); len(handed) != 0 {
+		t.Errorf("the redeploy sent %v over a box that holds the same content under another build digest", handed)
+	}
+}
+
+func TestARebuildOfUnchangedContentIsNotPushedAgainToARegistry(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.ImageStore().Preload(pushedCoordinate)
+
+	result, _ := deploy(t, client, namingARegistry(rebuiltContainerRequest()))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
+		t.Errorf("the deploy pushed %v that the registry already holds under this content's digest", pushed)
 	}
 }
 
@@ -780,7 +832,8 @@ func daemonWithTheBuiltImage(t *testing.T, architecture string) *builtImageDaemo
 	daemonServing(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/json"):
-			_, _ = w.Write([]byte(`{"Architecture":"` + architecture + `","Os":"linux"}`))
+			_, _ = w.Write([]byte(`{"Id":"` + r.URL.Path + `","Created":"` + time.Now().Format(time.RFC3339Nano) + `","Architecture":"` + architecture + `","Os":"linux",` +
+				`"Config":{"Entrypoint":["/app/server"]},"RootFS":{"Type":"layers","Layers":["sha256:aa"]}}`))
 		case strings.HasSuffix(r.URL.Path, "/get"):
 			daemon.mu.Lock()
 			daemon.exported++
@@ -806,8 +859,7 @@ func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.Prov
 }
 
 func wrappedCoordinate() string {
-	_, digest, _ := strings.Cut(containerTestImage, "@")
-	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, nil)
+	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, nil)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {
@@ -1052,9 +1104,8 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	}) {
 		t.Errorf("the pushed image has env %v, want the Next adapter path and node options left to the app and the container runtime", env)
 	}
-	_, digest, _ := strings.Cut(containerTestImage, "@")
 	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}}
-	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
+	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
 		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
 	}
 }
