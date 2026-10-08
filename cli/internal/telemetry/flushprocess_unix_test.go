@@ -46,7 +46,8 @@ func init() {
 		Args: os.Args[1:], PID: os.Getpid(), SessionID: sid, GroupID: syscall.Getpgrp(),
 		NullStdin: isNull(os.Stdin), NullStdout: isNull(os.Stdout), NullStderr: isNull(os.Stderr),
 	})
-	_ = os.WriteFile(filepath.Join(dir, "child.json"), raw, 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "child.json.partial"), raw, 0o600)
+	_ = os.Rename(filepath.Join(dir, "child.json.partial"), filepath.Join(dir, "child.json"))
 	time.Sleep(time.Second)
 	_ = os.WriteFile(filepath.Join(dir, "finished"), nil, 0o600)
 	os.Exit(0)
