@@ -65,12 +65,12 @@ func TestWhoamiKeepsTheProfileAmongTheDetails(t *testing.T) {
 func TestPermissionsRenderTheTierTheyAreAskedForAndNameIt(t *testing.T) {
 	t.Parallel()
 
-	creds := Credentials{Namespace: "acme"}
+	credentials := Credentials{Namespace: "acme"}
 	for purpose, tier := range map[edge.CredentialPurpose]environment.Tier{
 		edge.PurposeBootstrap: environment.TierPreview,
 		edge.PurposeDeploy:    environment.TierProduction,
 	} {
-		document, err := creds.Permissions(purpose, tier)
+		document, err := credentials.Permissions(purpose, tier)
 		if err != nil {
 			t.Fatalf("Permissions(%s, %s) = %v", purpose, tier, err)
 		}
