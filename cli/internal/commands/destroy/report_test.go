@@ -14,7 +14,7 @@ import (
 func destroyProductionWith(t *testing.T, project clitest.FakeProject, console *clitest.FakeConsole, yes, dry bool) (stderr string) {
 	t.Helper()
 	invocation := clitest.NewInvocation()
-	invocation.DeploymentReports = clitest.SignedInTo(console.URL)
+	invocation.Console = clitest.SignedInTo(console.URL)
 	var out, errOut bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &out)
 	if err := runDestroyProduction(context.Background(), invocation, project.Root, yes, dry, &out, &errOut, strings.NewReader("")); err != nil {
@@ -48,7 +48,7 @@ func TestDestroyingThePreviewFootprintRecordsADestroyedEventInThePreviewTier(t *
 	console := clitest.ServeConsole(t)
 	console.Link(t, project.Root)
 	invocation := clitest.NewInvocation()
-	invocation.DeploymentReports = clitest.SignedInTo(console.URL)
+	invocation.Console = clitest.SignedInTo(console.URL)
 	var out, errOut bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &out)
 

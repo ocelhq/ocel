@@ -22,7 +22,7 @@ func rollBack(t *testing.T, project clitest.FakeProject, console *clitest.FakeCo
 	t.Helper()
 	project.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fixtureTarget})
 	invocation := clitest.NewInvocation()
-	invocation.DeploymentReports = clitest.SignedInTo(console.URL)
+	invocation.Console = clitest.SignedInTo(console.URL)
 	var out, errOut bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &out)
 	opts.yes = true

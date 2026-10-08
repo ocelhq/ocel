@@ -31,7 +31,7 @@ func reportingDeploy(t *testing.T) (Dependencies, clitest.FakeProject, *clitest.
 	writeServeDescriptor(t, fixture.Root, "api", "bld_api_1")
 	fixture.Provider.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fixtureTarget})
 	console := clitest.ServeConsole(t)
-	dependencies.DeploymentReports = clitest.SignedInTo(console.URL)
+	dependencies.Console = clitest.SignedInTo(console.URL)
 	return dependencies, fixture, console
 }
 
@@ -147,7 +147,7 @@ func TestADeployWhoseConsoleIsUnreachableStillSucceedsWithOneWarningNamingTheDep
 	apiURL := down.URL
 	down.Close()
 	clitest.LinkToConsole(t, fixture.Root, apiURL)
-	dependencies.DeploymentReports = clitest.SignedInTo(apiURL)
+	dependencies.Console = clitest.SignedInTo(apiURL)
 
 	_, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{})
 	if err != nil {
@@ -209,7 +209,7 @@ func TestRemovingAPreviewFromALinkedTreeRecordsOneEnvironmentEvent(t *testing.T)
 	previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
 	console := clitest.ServeConsole(t)
 	console.Link(t, fixture.Root)
-	dependencies.DeploymentReports = clitest.SignedInTo(console.URL)
+	dependencies.Console = clitest.SignedInTo(console.URL)
 
 	stderr := removeWithConsole(t, fixture, dependencies, previewRemoveOptions{name: "release-v2"})
 
@@ -231,7 +231,7 @@ func TestRemovingAPreviewFromAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcel
 	dependencies := previewDependencies("feature/login", "")
 	previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
 	console := clitest.ServeConsole(t)
-	dependencies.DeploymentReports = clitest.SignedInTo(console.URL)
+	dependencies.Console = clitest.SignedInTo(console.URL)
 
 	stderr := removeWithConsole(t, fixture, dependencies, previewRemoveOptions{name: "release-v2"})
 

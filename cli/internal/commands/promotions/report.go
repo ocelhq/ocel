@@ -1,8 +1,6 @@
 package promotions
 
 import (
-	"context"
-	"io"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -24,21 +22,11 @@ func resolvedProject(p commands.ProviderRun, cfg *project.Project) *project.Proj
 	return cfg
 }
 
-func reportRolledBack(attempt deployreport.Attempt, promoted *contractv1.Promotion) (*consolev1.Deployment, error) {
+func reportRolledBack(attempt *deployreport.Attempt, promoted *contractv1.Promotion) (*consolev1.Deployment, error) {
 	apps, err := deployreport.AppsRolledBack(attempt.Project, promoted.GetReleases())
 	if err != nil {
 		return nil, err
 	}
-	attempt.Apps, attempt.PromotionID, attempt.PromotionSeq, attempt.Tag = apps, promoted.GetPromotionId(), promoted.GetTs(), promoted.GetTag()
-	deployment := attempt.Succeeded(time.Now())
+	deployment := attempt.Succeeded(time.Now(), apps, &consolev1.Promotion{Id: promoted.GetPromotionId(), Seq: promoted.GetTs(), Tag: promoted.GetTag()})
 	return deployment, deployreport.Write(attempt.Project.Dir, deployment)
-}
-
-func fileReport(ctx context.Context, invocation commands.Invocation, attempt *deployreport.Attempt, report *consolev1.Deployment, runErr error, stderr io.Writer) {
-	if report == nil && runErr != nil && attempt != nil {
-		report = attempt.Failed(time.Now(), runErr)
-	}
-	if report != nil {
-		invocation.DeploymentReports.ReportDeployment(ctx, attempt.Project.Dir, report, stderr)
-	}
 }

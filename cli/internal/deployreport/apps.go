@@ -37,14 +37,14 @@ func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult
 			}
 		}
 		if result := slices.IndexFunc(results, func(r *progressv1.AppResult) bool { return r.GetApp() == built.GetName() }); result >= 0 {
-			addResult(app, results[result])
+			applyResult(app, results[result])
 		}
 		apps = append(apps, app)
 	}
 	return apps, nil
 }
 
-func addResult(app *consolev1.App, result *progressv1.AppResult) {
+func applyResult(app *consolev1.App, result *progressv1.AppResult) {
 	app.Urls = result.GetUrls()
 	app.Release = result.GetRelease()
 	app.StoragePrefix = result.GetStoragePrefix()

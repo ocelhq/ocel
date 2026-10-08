@@ -26,25 +26,33 @@ var (
 
 func productionAttempt() Attempt {
 	return Attempt{
-		Kind:         consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
-		Project:      &project.Project{Slug: "shop", Provider: &project.Provider{ID: "aws"}},
-		Environment:  &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-		Target:       targetAccount,
-		TraceID:      traceID,
-		StartedAt:    startedAt,
-		PromotionID:  "p_01",
-		PromotionSeq: 1791374400,
-		Tag:          "v1.2.0",
-		Apps: []*consolev1.App{{
-			Name:    "web",
-			BuildId: "3f7c1b9a5e2d4c8f",
-			Release: webRelease,
-			Compute: consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS,
-			Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
-			Urls:    []string{"https://shop.example.com"},
-		}},
-		Trigger: &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI},
+		Kind:        consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
+		Project:     &project.Project{Slug: "shop", Provider: &project.Provider{ID: "aws"}},
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Target:      targetAccount,
+		TraceID:     traceID,
+		StartedAt:   startedAt,
+		Trigger:     &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI},
 	}
+}
+
+func liveApps() []*consolev1.App {
+	return []*consolev1.App{{
+		Name:    "web",
+		BuildId: "3f7c1b9a5e2d4c8f",
+		Release: webRelease,
+		Compute: consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS,
+		Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+		Urls:    []string{"https://shop.example.com"},
+	}}
+}
+
+func livePromotion() *consolev1.Promotion {
+	return &consolev1.Promotion{Id: "p_01", Seq: 1791374400, Tag: "v1.2.0"}
+}
+
+func productionDeployment() *consolev1.Deployment {
+	return productionAttempt().Succeeded(finishedAt, liveApps(), livePromotion())
 }
 
 func refuse(t *testing.T, deployment *consolev1.Deployment) {
@@ -57,7 +65,7 @@ func refuse(t *testing.T, deployment *consolev1.Deployment) {
 func TestASucceededAttemptIsADeploymentRecordTheConsoleAccepts(t *testing.T) {
 	t.Parallel()
 
-	deployment := productionAttempt().Succeeded(finishedAt)
+	deployment := productionDeployment()
 
 	refuse(t, deployment)
 	if deployment.GetId() != traceID {
@@ -86,7 +94,7 @@ func TestASucceededAttemptIsADeploymentRecordTheConsoleAccepts(t *testing.T) {
 func TestAFailedAttemptNamesItsErrorAndMadeNothingLive(t *testing.T) {
 	t.Parallel()
 
-	deployment := productionAttempt().Failed(finishedAt, errors.New("the stack update failed"))
+	deployment := productionAttempt().Failed(finishedAt, liveApps(), errors.New("the stack update failed"))
 
 	refuse(t, deployment)
 	if deployment.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_FAILED {
@@ -104,7 +112,7 @@ func TestAFailedAttemptKeepsTheTailOfAnErrorTooLongForTheRecord(t *testing.T) {
 	t.Parallel()
 
 	long := strings.Repeat("a", 5000) + "the cause"
-	deployment := productionAttempt().Failed(finishedAt, errors.New(long))
+	deployment := productionAttempt().Failed(finishedAt, liveApps(), errors.New(long))
 
 	refuse(t, deployment)
 	if !strings.HasSuffix(deployment.GetError(), "the cause") {
@@ -115,7 +123,7 @@ func TestAFailedAttemptKeepsTheTailOfAnErrorTooLongForTheRecord(t *testing.T) {
 func TestAnAttemptThatFinishedBeforeItStartedIsClampedToItsStart(t *testing.T) {
 	t.Parallel()
 
-	deployment := productionAttempt().Succeeded(startedAt.Add(-time.Hour))
+	deployment := productionAttempt().Succeeded(startedAt.Add(-time.Hour), liveApps(), livePromotion())
 
 	refuse(t, deployment)
 }
@@ -125,9 +133,8 @@ func TestAPreviewUpAttemptRecordsThePreviewEnvironmentAndItsEdge(t *testing.T) {
 	attempt := productionAttempt()
 	attempt.Kind = consolev1.DeploymentKind_DEPLOYMENT_KIND_PREVIEW_UP
 	attempt.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}
-	attempt.Tag = ""
 
-	deployment := attempt.Succeeded(finishedAt)
+	deployment := attempt.Succeeded(finishedAt, liveApps(), &consolev1.Promotion{Id: "p_01", Seq: 1791374400})
 
 	refuse(t, deployment)
 	if deployment.GetEnvironment().GetIdentity() != "pr-12" {
@@ -137,12 +144,12 @@ func TestAPreviewUpAttemptRecordsThePreviewEnvironmentAndItsEdge(t *testing.T) {
 
 func TestAnEnvironmentEventIsARecordTheConsoleAccepts(t *testing.T) {
 	t.Parallel()
-	ci := &consolev1.CI{Name: "ci"}
+	inCI := environment(map[string]string{"CI": "true"})
 
 	preview := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
-		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}, traceID, finishedAt, ci, nil)
+		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}, traceID, finishedAt, t.TempDir(), inCI)
 	destroyed := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED,
-		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, traceID, finishedAt, nil, &consolev1.Source{Commit: "0123456789abcdef"})
+		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, traceID, finishedAt, t.TempDir(), environment(nil))
 
 	for _, event := range []*consolev1.EnvironmentEvent{preview, destroyed} {
 		if err := protovalidate.Validate(event); err != nil {
@@ -151,5 +158,8 @@ func TestAnEnvironmentEventIsARecordTheConsoleAccepts(t *testing.T) {
 	}
 	if preview.GetId() != traceID || !preview.GetAt().AsTime().Equal(finishedAt) || preview.GetCi().GetName() != "ci" {
 		t.Errorf("event = %v, want the run's trace id, its time and its CI", preview)
+	}
+	if destroyed.GetCi() != nil || destroyed.GetSource() != nil {
+		t.Errorf("event = %v, want no CI outside one and no source outside git", destroyed)
 	}
 }
