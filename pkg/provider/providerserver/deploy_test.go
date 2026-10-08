@@ -484,7 +484,7 @@ func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, provider.StackRef, progress.Log) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
 	return nil
 }
 
@@ -615,8 +615,8 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	return r.inner.Destroy(ctx, ref, progress)
+func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+	return r.inner.Destroy(ctx, ref, images, progress)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {

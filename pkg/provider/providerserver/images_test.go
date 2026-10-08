@@ -109,7 +109,7 @@ func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ progre
 	return provider.StackResult{Containers: fake.ProvisionedContainers(spec)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, provider.StackRef, progress.Log) error {
+func (muteStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
 	return nil
 }
 

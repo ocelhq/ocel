@@ -110,7 +110,7 @@ func TestDestroyingAStackDeletesEveryRealtimeKeyOfItsEnvironmentAndNoOther(t *te
 	keys.values[conformanceSigningKey("c-chat")] = conformanceSeed
 	otherEnv := signingKeySecret(conformanceSigningKeyRoot, "conformance", "staging", "c-realtime")
 	keys.values[otherEnv] = conformanceSeed
-	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), conformanceInfra, nil); err != nil {
+	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	want := []string{conformanceSigningKey("c-chat"), conformanceSigningKey("c-realtime")}

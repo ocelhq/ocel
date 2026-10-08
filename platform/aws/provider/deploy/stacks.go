@@ -23,6 +23,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -460,7 +461,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	r.realized.mark(naming.Sanitize(spec.Ref.Project), spec.Ref.Name)
 	if runsContainer(spec) {
 		defer func() {
-			_ = r.cfg.Retention.ReconcileImages(ctx, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
+			_ = resources.ReconcileImages(ctx, r.cfg.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
 		}()
 		return r.provisionContainer(ctx, spec, progress)
 	}
@@ -578,7 +579,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	return spec, work, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, _ provider.ImageStore, progress progress.Log) error {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
@@ -616,7 +617,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 	if ref.Name.IsInfra() {
 		return nil
 	}
-	return opened.cfg.Retention.ForgetReleases(ctx, ref, ref.Name.App, progress)
+	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, progress)
 }
 
 func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {

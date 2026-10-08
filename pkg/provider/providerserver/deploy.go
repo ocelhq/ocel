@@ -324,9 +324,6 @@ func (r *deployRun) reportApps(result *progressv1.OperationResult) {
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
-	if r.images != nil {
-		ctx = provider.WithImageStore(ctx, r.images)
-	}
 	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
 		return env.phase(func(progress progress.Log) error {
 			return r.prepare(ctx, progress)
@@ -1637,7 +1634,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, previous: previous, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
-				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))
+				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress))
 			}
 			if err := r.serveDeployment(ctx, r.spec.Pointer, promotion, r.readAppRouter, progress); err != nil {
 				progress.Warn(fmt.Sprintf("Promotion %s serves on %s, but not on its own deployment hostname: %v",
@@ -1647,7 +1644,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.checkpoint(ctx); err != nil {
 				return err
 			}
-			if err := r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress); err != nil {
+			if err := r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress); err != nil {
 				progress.Warn(unreclaimedWarning(promotion.PromotionID, err))
 			}
 			r.pruneInlineBindings(ctx, progress)

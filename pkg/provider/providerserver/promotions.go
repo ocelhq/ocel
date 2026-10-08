@@ -68,13 +68,13 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	}
 	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
 	if err != nil {
-		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.Discard())))
+		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, nil, "", dropped, progress.Discard())))
 	}
 	if err := session.checkpoint(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
-	if err := session.reclaimDropped(ctx, "", dropped, progress.Discard()); err != nil {
+	if err := session.reclaimDropped(ctx, nil, "", dropped, progress.Discard()); err != nil {
 		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
 	}
 	return rolled, nil
@@ -144,7 +144,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := reclaimUnnamed(ctx, session.provider, session.ledger, pointer, pruned, progress); err != nil {
+		if err := reclaimUnnamed(ctx, session.provider, nil, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {

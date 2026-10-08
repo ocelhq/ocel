@@ -185,11 +185,11 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err != nil {
 		t.Fatalf("ledger RemovePointer(%s) = %v", pointer, err)
 	}
-	if err := providerserver.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
+	if err := providerserver.ReclaimPreview(ctx, p, nil, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := provider.StackRef{Project: teardownSlug, Tier: environment.TierPreview, Name: naming.InfraStack(pointer)}
-	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
+	if err := p.Stacks().Destroy(ctx, infra, nil, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v: an ephemeral preview provisions no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}
 	return spoken

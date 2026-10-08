@@ -221,7 +221,7 @@ func (r releases) provision(ref provider.StackRef, app *provider.AppSpec) {
 
 func (r releases) destroy(ref provider.StackRef) {
 	r.t.Helper()
-	if err := r.stacks.Destroy(context.Background(), ref, nil); err != nil {
+	if err := r.stacks.Destroy(context.Background(), ref, nil, nil); err != nil {
 		r.t.Fatalf("Destroy(%s) = %v", ref.Name, err)
 	}
 }
@@ -415,7 +415,7 @@ func TestAStackWhoseProvisionFailedPartwayIsDestroyedThroughWhatItsVendorNamed(t
 		t.Fatal("Provision() = nil, want the vendor's failure")
 	}
 
-	if err := stacks.Destroy(context.Background(), ref, nil); err != nil {
+	if err := stacks.Destroy(context.Background(), ref, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -457,7 +457,7 @@ func TestAProvisionWaitsForADestroyRemovingTheServiceWhole(t *testing.T) {
 		<-release
 	}
 	destroyed := make(chan error, 1)
-	go func() { destroyed <- released.stacks.Destroy(context.Background(), only, nil) }()
+	go func() { destroyed <- released.stacks.Destroy(context.Background(), only, nil, nil) }()
 	<-removing
 
 	provisioned := make(chan error, 1)
