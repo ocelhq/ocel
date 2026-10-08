@@ -2,7 +2,6 @@ package images_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -17,25 +16,13 @@ func answerWithManifest(w http.ResponseWriter) {
 	w.Header().Set("Content-Length", "100")
 }
 
-var anotherManifestDigest = "sha256:" + strings.Repeat("b", 64)
-
-func listingTags(w http.ResponseWriter, tags ...string) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"name": "acme/web", "tags": tags})
-}
-
-func TestRemovingATagDeletesTheManifestItNamesByDigest(t *testing.T) {
+func TestRemovingATagDeletesTheTagAndNothingElse(t *testing.T) {
 	var asked []string
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/" {
 			asked = append(asked, r.Method+" "+r.URL.Path)
 		}
-		switch {
-		case r.URL.Path == "/v2/acme/web/tags/list":
-			listingTags(w, "sha256-abc")
-		case r.Method == http.MethodHead:
-			answerWithManifest(w)
-		case r.Method == http.MethodDelete:
+		if r.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusAccepted)
 		}
 	})
@@ -44,39 +31,42 @@ func TestRemovingATagDeletesTheManifestItNamesByDigest(t *testing.T) {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	want := []string{
-		"HEAD /v2/acme/web/manifests/sha256-abc",
-		"GET /v2/acme/web/tags/list",
-		"DELETE /v2/acme/web/manifests/" + aManifestDigest,
-	}
-	if !slices.Equal(asked, want) {
-		t.Errorf("Remove() asked %v, want %v: a registry deletes by digest, and most refuse a tag", asked, want)
+	if want := []string{"DELETE /v2/acme/web/manifests/sha256-abc"}; !slices.Equal(asked, want) {
+		t.Errorf("Remove() asked %v, want %v: a registry that deletes tags removes the one going, and no listing of the repository is needed", asked, want)
 	}
 }
 
-func TestRemovingATagLeavesTheManifestAnotherTagStillNames(t *testing.T) {
-	var deleted bool
-	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/v2/acme/web/tags/list":
-			listingTags(w, "sha256-abc", "sha256-def", "sha256-kept")
-		case r.Method == http.MethodHead && strings.HasSuffix(r.URL.Path, "/sha256-def"):
-			w.Header().Set("Docker-Content-Digest", anotherManifestDigest)
-			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
-			w.Header().Set("Content-Length", "100")
-		case r.Method == http.MethodHead:
-			answerWithManifest(w)
-		case r.Method == http.MethodDelete:
-			deleted = true
-			w.WriteHeader(http.StatusAccepted)
-		}
-	})
+func TestARegistryThatRefusesTagDeletesHasTheManifestTheTagNamesDeletedByDigest(t *testing.T) {
+	for name, refusal := range map[string]int{"with 405": http.StatusMethodNotAllowed, "with 400": http.StatusBadRequest} {
+		t.Run(name, func(t *testing.T) {
+			var asked []string
+			store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v2/" {
+					asked = append(asked, r.Method+" "+r.URL.Path)
+				}
+				switch {
+				case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/sha256-abc"):
+					http.Error(w, `{"errors":[{"code":"UNSUPPORTED","message":"The operation is unsupported."}]}`, refusal)
+				case r.Method == http.MethodHead:
+					answerWithManifest(w)
+				case r.Method == http.MethodDelete:
+					w.WriteHeader(http.StatusAccepted)
+				}
+			})
 
-	if err := store.Remove(context.Background(), push.ImageRef); err != nil {
-		t.Fatalf("Remove() = %v", err)
-	}
-	if deleted {
-		t.Error("Remove() deleted the manifest sha256-kept also names: a registry deletes a manifest with every tag on it, so the release that tag belongs to would lose its image")
+			if err := store.Remove(context.Background(), push.ImageRef); err != nil {
+				t.Fatalf("Remove() = %v", err)
+			}
+
+			want := []string{
+				"DELETE /v2/acme/web/manifests/sha256-abc",
+				"HEAD /v2/acme/web/manifests/sha256-abc",
+				"DELETE /v2/acme/web/manifests/" + aManifestDigest,
+			}
+			if !slices.Equal(asked, want) {
+				t.Errorf("Remove() asked %v, want %v: the distribution spec lets a registry refuse tag deletes, and every tag a deploy pushes names a manifest no other tag names", asked, want)
+			}
+		})
 	}
 }
 
@@ -99,10 +89,6 @@ func TestRemovingATagTheRegistryDoesNotHaveIsDone(t *testing.T) {
 
 func TestARegistryThatRefusesDeletesSaysSoAndNamesTheImageItKept(t *testing.T) {
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v2/acme/web/tags/list" {
-			listingTags(w, "sha256-abc")
-			return
-		}
 		if r.Method == http.MethodDelete {
 			http.Error(w, `{"errors":[{"code":"UNSUPPORTED","message":"The operation is unsupported."}]}`, http.StatusMethodNotAllowed)
 			return
@@ -133,14 +119,6 @@ func TestRemovingATagAsksTheRegistryForATokenThatMayDelete(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer a-scoped-token" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="http://`+r.Host+`/token",service="registry"`)
 			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if r.URL.Path == "/v2/acme/web/tags/list" {
-			listingTags(w, "sha256-abc")
-			return
-		}
-		if r.Method == http.MethodHead {
-			answerWithManifest(w)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
