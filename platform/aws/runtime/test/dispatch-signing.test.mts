@@ -1,3 +1,6 @@
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import { gzipSync } from "node:zlib";
 import { CLIENT_AUTHORIZATION_HEADER } from "@platform/edge-contract/client-authorization";
 import { expect, test } from "vitest";
 import { siblingOriginFetch } from "../src/next/dispatch-signing.mjs";
@@ -65,4 +68,25 @@ test("a sibling's remapped WWW-Authenticate is restored, and no remapped name is
   expect(
     [...answered.headers.keys()].filter((name) => name.startsWith("x-amzn-remapped-")),
   ).toEqual([]);
+});
+
+test("a loopback render the app gzipped itself comes back with its own bytes and encoding", async () => {
+  const gzipped = gzipSync(Buffer.from("compressed by the app"));
+  const local = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-encoding": "gzip", "content-length": gzipped.length });
+    res.end(gzipped);
+  });
+  await new Promise<void>((resolve) => local.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  try {
+    const { port } = local.address() as AddressInfo;
+    const response = await siblingOriginFetch(
+      credentials,
+      "us-east-1",
+    )(new Request(`http://127.0.0.1:${port}/page`, { headers: { "accept-encoding": "gzip" } }));
+
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(gzipped);
+  } finally {
+    await new Promise<void>((resolve) => local.close(() => resolve()));
+  }
 });

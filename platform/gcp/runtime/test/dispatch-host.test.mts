@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -13,7 +14,7 @@ const manifest: NextRouteTable = {
   rootFunction: "bundle-0",
   buildId: "b1",
   basePath: "",
-  pathnames: ["/home", "/other", "/logo.svg"],
+  pathnames: ["/home", "/other", "/gzipped", "/logo.svg"],
   routes: {
     beforeMiddleware: [],
     beforeFiles: [],
@@ -25,6 +26,7 @@ const manifest: NextRouteTable = {
   dispatch: {
     "/home": { kind: "function", id: "bundle-0", entryKey: "/home" },
     "/other": { kind: "function", id: "bundle-1", entryKey: "/other" },
+    "/gzipped": { kind: "function", id: "bundle-0", entryKey: "/gzipped" },
     "/logo.svg": { kind: "static" },
   },
 };
@@ -34,6 +36,7 @@ let local: http.Server;
 let localOrigin: string;
 const served: string[] = [];
 const refreshed: string[] = [];
+const gzipped = gzipSync(Buffer.from("compressed by the app"));
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-dispatch-"));
@@ -41,6 +44,11 @@ beforeAll(async () => {
   await mkdir(join(dir, "static", "assets"), { recursive: true });
   await writeFile(join(dir, "static", "assets", "logo.svg"), "<svg/>");
   local = http.createServer((req, res) => {
+    if (req.headers["x-ocel-entry"] === "/gzipped") {
+      res.writeHead(200, { "content-encoding": "gzip", "content-length": gzipped.length });
+      res.end(gzipped);
+      return;
+    }
     served.push(String(req.headers["x-ocel-entry"]));
     if (req.headers["x-ocel-refresh"] !== undefined) refreshed.push(String(req.url));
     res.end("rendered here");
@@ -72,6 +80,22 @@ test("every function a route names is rendered by the instance that routed it", 
     "rendered here",
   ]);
   expect(served.sort()).toEqual(["/home", "/other"]);
+});
+
+test("a body the app gzipped itself reaches the client with its own bytes and encoding", async () => {
+  const host = readGcpDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
+    localOrigin,
+  );
+
+  const response = await dispatchRequest(
+    new Request("https://shop.example/gzipped", { headers: { "accept-encoding": "gzip" } }),
+    host,
+    () => {},
+  );
+
+  expect(response.headers.get("content-encoding")).toBe("gzip");
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(gzipped);
 });
 
 test("a static asset is served from the directory the service's image holds it in", async () => {

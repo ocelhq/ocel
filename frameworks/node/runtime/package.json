@@ -11,6 +11,7 @@
     "./router-header": "./src/router-header.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./fetch-bridge": "./src/fetch-bridge.mts",
+    "./undecoded-fetch": "./src/undecoded-fetch.mts",
     "./host": "./src/host.mts",
     "./live-values": "./src/live-values.mts",
     "./serve": "./src/serve.mts",

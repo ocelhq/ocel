@@ -1,6 +1,7 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { type DispatchHost, readDispatchHost } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
+import { fetchUndecoded } from "@framework/node-runtime/undecoded-fetch";
 import { cloudCdnRelease, newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
 import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
@@ -23,7 +24,7 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
   const staticDir = env[staticDirVar];
   const assetPrefix = env.OCEL_ASSET_PREFIX ?? "";
   const host = readDispatchHost(env, localOrigin, {
-    originFetch: fetch,
+    originFetch: fetchUndecoded,
     ...(staticDir && {
       assetBucket: newDiskAssetBucket(staticDir, assetPrefix),
       imageOrigin: newInProcessImageOrigin(newDiskObjectStore(staticDir, assetPrefix)),
