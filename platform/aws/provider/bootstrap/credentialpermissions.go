@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -113,8 +114,6 @@ type ScopedARNs struct {
 	scheduleGroup       string
 	schedule            string
 	edgeUser            string
-	appBoundary         string
-	variablesAlias      string
 	passphraseParam     string
 	edgeParam           string
 	originParam         string
@@ -142,8 +141,6 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		scheduleGroup:      "arn:aws:scheduler:*:*:schedule-group/" + core + "*",
 		schedule:           "arn:aws:scheduler:*:*:schedule/" + core + "*/*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
-		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(environment.TierProduction) + "*",
-		variablesAlias:     "arn:aws:kms:*:*:alias/" + string(n) + "-variables-*",
 		passphraseParam:    parameterARNPrefix + n.PassphraseParamName(),
 		edgeParam:          parameterARNPrefix + n.paramRoot() + "/edge/*",
 		originParam:        parameterARNPrefix + n.paramRoot() + "/origin/*",
@@ -159,11 +156,51 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 	return a
 }
 
+const (
+	effectAllow = "Allow"
+	effectDeny  = "Deny"
+)
+
 type GrantStatement struct {
+	Effect    string
 	Actions   []string
 	Resources []string
 	Condition map[string]any
 }
+
+func (n Namespace) tierStoresPrefix(tier environment.Tier) string {
+	return suffixed(tier, n.CoreStackName())
+}
+
+func (n Namespace) ScopedARNsFor(tier environment.Tier) ScopedARNs {
+	a := n.ScopedARNs()
+	prefix := n.tierStoresPrefix(tier)
+	a.bootstrapBucket = "arn:aws:s3:::" + prefix + "*"
+	a.bootstrapObject = a.bootstrapBucket + "/*"
+	a.BootstrapTable = "arn:aws:dynamodb:*:*:table/" + prefix + "*"
+	a.BootstrapTablePart = a.BootstrapTable + "/*"
+	return a
+}
+
+func withheldSiblingStores(ns Namespace, tier environment.Tier) []GrantStatement {
+	sibling := ns.ScopedARNsFor(tier.Sibling())
+	if tier != environment.TierProduction {
+		return nil
+	}
+	return []GrantStatement{{
+		Effect:    effectDeny,
+		Actions:   []string{"s3:*", "dynamodb:*"},
+		Resources: []string{sibling.bootstrapBucket, sibling.bootstrapObject, sibling.BootstrapTable, sibling.BootstrapTablePart},
+	}}
+}
+
+func variablesKeyOfTier(ns Namespace, tier environment.Tier) map[string]any {
+	return map[string]any{"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor(tier)}}
+}
+
+func policyARN(name string) string { return "arn:aws:iam::*:policy/" + name }
+
+func aliasARN(alias string) string { return "arn:aws:kms:*:*:" + alias }
 
 func inCallerAccount() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceAccount": callerAccount}}
@@ -216,9 +253,9 @@ func managedByAnAppCluster() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
 }
 
-func withinAppBoundary(ns Namespace) map[string]any {
+func withinAppBoundary(ns Namespace, tier environment.Tier) map[string]any {
 	return map[string]any{"StringEquals": map[string]any{
-		"iam:PermissionsBoundary": []string{appBoundaryARNFor(ns, environment.TierProduction), appBoundaryARNFor(ns, environment.TierPreview)},
+		"iam:PermissionsBoundary": appBoundaryARNFor(ns, tier),
 	}}
 }
 
@@ -296,7 +333,7 @@ func variablesKeyLifecycleActions() []string {
 	}
 }
 
-func bootstrapAccess(r ScopedARNs) []GrantStatement {
+func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions: []string{
@@ -338,17 +375,17 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
 			Resources: []string{AnyKeyARN},
-			Condition: map[string]any{
+			Condition: mergeConditions(variablesKeyOfTier(ns, tier), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
-			},
+			}),
 		},
 		{
 			Actions:   []string{"kms:CreateGrant"},
 			Resources: []string{AnyKeyARN},
-			Condition: map[string]any{
+			Condition: mergeConditions(variablesKeyOfTier(ns, tier), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
-			},
+			}),
 		},
 		{
 			Actions:   []string{"cloudformation:DescribeStacks"},
@@ -361,7 +398,7 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
+func appProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions:   []string{"lambda:CreateFunction"},
@@ -394,7 +431,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:CreateRole"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns)),
+			Condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns, tier)),
 		},
 		{
 			Actions: []string{
@@ -419,12 +456,12 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"iam:PutRolePolicy",
 			},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns)),
+			Condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns, tier)),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns)),
+			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns, tier)),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -1021,7 +1058,7 @@ func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
+func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions: []string{
@@ -1102,12 +1139,12 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor("*")},
+				"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor(tier)},
 			},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			Resources: []string{r.variablesAlias},
+			Resources: []string{aliasARN(ns.variablesKeyAliasFor(tier))},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
@@ -1130,7 +1167,7 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"iam:TagPolicy",
 				"iam:UntagPolicy",
 			},
-			Resources: []string{r.appBoundary},
+			Resources: []string{policyARN(ns.AppBoundaryNameFor(tier))},
 		},
 		{
 			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
@@ -1303,29 +1340,42 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func deployGrants(ns Namespace) []GrantStatement {
-	r := ns.ScopedARNs()
-	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r))
+func deployGrants(ns Namespace, tier environment.Tier) []GrantStatement {
+	r := ns.ScopedARNsFor(tier)
+	return slices.Concat(bootstrapAccess(ns, tier, r), appProvisioning(ns, tier, r), runtimeProvisioning(r), withheldSiblingStores(ns, tier))
 }
 
-func bootstrapGrants(ns Namespace) []GrantStatement {
-	r := ns.ScopedARNs()
-	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r), bootstrapProvisioning(ns, r), edgePrincipal(r))
+func bootstrapGrants(ns Namespace, tier environment.Tier) []GrantStatement {
+	r := ns.ScopedARNsFor(tier)
+	return slices.Concat(bootstrapAccess(ns, tier, r), appProvisioning(ns, tier, r), runtimeProvisioning(r), bootstrapProvisioning(ns, tier, r), edgePrincipal(r), withheldSiblingStores(ns, tier))
 }
 
-func DeployCredentialPermissions(ns Namespace) (string, error) {
-	return credentialPolicy("deploy", deployGrants(ns))
+func refuseUnservedTier(tier environment.Tier) error {
+	if tier == environment.TierProduction || tier == environment.TierPreview {
+		return nil
+	}
+	return fmt.Errorf("credential permissions are rendered for the production or preview tier, not %q", tier)
 }
 
-func BootstrapCredentialPermissions(ns Namespace) (string, error) {
-	return credentialPolicy("bootstrap", bootstrapGrants(ns))
+func DeployCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
+	if err := refuseUnservedTier(tier); err != nil {
+		return "", err
+	}
+	return credentialPolicy("deploy", deployGrants(ns, tier))
+}
+
+func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
+	if err := refuseUnservedTier(tier); err != nil {
+		return "", err
+	}
+	return credentialPolicy("bootstrap", bootstrapGrants(ns, tier))
 }
 
 func PolicyStatements(grants []GrantStatement) []map[string]any {
 	statements := make([]map[string]any, 0, len(grants))
 	for _, grant := range grants {
 		statement := map[string]any{
-			"Effect":   "Allow",
+			"Effect":   cmp.Or(grant.Effect, effectAllow),
 			"Action":   oneOrMany(grant.Actions),
 			"Resource": oneOrMany(grant.Resources),
 		}

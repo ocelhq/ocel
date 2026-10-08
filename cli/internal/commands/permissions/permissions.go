@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -26,7 +28,8 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Short:   "Print the permissions bootstrap or deploy credentials need",
 		Long: "Print the permissions bootstrap or deploy credentials need.\n\n" +
 			"`bootstrap` is what bootstrapping runs under, `deploy` the smaller set deploys and " +
-			"previews run under.",
+			"previews run under. A provider whose credentials differ between production and " +
+			"previews prints one document for each.",
 		Example: "  $ ocel permissions deploy",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -104,18 +107,35 @@ func credentialPermissions(ctx context.Context, invocation commands.Invocation, 
 	err = invocation.WithProvider(ctx, cfg, "ocel permissions", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-			permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
-				Purpose: purpose,
-				Edge:    cfg.EdgeSelection(),
-			})
-			groups = permissions.GetGroups()
-			return err
+			for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
+				permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
+					Purpose: purpose,
+					Edge:    cfg.EdgeSelection(),
+					Tier:    tier,
+				})
+				if err != nil {
+					return err
+				}
+				groups = appendNewGroups(groups, permissions.GetGroups())
+			}
+			return nil
 		})
 	})
 	if err != nil {
 		return nil, err
 	}
 	return groups, nil
+}
+
+func appendNewGroups(groups, rendered []*contractv1.CredentialGroup) []*contractv1.CredentialGroup {
+	for _, group := range rendered {
+		if !slices.ContainsFunc(groups, func(printed *contractv1.CredentialGroup) bool {
+			return printed.GetHeading() == group.GetHeading() && printed.GetDocument() == group.GetDocument()
+		}) {
+			groups = append(groups, group)
+		}
+	}
+	return groups
 }
 
 func purposeArg(args []string) (contractv1.CredentialPurpose, error) {

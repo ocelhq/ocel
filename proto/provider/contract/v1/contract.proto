@@ -509,6 +509,8 @@ message CredentialPermissionsRequest {
   CredentialPurpose purpose = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
+
+  common.environment.v1.Tier tier = 3 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 }
 
 message CredentialPermissionsResponse {

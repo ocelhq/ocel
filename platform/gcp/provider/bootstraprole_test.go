@@ -298,7 +298,7 @@ func TestAnEmulatedBootstrapMakesNoCustomRole(t *testing.T) {
 func TestABootstrapCredentialMayKeepTheCustomRoleItMakes(t *testing.T) {
 	t.Parallel()
 
-	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap)
+	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(bootstrap) = %v", err)
 	}

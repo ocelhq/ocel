@@ -87,8 +87,42 @@ func TestPermissionsWritesTheDocumentTheProviderRendersForThePurpose(t *testing.
 		if !strings.Contains(stdout.String(), "fake permissions for deploy") {
 			t.Errorf("stdout = %q, want the deploy purpose's document", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "fake credentials") {
-			t.Errorf("stdout = %q, want a lone group to print pipeable, without its heading", stdout.String())
+	})
+
+	t.Run("it writes one document for each tier when the credentials differ between them", func(t *testing.T) {
+		project := clitest.SetUpProject(t)
+		invocation := clitest.NewInvocation()
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		for _, want := range []string{"fake permissions for deploy in production", "fake permissions for deploy in preview"} {
+			if got := strings.Count(stdout.String(), want); got != 1 {
+				t.Errorf("stdout = %q, want %q exactly once, got %d", stdout.String(), want, got)
+			}
+		}
+		if strings.Index(stdout.String(), "in production") > strings.Index(stdout.String(), "in preview") {
+			t.Errorf("stdout = %q, want the production document before the preview one", stdout.String())
+		}
+	})
+
+	t.Run("it prints a document that is the same in every tier once, without its heading", func(t *testing.T) {
+		project := clitest.SetUpProject(t)
+		project.Provider.Credentials().(*fake.Credentials).DocumentsPermissions(edge.CredentialDocument{
+			Heading:  "fake credentials",
+			Document: "one document for every tier",
+		})
+		invocation := clitest.NewInvocation()
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stderr)
+		if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if got, want := strings.TrimSpace(stdout.String()), "one document for every tier"; got != want {
+			t.Errorf("stdout = %q, want %q: a document no tier changes prints once, pipeable", got, want)
 		}
 	})
 

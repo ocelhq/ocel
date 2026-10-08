@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -233,7 +234,7 @@ func TestPermissionsRefuseTheTierThatIsNoTier(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	if _, err := (gcp.Credentials{}).Permissions("neither"); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+	if _, err := (gcp.Credentials{}).Permissions("neither", environment.TierProduction); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(neither) = %v, want an invalid refusal", err)
 	}
 }

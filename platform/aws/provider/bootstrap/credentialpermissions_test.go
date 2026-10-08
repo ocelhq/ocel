@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -104,8 +105,11 @@ func grantsOf(t *testing.T, document string) map[grant]bool {
 	t.Helper()
 	grants := map[grant]bool{}
 	for _, statement := range parsePolicy(t, document).Statement {
+		if statement.Effect == "Deny" {
+			continue
+		}
 		if statement.Effect != "Allow" {
-			t.Fatalf("statement Effect = %q, want Allow", statement.Effect)
+			t.Fatalf("statement Effect = %q, want Allow or Deny", statement.Effect)
 		}
 		condition, err := json.Marshal(statement.Condition)
 		if err != nil {
@@ -131,21 +135,31 @@ func actionsOf(t *testing.T, document string) map[string]bool {
 
 func renderedCredentials(t *testing.T) (string, string) {
 	t.Helper()
-	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace)
+	return renderedCredentialsOf(t, environment.TierProduction)
+}
+
+func renderedCredentialsOf(t *testing.T, tier environment.Tier) (string, string) {
+	t.Helper()
+	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace, tier)
 	if err != nil {
-		t.Fatalf("BootstrapCredentialPermissions(defaultNamespace) error = %v", err)
+		t.Fatalf("BootstrapCredentialPermissions(defaultNamespace, %s) error = %v", tier, err)
 	}
-	deployDoc, err := DeployCredentialPermissions(defaultNamespace)
+	deployDoc, err := DeployCredentialPermissions(defaultNamespace, tier)
 	if err != nil {
-		t.Fatalf("DeployCredentialPermissions(defaultNamespace) error = %v", err)
+		t.Fatalf("DeployCredentialPermissions(defaultNamespace, %s) error = %v", tier, err)
 	}
 	return bootstrapDoc, deployDoc
 }
 
 func bothCredentials(t *testing.T) map[string]string {
 	t.Helper()
-	bootstrapDoc, deployDoc := renderedCredentials(t)
-	return map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc}
+	credentials := map[string]string{}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		credentials["bootstrap "+string(tier)] = bootstrapDoc
+		credentials["deploy "+string(tier)] = deployDoc
+	}
+	return credentials
 }
 
 func readOnly(action string) bool {
@@ -181,19 +195,11 @@ func boundaryScopes(condition map[string]any) bool {
 	if !ok {
 		return false
 	}
-	named, ok := operands["iam:PermissionsBoundary"].([]any)
+	named, ok := operands["iam:PermissionsBoundary"].(string)
 	if !ok {
 		return false
 	}
-	var arns []string
-	for _, one := range named {
-		arn, ok := one.(string)
-		if !ok {
-			return false
-		}
-		arns = append(arns, arn)
-	}
-	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, environment.TierProduction), appBoundaryARNFor(defaultNamespace, environment.TierPreview)})
+	return slices.Contains([]string{appBoundaryARNFor(defaultNamespace, environment.TierProduction), appBoundaryARNFor(defaultNamespace, environment.TierPreview)}, named)
 }
 
 func conditionScopes(actions []string, condition map[string]any) bool {
@@ -515,9 +521,9 @@ func conditionNames(condition map[string]any, key string) bool {
 	return false
 }
 
-func mustRender(t *testing.T, render func(Namespace) (string, error)) string {
+func mustRender(t *testing.T, render func(Namespace, environment.Tier) (string, error)) string {
 	t.Helper()
-	document, err := render(defaultNamespace)
+	document, err := render(defaultNamespace, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("render policy: %v", err)
 	}
@@ -562,12 +568,16 @@ func TestTheBootstrapCredentialOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T
 }
 
 func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
-	bootstrapARNs := defaultNamespace.ScopedARNs()
+	var bootstrapStores []string
+	for _, tier := range bothTiers {
+		bootstrapARNs := defaultNamespace.ScopedARNsFor(tier)
+		bootstrapStores = append(bootstrapStores, bootstrapARNs.bootstrapBucket, bootstrapARNs.bootstrapObject)
+	}
 	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			switch {
 			case strings.HasPrefix(g.action, "s3:"):
-				if g.resource == bootstrapARNs.bootstrapBucket || g.resource == bootstrapARNs.bootstrapObject {
+				if slices.Contains(bootstrapStores, g.resource) {
 					continue
 				}
 				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+appScopePrefix) {
@@ -721,7 +731,7 @@ func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPa
 			if !strings.HasPrefix(g.action, "ssm:Delete") || !iamResourceMatches(g.resource, r.passphraseParam) {
 				continue
 			}
-			if purpose != "bootstrap" {
+			if !strings.HasPrefix(purpose, "bootstrap") {
 				t.Errorf("the %s credential grants %s on %s, which reaches %s: only the credential that can already destroy every Pulumi state in the account may take what encrypts it", purpose, g.action, g.resource, r.passphraseParam)
 				continue
 			}
@@ -738,19 +748,21 @@ func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPa
 	}
 }
 
-func TestEveryCredentialMayGrantLambdaTheVariablesKeyAndNoOther(t *testing.T) {
-	want := conditionJSON(t, map[string]any{
-		"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
-		"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
-	})
-	for purpose, document := range bothCredentials(t) {
-		grants := grantsOf(t, document)
-		if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
-			t.Errorf("the %s credential does not grant kms:CreateGrant on a variables key for an AWS service, so Lambda cannot seal a function's environment under it", purpose)
-		}
-		for g := range grants {
-			if g.action == "kms:CreateGrant" && g.condition != want {
-				t.Errorf("the %s credential grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", purpose, g.condition)
+func TestEveryCredentialMayGrantLambdaTheVariablesKeyOfItsTierAndNoOther(t *testing.T) {
+	for _, tier := range bothTiers {
+		want := conditionJSON(t, mergeConditions(variablesKeyOfTier(defaultNamespace, tier), map[string]any{
+			"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
+			"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
+		}))
+		for purpose, document := range credentialsOfTier(t, tier) {
+			grants := grantsOf(t, document)
+			if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
+				t.Errorf("the %s %s credential does not grant kms:CreateGrant on its tier's variables key for an AWS service, so Lambda cannot seal a function's environment under it", tier, purpose)
+			}
+			for g := range grants {
+				if g.action == "kms:CreateGrant" && g.condition != want {
+					t.Errorf("the %s %s credential grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", tier, purpose, g.condition)
+				}
 			}
 		}
 	}
@@ -1142,6 +1154,148 @@ func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T
 		}
 		if !maps.Equal(granted, want) {
 			t.Errorf("the %s credential grants secretsmanager %v beyond the RDS master secrets, want exactly %v", purpose, granted, want)
+		}
+	}
+}
+
+var bothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
+
+func credentialsOfTier(t *testing.T, tier environment.Tier) map[string]string {
+	t.Helper()
+	bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+	return map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc}
+}
+
+func reaches(t *testing.T, document, action, arn string) bool {
+	t.Helper()
+	service, _, _ := strings.Cut(action, ":")
+	allowed := false
+	for _, statement := range parsePolicy(t, document).Statement {
+		actions := stringsOf(t, statement.Action, "Action")
+		if !slices.Contains(actions, action) && !slices.Contains(actions, service+":*") {
+			continue
+		}
+		matched := slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
+			return iamResourceMatches(pattern, arn)
+		})
+		switch {
+		case !matched:
+		case statement.Effect == "Deny":
+			return false
+		default:
+			allowed = true
+		}
+	}
+	return allowed
+}
+
+func TestEveryCredentialOpensOnlyTheVariablesKeyOfItsOwnTier(t *testing.T) {
+	opening := []string{"kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey", "kms:CreateGrant"}
+	for _, tier := range bothTiers {
+		want := map[string]any{"kms:ResourceAliases": defaultNamespace.variablesKeyAliasFor(tier)}
+		for purpose, document := range credentialsOfTier(t, tier) {
+			opened := map[string]bool{}
+			for _, statement := range parsePolicy(t, document).Statement {
+				for _, action := range stringsOf(t, statement.Action, "Action") {
+					if !slices.Contains(opening, action) {
+						continue
+					}
+					opened[action] = true
+					if got := statement.Condition["ForAnyValue:StringEquals"]; !reflect.DeepEqual(got, want) {
+						t.Errorf("the %s %s credential grants %s under ForAnyValue:StringEquals %v, want %v: any other key reaches the %s tier's variables", tier, purpose, action, got, want, tier.Sibling())
+					}
+				}
+			}
+			for _, action := range opening {
+				if !opened[action] {
+					t.Errorf("the %s %s credential grants no %s, and a deploy seals and opens variables with it", tier, purpose, action)
+				}
+			}
+		}
+	}
+}
+
+func TestEveryCredentialMintsAppRolesUnderOnlyTheBoundaryOfItsOwnTier(t *testing.T) {
+	for _, tier := range bothTiers {
+		for purpose, document := range credentialsOfTier(t, tier) {
+			pinned := false
+			for _, statement := range parsePolicy(t, document).Statement {
+				if !slices.Contains(stringsOf(t, statement.Action, "Action"), "iam:CreateRole") || !boundaryScopes(statement.Condition) {
+					continue
+				}
+				pinned = true
+				operands, _ := statement.Condition["StringEquals"].(map[string]any)
+				if got, want := operands["iam:PermissionsBoundary"], appBoundaryARNFor(defaultNamespace, tier); got != want {
+					t.Errorf("the %s %s credential mints roles under iam:PermissionsBoundary %v, want exactly %s", tier, purpose, got, want)
+				}
+			}
+			if !pinned {
+				t.Errorf("the %s %s credential mints app roles without pinning a boundary", tier, purpose)
+			}
+		}
+	}
+}
+
+func TestEveryCredentialReachesOnlyTheStateAndVariablesOfItsOwnTier(t *testing.T) {
+	core := defaultNamespace.CoreStackName()
+	buckets := map[environment.Tier]string{
+		environment.TierProduction: core + "-statebucket-1a2b3c",
+		environment.TierPreview:    core + "-preview-statebucket-1a2b3c",
+	}
+	tables := map[environment.Tier]string{
+		environment.TierProduction: core + "-variablestable-1a2b3c",
+		environment.TierPreview:    core + "-preview-variablestable-1a2b3c",
+	}
+	const tableARN = "arn:aws:dynamodb:us-east-1:111122223333:table/"
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		for purpose, document := range credentialsOfTier(t, tier) {
+			for _, c := range []struct{ action, own, other string }{
+				{"s3:GetObject", "arn:aws:s3:::" + buckets[tier] + "/state", "arn:aws:s3:::" + buckets[sibling] + "/state"},
+				{"s3:ListBucket", "arn:aws:s3:::" + buckets[tier], "arn:aws:s3:::" + buckets[sibling]},
+				{"dynamodb:GetItem", tableARN + tables[tier], tableARN + tables[sibling]},
+				{"dynamodb:Query", tableARN + tables[tier] + "/index/gsi1", tableARN + tables[sibling] + "/index/gsi1"},
+			} {
+				if !reaches(t, document, c.action, c.own) {
+					t.Errorf("the %s %s credential cannot %s on %s, its own tier's store", tier, purpose, c.action, c.own)
+				}
+				if reaches(t, document, c.action, c.other) {
+					t.Errorf("the %s %s credential can %s on %s, the %s tier's store", tier, purpose, c.action, c.other, sibling)
+				}
+			}
+		}
+	}
+}
+
+func TestOnlyTheBootstrapCredentialOfATierManagesItsBoundaryPolicyAndVariablesAlias(t *testing.T) {
+	const account = "arn:aws:%s::111122223333:%s"
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		for _, c := range []struct{ action, own, other string }{
+			{"iam:CreatePolicyVersion", fmt.Sprintf(account, "iam", "policy/"+defaultNamespace.AppBoundaryNameFor(tier)), fmt.Sprintf(account, "iam", "policy/"+defaultNamespace.AppBoundaryNameFor(sibling))},
+			{"kms:UpdateAlias", fmt.Sprintf(account, "kms", defaultNamespace.variablesKeyAliasFor(tier)), fmt.Sprintf(account, "kms", defaultNamespace.variablesKeyAliasFor(sibling))},
+		} {
+			if !reaches(t, bootstrapDoc, c.action, c.own) {
+				t.Errorf("the %s bootstrap credential cannot %s on %s", tier, c.action, c.own)
+			}
+			if reaches(t, bootstrapDoc, c.action, c.other) {
+				t.Errorf("the %s bootstrap credential can %s on %s, the %s tier's", tier, c.action, c.other, sibling)
+			}
+			if reaches(t, deployDoc, c.action, c.own) {
+				t.Errorf("the %s deploy credential can %s on %s", tier, c.action, c.own)
+			}
+		}
+	}
+}
+
+func TestACredentialIsRefusedForATierItDoesNotServe(t *testing.T) {
+	for _, render := range []func(Namespace, environment.Tier) (string, error){DeployCredentialPermissions, BootstrapCredentialPermissions} {
+		if _, err := render(defaultNamespace, "staging"); err == nil || !strings.Contains(err.Error(), `"staging"`) {
+			t.Errorf("render for tier staging error = %v, want it to name the tier", err)
+		}
+		if _, err := render(defaultNamespace, ""); err == nil {
+			t.Error("render for no tier produced a document, want a refusal: it would reach both tiers")
 		}
 	}
 }

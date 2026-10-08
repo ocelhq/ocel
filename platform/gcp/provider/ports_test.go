@@ -302,7 +302,7 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 			"roles/cloudkms.admin",
 		},
 	} {
-		document, err := credentials.Permissions(purpose)
+		document, err := credentials.Permissions(purpose, environment.TierProduction)
 		if err != nil {
 			t.Errorf("Permissions(%s) = %v, want the roles that purpose is granted", purpose, err)
 			continue
@@ -321,7 +321,7 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -337,7 +337,7 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecret(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -362,7 +362,7 @@ func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecr
 func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -391,7 +391,7 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 func TestADeployMayGrantTheCachePurgeRoleAndNoRoleItCouldChange(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -408,7 +408,7 @@ func TestADeployMayGrantTheCachePurgeRoleAndNoRoleItCouldChange(t *testing.T) {
 func TestADeployMayLetViewersThroughToTheCloudRunServicesOfItsNamespaceAndNoOtherProxiedResource(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -428,7 +428,7 @@ func TestADeployMayLetViewersThroughToTheCloudRunServicesOfItsNamespaceAndNoOthe
 func TestADeployMayUntagImagesInItsOwnRepositoriesAndNoOther(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -450,7 +450,7 @@ func TestADeployMayUntagImagesInItsOwnRepositoriesAndNoOther(t *testing.T) {
 func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -469,7 +469,7 @@ func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T
 func TestADeployAdministersTheDatabasesOfItsNamespaceAndNoOtherInstance(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -493,7 +493,7 @@ func TestACredentialPurposeNobodyDefinedIsRefusedRatherThanRendered(t *testing.T
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := testProvider(t).Credentials().Permissions(edge.CredentialPurpose("root"))
+	_, err := testProvider(t).Credentials().Permissions(edge.CredentialPurpose("root"), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

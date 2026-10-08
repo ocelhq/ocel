@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -56,7 +57,7 @@ func (c *Credentials) DocumentsPermissions(document edge.CredentialDocument) {
 	c.permissions = &document
 }
 
-func (c *Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (c *Credentials) Permissions(purpose edge.CredentialPurpose, tier environment.Tier) (edge.CredentialDocument, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.permissions != nil {
@@ -64,6 +65,6 @@ func (c *Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credenti
 	}
 	return edge.CredentialDocument{
 		Heading:  "fake credentials",
-		Document: "fake permissions for " + string(purpose),
+		Document: "fake permissions for " + string(purpose) + " in " + string(tier),
 	}, nil
 }

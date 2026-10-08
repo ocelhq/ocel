@@ -8,6 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -317,7 +318,11 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	if err != nil {
 		return nil, err
 	}
-	document, err := p.Credentials().Permissions(purpose)
+	tier, err := credentialTierOf(req.GetTier())
+	if err != nil {
+		return nil, err
+	}
+	document, err := p.Credentials().Permissions(purpose, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -345,6 +350,14 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 		})
 	}
 	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
+}
+
+func credentialTierOf(tier environmentv1.Tier) (environment.Tier, error) {
+	if tier == environmentv1.Tier_TIER_UNSPECIFIED {
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New(
+			"credential permissions are rendered for the production or preview tier; this request named neither"))
+	}
+	return decodeTier(tier)
 }
 
 func CredentialPurposeOf(purpose contractv1.CredentialPurpose) (edge.CredentialPurpose, error) {

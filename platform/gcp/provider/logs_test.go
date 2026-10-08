@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -140,7 +141,7 @@ func TestTheDeployCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
 	}
 
 	for _, purpose := range []edge.CredentialPurpose{edge.PurposeDeploy, edge.PurposeBootstrap} {
-		document, err := p.Credentials().Permissions(purpose)
+		document, err := p.Credentials().Permissions(purpose, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Permissions(%s) error = %v", purpose, err)
 		}
