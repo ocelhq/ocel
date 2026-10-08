@@ -243,7 +243,7 @@ func (b *bench) rendered(command string) session.Result {
 		return session.Result{}
 	case strings.HasPrefix(command, ownersCommand):
 		return session.Result{}
-	case strings.HasPrefix(command, "cat "):
+	case strings.HasPrefix(command, "cat ") && !strings.HasPrefix(command, "cat | "):
 		for _, items := range b.installed {
 			for _, item := range items {
 				if command == "cat "+quoted(item.Name) {
