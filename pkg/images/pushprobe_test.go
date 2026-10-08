@@ -107,6 +107,43 @@ func TestPushAccessHandsAnUploadLocationOnAnotherHostNoCredential(t *testing.T) 
 	}
 }
 
+func TestPushAccessSurvivesAnotherClientClosingTheDefaultTransportsIdleConnections(t *testing.T) {
+	target := pushRegistry(t, &uploads{}, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/v2/acme/web/blobs/uploads/session-1")
+		w.WriteHeader(http.StatusAccepted)
+	})
+	stop := make(chan struct{})
+	closing := make(chan struct{})
+	go func() {
+		defer close(closing)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+			}
+		}
+	}()
+	defer func() {
+		close(stop)
+		<-closing
+	}()
+
+	var probes sync.WaitGroup
+	for range 8 {
+		probes.Go(func() {
+			for range 100 {
+				if err := images.ProbePushAccess(context.Background(), target, "web"); err != nil {
+					t.Errorf("ProbePushAccess() error = %v, want a probe whose connections no other client of the default transport can close", err)
+					return
+				}
+			}
+		})
+	}
+	probes.Wait()
+}
+
 func TestPushAccessRefusedByTheRegistryIsADeniedCredentialNamingWhatTheRegistrySaid(t *testing.T) {
 	t.Parallel()
 
