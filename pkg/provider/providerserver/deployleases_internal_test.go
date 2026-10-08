@@ -61,6 +61,40 @@ func TestAHeldDeployLeaseIsRenewedWhileItsDeployRuns(t *testing.T) {
 	}
 }
 
+func TestALeaseHeldAgainAfterItWasLostIsRenewedAgain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	leases := quickLeases()
+	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+		t.Fatal(err)
+	}
+	defer leases.release(ctx, store, shopProduction, renewedLease)
+	if err := takeAs(ctx, store, rivalLease, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	leases.mu.Lock()
+	lost := leases.renewing[leaseName(shopProduction, renewedLease)]
+	leases.mu.Unlock()
+	<-lost.done
+	if err := stackrecords.ForgetDeployLease(ctx, store, shopProduction.tier, shopProduction.slug, shopProduction.env, rivalLease); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := leases.hold(ctx, store, shopProduction, renewedLease); err != nil {
+		t.Fatal(err)
+	}
+	taken := readLeaseExpiry(t, store)
+
+	deadline := time.Now().Add(10 * time.Second)
+	for readLeaseExpiry(t, store) <= taken {
+		if time.Now().After(deadline) {
+			t.Fatal("the lease expiry never moved, want the deploy that held it again to renew it again")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestADeployThatLostItsLeaseDoesNotRenewItOverTheDeployThatTookItOver(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

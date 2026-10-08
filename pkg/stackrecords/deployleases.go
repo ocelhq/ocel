@@ -44,6 +44,26 @@ func TakeDeployLease(ctx context.Context, store keyvalue.Store, tier environment
 	})
 }
 
+func RenewDeployLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, now time.Time, ttl time.Duration) error {
+	name := DeployLeaseKey(tier, slug, env)
+	return keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+		held, err := decodeDeployLease(name, recorded)
+		if err != nil {
+			return nil, false, err
+		}
+		if held.Token != token {
+			return nil, false, refusal.Refuse(refusal.CodeBusy,
+				"another deploy to %s is running, and took over the lease this deploy held, so this deploy stops before it promotes: deploy again once that deploy ends",
+				env)
+		}
+		value, err := json.Marshal(DeployLease{Token: token, ExpiresAt: now.Add(ttl).Unix()})
+		if err != nil {
+			return nil, false, fmt.Errorf("record %s: %w", name, err)
+		}
+		return value, true, nil
+	})
+}
+
 func ForgetDeployLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) error {
 	name := DeployLeaseKey(tier, slug, env)
 	return keyvalue.ForgetMatching(ctx, store, name, func(recorded keyvalue.Entry) (bool, error) {

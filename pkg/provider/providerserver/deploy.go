@@ -54,9 +54,9 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
+		var token string
 		if !req.GetDry() {
-			token := req.GetLeaseToken()
-			if token == "" {
+			if token = req.GetLeaseToken(); token == "" {
 				if token, err = newLeaseToken(); err != nil {
 					return nil, err
 				}
@@ -70,6 +70,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
+		run.leases, run.leaseToken = h.leases, token
 		return run.execute(ctx)
 	})
 }
@@ -205,6 +206,9 @@ type deployRun struct {
 
 	infraProvisioned     bool
 	infraHoldsUndeclared bool
+
+	leases     *deployLeases
+	leaseToken string
 
 	dry           bool
 	dryRunPlan    dryRunPlan
@@ -354,11 +358,22 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
+	if err := r.confirmLease(ctx); err != nil {
+		r.reclaimOwnRelease(ctx)
+		return nil, err
+	}
 	result, err := r.promote(ctx)
 	if err != nil {
 		r.reclaimOwnRelease(ctx)
 	}
 	return result, err
+}
+
+func (r *deployRun) confirmLease(ctx context.Context) error {
+	if r.leaseToken == "" {
+		return nil
+	}
+	return r.leases.confirm(ctx, r.provider.KeyValues(), scopeOf(r.spec), r.leaseToken)
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {

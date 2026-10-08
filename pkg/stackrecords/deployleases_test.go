@@ -130,3 +130,57 @@ func TestForgetDeployLeaseKeepsALeaseAnotherDeployHolds(t *testing.T) {
 		t.Errorf("TakeDeployLease = %v, want a busy refusal: forgetting a lease it never held must not free the other deploy's", err)
 	}
 }
+
+func TestRenewDeployLeaseIsRefusedOnceAnotherDeployTookTheLeaseOver(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart, leaseTTL); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", otherLease, leaseStart.Add(leaseTTL), leaseTTL); err != nil {
+		t.Fatal(err)
+	}
+
+	err := stackrecords.RenewDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart.Add(leaseTTL), leaseTTL)
+
+	if !isBusy(err) {
+		t.Errorf("RenewDeployLease = %v, want a busy refusal: another deploy took the lease over", err)
+	}
+}
+
+func TestRenewDeployLeaseDoesNotTakeBackALeaseTheDeployThatTookItOverFreed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", otherLease, leaseStart, leaseTTL); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.ForgetDeployLease(ctx, store, environment.TierProduction, "shop", "production", otherLease); err != nil {
+		t.Fatal(err)
+	}
+
+	err := stackrecords.RenewDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart, leaseTTL)
+
+	if !isBusy(err) {
+		t.Errorf("RenewDeployLease = %v, want a busy refusal: the deploy no longer holds the lease, so whatever ran since may have changed the environment", err)
+	}
+}
+
+func TestRenewDeployLeaseKeepsTheHolderPastItsFirstExpiry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart, leaseTTL); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.RenewDeployLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, leaseStart.Add(4*time.Minute), leaseTTL); err != nil {
+		t.Fatalf("RenewDeployLease: %v", err)
+	}
+
+	err := stackrecords.TakeDeployLease(ctx, store, environment.TierProduction, "shop", "production", otherLease, leaseStart.Add(8*time.Minute), leaseTTL)
+
+	if !isBusy(err) {
+		t.Errorf("TakeDeployLease = %v, want a busy refusal: the renewal moved the expiry to nine minutes in", err)
+	}
+}
