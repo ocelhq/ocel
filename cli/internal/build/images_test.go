@@ -317,6 +317,39 @@ func TestAContainerAppIsBuiltWithTheBindingProxyItsAppIsHandedInItsBuildEnvironm
 	}
 }
 
+func TestAContainerAppCannotDeclareTheNamesTheBindingProxyIsDeliveredUnder(t *testing.T) {
+	for _, name := range []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar} {
+		built := false
+		_, err := tools{
+			image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+				built = true
+				return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+			},
+			liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+		}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+			"web": {Live: map[string]string{name: "mine"}},
+		}, nil, nil, Host{}, Log{})
+
+		if err == nil || !strings.Contains(err.Error(), name) || built {
+			t.Errorf("an image app declaring %s was built (%v) with %v, want it refused by name before the build, since the binding proxy is delivered under it", name, built, err)
+		}
+	}
+}
+
+func TestAContainerAppMayDeclareANameAFunctionBuildSetsItself(t *testing.T) {
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), containerProject(t, ""), map[string]AppVariables{
+		"web": {Live: map[string]string{"NODE_ENV": "production"}},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Errorf("an image app declaring NODE_ENV = %v, want it built: an image build sets no such name itself", err)
+	}
+}
+
 func TestNoValueAContainerBuildWasGivenReachesTheLogOrTheError(t *testing.T) {
 	const value = "postgres://u:hunter2@127.0.0.1:5432/db"
 	cfg := containerProject(t, "")

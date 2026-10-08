@@ -49,6 +49,17 @@ func refuseReservedNames(app string, values AppVariables) error {
 	return nil
 }
 
+var bindingProxyNames = []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
+
+func refuseBindingProxyNames(app string, values AppVariables) error {
+	for _, key := range slices.Sorted(maps.Keys(values.Live)) {
+		if slices.Contains(bindingProxyNames, key) {
+			return fmt.Errorf("app %q declares %s, which the build is handed the binding proxy under; rename it where it is declared", app, key)
+		}
+	}
+	return nil
+}
+
 func isToolchainName(key string) bool {
 	return slices.Contains(toolchainNames, key) || slices.ContainsFunc(toolchainPrefixes, func(prefix string) bool { return strings.HasPrefix(key, prefix) })
 }
