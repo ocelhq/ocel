@@ -55,12 +55,12 @@ func (c *leaseClock) watchingTerms() stackrecords.LeaseTerms {
 }
 
 func takeLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
-	_, err := stackrecords.TakeEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, terms)
+	_, err := stackrecords.TakeEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, stackrecords.LeaseDeploy, terms)
 	return err
 }
 
 func renewLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
-	return stackrecords.RenewEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, terms)
+	return stackrecords.RenewEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, stackrecords.LeaseDeploy, terms)
 }
 
 func isBusy(err error) bool {
@@ -100,11 +100,11 @@ func TestTakeEnvironmentLeaseReportsWhetherTheTokenAlreadyHeldTheLease(t *testin
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	first, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, clockAt(leaseStart).terms())
+	first, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, stackrecords.LeaseDeploy, clockAt(leaseStart).terms())
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, clockAt(leaseStart.Add(time.Minute)).terms())
+	again, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, stackrecords.LeaseDeploy, clockAt(leaseStart.Add(time.Minute)).terms())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestTakeEnvironmentLeaseKeepsEachEnvironmentApart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	if _, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierPreview, "shop", "pr-12", firstLease, clockAt(leaseStart).terms()); err != nil {
+	if _, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierPreview, "shop", "pr-12", firstLease, stackrecords.LeaseDeploy, clockAt(leaseStart).terms()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -168,7 +168,7 @@ func TestTakeEnvironmentLeaseKeepsEachEnvironmentApart(t *testing.T) {
 		{environment.TierPreview, "blog", "pr-12"},
 		{environment.TierProduction, "shop", "pr-12"},
 	} {
-		if _, err := stackrecords.TakeEnvironmentLease(ctx, store, other.tier, other.slug, other.env, otherLease, clockAt(leaseStart).terms()); err != nil {
+		if _, err := stackrecords.TakeEnvironmentLease(ctx, store, other.tier, other.slug, other.env, otherLease, stackrecords.LeaseDeploy, clockAt(leaseStart).terms()); err != nil {
 			t.Errorf("TakeEnvironmentLease(%s %s %s) = %v, want it free: only pr-12 of shop's previews is held", other.tier, other.slug, other.env, err)
 		}
 	}
@@ -259,5 +259,20 @@ func TestRenewEnvironmentLeaseKeepsTheHolderPastItsFirstExpiry(t *testing.T) {
 
 	if !isBusy(err) {
 		t.Errorf("TakeEnvironmentLease = %v, want a busy refusal: the renewal moved the expiry to nine minutes in", err)
+	}
+}
+
+func TestTakeEnvironmentLeaseRefusalNamesWhatHoldsTheEnvironmentAndWhatToRunAgain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if _, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, stackrecords.LeaseRollback, clockAt(leaseStart).terms()); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", otherLease, stackrecords.LeaseRemoval, clockAt(leaseStart).terms())
+
+	if err == nil || !strings.Contains(err.Error(), "a rollback of production is running: remove it again once it ends") {
+		t.Errorf("TakeEnvironmentLease = %v, want the refusal to say a rollback of production holds it and to remove it again once that ends", err)
 	}
 }

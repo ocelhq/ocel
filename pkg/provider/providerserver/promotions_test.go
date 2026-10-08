@@ -14,6 +14,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -114,6 +115,50 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	}
 	if !listed.GetPromotions()[0].GetActive() {
 		t.Error("after the rollback the pointer does not name the promotion it made")
+	}
+}
+
+func TestARollbackIsRefusedWhileADeployHoldsProduction(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
+	takeLeaseOver(t, provider.KeyValues(), otherEnvironmentLease)
+
+	_, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
+
+	if err == nil || !strings.Contains(err.Error(), "a deploy to prod is running: roll back again once it ends") {
+		t.Fatalf("Rollback() = %v, want it refused while a deploy holds production", err)
+	}
+	active, err := ledger.New(provider.KeyValues(), environment.TierProduction, "shop").ActivePromotionID(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active != "p2" {
+		t.Errorf("the pointer names %q after the refused rollback, want p2", active)
+	}
+}
+
+func TestARollbackHoldsProductionWhileItMovesThePointerAndFreesItAfter(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
+	var during error
+	relayPlane(provider).BeforeNextPointerMove(func() {
+		_, during = stackrecords.TakeEnvironmentLease(context.Background(), provider.KeyValues(), environment.TierProduction, "shop", stackrecords.ProductionEnv,
+			otherEnvironmentLease, stackrecords.LeaseDeploy, stackrecords.LeaseTerms{TTL: time.Minute, Now: time.Now})
+	})
+
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if during == nil || !strings.Contains(during.Error(), "a rollback of prod is running") {
+		t.Errorf("a deploy taking production while the rollback moved the pointer = %v, want it refused because the rollback holds production", during)
+	}
+	if _, err := provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv)); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading production's lease after the rollback = %v, want it freed", err)
 	}
 }
 

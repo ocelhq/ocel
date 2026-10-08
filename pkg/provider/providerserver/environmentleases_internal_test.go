@@ -108,7 +108,7 @@ func takeAs(ctx context.Context, store keyvalue.Store, token string) error {
 	if err != nil {
 		return err
 	}
-	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, Holder: stackrecords.LeaseDeploy, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
 		return err
 	}
 	_, err = store.Write(ctx, recorded)
@@ -140,7 +140,7 @@ func TestAHeldLeaseIsRenewedWhileItsHolderRuns(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	leases, timers := newTimedLeases()
-	hold, err := leases.take(ctx, store, shopProduction, renewedLease)
+	hold, err := leases.take(ctx, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestAHolderRetriesAFailedRenewalSoonerThanItsNextRegularRenewal(t *testing.
 	ctx := context.Background()
 	store := &unwritableKeyValues{Store: fake.NewKeyValues()}
 	leases, timers := newTimedLeases()
-	hold, err := leases.take(ctx, store, shopProduction, renewedLease)
+	hold, err := leases.take(ctx, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestAHolderThatCannotRenewForItsWholeWindowHasItsWorkStopped(t *testing.T) 
 	ctx := context.Background()
 	store := &unwritableKeyValues{Store: fake.NewKeyValues()}
 	leases, timers := newTimedLeases()
-	hold, err := leases.take(ctx, store, shopProduction, renewedLease)
+	hold, err := leases.take(ctx, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestAHolderWhoseLeaseWasTakenOverHasItsWorkStoppedAndNeverTakesItBack(t *te
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	leases, timers := newTimedLeases()
-	hold, err := leases.take(ctx, store, shopProduction, renewedLease)
+	hold, err := leases.take(ctx, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestAHolderStopsRenewingWhenTheRequestThatHoldsItEnds(t *testing.T) {
 	store := fake.NewKeyValues()
 	leases, timers := newTimedLeases()
 	request, end := context.WithCancel(context.Background())
-	hold, err := leases.take(request, store, shopProduction, renewedLease)
+	hold, err := leases.take(request, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}

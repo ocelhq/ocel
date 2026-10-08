@@ -59,7 +59,7 @@ func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+	if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: token, Holder: stackrecords.LeaseDeploy, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Write(ctx, recorded); err != nil {

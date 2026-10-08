@@ -69,6 +69,7 @@ type environmentHold struct {
 	store  keyvalue.Store
 	scope  environmentScope
 	token  string
+	holder stackrecords.LeaseHolder
 	held   bool
 
 	leased context.Context
@@ -82,25 +83,33 @@ type environmentHold struct {
 	lostWith error
 }
 
-func (l *environmentLeases) take(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) (*environmentHold, error) {
-	held, err := stackrecords.TakeEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, l.terms())
+func (l *environmentLeases) take(ctx context.Context, store keyvalue.Store, scope environmentScope, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+	held, err := stackrecords.TakeEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, holder, l.terms())
 	if err != nil {
 		return nil, err
 	}
-	return l.startHold(ctx, store, scope, token, held), nil
+	return l.startHold(ctx, store, scope, token, holder, held), nil
 }
 
-func (l *environmentLeases) keep(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) (*environmentHold, error) {
-	if err := stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, l.terms()); err != nil {
+func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store keyvalue.Store, scope environmentScope, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+	token, err := stackrecords.NewEnvironmentLeaseToken()
+	if err != nil {
 		return nil, err
 	}
-	return l.startHold(ctx, store, scope, token, true), nil
+	return l.take(ctx, store, scope, token, holder)
 }
 
-func (l *environmentLeases) startHold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string, held bool) *environmentHold {
+func (l *environmentLeases) keep(ctx context.Context, store keyvalue.Store, scope environmentScope, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+	if err := stackrecords.RenewEnvironmentLease(ctx, store, scope.tier, scope.slug, scope.env, token, holder, l.terms()); err != nil {
+		return nil, err
+	}
+	return l.startHold(ctx, store, scope, token, holder, true), nil
+}
+
+func (l *environmentLeases) startHold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
 	leased, cancel := context.WithCancelCause(ctx)
 	h := &environmentHold{
-		leases: l, store: store, scope: scope, token: token, held: held,
+		leases: l, store: store, scope: scope, token: token, holder: holder, held: held,
 		leased: leased, cancel: cancel,
 		stop: make(chan struct{}), done: make(chan struct{}), lost: make(chan struct{}),
 	}
@@ -121,7 +130,7 @@ func (h *environmentHold) renew() {
 		}
 		started := h.leases.now()
 		ctx, cancel := context.WithTimeout(h.leased, h.leases.retry)
-		err := stackrecords.RenewEnvironmentLease(ctx, h.store, h.scope.tier, h.scope.slug, h.scope.env, h.token, h.leases.terms())
+		err := stackrecords.RenewEnvironmentLease(ctx, h.store, h.scope.tier, h.scope.slug, h.scope.env, h.token, h.holder, h.leases.terms())
 		cancel()
 		switch {
 		case err == nil:
@@ -131,8 +140,8 @@ func (h *environmentHold) renew() {
 			return
 		case h.leases.now().Sub(renewed) >= h.leases.ttl-h.leases.margin:
 			h.lose(refusal.Refuse(refusal.CodeBusy,
-				"this deploy could not renew its lease on %s for %s, so another deploy may take the lease over, and this deploy stopped: deploy again (the last renewal failed with: %v)",
-				h.scope.env, h.leases.ttl-h.leases.margin, err))
+				"this %s could not renew its lease on %s for %s, so another deploy may take the lease over, and this %s stopped: run it again (the last renewal failed with: %v)",
+				h.holder, h.scope.env, h.leases.ttl-h.leases.margin, h.holder, err))
 			return
 		default:
 			wait = h.leases.retry
@@ -186,7 +195,7 @@ func (h *environmentHold) confirm(ctx context.Context) error {
 	if lost := h.readLoss(); lost != nil {
 		return lost
 	}
-	err := stackrecords.RenewEnvironmentLease(ctx, h.store, h.scope.tier, h.scope.slug, h.scope.env, h.token, h.leases.terms())
+	err := stackrecords.RenewEnvironmentLease(ctx, h.store, h.scope.tier, h.scope.slug, h.scope.env, h.token, h.holder, h.leases.terms())
 	if isBusy(err) {
 		h.lose(err)
 	}
@@ -217,22 +226,18 @@ func (h *handlers) takeEnvironment(ctx context.Context, spec provider.DeploySpec
 	if err != nil {
 		return nil, err
 	}
-	return h.leases.take(ctx, p.KeyValues(), newEnvironmentScope(spec), token)
+	return h.leases.take(ctx, p.KeyValues(), newEnvironmentScope(spec), token, stackrecords.LeaseDeploy)
 }
 
 func (h *handlers) claimEnvironment(ctx context.Context, spec provider.DeploySpec, provisionedUnder string) (*environmentHold, error) {
-	if provisionedUnder == "" {
-		token, err := stackrecords.NewEnvironmentLeaseToken()
-		if err != nil {
-			return nil, err
-		}
-		return h.takeEnvironment(ctx, spec, token)
-	}
 	p, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
-	return h.leases.keep(ctx, p.KeyValues(), newEnvironmentScope(spec), provisionedUnder)
+	if provisionedUnder == "" {
+		return h.leases.takeUnderNewToken(ctx, p.KeyValues(), newEnvironmentScope(spec), stackrecords.LeaseDeploy)
+	}
+	return h.leases.keep(ctx, p.KeyValues(), newEnvironmentScope(spec), provisionedUnder, stackrecords.LeaseDeploy)
 }
 
 func (h *handlers) readLeaseScope(slug string, env *environmentv1.Environment) (provider.Provider, environmentScope, error) {
@@ -256,7 +261,7 @@ func (h *handlers) RenewDeployLease(ctx context.Context, req *contractv1.RenewDe
 	if err != nil {
 		return nil, err
 	}
-	if err := stackrecords.RenewEnvironmentLease(ctx, p.KeyValues(), scope.tier, scope.slug, scope.env, req.GetLeaseToken(), h.leases.terms()); err != nil {
+	if err := stackrecords.RenewEnvironmentLease(ctx, p.KeyValues(), scope.tier, scope.slug, scope.env, req.GetLeaseToken(), stackrecords.LeaseDeploy, h.leases.terms()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.RenewDeployLeaseResponse{}, nil
