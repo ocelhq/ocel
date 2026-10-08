@@ -3,6 +3,7 @@ package stackrecords_test
 import (
 	"bytes"
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -84,5 +85,56 @@ func TestWritingAStackRecordLeavesTheCallersBindingsWhole(t *testing.T) {
 	}
 	if bindings[0].Properties[provider.PropertyPassword] != "pg-password-s3cret" {
 		t.Errorf("Write left the caller's binding with %v, and the deploy still publishes that binding after recording it", bindings[0].Properties)
+	}
+}
+
+func TestAStackRecordKeepsOnlyTheBindingPropertiesItKnowsAreNotSecret(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	name := naming.InfraStack("main")
+
+	err := stackrecords.Write(ctx, store, environment.TierProduction, "shop", name, stackrecords.Stack{
+		Kind: provider.StackInfra,
+		Bindings: []provider.Binding{
+			{Type: provider.BindingPostgres, Name: "db", Properties: map[string]string{
+				provider.PropertyHost: "db.internal", "adminToken": "admin-token-s3cret",
+			}},
+			{Type: provider.BindingTopic, Name: "orders", Properties: map[string]string{
+				stackrecords.PropertyDeclared: "orders", stackrecords.PropertyTopicSpec: `{"ordered":true}`,
+				"topic": "projects/p/topics/orders",
+			}},
+			{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{
+				provider.PropertyBucket: "uploads", stackrecords.PropertySweepUploads: "true",
+				stackrecords.PropertyAllowedOrigins: "https://shop.example",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(environment.TierProduction, "shop", name))
+	if err != nil {
+		t.Fatalf("read the raw record: %v", err)
+	}
+	for _, unclassified := range []string{"admin-token-s3cret", "projects/p/topics/orders"} {
+		if bytes.Contains(raw.Value, []byte(unclassified)) {
+			t.Errorf("the stored stack record holds %q, a property neither bindings.proto nor the record declares, so it may be a secret", unclassified)
+		}
+	}
+	read, _, err := stackrecords.Read(ctx, store, environment.TierProduction, "shop", name)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	want := []map[string]string{
+		{provider.PropertyHost: "db.internal"},
+		{stackrecords.PropertyDeclared: "orders", stackrecords.PropertyTopicSpec: `{"ordered":true}`},
+		{provider.PropertyBucket: "uploads", stackrecords.PropertySweepUploads: "true", stackrecords.PropertyAllowedOrigins: "https://shop.example"},
+	}
+	for i, binding := range read.Bindings {
+		if !maps.Equal(binding.Properties, want[i]) {
+			t.Errorf("Read's %s binding = %v, want %v", binding.Name, binding.Properties, want[i])
+		}
 	}
 }

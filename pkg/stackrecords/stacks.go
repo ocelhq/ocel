@@ -19,6 +19,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+const (
+	PropertyDeclared       = "declared"
+	PropertyTopicSpec      = "spec"
+	PropertySweepUploads   = "sweepUploads"
+	PropertyAllowedOrigins = "allowedOrigins"
+)
+
 type Stack struct {
 	Kind         provider.StackKind  `json:"kind"`
 	App          string              `json:"app,omitempty"`
@@ -65,7 +72,7 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 	}
 	recorded.Bindings = slices.Clone(recorded.Bindings)
 	for i, binding := range recorded.Bindings {
-		recorded.Bindings[i] = redactSecrets(binding)
+		recorded.Bindings[i] = keepRecordedProperties(binding)
 	}
 	recorded.UpdatedAt = time.Now().Unix()
 	if row.Value, err = json.Marshal(recorded); err != nil {
@@ -77,23 +84,35 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 	return nil
 }
 
-func redactSecrets(binding provider.Binding) provider.Binding {
+var recordOnlyProperties = map[provider.BindingType][]string{
+	provider.BindingTopic:  {PropertyDeclared, PropertyTopicSpec},
+	provider.BindingTask:   {PropertyDeclared, PropertyTopicSpec},
+	provider.BindingBucket: {PropertySweepUploads, PropertyAllowedOrigins},
+}
+
+func keepRecordedProperties(binding provider.Binding) provider.Binding {
 	if len(binding.Properties) == 0 {
 		return binding
 	}
-	field := (&bindingsv1.Binding{}).ProtoReflect().Descriptor().Oneofs().ByName("properties").Fields().ByName(protoreflect.Name(binding.Type))
-	if binding.Type == provider.BindingCustom || field == nil {
-		binding.Properties = nil
-		return binding
-	}
+	kept := ListRecordedProperties(binding.Type)
 	binding.Properties = maps.Clone(binding.Properties)
+	maps.DeleteFunc(binding.Properties, func(name, _ string) bool { return !slices.Contains(kept, name) })
+	return binding
+}
+
+func ListRecordedProperties(t provider.BindingType) []string {
+	kept := slices.Clone(recordOnlyProperties[t])
+	field := (&bindingsv1.Binding{}).ProtoReflect().Descriptor().Oneofs().ByName("properties").Fields().ByName(protoreflect.Name(t))
+	if t == provider.BindingCustom || field == nil || field.Message() == nil {
+		return kept
+	}
 	properties := field.Message().Fields()
 	for i := range properties.Len() {
-		if options, _ := properties.Get(i).Options().(*descriptorpb.FieldOptions); options.GetDebugRedact() {
-			delete(binding.Properties, properties.Get(i).JSONName())
+		if options, _ := properties.Get(i).Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
+			kept = append(kept, properties.Get(i).JSONName())
 		}
 	}
-	return binding
+	return kept
 }
 
 func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {

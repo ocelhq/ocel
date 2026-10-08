@@ -119,7 +119,7 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 				if binding.Type != provider.BindingTopic && binding.Type != provider.BindingTask {
 					continue
 				}
-				named := fmt.Sprintf("%s %s of project %s environment %s", binding.Type, cmp.Or(binding.Properties[topicDeclaredProperty], binding.Name), slug, stack.Name.Env)
+				named := fmt.Sprintf("%s %s of project %s environment %s", binding.Type, cmp.Or(binding.Properties[stackrecords.PropertyDeclared], binding.Name), slug, stack.Name.Env)
 				if !slices.Contains(held, named) {
 					held = append(held, named)
 				}
