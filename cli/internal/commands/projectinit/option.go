@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -27,6 +28,23 @@ func parseOptionFlags(flags []string) ([]providerSetting, error) {
 		settings = append(settings, providerSetting{name: name, value: value})
 	}
 	return settings, nil
+}
+
+func refuseUnknownOptions(provider string, settings []providerSetting) error {
+	var taken []string
+	for _, option := range configdoc.TextProviderOptions(provider) {
+		taken = append(taken, option.Name)
+	}
+	for _, set := range settings {
+		if slices.Contains(taken, set.name) {
+			continue
+		}
+		if len(taken) == 0 {
+			return fmt.Errorf("%s names %q, and %s takes no option %s can give", optionFlag, set.name, provider, optionFlag)
+		}
+		return fmt.Errorf("%s names %q, and %s takes only %s", optionFlag, set.name, provider, english.And(taken))
+	}
+	return nil
 }
 
 func findMissingOptions(provider string, settings []providerSetting) []configdoc.ProviderOption {

@@ -164,24 +164,29 @@ function selectors(merged) {
   const each = (key) =>
     Object.fromEntries(options.map(([id, shape]) => [id, selection(shape.properties[key])]));
   return {
-    provider: { ...selection(provider), required: requiredText(provider) },
+    provider: { ...selection(provider), options: textOptions(provider) },
     edges: each("edge"),
     dns: each("dns"),
   };
 }
 
-function requiredText(selector) {
+function textOptions(selector) {
+  const selectorKeys = new Set(["edge", "dns"]);
   const acceptsText = (node) =>
     node?.type === "string" || (node?.oneOf ?? []).some((one) => one.type === "string");
   return Object.fromEntries(
     Object.entries(selector.oneOf[1].properties)
       .map(([id, options]) => [
         id,
-        (options.required ?? [])
-          .filter((name) => acceptsText(options.properties?.[name]))
-          .map((name) => ({ name, doc: options.properties[name].description ?? "" })),
+        Object.entries(options.properties ?? {})
+          .filter(([name, node]) => !selectorKeys.has(name) && acceptsText(node))
+          .map(([name, node]) => ({
+            name,
+            doc: node.description ?? "",
+            ...((options.required ?? []).includes(name) && { required: true }),
+          })),
       ])
-      .filter(([, required]) => required.length > 0),
+      .filter(([, listed]) => listed.length > 0),
   );
 }
 

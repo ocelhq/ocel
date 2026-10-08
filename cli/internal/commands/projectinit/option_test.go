@@ -152,3 +152,33 @@ func TestInitUnderJSONFailsInsteadOfAskingForARequiredOption(t *testing.T) {
 		t.Fatalf("err = %v, want input_required naming --option", err)
 	}
 }
+
+func TestInitRefusesAnOptionTheProviderDoesNotTakeAndNamesTheOnesItDoes(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dir := initTestDir(t, "proj")
+
+	opts := initOptions{provider: "vps", settings: []providerSetting{{name: "ssh", value: "box"}, {name: "foo", value: "bar"}}}
+	_, err := runInit(context.Background(), dependencies, dir, "my-app", opts)
+
+	if err == nil || !strings.Contains(err.Error(), `"foo"`) || !strings.Contains(err.Error(), "only deployKey, proxy and ssh") {
+		t.Fatalf("err = %v, want it to name foo and every option vps takes", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, project.TSFileName)); err == nil {
+		t.Error("a refused init wrote a config")
+	}
+}
+
+func TestInitTakesAnOptionTheProviderDoesNotRequire(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dir := initTestDir(t, "proj")
+
+	opts := initOptions{provider: "gcp", settings: []providerSetting{{name: "region", value: "europe-west1"}, {name: "project", value: "acme-prod"}}}
+	if _, err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
+		t.Fatalf("runInit err = %v", err)
+	}
+	if got := readConfig(t, dir); !strings.Contains(got, `"project": "acme-prod"`) {
+		t.Errorf("config = %s, want the project it was given", got)
+	}
+}
