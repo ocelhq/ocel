@@ -1,0 +1,28 @@
+---
+title: "ocel domain rm"
+description: "Unbind production hostnames this project no longer declares, and remove what ocel created for them."
+---
+
+```bash
+ocel domain rm [host] [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[host]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema domain rm` prints the JSON Schema of one line.

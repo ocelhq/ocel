@@ -1,0 +1,31 @@
+---
+title: "ocel preview prune"
+description: "Delete a preview's old deployments."
+---
+
+```bash
+ocel preview prune [name] [flags]
+```
+
+Keeps the newest `--keep` deployments and whatever is live. Without a name it prunes the current branch's preview.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[name]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--keep` | `int` | `3` | How many recent deployments to keep (the live one always stays) |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema preview prune` prints the JSON Schema of one line.

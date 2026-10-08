@@ -1,0 +1,29 @@
+---
+title: "ocel env history"
+description: "List a value's history."
+---
+
+```bash
+ocel env history <KEY> [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<KEY>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Use this named preview environment; requires `--preview` |
+| `--folder` | `string` |  | Use the value in this folder |
+| `--preview` | `bool` | `false` | Use preview values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema env history` prints.

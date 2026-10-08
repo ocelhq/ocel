@@ -1,0 +1,27 @@
+---
+title: "ocel destroy preview"
+description: "Permanently destroy this project's entire preview footprint."
+---
+
+```bash
+ocel destroy preview [flags]
+```
+
+Permanently destroy this project's entire preview footprint: every preview, all its data, assets and variables. The account-level preview bootstrap is left intact.
+
+Every run prints what it would destroy before asking for the project name; `--dry` prints it and stops.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print what would be destroyed and stop, destroying nothing |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema destroy preview` prints the JSON Schema of one line.

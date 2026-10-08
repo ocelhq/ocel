@@ -22,6 +22,8 @@ fingerprint >"$before"
 
 node scripts/schema/build.mjs
 pnpm gen
+go generate -C cli ./node
+node scripts/schema/cli-reference.mjs
 cp LICENSE NOTICE sdk/
 
 fingerprint >"$after"

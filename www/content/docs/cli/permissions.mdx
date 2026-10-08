@@ -1,0 +1,23 @@
+---
+title: "ocel permissions"
+description: "Print the permissions bootstrap or deploy credentials need."
+---
+
+```bash
+ocel permissions <bootstrap|deploy>
+```
+
+Also spelled `ocel perms`.
+
+`bootstrap` is what bootstrapping runs under, `deploy` the smaller set deploys and previews run under.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<bootstrap\|deploy>` | Required |
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema permissions` prints.

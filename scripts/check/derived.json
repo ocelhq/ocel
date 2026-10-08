@@ -10,10 +10,13 @@
     "platform/**/schema.edge.json",
     "scripts/schema/",
     "scripts/check/derived.sh",
-    "scripts/check/derived.json"
+    "scripts/check/derived.json",
+    "cli/internal/",
+    "www/content/cli/"
   ],
   "generated": [
     "www/public/schema",
+    "www/content/docs/cli",
     "cli/internal/outputschema/schemas",
     "packages/ocel/src/generated",
     "pkg/configdoc/selectors.json",

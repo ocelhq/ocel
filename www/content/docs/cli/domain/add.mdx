@@ -1,0 +1,19 @@
+---
+title: "ocel domain add"
+description: "Provision the certificate, the edge surface and the DNS for this project's production hostnames."
+---
+
+```bash
+ocel domain add [host]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[host]` | Optional |
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema domain add` prints the JSON Schema of one line.

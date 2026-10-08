@@ -1,0 +1,28 @@
+---
+title: "ocel link"
+description: "Link this directory to a console project."
+---
+
+```bash
+ocel link [project] [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[project]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--create` | `bool` | `false` | Create the project, named [project] or after this directory |
+| `--org` | `string` |  | Organization slug, instead of picking one |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema link` prints.

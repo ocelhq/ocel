@@ -1,0 +1,21 @@
+---
+title: "ocel schema"
+description: "Print the JSON Schema of what a command prints."
+---
+
+```bash
+ocel schema [command...]
+```
+
+A command that returns data prints one result envelope under `--json`, and its schema covers both the result and the failure document. A command that runs prints the run-event stream, and its schema covers one line of it. Without a command, lists every command that has a schema. Under `--json`, the schema is the data of this command's own result envelope.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[command]...` | Optional, and repeatable |
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema schema` prints.

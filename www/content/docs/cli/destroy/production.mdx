@@ -1,0 +1,27 @@
+---
+title: "ocel destroy production"
+description: "Permanently destroy this project's entire production deployment."
+---
+
+```bash
+ocel destroy production [flags]
+```
+
+Also spelled `ocel destroy prod`.
+
+Every run prints what it would destroy before asking for the project name; `--dry` prints it and stops.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print what would be destroyed and stop, destroying nothing |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema destroy production` prints the JSON Schema of one line.

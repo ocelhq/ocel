@@ -14,17 +14,26 @@
     "promotions",
     "rollback",
     "logs",
+    "run",
     "destroy",
     "---Configure---",
     "env",
     "domain",
     "bindings",
     "generate",
+    "lock",
+    "---Infrastructure---",
+    "bootstrap",
+    "permissions",
+    "cost",
     "---Account---",
     "login",
     "logout",
+    "link",
+    "unlink",
     "connector",
+    "---Tools---",
     "doctor",
-    "run"
+    "schema"
   ]
 }

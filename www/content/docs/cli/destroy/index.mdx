@@ -1,0 +1,21 @@
+---
+title: "ocel destroy"
+description: "Permanently destroy this project's deployment of one tier."
+---
+
+```bash
+ocel destroy
+```
+
+Permanently destroy what this project has deployed into one tier: `production` takes what the edge serves it with and the hostnames bound to it, its resources (databases and buckets, including all their data), and every app; `preview` takes the whole preview footprint and leaves the account-level preview bootstrap intact.
+
+Either is irreversible and requires typing the project name to confirm; `--dry` prints what would go and stops.
+
+An automated caller that must tear its own project down unattended passes `--yes`, or sets OCEL_DESTROY_BYPASS_CONFIRMATION to the project name — and only that name. Any other value is not a bypass.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel destroy preview`](/docs/cli/destroy/preview) | Permanently destroy this project's entire preview footprint |
+| [`ocel destroy production`](/docs/cli/destroy/production) | Permanently destroy this project's entire production deployment |

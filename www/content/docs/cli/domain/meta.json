@@ -1,0 +1,4 @@
+{
+  "title": "ocel domain",
+  "pages": ["index", "add", "ls", "release", "rm", "status", "use"]
+}

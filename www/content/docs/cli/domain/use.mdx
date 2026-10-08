@@ -1,0 +1,27 @@
+---
+title: "ocel domain use"
+description: "Install (or upgrade) the edge's preview routing and serve every project's previews on this wildcard."
+---
+
+```bash
+ocel domain use <wildcard> [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<wildcard>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the preview tier (required) |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema domain use` prints the JSON Schema of one line.

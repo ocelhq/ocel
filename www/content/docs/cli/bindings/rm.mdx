@@ -1,0 +1,28 @@
+---
+title: "ocel bindings rm"
+description: "Remove a binding, whatever published it."
+---
+
+```bash
+ocel bindings rm <NAME> [flags]
+```
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<NAME>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Address the binding this named preview environment has instead of the one bound to all environments |
+| `--preview` | `bool` | `false` | Act on the preview bootstrap instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema bindings rm` prints.

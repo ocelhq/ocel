@@ -130,6 +130,8 @@ describe("derivesFrom", () => {
       "platform/edge/cloudflare/schema.edge.json",
       "scripts/schema/build.mjs",
       "scripts/check/derived.sh",
+      "cli/internal/commands/logs/logs.go",
+      "www/content/cli/logs.mdx",
       "package.json",
       "LICENSE",
       "NOTICE",
@@ -146,6 +148,7 @@ describe("derivesFrom", () => {
       "pkg/configdoc/selectors.json",
       "www/public/schema/0.1.0/ocel.schema.json",
       "packages/ocel/src/generated/config.ts",
+      "www/content/docs/cli/env/set.mdx",
     ]) {
       assert.equal(derivesFrom([file]), true, file);
     }

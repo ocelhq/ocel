@@ -1,0 +1,4 @@
+{
+  "title": "ocel env",
+  "pages": ["index", "get", "history", "ls", "ref", "refs", "rm", "set", "source", "sync", "ui"]
+}

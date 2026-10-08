@@ -1,8 +1,3 @@
----
-title: ocel preview
-description: Deploy, list and tear down previews beside production.
----
-
 ```bash
 ocel preview
 ocel preview up pr-12
@@ -15,13 +10,11 @@ A preview is a full deployment beside production, on its own hostname, that you 
 without touching anything else. It needs the preview bootstrap (`ocel bootstrap preview`) and a
 preview domain.
 
-| Command | What it does |
-| --- | --- |
-| _(none)_ | The same as `up` with no name: deploys the current branch's preview. |
-| `up [name]` | Deploy or refresh a preview. `--persistent` creates a persistent one, `--prebuilt` deploys the existing `.ocel/output` from `ocel build`, and `--dry` prints every change it would make and stops. |
-| `rm [name]` | Tear down a preview. Asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it stops unless you pass `--yes`. |
-| `prune [name]` | Delete a preview's old deployments. Keeps the newest `--keep` (3 by default) and whatever is live. |
-| `ls` | List this project's previews: name, lifecycle, label, alias URL and when it was created. |
+`ocel preview` alone is `ocel preview up` with no name: it deploys the current branch's preview.
+`rm` asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it
+stops unless you pass `--yes`. `prune` keeps the newest `--keep` deployments (3 by default) and
+whatever is live. `ls` lists each preview's name, lifecycle, label, alias URL and when it was
+created.
 
 ## Naming a preview
 

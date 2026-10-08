@@ -1,34 +1,32 @@
 ---
-title: ocel init
-description: Make this directory deployable.
+title: "ocel init"
+description: "Make this directory deployable."
 ---
 
 ```bash
-ocel init --provider aws
+ocel init [slug] [flags]
 ```
 
-Writes the [config](/docs/configuration) here, naming the provider you gave and a slug — this
-directory's name unless you pass one — and adds the ocel SDK with your language's own package
-manager. A project built with node gets `ocel.config.ts`, and any other gets `ocel.json`. It
-runs entirely offline: it neither signs you in nor contacts the console.
+<include>../../cli/init.mdx</include>
 
-```bash
-ocel init my-app --provider vps
-```
+## Arguments
 
-| Flag | What it does |
+| Argument | Takes |
 | --- | --- |
-| `--provider` | The provider this project deploys through: `aws`, `gcp` or `vps`. Required. |
-| `--option` | A provider option whose value is text, as `name=value`; repeat it for each. `gcp` cannot deploy without `region`, nor `vps` without `ssh`; a name the provider does not take is refused, naming the ones it does. On a terminal, init asks for any you leave out; under `--json` or with no terminal, it fails with [`input_required`](/docs/errors/input_required). |
-| `--lang` | The language of this project (`go`, `rust`, `python`, `node`), when no manifest here says. |
-| `--format` | Write the config as `ts`, `json` or [`yaml`](/docs/configuration#yaml) instead of the default — the same document in each. `ts` needs node. |
+| `[slug]` | Optional |
 
-```bash
-ocel init --provider gcp --option region=europe-west1
-```
+## Flags
 
-Then pin the providers this CLI runs, and commit the result:
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--format` | `string` |  | Write the config as ts, json or yaml — the same document in each; ts needs node, and is the default only in a project built with it |
+| `--lang` | `string` |  | Language of this project (go, rust, python, node), when the manifests do not say |
+| `--option` | `stringArray` |  | Provider option whose value is text, as name=value; repeat it for each. On a terminal, init asks for any the provider cannot deploy without |
+| `--provider` | `string` |  | Provider this project deploys through |
 
-```bash
-ocel lock
-```
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema init` prints.

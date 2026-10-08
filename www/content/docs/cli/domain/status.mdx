@@ -1,0 +1,21 @@
+---
+title: "ocel domain status"
+description: "Show, per production hostname, its certificate, the records it needs, what last answered for it and what is still outstanding."
+---
+
+```bash
+ocel domain status [flags]
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--wait` | `bool` | `false` | Keep polling until every declared hostname is served, or give up |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema domain status` prints.

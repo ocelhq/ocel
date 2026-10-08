@@ -1,0 +1,33 @@
+---
+title: "ocel bootstrap production"
+description: "Set up or update the production environment."
+---
+
+```bash
+ocel bootstrap production [flags]
+```
+
+Also spelled `ocel bootstrap prod`.
+
+A bootstrap only ever builds up: `--features` and the interactive picker add and refresh, and a feature they leave out stays included. `--remove` is the only way anything goes.
+
+Every run prints the changes it would make before asking; `--dry` prints them and stops.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print the changes and stop, applying nothing |
+| `--features` | `string` |  | Comma-separated set of features to add or refresh; whatever else is installed is left alone (also: all, none) |
+| `--force` | `bool` | `false` | Remove a feature other projects still use |
+| `--remove` | `string` |  | Comma-separated set of features to tear down; nothing goes unless it is named here |
+| `--repair` | `bool` | `false` | Let later deploys refresh stale features on their own; `--repair=false` turns it off |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema bootstrap production` prints the JSON Schema of one line.

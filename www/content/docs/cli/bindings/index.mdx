@@ -1,0 +1,19 @@
+---
+title: "ocel bindings"
+description: "Manage the bindings this project's apps resolve."
+---
+
+```bash
+ocel bindings
+```
+
+A binding is one resource an app reaches — its address, its credentials and the permissions that go with it — published under a name apps bind to. Records live in your own provider account and are reached through the provider, never by the CLI directly.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel bindings generate`](/docs/cli/bindings/generate) | Write the transform types for the bindings published to one coordinate |
+| [`ocel bindings ls`](/docs/cli/bindings/ls) | List the published bindings, without revealing what they contain |
+| [`ocel bindings rm`](/docs/cli/bindings/rm) | Remove a binding, whatever published it |
+| [`ocel bindings set`](/docs/cli/bindings/set) | Publish one binding, read as JSON on stdin |
