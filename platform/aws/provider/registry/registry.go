@@ -17,7 +17,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const Namespace = "ocel"
+const (
+	Namespace  = "ocel"
+	ProjectTag = "ocel:project"
+)
 
 const (
 	ecrUsername   = "AWS"
@@ -30,6 +33,8 @@ type ECRAPI interface {
 	BatchDeleteImage(ctx context.Context, in *ecr.BatchDeleteImageInput, opts ...func(*ecr.Options)) (*ecr.BatchDeleteImageOutput, error)
 	DeleteRepository(ctx context.Context, in *ecr.DeleteRepositoryInput, opts ...func(*ecr.Options)) (*ecr.DeleteRepositoryOutput, error)
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
+	DescribeRepositories(ctx context.Context, in *ecr.DescribeRepositoriesInput, opts ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error)
+	TagResource(ctx context.Context, in *ecr.TagResourceInput, opts ...func(*ecr.Options)) (*ecr.TagResourceOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
@@ -147,18 +152,40 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 }
 
 func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
+	tags := repositoryTags(name)
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:             aws.String(name),
 		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
 		ImageScanningConfiguration: &ecrtypes.ImageScanningConfiguration{ScanOnPush: true},
-		Tags:                       []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)}},
+		Tags:                       tags,
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {
-		return false, nil
+		return false, tagRepository(ctx, api, name, tags)
 	}
 	if err != nil {
 		return false, fmt.Errorf("create the image repository %s: %w", name, err)
 	}
 	return true, nil
+}
+
+func repositoryTags(name string) []ecrtypes.Tag {
+	project, _, _ := strings.Cut(strings.TrimPrefix(name, Namespace+"/"), ".")
+	return []ecrtypes.Tag{
+		{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)},
+		{Key: aws.String(ProjectTag), Value: aws.String(project)},
+	}
+}
+
+func tagRepository(ctx context.Context, api ECRAPI, name string, tags []ecrtypes.Tag) error {
+	described, err := api.DescribeRepositories(ctx, &ecr.DescribeRepositoriesInput{RepositoryNames: []string{name}})
+	if err != nil {
+		return fmt.Errorf("read the image repository %s to tag it with its project: %w", name, err)
+	}
+	for _, repository := range described.Repositories {
+		if _, err := api.TagResource(ctx, &ecr.TagResourceInput{ResourceArn: repository.RepositoryArn, Tags: tags}); err != nil {
+			return fmt.Errorf("tag the image repository %s with its project: %w", name, err)
+		}
+	}
+	return nil
 }

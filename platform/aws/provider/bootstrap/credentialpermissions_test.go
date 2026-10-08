@@ -816,19 +816,50 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	}
 }
 
-func TestEveryCredentialReclaimsImagesOnlyInTheReposOcelMade(t *testing.T) {
+var ofThePrincipalsProject = map[string]any{
+	"StringEquals": map[string]any{"aws:ResourceAccount": "${aws:PrincipalAccount}"},
+	"StringLike":   map[string]any{"aws:ResourceTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
+}
+
+var taggedForThePrincipalsProject = map[string]any{
+	"StringEquals":       map[string]any{"aws:ResourceAccount": "${aws:PrincipalAccount}"},
+	"StringLike":         map[string]any{"aws:RequestTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
+	"StringLikeIfExists": map[string]any{"aws:ResourceTag/ocel:project": "${aws:PrincipalTag/ocel:project, '*'}"},
+}
+
+func TestEveryCredentialDeletesImagesOnlyInRepositoriesTaggedWithAProjectItsPrincipalMaySpeakFor(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
-		for _, action := range []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository", "ecr:DescribeImages"} {
-			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, inCallerAccount())}
+		for _, action := range []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"} {
+			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, ofThePrincipalsProject)}
 			if !grants[want] {
-				t.Errorf("the %s credential does not grant %s on %s: a destroy and a reconcile delete the images a deploy pushed there", purpose, action, appRepositoryARN)
+				t.Errorf("the %s credential does not grant %s on %s for the project its principal is tagged with: a principal tagged ocel:project reaches that project's repositories alone", purpose, action, appRepositoryARN)
 			}
 		}
 		for g := range grants {
-			if (g.action == "ecr:BatchDeleteImage" || g.action == "ecr:DeleteRepository") && g.resource != appRepositoryARN {
-				t.Errorf("the %s credential grants %s on %s, beyond the repositories under the ocel namespace", purpose, g.action, g.resource)
+			if (g.action == "ecr:BatchDeleteImage" || g.action == "ecr:DeleteRepository") && g.condition != conditionJSON(t, ofThePrincipalsProject) {
+				t.Errorf("the %s credential grants %s on %s under %s, which reaches repositories of a project its principal is not tagged with", purpose, g.action, g.resource, g.condition)
 			}
+		}
+	}
+}
+
+func TestEveryCredentialTagsARepositoryOnlyWithAProjectItsPrincipalMaySpeakFor(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		grants := grantsOf(t, document)
+		for _, action := range []string{"ecr:CreateRepository", "ecr:TagResource"} {
+			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, taggedForThePrincipalsProject)}
+			if !grants[want] {
+				t.Errorf("the %s credential does not grant %s on %s for the project its principal is tagged with", purpose, action, appRepositoryARN)
+			}
+			for g := range grants {
+				if g.action == action && g.condition != conditionJSON(t, taggedForThePrincipalsProject) {
+					t.Errorf("the %s credential grants %s under %s: retagging another project's repository would hand its deletes to this principal", purpose, action, g.condition)
+				}
+			}
+		}
+		if want := (grant{action: "ecr:DescribeImages", resource: appRepositoryARN, condition: conditionJSON(t, inCallerAccount())}); !grants[want] {
+			t.Errorf("the %s credential does not grant ecr:DescribeImages on %s: a reconcile reads the images it may sweep", purpose, appRepositoryARN)
 		}
 	}
 }

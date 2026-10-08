@@ -33,6 +33,38 @@ type fakeECR struct {
 	described   int
 
 	deletedRepositories []string
+	createdTags         map[string][]ecrtypes.Tag
+	resourceTags        map[string][]ecrtypes.Tag
+}
+
+func (f *fakeECR) DescribeRepositories(_ context.Context, in *ecr.DescribeRepositoriesInput, _ ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error) {
+	out := &ecr.DescribeRepositoriesOutput{}
+	for _, name := range in.RepositoryNames {
+		if !slices.Contains(f.existing, name) && !slices.Contains(f.created, name) {
+			return nil, &ecrtypes.RepositoryNotFoundException{Message: aws.String(name + " is gone")}
+		}
+		out.Repositories = append(out.Repositories, ecrtypes.Repository{
+			RepositoryName: aws.String(name),
+			RepositoryArn:  aws.String("arn:aws:ecr:us-east-1:123456789012:repository/" + name),
+		})
+	}
+	return out, nil
+}
+
+func (f *fakeECR) TagResource(_ context.Context, in *ecr.TagResourceInput, _ ...func(*ecr.Options)) (*ecr.TagResourceOutput, error) {
+	if f.resourceTags == nil {
+		f.resourceTags = map[string][]ecrtypes.Tag{}
+	}
+	f.resourceTags[aws.ToString(in.ResourceArn)] = in.Tags
+	return &ecr.TagResourceOutput{}, nil
+}
+
+func tagsOf(tags []ecrtypes.Tag) map[string]string {
+	named := map[string]string{}
+	for _, tag := range tags {
+		named[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+	}
+	return named
 }
 
 func (f *fakeECR) DeleteRepository(_ context.Context, in *ecr.DeleteRepositoryInput, _ ...func(*ecr.Options)) (*ecr.DeleteRepositoryOutput, error) {
@@ -65,6 +97,10 @@ func (f *fakeECR) CreateRepository(_ context.Context, in *ecr.CreateRepositoryIn
 		return nil, errors.New("a repository made without scan-on-push ships every image unexamined")
 	}
 	f.created = append(f.created, name)
+	if f.createdTags == nil {
+		f.createdTags = map[string][]ecrtypes.Tag{}
+	}
+	f.createdTags[name] = in.Tags
 	return &ecr.CreateRepositoryOutput{}, nil
 }
 
@@ -300,5 +336,32 @@ func TestAPushThatFailsWhileItsRepositoryStandsIsNotRetried(t *testing.T) {
 	}
 	if got := failing.Pushed(); len(got) != 0 {
 		t.Errorf("Push() pushed %v", got)
+	}
+}
+
+func TestARepositoryAPushCreatesIsTaggedWithTheProjectItsImagesBelongTo(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{}
+	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+		t.Fatalf("ensure() = %v", err)
+	}
+
+	if got := tagsOf(api.createdTags["ocel/shop.web"]); got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
+		t.Errorf("the repository was created tagged %v, want ocel:project=shop beside ocel:managed-by: the deploy credential deletes images only in repositories tagged with its principal's project", got)
+	}
+}
+
+func TestARepositoryAPushFindsInPlaceIsTaggedWithTheProjectItsImagesBelongTo(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{existing: []string{"ocel/shop.web"}}
+	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+		t.Fatalf("ensure() = %v", err)
+	}
+
+	got := tagsOf(api.resourceTags["arn:aws:ecr:us-east-1:123456789012:repository/ocel/shop.web"])
+	if got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
+		t.Errorf("the repository in place was tagged %v, want ocel:project=shop beside ocel:managed-by: one made before the tag existed would otherwise refuse every delete", got)
 	}
 }
