@@ -12,21 +12,21 @@ import (
 )
 
 const (
-	routerKindEnv         = "OCEL_ROUTER_KIND"
-	routingManifestEnv    = "OCEL_ROUTING_MANIFEST"
-	functionURLsEnv       = "OCEL_FUNCTION_URLS"
-	assetBucketEnv        = "OCEL_ASSET_BUCKET"
-	assetPrefixEnv        = "OCEL_ASSET_PREFIX"
-	slugEnv               = "OCEL_SLUG"
-	appNameEnv            = "OCEL_APP"
-	buildIDEnv            = "OCEL_BUILD_ID"
-	routingManifestInTask = "/var/task/" + edge.RoutingManifestFile
+	routerKindEnv    = "OCEL_ROUTER_KIND"
+	routeTableEnv    = "OCEL_NEXT_ROUTE_TABLE"
+	functionURLsEnv  = "OCEL_FUNCTION_URLS"
+	assetBucketEnv   = "OCEL_ASSET_BUCKET"
+	assetPrefixEnv   = "OCEL_ASSET_PREFIX"
+	slugEnv          = "OCEL_SLUG"
+	appNameEnv       = "OCEL_APP"
+	buildIDEnv       = "OCEL_BUILD_ID"
+	routeTableInTask = "/var/task/" + edge.NextRouteTableFile
 
 	functionURLBudgetBytes = 80
 )
 
 type dispatchHost struct {
-	Entry             string
+	RootFunction      string
 	AssetBucket       string
 	AssetPrefix       string
 	ImageOptimizerURL string
@@ -34,10 +34,10 @@ type dispatchHost struct {
 }
 
 func (h *dispatchHost) hosts(fn appFunction) bool {
-	return h != nil && fn.route() == h.Entry
+	return h != nil && fn.route() == h.RootFunction
 }
 
-func (h *dispatchHost) entryEnv(base map[string]string) map[string]string {
+func (h *dispatchHost) rootFunctionEnv(base map[string]string) map[string]string {
 	if h == nil {
 		return base
 	}
@@ -47,8 +47,8 @@ func (h *dispatchHost) entryEnv(base map[string]string) map[string]string {
 	return env
 }
 
-func (h *dispatchHost) plannedEntryEnv(base map[string]string, functions []appFunction) map[string]string {
-	env := h.entryEnv(base)
+func (h *dispatchHost) plannedRootFunctionEnv(base map[string]string, functions []appFunction) map[string]string {
+	env := h.rootFunctionEnv(base)
 	size := len("{}")
 	for _, fn := range functions {
 		if h.hosts(fn) {
@@ -64,7 +64,7 @@ func siblingFunctionURLs(urls pulumi.StringMap) pulumi.StringOutput {
 	return urls.ToStringMapOutput().ApplyT(func(resolved map[string]string) (string, error) {
 		encoded, err := json.Marshal(resolved)
 		if err != nil {
-			return "", fmt.Errorf("render the sibling Function URLs the entry function routes to: %w", err)
+			return "", fmt.Errorf("render the sibling Function URLs the root function routes to: %w", err)
 		}
 		return string(encoded), nil
 	}).(pulumi.StringOutput)

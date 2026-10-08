@@ -126,7 +126,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: entryRouteID, App: "api"}
+		want := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: rootFunctionRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionConfigFile, cfg, want)
 		}
@@ -145,8 +145,8 @@ func TestBundle(t *testing.T) {
 		if hosting.Needs == nil {
 			t.Errorf("%s = %s, want needs stated as an empty object, not null", buildoutput.HostingFile, readFile(t, hostingPath))
 		}
-		if hosting.Entry != cfg.ID {
-			t.Errorf("%s entry = %q, want the sole function's route id %q", buildoutput.HostingFile, hosting.Entry, cfg.ID)
+		if hosting.RootFunction != cfg.ID {
+			t.Errorf("%s rootFunction = %q, want the sole function's route id %q", buildoutput.HostingFile, hosting.RootFunction, cfg.ID)
 		}
 		if _, err := os.Stat(filepath.Join(l.functionDir, buildoutput.HostingFile)); err == nil {
 			t.Errorf("%s landed inside the function directory, want it in the app artifact root", buildoutput.HostingFile)

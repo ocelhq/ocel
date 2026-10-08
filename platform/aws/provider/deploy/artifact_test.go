@@ -191,22 +191,32 @@ func TestUploadArtifact(t *testing.T) {
 	})
 }
 
+var nextStatic = &buildoutput.Static{
+	ImmutablePrefixes:      []string{"/_next/static/"},
+	MustRevalidatePrefixes: []string{"/_next/static/service-worker/"},
+}
+
 func hostingJSON(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(buildoutput.Hosting{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
+	hosting := buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: runtime, FrameworkBuildID: buildID, RootFunction: "/"}
+	if runtime == buildoutput.FrameworkNext {
+		hosting.RouteTable = buildoutput.RouteTableNext
+		hosting.Static = nextStatic
+	}
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(raw)
 }
 
-func buildIDOf(t *testing.T, routingManifest string) string {
+func buildIDOf(t *testing.T, routeTable string) string {
 	t.Helper()
 	var routing struct {
 		BuildID string `json:"buildId"`
 	}
-	if err := json.Unmarshal([]byte(routingManifest), &routing); err != nil {
-		t.Fatalf("parse routing manifest %s: %v", routingManifest, err)
+	if err := json.Unmarshal([]byte(routeTable), &routing); err != nil {
+		t.Fatalf("parse route table %s: %v", routeTable, err)
 	}
 	return routing.BuildID
 }
@@ -215,7 +225,7 @@ func withHostings(t *testing.T, files map[string]string) map[string]string {
 	t.Helper()
 	out := maps.Clone(files)
 	for rel, contents := range files {
-		app, ok := appOfRoutingManifest(rel)
+		app, ok := appOfRouteTable(rel)
 		if !ok {
 			continue
 		}
@@ -228,9 +238,9 @@ func withHostings(t *testing.T, files map[string]string) map[string]string {
 	return out
 }
 
-func appOfRoutingManifest(rel string) (string, bool) {
+func appOfRouteTable(rel string) (string, bool) {
 	parts := strings.Split(rel, "/")
-	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.RoutingManifestFile {
+	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.NextRouteTableFile {
 		return "", false
 	}
 	return parts[1], true

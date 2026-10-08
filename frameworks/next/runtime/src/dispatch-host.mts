@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, type ImageOrigin } from "@framework/next-router/image";
@@ -22,7 +22,7 @@ export function withoutClientControl(headers: Headers): Headers {
 }
 
 export interface DispatchHost {
-  manifest: RoutingManifest;
+  manifest: NextRouteTable;
   routerKind: string;
   keepCacheTags: boolean;
   localOrigin: string;
@@ -45,7 +45,7 @@ function newRouteDeps(
     manifest: host.manifest,
     functionUrls: {
       ...host.functionUrls,
-      [host.manifest.entry]: host.localOrigin,
+      [host.manifest.rootFunction]: host.localOrigin,
     },
     slug: host.slug,
     app: host.app,
@@ -86,7 +86,7 @@ export interface DispatchAccess {
   originFetch: typeof fetch;
 }
 
-const routingManifestPathVar = "OCEL_ROUTING_MANIFEST";
+const routeTablePathVar = "OCEL_NEXT_ROUTE_TABLE";
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
 
@@ -111,11 +111,11 @@ export function readDispatchHost(
   localOrigin: string,
   access: DispatchAccess,
 ): DispatchHost {
-  const manifestPath = env[routingManifestPathVar];
-  if (!manifestPath) {
-    throw new Error(`ocel: ${routingManifestPathVar} names no routing manifest`);
+  const routeTablePath = env[routeTablePathVar];
+  if (!routeTablePath) {
+    throw new Error(`ocel: ${routeTablePathVar} names no route table`);
   }
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as RoutingManifest;
+  const manifest = JSON.parse(readFileSync(routeTablePath, "utf8")) as NextRouteTable;
 
   return {
     manifest,

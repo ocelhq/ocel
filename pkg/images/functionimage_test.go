@@ -149,7 +149,7 @@ func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t
 		"static/_next/static/chunks/app.js": "chunk",
 		"static/favicon.ico":                "icon",
 		"image-config.json":                 `{"path":"/_next/image"}`,
-		"routing-manifest.json":             "{}",
+		"next-route-table.json":             "{}",
 	} {
 		full := filepath.Join(app, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -184,7 +184,7 @@ func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t
 		}
 	}
 	if slices.ContainsFunc(names, func(name string) bool {
-		return strings.HasSuffix(name, "routing-manifest.json") && strings.HasPrefix(name, root)
+		return strings.HasSuffix(name, "next-route-table.json") && strings.HasPrefix(name, root)
 	}) {
 		t.Errorf("the image holds %v, want nothing from the app's build directory but its static assets and image config", names)
 	}

@@ -246,7 +246,7 @@ func TestBuildScriptMultipart(t *testing.T) {
 	t.Run("the main module and its siblings are uploaded as their own parts", func(t *testing.T) {
 		worker := edge.Worker{
 			Main:    mainModule(),
-			Modules: []edge.WorkerModule{{Name: "routing-manifest.json", ContentType: "text/plain", Content: []byte(`{"buildId":"b"}`)}},
+			Modules: []edge.WorkerModule{{Name: "next-route-table.json", ContentType: "text/plain", Content: []byte(`{"buildId":"b"}`)}},
 		}
 
 		body, contentType, err := buildScriptMultipart(worker, "")
@@ -275,8 +275,8 @@ func TestBuildScriptMultipart(t *testing.T) {
 		if got := byName["index.js"]; got != "export default {}" {
 			t.Errorf("index.js part = %q", got)
 		}
-		if got := byName["routing-manifest.json"]; got != `{"buildId":"b"}` {
-			t.Errorf("routing-manifest.json part = %q", got)
+		if got := byName["next-route-table.json"]; got != `{"buildId":"b"}` {
+			t.Errorf("next-route-table.json part = %q", got)
 		}
 	})
 }

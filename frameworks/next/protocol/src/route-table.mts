@@ -92,8 +92,8 @@ export type MiddlewareEntry =
       matchers?: MiddlewareMatcher[];
     };
 
-export interface RoutingManifest {
-  entry: string;
+export interface NextRouteTable {
+  rootFunction: string;
   buildId: string;
   appName?: string;
   basePath: string;

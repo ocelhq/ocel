@@ -1,7 +1,7 @@
 import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
@@ -28,8 +28,8 @@ const emptyRoutes = {
   fallback: [],
 };
 
-const manifest: RoutingManifest = {
-  entry: LOCAL_BUNDLE,
+const manifest: NextRouteTable = {
+  rootFunction: LOCAL_BUNDLE,
   buildId: "t",
   basePath: "",
   pathnames: ["/local", "/keyless", "/sibling"],

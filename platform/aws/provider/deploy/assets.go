@@ -24,11 +24,6 @@ const (
 	revalidateCacheControl = "public, max-age=0, must-revalidate"
 )
 
-const (
-	nextStaticSegment    = "_next/static/"
-	serviceWorkerSegment = "service-worker/"
-)
-
 var assetContentTypes = map[string]string{
 	".html":        "text/html; charset=utf-8",
 	".js":          "text/javascript; charset=utf-8",
@@ -74,21 +69,15 @@ func assetContentType(rel string) string {
 	return "application/octet-stream"
 }
 
-func assetCacheControl(rel string) string {
-	path := "/" + rel
-	at := strings.Index(path, "/"+nextStaticSegment)
-	if at == -1 {
-		return revalidateCacheControl
+func assetCacheControl(static *buildoutput.Static, rel string) string {
+	if static.IsImmutable("/" + rel) {
+		return immutableCacheControl
 	}
-	item := path[at+len("/"+nextStaticSegment):]
-	if strings.HasPrefix(item, serviceWorkerSegment) {
-		return revalidateCacheControl
-	}
-	return immutableCacheControl
+	return revalidateCacheControl
 }
 
-func assetHeaders(rel string) objectHeaders {
-	return objectHeaders{contentType: assetContentType(rel), cacheControl: assetCacheControl(rel)}
+func assetHeaders(static *buildoutput.Static, rel string) objectHeaders {
+	return objectHeaders{contentType: assetContentType(rel), cacheControl: assetCacheControl(static, rel)}
 }
 
 const imageConfigFile = "image-config.json"
@@ -111,8 +100,8 @@ type assetUpload struct {
 	headers  objectHeaders
 }
 
-func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) (*assetSet, error) {
-	if framework != buildoutput.FrameworkNext {
+func staticAssetSet(cfg Config, app string, static *buildoutput.Static, coord naming.Coordinate) (*assetSet, error) {
+	if static == nil {
 		return nil, nil
 	}
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
@@ -135,7 +124,7 @@ func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) 
 			key:     key,
 			src:     filepath.Join(dir, filepath.FromSlash(file.rel)),
 			to:      plane,
-			headers: assetHeaders(file.rel),
+			headers: assetHeaders(static, file.rel),
 		})
 		for _, to := range plane {
 			manifest.add(to.bucket, key, file.size)

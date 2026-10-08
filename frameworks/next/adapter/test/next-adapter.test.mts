@@ -342,7 +342,7 @@ async function partitionFuncDirs(projectDir: string) {
 }
 
 async function readManifest(projectDir: string) {
-  return JSON.parse(await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"));
+  return JSON.parse(await readFile(join(projectDir, ".ocel/output/next-route-table.json"), "utf8"));
 }
 
 async function readLauncher(projectDir: string, bundle = "bundle-0") {
@@ -798,14 +798,14 @@ test("copies public/ files into the static output, recursively", async () => {
   expect(await exists(join(staticDir, "icons/logo.png"))).toBe(true);
 });
 
-test("enumerates public/ files as static in the routing manifest", async () => {
+test("enumerates public/ files as static in the route table", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"),
+    await readFile(join(projectDir, ".ocel/output/next-route-table.json"), "utf8"),
   );
 
   expect(manifest.pathnames).toContain("/next.svg");
@@ -1075,7 +1075,7 @@ test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
   expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
 });
 
-test("passes the app's trailing-slash config into the routing manifest", async () => {
+test("passes the app's trailing-slash config into the route table", async () => {
   const { projectDir, args } = await synthProject();
   args.config = {
     ...args.config,
@@ -1209,7 +1209,7 @@ test("projects a prerender's fallback down to its freshness windows and pprChain
   expect(entry.pprChain).toEqual({ headers: { "next-resume": "1" } });
 });
 
-test("emits no build-machine file paths in the routing manifest", async () => {
+test("emits no build-machine file paths in the route table", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1219,7 +1219,7 @@ test("emits no build-machine file paths in the routing manifest", async () => {
   expect(manifest).not.toContain(projectDir);
 });
 
-test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", async () => {
+test("records the ocel app name (from OCEL_APP_NAME) in the route table", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1738,7 +1738,7 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
 
   await adapter.onBuildComplete(args as never);
 
-  expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "next-route-table.json"))).toBe(true);
   expect(await exists(join(outputRoot, "hosting.json"))).toBe(true);
   expect(await exists(join(outputRoot, "functions/bundle-0.func/function-config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
@@ -1754,29 +1754,50 @@ test("states the runtime and next's own build id in hosting.json", async () => {
   const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   const manifest = await readManifest(projectDir);
   expect(hosting).toEqual({
+    version: 1,
     framework: "next",
     frameworkBuildId: args.buildId,
-    edgeRouting: true,
-    entry: manifest.entry,
+    rootFunction: manifest.rootFunction,
+    routeTable: "next",
+    static: expect.objectContaining({ immutablePrefixes: expect.any(Array) }),
     needs: {},
   });
   expect(hosting.frameworkBuildId).toBe(manifest.buildId);
 });
 
-test("names the bundle serving the root route as the entry", async () => {
+test("states next's static dir as immutable under whatever base path the build serves it at", async () => {
+  const { nextStatic } = await import("../src/next-adapter.mts");
+
+  expect(
+    nextStatic([
+      "/docs/_next/static/chunks/main.js",
+      "/docs/_next/static/css/app.css",
+      "/docs/favicon.ico",
+    ]),
+  ).toEqual({
+    immutablePrefixes: ["/docs/_next/static/"],
+    mustRevalidatePrefixes: ["/docs/_next/static/service-worker/"],
+  });
+  expect(nextStatic(["/favicon.ico"])).toEqual({
+    immutablePrefixes: [],
+    mustRevalidatePrefixes: [],
+  });
+});
+
+test("names the bundle serving the root route as the root function", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/"].id).toBe(manifest.entry);
-  expect(await exists(join(projectDir, `.ocel/output/functions/${manifest.entry}.func`))).toBe(
-    true,
-  );
+  expect(manifest.dispatch["/"].id).toBe(manifest.rootFunction);
+  expect(
+    await exists(join(projectDir, `.ocel/output/functions/${manifest.rootFunction}.func`)),
+  ).toBe(true);
 });
 
-test("names the first bundle as the entry when no function serves the root route", async () => {
+test("names the first bundle as the root function when no function serves the root route", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1785,8 +1806,8 @@ test("names the first bundle as the entry when no function serves the root route
   const manifest = await readManifest(projectDir);
   const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
   expect(manifest.dispatch["/"]).toBeUndefined();
-  expect(manifest.entry).toBe("bundle-0");
-  expect(hosting.entry).toBe("bundle-0");
+  expect(manifest.rootFunction).toBe("bundle-0");
+  expect(hosting.rootFunction).toBe("bundle-0");
   expect(await exists(join(projectDir, ".ocel/output/functions/bundle-0.func"))).toBe(true);
 });
 
@@ -1810,9 +1831,9 @@ test("names the root route's bundle in a build split across several bundles", as
   expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.entry).toBe(manifest.dispatch["/"].id);
-  expect(manifest.entry).not.toBe(manifest.dispatch["/api/documents"].id);
-  expect(Object.keys((await readLauncher(projectDir, manifest.entry)).entries)).toEqual([
+  expect(manifest.rootFunction).toBe(manifest.dispatch["/"].id);
+  expect(manifest.rootFunction).not.toBe(manifest.dispatch["/api/documents"].id);
+  expect(Object.keys((await readLauncher(projectDir, manifest.rootFunction)).entries)).toEqual([
     "/",
     "/_middleware",
   ]);
@@ -1944,7 +1965,7 @@ test("two apps exposing the same route path do not overwrite each other", async 
     expect(config.app).toBe(app);
     expect(config.id).toBe("bundle-0");
 
-    const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
+    const manifest = JSON.parse(await readFile(join(outputRoot, "next-route-table.json"), "utf8"));
     expect(manifest.appName).toBe(app);
     expect(manifest.dispatch["/api/documents"]).toEqual({
       kind: "function",

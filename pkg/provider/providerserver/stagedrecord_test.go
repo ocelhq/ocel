@@ -65,7 +65,7 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 
 func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{Entry: "/"}, nil)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RootFunction: "/"}, nil)
 	client, provider := deployServed(t)
 	stager := staging(t, provider)
 
@@ -83,14 +83,14 @@ func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	record := staged[0]
-	if record.Entry != "/" {
-		t.Errorf("entry = %q, want the route the build serves through: an edge that fronts a release reaches it at functionUrls[entry]", record.Entry)
+	if record.RootFunction != "/" {
+		t.Errorf("rootFunction = %q, want the route the build serves through: an edge that fronts a release reaches it at functionUrls[rootFunction]", record.RootFunction)
 	}
-	if record.FunctionURLs[record.Entry] == "" {
-		t.Errorf("functionUrls[%q] = \"\", want the entry to name a URL the edge can reach", record.Entry)
+	if record.FunctionURLs[record.RootFunction] == "" {
+		t.Errorf("functionUrls[%q] = \"\", want the root function to name a URL the edge can reach", record.RootFunction)
 	}
-	if record.EntryFunction == "" {
-		t.Error("the staged record names no entry function, so an edge that invokes the release by name has nothing to call")
+	if record.RootFunctionPhysical == "" {
+		t.Error("the staged record names no root function, so an edge that invokes the release by name has nothing to call")
 	}
 }
 
@@ -208,7 +208,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 
 func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
@@ -229,13 +229,13 @@ func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t
 		t.Fatalf("the deploy staged %d records and provisioned %d functions, want one of each", len(staged), len(functions))
 	}
 	if staged[0].Origin != functions[0].URL || staged[0].Origin == "" {
-		t.Errorf("origin = %q, want the entry function's URL %q: the edge that runs code reaches the deployment there", staged[0].Origin, functions[0].URL)
+		t.Errorf("origin = %q, want the root function's URL %q: the edge that runs code reaches the deployment there", staged[0].Origin, functions[0].URL)
 	}
 }
 
 func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

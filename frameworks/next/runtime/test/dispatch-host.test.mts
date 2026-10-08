@@ -1,5 +1,5 @@
 import http from "node:http";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { dispatchesAtOrigin } from "@framework/node-runtime/host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
@@ -24,8 +24,8 @@ const emptyRoutes = {
   fallback: [],
 };
 
-const manifest: RoutingManifest = {
-  entry: LOCAL_BUNDLE,
+const manifest: NextRouteTable = {
+  rootFunction: LOCAL_BUNDLE,
   buildId: "t",
   basePath: "",
   pathnames: ["/local", "/keyless", "/sibling"],
@@ -123,12 +123,12 @@ test("a dispatch host serves assets from the bucket its host handed it", async (
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-access-"));
-  const path = join(dir, "routing-manifest.json");
+  const path = join(dir, "next-route-table.json");
   await writeFile(path, JSON.stringify(manifest));
   const assetBucket = { get: async () => null };
   const originFetch = (async () => new Response("sibling")) as unknown as typeof fetch;
 
-  const built = readDispatchHost({ OCEL_ROUTING_MANIFEST: path }, localOrigin, {
+  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
     assetBucket,
     originFetch,
   });
@@ -142,7 +142,7 @@ test("an image request is answered by the image origin its host handed the dispa
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-image-"));
-  const path = join(dir, "routing-manifest.json");
+  const path = join(dir, "next-route-table.json");
   await writeFile(
     path,
     JSON.stringify({
@@ -166,7 +166,7 @@ test("an image request is answered by the image origin its host handed the dispa
     }),
   );
   const asked: { url: string; w: number }[] = [];
-  const built = readDispatchHost({ OCEL_ROUTING_MANIFEST: path }, localOrigin, {
+  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
     originFetch: fetch,
     imageOrigin: async (payload) => {
       asked.push({ url: payload.url, w: payload.w });
@@ -228,10 +228,10 @@ test("only a deploy that declared origin dispatch hosts it", () => {
   expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "1" } as NodeJS.ProcessEnv)).toBe(true);
 });
 
-test("origin dispatch without a routing manifest refuses to boot", () => {
+test("origin dispatch without a route table refuses to boot", () => {
   expect(() =>
     readDispatchHost({ OCEL_ROUTER_KIND: "cloudfront" }, localOrigin, { originFetch: fetch }),
-  ).toThrow(/OCEL_ROUTING_MANIFEST/);
+  ).toThrow(/OCEL_NEXT_ROUTE_TABLE/);
 });
 
 test("sibling urls arrive as a routeId-to-URL object", () => {
@@ -246,13 +246,13 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-host-"));
-  const path = join(dir, "routing-manifest.json");
+  const path = join(dir, "next-route-table.json");
   await writeFile(path, JSON.stringify(manifest));
 
   const built = readDispatchHost(
     {
       OCEL_ROUTER_KIND: "cloudfront",
-      OCEL_ROUTING_MANIFEST: path,
+      OCEL_NEXT_ROUTE_TABLE: path,
       OCEL_FUNCTION_URLS: JSON.stringify({ [SIBLING_BUNDLE]: SIBLING_URL }),
       OCEL_ASSET_PREFIX: "prod/shop/web/r0a1b2c3d/assets",
       OCEL_SLUG: "shop",
@@ -263,7 +263,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
     { originFetch: fetch },
   );
 
-  expect(built.manifest.entry).toBe(LOCAL_BUNDLE);
+  expect(built.manifest.rootFunction).toBe(LOCAL_BUNDLE);
   expect(built.routerKind).toBe("cloudfront");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
   expect(built.assetPrefix).toBe("prod/shop/web/r0a1b2c3d/assets");

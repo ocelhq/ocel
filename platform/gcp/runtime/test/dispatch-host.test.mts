@@ -2,15 +2,15 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { newGcpDispatchInvoke, readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
 import { newRefreshEndpoint } from "../src/next/refresh-endpoint.mjs";
 import { refreshSignatureHeader, signRefreshTask } from "../src/next/refresh-signature.mjs";
 
-const manifest: RoutingManifest = {
-  entry: "bundle-0",
+const manifest: NextRouteTable = {
+  rootFunction: "bundle-0",
   buildId: "b1",
   basePath: "",
   pathnames: ["/home", "/other", "/logo.svg"],
@@ -57,7 +57,7 @@ afterAll(async () => {
 
 test("every function a route names is rendered by the instance that routed it", async () => {
   const host = readGcpDispatchHost(
-    { OCEL_ROUTING_MANIFEST: join(dir, "routing.json") },
+    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
     localOrigin,
   );
 
@@ -77,7 +77,7 @@ test("every function a route names is rendered by the instance that routed it", 
 test("a static asset is served from the directory the service's image holds it in", async () => {
   const host = readGcpDispatchHost(
     {
-      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
       OCEL_STATIC_DIR: join(dir, "static"),
       OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
     },
@@ -122,7 +122,7 @@ test("a refresh task reaches the endpoint before the router strips its control h
   const server = await serveInvoke(
     newGcpDispatchInvoke(
       localOrigin,
-      { OCEL_ROUTING_MANIFEST: join(dir, "routing.json") },
+      { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
       endpoint,
     ),
   );
@@ -151,7 +151,7 @@ test("a service told no refresh url routes the refresh path like any other", asy
   const server = await serveInvoke(
     newGcpDispatchInvoke(
       localOrigin,
-      { OCEL_ROUTING_MANIFEST: join(dir, "routing.json") },
+      { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
       undefined,
     ),
   );
@@ -168,7 +168,7 @@ test("a static flight response reaches Cloud CDN without the router state tree i
   const invoke = newGcpDispatchInvoke(
     localOrigin,
     {
-      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
       OCEL_STATIC_DIR: join(dir, "static"),
       OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
     },
@@ -194,7 +194,7 @@ test("a page the GCP dispatch serves carries its release tag when its edge purge
   const invoke = newGcpDispatchInvoke(
     localOrigin,
     {
-      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
       OCEL_CACHE_TAG_PURGE: "1",
       OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
     },

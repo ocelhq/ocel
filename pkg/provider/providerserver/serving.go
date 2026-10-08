@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type AppServingInput struct {
@@ -29,13 +30,14 @@ type AppServingInput struct {
 }
 
 type AppServing struct {
-	Entry          string
+	RootFunction   string
 	OriginDispatch *provider.RoutingSpec
 	EdgeDispatch   *provider.RoutingSpec
 	Guard          *provider.OriginGuard
 	ISR            *provider.ISRSpec
 	Bytecode       *provider.BytecodeSpec
 	AssetPrefix    string
+	Static         *buildoutput.Static
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
@@ -48,7 +50,8 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		Bytecode:    &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
 	}
 	if present {
-		facts.Entry = hosting.Entry
+		facts.RootFunction = hosting.RootFunction
+		facts.Static = hosting.Static
 	}
 	if q.Framework == buildoutput.FrameworkNext {
 		facts.ISR = &provider.ISRSpec{
@@ -72,10 +75,10 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 }
 
 func guardFor(q AppServingInput, hosting buildoutput.Hosting, present bool) *provider.OriginGuard {
-	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || hosting.Entry == "" {
+	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || hosting.RootFunction == "" {
 		return nil
 	}
-	return &provider.OriginGuard{Entry: hosting.Entry}
+	return &provider.OriginGuard{RootFunction: hosting.RootFunction}
 }
 
 func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Binding) bool {
@@ -83,22 +86,34 @@ func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Bindi
 }
 
 func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*provider.RoutingSpec, error) {
-	if !present || !hosting.EdgeRouting {
+	if !present || hosting.RouteTable == "" {
 		return nil, nil
 	}
-	if hosting.Entry == "" {
+	file, known := routeTableFiles[hosting.RouteTable]
+	if !known {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
+			"app %s routes by a %q route table, which no router this CLI ships reads; rebuild the app with this CLI", q.App, hosting.RouteTable)
 	}
-	raw, err := os.ReadFile(filepath.Join(buildoutput.AppRoot(q.Root, q.App), edge.RoutingManifestFile))
+	if hosting.RootFunction == "" {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"app %s routes by a route table but its build names no root function; rebuild the app", q.App)
+	}
+	raw, err := os.ReadFile(filepath.Join(buildoutput.AppRoot(q.Root, q.App), file))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s declares edge routing but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)
+			"app %s routes by a route table but its build wrote no %s; rebuild the app", q.App, file)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
+		return nil, fmt.Errorf("read the route table %s routes by: %w", q.App, err)
 	}
-	return &provider.RoutingSpec{Entry: hosting.Entry, Manifest: raw}, nil
+	return &provider.RoutingSpec{
+		RootFunction: hosting.RootFunction,
+		RouteTable:   router.RouteTable{Format: hosting.RouteTable, Table: raw},
+	}, nil
+}
+
+var routeTableFiles = map[buildoutput.RouteTableFormat]string{
+	buildoutput.RouteTableNext: edge.NextRouteTableFile,
 }
 
 func withoutSlash(prefix string) string {

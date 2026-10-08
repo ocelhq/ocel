@@ -24,7 +24,7 @@ const (
 const (
 	memoryEnvVar            = "OCEL_FUNCTION_MEMORY_MB"
 	routerKindEnvVar        = "OCEL_ROUTER_KIND"
-	routingManifestEnvVar   = "OCEL_ROUTING_MANIFEST"
+	routeTableEnvVar        = "OCEL_NEXT_ROUTE_TABLE"
 	assetPrefixEnvVar       = "OCEL_ASSET_PREFIX"
 	slugEnvVar              = "OCEL_SLUG"
 	appNameEnvVar           = "OCEL_APP"
@@ -51,7 +51,7 @@ const (
 
 const refreshPath = "/_ocel/refresh"
 
-var routingManifestInImage = path.Join(images.FunctionImageRoot, edge.RoutingManifestFile)
+var routeTableInImage = path.Join(images.FunctionImageRoot, edge.NextRouteTableFile)
 
 func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
@@ -141,7 +141,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
-	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
+	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
 		if factsOf(spec.Edge).RunsCode {
 			env[imageEndpointEnvVar] = "1"
 		} else {
@@ -163,7 +163,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 				}
 			}
 		}
-		env[routingManifestEnvVar] = routingManifestInImage
+		env[routeTableEnvVar] = routeTableInImage
 		env[staticDirEnvVar] = images.StaticRoot
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project

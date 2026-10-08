@@ -34,9 +34,9 @@ func TestFrameworkBuildID(t *testing.T) {
 			want:     "UxK1p2",
 		},
 		{
-			name:     "a routing manifest alone answers nothing",
+			name:     "a route table alone answers nothing",
 			app:      "web",
-			contents: map[string]string{"web/routing-manifest.json": `{"buildId":"stale"}`},
+			contents: map[string]string{"web/next-route-table.json": `{"buildId":"stale"}`},
 			want:     "",
 		},
 		{

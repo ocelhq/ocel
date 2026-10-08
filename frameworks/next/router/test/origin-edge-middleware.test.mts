@@ -114,7 +114,7 @@ function manifestFor(hosted: Hosted, middleware: unknown) {
     entryKey: PAGE_ENTRY,
   };
   return {
-    entry: bundleOf(hosted),
+    rootFunction: bundleOf(hosted),
     buildId: "test-build",
     basePath: "",
     pathnames: ["/dashboard", "/rewritten"],

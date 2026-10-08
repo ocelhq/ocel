@@ -75,7 +75,7 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 		EntryFile: entryFile,
 		Command:   command,
 		Worker:    worker,
-		ID:        entryRouteID,
+		ID:        rootFunctionRouteID,
 		App:       app,
 	}); err != nil {
 		return err
@@ -86,9 +86,10 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 		return err
 	}
 	return writeJSON(filepath.Join(appDir, buildoutput.HostingFile), buildoutput.Hosting{
+		Version:          buildoutput.HostingVersion,
 		Framework:        framework.Name,
 		FrameworkBuildID: buildID,
-		Entry:            entryRouteID,
+		RootFunction:     rootFunctionRouteID,
 		Needs:            map[edge.Need]buildoutput.NeedDetail{},
 	})
 }

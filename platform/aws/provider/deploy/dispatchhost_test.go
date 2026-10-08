@@ -23,13 +23,13 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-const routedManifest = `{"entry":"/","buildId":"WEB1","basePath":"","pathnames":[],"routes":{},"dispatch":{}}`
+const routedManifest = `{"rootFunction":"/","buildId":"WEB1","basePath":"","pathnames":[],"routes":{},"dispatch":{}}`
 
 func routedArtifactRoot(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/hosting.json":          `{"framework":"next","frameworkBuildId":"WEB1","edgeRouting":true,"entry":"/"}`,
+		"apps/web/next-route-table.json": routedManifest,
+		"apps/web/hosting.json":          `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{"immutablePrefixes":["/_next/static/"],"mustRevalidatePrefixes":["/_next/static/service-worker/"]}}`,
 	})
 }
 
@@ -87,6 +87,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 			Routing:     serving.OriginDispatch,
 			Guard:       serving.Guard,
 			AssetPrefix: serving.AssetPrefix,
+			Static:      serving.Static,
 		},
 	}
 }
@@ -112,13 +113,13 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	coord := routedCoordinate(t)
 	host := newDispatchHostFor(t, cfg)
 	if host == nil {
-		t.Fatal("dispatch host = none, want the entry function to host dispatch")
+		t.Fatal("dispatch host = none, want the root function to host dispatch")
 	}
-	if host.Entry != "/" {
-		t.Errorf("entry = %q, want the route id the spec names", host.Entry)
+	if host.RootFunction != "/" {
+		t.Errorf("rootFunction = %q, want the route id the spec names", host.RootFunction)
 	}
 	want := map[string]string{
-		routingManifestEnv:        routingManifestInTask,
+		routeTableEnv:             routeTableInTask,
 		assetBucketEnv:            "assets-bucket",
 		assetPrefixEnv:            appAssetPrefix(coord),
 		slugEnv:                   "shop",
@@ -192,8 +193,8 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	if entry[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the router kind the deploy chose", routerKindEnv, entry[routerKindEnv])
 	}
-	if entry[routingManifestEnv] != routingManifestInTask {
-		t.Errorf("%s = %q, want the manifest packed beside the handler", routingManifestEnv, entry[routingManifestEnv])
+	if entry[routeTableEnv] != routeTableInTask {
+		t.Errorf("%s = %q, want the manifest packed beside the handler", routeTableEnv, entry[routeTableEnv])
 	}
 	var siblings map[string]string
 	if err := json.Unmarshal([]byte(entry[functionURLsEnv]), &siblings); err != nil {
@@ -234,9 +235,9 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 	if sibling[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want every function to learn the router kind", routerKindEnv, sibling[routerKindEnv])
 	}
-	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
+	for _, key := range []string{routeTableEnv, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
-			t.Errorf("sibling has %s, want dispatch wired into the entry function alone", key)
+			t.Errorf("sibling has %s, want dispatch wired into the root function alone", key)
 		}
 	}
 }
@@ -263,7 +264,7 @@ func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
 
 	behindCloudFront := plannedEnv(t, routedConfig(t, cloudfront.Kind), routedApp(), fakeEdgeOf(cloudfront.Kind))
 	if behindCloudFront["OCEL_ORIGIN_DISPATCH"] != "1" {
-		t.Errorf("OCEL_ORIGIN_DISPATCH = %q behind CloudFront, want \"1\": the entry function dispatches each path", behindCloudFront["OCEL_ORIGIN_DISPATCH"])
+		t.Errorf("OCEL_ORIGIN_DISPATCH = %q behind CloudFront, want \"1\": the root function dispatches each path", behindCloudFront["OCEL_ORIGIN_DISPATCH"])
 	}
 
 	behindCloudflare := plannedEnv(t, routedConfig(t, cloudflare.Kind), routedApp(), fakeEdgeOf(cloudflare.Kind))
@@ -301,11 +302,11 @@ func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
 
 	base := map[string]string{routerKindEnv: string(cloudfront.Kind)}
-	planned := host.plannedEntryEnv(base, manifestAppFunctions(routedFunctions()))
+	planned := host.plannedRootFunctionEnv(base, manifestAppFunctions(routedFunctions()))
 	if charged := len(planned[functionURLsEnv]); charged < len("/admin")+functionURLBudgetBytes {
 		t.Errorf("%s charges %d bytes, want an upper bound on the URL Pulumi resolves later", functionURLsEnv, charged)
 	}
-	if _, charged := host.entryEnv(base)[functionURLsEnv]; charged {
+	if _, charged := host.rootFunctionEnv(base)[functionURLsEnv]; charged {
 		t.Errorf("%s is charged twice; the plan-time bound is the only estimate", functionURLsEnv)
 	}
 }

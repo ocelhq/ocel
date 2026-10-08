@@ -232,7 +232,7 @@ async function readBundle(projectDir: string) {
 }
 
 async function readManifest(projectDir: string) {
-  return JSON.parse(await readFile(join(outputDir(projectDir), "routing-manifest.json"), "utf8"));
+  return JSON.parse(await readFile(join(outputDir(projectDir), "next-route-table.json"), "utf8"));
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -518,7 +518,7 @@ test("dispatches each edge pathname to its entry key", async () => {
   expect(manifest.pathnames).toContain("/edge-page.rsc");
 });
 
-test("copies the middleware matchers into the routing manifest verbatim", async () => {
+test("copies the middleware matchers into the route table verbatim", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);

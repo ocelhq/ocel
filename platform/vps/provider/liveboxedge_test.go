@@ -69,12 +69,12 @@ func (f front) serves(t *testing.T, vm machine, path string) string {
 
 func liveRecord(tag string, staged release) router.ReleaseRecord {
 	return router.ReleaseRecord{
-		App:        liveApp,
-		Release:    tag,
-		Entry:      "/",
-		Image:      fixtureAt(tag),
-		Physical:   staged.physical,
-		HealthPath: healthPath,
+		App:          liveApp,
+		Release:      tag,
+		RootFunction: "/",
+		Image:        fixtureAt(tag),
+		Physical:     staged.physical,
+		HealthPath:   healthPath,
 	}
 }
 

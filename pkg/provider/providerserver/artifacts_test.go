@@ -292,7 +292,7 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
 
 	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
 	client := servedBy(t, vendor)
@@ -319,11 +319,11 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	for _, fn := range spec.App.Functions {
 		packages[fn.Name] = packagedFiles(t, vendor, fn.Artifact)
 	}
-	if got := packages["server"][edge.RoutingManifestFile]; got != string(routing) {
-		t.Errorf("the entry function's package contains %s = %q, want the routing manifest it routes the app with", edge.RoutingManifestFile, got)
+	if got := packages["server"][edge.NextRouteTableFile]; got != string(routing) {
+		t.Errorf("the root function's package contains %s = %q, want the route table it routes the app with", edge.NextRouteTableFile, got)
 	}
-	if _, ok := packages["feed"][edge.RoutingManifestFile]; ok {
-		t.Errorf("a function that routes nothing contains %s", edge.RoutingManifestFile)
+	if _, ok := packages["feed"][edge.NextRouteTableFile]; ok {
+		t.Errorf("a function that routes nothing contains %s", edge.NextRouteTableFile)
 	}
 	if packages["server"][sealedFile] == "" || packages["feed"][sealedFile] == "" {
 		t.Error("the sealed values reach only some of the app's functions, want every one of them")

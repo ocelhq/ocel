@@ -257,12 +257,15 @@ describe("node runtime serve path", () => {
     const record = makeRecord({
       framework: "next",
       functionUrls: {},
-      routingManifest: {
-        buildId: "build-1",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {},
+      routeTable: {
+        format: "next",
+        table: {
+          buildId: "build-1",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: {},
+        },
       },
     });
     const serve = (await resolved(record)) as ServeFetch;

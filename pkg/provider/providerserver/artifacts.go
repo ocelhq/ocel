@@ -14,7 +14,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -88,12 +87,12 @@ func discardStaged(staged []provider.Upload) {
 }
 
 func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) map[string][]byte {
-	if routing == nil || resolveRouteID(fn) != routing.Entry {
+	if routing == nil || resolveRouteID(fn) != routing.RootFunction {
 		return base
 	}
 	overlay := make(map[string][]byte, len(base)+1)
 	maps.Copy(overlay, base)
-	overlay[edge.RoutingManifestFile] = routing.Manifest
+	overlay[routeTableFiles[routing.RouteTable.Format]] = routing.RouteTable.Table
 	return overlay
 }
 

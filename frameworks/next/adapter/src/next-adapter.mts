@@ -18,7 +18,7 @@ import { pipeline } from "node:stream/promises";
 import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { Hosting } from "@platform/edge-contract/hosting";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
@@ -224,7 +224,7 @@ const adapter = {
 
     const rootPathname = basePath || "/";
     const rootEntryKey = entryKeyByPathname.get(rootPathname);
-    const entry =
+    const rootFunction =
       rootEntryKey === undefined
         ? (bundles[0]?.name ?? "")
         : bundleNameOf(rootEntryKey, rootPathname);
@@ -235,7 +235,7 @@ const adapter = {
 
     const variantHeaders = JSON.stringify(variantHeaderProjection(prerenderGroups));
 
-    const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
+    const routes = launcherRoutes(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
     const nextConfigProjection = {
       basePath: config.basePath || "",
@@ -439,21 +439,21 @@ const adapter = {
     const notFoundKey = firstDispatchedErrorPage([`${basePath}/404`, `${basePath}/_not-found`]);
     const notFoundFlightKey = firstDispatchedErrorPage([`${basePath}/_not-found`]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
-    const errorRoutes: NonNullable<RoutingManifest["errorRoutes"]> = {};
+    const errorRoutes: NonNullable<NextRouteTable["errorRoutes"]> = {};
     if (notFoundKey !== undefined) errorRoutes.notFound = notFoundKey;
     if (notFoundFlightKey !== undefined) {
       errorRoutes.notFoundFlight = notFoundFlightKey;
     }
     if (serverErrorKey !== undefined) errorRoutes.serverError = serverErrorKey;
 
-    const imagesField: Partial<Pick<RoutingManifest, "images">> = images
+    const imagesField: Partial<Pick<NextRouteTable, "images">> = images
       ? { images: { ...images, configHash: imageConfigHash(images) } }
       : {};
 
-    const vercelCacheField: Partial<Pick<RoutingManifest, "vercelCacheAlias">> =
+    const vercelCacheField: Partial<Pick<NextRouteTable, "vercelCacheAlias">> =
       process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" ? { vercelCacheAlias: true } : {};
 
-    const middlewareField: Partial<Pick<RoutingManifest, "middleware">> = middleware
+    const middlewareField: Partial<Pick<NextRouteTable, "middleware">> = middleware
       ? {
           middleware: originMiddleware
             ? {
@@ -470,18 +470,18 @@ const adapter = {
         }
       : {};
 
-    const errorRoutesField: Partial<Pick<RoutingManifest, "errorRoutes">> =
+    const errorRoutesField: Partial<Pick<NextRouteTable, "errorRoutes">> =
       Object.keys(errorRoutes).length > 0 ? { errorRoutes } : {};
 
-    const routingManifest = exactly<RoutingManifest>()({
-      entry,
+    const routeTable = exactly<NextRouteTable>()({
+      rootFunction,
       buildId,
       appName,
       basePath: config.basePath || "",
       trailingSlash: !!config.trailingSlash,
       skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
       skipMiddlewareUrlNormalize: !!config.skipMiddlewareUrlNormalize,
-      i18n: (config.i18n ?? undefined) as RoutingManifest["i18n"],
+      i18n: (config.i18n ?? undefined) as NextRouteTable["i18n"],
       ...imagesField,
 
       ...vercelCacheField,
@@ -506,7 +506,7 @@ const adapter = {
     });
 
     await mkdir(outputRoot, { recursive: true });
-    writeFileSync(join(outputRoot, "routing-manifest.json"), JSON.stringify(routingManifest));
+    writeFileSync(join(outputRoot, "next-route-table.json"), JSON.stringify(routeTable));
     const pprRoutes = outputs.prerenders
       .filter((p) => p.pprChain && isUserFacingPathname(p.pathname))
       .map((p) => p.pathname);
@@ -538,10 +538,12 @@ const adapter = {
     };
 
     const hosting: Hosting = {
+      version: 1,
       framework: "next",
       frameworkBuildId: buildId,
-      edgeRouting: true,
-      entry,
+      rootFunction,
+      routeTable: "next",
+      static: nextStatic(staticAssets.map(([pathname]) => pathname)),
       needs,
     };
     writeFileSync(join(outputRoot, "hosting.json"), JSON.stringify(hosting));
@@ -1152,15 +1154,15 @@ async function emitFetchEntries(outputRoot: string, distDir: string): Promise<vo
   );
 }
 
-export interface RouteTable {
+export interface LauncherRoutes {
   exact: Record<string, string>;
   dynamic: [string, string][];
 }
 
-function routeTable(
+function launcherRoutes(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
-): RouteTable {
+): LauncherRoutes {
   const exact = Object.fromEntries(entryKeyByPathname);
 
   const dynamic: [string, string][] = [];
@@ -1193,7 +1195,7 @@ function clientAssetSuffix(config: {
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
-  routes: RouteTable,
+  routes: LauncherRoutes,
   nextConfig: NextConfigProjection,
 ): string {
   return `${[
@@ -1290,6 +1292,23 @@ function nextDataPathnameOf(pageKey: string, buildId: string, basePath: string):
   const normalized = unprefixed === "/" ? "/index" : unprefixed;
   const dataPathname = `/_next/data/${buildId}${normalized}.json`;
   return basePath ? `${basePath}${dataPathname}` : dataPathname;
+}
+
+const NEXT_STATIC_SEGMENT = "/_next/static/";
+
+export function nextStatic(pathnames: string[]): NonNullable<Hosting["static"]> {
+  const immutablePrefixes = [
+    ...new Set(
+      pathnames.flatMap((pathname) => {
+        const at = pathname.indexOf(NEXT_STATIC_SEGMENT);
+        return at === -1 ? [] : [pathname.slice(0, at + NEXT_STATIC_SEGMENT.length)];
+      }),
+    ),
+  ].sort();
+  return {
+    immutablePrefixes,
+    mustRevalidatePrefixes: immutablePrefixes.map((prefix) => `${prefix}service-worker/`),
+  };
 }
 
 function servedPathname(file: { pathname: string; filePath: string }): string {

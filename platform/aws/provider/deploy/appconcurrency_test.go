@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 )
 
@@ -22,8 +23,8 @@ func siblingAppRoot(t *testing.T, apps ...string) string {
 	t.Helper()
 	files := map[string]string{}
 	for _, app := range apps {
-		files["apps/"+app+"/routing-manifest.json"] = routedManifest
-		files["apps/"+app+"/hosting.json"] = `{"framework":"next","frameworkBuildId":"WEB1","edgeRouting":true,"entry":"/"}`
+		files["apps/"+app+"/next-route-table.json"] = routedManifest
+		files["apps/"+app+"/hosting.json"] = `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{"immutablePrefixes":["/_next/static/"],"mustRevalidatePrefixes":["/_next/static/service-worker/"]}}`
 		files["apps/"+app+"/static/"+app+".txt"] = "an asset only " + app + " ships"
 	}
 	return writeTree(t, files)
@@ -72,17 +73,18 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
-			App:       app,
-			Framework: buildoutput.FrameworkNext,
-			Entry:     "fn--" + app + "--entry",
-			BuildID:   "d1",
+			App:          app,
+			Framework:    buildoutput.FrameworkNext,
+			RootFunction: "fn--" + app + "--entry",
+			BuildID:      "d1",
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
 			},
-			Routing:     &provider.RoutingSpec{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
+			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: buildoutput.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
 			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
 			AssetPrefix: coord.AssetKey(""),
+			Static:      nextStatic,
 		},
 	}
 }

@@ -45,6 +45,7 @@ const ROUTE = {
   release: RELEASE,
   assets: "ocel-assets.s3.eu-west-1.amazonaws.com",
   assetPrefix: ASSET_PREFIX,
+  immutable: ["/_next/static/"],
   secret: "5e884898da28047151d0e56f8dc6292773603d0d",
 };
 
@@ -135,6 +136,23 @@ describe("the resolver", () => {
     });
 
     expect(origins[0].originPath).toBe(`/${ASSET_PREFIX}`);
+  });
+
+  it("sends a path under any immutable prefix the release names to the bucket, so a base path is served from it too", async () => {
+    const { origins } = await resolve(request("/docs/_next/static/chunks/main.js"), {
+      "shop.example.com": { ...ROUTE, immutable: ["/docs/_next/static/"] },
+    });
+
+    expect(origins[0].domainName).toBe(ROUTE.assets);
+  });
+
+  it("sends a path outside every immutable prefix to the origin, whatever framework's static path it looks like", async () => {
+    const { origins } = await resolve(request("/_next/static/chunks/main.js"), {
+      "shop.example.com": { ...ROUTE, immutable: undefined },
+    });
+
+    expect(origins).toHaveLength(1);
+    expect(origins[0].domainName).toBe(ROUTE.origin);
   });
 
   it("sends a static asset to the origin itself when the release names no asset bucket", async () => {
@@ -271,7 +289,7 @@ describe("the cache key the resolver computes", () => {
   }
 });
 
-describe("the resolver reads no routing manifest, so it keys every route as if it were static", () => {
+describe("the resolver reads no route table, so it keys every route as if it were static", () => {
   const diverging = fixture.cases.filter(
     (c) => c.variantPrerendered !== c.variantPartiallyStatic && c.variantPrerendered !== null,
   );

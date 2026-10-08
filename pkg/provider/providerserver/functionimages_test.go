@@ -283,7 +283,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *te
 
 func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	builtRoutingApp(t, "web", buildoutput.Hosting{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, []byte(`{"entry":"index"}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: buildoutput.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, []byte(`{"rootFunction":"index"}`))
 	app := filepath.Join(workingOutputRoot(t), "apps", "web")
 	for rel, body := range map[string]string{
 		"static/_next/static/app.js": "chunk",
@@ -322,7 +322,7 @@ func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes
 		pushed[push.App] = regularFiles(t, push.Built)
 	}
 	if !slices.Contains(pushed["server"], asset) || !slices.Contains(pushed["server"], config) {
-		t.Errorf("the entry function's image holds %v, want %s and %s: a function run from an image has no asset store to read them from", pushed["server"], asset, config)
+		t.Errorf("the root function's image holds %v, want %s and %s: a function run from an image has no asset store to read them from", pushed["server"], asset, config)
 	}
 	if slices.Contains(pushed["feed"], asset) {
 		t.Errorf("a function that routes nothing holds the app's static assets at %s", asset)

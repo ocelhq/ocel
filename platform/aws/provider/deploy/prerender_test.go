@@ -63,9 +63,9 @@ func twoAppManifest() *contractv1.Manifest {
 func twoAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
+		"apps/web/next-route-table.json":    `{"buildId":"WEB1"}`,
 		"apps/web/cache/index.cache.json":   `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
-		"apps/admin/routing-manifest.json":  `{"buildId":"ADM1"}`,
+		"apps/admin/next-route-table.json":  `{"buildId":"ADM1"}`,
 		"apps/admin/cache/dash.cache.json":  `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
 		"apps/admin/cache/users.cache.json": `{"lastModified":3,"value":{"kind":"APP_PAGE"}}`,
 	})
@@ -159,15 +159,19 @@ func pushSet(ctx context.Context, set *assetSet, err error) error {
 	return set.push(ctx, quietProgress{})
 }
 
-func pushStaticAssetSet(ctx context.Context, cfg Config, app, runtime string, coord naming.Coordinate) error {
-	set, err := staticAssetSet(cfg, app, runtime, coord)
+func pushStaticAssetSet(ctx context.Context, cfg Config, app string, static *buildoutput.Static, coord naming.Coordinate) error {
+	set, err := staticAssetSet(cfg, app, static, coord)
 	return pushSet(ctx, set, err)
 }
 
 func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range deployedManifest(manifest).GetApps() {
 		name := app.GetName()
-		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetFramework().GetName(), builds.coords[name]); err != nil {
+		hosting, _, err := buildoutput.ReadHosting(cfg.ArtifactRoot, name)
+		if err != nil {
+			return err
+		}
+		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, hosting.Static, builds.coords[name]); err != nil {
 			return err
 		}
 	}
@@ -430,7 +434,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("no prerenders", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":                     `{"buildId":"BID","appName":"web"}`,
+			"apps/web/next-route-table.json":                     `{"buildId":"BID","appName":"web"}`,
 			"apps/web/functions/index.func/function-config.json": `{"id":"/"}`,
 		})
 		f := &fakeArtifactStore{exists: map[string]bool{}}
@@ -447,7 +451,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("missing bucket", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
+			"apps/web/next-route-table.json":  `{"buildId":"BID","appName":"web"}`,
 			"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 		})
 		f := &fakeArtifactStore{exists: map[string]bool{}}
@@ -461,7 +465,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("uploads cache entries", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":      `{"buildId":"BID","appName":"web"}`,
+			"apps/web/next-route-table.json":      `{"buildId":"BID","appName":"web"}`,
 			"apps/web/cache/index.cache.json":     `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/cache/blog/post.cache.json": `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
 		})
@@ -493,7 +497,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		t.Parallel()
 		hash := "a1b2c3"
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":               `{"buildId":"WEB1"}`,
+			"apps/web/next-route-table.json":               `{"buildId":"WEB1"}`,
 			"apps/web/cache/index.cache.json":              `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})

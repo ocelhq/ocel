@@ -54,7 +54,7 @@ const originRecord: ReleaseRecord = {
   app: "api",
   framework: "node",
   buildId: "0123456789abcdef",
-  routingManifest: null,
+  routeTable: null,
   functionUrls: { api: FN_URL },
   assetPrefix: "",
   isrPrefix: "",

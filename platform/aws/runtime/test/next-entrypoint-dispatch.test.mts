@@ -45,8 +45,8 @@ const launcherModule = `module.exports = {
 
 const dispatchedPaths = ["/page", "/isr", "/static", "/blog/hello", "/__stale", "/__private"];
 
-const routingManifest = {
-  entry: ENTRY_BUNDLE,
+const routeTable = {
+  rootFunction: ENTRY_BUNDLE,
   buildId: "t",
   basePath: "",
   pathnames: dispatchedPaths,
@@ -133,15 +133,15 @@ beforeAll(async () => {
   const launcherPath = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcherPath, launcherModule);
 
-  const manifestPath = join(dir, "routing-manifest.json");
-  await writeFile(manifestPath, JSON.stringify(routingManifest));
+  const manifestPath = join(dir, "next-route-table.json");
+  await writeFile(manifestPath, JSON.stringify(routeTable));
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
   process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";
   process.env.OCEL_CACHE_TAG_PURGE = "1";
   process.env.OCEL_ORIGIN_SECRET = originSecret;
-  process.env.OCEL_ROUTING_MANIFEST = manifestPath;
+  process.env.OCEL_NEXT_ROUTE_TABLE = manifestPath;
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");
