@@ -10,7 +10,7 @@ import (
 )
 
 func (c *Client) projects(accessToken string) consolev1connect.ProjectServiceClient {
-	return consolev1connect.NewProjectServiceClient(c.http, c.baseURL+connectRoute, c.session(accessToken))
+	return consolev1connect.NewProjectServiceClient(c.http, c.baseURL+connectRoute, c.withSessionHeaders(accessToken))
 }
 
 func IsConflict(err error) bool {

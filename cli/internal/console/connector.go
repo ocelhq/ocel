@@ -36,22 +36,30 @@ type ConnectorAddress struct {
 	Compute   string
 }
 
-var computeKinds = map[string]consolev1.ComputeKind{
-	"serverless": consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS,
-	"container":  consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
+func ComputeNameOf(kind consolev1.ComputeKind) string {
+	switch kind {
+	case consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS:
+		return "serverless"
+	case consolev1.ComputeKind_COMPUTE_KIND_CONTAINER:
+		return "container"
+	default:
+		return ""
+	}
 }
 
-func ComputeNameOf(kind consolev1.ComputeKind) string {
-	for name, known := range computeKinds {
-		if known == kind {
-			return name
-		}
+func computeKindOf(name string) (consolev1.ComputeKind, bool) {
+	switch name {
+	case "serverless":
+		return consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS, true
+	case "container":
+		return consolev1.ComputeKind_COMPUTE_KIND_CONTAINER, true
+	default:
+		return consolev1.ComputeKind_COMPUTE_KIND_UNSPECIFIED, false
 	}
-	return ""
 }
 
 func (c *Client) connectors(accessToken string) consolev1connect.ConnectorServiceClient {
-	return consolev1connect.NewConnectorServiceClient(c.http, c.baseURL+connectRoute, c.session(accessToken))
+	return consolev1connect.NewConnectorServiceClient(c.http, c.baseURL+connectRoute, c.withSessionHeaders(accessToken))
 }
 
 func (c *Client) ListConnectors(ctx context.Context, accessToken string) ([]*consolev1.Connector, error) {
@@ -92,7 +100,7 @@ func (c *Client) SetConnectorAddress(ctx context.Context, accessToken, id string
 		request.PublicKey = proto.String(address.PublicKey)
 	}
 	if address.Compute != "" {
-		kind, known := computeKinds[address.Compute]
+		kind, known := computeKindOf(address.Compute)
 		if !known {
 			return nil, fmt.Errorf("the console has no compute kind %q", address.Compute)
 		}

@@ -192,10 +192,12 @@ func printConnector(out io.Writer, registered *consolev1.Connector, live console
 }
 
 func reachName(reach consolev1.ConnectorReach) string {
-	if reach == consolev1.ConnectorReach_CONNECTOR_REACH_DIAL {
+	switch reach {
+	case consolev1.ConnectorReach_CONNECTOR_REACH_DIAL:
 		return "dial"
+	default:
+		return "unknown"
 	}
-	return "unknown"
 }
 
 func timeOf(at *timestamppb.Timestamp) *time.Time {

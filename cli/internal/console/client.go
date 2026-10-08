@@ -33,7 +33,7 @@ func New(baseURL string) *Client {
 	}
 }
 
-func (c *Client) session(accessToken string) connect.ClientOption {
+func (c *Client) withSessionHeaders(accessToken string) connect.ClientOption {
 	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			req.Header().Set("Authorization", "Bearer "+accessToken)
