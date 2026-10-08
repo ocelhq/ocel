@@ -117,7 +117,7 @@ func TestReadTierParamsBatches(t *testing.T) {
 func TestReadTierParamsPreviewNames(t *testing.T) {
 	preview := cloudflareNames(environment.TierPreview)
 	ssmc := &fakeBatchSSM{params: map[string]string{
-		passphraseParam:            "pass-1",
+		defaultNamespace.PassphraseParamFor(environment.TierPreview): "pass-1",
 		preview.credentialsParam:   `{"accessKeyId":"AKIA-prev"}`,
 		preview.isrWriterSeedParam: "seed-prev",
 	}}

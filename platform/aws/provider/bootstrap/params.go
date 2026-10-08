@@ -32,8 +32,7 @@ const (
 	keyStale        = "the access key it records is older than 90 days and is rotated"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
 
-	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no bootstrap is left to need it"
-	passphraseShared   = "the %s bootstrap is still installed and its Pulumi state is encrypted under it"
+	passphraseStranded = "the only copy of the passphrase this tier's Pulumi stacks were encrypted under; no bootstrap of this tier is left to need it"
 )
 
 type ParamAPIs struct {
@@ -55,7 +54,7 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier envi
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	passphrase, err := paramPresence(ctx, apis.SSM, ns.PassphraseParamName())
+	passphrase, err := paramPresence(ctx, apis.SSM, ns.PassphraseParamFor(tier))
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -101,14 +100,14 @@ func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier envir
 	return changes, nil
 }
 
-func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, sharedPassphrase bool) (provider.ChangeGroup, error) {
+func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier) (provider.ChangeGroup, error) {
 	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: ParamGroupName}
 
 	names, err := TierParamNames(ns, tier)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	present, err := paramsPresent(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamName()))
+	present, err := paramsPresent(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamFor(tier)))
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -138,9 +137,13 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 		})
 	}
 
-	passphrase := plannedPassphraseRemoval(present[ns.PassphraseParamName()], ns, tier, sharedPassphrase)
-	if passphrase.Name != "" {
-		group.Changes = append(group.Changes, passphrase)
+	if present[ns.PassphraseParamFor(tier)] {
+		group.Changes = append(group.Changes, provider.Change{
+			Kind:   kindParameter,
+			Name:   ns.PassphraseParamFor(tier),
+			Action: provider.ActionDelete,
+			Reason: passphraseStranded,
+		})
 	}
 
 	group.Action = provider.ActionKeep
@@ -151,26 +154,6 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 		}
 	}
 	return group, nil
-}
-
-func plannedPassphraseRemoval(present bool, ns Namespace, tier environment.Tier, shared bool) provider.Change {
-	if !present {
-		return provider.Change{}
-	}
-	if !shared {
-		return provider.Change{
-			Kind:   kindParameter,
-			Name:   ns.PassphraseParamName(),
-			Action: provider.ActionDelete,
-			Reason: passphraseStranded,
-		}
-	}
-	return provider.Change{
-		Kind:   kindParameter,
-		Name:   ns.PassphraseParamName(),
-		Action: provider.ActionKeep,
-		Reason: fmt.Sprintf(passphraseShared, tier.Sibling()),
-	}
 }
 
 func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {

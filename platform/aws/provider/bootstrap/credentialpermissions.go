@@ -150,7 +150,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		scheduleGroup:     "arn:aws:scheduler:*:*:schedule-group/" + group,
 		schedule:          "arn:aws:scheduler:*:*:schedule/" + group + "/*",
 		edgeUser:          "arn:aws:iam::*:user/" + edgeUser,
-		passphraseParam:   parameterARNPrefix + n.PassphraseParamName(),
+		passphraseParam:   parameterARNPrefix + n.PassphraseParamFor(tier),
 		originParam:       parameterARNPrefix + origin,
 		kvToken:           parameterARNPrefix + n.KVTokenRoot() + "/*",
 		signingKey:        "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",

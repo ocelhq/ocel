@@ -47,7 +47,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		t.Fatalf("EdgeUserNameFor(%s): %v", tier, err)
 	}
 
-	stored := map[string]string{passphraseParam: "pp"}
+	stored := map[string]string{defaultNamespace.PassphraseParamFor(tier): "pp"}
 	for _, name := range params {
 		stored[name] = "{}"
 	}
@@ -415,17 +415,22 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	}
 }
 
-func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
+func TestRemoveOfOneTierTakesItsOwnPassphraseAndLeavesTheOtherTiers(t *testing.T) {
 	t.Parallel()
 
 	b := installedBootstrapper(t, environment.TierPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
+	stored := b.SSM.(*teardownSSM).params
+	stored[passphraseParam] = "pp-production"
 
 	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if _, kept := b.SSM.(*teardownSSM).params[passphraseParam]; !kept {
-		t.Error("the passphrase the production bootstrap still needs was deleted")
+	if _, kept := stored[passphraseParam]; !kept {
+		t.Error("removing the preview bootstrap deleted the passphrase the production bootstrap's state is encrypted under")
+	}
+	if _, kept := stored[defaultNamespace.PassphraseParamFor(environment.TierPreview)]; kept {
+		t.Error("the preview passphrase survived the preview bootstrap's removal")
 	}
 	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, environment.TierPreview, "/credentials")]; kept {
 		t.Error("the preview bootstrap's own parameters must go")
@@ -459,11 +464,13 @@ type teardownCFN struct {
 	resources map[string][]cfntypes.StackResourceSummary
 	deleted   []string
 	describes int
+	described []string
 }
 
 func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	c.describes++
 	name := aws.ToString(in.StackName)
+	c.described = append(c.described, name)
 	deployed, ok := c.present[name]
 	if !ok {
 		return nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id " + name + " does not exist"}

@@ -49,7 +49,7 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"preview core stack":    preview,
 		"feature stack":         n.FeatureStackName(FeatureImageOptimization, environment.TierProduction),
 		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, environment.TierPreview),
-		"passphrase param":      n.PassphraseParamName(),
+		"passphrase param":      n.PassphraseParamFor(environment.TierProduction),
 		"edge user":             edgeUser,
 		"preview edge user":     edgeUserPreview,
 		"app boundary":          n.AppBoundaryNameFor(environment.TierProduction),

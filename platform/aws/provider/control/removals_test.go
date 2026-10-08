@@ -149,7 +149,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	}
 	passphrase := changeNamed(params, passphraseParam)
 	if passphrase == nil || passphrase.Action != provider.ActionDelete || passphrase.Reason == "" {
-		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap shares it, with the reason the typed confirmation names", passphrase)
+		t.Errorf("the passphrase row = %+v, want it deleted with its tier, with the reason the typed confirmation names", passphrase)
 	}
 
 	front := groupNamed(plan, string(cloudflareKind)+"/edge")
@@ -167,26 +167,27 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	}
 }
 
-func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingShares(t *testing.T) {
+func TestPlanRemovalOfOneTierDeletesItsOwnPassphraseAndReadsNoStackOfTheOther(t *testing.T) {
 	t.Parallel()
 
 	b := removingBootstrapper(t, environment.TierPreview)
-	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
+	stacks := b.CFN.(*teardownCFN)
+	stacks.present[coreStackName] = bootstrap.Deployed{Present: true}
 
 	plan, err := b.PlanRemove(context.Background(), environment.TierPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
-	kept := changeNamed(params, passphraseParam)
-	if kept == nil || kept.Action != provider.ActionKeep {
-		t.Fatalf("the passphrase row = %+v, want it kept", kept)
+	own := changeNamed(params, defaultNamespace.PassphraseParamFor(environment.TierPreview))
+	if own == nil || own.Action != provider.ActionDelete {
+		t.Errorf("the preview passphrase row = %+v, want it deleted with the preview bootstrap", own)
 	}
-	if !strings.Contains(kept.Reason, string(environment.TierProduction)) {
-		t.Errorf("reason = %q, want it to name the bootstrap still sharing it", kept.Reason)
+	if other := changeNamed(params, passphraseParam); other != nil {
+		t.Errorf("the plan has %+v, a row for the production tier's passphrase", other)
 	}
-	if params.Action != provider.ActionDelete {
-		t.Errorf("the parameters group = %q, want it still a deletion: only the passphrase stays", params.Action)
+	if slices.Contains(stacks.described, coreStackName) {
+		t.Errorf("PlanRemove(preview) described %v, which includes %s: the preview bootstrap credential cannot describe the production tier's stacks", stacks.described, coreStackName)
 	}
 }
 

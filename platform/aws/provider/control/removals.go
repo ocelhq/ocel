@@ -21,12 +21,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, tier)
-	if err != nil {
-		return provider.Plan{}, err
-	}
-	params, err := bootstrap.PlanParameterRemoval(ctx,
-		b.paramAPIs(), b.Namespace, tier, shared)
+	params, err := bootstrap.PlanParameterRemoval(ctx, b.paramAPIs(), b.Namespace, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}

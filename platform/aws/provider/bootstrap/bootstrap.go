@@ -424,7 +424,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	}
 
 	progress.Say("Ensuring the Pulumi passphrase (SSM SecureString)")
-	created, err := ensurePassphrase(ctx, apis.SSM, target.ns)
+	created, err := ensurePassphrase(ctx, apis.SSM, target.ns, target.tier)
 	if err != nil {
 		return err
 	}
@@ -604,9 +604,9 @@ func absorbRefs(refs *stackRefs, out map[string]string) error {
 	return absorb(&ignored, refs, out)
 }
 
-func ensurePassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (created bool, err error) {
+func ensurePassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier) (created bool, err error) {
 	_, err = ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(ns.PassphraseParamName()),
+		Name:           aws.String(ns.PassphraseParamFor(tier)),
 		WithDecryption: aws.Bool(true),
 	})
 	if err == nil {
@@ -622,8 +622,8 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (crea
 		return false, err
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(ns.PassphraseParamName()),
-		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. This is the only copy - delete it and that state can never be decrypted again."),
+		Name:        aws.String(ns.PassphraseParamFor(tier)),
+		Description: aws.String("Ocel: the passphrase every " + string(tier) + " Pulumi stack in this account is encrypted under. This is the only copy - delete it and that state can never be decrypted again."),
 		Value:       aws.String(passphrase),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(false),
@@ -633,9 +633,9 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (crea
 	return true, nil
 }
 
-func ReadPassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (string, error) {
+func ReadPassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier) (string, error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(ns.PassphraseParamName()),
+		Name:           aws.String(ns.PassphraseParamFor(tier)),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {

@@ -159,7 +159,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 		}
 	}
 	if !run.account.paramExists(t, passphraseParam) {
-		t.Errorf("%s is missing after the CLI bootstrapped, and every Pulumi stack this account deploys is encrypted under it", passphraseParam)
+		t.Errorf("%s is missing after the CLI bootstrapped, and every production Pulumi stack this account deploys is encrypted under it", passphraseParam)
 	}
 
 	diagnosis := run.must(t, "doctor")

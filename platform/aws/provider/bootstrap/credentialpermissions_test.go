@@ -757,6 +757,24 @@ func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPa
 	}
 }
 
+func TestABootstrapCredentialWritesAndDeletesThePassphraseOfOnlyItsOwnTier(t *testing.T) {
+	const account = "arn:aws:ssm:us-east-1:111122223333:parameter"
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		own := account + defaultNamespace.PassphraseParamFor(tier)
+		other := account + defaultNamespace.PassphraseParamFor(sibling)
+		for _, action := range []string{"ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"} {
+			if !allows(t, bootstrapDoc, action, own, nil) {
+				t.Errorf("the %s bootstrap credential cannot %s on %s, its own tier's passphrase", tier, action, own)
+			}
+			if allows(t, bootstrapDoc, action, other, nil) {
+				t.Errorf("the %s bootstrap credential can %s on %s, the passphrase the %s tier's Pulumi state is encrypted under", tier, action, other, sibling)
+			}
+		}
+	}
+}
+
 func TestEveryCredentialMayGrantLambdaTheVariablesKeyOfItsTierAndNoOther(t *testing.T) {
 	for _, tier := range bothTiers {
 		want := conditionJSON(t, mergeConditions(defaultNamespace.ScopedARNs(tier).variablesKey(), map[string]any{

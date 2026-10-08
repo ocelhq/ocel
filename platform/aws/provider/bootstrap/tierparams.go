@@ -44,7 +44,7 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 	if err != nil {
 		return TierParams{}, err
 	}
-	passphraseParam := ns.PassphraseParamName()
+	passphraseParam := ns.PassphraseParamFor(tier)
 	found, err := getParameters(ctx, api, []string{passphraseParam, origin})
 	if err != nil {
 		return TierParams{}, err
@@ -83,7 +83,7 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 	if err != nil {
 		return TierParams{}, err
 	}
-	passphraseParam := ns.PassphraseParamName()
+	passphraseParam := ns.PassphraseParamFor(tier)
 	wanted := []string{
 		passphraseParam,
 		names.credentialsParam,
