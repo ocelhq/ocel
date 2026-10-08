@@ -101,7 +101,14 @@ func (s *Service) readSession(ctx context.Context, sessions scope, id string) (s
 }
 
 func (s *Service) anySession(ctx context.Context, id string) (session, error) {
-	return s.readSession(ctx, s.sessions, id)
+	sess, err := s.readSession(ctx, s.sessions, id)
+	if err != nil {
+		return session{}, err
+	}
+	if !s.hasBucket(sess.Bucket) {
+		return session{}, errSessionNotFound
+	}
+	return sess, nil
 }
 
 func (s *Service) writeSession(ctx context.Context, sess *session) error {

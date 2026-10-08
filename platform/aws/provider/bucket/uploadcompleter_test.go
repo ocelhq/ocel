@@ -125,7 +125,7 @@ func TestUploadCompleter(t *testing.T) {
 			t.Fatalf("callback url op = %q, want callback (url %q)", got, post.url)
 		}
 
-		svc := &Service{store: &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}}
+		svc := New(Config{DDB: ddb, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix, Granted: func() []string { return []string{testBucket} }})
 		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, post.body))
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)
@@ -154,7 +154,7 @@ func TestUploadCompleter(t *testing.T) {
 		forged := doer.posts[0].body
 		forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0"
 
-		svc := &Service{store: &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}}
+		svc := New(Config{DDB: ddb, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix, Granted: func() []string { return []string{testBucket} }})
 		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, forged))
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)
