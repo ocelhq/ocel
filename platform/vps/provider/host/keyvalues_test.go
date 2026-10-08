@@ -108,6 +108,29 @@ func TestTheKeyValueHelperListsEverythingUnderAPrefixAndNothingBeside(t *testing
 	}
 }
 
+func TestRemovingThePartitionsLastEntryReclaimsWhatAKilledWriteStaged(t *testing.T) {
+	t.Parallel()
+
+	dir := helperDir(t)
+	name := "values+shop/cells/a"
+	revision := helperWrite(t, dir, name, "", "one")
+	cells := filepath.Join(keyValuesDir(t, dir), "values+shop", "cells")
+	for _, killed := range []string{"a.json.staged", "b.json.staged"} {
+		if err := os.WriteFile(filepath.Join(cells, killed), []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, code := helper(t, dir, "", "remove", name, revision); code != 0 {
+		t.Fatalf("a removal at the current revision exited %d", code)
+	}
+
+	partition := filepath.Join(keyValuesDir(t, dir), "values+shop")
+	if _, err := os.Stat(partition); !os.IsNotExist(err) {
+		t.Errorf("%s remains after its last entry was removed (%v): a write killed between staging and its rename left a file no listing names, so no teardown ever removes it", partition, err)
+	}
+}
+
 const helperTier = "production"
 
 func helperDir(t *testing.T) string {
