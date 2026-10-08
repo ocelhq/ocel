@@ -182,7 +182,7 @@ func pushedToDaemon(t *testing.T, repository string, image v1.Image) string {
 	if err := images.DaemonStore().Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("write %s into the docker daemon the emulator runs out of: %v", target, err)
 	}
-	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
+	return target
 }
 
 func functionImage(t *testing.T, p *gcp.Provider, repository string, framework buildoutput.Framework, dir string) string {
