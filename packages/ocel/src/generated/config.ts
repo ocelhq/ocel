@@ -348,6 +348,7 @@ export interface LifecycleConfig {
   preBuild?: string | LifecycleCommand;
 }
 
+/** A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs. */
 export interface LifecycleCommand {
   /** The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory. */
   app?: string;
