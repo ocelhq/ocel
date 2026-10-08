@@ -36,7 +36,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	opened, err := p.newBastion(c).forwardPorts(ctx, req.Tier, targets, progress)
+	opened, err := p.newBastion(c).forwardPorts(ctx, req.Tier, targets, progress, req.ReportFailure)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (p *Provider) newBastion(c *clients) bastion {
 	}
 }
 
-func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) ([]*relay.Forward, error) {
+func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log, reportFailure func(error)) ([]*relay.Forward, error) {
 	tokens := &identityTokens{prove: b.prove, audience: b.audience(tier), now: time.Now}
 	if _, err := tokens.mintOrReuse(ctx); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, target
 	}
 	forwards := make([]*relay.Forward, 0, len(targets))
 	for _, target := range targets {
-		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mintOrReuse, Warn: ensureProgress(progress).Warn})
+		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mintOrReuse, Warn: ensureProgress(progress).Warn, ReportFailure: reportFailure})
 		if err != nil {
 			for _, opened := range forwards {
 				opened.Close()

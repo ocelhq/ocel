@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,10 +18,11 @@ import (
 const handshakeTimeout = 30 * time.Second
 
 type Link struct {
-	URL    string
-	Target string
-	Token  func(ctx context.Context) (string, error)
-	Warn   func(message string)
+	URL           string
+	Target        string
+	Token         func(ctx context.Context) (string, error)
+	Warn          func(message string)
+	ReportFailure func(error)
 }
 
 type Forward struct {
@@ -31,7 +33,12 @@ type Forward struct {
 	connections sync.WaitGroup
 	once        sync.Once
 	warned      sync.Once
+	failed      sync.Once
 }
+
+type goneBastion struct{ refusal.Refusal }
+
+func (g goneBastion) Unwrap() error { return g.Refusal }
 
 func OpenForward(ctx context.Context, link Link) (*Forward, error) {
 	probe, err := link.connect(ctx)
@@ -77,11 +84,7 @@ func (f *Forward) carry(ctx context.Context, link Link, local net.Conn) {
 	defer local.Close()
 	remote, err := link.connect(ctx)
 	if err != nil {
-		if ctx.Err() == nil && link.Warn != nil {
-			f.warned.Do(func() {
-				link.Warn(fmt.Sprintf("A connection through the forward to %s failed, and the build saw it closed: %s", link.Target, err))
-			})
-		}
+		f.sayFailed(ctx, link, err)
 		return
 	}
 	defer remote.Close()
@@ -91,6 +94,21 @@ func (f *Forward) carry(ctx context.Context, link Link, local net.Conn) {
 	})
 	defer stop()
 	pipe(local, remote)
+}
+
+func (f *Forward) sayFailed(ctx context.Context, link Link, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	if gone := (goneBastion{}); errors.As(err, &gone) && link.ReportFailure != nil {
+		f.failed.Do(func() { link.ReportFailure(err) })
+		return
+	}
+	if link.Warn != nil {
+		f.warned.Do(func() {
+			link.Warn(fmt.Sprintf("A connection through the forward to %s failed, and the build saw it closed: %s", link.Target, err))
+		})
+	}
 }
 
 func (l Link) connect(ctx context.Context) (net.Conn, error) {
@@ -116,6 +134,9 @@ func (l Link) refused(resp *http.Response, dialed error) error {
 		return refusal.Refuse(refusal.CodeNotReady, "the bastion at %s could not be reached to forward to %s: %s", l.URL, l.Target, dialed)
 	}
 	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return goneBastion{refusal.Refusal{Code: refusal.CodeNotReady,
+			Message: fmt.Sprintf("the bastion at %s no longer exists (HTTP 404), so nothing forwards to %s", l.URL, l.Target)}}
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the bastion at %s refused the connection to %s (HTTP %d): it admits only an identity holding roles/run.invoker on it, and forwards to the tier's databases and caches alone",

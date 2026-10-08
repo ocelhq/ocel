@@ -5,11 +5,13 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,6 +122,7 @@ type bastionHarness struct {
 	b       bastion
 	relay   *httptest.Server
 	allowed []string
+	gone    atomic.Bool
 
 	mu       sync.Mutex
 	pushed   []string
@@ -133,7 +136,14 @@ func newBastionHarness(t *testing.T, relayAllows ...string) *bastionHarness {
 	h.run.identities().accounts = map[string]bool{}
 	h.run.identities().accountPolicies = map[string]*iam.Policy{}
 	p := h.run.open(t)
-	h.relay = httptest.NewServer(relay.NewHandler(destinationsOf(t, relayAllows...)))
+	relaying := relay.NewHandler(destinationsOf(t, relayAllows...))
+	h.relay = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.gone.Load() {
+			http.NotFound(w, r)
+			return
+		}
+		relaying.ServeHTTP(w, r)
+	}))
 	t.Cleanup(h.relay.Close)
 	h.b = p.newBastion(p.resolved)
 	h.b.pushBinary = func(_ context.Context, _ environment.Tier, _, ref string, binary []byte, _ string) error {
@@ -164,7 +174,7 @@ func newBastionHarness(t *testing.T, relayAllows ...string) *bastionHarness {
 
 func (h *bastionHarness) forward(t *testing.T, targets ...string) []*relay.Forward {
 	t.Helper()
-	forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, targets, nil)
+	forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, targets, nil, nil)
 	if err != nil {
 		t.Fatalf("forwardPorts(%v) = %v", targets, err)
 	}
@@ -225,7 +235,7 @@ func TestTheFirstForwardSaysItMakesTheBastionAndLaterOnesSayNothing(t *testing.T
 	first, later := &fake.Log{}, &fake.Log{}
 
 	for _, said := range []*fake.Log{first, later} {
-		forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, said)
+		forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, said, nil)
 		if err != nil {
 			t.Fatalf("forwardPorts() = %v", err)
 		}
@@ -346,13 +356,43 @@ func TestForwardsAreOpenedOnLoopbackAndCarryBytesToTheirTargetsThroughTheBastion
 	}
 }
 
+func TestAForwardWhoseBastionIsGoneReportsThatItFailedAndWhy(t *testing.T) {
+	t.Parallel()
+	target := echoTarget(t)
+	h := newBastionHarness(t, target)
+	failed := make(chan error, 1)
+	forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, nil, func(err error) { failed <- err })
+	if err != nil {
+		t.Fatalf("forwardPorts() = %v", err)
+	}
+	defer forwards[0].Close()
+	h.gone.Store(true)
+
+	conn, err := net.Dial("tcp", forwards[0].Address())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	_, _ = conn.Read(make([]byte, 1))
+
+	select {
+	case err := <-failed:
+		if !strings.Contains(err.Error(), target) || !strings.Contains(err.Error(), "404") {
+			t.Errorf("the forward reported %v, want it to name %s and that the bastion is gone", err, target)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a forward whose bastion is gone reported no failure, so the build runs on without its database")
+	}
+}
+
 func TestAUsersOwnLoginIsRefusedBeforeAnythingIsCreated(t *testing.T) {
 	t.Parallel()
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	h.proveErr = errTestUserLogin
 
-	_, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, nil)
+	_, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, nil, nil)
 
 	if err == nil || !strings.Contains(err.Error(), errTestUserLogin.Error()) {
 		t.Fatalf("forwardPorts() = %v, want the message the identity proof gave", err)
@@ -367,7 +407,7 @@ func TestAForwardTheBastionCannotOpenStopsTheOnesAlreadyOpenedAndLeavesTheBuildW
 	reachable, unreachable := echoTarget(t), echoTarget(t)
 	h := newBastionHarness(t, reachable)
 
-	forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{reachable, unreachable}, nil)
+	forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{reachable, unreachable}, nil, nil)
 
 	if err == nil || len(forwards) != 0 {
 		t.Fatalf("forwardPorts() = %v, %v, want a refusal and no forward", forwards, err)
