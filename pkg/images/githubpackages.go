@@ -45,16 +45,16 @@ type gitHubAnswer struct {
 }
 
 func (r registryStore) removePackageVersion(ctx context.Context, tag name.Tag) error {
-	owner, pkg, nested := strings.Cut(tag.RepositoryStr(), "/")
+	owner, packageName, nested := strings.Cut(tag.RepositoryStr(), "/")
 	if !nested {
 		return fmt.Errorf("%s names no package under a GitHub owner", tag)
 	}
 	api := gitHubPackages{client: &http.Client{Timeout: registryTimeout}, token: r.target.Password}
 	for _, scope := range []string{"orgs/", "users/"} {
-		packagePath := strings.TrimSuffix(r.packagesAPI, "/") + "/" + scope + url.PathEscape(owner) + "/packages/container/" + url.PathEscape(pkg)
+		packagePath := strings.TrimSuffix(r.packagesAPI, "/") + "/" + scope + url.PathEscape(owner) + "/packages/container/" + url.PathEscape(packageName)
 		version, listed, err := api.findVersion(ctx, packagePath, tag.TagStr())
 		if err != nil {
-			return fmt.Errorf("look for %s among the versions of GitHub package %s: %w", tag, pkg, err)
+			return fmt.Errorf("look for %s among the versions of GitHub package %s: %w", tag, packageName, err)
 		}
 		if !listed {
 			continue
