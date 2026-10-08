@@ -390,6 +390,24 @@ func TestASignatureTheAppGaveNoLifetimeExpiresInAnHour(t *testing.T) {
 	}
 }
 
+func TestASignatureAskedForOffGoogleCloudSaysOnlyTheDeployedAppCanSign(t *testing.T) {
+	metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "no such host", http.StatusNotFound)
+	}))
+	t.Cleanup(metadataServer.Close)
+	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadataServer.URL, "http://"))
+
+	store, err := Open(context.Background(), "http://storage.invalid")
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+	_, err = store.Account(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "a build cannot sign a bucket URL") {
+		t.Errorf("Account() off Google Cloud = %v, want it to say a build cannot sign a bucket URL", err)
+	}
+}
+
 func TestTheAccountAnAppSignsAsIsAskedAgainAfterTheMetadataServerFailedAndKeptOnceKnown(t *testing.T) {
 	var asked atomic.Int32
 	metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

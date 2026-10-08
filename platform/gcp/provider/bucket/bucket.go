@@ -41,7 +41,7 @@ func Open(ctx context.Context, endpoint string) (Store, error) {
 	if endpoint == "" {
 		client, err := google.DefaultClient(ctx, platformScope)
 		if err != nil {
-			return Store{}, fmt.Errorf("find the identity this app runs as: %w", err)
+			return Store{}, fmt.Errorf("find the Google credentials Cloud Storage is reached with: %w", err)
 		}
 		store.Client = client
 	}
@@ -61,7 +61,7 @@ func Open(ctx context.Context, endpoint string) (Store, error) {
 		}
 		account, err := metadata.EmailWithContext(ctx, "default")
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("read the service account a bucket URL is signed as from the metadata server, which only an app Google Cloud runs can reach, so a build cannot sign a bucket URL: %w", err)
 		}
 		email.account = account
 		return account, nil

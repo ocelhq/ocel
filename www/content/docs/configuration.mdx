@@ -582,7 +582,9 @@ The command reads your resources the way your code does. Every binding of the pr
 forwards no port runs the command without bindings and the deploy says so, as it does for a
 resource neither a port nor the provider's proxy reaches, such as a topic. A bucket the provider owns is
 reached through that proxy, which the command finds at `OCEL_RUNTIME_ADDRESS` as your code does when
-deployed, and a page that reads a bucket while it builds is built the same way. When the provider refuses a forward, because the
+deployed, and a page that reads a bucket while it builds is built the same way. On GCP a signed
+URL is signed as the service account the deployed app runs as, so neither the command nor a
+build can make one; they can read, write and list objects. When the provider refuses a forward, because the
 database is not running or nothing is deployed yet, the deploy stops before the command runs and
 says why. Its output streams into the deploy.
 
