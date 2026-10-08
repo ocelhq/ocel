@@ -5,9 +5,9 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   type DispatchHost,
   dispatchRequest,
+  parseStaticRules,
   readDispatchHost,
   siblingFunctionUrls,
-  staticRules,
   withoutClientControl,
 } from "../src/dispatch-host.mjs";
 
@@ -318,5 +318,5 @@ test("a dispatch host serves by the static rules its host states", async () => {
 });
 
 test("a dispatch host refuses static rules that state no immutable prefixes", async () => {
-  expect(() => staticRules(`{"mustRevalidatePrefixes":[]}`)).toThrow(/OCEL_STATIC_RULES/);
+  expect(() => parseStaticRules(`{"mustRevalidatePrefixes":[]}`)).toThrow(/OCEL_STATIC_RULES/);
 });

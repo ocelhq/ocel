@@ -2,7 +2,13 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Adapter, Builder } from "@sveltejs/kit";
-import { FRAMEWORK, hosting, ROOT_FUNCTION, served, staticRules } from "./output.js";
+import {
+  describeHosting,
+  describeStaticRules,
+  FRAMEWORK,
+  ROOT_FUNCTION,
+  tableServedFiles,
+} from "./output.js";
 import { bundleFunction } from "./trace.js";
 
 /** How the adapter writes the build. */
@@ -31,7 +37,7 @@ type AnyBuilder = Omit<Builder, "generateServerInstance" | "config"> & {
   writeServer: (dest: string) => string[];
 };
 
-function kitConfig(builder: AnyBuilder): KitConfig {
+function readKitConfig(builder: AnyBuilder): KitConfig {
   const config = builder.config as unknown as Partial<KitConfig> & { kit: KitConfig };
   return config.paths ? (config as KitConfig) : config.kit;
 }
@@ -72,7 +78,7 @@ export default function ocel(options: Options = {}): Adapter {
     async adapt(kitBuilder) {
       const builder = kitBuilder as AnyBuilder;
       const out = resolve(process.env[OUTPUT_DIR_ENV] || options.out || "build");
-      const kit = kitConfig(builder);
+      const kit = readKitConfig(builder);
       const base = kit.paths.base;
       const appPath = builder.getAppPath();
       const tmp = builder.getBuildDirectory("ocel");
@@ -92,7 +98,7 @@ export default function ocel(options: Options = {}): Adapter {
       const entry = `${tmp}/entry.js`;
       builder.copy(`${files}/entry.js`, entry);
       writeServer(builder, tmp);
-      const table = served({
+      const table = tableServedFiles({
         root: staticDir,
         base,
         appPath,
@@ -130,7 +136,7 @@ export default function ocel(options: Options = {}): Adapter {
       });
       writeFileSync(
         join(out, "hosting.json"),
-        JSON.stringify(hosting(kit.version.name, staticRules(appPath))),
+        JSON.stringify(describeHosting(kit.version.name, describeStaticRules(appPath))),
       );
     },
   };

@@ -42,7 +42,7 @@ export async function bundleFunction(
   }
 
   const files = [...traced.fileList].map((file) => join(base, file));
-  const ancestor = commonAncestor(files);
+  const ancestor = findCommonAncestor(files);
   const links: { source: string; real: string }[] = [];
   for (const source of files) {
     const real = realpathSync(source);
@@ -61,13 +61,13 @@ export async function bundleFunction(
     const rel = relative(ancestor, source);
     if (linked.some((dir) => rel.startsWith(`${dir}${sep}`))) continue;
     const directory = statSync(source).isDirectory();
-    linkWithin(real, join(functionDir, rel), ancestor, functionDir, directory);
+    linkInsideFunction(real, join(functionDir, rel), ancestor, functionDir, directory);
     if (directory) linked.push(rel);
   }
   return { entryFile: relative(ancestor, resolve(entry)).split(sep).join("/"), ancestor };
 }
 
-function linkWithin(
+function linkInsideFunction(
   real: string,
   dest: string,
   ancestor: string,
@@ -92,7 +92,7 @@ function linkWithin(
   }
 }
 
-function commonAncestor(files: string[]): string {
+function findCommonAncestor(files: string[]): string {
   const [first, ...rest] = files.map((file) => dirname(file).split(sep));
   let common = first ?? [];
   for (const parts of rest) {

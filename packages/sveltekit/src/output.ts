@@ -41,11 +41,11 @@ export interface Served {
   redirects: Record<string, Redirect>;
 }
 
-export function staticRules(appPath: string): StaticRules {
+export function describeStaticRules(appPath: string): StaticRules {
   return { immutablePrefixes: [`/${appPath}/immutable/`] };
 }
 
-export function hosting(buildId: string, rules: StaticRules): Hosting {
+export function describeHosting(buildId: string, rules: StaticRules): Hosting {
   return {
     version: HOSTING_VERSION,
     framework: FRAMEWORK,
@@ -79,7 +79,7 @@ const FALLBACK_TYPES: Record<string, string> = {
   ".wasm": "application/wasm",
 };
 
-export function typeOf(file: string, mimeTypes: Record<string, string> = {}): string {
+export function findContentType(file: string, mimeTypes: Record<string, string> = {}): string {
   const extension = extname(file).toLowerCase();
   const type = mimeTypes[extension] ?? FALLBACK_TYPES[extension] ?? "application/octet-stream";
   return type.startsWith("text/") || type === "application/json" || type.endsWith("+json")
@@ -97,7 +97,7 @@ function measure(root: string, file: string, mimeTypes: Record<string, string>):
   const body = readFileSync(join(root, file));
   return {
     file,
-    type: typeOf(file, mimeTypes),
+    type: findContentType(file, mimeTypes),
     size: body.byteLength,
     etag: `"${createHash("sha256").update(body).digest("base64url")}"`,
   };
@@ -114,7 +114,7 @@ export interface ServedInput {
   mimeTypes?: Record<string, string>;
 }
 
-export function served(input: ServedInput): Served {
+export function tableServedFiles(input: ServedInput): Served {
   const mimeTypes = input.mimeTypes ?? {};
   const assets: Record<string, Asset> = {};
   const claim = (pathname: string, asset: Asset) => {
@@ -151,7 +151,7 @@ export function served(input: ServedInput): Served {
 
   return {
     base: input.base,
-    immutable: staticRules(input.appPath).immutablePrefixes,
+    immutable: describeStaticRules(input.appPath).immutablePrefixes,
     assets,
     redirects: Object.fromEntries(input.redirects),
   };
