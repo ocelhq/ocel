@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
-import { dirname, join, parse, relative, resolve, sep } from "node:path";
+import { readlink } from "node:fs/promises";
+import { basename, dirname, join, parse, relative, resolve, sep } from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 
 export interface Bundled {
@@ -22,6 +23,7 @@ export async function bundleFunction(
     base,
     processCwd: process.cwd(),
     ignore: (file) => file.startsWith("**"),
+    readlink: readlinkFromRealParent,
   });
 
   const unresolved: string[] = [];
@@ -65,6 +67,20 @@ export async function bundleFunction(
     if (directory) linked.push(rel);
   }
   return { entryFile: relative(ancestor, resolve(entry)).split(sep).join("/"), ancestor };
+}
+
+async function readlinkFromRealParent(path: string): Promise<string | null> {
+  let target: string;
+  try {
+    target = await readlink(path);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EINVAL" || code === "ENOENT" || code === "UNKNOWN") return null;
+    throw error;
+  }
+  const parent = dirname(path);
+  const realParent = realpathSync(parent);
+  return realParent === parent ? target : join(realParent, basename(path));
 }
 
 function linkInsideFunction(
