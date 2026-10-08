@@ -48,6 +48,9 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - name: Setup Go
+        uses: ./.github/actions/go
+
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
@@ -95,6 +98,16 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: node scripts/release/version.mjs "$VERSION"
+
+      - name: Everything the modules embed
+        run: |
+          set -euo pipefail
+          for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/provider/transform; do
+            go generate -C "$dir" ./...
+          done
+
+      - name: Name the third-party code the binaries are built from
+        run: node scripts/release/notices.mjs THIRD_PARTY_NOTICES
 
       - name: Open the release pull request
         env:

@@ -119,7 +119,7 @@ archives:
   - id: cli
     ids: [ocel]
     name_template: "ocel_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -127,7 +127,7 @@ archives:
   - id: provider-aws
     ids: [provider-aws]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -135,7 +135,7 @@ archives:
   - id: provider-gcp
     ids: [provider-gcp]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -143,7 +143,7 @@ archives:
   - id: provider-vps
     ids: [provider-vps]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -151,17 +151,17 @@ archives:
   - id: connector-aws
     ids: [connector-aws]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
 
   - id: connector-gcp
     ids: [connector-gcp]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
 
   - id: connector-vps
     ids: [connector-vps]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files: [LICENSE, NOTICE, THIRD_PARTY_NOTICES]
 
 checksum:
   name_template: checksums.txt

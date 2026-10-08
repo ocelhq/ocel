@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { distTag, LICENSING, ORDER, pack, published } from "./npm.mjs";
+import { distTag, licensing, ORDER, pack, published } from "./npm.mjs";
 
 const packages = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages");
 
@@ -71,10 +71,16 @@ describe("ORDER", () => {
     }
   });
 
+  it("ships the third-party notices with every platform binary, and only there", () => {
+    for (const dir of ORDER) {
+      assert.equal(licensing(dir).includes("THIRD_PARTY_NOTICES"), dir.startsWith("cli-"), dir);
+    }
+  });
+
   it("packs the licensing files the publish copies in from the root", () => {
     for (const dir of ORDER) {
       const manifest = JSON.parse(readFileSync(join(packages, dir, "package.json"), "utf8"));
-      for (const file of LICENSING)
+      for (const file of licensing(dir))
         assert.ok(manifest.files.includes(file), `${dir} lacks ${file}`);
       assert.equal(manifest.license, "Apache-2.0", dir);
     }
@@ -130,7 +136,7 @@ describe("pack", () => {
         const cwd = join(root, dir);
         mkdirSync(join(cwd, "bin"), { recursive: true });
         copyFileSync(join(packages, dir, "package.json"), join(cwd, "package.json"));
-        for (const file of LICENSING) writeFileSync(join(cwd, file), "");
+        for (const file of licensing(dir)) writeFileSync(join(cwd, file), "");
         writeFileSync(join(cwd, "bin", binary), "#!/bin/sh\n");
         chmodSync(join(cwd, "bin", binary), 0o755);
         const destination = mkdtempSync(join(root, "pack-"));

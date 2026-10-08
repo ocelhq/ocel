@@ -23,7 +23,10 @@ export const ORDER = [
   "sveltekit",
 ];
 
-export const LICENSING = ["LICENSE", "NOTICE"];
+export function licensing(dir) {
+  const files = ["LICENSE", "NOTICE"];
+  return dir.startsWith("cli-") ? [...files, "THIRD_PARTY_NOTICES"] : files;
+}
 
 const DIST_TAGS = { stable: "latest", rc: "next", nightly: "nightly" };
 
@@ -81,7 +84,7 @@ function main() {
         console.error(`${name}@${version} is already on npm`);
         continue;
       }
-      for (const file of LICENSING) copyFileSync(join(REPO_ROOT, file), join(cwd, file));
+      for (const file of licensing(dir)) copyFileSync(join(REPO_ROOT, file), join(cwd, file));
       const destination = mkdtempSync(join(packed, "pack-"));
       const tarball = pack(cwd, destination);
       const publish = ["publish", tarball, "--access", "public", "--tag", tag];
