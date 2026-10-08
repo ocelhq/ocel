@@ -29,6 +29,7 @@ type cloudSQLServer struct {
 	listed     []string
 	writes     []string
 	addressed  bool
+	primary    string
 	refusedSet int
 }
 
@@ -75,6 +76,9 @@ func (s *cloudSQLServer) serve(w http.ResponseWriter, r *http.Request) {
 			for _, auto := range stored.Settings.IpConfiguration.PscConfig.PscAutoConnections {
 				auto.IpAddress = databaseAddress
 			}
+		}
+		if s.primary != "" {
+			stored.IpAddresses = []*sqladmin.IpMapping{{Type: "PRIMARY", IpAddress: s.primary}}
 		}
 		s.instances[created.Name] = &stored
 		s.operation(w)
