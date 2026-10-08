@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -20,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -70,7 +72,15 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		return err
 	}
 
-	return invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
+	if !opts.dry {
+		if err := deployreport.Clear(cfg.Dir); err != nil {
+			return err
+		}
+	}
+
+	var attempt *deployreport.Attempt
+	var report *consolev1.Deployment
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
 		Require: readiness.Features,
@@ -105,6 +115,9 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return nil
 		}
 
+		begun := p.BeginAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), productionEnvironment(), "")
+		attempt = &begun
+
 		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
 		rolled, err := promote(ctx, promoting, provider, cfg, target)
 		for _, warning := range rolled.GetWarnings() {
@@ -115,6 +128,9 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return err
 		}
 		promoted := rolled.GetPromoted()
+		if report, err = reportRolledBack(*attempt, promoted); err != nil {
+			return err
+		}
 		tagSuffix := ""
 		if target.GetTag() != "" {
 			tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
@@ -127,6 +143,8 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, promoted.GetPromotionId(), noteSuffix))
 		return nil
 	})
+	fileReport(ctx, invocation, attempt, report, err, stderr)
+	return err
 }
 
 func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Provider, cfg *project.Project, target *contractv1.Promotion) (*contractv1.RollbackResponse, error) {
