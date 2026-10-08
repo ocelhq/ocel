@@ -1001,22 +1001,35 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 	if isEphemeralPreview(r.spec) {
 		return nil
 	}
-	resources, err := manifestResources(r.manifest)
+	declaredResources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
 	}
+	undeclaredNames := map[string]bool{}
 	for _, held := range undeclared {
-		resource, err := manifestResource(held)
+		undeclaredNames[resourceName(held)] = true
+	}
+	var held []*contractv1.ManifestResource
+	var resources []provider.Resource
+	for i, resource := range r.manifest.GetResources() {
+		if !undeclaredNames[resourceName(resource)] {
+			held = append(held, resource)
+			resources = append(resources, declaredResources[i])
+		}
+	}
+	for _, message := range undeclared {
+		resource, err := manifestResource(message)
 		if err != nil {
 			return err
 		}
+		held = append(held, message)
 		resources = append(resources, resource)
 	}
 	declared, err := encodeResources(r.manifest.GetResources())
 	if err != nil {
 		return err
 	}
-	holds, err := encodeResources(append(slices.Clone(r.manifest.GetResources()), undeclared...))
+	holds, err := encodeResources(held)
 	if err != nil {
 		return err
 	}
