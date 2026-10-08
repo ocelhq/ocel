@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 
@@ -20,8 +21,13 @@ type fakeECR struct {
 	token    string
 	endpoint string
 
-	tagged    map[string][]string
-	deleteErr error
+	tagged      map[string][]string
+	pushedAt    map[string]time.Time
+	pageSize    int
+	deleteErr   error
+	describeErr error
+	deleteCalls int
+	described   int
 }
 
 func (f *fakeECR) CreateRepository(_ context.Context, in *ecr.CreateRepositoryInput, _ ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error) {

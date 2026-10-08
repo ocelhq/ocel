@@ -816,6 +816,23 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	}
 }
 
+func TestEveryCredentialReclaimsImagesOnlyInTheReposOcelMade(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		grants := grantsOf(t, document)
+		for _, action := range []string{"ecr:BatchDeleteImage", "ecr:DescribeImages"} {
+			want := grant{action: action, resource: appRepositoryARN, condition: conditionJSON(t, inCallerAccount())}
+			if !grants[want] {
+				t.Errorf("the %s credential does not grant %s on %s: a destroy and a reconcile delete the images a deploy pushed there", purpose, action, appRepositoryARN)
+			}
+		}
+		for g := range grants {
+			if g.action == "ecr:BatchDeleteImage" && g.resource != appRepositoryARN {
+				t.Errorf("the %s credential grants ecr:BatchDeleteImage on %s, beyond the repositories under the ocel namespace", purpose, g.resource)
+			}
+		}
+	}
+}
+
 func conditionAdmits(operator, pattern, value string) bool {
 	switch operator {
 	case "StringEquals":
