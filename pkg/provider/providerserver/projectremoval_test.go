@@ -234,6 +234,49 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 }
 
+func TestRemoveProjectLeavesNothingInTheProjectsValuesOrReferencesPartitions(t *testing.T) {
+	client, vendor := deployedProject(t)
+	ctx := context.Background()
+
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	shop := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	region := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: "REGION"}}
+	if _, err := store.Set(ctx, shop, region, "eu", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, variablestore.Scope{Project: "blog", Tier: environment.TierProduction}, region,
+		variablestore.Target{Project: "shop", Cell: region.Cell}); err != nil {
+		t.Fatal(err)
+	}
+	partitions := map[string]keyvalue.Partition{
+		"values":     variablestore.ValuesPartition(shop),
+		"references": variablestore.ReferencesPartition(shop),
+	}
+	for what, partition := range partitions {
+		if kept, err := vendor.KeyValues().List(ctx, partition); err != nil || len(kept) == 0 {
+			t.Fatalf("the project's %s partition holds %d entries (%v) before the removal, and a removal that purges none proves nothing", what, len(kept), err)
+		}
+	}
+
+	stream, err := client.RemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	for what, partition := range partitions {
+		kept, err := vendor.KeyValues().List(ctx, partition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(kept) != 0 {
+			t.Errorf("the project's %s partition keeps %d entries after the removal, want none: a destroyed project leaves no bytes behind", what, len(kept))
+		}
+	}
+}
+
 func TestRemoveProjectRetiresTheISRPrefixOfEveryReleaseBeforeSweepingTheProject(t *testing.T) {
 	client, vendor := deployedProject(t)
 
