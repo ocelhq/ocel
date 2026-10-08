@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func artifactTag(image string) (string, bool) {
@@ -40,6 +41,52 @@ func artifactTag(image string) (string, bool) {
 	}
 	return fmt.Sprintf("projects/%s/locations/%s/repositories/%s/packages/%s/tags/%s",
 		segments[0], location, segments[1], url.PathEscape(segments[2]), tag), true
+}
+
+func (p *Provider) ReconcileImages(ctx context.Context, _ provider.StackRef, _, imageRef string, _ provider.ImageStore, progress progress.Log) error {
+	name, tagged := artifactTag(imageRef)
+	if !tagged {
+		return nil
+	}
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	repositories, err := clients.Repositories()
+	if err != nil {
+		return err
+	}
+	at := strings.LastIndex(name, "/tags/")
+	listed, err := listPackageTags(ctx, repositories, name[:at])
+	if err != nil {
+		return fmt.Errorf("list the tags of %s: %w", name[:at], err)
+	}
+	repository := imageRef[:strings.LastIndex(imageRef, ":")]
+	images := make([]string, 0, len(listed))
+	for _, tag := range listed {
+		images = append(images, repository+":"+tag)
+	}
+	p.untagUnusedImages(ctx, images, progress)
+	return nil
+}
+
+func listPackageTags(ctx context.Context, repositories *artifactregistry.Service, packageName string) ([]string, error) {
+	var tags []string
+	page := ""
+	for {
+		listed, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.ListTagsResponse, error) {
+			return repositories.Projects.Locations.Repositories.Packages.Tags.List(packageName).PageToken(page).Context(ctx).Do(call...)
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range listed.Tags {
+			tags = append(tags, tag.Name[strings.LastIndex(tag.Name, "/tags/")+len("/tags/"):])
+		}
+		if page = listed.NextPageToken; page == "" {
+			return tags, nil
+		}
+	}
 }
 
 func imagesOf(revisions ...*run.GoogleCloudRunV2Revision) []string {

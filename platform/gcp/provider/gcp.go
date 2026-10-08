@@ -156,6 +156,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 			Remove:    p.RemoveContainers,
 			Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
 		},
+		Retention: &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages},
 	}
 }
 
