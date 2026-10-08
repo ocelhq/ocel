@@ -287,6 +287,30 @@ func TestACallerOutsideEveryContainerIsRefused(t *testing.T) {
 	}
 }
 
+func TestAProcessInsideTheContainerOtherThanItsRuntimeIsHandedNoValueAndMeasuresNoVolume(t *testing.T) {
+	t.Parallel()
+	resolve := &resolving{}
+	space := &measuring{free: 1, total: 2}
+	socket := serving(t, &Server{
+		Proc: procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
+		Inspect: &inspecting{
+			manifests: map[string]string{containerID: storeManifest(t, "shop-prod-store-s3-data")},
+			initPID:   os.Getpid() + 1,
+		},
+		Resolve: resolve,
+		Space:   space,
+	})
+	if status, body := ask(t, socket); status != http.StatusForbidden {
+		t.Errorf("a process the app started was answered %d %q asking for values, want a refusal: the runtime holds the store's credential for the binding proxy, not the app", status, body)
+	}
+	if status, body := askSpace(t, socket); status != http.StatusForbidden {
+		t.Errorf("a process the app started was answered %d %q asking after the store volume, want a refusal", status, body)
+	}
+	if len(resolve.given) != 0 || len(space.asked) != 0 {
+		t.Errorf("a process other than the container's runtime reached the store (%v) or the volume (%v)", resolve.given, space.asked)
+	}
+}
+
 func TestACallerWhoseCgroupCannotBeReadIsRefused(t *testing.T) {
 	t.Parallel()
 	socket := serving(t, &Server{Proc: procNaming(t, ""), Inspect: &inspecting{}, Resolve: &resolving{}})
