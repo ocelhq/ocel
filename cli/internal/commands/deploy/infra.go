@@ -29,9 +29,10 @@ type infraProvisioning struct {
 	leaseToken      string
 	renewal         time.Duration
 
-	sent     *contractv1.ProvisionInfraRequest
-	shipped  bool
-	renewing *leaseRenewal
+	sent      *contractv1.ProvisionInfraRequest
+	attempted bool
+	shipped   bool
+	renewing  *leaseRenewal
 }
 
 type leaseRenewal struct {
@@ -84,6 +85,7 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 	if proto.Equal(req, i.sent) {
 		return nil
 	}
+	i.attempted = true
 	if _, err := providerprocess.Stream(ctx, i.providerProcess, "ProvisionInfra", req, contractv1connect.ProviderServiceClient.ProvisionInfra); err != nil {
 		return err
 	}
@@ -160,7 +162,7 @@ func (i *infraProvisioning) markShipped() {
 
 func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
 	i.stopRenewing()
-	if !i.isProvisioned() || i.shipped {
+	if i == nil || !i.attempted || i.shipped {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
