@@ -99,13 +99,13 @@ var forwardBindings = []provider.Binding{
 
 func ignoreFailures(error) {}
 
-func forwarded(t *testing.T, account *account, sess *sessions, reportFailure func(error)) []provider.PortForward {
+func forwarded(t *testing.T, account *account, sessions *sessions, reportFailure func(error)) []provider.PortForward {
 	t.Helper()
 	if reportFailure == nil {
 		reportFailure = ignoreFailures
 	}
 	clients, reconciled := readyBastion(t, account)
-	forwards, err := reconciled.Forward(context.Background(), clients, sess.open, reportFailure, forwardBindings)
+	forwards, err := reconciled.Forward(context.Background(), clients, sessions.open, reportFailure, forwardBindings)
 	if err != nil {
 		t.Fatalf("Forward() = %v", err)
 	}
@@ -133,8 +133,8 @@ func roundTrip(t *testing.T, address, message string) string {
 func TestForwardSendsEachConnectionToItsEndpointOverASessionOfItsOwnFromTheLoopback(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
-	forwards := forwarded(t, account, sess, nil)
+	account, sessions := newAccount(), &sessions{}
+	forwards := forwarded(t, account, sessions, nil)
 	defer closeAll(forwards)
 
 	if len(forwards) != 2 || forwards[0].Binding != "orders" || forwards[1].Binding != "cache" {
@@ -155,29 +155,29 @@ func TestForwardSendsEachConnectionToItsEndpointOverASessionOfItsOwnFromTheLoopb
 		t.Errorf("a connection to cache got %q", got)
 	}
 
-	sess.mu.Lock()
-	defer sess.mu.Unlock()
-	if len(sess.opened) != 3 {
-		t.Fatalf("sessions opened = %+v, want one per connection", sess.opened)
+	sessions.mu.Lock()
+	defer sessions.mu.Unlock()
+	if len(sessions.opened) != 3 {
+		t.Fatalf("sessions opened = %+v, want one per connection", sessions.opened)
 	}
-	target := sess.opened[0].target
+	target := sessions.opened[0].target
 	if !strings.HasPrefix(target, "ecs:ocel-bastion-production_") {
 		t.Errorf("session target = %q, want the bastion task", target)
 	}
 	counts := map[opened]int{}
-	for _, o := range sess.opened {
+	for _, o := range sessions.opened {
 		counts[o]++
 	}
 	if counts[opened{target, forwardBindings[0].Properties[provider.PropertyHost], 5432}] != 2 || counts[opened{target, forwardBindings[1].Properties[provider.PropertyHost], 6379}] != 1 {
-		t.Errorf("sessions opened = %+v, want two to orders on 5432 and one to cache on 6379", sess.opened)
+		t.Errorf("sessions opened = %+v, want two to orders on 5432 and one to cache on 6379", sessions.opened)
 	}
 }
 
 func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSessions(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
-	forwards := forwarded(t, account, sess, nil)
+	account, sessions := newAccount(), &sessions{}
+	forwards := forwarded(t, account, sessions, nil)
 	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -186,7 +186,7 @@ func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSe
 	if _, err := conn.Write([]byte("x")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	waitFor(t, "a session for the open connection", func() bool { return sess.count() == 1 })
+	waitFor(t, "a session for the open connection", func() bool { return sessions.count() == 1 })
 
 	forwards[0].Close()
 	forwards[0].Close()
@@ -195,7 +195,7 @@ func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSe
 	}
 	waitFor(t, "the open session to end with its forward", func() bool {
 		select {
-		case <-sess.streams[0].terminated:
+		case <-sessions.streams[0].terminated:
 			return true
 		default:
 			return false
@@ -214,10 +214,10 @@ func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSe
 func TestForwardStopsTheTaskWhenItsContextEnds(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
+	account, sessions := newAccount(), &sessions{}
 	clients, reconciled := readyBastion(t, account)
 	ctx, cancel := context.WithCancel(context.Background())
-	if _, err := reconciled.Forward(ctx, clients, sess.open, ignoreFailures, forwardBindings); err != nil {
+	if _, err := reconciled.Forward(ctx, clients, sessions.open, ignoreFailures, forwardBindings); err != nil {
 		t.Fatalf("Forward() = %v", err)
 	}
 
@@ -229,10 +229,10 @@ func TestForwardStopsTheTaskWhenItsContextEnds(t *testing.T) {
 func TestForwardRefusesAPortTheBastionsSecurityGroupDoesNotOpenBeforeStartingATask(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
+	account, sessions := newAccount(), &sessions{}
 	clients, reconciled := readyBastion(t, account)
 
-	_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{{Type: provider.BindingKV, Name: "other", Properties: map[string]string{provider.PropertyHost: "10.0.0.5", provider.PropertyPort: "22"}}})
+	_, err := reconciled.Forward(context.Background(), clients, sessions.open, ignoreFailures, []provider.Binding{{Type: provider.BindingKV, Name: "other", Properties: map[string]string{provider.PropertyHost: "10.0.0.5", provider.PropertyPort: "22"}}})
 
 	if err == nil {
 		t.Fatal("Forward() to port 22 = nil error, want it refused: the security group lets nothing out on it")
@@ -245,12 +245,12 @@ func TestForwardRefusesAPortTheBastionsSecurityGroupDoesNotOpenBeforeStartingATa
 func TestForwardLeavesNoTaskBehindWhenTheTaskNeverGetsItsExecAgent(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
+	account, sessions := newAccount(), &sessions{}
 	account.agentAfter = 100
 	account.onDescribe = func(t *task) { t.stopped = true }
 	clients, reconciled := readyBastion(t, account)
 
-	_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, forwardBindings)
+	_, err := reconciled.Forward(context.Background(), clients, sessions.open, ignoreFailures, forwardBindings)
 
 	if err == nil {
 		t.Fatal("Forward() = nil error, want the task's failure")
@@ -263,9 +263,9 @@ func TestForwardLeavesNoTaskBehindWhenTheTaskNeverGetsItsExecAgent(t *testing.T)
 func TestForwardClosesAConnectionItCannotOpenASessionForAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{failure: errors.New("TargetNotConnected")}
+	account, sessions := newAccount(), &sessions{failure: errors.New("TargetNotConnected")}
 	reported := make(chan error, 1)
-	forwards := forwarded(t, account, sess, func(err error) { reported <- err })
+	forwards := forwarded(t, account, sessions, func(err error) { reported <- err })
 	defer closeAll(forwards)
 
 	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
@@ -291,9 +291,9 @@ func TestForwardClosesAConnectionItCannotOpenASessionForAndSaysWhy(t *testing.T)
 func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheTaskAnyMore(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{failure: errors.New("TargetNotConnected")}
+	account, sessions := newAccount(), &sessions{failure: errors.New("TargetNotConnected")}
 	reported := make(chan error, 1)
-	forwards := forwarded(t, account, sess, func(err error) {
+	forwards := forwarded(t, account, sessions, func(err error) {
 		select {
 		case reported <- err:
 		default:
@@ -333,10 +333,10 @@ func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheT
 func TestForwardPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
+	account, sessions := newAccount(), &sessions{}
 	clients, reconciled := readyBastion(t, account)
 
-	forwards, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{
+	forwards, err := reconciled.Forward(context.Background(), clients, sessions.open, ignoreFailures, []provider.Binding{
 		{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "orders.rds.internal", provider.PropertyPort: "5432"}},
 		{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "cache.internal", provider.PropertyPort: "6379"}},
 	})
@@ -355,22 +355,22 @@ func TestForwardPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T)
 	if got := roundTrip(t, forwards[1].LocalAddress, "PING"); got != "echo:PING" {
 		t.Errorf("a connection to cache got %q", got)
 	}
-	if sess.opened[0].host != "cache.internal" || sess.opened[0].port != 6379 {
-		t.Errorf("the session went to %s:%d, want cache.internal:6379", sess.opened[0].host, sess.opened[0].port)
+	if sessions.opened[0].host != "cache.internal" || sessions.opened[0].port != 6379 {
+		t.Errorf("the session went to %s:%d, want cache.internal:6379", sessions.opened[0].host, sessions.opened[0].port)
 	}
 }
 
 func TestForwardRefusesABindingThatNamesNoHostOrNoNumericPort(t *testing.T) {
 	t.Parallel()
 
-	account, sess := newAccount(), &sessions{}
+	account, sessions := newAccount(), &sessions{}
 	clients, reconciled := readyBastion(t, account)
 	for name, properties := range map[string]map[string]string{
 		"no host":  {provider.PropertyPort: "5432"},
 		"no port":  {provider.PropertyHost: "orders.rds.internal"},
 		"bad port": {provider.PropertyHost: "orders.rds.internal", provider.PropertyPort: "five"},
 	} {
-		_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{{Type: provider.BindingPostgres, Name: "orders", Properties: properties}})
+		_, err := reconciled.Forward(context.Background(), clients, sessions.open, ignoreFailures, []provider.Binding{{Type: provider.BindingPostgres, Name: "orders", Properties: properties}})
 		if err == nil {
 			t.Errorf("%s: Forward() = nil error, want it refused", name)
 		}
@@ -385,12 +385,12 @@ func TestForwardOpensNoSessionOnceItsTaskIsStoppedHoweverManyConnectionsArriveAs
 
 	for range 20 {
 		account := newAccount()
-		sess := &sessions{}
+		sessions := &sessions{}
 		var late sync.WaitGroup
-		forwards := forwarded(t, account, sess, nil)
-		sess.mu.Lock()
-		sess.afterStop = func() bool { return len(account.runningTasks()) == 0 }
-		sess.mu.Unlock()
+		forwards := forwarded(t, account, sessions, nil)
+		sessions.mu.Lock()
+		sessions.afterStop = func() bool { return len(account.runningTasks()) == 0 }
+		sessions.mu.Unlock()
 		dialing := make(chan struct{})
 		for range 48 {
 			late.Add(1)
@@ -409,7 +409,7 @@ func TestForwardOpensNoSessionOnceItsTaskIsStoppedHoweverManyConnectionsArriveAs
 		late.Wait()
 		time.Sleep(5 * time.Millisecond)
 
-		if opened := sess.openedAfterStop(); opened > 0 {
+		if opened := sessions.openedAfterStop(); opened > 0 {
 			t.Fatalf("%d sessions were opened after the forwards closed and their task stopped", opened)
 		}
 	}
