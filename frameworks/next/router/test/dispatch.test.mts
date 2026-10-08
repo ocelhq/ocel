@@ -2646,7 +2646,7 @@ describe("not-found fallback for unmatched pathnames", () => {
           status: 200,
           headers: { "content-type": "text/html" },
         })) as unknown as typeof fetch,
-      assetStore: assetStoreServing({}),
+      assetStore: assetStoreServing({}, "/base"),
     });
 
     const res = await dispatchResult(

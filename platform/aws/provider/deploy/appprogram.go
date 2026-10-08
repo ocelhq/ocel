@@ -252,6 +252,9 @@ func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error
 	if r.cfg.ImageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = r.cfg.ImageOptimizerURL
 	}
+	if rules := spec.App.Static.Variable(); rules != "" {
+		host.Env[edge.StaticRulesVar] = rules
+	}
 	return host, nil
 }
 

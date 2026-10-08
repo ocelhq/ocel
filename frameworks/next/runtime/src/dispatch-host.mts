@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
-import type { AssetBucket } from "@framework/next-router/assets";
+import type { AssetBucket, AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, type ImageOrigin } from "@framework/next-router/image";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
@@ -31,6 +31,7 @@ export interface DispatchHost {
   app: string;
   appBuildId: string;
   assetPrefix: string;
+  static?: Static;
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
   imageOrigin?: ImageOrigin;
@@ -58,6 +59,7 @@ function newRouteDeps(
       store: host.assetBucket,
       assetPrefix: host.assetPrefix,
       basePath: host.manifest.basePath,
+      ...(host.static ? { static: host.static } : {}),
       cache: uncachedResponses(),
       waitUntil,
     },
@@ -89,6 +91,19 @@ export interface DispatchAccess {
 const routeTablePathVar = "OCEL_NEXT_ROUTE_TABLE";
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
+
+const staticRulesVar = "OCEL_STATIC_RULES";
+
+type Static = NonNullable<AssetStoreDeps["static"]>;
+
+export function staticRules(declared: string | undefined): Static | undefined {
+  if (!declared) return undefined;
+  const parsed = JSON.parse(declared) as Partial<Static> | null;
+  if (!parsed || !Array.isArray(parsed.immutablePrefixes)) {
+    throw new Error(`ocel: ${staticRulesVar} states no immutable prefixes`);
+  }
+  return parsed as Static;
+}
 
 export function siblingFunctionUrls(declared: string | undefined): Record<string, string> {
   if (!declared) return {};
@@ -127,6 +142,7 @@ export function readDispatchHost(
     app: env.OCEL_APP ?? manifest.appName ?? "",
     appBuildId: env.OCEL_BUILD_ID ?? "",
     assetPrefix: env.OCEL_ASSET_PREFIX ?? "",
+    ...(env[staticRulesVar] ? { static: staticRules(env[staticRulesVar]) } : {}),
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
     ...(access.imageOrigin ? { imageOrigin: access.imageOrigin } : {}),

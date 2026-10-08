@@ -1,6 +1,11 @@
 package edge
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestAStaticPathIsImmutableOnlyUnderAnImmutablePrefixAndOutsideEveryMustRevalidatePrefix(t *testing.T) {
 	t.Parallel()
@@ -21,5 +26,33 @@ func TestAStaticPathIsImmutableOnlyUnderAnImmutablePrefixAndOutsideEveryMustReva
 	}
 	if (*Static)(nil).IsImmutable("/docs/_next/static/chunks/main.js") {
 		t.Error("a build with no static dir calls a path immutable")
+	}
+}
+
+func TestTheStaticRulesClassifyEveryPathAsTheEdgeContractFixtureSays(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "platform", "edge", "contract", "fixtures", "static-rules.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Static Static `json:"static"`
+		Cases  []struct {
+			Path      string `json:"path"`
+			Immutable bool   `json:"immutable"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range fixture.Cases {
+		want := RevalidateCacheControl
+		if c.Immutable {
+			want = ImmutableCacheControl
+		}
+		if got := fixture.Static.CacheControl(c.Path); got != want {
+			t.Errorf("CacheControl(%q) = %q, want %q", c.Path, got, want)
+		}
 	}
 }

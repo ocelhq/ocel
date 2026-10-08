@@ -1,6 +1,7 @@
 import type { Route } from "@next/routing";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
+import { nextStatic } from "./dispatch-scenario.mjs";
 
 export function assetStoreServing(
   files: Record<string, string>,
@@ -19,6 +20,7 @@ export function assetStoreServing(
     store,
     assetPrefix: "",
     basePath,
+    static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };

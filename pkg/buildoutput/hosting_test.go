@@ -2,6 +2,9 @@ package buildoutput
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -85,6 +88,25 @@ func TestHostingWithNoRouteTableOrStaticDirWritesNeitherKey(t *testing.T) {
 	for _, key := range []string{"routeTable", "static"} {
 		if _, ok := keys[key]; ok {
 			t.Errorf("hosting = %s, want no %q key for a build that has none", encoded, key)
+		}
+	}
+}
+
+func TestHostingOfAVersionThisCLIDoesNotReadIsRefused(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, version := range []int{0, HostingVersion + 1} {
+		dir := AppRoot(root, "web")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		raw := fmt.Sprintf(`{"version":%d,"framework":"sveltekit","rootFunction":"/","needs":{}}`, version)
+		if err := os.WriteFile(filepath.Join(dir, HostingFile), []byte(raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := ReadHosting(root, "web"); err == nil {
+			t.Errorf("ReadHosting read a version %d hosting.json, want it refused", version)
 		}
 	}
 }

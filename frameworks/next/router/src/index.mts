@@ -8,7 +8,7 @@ import type {
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 
-import { type AssetStoreDeps, isNextStaticPathname, serveStaticAsset } from "./assets.mjs";
+import { type AssetStoreDeps, isImmutablePathname, serveStaticAsset } from "./assets.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
 import { localeOf, resolveLocale } from "./i18n.mjs";
 import {
@@ -728,7 +728,7 @@ async function dispatch(result: RouteResult, request: Request, deps: RouteDeps):
     const asset = await staticAsset();
     if (asset.status !== 404) return asset;
     if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
-    if (isNextStaticPathname(url.pathname)) return asset;
+    if (isImmutablePathname(deps.assetStore, url.pathname)) return asset;
     return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
   }
 

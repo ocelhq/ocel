@@ -680,7 +680,8 @@ func declaresNeed(t *testing.T, app string, need edge.Need) {
 		t.Fatal(err)
 	}
 	raw, err := json.Marshal(buildoutput.Hosting{
-		Needs: map[edge.Need]buildoutput.NeedDetail{need: {Routes: []string{"/feed"}}},
+		Version: buildoutput.HostingVersion,
+		Needs:   map[edge.Need]buildoutput.NeedDetail{need: {Routes: []string{"/feed"}}},
 	})
 	if err != nil {
 		t.Fatal(err)

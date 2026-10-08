@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func staticAppTree(t *testing.T) string {
@@ -139,20 +141,20 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 
 		for _, tc := range []struct{ rel, contentType, cacheControl string }{
-			{"_next/static/chunk.js", "text/javascript; charset=utf-8", immutableCacheControl},
-			{"_next/static/css/app.css", "text/css; charset=utf-8", immutableCacheControl},
-			{"_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
-			{"docs/_next/static/chunks/main.js", "text/javascript; charset=utf-8", immutableCacheControl},
-			{"docs/_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
-			{"next.svg", "image/svg+xml", revalidateCacheControl},
-			{"styles.css", "text/css; charset=utf-8", revalidateCacheControl},
-			{"chunk.js.map", "application/json; charset=utf-8", revalidateCacheControl},
-			{"favicon.ico", "image/x-icon", revalidateCacheControl},
-			{"robots.txt", "text/plain", revalidateCacheControl},
-			{"manifest.json", "application/manifest+json", revalidateCacheControl},
-			{"index.html", "text/html; charset=utf-8", revalidateCacheControl},
-			{"font.woff2", "font/woff2", revalidateCacheControl},
-			{"LICENSE", "application/octet-stream", revalidateCacheControl},
+			{"_next/static/chunk.js", "text/javascript; charset=utf-8", edge.ImmutableCacheControl},
+			{"_next/static/css/app.css", "text/css; charset=utf-8", edge.ImmutableCacheControl},
+			{"_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", edge.RevalidateCacheControl},
+			{"docs/_next/static/chunks/main.js", "text/javascript; charset=utf-8", edge.ImmutableCacheControl},
+			{"docs/_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", edge.RevalidateCacheControl},
+			{"next.svg", "image/svg+xml", edge.RevalidateCacheControl},
+			{"styles.css", "text/css; charset=utf-8", edge.RevalidateCacheControl},
+			{"chunk.js.map", "application/json; charset=utf-8", edge.RevalidateCacheControl},
+			{"favicon.ico", "image/x-icon", edge.RevalidateCacheControl},
+			{"robots.txt", "text/plain", edge.RevalidateCacheControl},
+			{"manifest.json", "application/manifest+json", edge.RevalidateCacheControl},
+			{"index.html", "text/html; charset=utf-8", edge.RevalidateCacheControl},
+			{"font.woff2", "font/woff2", edge.RevalidateCacheControl},
+			{"LICENSE", "application/octet-stream", edge.RevalidateCacheControl},
 		} {
 			key := assetKeyFor("web", testBuildID, tc.rel)
 			for name, up := range map[string]*fakeArtifactStore{"cache store": store, "asset bucket": asset} {
