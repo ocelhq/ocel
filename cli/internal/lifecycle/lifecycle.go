@@ -69,8 +69,19 @@ func Run(ctx context.Context, c Command) (err error) {
 	cmd.Env = mergeEnvironment(os.Environ(), env)
 	cmd.Stdout = c.Stdout
 	cmd.Stderr = c.Stderr
+	tree, err := newProcessTree(cmd)
+	if err != nil {
+		return fmt.Errorf("start %q: %w", c.Line, err)
+	}
+	defer tree.kill()
+	defer context.AfterFunc(runCtx, tree.kill)()
 	child, err := childprocess.Start(runCtx, cmd, nil, false)
 	if err != nil {
+		return fmt.Errorf("start %q: %w", c.Line, err)
+	}
+	if err := tree.assign(cmd.Process.Pid); err != nil {
+		_ = childprocess.KillGroup(cmd)
+		_ = child.Wait()
 		return fmt.Errorf("start %q: %w", c.Line, err)
 	}
 	waitErr := child.Wait()
