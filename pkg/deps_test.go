@@ -50,7 +50,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		open    []string
 	}{
 		{name: "pkg", pattern: "./...", open: depstest.OpenToPkg},
-		{name: "provider", pattern: "./provider/...", open: append(slices.Clone(providerBuildsOn), "github.com/ocelhq/ocel/pkg/runtime/bindingproxy")},
+		{name: "provider", pattern: "./provider/...", open: providerBuildsOn},
 		{name: "arch", pattern: "./arch/...", open: providerBuildsOn},
 		{name: "buildoutput", pattern: "./buildoutput/...", open: providerBuildsOn},
 		{name: "containerimage", pattern: "./containerimage/...", open: providerBuildsOn},

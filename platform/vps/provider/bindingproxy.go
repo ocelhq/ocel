@@ -51,16 +51,18 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Granted:      buildproxy.ListBucketNames(grant),
 			})}})
 		}
-		proxy, err := buildproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
 		if err != nil {
 			stopForward()
 			return provider.BindingProxy{}, err
 		}
-		closeProxy := proxy.Close
-		proxy.Close = func() {
-			closeProxy()
-			stopForward()
+		sessions := make([]provider.BindingSession, 0, len(proxy.Sessions))
+		for _, session := range proxy.Sessions {
+			sessions = append(sessions, provider.BindingSession{Grantee: session.Grantee, SessionToken: session.Token})
 		}
-		return proxy, nil
+		return provider.BindingProxy{Address: proxy.Address, Sessions: sessions, Close: func() {
+			_ = proxy.Close()
+			stopForward()
+		}}, nil
 	})
 }
