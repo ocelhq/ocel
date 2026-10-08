@@ -209,3 +209,42 @@ func TestInitTakesAnOptionTheProviderDoesNotRequire(t *testing.T) {
 		t.Errorf("config = %s, want the project it was given", got)
 	}
 }
+
+func TestInitCountsABlankOptionAsMissing(t *testing.T) {
+	dir := initTestDir(t, "proj")
+
+	code, hint := runFailingInit(t, dir, initOptions{provider: "vps", settings: []providerSetting{{name: "ssh", value: "  "}}})
+
+	if code != clierror.CodeInputRequired || !strings.Contains(hint, "--option ssh=") {
+		t.Fatalf("code, hint = %q, %q; want input_required naming --option ssh=<value>", code, hint)
+	}
+}
+
+func TestInitCountsABlankAnswerAsMissing(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	dir := initTestDir(t, "proj")
+
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, strings.NewReader("   \n"), io.Discard, io.Discard)
+
+	if code := clierror.NewRunError(err).GetCode(); code != clierror.CodeInputRequired {
+		t.Fatalf("code = %q (err %v), want %s", code, err, clierror.CodeInputRequired)
+	}
+}
+
+func TestInitStopsAsInterruptedWhenTheOptionQuestionIsCancelled(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	dir := initTestDir(t, "proj")
+
+	err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "vps"}, strings.NewReader(""), io.Discard, io.Discard)
+
+	if code := clierror.NewRunError(err).GetCode(); code != clierror.CodeInterrupted {
+		t.Fatalf("code = %q (err %v), want %s", code, err, clierror.CodeInterrupted)
+	}
+	if _, err := os.Stat(filepath.Join(dir, project.TSFileName)); err == nil {
+		t.Error("a cancelled init wrote a config")
+	}
+}

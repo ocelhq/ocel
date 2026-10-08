@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -97,12 +98,16 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 		return err
 	}
 	if len(findMissingOptions(resolved.provider, resolved.settings)) > 0 && dependencies.CanAsk(stdin) {
+		var answered bool
 		err := dependencies.Events.Preamble(ctx).Ask(func() (err error) {
-			resolved.settings, _, err = askMissingOptions(ctx, terminal.NewPrompt(prompts, stdin), resolved.provider, resolved.settings)
+			resolved.settings, answered, err = askMissingOptions(ctx, terminal.NewPrompt(prompts, stdin), resolved.provider, resolved.settings)
 			return err
 		})
 		if err != nil {
 			return err
+		}
+		if !answered {
+			return &exitcode.ExitError{Code: exitcode.Interrupt, Err: errors.New("init was cancelled before every option was given, and wrote nothing")}
 		}
 	}
 	result, err := initProject(ctx, dependencies, resolved)
