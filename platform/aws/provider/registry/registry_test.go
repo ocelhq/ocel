@@ -35,6 +35,12 @@ type fakeECR struct {
 	deletedRepositories []string
 	createdTags         map[string][]ecrtypes.Tag
 	resourceTags        map[string][]ecrtypes.Tag
+	tagCalls            int
+	tagErr              error
+}
+
+func (f *fakeECR) ListTagsForResource(_ context.Context, in *ecr.ListTagsForResourceInput, _ ...func(*ecr.Options)) (*ecr.ListTagsForResourceOutput, error) {
+	return &ecr.ListTagsForResourceOutput{Tags: f.resourceTags[aws.ToString(in.ResourceArn)]}, nil
 }
 
 func (f *fakeECR) DescribeRepositories(_ context.Context, in *ecr.DescribeRepositoriesInput, _ ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error) {
@@ -52,6 +58,10 @@ func (f *fakeECR) DescribeRepositories(_ context.Context, in *ecr.DescribeReposi
 }
 
 func (f *fakeECR) TagResource(_ context.Context, in *ecr.TagResourceInput, _ ...func(*ecr.Options)) (*ecr.TagResourceOutput, error) {
+	f.tagCalls++
+	if f.tagErr != nil {
+		return nil, f.tagErr
+	}
 	if f.resourceTags == nil {
 		f.resourceTags = map[string][]ecrtypes.Tag{}
 	}
@@ -165,11 +175,11 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 		t.Error("repositoryOf accepted a coordinate under another registry, which no repository of this account's stores")
 	}
 
-	api := &fakeECR{existing: []string{"ocel/api"}}
-	if created, err := ensure(context.Background(), api, "ocel/api"); err != nil || created || len(api.created) != 0 {
+	api := &fakeECR{existing: []string{"ocel/shop.api"}}
+	if created, err := ensure(context.Background(), api, "ocel/shop.api"); err != nil || created || len(api.created) != 0 {
 		t.Errorf("ensure of an existing repository = %v, %v, created %v; want a no-op", created, err, api.created)
 	}
-	if created, err := ensure(context.Background(), api, "ocel/web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/web"}) {
+	if created, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/shop.web"}) {
 		t.Errorf("ensure of a new repository = %v, %v, created %v; want it created immutable under the namespace", created, err, api.created)
 	}
 }
@@ -363,5 +373,46 @@ func TestARepositoryAPushFindsInPlaceIsTaggedWithTheProjectItsImagesBelongTo(t *
 	got := tagsOf(api.resourceTags["arn:aws:ecr:us-east-1:123456789012:repository/ocel/shop.web"])
 	if got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
 		t.Errorf("the repository in place was tagged %v, want ocel:project=shop beside ocel:managed-by: one made before the tag existed would otherwise refuse every delete", got)
+	}
+}
+
+const shopWebARN = "arn:aws:ecr:us-east-1:123456789012:repository/ocel/shop.web"
+
+func TestARepositoryInPlaceAlreadyTaggedWithItsProjectIsNotTaggedAgain(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{existing: []string{"ocel/shop.web"}, resourceTags: map[string][]ecrtypes.Tag{shopWebARN: {
+		{Key: aws.String("ocel:project"), Value: aws.String("shop")},
+		{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")},
+	}}}
+	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+		t.Fatalf("ensure() = %v", err)
+	}
+
+	if api.tagCalls != 0 {
+		t.Errorf("ensure() tagged a repository already tagged with its project %d times: a principal without ecr:TagResource would fail every push for nothing", api.tagCalls)
+	}
+}
+
+func TestAPushIntoARepositoryItMayNotTagWithItsProjectFails(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{existing: []string{"ocel/shop.web"}, tagErr: errors.New("AccessDeniedException: not authorized to perform ecr:TagResource")}
+	_, err := ensure(context.Background(), api, "ocel/shop.web")
+
+	if err == nil {
+		t.Fatal("ensure() = nil for a repository it could not tag with its project: no credential could ever delete the images pushed there")
+	}
+}
+
+func TestARepositoryNamingNoProjectIsNeverCreated(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeECR{}
+	if _, err := ensure(context.Background(), api, "ocel/web"); err == nil {
+		t.Error("ensure(ocel/web) = nil: a repository with no project to tag it with is one no project-tagged principal may ever clean")
+	}
+	if len(api.created) != 0 {
+		t.Errorf("ensure(ocel/web) created %v", api.created)
 	}
 }
