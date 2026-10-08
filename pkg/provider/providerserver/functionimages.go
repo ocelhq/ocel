@@ -3,7 +3,6 @@ package providerserver
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -71,13 +70,13 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
-	files, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
+	runtime, err := readRuntime(ctx, hooks, framework, name)
 	if err != nil {
 		return provider.ImagePush{}, err
 	}
 	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
-		Overlay:         files,
-		NextRuntimeDir:  r.provider.Facts().NextRuntimeDir,
+		Overlay:         overlay,
+		Runtime:         runtime,
 		StaticSourceDir: staticSourceDir,
 	})
 	if err != nil {
@@ -131,27 +130,27 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework bui
 	return wrapped, nil
 }
 
-func runtimeOverlay(
+func readRuntime(
 	ctx context.Context,
 	hooks provider.Hooks,
 	framework buildoutput.Framework,
 	name string,
-	overlay map[string][]byte,
 ) (map[string][]byte, error) {
-	if !images.BootsThroughNodeRuntime(framework) {
-		return overlay, nil
+	if !images.BootsThroughRuntime(framework) {
+		return nil, nil
 	}
-	body, err := hooks.FunctionImages.ReadRuntime(ctx, framework)
+	files, err := hooks.FunctionImages.ReadRuntime(ctx, framework)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s boots through: %w", name, err)
 	}
-	if len(body) == 0 {
+	if len(files) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider ships no runtime for a %s function to boot through, and %s is one", framework.Name, name)
 	}
-	files := make(map[string][]byte, len(overlay)+1)
-	maps.Copy(files, overlay)
-	files[images.NodeRuntimePath] = body
+	if _, ok := files[images.RuntimeEntrypointFile]; !ok {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"this provider's runtime for a %s function holds no %s, so %s would boot node over a file that is not there", framework.Name, images.RuntimeEntrypointFile, name)
+	}
 	return files, nil
 }
 

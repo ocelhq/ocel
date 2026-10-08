@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const wrappedDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -195,13 +193,13 @@ func TestTheRuntimeTagNamesTheImagesDigestAndTheRuntimeItIsWrappedIn(t *testing.
 }
 
 func nextServerRuntime(files map[string][]byte) *images.NextServerRuntime {
-	return &images.NextServerRuntime{Dir: "/ocel/next", Files: files}
+	return &images.NextServerRuntime{Files: files}
 }
 
 func nextFiles() map[string][]byte {
 	return map[string][]byte{
 		containerimage.NextServerAdapterFile: []byte("an adapter"),
-		"cache-handler.cjs":                  []byte("a cache handler"),
+		"server-chunk.mjs":                   []byte("a server chunk"),
 	}
 }
 
@@ -214,7 +212,7 @@ func digestOf(t *testing.T, image v1.Image) string {
 	return digest.String()
 }
 
-func TestWrapContainerShipsANextAppsServerRuntimeAtTheDirectoryItsProviderNames(t *testing.T) {
+func TestANextContainerFindsItsAdapterInTheNextRuntimeDirectory(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
@@ -224,16 +222,16 @@ func TestWrapContainerShipsANextAppsServerRuntimeAtTheDirectoryItsProviderNames(
 	}
 
 	layer := lastLayer(t, wrapped)
-	if header, _ := tarEntry(t, layer, "ocel/next/"); header.Typeflag != tar.TypeDir || header.Mode != 0o755 {
+	if header, _ := tarEntry(t, layer, "ocel/runtime/next/"); header.Typeflag != tar.TypeDir || header.Mode != 0o755 {
 		t.Errorf("the layer has the Next runtime directory as type %q mode %o, want a 0755 directory", header.Typeflag, header.Mode)
 	}
 	for name, want := range nextFiles() {
-		header, body := tarEntry(t, layer, "ocel/next/"+name)
+		header, body := tarEntry(t, layer, "ocel/runtime/next/"+name)
 		if !bytes.Equal(body, want) {
-			t.Errorf("the layer holds %q at /ocel/next/%s, want %q", body, name, want)
+			t.Errorf("the layer holds %q at /ocel/runtime/next/%s, want %q", body, name, want)
 		}
 		if header.Mode != 0o644 {
-			t.Errorf("/ocel/next/%s is mode %o, want 0644", name, header.Mode)
+			t.Errorf("/ocel/runtime/next/%s is mode %o, want 0644", name, header.Mode)
 		}
 	}
 	if config := configOf(t, wrapped); !slices.Equal(config.Entrypoint, []string{containerimage.RuntimePath}) || !slices.Equal(config.Cmd, []string{"next", "start"}) {
@@ -250,7 +248,7 @@ func TestWrapContainerPointsNextsServerAtTheShippedAdapter(t *testing.T) {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
 
-	want := []string{"PATH=/usr/bin", containerimage.NextAdapterPathVar + "=/ocel/next/" + containerimage.NextServerAdapterFile}
+	want := []string{"PATH=/usr/bin", containerimage.NextAdapterPathVar + "=/ocel/runtime/next/" + containerimage.NextServerAdapterFile}
 	if got := configOf(t, wrapped).Env; !slices.Equal(got, want) {
 		t.Errorf("the wrapped image has env %v, want %v", got, want)
 	}
@@ -298,29 +296,9 @@ func TestWrapContainerRefusesANextServerRuntimeWithoutItsAdapter(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
-	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(map[string][]byte{"cache-handler.cjs": []byte("x")}))
+	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(map[string][]byte{"server-chunk.mjs": []byte("x")}))
 	if err == nil || !strings.Contains(err.Error(), containerimage.NextServerAdapterFile) {
 		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, containerimage.NextServerAdapterFile)
-	}
-}
-
-func TestWrapContainerRefusesANextServerRuntimeWhoseDirectoryIsNotAbsolute(t *testing.T) {
-	t.Parallel()
-
-	for _, dir := range []string{"ocel/next", "./ocel/next", ""} {
-		t.Run(dir, func(t *testing.T) {
-			t.Parallel()
-
-			base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
-			_, err := images.WrapContainer(base, []byte("a runtime"), &images.NextServerRuntime{Dir: dir, Files: nextFiles()})
-			var refused refusal.Refusal
-			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-				t.Fatalf("WrapContainer() = %v, want an invalid refusal", err)
-			}
-			if !strings.Contains(err.Error(), fmt.Sprintf("%q", dir)) {
-				t.Errorf("WrapContainer() = %v, want it to name %q", err, dir)
-			}
-		})
 	}
 }
 
@@ -347,14 +325,13 @@ func TestTheRuntimeTagChangesWhenTheNextServerRuntimeDoes(t *testing.T) {
 	runtime := []byte("a runtime binary")
 	tag := images.RuntimeTag(wrappedDigest, runtime, nextServerRuntime(nextFiles()))
 	changedFile := nextFiles()
-	changedFile["cache-handler.cjs"] = []byte("a newer cache handler")
+	changedFile["server-chunk.mjs"] = []byte("a newer server chunk")
 	addedFile := nextFiles()
 	addedFile["extra.cjs"] = []byte("x")
 	for name, other := range map[string]*images.NextServerRuntime{
 		"none":           nil,
 		"a changed file": nextServerRuntime(changedFile),
 		"an added file":  nextServerRuntime(addedFile),
-		"another dir":    {Dir: "/srv/next", Files: nextFiles()},
 	} {
 		if images.RuntimeTag(wrappedDigest, runtime, other) == tag {
 			t.Errorf("a Next server runtime with %s tags like the one it replaces, so the registry would keep serving the old one", name)

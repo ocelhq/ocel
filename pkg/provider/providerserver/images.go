@@ -77,16 +77,11 @@ func (r *deployRun) readNextServerRuntime(ctx context.Context, entry provider.Ap
 	if read == nil || entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
 		return nil, nil
 	}
-	dir := r.provider.Facts().NextRuntimeDir
-	if dir == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider ships a Next server runtime and names no directory for it, so %s's image has nowhere to hold it", entry.App)
-	}
 	files, err := read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the Next server runtime %s's container loads: %w", entry.App, err)
 	}
-	return &images.NextServerRuntime{Dir: dir, Files: files}, nil
+	return &images.NextServerRuntime{Files: files}, nil
 }
 
 func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageRegistry) error {

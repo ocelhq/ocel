@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"context"
-	"path"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -68,10 +67,6 @@ func runHooks(t *testing.T, suite Suite) {
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.ReadNextServerRuntime == nil {
 			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
-		}
-		dir := p.Facts().NextRuntimeDir
-		if dir == "" || !path.IsAbs(dir) {
-			t.Fatalf("Facts().NextRuntimeDir = %q, want the absolute directory the Next server runtime is shipped to", dir)
 		}
 		files, err := hooks.ReadNextServerRuntime(context.Background())
 		if err != nil {

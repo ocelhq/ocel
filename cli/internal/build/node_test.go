@@ -32,7 +32,7 @@ func TestAProjectWithNoJavaScriptNeverRunsTheNodeBuildScript(t *testing.T) {
 	cfg := &project.Project{Dir: root}
 
 	ran := false
-	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}

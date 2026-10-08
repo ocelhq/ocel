@@ -1047,12 +1047,12 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
 	}
-	want := containerimage.NextAdapterPathVar + "=/opt/fake/next/" + containerimage.NextServerAdapterFile
+	want := containerimage.NextAdapterPathVar + "=/ocel/runtime/next/" + containerimage.NextServerAdapterFile
 	if env := configOf(t, pushed[0].Built).Env; !slices.Contains(env, want) {
 		t.Errorf("the pushed image has env %v, want it to hold %s", env, want)
 	}
 	_, digest, _ := strings.Cut(containerTestImage, "@")
-	next := &images.NextServerRuntime{Dir: "/opt/fake/next", Files: map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}}
+	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerAdapterFile: []byte("an adapter")}}
 	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
 		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
 	}

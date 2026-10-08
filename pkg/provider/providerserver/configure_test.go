@@ -89,29 +89,6 @@ func configureInWorkingDir(t *testing.T) *contractv1.ConfigureRequest {
 	return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: workingDir(t)}}
 }
 
-func TestConfigureNamesTheDirectoryItsFunctionsLoadNextsCacheHandlersFromWithoutCredentials(t *testing.T) {
-	vendor := fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) {
-		facts.NextRuntimeDir = "/var/host/next"
-	})
-	vendor.Credentials().(*fake.Credentials).Ask("sign in to fake", provider.Question{Finding: "no session", Prompt: "Sign in?"})
-	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
-		Version: "test",
-		New: func(context.Context, provider.Settings) (provider.Provider, error) {
-			return vendor, nil
-		},
-	}))
-	t.Cleanup(server.Close)
-	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-
-	configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
-	if err != nil {
-		t.Fatalf("Configure() error = %v", err)
-	}
-	if got := configured.GetFacts().GetNextRuntimeDir(); got != "/var/host/next" {
-		t.Errorf("Configure() facts name the Next runtime directory %q, want the one the provider declares", got)
-	}
-}
-
 func TestConfigureNamesTheFunctionSizeBudgetTheProviderDeclares(t *testing.T) {
 	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "test",

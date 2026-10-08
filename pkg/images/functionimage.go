@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -14,7 +13,6 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -28,7 +26,7 @@ const StaticRoot = "/ocel/static"
 
 type FunctionImageOptions struct {
 	Overlay         map[string][]byte
-	NextRuntimeDir  string
+	Runtime         map[string][]byte
 	StaticSourceDir string
 }
 
@@ -41,13 +39,23 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	if err != nil {
 		return nil, err
 	}
-	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(packed)), nil
-	})
+	layer, err := newBytesLayer(packed)
 	if err != nil {
 		return nil, err
 	}
-	appended, err := mutate.Append(base, mutate.Addendum{Layer: layer})
+	addenda := []mutate.Addendum{{Layer: layer}}
+	if len(opts.Runtime) > 0 {
+		runtimePacked, err := runtimeLayer(framework, opts.Runtime)
+		if err != nil {
+			return nil, err
+		}
+		runtime, err := newBytesLayer(runtimePacked)
+		if err != nil {
+			return nil, err
+		}
+		addenda = append([]mutate.Addendum{{Layer: runtime}}, addenda...)
+	}
+	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +67,7 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	if err != nil {
 		return nil, err
 	}
-	command, err := functionCommand(framework, staged, opts.NextRuntimeDir)
+	command, err := functionCommand(framework, staged)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +93,13 @@ func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
 	return staged, nil
 }
 
-const NodeRuntimeRoot = "/ocel/runtime"
+const RuntimeRoot = "/ocel/runtime"
 
-const entrypointFile = "entrypoint.mjs"
+const RuntimeEntrypointFile = "entrypoint.mjs"
 
-const NodeRuntimePath = NodeRuntimeRoot + "/" + entrypointFile
+func FrameworkRuntimeDir(framework string) string {
+	return path.Join(RuntimeRoot, framework)
+}
 
 const HandlerName = "OCEL_HANDLER"
 
@@ -97,10 +107,6 @@ const nodeEnvName = "NODE_ENV"
 
 func BootsThroughRuntime(framework buildoutput.Framework) bool {
 	return framework.Name == buildoutput.FrameworkNode || framework.Name == buildoutput.FrameworkNext
-}
-
-func BootsThroughNodeRuntime(framework buildoutput.Framework) bool {
-	return framework.Name == buildoutput.FrameworkNode
 }
 
 func servedHandler(staged buildoutput.FunctionDescriptor) string {
@@ -127,23 +133,37 @@ func boundPort(env []string) []string {
 	return append(kept, containerimage.PortEnvVar+"="+containerimage.PortText)
 }
 
-func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor, nextRuntimeDir string) ([]string, error) {
+func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case BootsThroughNodeRuntime(framework):
-		return []string{"node", NodeRuntimePath}, nil
-	case framework.Name == buildoutput.FrameworkNext && nextRuntimeDir == "":
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the Next function staged at %s is served through the Next runtime, and this provider names no directory its images hold the Next runtime in",
-			staged.ID)
-	case framework.Name == buildoutput.FrameworkNext:
-		return []string{"node", path.Join(nextRuntimeDir, entrypointFile)}, nil
+	case BootsThroughRuntime(framework):
+		return []string{"node", path.Join(FrameworkRuntimeDir(framework.Name), RuntimeEntrypointFile)}, nil
 	default:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %s function staged at %s names no command to run, and only a node function boots through a runtime this image could run in its place",
+			"the %s function staged at %s names no command to run, and only a node or Next function boots through a runtime this image could run in its place",
 			framework.Name, staged.ID)
 	}
+}
+
+func runtimeLayer(framework buildoutput.Framework, runtime map[string][]byte) ([]byte, error) {
+	dir := FrameworkRuntimeDir(framework.Name)
+	var packed bytes.Buffer
+	archive := tar.NewWriter(&packed)
+	for _, name := range sortedNames(runtime) {
+		full := path.Join(dir, name)
+		if path.IsAbs(name) || !strings.HasPrefix(full, dir+"/") {
+			return nil, refusal.Refuse(refusal.CodeInvalid,
+				"a function's image was handed the runtime file %s, and a runtime file is named by a path inside %s, which contains the runtime it boots through", name, dir)
+		}
+		if err := tarBody(archive, full, runtime[name], 0o644); err != nil {
+			return nil, err
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return nil, err
+	}
+	return packed.Bytes(), nil
 }
 
 func functionLayer(dir string, rels []string, opts FunctionImageOptions) ([]byte, error) {
@@ -234,14 +254,12 @@ func tarBody(archive *tar.Writer, rel string, body []byte, mode int64) error {
 
 func refuseStrayOverlay(rel string) error {
 	full := "/" + imagePath(rel)
-	for _, root := range []string{FunctionImageRoot, NodeRuntimeRoot} {
-		if strings.HasPrefix(full, root+"/") {
-			return nil
-		}
+	if strings.HasPrefix(full, FunctionImageRoot+"/") {
+		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"a function's image was handed %s to include, and it lands at %s, outside both %s, which contains the function's own tree, and %s, which contains the runtime it boots through: an image ocel builds writes nowhere else in the base it is built on",
-		rel, full, FunctionImageRoot, NodeRuntimeRoot)
+		"a function's image was handed %s to include, and it lands at %s, outside %s, which contains the function's own tree: an image ocel builds writes nowhere else in the base it is built on",
+		rel, full, FunctionImageRoot)
 }
 
 func imagePath(rel string) string {

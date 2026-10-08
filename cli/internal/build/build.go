@@ -145,9 +145,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	defer log.flushShared()
 	defer func() { err = log.hidden.HideError(err) }()
 
-	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
-		return err
-	}
 	if err := RefuseNextFunctionsWithOwnAdapter(cfg); err != nil {
 		return err
 	}
@@ -225,7 +222,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 
-				NextRuntimeDir:         host.NextRuntimeDir,
 				MaxFunctionBytes:       host.MaxFunctionBytes,
 				NextRefreshesByRequest: host.NextRefreshesByRequest,
 			})
