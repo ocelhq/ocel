@@ -14,6 +14,8 @@ import (
 
 const DefaultTimeout = 10 * time.Second
 
+var errNoTarget = errors.New("the provider named no target account it deployed to")
+
 type Console struct {
 	LoadCredentials func() (console.Credentials, error)
 	Timeout         time.Duration
@@ -21,6 +23,9 @@ type Console struct {
 
 func (c Console) ReportDeployment(ctx context.Context, projectDir string, deployment *consolev1.Deployment, stderr io.Writer) {
 	c.send(ctx, projectDir, "deployment "+deployment.GetId(), stderr, func(ctx context.Context, client *console.Client, accessToken, projectID string) error {
+		if deployment.GetTarget() == "" {
+			return errNoTarget
+		}
 		return client.ReportDeployment(ctx, accessToken, projectID, deployment)
 	})
 }
@@ -32,7 +37,15 @@ func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, 
 }
 
 func (c Console) send(ctx context.Context, projectDir, subject string, stderr io.Writer, call func(ctx context.Context, client *console.Client, accessToken, projectID string) error) {
-	credentials, loadErr := c.loadCredentials()
+	credentials, err := c.loadCredentials()
+	if errors.Is(err, console.ErrNotLoggedIn) {
+		fmt.Fprintf(stderr, "Couldn't report %s to the console: you're not logged in. Run `ocel login`.\n", subject)
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "Couldn't report %s to the console: your saved login could not be read: %v\n", subject, err)
+		return
+	}
 	apiURL := console.BaseURL(credentials.APIURL)
 	link, err := console.ReadLink(projectDir, apiURL)
 	if err != nil {
@@ -41,14 +54,6 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 	}
 	if link == nil {
 		fmt.Fprintln(stderr, "This directory isn't linked to a console project, so nothing was reported there. Run `ocel link` to link it.")
-		return
-	}
-	if errors.Is(loadErr, console.ErrNotLoggedIn) {
-		fmt.Fprintf(stderr, "Couldn't report %s to the console: you're not logged in. Run `ocel login`.\n", subject)
-		return
-	}
-	if loadErr != nil {
-		fmt.Fprintf(stderr, "Couldn't report %s to the console: your saved login could not be read: %v\n", subject, loadErr)
 		return
 	}
 

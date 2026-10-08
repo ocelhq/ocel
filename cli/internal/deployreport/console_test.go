@@ -248,3 +248,40 @@ func TestAnEnvironmentEventFollowsTheSameLinkedAndUnlinkedRules(t *testing.T) {
 		t.Errorf("unlinked stderr = %q, want the link hint", unlinkedErr.String())
 	}
 }
+
+func TestADeploymentThatNamesNoTargetMakesNoCallAndLeavesOneWarningNamingIt(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	dir := linkedTree(t, apiURL)
+	attempt := productionAttempt()
+	attempt.Target = ""
+	var stderr bytes.Buffer
+
+	signedIn(apiURL).ReportDeployment(context.Background(), dir, attempt.Succeeded(finishedAt), &stderr)
+
+	if len(fake.reports) != 0 {
+		t.Errorf("the console received %d reports, want none for a record it would refuse", len(fake.reports))
+	}
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], traceID) || !strings.Contains(lines[0], "target") {
+		t.Errorf("stderr = %q, want one warning naming deployment %s and its missing target", stderr.String(), traceID)
+	}
+}
+
+func TestATreeLinkedToAnotherConsoleThatIsNotLoggedInIsToldToLogIn(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	dir := linkedTree(t, apiURL)
+	reporting := Console{LoadCredentials: func() (console.Credentials, error) {
+		return console.Credentials{}, console.ErrNotLoggedIn
+	}}
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), dir, productionAttempt().Succeeded(finishedAt), &stderr)
+
+	if len(fake.reports) != 0 || !strings.Contains(stderr.String(), "`ocel login`") || strings.Contains(stderr.String(), "`ocel link`") {
+		t.Errorf("reports %d, stderr %q, want no call and the login warning rather than the link hint", len(fake.reports), stderr.String())
+	}
+}
