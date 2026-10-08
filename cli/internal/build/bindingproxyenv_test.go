@@ -13,14 +13,14 @@ import (
 
 func proxiedVariables() map[string]AppVariables {
 	return map[string]AppVariables{"web": {
-		RuntimeEnv: map[string]string{
+		BindingProxyEnv: map[string]string{
 			processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999",
 			localrpc.SessionTokenEnvVar:     "proxy-session-token",
 		},
 	}}
 }
 
-func TestABuildReachesTheBindingProxyThroughTheRuntimeEnvItIsHanded(t *testing.T) {
+func TestABuildReachesTheBindingProxyThroughTheEnvironmentItIsHanded(t *testing.T) {
 	root := t.TempDir()
 	writeBuildScript(t, root)
 	cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}

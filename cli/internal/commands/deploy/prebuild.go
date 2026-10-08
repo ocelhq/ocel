@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -49,7 +48,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	env := map[string]string{}
 	live := map[string]string{}
 	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
-	maps.Copy(env, forwards.RuntimeEnv())
+	maps.Copy(env, forwards.BindingProxyEnv())
 	if command.App != "" {
 		maps.Copy(env, values[command.App].Env)
 		maps.Copy(live, values[command.App].Live)
@@ -59,7 +58,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	if forwards == nil && resourceCount > 0 && !a.infra.providerProcess.Facts().GetForwardsPorts() {
 		span.Say(fmt.Sprintf("The provider forwards no port, so %s goes without the bindings of the resources %s declares", preBuildName, cfg.Slug))
 	}
-	hidden := redaction.NewValues(append(build.SecretValues(live), forwards.RuntimeEnv()[localrpc.SessionTokenEnvVar]))
+	hidden := redaction.NewValues(build.AppVariables{Live: live, BindingProxyEnv: forwards.BindingProxyEnv()}.SecretValues())
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	err := lifecycle.Run(ctx, lifecycle.Command{
 		Line:    command.Command,
