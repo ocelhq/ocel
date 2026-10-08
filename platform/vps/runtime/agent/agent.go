@@ -148,12 +148,12 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (variables.Manifest, bool) {
-	caller, refused := s.identifyCaller(r.Context())
+	manifest, refused := s.callerManifest(r.Context())
 	if refused != nil {
 		http.Error(w, refused.Error(), refused.status)
 		return variables.Manifest{}, false
 	}
-	return caller.manifest, true
+	return manifest, true
 }
 
 type callerRefusal struct {
@@ -163,37 +163,35 @@ type callerRefusal struct {
 
 func (c *callerRefusal) Error() string { return c.reason }
 
-type caller struct {
-	manifest variables.Manifest
-	isInit   bool
-}
-
-func (s *Server) identifyCaller(ctx context.Context) (caller, *callerRefusal) {
-	connected, _ := ctx.Value(peerKey{}).(peer)
-	if connected.err != nil {
-		return caller{}, &callerRefusal{http.StatusForbidden, "the caller could not be identified: " + connected.err.Error()}
+func (s *Server) callerManifest(ctx context.Context) (variables.Manifest, *callerRefusal) {
+	caller, _ := ctx.Value(peerKey{}).(peer)
+	if caller.err != nil {
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, "the caller could not be identified: " + caller.err.Error()}
 	}
-	container, err := s.containerOf(connected.pid)
+	container, err := s.containerOf(caller.pid)
 	if err != nil {
-		return caller{}, &callerRefusal{http.StatusForbidden, err.Error()}
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, err.Error()}
 	}
 	inspecting, cancel := context.WithTimeout(ctx, inspectWindow)
 	defer cancel()
 	read, err := s.Inspect.ReadContainer(inspecting, container)
 	if err != nil {
-		return caller{}, &callerRefusal{http.StatusBadGateway, "read the caller's container: " + err.Error()}
+		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, "read the caller's container: " + err.Error()}
+	}
+	if read.InitPID <= 0 || read.InitPID != caller.pid {
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, "only the runtime of the caller's container, which serves its binding proxy, is answered: a process the app started is not"}
 	}
 	if read.Manifest == "" {
-		return caller{}, &callerRefusal{http.StatusNotFound, "the caller's container has no live-value manifest"}
+		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's container has no live-value manifest"}
 	}
 	manifest, err := variables.Parse([]byte(read.Manifest))
 	if err != nil {
-		return caller{}, &callerRefusal{http.StatusBadGateway, err.Error()}
+		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, err.Error()}
 	}
 	if !manifest.Live() {
-		return caller{}, &callerRefusal{http.StatusNotFound, "the caller's manifest names nothing live"}
+		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's manifest names nothing live"}
 	}
-	return caller{manifest: manifest, isInit: read.InitPID > 0 && read.InitPID == connected.pid}, nil
+	return manifest, nil
 }
 
 func (s *Server) measure(w http.ResponseWriter, r *http.Request) {

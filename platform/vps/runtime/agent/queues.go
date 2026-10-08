@@ -29,7 +29,7 @@ func (s *Server) mountQueues(mux *http.ServeMux) {
 }
 
 func (s *Server) callerQueue(ctx context.Context) (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler, error) {
-	caller, refused := s.identifyCaller(ctx)
+	manifest, refused := s.callerManifest(ctx)
 	if refused != nil {
 		code := connect.CodeUnavailable
 		switch refused.status {
@@ -40,11 +40,6 @@ func (s *Server) callerQueue(ctx context.Context) (taskv1connect.TaskServiceHand
 		}
 		return nil, nil, connect.NewError(code, refused)
 	}
-	if !caller.isInit {
-		return nil, nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("only the runtime of the caller's container, which serves its binding proxy, may call its queue: a process the app started may not"))
-	}
-	manifest := caller.manifest
 	if manifest.Queue == "" {
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("this deployment declares no task or topic, so there is nothing to trigger or send to"))
