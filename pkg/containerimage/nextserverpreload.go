@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	RuntimeRoot           = "/ocel/runtime"
 	NextServerPreloadFile = "server-preload.mjs"
 	nodeOptionsVar        = "NODE_OPTIONS"
 )

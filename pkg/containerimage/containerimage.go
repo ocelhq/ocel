@@ -31,5 +31,6 @@ var PortText = strconv.Itoa(Port)
 
 const (
 	RuntimePath = "/ocel/bin/runtime"
+	RuntimeRoot = "/ocel/runtime"
 	LivePath    = "/ocel/live"
 )

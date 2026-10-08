@@ -56,7 +56,7 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	}
 }
 
-func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsAdapter(t *testing.T) {
+func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsPreload(t *testing.T) {
 	t.Parallel()
 
 	read := fake.NewForProject(fake.Options{}, "").Hooks().ReadNextServerRuntime
