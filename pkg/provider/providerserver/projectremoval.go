@@ -249,7 +249,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 			return project.explain(err)
 		}
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
-			return err
+			return project.explain(err)
 		}
 		removed, err := removal.listRemovedEnvironments(project.context(ctx))
 		if err != nil {
