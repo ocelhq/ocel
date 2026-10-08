@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -24,7 +25,7 @@ func NewJSONLines(w io.Writer) *JSONLines {
 }
 
 func (s *JSONLines) Receive(ev *streamv1.RunEvent) {
-	line, err := envelopeJSON(ev)
+	line, err := envelopeJSON(withValidUTF8(ev))
 	if err != nil {
 		return
 	}
@@ -32,6 +33,61 @@ func (s *JSONLines) Receive(ev *streamv1.RunEvent) {
 }
 
 func (s *JSONLines) Close() error { return nil }
+
+func withValidUTF8(ev *streamv1.RunEvent) *streamv1.RunEvent {
+	valid := proto.CloneOf(ev)
+	if valid != nil {
+		replaceInvalidUTF8(valid.ProtoReflect())
+	}
+	return valid
+}
+
+func replaceInvalidUTF8(m protoreflect.Message) {
+	m.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		switch {
+		case field.IsList():
+			list := value.List()
+			for i := 0; i < list.Len(); i++ {
+				list.Set(i, validUTF8Value(field, list.Get(i)))
+			}
+		case field.IsMap():
+			replaceInvalidUTF8InMap(field, value.Map())
+		default:
+			m.Set(field, validUTF8Value(field, value))
+		}
+		return true
+	})
+}
+
+func replaceInvalidUTF8InMap(field protoreflect.FieldDescriptor, entries protoreflect.Map) {
+	type entry struct {
+		key   protoreflect.MapKey
+		value protoreflect.Value
+	}
+	var all []entry
+	entries.Range(func(key protoreflect.MapKey, value protoreflect.Value) bool {
+		all = append(all, entry{key: key, value: value})
+		return true
+	})
+	for _, e := range all {
+		key := e.key
+		if field.MapKey().Kind() == protoreflect.StringKind {
+			entries.Clear(key)
+			key = protoreflect.ValueOfString(strings.ToValidUTF8(key.String(), "�")).MapKey()
+		}
+		entries.Set(key, validUTF8Value(field.MapValue(), e.value))
+	}
+}
+
+func validUTF8Value(field protoreflect.FieldDescriptor, value protoreflect.Value) protoreflect.Value {
+	switch field.Kind() {
+	case protoreflect.StringKind:
+		return protoreflect.ValueOfString(strings.ToValidUTF8(value.String(), "�"))
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		replaceInvalidUTF8(value.Message())
+	}
+	return value
+}
 
 func envelopeJSON(ev *streamv1.RunEvent) (string, error) {
 	operation, err := operationJSON(ev.GetOperation())
