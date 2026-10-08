@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,6 +22,14 @@ func decodeTier(tier environmentv1.Tier) (environment.Tier, error) {
 			"there is no %s bootstrap; a bootstrap is either production or preview",
 			strings.ToLower(strings.TrimPrefix(tier.String(), "TIER_"))))
 	}
+}
+
+func decodeRequiredTier(tier environmentv1.Tier) (environment.Tier, error) {
+	if tier == environmentv1.Tier_TIER_UNSPECIFIED {
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New(
+			"this request is answered for the production or preview tier, and it named neither"))
+	}
+	return decodeTier(tier)
 }
 
 func encodeTier(tier environment.Tier) environmentv1.Tier {
