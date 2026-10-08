@@ -235,6 +235,42 @@ func sweepingOff(removed ...string) *box {
 	}}
 }
 
+func sweepingOffWhileADeployClaims(claimed string, removed ...string) *box {
+	sweeping := sweepingOff(removed...)
+	return &box{refuses: func(command string) (session.Result, bool) {
+		if strings.Contains(command, "/usr/local/lib/ocel/releases") && strings.Contains(command, "'claimed'") {
+			if strings.Contains(command, quoted(claimed)) {
+				return session.Result{Stdout: claimed + "\n"}, true
+			}
+			return session.Result{}, true
+		}
+		return sweeping.refuses(command)
+	}}
+}
+
+func TestASweepLeavesInTheRegistryARefADeployClaimedAfterTheBoxReportedIt(t *testing.T) {
+	t.Parallel()
+
+	promoted := "registry.example.com/acme/shop.web:sha256-promoted"
+	going := "registry.example.com/acme/shop.web:sha256-old"
+	machine := sweepingOffWhileADeployClaims(promoted, promoted, going)
+	store := fake.NewImages()
+
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, nil); err != nil {
+		t.Fatalf("ReconcileImages() = %v", err)
+	}
+
+	if got, want := store.Removed(), []string{going}; !slices.Equal(got, want) {
+		t.Errorf("the registry was asked to remove %v, want %v: a deploy promoted %s after the box reported it, and a fresh box pulls it from the registry", got, want, promoted)
+	}
+	if got, want := settledRefs(machine), []string{going}; !slices.Equal(got, want) {
+		t.Errorf("the sweep settled %v, want %v: a ref claimed again is not a ref the registry removed", got, want)
+	}
+	if asked := helperCalls(machine, "claimed"); len(asked) != 2 {
+		t.Errorf("the sweep asked the box %d times what is claimed, want once before each registry delete", len(asked))
+	}
+}
+
 func settledRefs(machine *box) []string {
 	var settled []string
 	for _, command := range helperCalls(machine, "settle") {
