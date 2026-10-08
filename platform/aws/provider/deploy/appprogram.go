@@ -124,7 +124,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	}
 	role := executionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
-		VariablesKeyARN: r.cfg.VariablesKeyARN, Boundary: r.cfg.AppBoundaryARN,
+		VariablesKeyARN: r.cfg.VariablesKeyARN, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if reachesTasks(app) {

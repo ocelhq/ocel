@@ -9,7 +9,10 @@ import (
 	pulumi "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-const testBoundaryARN = "arn:aws:iam::123456789012:policy/ocel-app-boundary"
+const (
+	testBoundaryARN = "arn:aws:iam::123456789012:policy/ocel-app-boundary"
+	testAppRolePath = "/ocel/production/app/"
+)
 
 const (
 	mockAccount        = "123456789012"

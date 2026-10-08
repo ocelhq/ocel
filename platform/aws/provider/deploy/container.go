@@ -85,6 +85,7 @@ type containerWork struct {
 	env         map[string]string
 	tags        map[string]string
 	boundary    string
+	rolePath    string
 	region      string
 	secrets     []string
 	policies    []bindingPolicy
@@ -213,6 +214,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		env:        env,
 		tags:       spec.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
+		rolePath:   r.cfg.AppRolePath,
 		region:     r.cfg.Region,
 		secrets:    presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
 		policies:   policies,
@@ -584,6 +586,7 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		Description:         describe(w.role, "task role for this app's container"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
+		Path:                pulumi.String(w.rolePath),
 		Tags:                resourceTags(naming.KindRole, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app))),
 	})
 	if err != nil {

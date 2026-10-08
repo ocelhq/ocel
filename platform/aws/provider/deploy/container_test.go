@@ -58,6 +58,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	cfg := Config{
 		Region:            "us-east-1",
 		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
+		AppRolePath:       testAppRolePath,
 		OriginSecret:      fixtureSecret,
 		Slug:              "shop",
 		Tier:              environment.TierProduction,

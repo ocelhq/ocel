@@ -23,6 +23,8 @@ type variablesTemplate struct {
 		} `yaml:"Metadata"`
 		Properties struct {
 			Description          string `yaml:"Description"`
+			Path                 string `yaml:"Path"`
+			RoleName             string `yaml:"RoleName"`
 			BillingMode          string `yaml:"BillingMode"`
 			AttributeDefinitions []struct {
 				AttributeName string `yaml:"AttributeName"`

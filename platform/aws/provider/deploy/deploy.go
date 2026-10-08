@@ -46,6 +46,7 @@ type Config struct {
 	VariablesTableARN   string
 	VariablesKeyARN     string
 	AppBoundaryARN      string
+	AppRolePath         string
 	Tier                environment.Tier
 	VariablesReferenced map[variablestore.Coordinate]string
 

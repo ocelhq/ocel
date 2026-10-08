@@ -114,6 +114,8 @@ type ScopedARNs struct {
 	runtimeLayers        []string
 	runtimeLayerVersions []string
 	bootstrapRoles       []string
+	appRoles             string
+	bastionRole          string
 	bootstrapFunction    string
 	bootstrapLogGroups   []string
 	bootstrapQueues      []string
@@ -145,7 +147,9 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		appBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
 		runtimeStack:      "arn:aws:cloudformation:*:*:stack/" + runtime + "/*",
 		runtimeChangeSet:  "arn:aws:cloudformation:*:*:changeSet/" + runtime + "-*/*",
-		bootstrapRoles:    []string{"arn:aws:iam::*:role/" + n.CoreStackName() + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
+		bootstrapRoles:    []string{"arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
+		appRoles:          "arn:aws:iam::*:role" + n.AppRolePathFor(tier) + "*",
+		bastionRole:       "arn:aws:iam::*:role/" + bastion.NameFor(tier),
 		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
 		scheduleGroup:     "arn:aws:scheduler:*:*:schedule-group/" + group,
 		schedule:          "arn:aws:scheduler:*:*:schedule/" + group + "/*",
@@ -312,12 +316,8 @@ func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	return condition
 }
 
-func passedToLambda(resourceTagged bool) map[string]any {
-	return passedTo(LambdaServicePrincipal, resourceTagged)
-}
-
-func passedToECSTasks() map[string]any {
-	return passedTo(ecsTasksPrincipal, true)
+func passedToLambda() map[string]any {
+	return passedTo(LambdaServicePrincipal)
 }
 
 func scalesECSServices(tagged map[string]any) map[string]any {
@@ -331,14 +331,8 @@ func linkedRoleFor(service string) map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"iam:AWSServiceName": service}}
 }
 
-func passedTo(service any, resourceTagged bool) map[string]any {
-	condition := map[string]any{
-		"StringEquals": map[string]any{"iam:PassedToService": service},
-	}
-	if resourceTagged {
-		return mergeConditions(condition, taggedByOcel())
-	}
-	return condition
+func passedTo(service any) map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"iam:PassedToService": service}}
 }
 
 func variablesKeyLifecycleActions() []string {
@@ -505,18 +499,18 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
-			Resources: []string{appRoleARN},
-			Condition: mergeConditions(passedToLambda(true), r.madeByItsStacks()),
+			Resources: []string{r.appRoles},
+			Condition: passedToLambda(),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
-			Resources: []string{appRoleARN},
-			Condition: mergeConditions(passedToECSTasks(), r.madeByItsStacks()),
+			Resources: []string{r.appRoles, r.bastionRole},
+			Condition: passedTo(ecsTasksPrincipal),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
-			Resources: []string{appRoleARN},
-			Condition: mergeConditions(passedTo(schedulerServicePrincipal, true), r.madeByItsStacks()),
+			Resources: []string{r.appRoles},
+			Condition: passedTo(schedulerServicePrincipal),
 		},
 		{
 			Actions: []string{
@@ -1257,12 +1251,12 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: r.bootstrapRoles,
-			Condition: mergeConditions(passedToLambda(false), r.madeByItsStacks()),
+			Condition: passedToLambda(),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: r.bootstrapRoles,
-			Condition: mergeConditions(passedTo(schedulerServicePrincipal, false), r.madeByItsStacks()),
+			Condition: passedTo(schedulerServicePrincipal),
 		},
 		{
 			Actions: []string{

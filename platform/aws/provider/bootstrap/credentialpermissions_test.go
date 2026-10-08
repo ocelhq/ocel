@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
 
 type parsedPolicy struct {
@@ -1273,6 +1274,45 @@ func TestEveryBucketAndTableABootstrapStackMakesIsOneTheCredentialsName(t *testi
 	}
 }
 
+func TestEveryRoleABootstrapStackGeneratesIsOneOnlyItsOwnTiersCredentialMayPass(t *testing.T) {
+	passing := []requestContext{
+		{"iam:PassedToService": LambdaServicePrincipal},
+		{"iam:PassedToService": schedulerServicePrincipal},
+	}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		ownDoc, _ := renderedCredentialsOf(t, tier)
+		siblingDoc, _ := renderedCredentialsOf(t, sibling)
+		templates := map[string]string{"core": coreStackTemplate(defaultNamespace, tier, "")}
+		for _, f := range featureRegistry {
+			templates[f.stackName(defaultNamespace, tier)] = featureTemplate(f.name, tier)
+		}
+		for stack, body := range templates {
+			for logicalID, resource := range parseVariablesTemplate(t, body).Resources {
+				if resource.Type != "AWS::IAM::Role" || resource.Properties.RoleName != "" {
+					continue
+				}
+				path := resource.Properties.Path
+				if path == "" {
+					path = "/"
+				}
+				role := "arn:aws:iam::111122223333:role" + path + stack + "-" + logicalID + "-A1B2C3D4E5F6"
+				passable := slices.ContainsFunc(passing, func(request requestContext) bool {
+					return allows(t, ownDoc, "iam:PassRole", role, taggedWithTier(tier, request))
+				})
+				if !passable {
+					t.Errorf("the %s bootstrap credential cannot pass %s, the role its %s stack generates as %s", tier, role, stack, logicalID)
+				}
+				for _, request := range passing {
+					if allows(t, siblingDoc, "iam:PassRole", role, taggedWithTier(sibling, request)) {
+						t.Errorf("the %s bootstrap credential can pass %s to %s, the role the %s tier's %s stack generates", sibling, role, request["iam:PassedToService"], tier, stack)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestOnlyTheBootstrapCredentialOfATierManagesItsBoundaryPolicyAndVariablesAlias(t *testing.T) {
 	const account = "arn:aws:%s::111122223333:%s"
 	for _, tier := range bothTiers {
@@ -1326,8 +1366,25 @@ func allows(t *testing.T, document, action, arn string, request requestContext) 
 		}) {
 			continue
 		}
+		if namesAResourceTagAWSIgnoresFor(action, statement.Condition) {
+			continue
+		}
 		if conditionHolds(t, statement.Condition, request) {
 			return true
+		}
+	}
+	return false
+}
+
+func namesAResourceTagAWSIgnoresFor(action string, condition map[string]any) bool {
+	if action != "iam:PassRole" {
+		return false
+	}
+	for _, operands := range condition {
+		for key := range operands.(map[string]any) {
+			if strings.HasPrefix(key, "aws:ResourceTag/") || strings.HasPrefix(key, "iam:ResourceTag/") {
+				return true
+			}
 		}
 	}
 	return false
@@ -1420,39 +1477,40 @@ func taggedWithTier(tier environment.Tier, also requestContext) requestContext {
 }
 
 func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *testing.T) {
-	const (
-		role     = "arn:aws:iam::111122223333:role/ocel-bootstrap-variables-k-EnvSourceSyncRol-A1B2C3D4E5F6"
-		function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-bootstrap-variables-k-EnvSourceSync-A1B2C3D4E5F6"
-	)
+	const function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-bootstrap-variables-k-EnvSourceSync-A1B2C3D4E5F6"
+	roleOf := func(tier environment.Tier) string {
+		return "arn:aws:iam::111122223333:role" + defaultNamespace.bootstrapRolePathFor(tier) + "ocel-bootstrap-variables-k-EnvSourceSyncRol-A1B2C3D4E5F6"
+	}
 	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		role, siblingRole := roleOf(tier), roleOf(sibling)
 		for _, c := range []struct {
-			action, arn string
-			also        requestContext
+			action, arn, siblingARN string
+			also                    requestContext
 		}{
-			{"iam:PutRolePolicy", role, nil},
-			{"iam:DeleteRolePolicy", role, nil},
-			{"iam:UpdateAssumeRolePolicy", role, nil},
-			{"iam:UpdateRole", role, nil},
-			{"iam:DeleteRole", role, nil},
-			{"iam:UntagRole", role, nil},
-			{"iam:TagRole", role, nil},
-			{"iam:AttachRolePolicy", role, requestContext{"iam:PolicyARN": LambdaBasicExecutionPolicyARN}},
-			{"iam:PassRole", role, toLambda},
-			{"lambda:UpdateFunctionCode", function, nil},
-			{"lambda:UpdateFunctionConfiguration", function, nil},
-			{"lambda:AddPermission", function, nil},
-			{"lambda:DeleteFunction", function, nil},
-			{"lambda:PutFunctionEventInvokeConfig", function, nil},
-			{"lambda:TagResource", function, nil},
+			{"iam:PutRolePolicy", role, siblingRole, nil},
+			{"iam:DeleteRolePolicy", role, siblingRole, nil},
+			{"iam:UpdateAssumeRolePolicy", role, siblingRole, nil},
+			{"iam:UpdateRole", role, siblingRole, nil},
+			{"iam:DeleteRole", role, siblingRole, nil},
+			{"iam:UntagRole", role, siblingRole, nil},
+			{"iam:TagRole", role, siblingRole, nil},
+			{"iam:AttachRolePolicy", role, siblingRole, requestContext{"iam:PolicyARN": LambdaBasicExecutionPolicyARN}},
+			{"iam:PassRole", role, siblingRole, toLambda},
+			{"lambda:UpdateFunctionCode", function, function, nil},
+			{"lambda:UpdateFunctionConfiguration", function, function, nil},
+			{"lambda:AddPermission", function, function, nil},
+			{"lambda:DeleteFunction", function, function, nil},
+			{"lambda:PutFunctionEventInvokeConfig", function, function, nil},
+			{"lambda:TagResource", function, function, nil},
 		} {
 			if !allows(t, bootstrapDoc, c.action, c.arn, taggedWithTier(tier, c.also)) {
 				t.Errorf("the %s bootstrap credential cannot %s on %s, which its own stacks made", tier, c.action, c.arn)
 			}
-			if allows(t, bootstrapDoc, c.action, c.arn, taggedWithTier(sibling, c.also)) {
-				t.Errorf("the %s bootstrap credential can %s on %s, which the %s tier's stacks made", tier, c.action, c.arn, sibling)
+			if allows(t, bootstrapDoc, c.action, c.siblingARN, taggedWithTier(sibling, c.also)) {
+				t.Errorf("the %s bootstrap credential can %s on %s, which the %s tier's stacks made", tier, c.action, c.siblingARN, sibling)
 			}
 		}
 		for _, c := range []struct{ action, arn string }{
@@ -1519,38 +1577,41 @@ func appResourceOf(tier environment.Tier, also requestContext) requestContext {
 func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T) {
 	const (
 		function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-app-shop-pr-7-web-a1b2c3"
-		role     = "arn:aws:iam::111122223333:role/ocel-app-shop-pr-7-web-role-a1b2c3"
 		mapping  = "arn:aws:lambda:us-east-1:111122223333:event-source-mapping:0a1b2c3d-4e5f-6789-abcd-ef0123456789"
 	)
+	roleOf := func(tier environment.Tier) string {
+		return "arn:aws:iam::111122223333:role" + defaultNamespace.AppRolePathFor(tier) + "ocel-app-shop-pr-7-web-role-a1b2c3"
+	}
 	worker := requestContext{"lambda:FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:ocel-app-shop-pr-7-worker-a1b2c3"}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
+		role, siblingRole := roleOf(tier), roleOf(sibling)
 		for purpose, document := range credentialsOfTier(t, tier) {
 			for _, c := range []struct {
-				action, arn string
-				also        requestContext
+				action, arn, siblingARN string
+				also                    requestContext
 			}{
-				{"lambda:UpdateFunctionCode", function, nil},
-				{"lambda:UpdateFunctionConfiguration", function, nil},
-				{"lambda:InvokeFunction", function, nil},
-				{"lambda:AddPermission", function, nil},
-				{"lambda:DeleteFunction", function, nil},
-				{"lambda:TagResource", function, nil},
-				{"iam:PassRole", role, requestContext{"iam:PassedToService": LambdaServicePrincipal}},
-				{"iam:PassRole", role, requestContext{"iam:PassedToService": ecsTasksPrincipal}},
-				{"iam:PassRole", role, requestContext{"iam:PassedToService": schedulerServicePrincipal}},
-				{"iam:DeleteRole", role, nil},
-				{"iam:UpdateRole", role, nil},
-				{"iam:TagRole", role, nil},
-				{"lambda:UpdateEventSourceMapping", mapping, worker},
-				{"lambda:DeleteEventSourceMapping", mapping, worker},
-				{"lambda:TagResource", mapping, nil},
+				{"lambda:UpdateFunctionCode", function, function, nil},
+				{"lambda:UpdateFunctionConfiguration", function, function, nil},
+				{"lambda:InvokeFunction", function, function, nil},
+				{"lambda:AddPermission", function, function, nil},
+				{"lambda:DeleteFunction", function, function, nil},
+				{"lambda:TagResource", function, function, nil},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": LambdaServicePrincipal}},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": ecsTasksPrincipal}},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": schedulerServicePrincipal}},
+				{"iam:DeleteRole", role, siblingRole, nil},
+				{"iam:UpdateRole", role, siblingRole, nil},
+				{"iam:TagRole", role, siblingRole, nil},
+				{"lambda:UpdateEventSourceMapping", mapping, mapping, worker},
+				{"lambda:DeleteEventSourceMapping", mapping, mapping, worker},
+				{"lambda:TagResource", mapping, mapping, nil},
 			} {
 				if !allows(t, document, c.action, c.arn, appResourceOf(tier, c.also)) {
 					t.Errorf("the %s %s credential cannot %s on %s, which its own tier's deploys made", tier, purpose, c.action, c.arn)
 				}
-				if allows(t, document, c.action, c.arn, appResourceOf(sibling, c.also)) {
-					t.Errorf("the %s %s credential can %s on %s, which the %s tier's deploys made", tier, purpose, c.action, c.arn, sibling)
+				if allows(t, document, c.action, c.siblingARN, appResourceOf(sibling, c.also)) {
+					t.Errorf("the %s %s credential can %s on %s, which the %s tier's deploys made", tier, purpose, c.action, c.siblingARN, sibling)
 				}
 			}
 			creating := func(of environment.Tier, also requestContext) requestContext {
@@ -1590,8 +1651,25 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 		if !allows(t, bootstrapDoc, "iam:DeleteRolePermissionsBoundary", role, appResourceOf(tier, nil)) {
 			t.Errorf("the %s bootstrap credential cannot lift the boundary of its own tier's app role", tier)
 		}
-		if allows(t, bootstrapDoc, "iam:DeleteRolePermissionsBoundary", role, appResourceOf(sibling, nil)) {
+		if allows(t, bootstrapDoc, "iam:DeleteRolePermissionsBoundary", siblingRole, appResourceOf(sibling, nil)) {
 			t.Errorf("the %s bootstrap credential can lift the boundary of the %s tier's app role", tier, sibling)
+		}
+	}
+}
+
+func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) {
+	toTasks := requestContext{"iam:PassedToService": ecsTasksPrincipal}
+	roleOf := func(tier environment.Tier) string {
+		return "arn:aws:iam::111122223333:role/" + bastion.NameFor(tier)
+	}
+	for _, tier := range bothTiers {
+		for purpose, document := range credentialsOfTier(t, tier) {
+			if !allows(t, document, "iam:PassRole", roleOf(tier), toTasks) {
+				t.Errorf("the %s %s credential cannot pass %s to ECS, so its bastion task cannot be registered", tier, purpose, roleOf(tier))
+			}
+			if allows(t, document, "iam:PassRole", roleOf(tier.Sibling()), toTasks) {
+				t.Errorf("the %s %s credential can pass %s, the %s tier's bastion role, to ECS", tier, purpose, roleOf(tier.Sibling()), tier.Sibling())
+			}
 		}
 	}
 }

@@ -29,7 +29,7 @@ func (r *release) declareRealtime(pctx *sdk.Context, project, env string, resour
 	if len(realtimes) == 0 {
 		return nil
 	}
-	args := realtimeArgs{Authorizer: work.authorizer, BoundaryARN: r.cfg.AppBoundaryARN}
+	args := realtimeArgs{Authorizer: work.authorizer, BoundaryARN: r.cfg.AppBoundaryARN, RolePath: r.cfg.AppRolePath}
 	for _, resource := range realtimes {
 		secret := signingKeySecret(r.cfg.SigningKeyRoot, project, env, resource.Name)
 		var seed []byte

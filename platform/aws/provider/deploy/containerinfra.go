@@ -81,6 +81,7 @@ type containerInfra struct {
 type containerInfraWork struct {
 	tier     environment.Tier
 	boundary string
+	rolePath string
 	tags     map[string]string
 	public   []string
 	outputs  auto.OutputMap
@@ -193,6 +194,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	work := &containerInfraWork{
 		tier:     tier,
 		boundary: owner.cfg.AppBoundaryARN,
+		rolePath: owner.cfg.AppRolePath,
 		tags:     containerInfraTags(tier),
 		public:   public,
 	}
@@ -460,6 +462,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
+		Path:                pulumi.String(w.rolePath),
 		Tags:                tags,
 	})
 	if err != nil {

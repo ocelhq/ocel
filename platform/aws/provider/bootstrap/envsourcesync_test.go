@@ -365,14 +365,15 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 		}
 	}
 	passed := false
+	scoped := defaultNamespace.ScopedARNs(environment.TierProduction)
 	for g := range bootstrapGrants {
 		if g.action == "iam:PassRole" && strings.Contains(g.condition, `"iam:PassedToService":"scheduler.amazonaws.com"`) {
-			if g.resource == appRoleARN && strings.Contains(g.condition, `"aws:ResourceTag/ocel:managed-by":"ocel"`) {
+			if g.resource == scoped.appRoles {
 				continue
 			}
-			passed = slices.Contains(defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRoles, g.resource)
+			passed = slices.Contains(scoped.bootstrapRoles, g.resource)
 			if !passed {
-				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes or an app role Ocel tagged", g.resource)
+				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes or an app role under its tier's path", g.resource)
 			}
 		}
 	}

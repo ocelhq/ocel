@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -38,10 +39,11 @@ func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket strin
 	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }
 
-func imageOptimizerResources(ns Namespace, code payloads.Placement) string {
+func imageOptimizerResources(ns Namespace, tier environment.Tier, code payloads.Placement) string {
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: `+ns.bootstrapRolePathFor(tier)+`
       Description: "Execution role for this bootstrap's shared image optimizer: read on the asset bucket's assets and image-config prefixes, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
