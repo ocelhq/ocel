@@ -248,6 +248,7 @@ export const prerender = {
     apps: ["web"],
     checks: [...healthChecks, ...prerenderBucketChecks],
     on: { aws: [defaults], gcp: [defaults], vps: [defaults] },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   nextDockerfile: fixture("prerender/next-dockerfile", {
     apps: ["web"],
