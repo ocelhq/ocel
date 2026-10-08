@@ -57,8 +57,7 @@ type runServer struct {
 	untagAtRelease    string
 	untagEveryRelease bool
 
-	tagged      map[string][]string
-	refusesList bool
+	tagged map[string][]string
 
 	signed []signedJWT
 }
@@ -330,11 +329,6 @@ func (s *runServer) getTag(w http.ResponseWriter, name string) {
 }
 
 func (s *runServer) listTags(w http.ResponseWriter, parent string) {
-	if s.refusesList {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"error":{"code":403,"message":"Permission 'artifactregistry.tags.list' denied"}}`))
-		return
-	}
 	listed := map[string]any{}
 	var tags []map[string]string
 	for _, tag := range s.tagged[strings.TrimSuffix(parent, "/tags")] {
