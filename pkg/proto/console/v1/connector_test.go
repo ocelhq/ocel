@@ -26,6 +26,14 @@ func validSetConnectorAddressRequest() *consolev1.SetConnectorAddressRequest {
 	}
 }
 
+func validHeartbeatConnectorRequest() *consolev1.HeartbeatConnectorRequest {
+	return &consolev1.HeartbeatConnectorRequest{
+		Id:           connectorID,
+		Version:      "0.0.0-alpha",
+		Capabilities: []string{"variables.read"},
+	}
+}
+
 func TestProtovalidateAcceptsEveryConnectorTheCLICanRegister(t *testing.T) {
 	requireAccepted(t, "a target, a vendor and the way to reach it", validUpsertConnectorRequest())
 
@@ -38,6 +46,8 @@ func TestProtovalidateAcceptsEveryConnectorTheCLICanRegister(t *testing.T) {
 
 	requireAccepted(t, "a removal by id", &consolev1.RemoveConnectorRequest{Id: connectorID})
 	requireAccepted(t, "a list", &consolev1.ListConnectorsRequest{})
+	requireAccepted(t, "a heartbeat with a version and grants", validHeartbeatConnectorRequest())
+	requireAccepted(t, "a heartbeat with no grants", &consolev1.HeartbeatConnectorRequest{Id: connectorID})
 }
 
 func TestProtovalidateRefusesAConnectorTheConsoleCannotStore(t *testing.T) {
@@ -73,5 +83,18 @@ func TestProtovalidateRefusesAConnectorTheConsoleCannotStore(t *testing.T) {
 	}, []refusal[*consolev1.RemoveConnectorRequest]{
 		{name: "the id is required", mutate: func(r *consolev1.RemoveConnectorRequest) { r.Id = "" }},
 		{name: "the id is a uuid", mutate: func(r *consolev1.RemoveConnectorRequest) { r.Id = "con_1" }},
+	})
+
+	requireRefusals(t, validHeartbeatConnectorRequest, []refusal[*consolev1.HeartbeatConnectorRequest]{
+		{name: "the id is required", mutate: func(r *consolev1.HeartbeatConnectorRequest) { r.Id = "" }},
+		{name: "the id is a uuid", mutate: func(r *consolev1.HeartbeatConnectorRequest) { r.Id = "con_1" }},
+		{name: "the version is at most 64 characters", mutate: func(r *consolev1.HeartbeatConnectorRequest) { r.Version = strings.Repeat("v", 65) }},
+		{name: "a grant is not empty", mutate: func(r *consolev1.HeartbeatConnectorRequest) { r.Capabilities = []string{""} }},
+		{name: "a connector holds at most 64 grants", mutate: func(r *consolev1.HeartbeatConnectorRequest) {
+			r.Capabilities = make([]string, 65)
+			for i := range r.Capabilities {
+				r.Capabilities[i] = "g"
+			}
+		}},
 	})
 }
