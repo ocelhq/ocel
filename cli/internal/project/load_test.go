@@ -186,6 +186,36 @@ func TestFindProjectRootIgnoresTheScratchDirectory(t *testing.T) {
 	}
 }
 
+func TestFindRootIsTheDirectoryOfTheNearestConfig(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, DefaultFileName), `{"slug":"acme"}`)
+	nested := filepath.Join(root, "a")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	if found, err := FindRoot(nested, ""); err != nil || found != root {
+		t.Fatalf("FindRoot = %q, %v, want %q", found, err, root)
+	}
+}
+
+func TestFindRootIsTheStartDirectoryWhenNoConfigIsFound(t *testing.T) {
+	start := t.TempDir()
+
+	if found, err := FindRoot(start, ""); err != nil || found != start {
+		t.Fatalf("FindRoot = %q, %v, want %q", found, err, start)
+	}
+}
+
+func TestFindRootIsTheDirectoryOfAnExplicitConfig(t *testing.T) {
+	start, elsewhere := t.TempDir(), t.TempDir()
+	write(t, filepath.Join(elsewhere, "ocel.staging.json"), `{"slug":"acme"}`)
+
+	if found, err := FindRoot(start, filepath.Join(elsewhere, "ocel.staging.json")); err != nil || found != elsewhere {
+		t.Fatalf("FindRoot = %q, %v, want %q", found, err, elsewhere)
+	}
+}
+
 func TestLoadRefusesTheSameSelectorsInEveryForm(t *testing.T) {
 	cases := []struct {
 		name string

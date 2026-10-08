@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "cli.result.v1.SkillInstallResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(ocel_version)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ocelVersion": {
+          "default": "",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.SkillTarget.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "written": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Skill Install Result",
+      "type": "object"
+    },
+    "cli.result.v1.SkillTarget.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "default": "",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Skill Target",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.SkillInstallResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.SkillInstallResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

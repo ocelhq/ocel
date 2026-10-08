@@ -36,6 +36,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
 	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
 	"github.com/ocelhq/ocel/cli/internal/commands/schema"
+	skillcommand "github.com/ocelhq/ocel/cli/internal/commands/skill"
 	"github.com/ocelhq/ocel/cli/internal/commands/telemetryflush"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -214,6 +215,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(cost.NewCommand(cost.Dependencies{Invocation: invocation, ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect}))
 	rootCmd.AddCommand(doctor.NewCommand(invocation))
 	rootCmd.AddCommand(schema.NewCommand(invocation))
+	rootCmd.AddCommand(skillcommand.NewCommand(invocation))
 	rootCmd.AddCommand(telemetryflush.NewCommand())
 
 	rootCmd.AddGroup(
