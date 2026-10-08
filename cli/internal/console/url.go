@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const DefaultBaseURL = "https://ocel.app"
+const DefaultBaseURL = "https://app.ocelhq.com"
 
 const URLEnvVar = "OCEL_CONSOLE_URL"
 
