@@ -34,11 +34,11 @@ type Use struct {
 }
 
 type Forwards struct {
-	bindings    map[string]map[string]string
-	runtimeEnv  map[string]string
-	unforwarded []string
-	stop        context.CancelFunc
-	ended       chan error
+	bindings        map[string]map[string]string
+	bindingProxyEnv map[string]string
+	unforwarded     []string
+	stop            context.CancelFunc
+	ended           chan error
 }
 
 func (f *Forwards) Close() error {
@@ -60,11 +60,11 @@ func (f *Forwards) Bindings(app string) map[string]string {
 	return f.bindings[app]
 }
 
-func (f *Forwards) RuntimeEnv() map[string]string {
+func (f *Forwards) BindingProxyEnv() map[string]string {
 	if f == nil {
 		return nil
 	}
-	return f.runtimeEnv
+	return f.bindingProxyEnv
 }
 
 func (f *Forwards) Apps() []string {
@@ -171,7 +171,7 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 	}
 	forwards.bindings = byApp
 	if proxy := resp.GetBindingProxy(); proxy != nil {
-		forwards.runtimeEnv = map[string]string{
+		forwards.bindingProxyEnv = map[string]string{
 			processenv.RuntimeAddressEnvVar: proxy.GetAddress(),
 			localrpc.SessionTokenEnvVar:     proxy.GetSessionToken(),
 		}

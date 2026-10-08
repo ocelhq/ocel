@@ -469,8 +469,8 @@ func TestADeployBuildsAnAppWithTheBindingProxyAndTheBucketRecordItBindsAndCloses
 	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
 
 	wantRuntime := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-token"}
-	if !maps.Equal(built.RuntimeEnv, wantRuntime) {
-		t.Errorf("the build was handed the runtime env %v, want the binding proxy the provider served", built.RuntimeEnv)
+	if !maps.Equal(built.BindingProxyEnv, wantRuntime) {
+		t.Errorf("the build was handed the runtime env %v, want the binding proxy the provider served", built.BindingProxyEnv)
 	}
 	if _, ok := built.Live["OCEL_RESOURCE_BUCKET_files"]; !ok {
 		t.Errorf("the build was handed %v to read from its live dir, want the files bucket beside main", slices.Sorted(maps.Keys(built.Live)))
@@ -500,7 +500,7 @@ func TestAnAppWhoseBuildTakesNoBindingsIsHandedNoBindingProxy(t *testing.T) {
 
 	deployed(t, dependencies, fixture, deployOptions{yes: true})
 
-	if len(built.RuntimeEnv) != 0 {
-		t.Errorf("an app that opted out was handed the runtime env %v", built.RuntimeEnv)
+	if len(built.BindingProxyEnv) != 0 {
+		t.Errorf("an app that opted out was handed the runtime env %v", built.BindingProxyEnv)
 	}
 }
