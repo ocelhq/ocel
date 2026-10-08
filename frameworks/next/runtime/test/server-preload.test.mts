@@ -1,39 +1,36 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import net from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { CacheHandlerSettings } from "@framework/next-cache/app-cache-handlers";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/cache-handler.mjs";
 import { getNextHost, installNextHost } from "../src/host.mjs";
-import { installServerPreload, readServedCacheHandlers } from "../src/server-preload.mjs";
+import { installServerPreload } from "../src/server-preload.mjs";
 import useCacheDefault from "../src/use-cache-default.mjs";
 import useCacheRemote from "../src/use-cache-remote.mjs";
 
 const nextCacheHandlers = Symbol.for("@next/cache-handlers");
-const listen = net.Server.prototype.listen;
-let projectDir: string;
+const nextRouterServerContexts = Symbol.for("@next/router-server-methods");
+const slots = globalThis as Record<symbol, unknown>;
 
-beforeEach(async () => {
-  projectDir = await mkdtemp(join(tmpdir(), "server-preload-"));
-});
-
-afterEach(async () => {
-  net.Server.prototype.listen = listen;
-  delete (globalThis as Record<symbol, unknown>)[nextCacheHandlers];
+afterEach(() => {
+  delete slots[nextCacheHandlers];
+  delete slots[nextRouterServerContexts];
   installNextHost({});
-  await rm(projectDir, { recursive: true, force: true });
 });
 
-async function writeManifest(config: Record<string, unknown>): Promise<void> {
-  await mkdir(join(projectDir, ".next"), { recursive: true });
-  await writeFile(join(projectDir, ".next/required-server-files.json"), JSON.stringify({ config }));
+function registerNextServer(context: Record<string, unknown>): Record<string, unknown> {
+  if (!slots[nextRouterServerContexts]) slots[nextRouterServerContexts] = {};
+  const contexts = slots[nextRouterServerContexts] as Record<string, Record<string, unknown>>;
+  contexts[""] = context;
+  return contexts[""];
 }
+
+const nextDefaults = {
+  cacheHandler: undefined,
+  cacheHandlers: { default: undefined, remote: undefined, static: undefined },
+};
 
 test("installs the fetch, default and remote handlers as Next's global cache handlers", () => {
   installServerPreload(() => ({}));
 
-  expect((globalThis as Record<symbol, unknown>)[nextCacheHandlers]).toEqual({
+  expect(slots[nextCacheHandlers]).toEqual({
     FetchCache: OcelCacheHandler,
     DefaultCache: useCacheDefault,
     RemoteCache: useCacheRemote,
@@ -53,82 +50,59 @@ test("builds its host only when the cache first reads it", () => {
   expect(built).toBe(1);
 });
 
-test("reads the cache handlers a built app serves with from its build manifest", async () => {
-  await writeManifest({ cacheHandler: "../h.cjs", cacheHandlers: { remote: "../r.cjs" } });
-
-  expect(readServedCacheHandlers({}, projectDir)).toEqual({
-    cacheHandler: "../h.cjs",
-    cacheHandlers: { default: undefined, remote: "../r.cjs" },
-  });
-});
-
 test.each([
-  ["NEXT_CACHE_HANDLER_PATH", (served: CacheHandlerSettings) => served.cacheHandler],
-  [
-    "NEXT_DEFAULT_CACHE_HANDLER_PATH",
-    (served: CacheHandlerSettings) => served.cacheHandlers?.default,
-  ],
-  [
-    "NEXT_REMOTE_CACHE_HANDLER_PATH",
-    (served: CacheHandlerSettings) => served.cacheHandlers?.remote,
-  ],
-])("reads the cache handler %s names", async (name, handlerOf) => {
-  await writeManifest({});
-
-  const served = readServedCacheHandlers({ [name]: "/e.cjs" }, projectDir);
-
-  expect(handlerOf(served)).toBe("/e.cjs");
-});
-
-test("reads a standalone server's baked config and ignores the environment its config replaced", () => {
-  const env = {
-    __NEXT_PRIVATE_STANDALONE_CONFIG: JSON.stringify({ cacheHandlers: { default: "../u.cjs" } }),
-    NEXT_CACHE_HANDLER_PATH: "/ignored.cjs",
-  };
-
-  expect(readServedCacheHandlers(env, projectDir)).toEqual({
-    cacheHandlers: { default: "../u.cjs" },
-  });
-});
-
-test("refuses to read an app whose build manifest is missing", () => {
-  expect(() => readServedCacheHandlers({}, projectDir)).toThrow("required-server-files.json");
-});
-
-test("refuses the first server to listen when the app names its own cache handler", async () => {
-  await writeManifest({ cacheHandler: "../h.cjs" });
-  const cwd = process.cwd();
-  process.chdir(projectDir);
-  try {
+  ["cacheHandler", { cacheHandler: "/app/h.cjs" }],
+  ["cacheHandlers.default", { cacheHandlers: { default: "/app/d.cjs" } }],
+  ["cacheHandlers.remote", { cacheHandlers: { remote: "/app/r.cjs" } }],
+])(
+  "refuses the config a Next server loads when its %s names the app's own handler",
+  (setting, config) => {
     installServerPreload(() => ({}));
 
-    const run = () => net.createServer().listen(0);
+    expect(() => registerNextServer({ nextConfig: { ...nextDefaults, ...config } })).toThrow(
+      setting,
+    );
+  },
+);
 
-    expect(run).toThrow("cacheHandler");
-  } finally {
-    process.chdir(cwd);
-  }
-});
-
-test("lets a server listen when the app names no cache handler of its own", async () => {
-  await writeManifest({ cacheHandlers: {} });
-  const cwd = process.cwd();
-  process.chdir(projectDir);
-  try {
-    installServerPreload(() => ({}));
-
-    const server = net.createServer().listen(0);
-
-    await new Promise((resolve) => server.close(resolve));
-  } finally {
-    process.chdir(cwd);
-  }
-});
-
-test("leaves a process that never listens alone however its app is configured", async () => {
-  await writeManifest({ cacheHandler: "../h.cjs" });
-
+test("refuses a config Next sets on a server it registered without one", () => {
   installServerPreload(() => ({}));
+  const context = registerNextServer({});
 
-  expect(getNextHost()).toBeDefined();
+  expect(() => {
+    context.nextConfig = { cacheHandler: "/app/h.cjs" };
+  }).toThrow("cacheHandler");
+});
+
+test("builds its host as a Next server loads a config that names no handler of its own", () => {
+  let built = 0;
+  installServerPreload(() => {
+    built++;
+    return {};
+  });
+
+  const context = registerNextServer({ nextConfig: nextDefaults, hostname: "localhost" });
+
+  expect(built).toBe(1);
+  expect(context.hostname).toBe("localhost");
+  expect(context.nextConfig).toBe(nextDefaults);
+});
+
+test("stops a Next server loading its config when its host cannot be built", () => {
+  installServerPreload(() => {
+    throw new Error("ocel: OCEL_CDN_URL_MAP names a url map to purge");
+  });
+
+  expect(() => registerNextServer({ nextConfig: nextDefaults })).toThrow("OCEL_CDN_URL_MAP");
+});
+
+test("never builds the host of a process that runs no Next server", () => {
+  let built = 0;
+
+  installServerPreload(() => {
+    built++;
+    return {};
+  });
+
+  expect(built).toBe(0);
 });

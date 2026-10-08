@@ -33,9 +33,16 @@ export function installNextHostOnFirstUse(newHost: () => NextHost): void {
 export function getNextHost(): NextHost {
   const slot = slots[hostKey];
   if (typeof slot !== "function") return slot ?? {};
-  const host = slot();
-  slots[hostKey] = host;
-  return host;
+  try {
+    const host = slot();
+    slots[hostKey] = host;
+    return host;
+  } catch (err) {
+    slots[hostKey] = () => {
+      throw err;
+    };
+    throw err;
+  }
 }
 
 export function refuseIncompleteHost(host: NextHost, env: NodeJS.ProcessEnv): Error | undefined {

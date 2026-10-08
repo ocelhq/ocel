@@ -181,3 +181,16 @@ test("builds a host installed for first use only when it is first read", async (
   expect(getNextHost().cacheTagsPerObject).toBe(7);
   expect(built).toBe(1);
 });
+
+test("a host installed for first use that fails to build fails every read with that error and is built once", async () => {
+  const { getNextHost, installNextHostOnFirstUse } = await import("../src/host.mjs");
+  let built = 0;
+  installNextHostOnFirstUse(() => {
+    built++;
+    throw new Error("ocel: no url map");
+  });
+
+  expect(() => getNextHost()).toThrow("ocel: no url map");
+  expect(() => getNextHost()).toThrow("ocel: no url map");
+  expect(built).toBe(1);
+});

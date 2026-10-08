@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { isBuiltin } from "node:module";
 import net from "node:net";
@@ -95,7 +95,11 @@ const cacheEnv = {
   OCEL_TAG_DATABASE: "database",
 };
 
-test("the server preload installs the cache handlers and a Cloud Run host it builds only when the cache first reads it", async () => {
+const registerNextServer = (config: string) =>
+  `globalThis[Symbol.for("@next/router-server-methods")] ??= {};
+globalThis[Symbol.for("@next/router-server-methods")][""] = { nextConfig: ${config} };`;
+
+test("the server preload installs the cache handlers and builds its Cloud Run host only once a Next server loads its config", async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     [
@@ -103,15 +107,13 @@ test("the server preload installs the cache handlers and a Cloud Run host it bui
       "-e",
       `process.env.OCEL_REFRESH_SECRET = "s1";
 await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
-const slot = globalThis[Symbol.for("ocel.next.host.v1")];
 const handlers = globalThis[Symbol.for("@next/cache-handlers")];
-const secretBefore = process.env.OCEL_REFRESH_SECRET;
-const host = slot();
+const before = { slot: typeof globalThis[Symbol.for("ocel.next.host.v1")], secret: process.env.OCEL_REFRESH_SECRET ?? null };
+${registerNextServer("{ cacheHandlers: {} }")}
+const host = globalThis[Symbol.for("ocel.next.host.v1")];
 process.stdout.write(JSON.stringify({
-  slot: typeof slot,
-  secretBefore,
-  secretAfter: process.env.OCEL_REFRESH_SECRET ?? null,
-  store: typeof host.newCacheStore,
+  before,
+  after: { store: typeof host.newCacheStore, secret: process.env.OCEL_REFRESH_SECRET ?? null },
   handlers: Object.fromEntries(Object.entries(handlers ?? {}).map(([name, handler]) => [name, typeof handler])),
 }));`,
     ],
@@ -119,10 +121,8 @@ process.stdout.write(JSON.stringify({
   );
 
   expect(JSON.parse(stdout)).toEqual({
-    slot: "function",
-    secretBefore: "s1",
-    secretAfter: null,
-    store: "function",
+    before: { slot: "function", secret: "s1" },
+    after: { store: "function", secret: null },
     handlers: { FetchCache: "function", DefaultCache: "object", RemoteCache: "object" },
   });
 });
@@ -144,33 +144,47 @@ const res = await fetch("http://127.0.0.1:" + server.address().port);
 process.stdout.write(res.headers.get("cache-control") ?? "");
 server.close();`,
     ],
-    { env: { PATH: process.env.PATH }, cwd: await projectNaming({}) },
+    { env: { PATH: process.env.PATH } },
   );
 
   expect(stdout).not.toContain("s-maxage");
 });
 
-async function projectNaming(config: Record<string, unknown>): Promise<string> {
-  const projectDir = await mkdtemp(join(dist, "preload-"));
-  await mkdir(join(projectDir, ".next"));
-  await writeFile(join(projectDir, ".next/required-server-files.json"), JSON.stringify({ config }));
-  return projectDir;
-}
-
-test("a process running the server preload refuses to listen when its app names its own cache handler", async () => {
+test("a process running the server preload stops when the Next server it runs loads a config naming the app's own cache handler", async () => {
   const run = execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
+${registerNextServer(`{ cacheHandler: "/app/mine.cjs" }`)}`,
+    ],
+    { env: { PATH: process.env.PATH } },
+  );
+
+  await expect(run).rejects.toThrow("cacheHandler");
+});
+
+test("a process running the server preload that runs no Next server listens and keeps its environment", async () => {
+  const { stdout } = await execFileAsync(
     process.execPath,
     [
       "--input-type=module",
       "-e",
       `import net from "node:net";
 await import(${JSON.stringify(join(dir, "server-preload.mjs"))});
-net.createServer().listen(0);`,
+const server = net.createServer();
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+server.close();
+process.stdout.write(process.env.OCEL_REFRESH_SECRET ?? "");`,
     ],
-    { env: { PATH: process.env.PATH }, cwd: await projectNaming({ cacheHandler: "../mine.cjs" }) },
+    {
+      env: { PATH: process.env.PATH, OCEL_REFRESH_SECRET: "s1", OCEL_CDN_URL_MAP: "m" },
+      cwd: tmpdir(),
+    },
   );
 
-  await expect(run).rejects.toThrow("cacheHandler");
+  expect(stdout).toBe("s1");
 });
 
 test("the runtime directory ships sharp built for the Linux x64 Cloud Run runs", async () => {
