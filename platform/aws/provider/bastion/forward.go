@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -52,6 +53,7 @@ type portListener struct {
 type connection struct {
 	conn   net.Conn
 	stream Stream
+	ending atomic.Bool
 	end    func()
 }
 
@@ -207,6 +209,7 @@ func (l *portListener) forwardConnection(conn net.Conn) {
 	}
 	open := &connection{conn: conn, stream: stream}
 	open.end = sync.OnceFunc(func() {
+		open.ending.Store(true)
 		_ = conn.Close()
 		_ = stream.Terminate()
 	})
@@ -236,6 +239,7 @@ func (l *portListener) forwardConnection(conn net.Conn) {
 				}
 			}
 			if receiveErr != nil {
+				l.failIfTaskStopped(open, receiveErr)
 				return
 			}
 		}
@@ -245,6 +249,7 @@ func (l *portListener) forwardConnection(conn net.Conn) {
 		n, readErr := conn.Read(buf)
 		if n > 0 {
 			if sendErr := stream.Send(buf[:n]); sendErr != nil {
+				l.failIfTaskStopped(open, sendErr)
 				break
 			}
 		}
@@ -254,4 +259,13 @@ func (l *portListener) forwardConnection(conn net.Conn) {
 	}
 	open.end()
 	<-received
+}
+
+func (l *portListener) failIfTaskStopped(open *connection, cause error) {
+	if open.ending.Load() || l.group.ctx.Err() != nil {
+		return
+	}
+	if reason, stopped := l.group.task.stoppedReason(l.group.ctx); stopped {
+		l.group.fail(fmt.Errorf("the bastion task stopped (%s), so every port forward through it has ended: the session to %s at %s:%d ended: %w", reason, l.endpoint.binding, l.endpoint.host, l.endpoint.port, cause))
+	}
 }

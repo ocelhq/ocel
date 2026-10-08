@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -18,13 +19,19 @@ import (
 type echoStream struct {
 	replies    chan []byte
 	terminated chan struct{}
+	ended      chan struct{}
 	once       sync.Once
+	endOnce    sync.Once
 	sent       bytes.Buffer
 	mu         sync.Mutex
 }
 
 func newEchoStream() *echoStream {
-	return &echoStream{replies: make(chan []byte, 16), terminated: make(chan struct{})}
+	return &echoStream{replies: make(chan []byte, 16), terminated: make(chan struct{}), ended: make(chan struct{})}
+}
+
+func (s *echoStream) endFromTheTask() {
+	s.endOnce.Do(func() { close(s.ended) })
 }
 
 func (s *echoStream) Receive() ([]byte, error) {
@@ -33,6 +40,8 @@ func (s *echoStream) Receive() ([]byte, error) {
 		return payload, nil
 	case <-s.terminated:
 		return nil, io.EOF
+	case <-s.ended:
+		return nil, errors.New("the session's data channel closed")
 	}
 }
 
@@ -84,6 +93,12 @@ func (s *sessions) open(_ context.Context, target, host string, port int) (basti
 	stream := newEchoStream()
 	s.streams = append(s.streams, stream)
 	return stream, nil
+}
+
+func (s *sessions) stream(i int) *echoStream {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.streams[i]
 }
 
 func (s *sessions) count() int {
@@ -328,6 +343,80 @@ func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheT
 		_ = probe.Close()
 		return false
 	})
+}
+
+func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenAnOpenSessionEndsWithTheTask(t *testing.T) {
+	t.Parallel()
+
+	account, sessions := newAccount(), &sessions{}
+	reported := make(chan error, 1)
+	forwards := forwarded(t, account, sessions, func(err error) {
+		select {
+		case reported <- err:
+		default:
+		}
+	})
+	defer closeAll(forwards)
+	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	waitFor(t, "a session for the open connection", func() bool { return sessions.count() == 1 })
+	for _, arn := range account.runningTasks() {
+		account.mu.Lock()
+		account.tasks[arn].stopped = true
+		account.mu.Unlock()
+	}
+
+	sessions.stream(0).endFromTheTask()
+
+	select {
+	case err := <-reported:
+		if !strings.Contains(err.Error(), "stopped in the test") || !strings.Contains(err.Error(), "orders") {
+			t.Errorf("reported %q, want why the bastion task stopped and the binding whose session ended", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the task's failure was not reported though no further connection was opened")
+	}
+	waitFor(t, "the cache forward to stop accepting", func() bool {
+		probe, err := net.DialTimeout("tcp", forwards[1].LocalAddress, time.Second)
+		if err != nil {
+			return true
+		}
+		_ = probe.Close()
+		return false
+	})
+}
+
+func TestForwardEndsOnlyTheConnectionWhoseSessionEndsWhileTheTaskRuns(t *testing.T) {
+	t.Parallel()
+
+	account, sessions := newAccount(), &sessions{}
+	reported := make(chan error, 1)
+	forwards := forwarded(t, account, sessions, func(err error) { reported <- err })
+	defer closeAll(forwards)
+	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	waitFor(t, "a session for the open connection", func() bool { return sessions.count() == 1 })
+
+	sessions.stream(0).endFromTheTask()
+
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Read(make([]byte, 1)); err == nil || errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("read after the session ended = %v, want the connection closed", err)
+	}
+	select {
+	case err := <-reported:
+		t.Errorf("reported %q for a session that ended while its task ran, as an idle session does", err)
+	default:
+	}
+	if got := roundTrip(t, forwards[0].LocalAddress, "select 1"); got != "echo:select 1" {
+		t.Errorf("a new connection to orders got %q", got)
+	}
 }
 
 func TestForwardPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T) {
