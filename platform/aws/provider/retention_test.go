@@ -78,7 +78,7 @@ func TestForgettingAStackRemovesTheImagesItRanFromTheProjectsRegistryThatNoOther
 	recordImage(t, store, environment.TierPreview, "shop", other, projectRegistryImage("sha256-shared"))
 	pushed := fake.NewImages()
 
-	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", pushed, progress.Discard())
+	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", pushed, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) 
 	refused.FailRemovals(errors.New("UNSUPPORTED"))
 	said := &fake.Log{}
 
-	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", refused, said)
+	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", refused, said)
 
 	if err != nil {
 		t.Errorf("forgetImages() = %v, want the destroy to finish: a registry that never deletes would otherwise block every retry", err)
@@ -164,7 +164,7 @@ func TestForgettingAStackWhoseReleaseFailedRemovesTheImageItPushed(t *testing.T)
 	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, projectRegistryImage("sha256-failed"))
 	pushed := fake.NewImages()
 
-	err := forgetImages(context.Background(), store, nil, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", pushed, progress.Discard())
+	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", pushed, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -248,5 +248,29 @@ func TestAReclaimHandedTheECRStoreDeletesTheRepositoryItEmpties(t *testing.T) {
 
 	if !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
 		t.Errorf("forgetImages() deleted the repositories %v, want ocel/shop.web: a failed deploy reclaims through the ECR store it pushed with, and that reclaim must empty and delete the repository as a destroy does", api.deleted)
+	}
+}
+
+type wrappedImages struct{ provider.ImageStore }
+
+func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/shop.web:sha256-failed")
+	api := &repositoryECR{tags: []string{"sha256-failed"}}
+	target, err := registry.Resolve(context.Background(), api)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = forgetImages(context.Background(), store, api, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", wrappedImages{registry.Images(target, api)}, progress.Discard())
+	if err != nil {
+		t.Fatalf("forgetImages() = %v", err)
+	}
+
+	if !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
+		t.Errorf("forgetImages() deleted the repositories %v, want ocel/shop.web: an image under this account's ECR is reclaimed as ECR's, whatever store carries it", api.deleted)
 	}
 }
