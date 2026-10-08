@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
@@ -224,5 +225,41 @@ func TestReconcileRestoresASessionPolicyThatLostAnActionTheExecAgentNeeds(t *tes
 		if !strings.Contains(document, action) {
 			t.Errorf("the session policy after Reconcile() is %s, which lacks %s, so the ECS Exec agent could never open its channels", document, action)
 		}
+	}
+}
+
+func TestReconcileRegistersAFreshTaskDefinitionOverALaterRevisionFargateCannotRunAsTheBastion(t *testing.T) {
+	t.Parallel()
+
+	for name, change := range map[string]func(*ecstypes.TaskDefinition){
+		"bridge network": func(d *ecstypes.TaskDefinition) { d.NetworkMode = ecstypes.NetworkModeBridge },
+		"EC2 only": func(d *ecstypes.TaskDefinition) {
+			d.RequiresCompatibilities = []ecstypes.Compatibility{ecstypes.CompatibilityEc2}
+		},
+		"other CPU":    func(d *ecstypes.TaskDefinition) { d.Cpu = aws.String("128") },
+		"other memory": func(d *ecstypes.TaskDefinition) { d.Memory = aws.String("100") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			account := newAccount()
+			if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+				t.Fatalf("Reconcile() = %v", err)
+			}
+			changed := *account.definition["ocel-bastion-production"][0]
+			changed.Revision = 2
+			changed.TaskDefinitionArn = aws.String("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-bastion-production:2")
+			change(&changed)
+			account.definition["ocel-bastion-production"] = append(account.definition["ocel-bastion-production"], &changed)
+
+			got, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
+			if err != nil {
+				t.Fatalf("Reconcile() = %v", err)
+			}
+
+			if got.TaskDefinition == aws.ToString(changed.TaskDefinitionArn) {
+				t.Errorf("Reconcile() reused %s, whose settings Fargate cannot run as the bastion", got.TaskDefinition)
+			}
+		})
 	}
 }

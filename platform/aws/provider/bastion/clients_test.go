@@ -208,16 +208,17 @@ func (a *account) RegisterTaskDefinition(_ context.Context, in *ecs.RegisterTask
 	a.record("RegisterTaskDefinition " + family)
 	revision := int32(len(a.definition[family]) + 1)
 	registered := &ecstypes.TaskDefinition{
-		Family:               in.Family,
-		Revision:             revision,
-		Status:               ecstypes.TaskDefinitionStatusActive,
-		TaskDefinitionArn:    aws.String(fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:task-definition/%s:%d", family, revision)),
-		TaskRoleArn:          in.TaskRoleArn,
-		ExecutionRoleArn:     in.ExecutionRoleArn,
-		ContainerDefinitions: in.ContainerDefinitions,
-		NetworkMode:          in.NetworkMode,
-		Cpu:                  in.Cpu,
-		Memory:               in.Memory,
+		Family:                  in.Family,
+		Revision:                revision,
+		Status:                  ecstypes.TaskDefinitionStatusActive,
+		TaskDefinitionArn:       aws.String(fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:task-definition/%s:%d", family, revision)),
+		TaskRoleArn:             in.TaskRoleArn,
+		ExecutionRoleArn:        in.ExecutionRoleArn,
+		ContainerDefinitions:    in.ContainerDefinitions,
+		NetworkMode:             in.NetworkMode,
+		RequiresCompatibilities: in.RequiresCompatibilities,
+		Cpu:                     in.Cpu,
+		Memory:                  in.Memory,
 	}
 	a.definition[family] = append(a.definition[family], registered)
 	return &ecs.RegisterTaskDefinitionOutput{TaskDefinition: registered}, nil
