@@ -207,8 +207,9 @@ func proxying(manifest boxlive.Manifest, values *live.Values, socket, app string
 	services := bindingproxy.Services{Buckets: buckets, Realtime: newRealtime(manifest, values)}
 	if manifest.Queue != "" {
 		agent := source.Client(socket)
-		services.Tasks = taskv1connect.NewTaskServiceClient(agent, source.AgentURL)
-		services.Topics = topicv1connect.NewTopicServiceClient(agent, source.AgentURL)
+		secret := source.PresentCallerSecret(manifest.QueueCallerSecret)
+		services.Tasks = taskv1connect.NewTaskServiceClient(agent, source.AgentURL, secret)
+		services.Topics = topicv1connect.NewTopicServiceClient(agent, source.AgentURL, secret)
 	}
 	if services.Empty() {
 		return bindingproxy.Served{}, nil
