@@ -249,7 +249,7 @@ func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, 
 	return ProvisionedFunctions(spec), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 	for _, function := range functions {
 		p.stacks.recordDestroyed(function.Name)
 	}
@@ -260,7 +260,7 @@ func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec,
 	return ProvisionedContainers(spec), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
 	for _, container := range containers {
 		p.stacks.recordDestroyed(container.Name)
 	}

@@ -36,13 +36,13 @@ type Hooks struct {
 
 type FunctionHooks struct {
 	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error
+	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) error
 	Shared    *SharedHooks[provider.Function]
 }
 
 type ContainerHooks struct {
 	Provision func(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error)
-	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error
+	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error
 	Shared    *SharedHooks[provider.AppContainer]
 }
 
@@ -353,13 +353,14 @@ func removeAll[T any](
 	ctx context.Context,
 	ref provider.StackRef,
 	going []T,
-	remove func(context.Context, provider.StackRef, []T, progress.Log) error,
+	remove func(context.Context, provider.StackRef, []T, provider.ImageStore, progress.Log) error,
+	images provider.ImageStore,
 	progress progress.Log,
 ) error {
 	if len(going) == 0 || remove == nil {
 		return nil
 	}
-	return remove(ctx, ref, going, progress)
+	return remove(ctx, ref, going, images, progress)
 }
 
 func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string) error {

@@ -405,7 +405,7 @@ func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.Stac
 	return functions, nil
 }
 
-func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 	w.removed = append(w.removed, functions...)
 	return nil
 }
@@ -608,7 +608,7 @@ func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.St
 	return []provider.AppContainer{container(spec.Ref, spec.App.App)}, nil
 }
 
-func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
+func (w *withContainers) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
 	w.removed = append(w.removed, containers...)
 	return nil
 }
@@ -1087,7 +1087,7 @@ func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSp
 	return []provider.AppContainer{{Name: spec.App.App, Physical: spec.Ref.Name.String() + "-" + spec.App.App, Image: spec.App.Image}}, nil
 }
 
-func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ progress.Log) error {
+func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, going []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
 	for _, container := range going {
 		r.taken = append(r.taken, container.Physical)
 	}

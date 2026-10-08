@@ -132,7 +132,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 				}
 				return functions, nil
 			},
-			Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+			Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 				var call []string
 				for _, function := range functions {
 					s.remove(function.Physical)
@@ -169,7 +169,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 				containers[0].Revision = revision
 				return containers, nil
 			},
-			Remove: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ progress.Log) error {
+			Remove: func(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, _ progress.Log) error {
 				for _, container := range containers {
 					s.remove(container.Physical)
 				}

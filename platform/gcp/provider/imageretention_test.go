@@ -332,3 +332,21 @@ func TestPruningASupersededRevisionRemovesTheImageItRanFromTheProjectsRegistry(t
 		t.Errorf("pruning removed %v, want %v: the revision was the last to run it, and the project's registry keeps it forever otherwise", got, want)
 	}
 }
+
+func TestDestroyingTheLastReleaseOfAFunctionRemovesItsImageFromTheProjectsRegistry(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	image := fake.RegistryServer + "/acme/shop.web-checkout:sha256-one"
+	only := functionRelease("d1", image)
+	released.provision(t, only)
+	pushed := fake.NewImages()
+
+	if err := released.stacks.Destroy(context.Background(), only.Ref, pushed, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+
+	if got, want := pushed.Removed(), []string{image}; !slices.Equal(got, want) {
+		t.Errorf("destroying the function's last release removed %v, want %v: tearing the whole service down must reach the project's registry as pruning one revision does", got, want)
+	}
+}

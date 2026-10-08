@@ -546,7 +546,7 @@ func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, progr
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, progress.Log) error {
+func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, provider.ImageStore, progress.Log) error {
 	return nil
 }
 

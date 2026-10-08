@@ -90,7 +90,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, progress progress.Log) error {
 	if err := p.removeWorkers(ctx, ref); err != nil {
 		return err
 	}

@@ -216,11 +216,11 @@ func workerImageOf(app *provider.AppSpec) string {
 	return app.Image
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) error {
 	if err := p.unrouteServiceOriginHosts(ctx, ref.Tier, functions); err != nil {
 		return err
 	}
-	if err := p.tearDownAll(ctx, ref, functionRevisions(functions), progress); err != nil {
+	if err := p.tearDownAll(ctx, ref, functionRevisions(functions), images, progress); err != nil {
 		return err
 	}
 	c, err := p.openClients(ctx)
@@ -369,8 +369,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	return append(deployed, workerContainers(workers, app.Image)...), nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
-	if err := p.tearDownAll(ctx, ref, containerRevisions(containers), progress); err != nil {
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error {
+	if err := p.tearDownAll(ctx, ref, containerRevisions(containers), images, progress); err != nil {
 		return err
 	}
 	c, err := p.openClients(ctx)
@@ -445,9 +445,9 @@ type serviceRevision struct {
 	revision string
 }
 
-func (p *Provider) tearDownAll(ctx context.Context, ref provider.StackRef, going []serviceRevision, progress progress.Log) error {
+func (p *Provider) tearDownAll(ctx context.Context, ref provider.StackRef, going []serviceRevision, images provider.ImageStore, progress progress.Log) error {
 	var ran []string
-	defer func() { p.removeUnusedImages(ctx, ref, ran, nil, progress) }()
+	defer func() { p.removeUnusedImages(ctx, ref, ran, images, progress) }()
 	for _, each := range going {
 		if each.service == "" {
 			continue

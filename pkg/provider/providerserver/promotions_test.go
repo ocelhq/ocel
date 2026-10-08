@@ -270,7 +270,7 @@ func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *te
 	var mu sync.Mutex
 	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
 		Provision: vendor.ProvisionFunctions,
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, function := range functions {
@@ -367,7 +367,7 @@ func TestADeployWhoseSharedProvisionFailsRemovesWhatItsVendorNamed(t *testing.T)
 		Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.Function, error) {
 			return nil, errors.New("the revision never became ready")
 		},
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, function := range functions {
@@ -408,7 +408,7 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	removedUnder := make(chan error, 1)
 	vendor.ResourceStacks(resources.Hooks{Functions: &resources.FunctionHooks{
 		Provision: vendor.ProvisionFunctions,
-		Remove: func(ctx context.Context, _ provider.StackRef, _ []provider.Function, _ progress.Log) error {
+		Remove: func(ctx context.Context, _ provider.StackRef, _ []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 			removedUnder <- ctx.Err()
 			return nil
 		},
@@ -675,7 +675,7 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 			s.revisions++
 			return []provider.Function{{Name: "api", Physical: "shop-web-api", Revision: fmt.Sprintf("shop-web-api-%05d", s.revisions)}}, nil
 		},
-		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+		Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ provider.ImageStore, _ progress.Log) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			for _, function := range functions {

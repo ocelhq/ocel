@@ -294,7 +294,7 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	image := functionImage(t, p, "ocel-live/fn", nodeRuntime,
 		stagedNode(t, "export default { fetch: () => new Response(process.env.MARK) };"))
 	spec := serverlessSpec("fn", image, map[string]string{"MARK": "runtime-one"})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil, nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {
@@ -333,7 +333,7 @@ func TestLiveAContainerAppIsDeployedAndReleasedAgainOntoANewRevision(t *testing.
 	t.Cleanup(func() {
 		_ = p.RemoveContainers(ctx, spec.Ref, []provider.AppContainer{
 			{Name: "app", Physical: runningAs(t, p, spec)[0].Physical},
-		}, nil)
+		}, nil, nil)
 	})
 
 	containers, err := p.ProvisionContainers(ctx, spec, nil)
@@ -379,13 +379,13 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 		t.Fatalf("GET %s = %d %q, want it up before it is taken down", at, status, said)
 	}
 
-	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if status, said := gone(t, at); status == http.StatusOK {
 		t.Errorf("GET %s = %d %q after the service was taken down, want nothing answering there", at, status, said)
 	}
-	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil, nil); err != nil {
 		t.Errorf("RemoveContainers() a second time = %v, want a teardown that is safe to re-run", err)
 	}
 }
@@ -396,7 +396,7 @@ func servesItsOwn(t *testing.T, app string, framework buildoutput.Framework, sta
 	p := runnable(t)
 	image := functionImage(t, p, "ocel-live/"+app, framework, stage(t))
 	spec := serverlessSpecOn(app, image, framework, map[string]string{"MARK": mark})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil, nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {
