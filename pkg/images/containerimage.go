@@ -154,7 +154,7 @@ func packRuntimeLayer(runtime []byte) ([]byte, error) {
 	return packed.Bytes(), nil
 }
 
-func RuntimeTag(digest string, runtime []byte, next *NextServerRuntime) string {
+func RuntimeTag(contentDigest string, runtime []byte, next *NextServerRuntime) string {
 	hash := sha256.New()
 	hash.Write(runtime)
 	if next != nil {
@@ -165,17 +165,17 @@ func RuntimeTag(digest string, runtime []byte, next *NextServerRuntime) string {
 			hash.Write(body)
 		}
 	}
-	return naming.DigestTag(digest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(hash.Sum(nil))[:runtimeTagHexLen]
+	return naming.DigestTag(contentDigest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(hash.Sum(nil))[:runtimeTagHexLen]
 }
 
-func BuiltArchitecture(ctx context.Context, repository, digest string) (string, error) {
+func InspectBuiltImage(ctx context.Context, repository, digest string) (ImageInspection, error) {
 	host, err := DockerHostFromEnv()
 	if err != nil {
-		return "", err
+		return ImageInspection{}, err
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
-	return host.Architecture(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
+	return host.Inspect(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
 }
 
 func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte, next *NextServerRuntime) (v1.Image, func(), error) {

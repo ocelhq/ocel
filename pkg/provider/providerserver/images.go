@@ -37,26 +37,26 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
 	}
-	arch, err := images.BuiltArchitecture(ctx, repository, digest)
+	built, err := images.InspectBuiltImage(ctx, repository, digest)
 	if err != nil {
-		return provider.ImagePush{}, fmt.Errorf("read the architecture %s's image is built for: %w", app, err)
+		return provider.ImagePush{}, fmt.Errorf("inspect the image %s was built as: %w", app, err)
 	}
 	runs, err := runtimePort.Arch(ctx, app, entry.Arch)
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", app, err)
 	}
-	if arch != runs {
+	if built.Architecture != runs {
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s's image is built for %s and the target runs %s, which cannot execute it: build it for %s, and drop any --platform its Dockerfile pins a FROM to",
-			app, images.ContainerPlatform(arch), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
+			app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
 	}
-	runtime, err := runtimePort.Binary(ctx, arch)
+	runtime, err := runtimePort.Binary(ctx, built.Architecture)
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("read the runtime %s's container boots through: %w", app, err)
 	}
 	if len(runtime) == 0 {
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider ships no container runtime built for %s, and %s's image is built for it", arch, app)
+			"this provider ships no container runtime built for %s, and %s's image is built for it", built.Architecture, app)
 	}
 	next, err := r.readNextServerRuntime(ctx, entry)
 	if err != nil {
@@ -65,7 +65,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 	return provider.ImagePush{
 		App:      app,
 		Source:   ref,
-		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(digest, runtime, next), r.registry),
+		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(built.ContentDigest, runtime, next), r.registry),
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
 			return images.WrapFromDaemon(ctx, repository, digest, runtime, next)
 		},
