@@ -6,6 +6,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -41,9 +44,10 @@ func (d Deployed) Stale(required []string) []StackStamp {
 	return out
 }
 
-func stampTags(ns Namespace, s Stamp) []cfntypes.Tag {
+func stampTags(ns Namespace, tier environment.Tier, s Stamp) []cfntypes.Tag {
 	return []cfntypes.Tag{
 		{Key: aws.String(cfn.TagNamespace), Value: aws.String(string(ns))},
+		{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
 		{Key: aws.String(cfn.TagDigest), Value: aws.String(s.Digest)},
 		{Key: aws.String(cfn.TagBootstrappedBy), Value: aws.String(s.WrittenBy)},
 	}

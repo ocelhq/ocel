@@ -158,14 +158,14 @@ func TestRestampingTurnsOnlyOnTheStacksCurrentTags(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stacks, _ := installedBootstrap(t)
-			tags := stampTags(defaultNamespace, tc.current)
+			tags := stampTags(defaultNamespace, environment.TierProduction, tc.current)
 			if tc.unwritten {
 				tags = cfn.WithoutTag(tags, cfn.TagBootstrappedBy)
 			}
 			stacks.stamped(coreStackName, tags)
 			before := stacks.restamps
 
-			if err := cfn.Restamp(context.Background(), stacks, coreStackName, nil, nil, stampTags(defaultNamespace, tc.incoming)); err != nil {
+			if err := cfn.Restamp(context.Background(), stacks, coreStackName, nil, nil, stampTags(defaultNamespace, environment.TierProduction, tc.incoming)); err != nil {
 				t.Fatalf("cfn.Restamp: %v", err)
 			}
 			if wrote := stacks.restamps > before; wrote != tc.writes {
@@ -177,7 +177,7 @@ func TestRestampingTurnsOnlyOnTheStacksCurrentTags(t *testing.T) {
 
 func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	staleBody := "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\nOutputs: {}\n"
-	staleTags := stampTags(defaultNamespace, Stamp{Digest: "beef", WrittenBy: "1.4.0"})
+	staleTags := stampTags(defaultNamespace, environment.TierProduction, Stamp{Digest: "beef", WrittenBy: "1.4.0"})
 
 	t.Run("a caller context that is already gone still takes the change set down", func(t *testing.T) {
 		stacks, _ := installedBootstrap(t)

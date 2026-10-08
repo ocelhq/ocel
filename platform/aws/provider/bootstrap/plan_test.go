@@ -73,7 +73,7 @@ func changeNamed(t *testing.T, group provider.ChangeGroup, name string) provider
 func (f *fakeCFN) misstamp(stackName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.tags[stackName] = stampTags(defaultNamespace, Stamp{Digest: "beef", WrittenBy: "1.0.0"})
+	f.tags[stackName] = stampTags(defaultNamespace, environment.TierProduction, Stamp{Digest: "beef", WrittenBy: "1.0.0"})
 }
 
 func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {

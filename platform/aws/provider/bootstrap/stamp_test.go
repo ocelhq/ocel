@@ -1,7 +1,10 @@
 package bootstrap
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 
 	"testing"
@@ -51,6 +54,31 @@ func TestTemplateDigest(t *testing.T) {
 	})
 }
 
+func TestEveryBootstrapStackIsTaggedWithItsTier(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			stacks := newFakeCFN()
+			if err := Run(context.Background(), apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore()), defaultNamespace, tier, everything(), nil); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if len(stacks.tags) == 0 {
+				t.Fatal("the run applied no stack")
+			}
+			for name, tags := range stacks.tags {
+				got := ""
+				for _, tag := range tags {
+					if aws.ToString(tag.Key) == naming.EnvTierTagKey {
+						got = aws.ToString(tag.Value)
+					}
+				}
+				if got != string(tier) {
+					t.Errorf("stack %s is tagged %s=%q, want %q: CloudFormation hands the tag to every role and function it makes, and the bootstrap credential reaches only those of its own tier", name, naming.EnvTierTagKey, got, tier)
+				}
+			}
+		})
+	}
+}
+
 func TestStampTags(t *testing.T) {
 	t.Parallel()
 
@@ -58,8 +86,8 @@ func TestStampTags(t *testing.T) {
 		t.Parallel()
 
 		want := Stamp{Digest: "abc", WrittenBy: "1.2.3"}
-		if got := readStamp(stampTags(defaultNamespace, want)); got != want {
-			t.Fatalf("readStamp(stampTags(defaultNamespace, %+v)) = %+v", want, got)
+		if got := readStamp(stampTags(defaultNamespace, environment.TierProduction, want)); got != want {
+			t.Fatalf("readStamp(stampTags(defaultNamespace, production, %+v)) = %+v", want, got)
 		}
 	})
 

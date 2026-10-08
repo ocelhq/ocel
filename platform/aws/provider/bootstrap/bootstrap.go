@@ -403,7 +403,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
 	coreBody := target.core(coreVariablesKey(alongside, req.VariablesKey))
-	coreTags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
+	coreTags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
-				tags := stampTags(target.ns, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
+				tags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
 				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}

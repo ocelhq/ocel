@@ -1,14 +1,16 @@
 package bootstrap
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
@@ -98,105 +100,122 @@ const (
 )
 
 type ScopedARNs struct {
-	bootstrapBucket     string
-	bootstrapObject     string
-	BootstrapTable      string
-	BootstrapTablePart  string
-	BootstrapStack      string
-	bootstrapChangeSet  string
-	runtimeStack        string
-	runtimeChangeSet    string
-	runtimeLayer        string
-	runtimeLayerVersion string
-	bootstrapRole       string
-	bootstrapFunction   string
-	bootstrapLogGroup   string
-	bootstrapQueue      string
-	scheduleGroup       string
-	schedule            string
-	edgeUser            string
-	passphraseParam     string
-	edgeParam           string
-	originParam         string
-	stackRecordTree     string
-	stackRecord         string
-	anyParam            string
-	kvToken             string
-	signingKey          string
+	tier                 environment.Tier
+	variablesKeyAlias    string
+	appBoundary          string
+	appBoundaryPolicy    string
+	bootstrapBuckets     []string
+	bootstrapObjects     []string
+	BootstrapTables      []string
+	BootstrapStacks      []string
+	bootstrapChangeSets  []string
+	runtimeStack         string
+	runtimeChangeSet     string
+	runtimeLayers        []string
+	runtimeLayerVersions []string
+	bootstrapRole        string
+	bootstrapFunction    string
+	bootstrapLogGroups   []string
+	bootstrapQueue       string
+	scheduleGroup        string
+	schedule             string
+	edgeUser             string
+	passphraseParam      string
+	edgeParam            string
+	originParam          string
+	stackRecordTree      string
+	stackRecord          string
+	anyParam             string
+	kvToken              string
+	signingKey           string
 }
 
-func (n Namespace) ScopedARNs() ScopedARNs {
-	core := n.CoreStackName()
+var (
+	coreStackBuckets = []string{"StateBucket", "ArtifactBucket", "AssetBucket"}
+	coreStackTables  = []string{"StateTable", "VariablesTable"}
+)
+
+func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
+	core, _ := n.StackNameFor(tier)
+	runtime := n.runtimeStackName(tier)
+	group := n.envSourceSyncScheduleGroupName(tier)
+	edgeUser, _ := n.EdgeUserNameFor(tier)
 	a := ScopedARNs{
-		bootstrapBucket:    "arn:aws:s3:::" + core + "*",
-		BootstrapTable:     "arn:aws:dynamodb:*:*:table/" + core + "*",
-		BootstrapStack:     "arn:aws:cloudformation:*:*:stack/" + core + "*/*",
-		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
-		runtimeStack:       "arn:aws:cloudformation:*:*:stack/" + core + "-runtime*/*",
-		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
-		runtimeLayer:       "arn:aws:lambda:*:*:layer:" + string(n) + "-runtime*",
-		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
-		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
-		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
-		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
-		scheduleGroup:      "arn:aws:scheduler:*:*:schedule-group/" + core + "*",
-		schedule:           "arn:aws:scheduler:*:*:schedule/" + core + "*/*",
-		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
-		passphraseParam:    parameterARNPrefix + n.PassphraseParamName(),
-		edgeParam:          parameterARNPrefix + n.paramRoot() + "/edge/*",
-		originParam:        parameterARNPrefix + n.paramRoot() + "/origin/*",
-		stackRecordTree:    parameterARNPrefix + n.stackRecordRoot() + "*",
-		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
-		kvToken:            parameterARNPrefix + n.KVTokenRoot() + "/*",
-		signingKey:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
+		tier:              tier,
+		variablesKeyAlias: n.variablesKeyAliasFor(tier),
+		appBoundary:       appBoundaryARNFor(n, tier),
+		appBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
+		runtimeStack:      "arn:aws:cloudformation:*:*:stack/" + runtime + "/*",
+		runtimeChangeSet:  "arn:aws:cloudformation:*:*:changeSet/" + runtime + "-*/*",
+		bootstrapRole:     "arn:aws:iam::*:role/" + n.CoreStackName() + "*",
+		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
+		bootstrapQueue:    "arn:aws:sqs:*:*:" + string(n) + "-*",
+		scheduleGroup:     "arn:aws:scheduler:*:*:schedule-group/" + group,
+		schedule:          "arn:aws:scheduler:*:*:schedule/" + group + "/*",
+		edgeUser:          "arn:aws:iam::*:user/" + edgeUser,
+		passphraseParam:   parameterARNPrefix + n.PassphraseParamName(),
+		edgeParam:         parameterARNPrefix + n.paramRoot() + "/edge/*",
+		originParam:       parameterARNPrefix + n.paramRoot() + "/origin/*",
+		stackRecordTree:   parameterARNPrefix + n.stackRecordRoot() + "*",
+		anyParam:          parameterARNPrefix + n.paramRoot() + "/*",
+		kvToken:           parameterARNPrefix + n.KVTokenRoot() + "/*",
+		signingKey:        "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
 	}
-	a.bootstrapObject = a.bootstrapBucket + "/*"
-	a.runtimeLayerVersion = a.runtimeLayer + ":*"
-	a.BootstrapTablePart = a.BootstrapTable + "/*"
+	for _, bucket := range coreStackBuckets {
+		named := "arn:aws:s3:::" + strings.ToLower(core+"-"+bucket) + "-*"
+		a.bootstrapBuckets = append(a.bootstrapBuckets, named)
+		a.bootstrapObjects = append(a.bootstrapObjects, named+"/*")
+	}
+	for _, table := range coreStackTables {
+		named := "arn:aws:dynamodb:*:*:table/" + core + "-" + table + "-*"
+		a.BootstrapTables = append(a.BootstrapTables, named, named+"/*")
+	}
+	stacks := []string{core, runtime}
+	for _, f := range featureRegistry {
+		stack := f.stackName(n, tier)
+		stacks = append(stacks, stack)
+		a.bootstrapLogGroups = append(a.bootstrapLogGroups, "arn:aws:logs:*:*:log-group:/aws/lambda/"+stack+"-*")
+	}
+	for _, stack := range stacks {
+		a.BootstrapStacks = append(a.BootstrapStacks, "arn:aws:cloudformation:*:*:stack/"+stack+"/*")
+		a.bootstrapChangeSets = append(a.bootstrapChangeSets, "arn:aws:cloudformation:*:*:changeSet/"+stack+"-*/*")
+	}
+	for _, token := range slices.Sorted(maps.Values(runtimeArchTokens)) {
+		layer := "arn:aws:lambda:*:*:layer:" + runtimeLayerPrefix(n, tier, token) + "*"
+		a.runtimeLayers = append(a.runtimeLayers, layer)
+		a.runtimeLayerVersions = append(a.runtimeLayerVersions, layer+":*")
+	}
 	a.stackRecord = a.stackRecordTree + "/*"
 	return a
 }
 
-const (
-	effectAllow = "Allow"
-	effectDeny  = "Deny"
-)
-
 type GrantStatement struct {
-	Effect    string
 	Actions   []string
 	Resources []string
 	Condition map[string]any
 }
 
-func (n Namespace) tierStoresPrefix(tier environment.Tier) string {
-	return suffixed(tier, n.CoreStackName())
+func (r ScopedARNs) variablesKey() map[string]any {
+	return map[string]any{"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": r.variablesKeyAlias}}
 }
 
-func (n Namespace) ScopedARNsFor(tier environment.Tier) ScopedARNs {
-	a := n.ScopedARNs()
-	prefix := n.tierStoresPrefix(tier)
-	a.bootstrapBucket = "arn:aws:s3:::" + prefix + "*"
-	a.bootstrapObject = a.bootstrapBucket + "/*"
-	a.BootstrapTable = "arn:aws:dynamodb:*:*:table/" + prefix + "*"
-	a.BootstrapTablePart = a.BootstrapTable + "/*"
-	return a
+func (r ScopedARNs) withinAppBoundary() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"iam:PermissionsBoundary": r.appBoundary}}
 }
 
-func withheldSiblingStores(ns Namespace, tier environment.Tier) []GrantStatement {
-	sibling := ns.ScopedARNsFor(tier.Sibling())
-	if tier != environment.TierProduction {
-		return nil
-	}
-	return []GrantStatement{{
-		Effect:    effectDeny,
-		Actions:   []string{"s3:*", "dynamodb:*"},
-		Resources: []string{sibling.bootstrapBucket, sibling.bootstrapObject, sibling.BootstrapTable, sibling.BootstrapTablePart},
+func (r ScopedARNs) madeByItsStacks() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(r.tier)}}
+}
+
+func (r ScopedARNs) madeForItsTier() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(r.tier)}}
+}
+
+func (r ScopedARNs) taggedOnlyAsItsTier() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{
+		"aws:ResourceTag/" + naming.EnvTierTagKey: string(r.tier),
+		"aws:RequestTag/" + naming.EnvTierTagKey:  string(r.tier),
 	}}
-}
-
-func variablesKeyOfTier(ns Namespace, tier environment.Tier) map[string]any {
-	return map[string]any{"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor(tier)}}
 }
 
 func policyARN(name string) string { return "arn:aws:iam::*:policy/" + name }
@@ -252,12 +271,6 @@ func keyPairSuppliedByCaller() map[string]any {
 
 func managedByAnAppCluster() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
-}
-
-func withinAppBoundary(ns Namespace, tier environment.Tier) map[string]any {
-	return map[string]any{"StringEquals": map[string]any{
-		"iam:PermissionsBoundary": appBoundaryARNFor(ns, tier),
-	}}
 }
 
 func mergeConditions(conditions ...map[string]any) map[string]any {
@@ -333,18 +346,18 @@ func variablesKeyLifecycleActions() []string {
 	}
 }
 
-func variablesKeyTaggedFor(tier environment.Tier) map[string]any {
+func (r ScopedARNs) itsVariablesKey() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{
 		"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
-		"aws:ResourceTag/" + naming.EnvTierTagKey:        string(tier),
+		"aws:ResourceTag/" + naming.EnvTierTagKey:        string(r.tier),
 	}}
 }
 
-func retaggedOnlyAs(tier environment.Tier) map[string]any {
-	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}}
+func (r ScopedARNs) retaggedOnlyAsItsTier() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(r.tier)}}
 }
 
-func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
+func bootstrapAccess(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions: []string{
@@ -354,12 +367,12 @@ func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
 			},
-			Resources: []string{r.bootstrapObject},
+			Resources: r.bootstrapObjects,
 			Condition: inCallerAccount(),
 		},
 		{
 			Actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
-			Resources: []string{r.bootstrapBucket},
+			Resources: r.bootstrapBuckets,
 			Condition: inCallerAccount(),
 		},
 		{
@@ -373,7 +386,7 @@ func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 				"dynamodb:Query",
 				"dynamodb:UpdateItem",
 			},
-			Resources: []string{r.BootstrapTable, r.BootstrapTablePart},
+			Resources: r.BootstrapTables,
 		},
 		{
 			Actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
@@ -386,21 +399,21 @@ func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 		{
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(variablesKeyOfTier(ns, tier), map[string]any{
+			Condition: mergeConditions(r.variablesKey(), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			}),
 		},
 		{
 			Actions:   []string{"kms:CreateGrant"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(variablesKeyOfTier(ns, tier), map[string]any{
+			Condition: mergeConditions(r.variablesKey(), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 			}),
 		},
 		{
 			Actions:   []string{"cloudformation:DescribeStacks"},
-			Resources: []string{r.BootstrapStack},
+			Resources: r.BootstrapStacks,
 		},
 		{
 			Actions:   []string{"sts:GetCallerIdentity"},
@@ -409,7 +422,7 @@ func bootstrapAccess(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 	}
 }
 
-func appProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
+func appProvisioning(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions:   []string{"lambda:CreateFunction"},
@@ -442,7 +455,7 @@ func appProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 		{
 			Actions:   []string{"iam:CreateRole"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns, tier)),
+			Condition: mergeConditions(taggedOnCreate(), r.withinAppBoundary()),
 		},
 		{
 			Actions: []string{
@@ -467,12 +480,12 @@ func appProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantS
 				"iam:PutRolePolicy",
 			},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns, tier)),
+			Condition: mergeConditions(taggedByOcel(), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns, tier)),
+			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -1048,7 +1061,7 @@ func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 				"lambda:ListLayerVersions",
 				"lambda:PublishLayerVersion",
 			},
-			Resources: []string{r.runtimeLayer, r.runtimeLayerVersion},
+			Resources: slices.Concat(r.runtimeLayers, r.runtimeLayerVersions),
 		},
 		{
 			Actions: []string{
@@ -1069,7 +1082,7 @@ func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []GrantStatement {
+func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
 			Actions: []string{
@@ -1078,7 +1091,7 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"cloudformation:DeleteStack",
 				"cloudformation:DescribeStackEvents",
 			},
-			Resources: []string{r.BootstrapStack},
+			Resources: r.BootstrapStacks,
 		},
 		{
 			Actions: []string{
@@ -1086,11 +1099,11 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"cloudformation:DescribeChangeSet",
 				"cloudformation:ExecuteChangeSet",
 			},
-			Resources: []string{r.BootstrapStack, r.bootstrapChangeSet},
+			Resources: slices.Concat(r.BootstrapStacks, r.bootstrapChangeSets),
 		},
 		{
 			Actions:   []string{"s3:CreateBucket"},
-			Resources: []string{r.bootstrapBucket},
+			Resources: r.bootstrapBuckets,
 		},
 		{
 			Actions: []string{
@@ -1107,12 +1120,12 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"s3:PutEncryptionConfiguration",
 				"s3:PutLifecycleConfiguration",
 			},
-			Resources: []string{r.bootstrapBucket},
+			Resources: r.bootstrapBuckets,
 			Condition: inCallerAccount(),
 		},
 		{
 			Actions:   []string{"s3:DeleteObjectVersion", "s3:GetObjectVersion"},
-			Resources: []string{r.bootstrapObject},
+			Resources: r.bootstrapObjects,
 			Condition: inCallerAccount(),
 		},
 		{
@@ -1130,41 +1143,41 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"dynamodb:UpdateTable",
 				"dynamodb:UpdateTimeToLive",
 			},
-			Resources: []string{r.BootstrapTable, r.BootstrapTablePart},
+			Resources: r.BootstrapTables,
 		},
 		{
 			Actions:   []string{"kms:CreateKey"},
 			Resources: []string{UnscopedResource},
 			Condition: map[string]any{"StringEquals": map[string]any{
 				"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
-				"aws:RequestTag/" + naming.EnvTierTagKey:        string(tier),
+				"aws:RequestTag/" + naming.EnvTierTagKey:        string(r.tier),
 			}},
 		},
 		{
 			Actions:   variablesKeyLifecycleActions(),
 			Resources: []string{AnyKeyARN},
-			Condition: variablesKeyTaggedFor(tier),
+			Condition: r.itsVariablesKey(),
 		},
 		{
 			Actions:   []string{"kms:TagResource"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(variablesKeyTaggedFor(tier), retaggedOnlyAs(tier)),
+			Condition: mergeConditions(r.itsVariablesKey(), r.retaggedOnlyAsItsTier()),
 		},
 		{
 			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
 			Resources: []string{AnyKeyARN},
 			Condition: map[string]any{
-				"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor(tier)},
+				"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": r.variablesKeyAlias},
 			},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			Resources: []string{aliasARN(ns.variablesKeyAliasFor(tier))},
+			Resources: []string{aliasARN(r.variablesKeyAlias)},
 		},
 		{
 			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
 			Resources: []string{AnyKeyARN},
-			Condition: variablesKeyTaggedFor(tier),
+			Condition: r.itsVariablesKey(),
 		},
 		{
 			Actions: []string{
@@ -1180,7 +1193,7 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"iam:TagPolicy",
 				"iam:UntagPolicy",
 			},
-			Resources: []string{policyARN(ns.AppBoundaryNameFor(tier))},
+			Resources: []string{r.appBoundaryPolicy},
 		},
 		{
 			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
@@ -1188,39 +1201,51 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 			Condition: taggedByOcel(),
 		},
 		{
-			Actions:   []string{"iam:CreateRole", "iam:TagRole"},
+			Actions:   []string{"iam:CreateRole"},
+			Resources: []string{r.bootstrapRole},
+			Condition: r.madeForItsTier(),
+		},
+		{
+			Actions:   []string{"iam:TagRole"},
+			Resources: []string{r.bootstrapRole},
+			Condition: r.taggedOnlyAsItsTier(),
+		},
+		{
+			Actions: []string{
+				"iam:GetRole",
+				"iam:GetRolePolicy",
+				"iam:ListAttachedRolePolicies",
+				"iam:ListRolePolicies",
+				"iam:ListRoleTags",
+			},
 			Resources: []string{r.bootstrapRole},
 		},
 		{
 			Actions: []string{
 				"iam:DeleteRole",
 				"iam:DeleteRolePolicy",
-				"iam:GetRole",
-				"iam:GetRolePolicy",
-				"iam:ListAttachedRolePolicies",
-				"iam:ListRolePolicies",
-				"iam:ListRoleTags",
 				"iam:PutRolePolicy",
 				"iam:UntagRole",
 				"iam:UpdateAssumeRolePolicy",
 				"iam:UpdateRole",
 			},
 			Resources: []string{r.bootstrapRole},
+			Condition: r.madeByItsStacks(),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{r.bootstrapRole},
-			Condition: attachedPolicyIsAServiceRole(false),
+			Condition: mergeConditions(attachedPolicyIsAServiceRole(false), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.bootstrapRole},
-			Condition: passedToLambda(false),
+			Condition: mergeConditions(passedToLambda(false), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.bootstrapRole},
-			Condition: passedTo(schedulerServicePrincipal, false),
+			Condition: mergeConditions(passedTo(schedulerServicePrincipal, false), r.madeByItsStacks()),
 		},
 		{
 			Actions: []string{
@@ -1243,22 +1268,35 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 			Resources: []string{r.schedule},
 		},
 		{
+			Actions:   []string{"lambda:CreateFunction"},
+			Resources: []string{r.bootstrapFunction},
+			Condition: r.madeForItsTier(),
+		},
+		{
+			Actions:   []string{"lambda:TagResource"},
+			Resources: []string{r.bootstrapFunction},
+			Condition: r.taggedOnlyAsItsTier(),
+		},
+		{
 			Actions: []string{
-				"lambda:AddPermission",
-				"lambda:CreateFunction",
-				"lambda:CreateFunctionUrlConfig",
-				"lambda:DeleteFunction",
-				"lambda:DeleteFunctionEventInvokeConfig",
-				"lambda:DeleteFunctionUrlConfig",
 				"lambda:GetFunction",
 				"lambda:GetFunctionConfiguration",
 				"lambda:GetFunctionEventInvokeConfig",
 				"lambda:GetFunctionUrlConfig",
 				"lambda:GetPolicy",
 				"lambda:ListTags",
+			},
+			Resources: []string{r.bootstrapFunction},
+		},
+		{
+			Actions: []string{
+				"lambda:AddPermission",
+				"lambda:CreateFunctionUrlConfig",
+				"lambda:DeleteFunction",
+				"lambda:DeleteFunctionEventInvokeConfig",
+				"lambda:DeleteFunctionUrlConfig",
 				"lambda:PutFunctionEventInvokeConfig",
 				"lambda:RemovePermission",
-				"lambda:TagResource",
 				"lambda:UntagResource",
 				"lambda:UpdateFunctionCode",
 				"lambda:UpdateFunctionConfiguration",
@@ -1266,6 +1304,7 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			Resources: []string{r.bootstrapFunction},
+			Condition: r.madeByItsStacks(),
 		},
 		{
 			Actions: []string{
@@ -1276,7 +1315,7 @@ func bootstrapProvisioning(ns Namespace, tier environment.Tier, r ScopedARNs) []
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			Resources: []string{r.bootstrapLogGroup},
+			Resources: r.bootstrapLogGroups,
 		},
 		{
 			Actions:   []string{"lambda:CreateEventSourceMapping"},
@@ -1353,42 +1392,40 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func deployGrants(ns Namespace, tier environment.Tier) []GrantStatement {
-	r := ns.ScopedARNsFor(tier)
-	return slices.Concat(bootstrapAccess(ns, tier, r), appProvisioning(ns, tier, r), runtimeProvisioning(r), withheldSiblingStores(ns, tier))
+func deployGrants(r ScopedARNs) []GrantStatement {
+	return slices.Concat(bootstrapAccess(r), appProvisioning(r), runtimeProvisioning(r))
 }
 
-func bootstrapGrants(ns Namespace, tier environment.Tier) []GrantStatement {
-	r := ns.ScopedARNsFor(tier)
-	return slices.Concat(bootstrapAccess(ns, tier, r), appProvisioning(ns, tier, r), runtimeProvisioning(r), bootstrapProvisioning(ns, tier, r), edgePrincipal(r), withheldSiblingStores(ns, tier))
+func bootstrapGrants(r ScopedARNs) []GrantStatement {
+	return slices.Concat(bootstrapAccess(r), appProvisioning(r), runtimeProvisioning(r), bootstrapProvisioning(r), edgePrincipal(r))
 }
 
 func refuseUnservedTier(tier environment.Tier) error {
 	if tier == environment.TierProduction || tier == environment.TierPreview {
 		return nil
 	}
-	return fmt.Errorf("credential permissions are rendered for the production or preview tier, not %q", tier)
+	return refusal.Refuse(refusal.CodeInvalid, "credential permissions are rendered for the production or preview tier, not %q", tier)
 }
 
 func DeployCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("deploy", deployGrants(ns, tier))
+	return credentialPolicy("deploy", deployGrants(ns.ScopedARNs(tier)))
 }
 
 func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("bootstrap", bootstrapGrants(ns, tier))
+	return credentialPolicy("bootstrap", bootstrapGrants(ns.ScopedARNs(tier)))
 }
 
 func PolicyStatements(grants []GrantStatement) []map[string]any {
 	statements := make([]map[string]any, 0, len(grants))
 	for _, grant := range grants {
 		statement := map[string]any{
-			"Effect":   cmp.Or(grant.Effect, effectAllow),
+			"Effect":   "Allow",
 			"Action":   oneOrMany(grant.Actions),
 			"Resource": oneOrMany(grant.Resources),
 		}
