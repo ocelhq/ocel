@@ -29,9 +29,6 @@ func answersTheFunctionBuildFacts(t *testing.T, suite Suite, configured *contrac
 
 	p := readDeclaredProvider(t, suite)
 	declared := p.Facts()
-	if got, want := configured.GetShipsNextServerRuntime(), p.Hooks().ReadNextServerRuntime != nil; got != want {
-		t.Errorf("ConfigureResponse.facts.ships_next_server_runtime = %v, want %v — the RPC answers whether Hooks().ReadNextServerRuntime is set", got, want)
-	}
 	if got, want := configured.GetForwardsPorts(), p.Hooks().ForwardPorts != nil; got != want {
 		t.Errorf("ConfigureResponse.facts.forwards_ports = %v, want %v — the RPC answers whether Hooks().ForwardPorts is set", got, want)
 	}

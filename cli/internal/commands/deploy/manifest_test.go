@@ -229,39 +229,6 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	return ""
 }
 
-func TestADeployWarnsAboutAStandaloneNextContainerBeforeItBuilds(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "web"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "web", "next.config.mjs"), []byte(`export default { output: "standalone" }`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	dependencies := newTestDependencies()
-	recordBuildApp(&dependencies)
-	s, out := newBuildSpan(t)
-	warned := false
-	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
-		warned = strings.Contains(out.String(), `app "web" sets output: "standalone" in next.config.mjs`)
-		return buildApps(ctx, cfg, variables, archs, workers, host, log)
-	}
-	cfg := &project.Project{
-		Dir:  root,
-		Slug: "standalone",
-		Apps: []project.App{{Name: "web", Path: "web", Compute: provider.ComputeContainer, Container: &project.Container{Framework: buildoutput.FrameworkNext}}},
-	}
-	stubAppImages(&dependencies, "web")
-
-	_, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s, host: build.Host{ShipsNextServerRuntime: true}})
-	if err != nil {
-		t.Fatalf("collectBuildAndAssemble() error = %v", err)
-	}
-	if !warned {
-		t.Errorf("the build began before the standalone warning, output so far:\n%s", out)
-	}
-}
-
 func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")

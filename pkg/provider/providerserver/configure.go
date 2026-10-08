@@ -32,7 +32,6 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		WorkerCeilings:         provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes:       facts.MaxFunctionBytes,
 		NextRefreshesByRequest: facts.NextRefreshesByRequest,
-		ShipsNextServerRuntime: p.Hooks().ReadNextServerRuntime != nil,
 		ForwardsPorts:          p.Hooks().ForwardPorts != nil,
 	}
 }
