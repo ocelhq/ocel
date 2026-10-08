@@ -65,7 +65,7 @@ func isTaggedElsewhere(tag name.Tag, digest v1.Hash, called []remote.Option) (bo
 		if other == tag.TagStr() {
 			continue
 		}
-		described, err := remote.Head(tag.Repository.Tag(other), called...)
+		described, err := remote.Head(tag.Tag(other), called...)
 		if isAbsent(err) {
 			continue
 		}
