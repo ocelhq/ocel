@@ -39,6 +39,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/telemetryflush"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
@@ -251,5 +252,7 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		IsJSON:          isJSON,
 		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
+
+		DeploymentReports: deployreport.Console{LoadCredentials: console.LoadCredentials},
 	}
 }

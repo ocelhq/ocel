@@ -14,9 +14,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult, tier environmentv1.Tier, frameworkBuildID func(app string) string) []*consolev1.App {
+func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult, tier environmentv1.Tier, frameworkBuildID func(app string) (string, error)) ([]*consolev1.App, error) {
 	apps := make([]*consolev1.App, 0, len(manifest.GetApps()))
 	for _, built := range manifest.GetApps() {
+		buildID, err := frameworkBuildID(built.GetName())
+		if err != nil {
+			return nil, fmt.Errorf("app %s: %w", built.GetName(), err)
+		}
 		app := &consolev1.App{
 			Name:             built.GetName(),
 			Folder:           built.GetFolder(),
@@ -24,7 +28,7 @@ func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult
 			Compute:          computeKind(provider.ComputeOf(built)),
 			BuildId:          built.GetBuildId(),
 			HealthPath:       built.GetContainer().GetHealthCheckPath(),
-			FrameworkBuildId: frameworkBuildID(built.GetName()),
+			FrameworkBuildId: buildID,
 			Outcome:          consolev1.AppOutcome_APP_OUTCOME_SKIPPED,
 		}
 		for _, domains := range built.GetDomains() {
@@ -37,7 +41,7 @@ func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult
 		}
 		apps = append(apps, app)
 	}
-	return apps
+	return apps, nil
 }
 
 func addResult(app *consolev1.App, result *progressv1.AppResult) {

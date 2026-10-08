@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -18,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -115,16 +113,9 @@ func TestAPreviewBuildIsGivenTheAliasItsDeployIsServedOn(t *testing.T) {
 		t.Fatalf("the build was given %q, want the preview's name and a signed token under *.preview.acme.com", built)
 	}
 
-	recorded, err := os.ReadFile(deployrecord.Path(fixture.Root))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var record deployrecord.Record
-	if err := json.Unmarshal(recorded, &record); err != nil {
-		t.Fatal(err)
-	}
-	if len(record.Apps) != 1 || !slices.Contains(record.Apps[0].URLs, built) {
-		t.Errorf("the deploy recorded %+v, want it served on %s, the alias its build was given", record.Apps, built)
+	record := readDeployReport(t, fixture.Root)
+	if len(record.GetApps()) != 1 || !slices.Contains(record.GetApps()[0].GetUrls(), built) {
+		t.Errorf("the deploy recorded %v, want it served on %s, the alias its build was given", record.GetApps(), built)
 	}
 }
 

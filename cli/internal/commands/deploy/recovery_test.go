@@ -976,7 +976,7 @@ func TestMissingVariablesUnderJSONOnATerminalFailWithTheirRemedyAndWaitForNobody
 				return fixture, newTestDependencies()
 			},
 			run: func(ctx context.Context, t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, stdout io.Writer, stdin io.Reader) error {
-				return runDeploy(ctx, dependencies, fixture.Root, deployOptions{yes: true}, stdout, stdout, stdin)
+				return runDeploy(ctx, dependencies, fixture.Root, deployOptions{yes: true}, stdout, io.Discard, stdin)
 			},
 		},
 		{
@@ -987,7 +987,7 @@ func TestMissingVariablesUnderJSONOnATerminalFailWithTheirRemedyAndWaitForNobody
 				return fixture, dependencies
 			},
 			run: func(ctx context.Context, t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, stdout io.Writer, stdin io.Reader) error {
-				return runPreviewUp(ctx, dependencies, fixture.Root, previewUpOptions{name: "staging", persistent: true, yes: true}, stdout, stdout, stdin)
+				return runPreviewUp(ctx, dependencies, fixture.Root, previewUpOptions{name: "staging", persistent: true, yes: true}, stdout, io.Discard, stdin)
 			},
 		},
 	} {
