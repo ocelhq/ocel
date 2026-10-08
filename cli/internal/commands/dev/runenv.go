@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/dev"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -53,7 +55,12 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 		if err != nil {
 			return err
 		}
-		return errors.Join(dev.RunProjected(ctx, opts, forwards.Bindings(portforward.WholeProject)), forwards.Close())
+		live := forwards.Bindings(portforward.WholeProject)
+		hidden := redaction.NewValues(build.SecretValues(live))
+		stdout, stderr := hidden.Writer(opts.Stdout), hidden.Writer(opts.Stderr)
+		opts.Stdout, opts.Stderr = stdout, stderr
+		ran := dev.RunProjected(ctx, opts, live)
+		return errors.Join(ran, stdout.Flush(), stderr.Flush(), forwards.Close())
 	})
 }
 

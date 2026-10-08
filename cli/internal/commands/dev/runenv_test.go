@@ -153,6 +153,27 @@ func TestRunInADeployedEnvironmentGivesTheCommandItsBindingsThroughTheLiveDirAnd
 	}
 }
 
+func TestRunInADeployedEnvironmentHidesWhatTheBindingsKeepSecretInTheCommandsOutput(t *testing.T) {
+	fixture := setUpDeployedProject(t)
+	forwardingPorts(t, fixture)
+	deployProject(t, fixture, clitest.NewInvocation())
+	out := filepath.Join(t.TempDir(), "seen")
+
+	got, err := runInEnvironment(t, fixture, clitest.NewInvocation(), "--env", "production", "--", "sh", "-c",
+		`cp "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" `+out+`; cat `+out+`; cat `+out+` >&2; printf %s "$(cat `+out+`)"`)
+
+	if err != nil {
+		t.Fatalf("ocel run err = %v; out=%s", err, got)
+	}
+	var binding bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(readFile(t, out)), &binding); err != nil || binding.GetPostgres().GetPassword() == "" {
+		t.Fatalf("the command read %q as main's binding (%v), want one with a password", readFile(t, out), err)
+	}
+	if password := binding.GetPostgres().GetPassword(); strings.Contains(got, password) {
+		t.Errorf("ocel run printed main's password in %q, want it hidden on stdout and stderr", got)
+	}
+}
+
 func TestRunInADeployedEnvironmentExitsWithTheCommandsExitCode(t *testing.T) {
 	fixture := setUpDeployedProject(t)
 	forwardingPorts(t, fixture)
