@@ -2,10 +2,7 @@ package providerserver
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -46,14 +43,6 @@ type leaseRenewal struct {
 
 func newDeployLeases() *deployLeases {
 	return &deployLeases{ttl: deployLeaseTTL, renewal: deployLeaseRenewal, renewing: map[heldLease]*leaseRenewal{}}
-}
-
-func newLeaseToken() (string, error) {
-	token := make([]byte, 16)
-	if _, err := rand.Read(token); err != nil {
-		return "", fmt.Errorf("mint a deploy lease token: %w", err)
-	}
-	return hex.EncodeToString(token), nil
 }
 
 func (l *deployLeases) hold(ctx context.Context, store keyvalue.Store, scope environmentScope, token string) (taken bool, err error) {

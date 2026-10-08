@@ -57,7 +57,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		var token string
 		if !req.GetDry() {
 			if token = req.GetLeaseToken(); token == "" {
-				if token, err = newLeaseToken(); err != nil {
+				if token, err = stackrecords.NewDeployLeaseToken(); err != nil {
 					return nil, err
 				}
 			}

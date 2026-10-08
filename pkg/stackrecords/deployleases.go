@@ -2,6 +2,8 @@ package stackrecords
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -14,6 +16,14 @@ import (
 type DeployLease struct {
 	Token     string `json:"token"`
 	ExpiresAt int64  `json:"expiresAt"`
+}
+
+func NewDeployLeaseToken() (string, error) {
+	token := make([]byte, 16)
+	if _, err := rand.Read(token); err != nil {
+		return "", fmt.Errorf("mint a deploy lease token: %w", err)
+	}
+	return hex.EncodeToString(token), nil
 }
 
 func DeployLeasesPartition(tier environment.Tier, slug string) keyvalue.Partition {
