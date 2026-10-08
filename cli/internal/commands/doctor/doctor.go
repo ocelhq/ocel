@@ -161,6 +161,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 	}
 	checked.pass(edgeText(cfg))
 	checked.checks = append(checked.checks, sdkChecks(cfg, version.Version)...)
+	checked.checks = append(checked.checks, skillChecks(cfg.Dir, version.Version)...)
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range checkedTiers() {
