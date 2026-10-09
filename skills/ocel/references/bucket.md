@@ -35,7 +35,7 @@ uploads.put("reports/q3.pdf", data, content_type="application/pdf")
 body = uploads.get("reports/q3.pdf")  # raises ocel.ObjectNotFound when missing
 for info in uploads.list(prefix="reports/"): ...
 url = uploads.signed_url("reports/q3.pdf")
-# every method has an _async twin: await uploads.put_async(...)
+# every method but public_url has an _async twin: await uploads.put_async(...)
 ```
 
 ```rust

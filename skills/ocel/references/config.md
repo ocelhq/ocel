@@ -21,10 +21,10 @@ The JSON Schema is at `https://ocel.dev/schema/ocel.schema.json`, and an editor 
 ```
 
 - **`slug`:** the project's identity, and the only required key. Changing it creates a different project, with new infrastructure.
-- **`provider`:** where the apps run: `aws`, `gcp` or `vps`, or `{ "<id>": { …options } }` for provider options, `edge` (for example Cloudflare in front) and `dns`.
+- **`provider`:** where the apps run: `"aws"` alone, or `{ "<id>": { …options } }` with `aws`, `gcp` or `vps` as the id (`gcp` and `vps` always take this form) for provider options, `edge` (for example Cloudflare in front) and `dns`.
 - **`apps`:** each app's `name` and `path`.
-  - The framework is detected from the app (`node`, `next`, `sveltekit`, `go`, `python`, `rust`); set `framework` only to override it.
-  - `compute` is `serverless` or `container`.
+  - The framework is detected from the app (`node`, `next`, `sveltekit`, `go`, `python`, `rust`); set `compute: { "serverless": { "framework": … } }` only to override it.
+  - `compute` is `serverless` or `container`, named alone or keyed with its options.
   - Optional per-app keys: `domains.production` and `arch`.
 - **`domains`:** the project's production domain and the preview wildcard (`*.preview.example.com`).
 - **`bindings`:** binds a declared `postgres`, `bucket` or `kv` to something that already exists instead of provisioning it.
