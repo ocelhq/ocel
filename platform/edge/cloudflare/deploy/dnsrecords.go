@@ -74,7 +74,7 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 	}
 	res, err := w.zones.List(ctx, params)
 	if err != nil {
-		return refuseUnverifiedToken(w.accountID, err)
+		return refuseUnverifiedToken(ctx, w.accountID, err)
 	}
 	if w.named != "" && !slices.ContainsFunc(res.Result, func(z zones.Zone) bool { return strings.EqualFold(z.Name, w.named) }) {
 		return fmt.Errorf("no zone named %q is reachable with %s in account %s", w.named, envAPIToken, w.accountID)
