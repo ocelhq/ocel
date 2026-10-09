@@ -32,6 +32,7 @@ type wildcards struct {
 	sel            *contractv1.EdgeSelection
 	progressStream *eventStream
 	progressSpan   Span
+	skipChecks     bool
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -44,7 +45,7 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	if err != nil {
 		return nil, err
 	}
-	return &wildcards{provider: vendor, keyValues: store, recorded: wildcard, sel: sel}, nil
+	return &wildcards{provider: vendor, keyValues: store, recorded: wildcard, sel: sel, skipChecks: h.skipChecks}, nil
 }
 
 func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
@@ -359,7 +360,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	}, nil
 }
 
-func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
+func recordedPreviewWildcard(ctx context.Context, p provider.Provider, skipChecks bool) (*contractv1.PreviewWildcard, error) {
 	recorded, err := stackrecords.ReadWildcard(ctx, p.KeyValues())
 	if err != nil {
 		return nil, err
@@ -367,7 +368,7 @@ func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contrac
 	if recorded.BaseDomain == "" {
 		return nil, nil
 	}
-	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded}
+	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded, skipChecks: skipChecks}
 	wildcard := w.proto(ctx)
 	answering, err := findEdgeRouter(p, recorded.Edge)
 	if err != nil {
@@ -398,6 +399,9 @@ func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
 func (w *wildcards) routeInstalled(ctx context.Context) bool {
 	if !w.recorded.IsRecorded() {
 		return false
+	}
+	if w.skipChecks {
+		return true
 	}
 	front, err := w.provider.Edges().Open(w.recorded.Edge, nil)
 	if err != nil {

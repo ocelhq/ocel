@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { ocelBinary, projectSlugForRun, renderOcelConfig, withoutSkipDriftChecks } from "./lib.mjs";
+import { ocelBinary, projectSlugForRun, renderOcelConfig, withoutSkipChecks } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const TIERS = ["bootstrap", "deploy"];
@@ -147,7 +147,7 @@ function configuredDir(label) {
 
 function ocel(args, options) {
   return run(`ocel ${args.join(" ")}`, process.execPath, [ocelBinary(adapterDir()), ...args], {
-    env: withoutSkipDriftChecks(process.env),
+    env: withoutSkipChecks(process.env),
     ...options,
   });
 }

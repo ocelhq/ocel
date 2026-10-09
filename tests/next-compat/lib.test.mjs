@@ -55,6 +55,7 @@ import {
   renderOcelConfig,
   requireNamespace,
   retryDelayMs,
+  SKIP_CHECKS_ENV,
   SLUG_PREFIX,
   selectRunSlugs,
   selectStrandedAppSlugs,
@@ -74,6 +75,7 @@ import {
   warmCoverage,
   warmSummaryOutcome,
   withBuildScript,
+  withoutSkipChecks,
   withPinnedTypeScript,
   zipEntryNames,
 } from "./lib.mjs";
@@ -99,6 +101,23 @@ describe("namespaceProblem", () => {
       )?.[1],
     );
     expect(namespaceProblem({ OCEL_NAMESPACE: DEFAULT_NAMESPACE })).toBeTruthy();
+  });
+});
+
+describe("SKIP_CHECKS_ENV", () => {
+  it("names the one variable the provider reads to skip its checks", () => {
+    expect(SKIP_CHECKS_ENV).toEqual({ OCEL_SKIP_CHECKS: "1" });
+    expect(readFileSync("../../pkg/processenv/processenv.go", "utf8")).toContain(
+      'SkipChecksEnvVar = "OCEL_SKIP_CHECKS"',
+    );
+  });
+});
+
+describe("withoutSkipChecks", () => {
+  it("strips the skip so a teardown runs fully checked, and keeps everything else", () => {
+    const env = { ...SKIP_CHECKS_ENV, OCEL_NAMESPACE: NEXT_COMPAT_NAMESPACE };
+    expect(withoutSkipChecks(env)).toEqual({ OCEL_NAMESPACE: NEXT_COMPAT_NAMESPACE });
+    expect(env).toEqual({ ...SKIP_CHECKS_ENV, OCEL_NAMESPACE: NEXT_COMPAT_NAMESPACE });
   });
 });
 

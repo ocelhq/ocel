@@ -180,7 +180,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return &stack{p: p, state: state, own: own}, nil
 	}
 	upToDate := stamps[program.Name] == stamp
-	if upToDate && skipEdgeReconcile() {
+	if upToDate && p.skipChecks {
 		return opened(prior)
 	}
 
@@ -200,7 +200,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
-		prune:           spec.PruneRoutes,
+		prune:           spec.PruneRoutes && (!spec.PruneOnly || !p.skipChecks),
 		pruneStem:       program.PruneWorkerStem,
 		requiredRecord:  program.RequiredRecord,
 		owns:            projectOwnsScript(p.namespace, slug),

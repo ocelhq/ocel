@@ -14,7 +14,7 @@ import {
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
-  withoutSkipDriftChecks,
+  withoutSkipChecks,
 } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
@@ -89,7 +89,7 @@ function failureOf(adapterDir, dir, args, timeout) {
     cwd: dir,
     stdio: ["ignore", "inherit", "inherit"],
     timeout,
-    env: withoutSkipDriftChecks(process.env),
+    env: withoutSkipChecks(process.env),
   });
   if (res.error || res.signal || res.status !== 0) {
     return (

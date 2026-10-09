@@ -79,6 +79,24 @@ func TestTheCloudflareEdgeDescribesEachBootstrapPartAndWhetherItIsCurrent(t *tes
 	})
 }
 
+func TestDescribingTheBootstrapWithTheChecksSkippedReadsNothingAndCallsItCurrent(t *testing.T) {
+	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+	m := bootstrapMock(t, false)
+	p := m.provider(t)
+	p.skipChecks = true
+
+	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("DescribeBootstrap: %v", err)
+	}
+	if m.requests != 0 {
+		t.Errorf("DescribeBootstrap with the checks skipped sent Cloudflare %d requests, want none", m.requests)
+	}
+	if len(parts) == 0 || slices.ContainsFunc(parts, func(part edge.BootstrapPart) bool { return !part.Current }) {
+		t.Errorf("parts = %+v, want the bootstrap described and current", parts)
+	}
+}
+
 func TestDescribingACloudflareBootstrapWithoutCredentialsIsAnError(t *testing.T) {
 	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 	m := bootstrapMock(t, true)

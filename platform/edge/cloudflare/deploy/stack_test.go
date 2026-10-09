@@ -367,12 +367,11 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("an opted-in second reconcile of the same spec only reads the bootstrap workers", func(t *testing.T) {
-		t.Setenv(envSkipEdgeReconcile, "1")
-
+	t.Run("a second reconcile of the same spec with the checks skipped only reads the bootstrap workers", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
+		p.skipChecks = true
 		spec := previewSpec(store.URL, "v2")
 
 		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
@@ -405,7 +404,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("second Reconcile: %v", err)
 		}
 		if m.routeLists != 2 {
-			t.Errorf("route lists = %d, want 2: every deploy repairs its routes unless %s says otherwise", m.routeLists, envSkipEdgeReconcile)
+			t.Errorf("route lists = %d, want 2: every deploy repairs its routes unless the checks are skipped", m.routeLists)
 		}
 		if len(m.putScripts) != 1 {
 			t.Errorf("uploaded scripts = %v, want the first reconcile's alone", m.putScripts)
@@ -413,11 +412,10 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("a preview whose signing key changed re-uploads the shared worker", func(t *testing.T) {
-		t.Setenv(envSkipEdgeReconcile, "1")
-
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
+		p.skipChecks = true
 
 		spec := previewSpec(store.URL, "v2")
 		spec.Program.Worker = withSecret(spec.Program.Worker, edge.PreviewKeyVar, "key-1")
@@ -438,11 +436,10 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("two apps on one slug each read back their own stamp", func(t *testing.T) {
-		t.Setenv(envSkipEdgeReconcile, "1")
-
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
+		p.skipChecks = true
 
 		appSpec := func(name string) edge.StackSpec {
 			spec := testSpec(store.URL, "v2")
@@ -554,6 +551,31 @@ func TestReconcile(t *testing.T) {
 
 		if _, err := reconcileState(t, previewZoneMock().provider(t), spec, testState(store.URL, "s3cr3t")); err == nil {
 			t.Fatal("Reconcile err = nil, want a refusal to prune the shared entry worker")
+		}
+	})
+
+	t.Run("a prune-only spec with the checks skipped retires its worker without listing the account's routes", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		m.existingRoutes = []map[string]any{
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		}
+		p := m.provider(t)
+		p.skipChecks = true
+		spec := pruneOnlySpec(store.URL, "v2")
+
+		if _, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t")); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		if m.zoneLists != 0 || m.routeLists != 0 {
+			t.Errorf("zone lists = %d, route lists = %d, want none: with the checks skipped a prune-only stack prunes no routes", m.zoneLists, m.routeLists)
+		}
+		if len(m.deletedRoutes) != 0 {
+			t.Errorf("deleted routes = %v, want none", m.deletedRoutes)
+		}
+		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
+			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
 	})
 }

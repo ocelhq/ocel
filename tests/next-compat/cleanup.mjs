@@ -12,7 +12,7 @@ import {
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
-  SKIP_DRIFT_CHECK_ENV,
+  SKIP_CHECKS_ENV,
   STATE_FILE,
 } from "./lib.mjs";
 
@@ -42,7 +42,7 @@ const res = spawnSync(process.execPath, [ocelBinary(adapterDir), ...command], {
   cwd: appDir,
   stdio: ["ignore", "inherit", "inherit"],
   timeout: TEARDOWN_TIMEOUT_MS,
-  env: { ...process.env, ...SKIP_DRIFT_CHECK_ENV },
+  env: { ...process.env, ...SKIP_CHECKS_ENV },
 });
 
 if (res.error || res.signal || res.status !== 0) {

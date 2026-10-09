@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -341,6 +342,29 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	}
 	if !wildcard.GetRouteInstalled() {
 		t.Error("Preflight() says the shared entry route is not installed, though the edge owns it")
+	}
+}
+
+func TestPreflightTakesThePreviewEntryRouteAsInstalledWithoutAskingTheEdgeWhenTheChecksAreSkipped(t *testing.T) {
+	for _, skipped := range []bool{false, true} {
+		if skipped {
+			t.Setenv(processenv.SkipChecksEnvVar, "1")
+		}
+		ctx := context.Background()
+		client, vendor := contractServed(t, "1.2.3")
+		bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+		if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+			t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+		}
+		vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
+
+		resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+		if err != nil {
+			t.Fatalf("Preflight() error = %v", err)
+		}
+		if got := resp.GetPreviewWildcard().GetRouteInstalled(); got != skipped {
+			t.Errorf("Preflight() with the checks skipped = %v says the shared entry route installed = %v, want %v: only an edge asked who owns it can say it is not", skipped, got, skipped)
+		}
 	}
 }
 

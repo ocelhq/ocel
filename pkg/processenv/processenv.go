@@ -1,5 +1,10 @@
 package processenv
 
+import (
+	"os"
+	"strings"
+)
+
 const PhaseEnvVar = "OCEL_PHASE"
 
 const DevServerEnvVar = "OCEL_DEV_SERVER"
@@ -23,6 +28,16 @@ const LiveDirEnvVar = "OCEL_LIVE_DIR"
 const DeliveredVariablePrefix = "OCEL_VAR_"
 
 const ClientURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
+
+const SkipChecksEnvVar = "OCEL_SKIP_CHECKS"
+
+func SkipChecks() bool {
+	switch strings.ToLower(os.Getenv(SkipChecksEnvVar)) {
+	case "1", "true":
+		return true
+	}
+	return false
+}
 
 func IsInjected(clientBundle bool, key string) bool {
 	switch key {

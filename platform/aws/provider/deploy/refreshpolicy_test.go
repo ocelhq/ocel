@@ -12,7 +12,7 @@ import (
 func TestOnlyADestroyOfAStackThisProcessDidNotRealizeRefreshes(t *testing.T) {
 	realized := &Realized{}
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	policy := refreshPolicy(realized)
+	policy := (&Stacks{realized: realized}).refreshPolicy()
 
 	for _, op := range []pulumi.Operation{pulumi.OperationProvision} {
 		if policy(ref, op) {
@@ -28,9 +28,9 @@ func TestOnlyADestroyOfAStackThisProcessDidNotRealizeRefreshes(t *testing.T) {
 		t.Error("refresh before a destroy of a stack this process just realized = true, want false: its state is what this process wrote")
 	}
 
-	t.Setenv(skipTeardownRefreshEnv, "1")
 	other := provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	if policy(other, pulumi.OperationDestroy) {
-		t.Errorf("refresh before a destroy with %s set = true, want false: the harness sets it to trade the drift check for speed", skipTeardownRefreshEnv)
+	skipping := (&Stacks{realized: realized, skipChecks: true}).refreshPolicy()
+	if skipping(other, pulumi.OperationDestroy) {
+		t.Error("refresh before a destroy with the checks skipped = true, want false: the harness skips them to trade the drift check for speed")
 	}
 }
