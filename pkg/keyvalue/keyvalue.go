@@ -2,14 +2,16 @@ package keyvalue
 
 import (
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -148,7 +150,7 @@ const revisionBytes = 16
 
 func NewRevision() (Revision, error) {
 	token := make([]byte, revisionBytes)
-	if _, err := rand.Read(token); err != nil {
+	if _, err := cryptorand.Read(token); err != nil {
 		return "", fmt.Errorf("mint a revision token: %w", err)
 	}
 	return Revision(hex.EncodeToString(token)), nil
@@ -250,7 +252,10 @@ func ForgetMatching(ctx context.Context, store Store, key Key, match func(record
 const forgetAttempts = 5
 
 func Change(ctx context.Context, store Store, key Key, change func(recorded Entry) (value []byte, changed bool, err error)) error {
-	for range changeAttempts {
+	for attempt := range changeAttempts {
+		if err := waitForRacingWriter(ctx, attempt); err != nil {
+			return err
+		}
 		recorded, err := ReadOrEmpty(ctx, store, key)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", key, err)
@@ -272,4 +277,20 @@ func Change(ctx context.Context, store Store, key Key, change func(recorded Entr
 		key, changeAttempts)
 }
 
-const changeAttempts = 5
+const changeAttempts = 10
+
+const racingWriterWait = 10 * time.Millisecond
+
+func waitForRacingWriter(ctx context.Context, attempt int) error {
+	if attempt == 0 {
+		return nil
+	}
+	timer := time.NewTimer(time.Duration(rand.Int64N(int64(racingWriterWait << min(attempt, 6)))))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}

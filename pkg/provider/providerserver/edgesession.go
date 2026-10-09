@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,35 +22,97 @@ import (
 type edgeStateStore struct {
 	keyValues keyvalue.Store
 	name      keyvalue.Key
+	recorded  stackrecords.EdgeState
 }
 
-func (s edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
+func (s *edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
+	entry, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
-	var state stackrecords.EdgeState
-	if len(recorded.Value) == 0 {
-		return state, nil
+	if s.recorded, err = decodeEdgeState(entry.Value); err != nil {
+		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
-	if err := json.Unmarshal(recorded.Value, &state); err != nil {
+	state, err := decodeEdgeState(entry.Value)
+	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	return state, nil
 }
 
-func (s edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState) error {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
+func (s *edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState) error {
+	written, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", s.name, err)
-	}
-	if recorded.Value, err = json.Marshal(state); err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
-	if _, err := s.keyValues.Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record %s: %w", s.name, err)
+	err = keyvalue.Change(ctx, s.keyValues, s.name, func(entry keyvalue.Entry) ([]byte, bool, error) {
+		current, err := decodeEdgeState(entry.Value)
+		if err != nil {
+			return nil, false, fmt.Errorf("read %s: %w", s.name, err)
+		}
+		value, err := json.Marshal(mergeEdgeState(s.recorded, state, current))
+		return value, !bytes.Equal(value, entry.Value), err
+	})
+	if err != nil {
+		return err
 	}
-	return nil
+	s.recorded, err = decodeEdgeState(written)
+	return err
+}
+
+func decodeEdgeState(value []byte) (stackrecords.EdgeState, error) {
+	var state stackrecords.EdgeState
+	if len(value) == 0 {
+		return state, nil
+	}
+	err := json.Unmarshal(value, &state)
+	return state, err
+}
+
+func mergeEdgeState(base, mine, current stackrecords.EdgeState) stackrecords.EdgeState {
+	merged := current
+	if mine.Kind != base.Kind {
+		merged.Kind = mine.Kind
+	}
+	if !isSameJSON(mine.Edge, base.Edge) {
+		merged.Edge = mine.Edge
+	}
+	merged.Routers = mergeEntries(base.Routers, mine.Routers, current.Routers)
+	merged.Apps = mergeEntries(base.Apps, mine.Apps, current.Apps)
+	merged.Hosts = mergeEntries(base.Hosts, mine.Hosts, current.Hosts)
+	return merged
+}
+
+func mergeEntries[K comparable, V any](base, mine, current map[K]V) map[K]V {
+	merged := maps.Clone(current)
+	for _, key := range append(slices.Collect(maps.Keys(base)), slices.Collect(maps.Keys(mine))...) {
+		was, recorded := base[key]
+		now, held := mine[key]
+		if recorded == held && isSameJSON(was, now) {
+			continue
+		}
+		if !held {
+			delete(merged, key)
+			continue
+		}
+		if merged == nil {
+			merged = map[K]V{}
+		}
+		merged[key] = now
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func isSameJSON(a, b any) bool {
+	first, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	second, err := json.Marshal(b)
+	return err == nil && bytes.Equal(first, second)
 }
 
 type edgeSession struct {

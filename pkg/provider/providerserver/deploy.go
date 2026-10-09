@@ -550,18 +550,36 @@ func (r *deployRun) readPreviewHosts(ctx context.Context, progress progress.Log,
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
-	name := stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, r.provider.KeyValues(), name)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
+	var base []string
+	read := false
+	return keyvalue.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry keyvalue.Entry) ([]byte, bool, error) {
+		current, err := decodeProject(entry)
+		if err != nil {
+			return nil, false, err
+		}
+		if !read {
+			base, read = current.Features, true
+		}
+		features := slices.Clone(r.features)
+		for _, feature := range current.Features {
+			if !slices.Contains(base, feature) && !slices.Contains(features, feature) {
+				features = append(features, feature)
+			}
+		}
+		value, err := json.Marshal(stackrecords.Project{Features: features})
+		return value, true, err
+	})
+}
+
+func decodeProject(entry keyvalue.Entry) (stackrecords.Project, error) {
+	var project stackrecords.Project
+	if len(entry.Value) == 0 {
+		return project, nil
 	}
-	if recorded.Value, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
+	if err := json.Unmarshal(entry.Value, &project); err != nil {
+		return project, fmt.Errorf("read %s: %w", entry.Key, err)
 	}
-	if _, err := r.provider.KeyValues().Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
+	return project, nil
 }
 
 type hostingMode int

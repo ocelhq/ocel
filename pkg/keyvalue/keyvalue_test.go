@@ -273,6 +273,16 @@ func TestChangeReadsAgainAndReappliesTheChangeWhenTheEntryMovedUnderIt(t *testin
 	}
 }
 
+func TestChangeOutlastsSevenWritersRacingItToTheEntry(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 7}
+	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+		return []byte(`"changed"`), true, nil
+	})
+	if err != nil || string(moved.recorded.Value) != `"changed"` {
+		t.Errorf("Change() of an entry rewritten seven times = %v, recorded %s, want the change written: parallel previews of one project race to its records", err, moved.recorded.Value)
+	}
+}
+
 func TestChangeWritesNothingWhenTheChangeLeavesTheEntryAlone(t *testing.T) {
 	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 100}
 	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
