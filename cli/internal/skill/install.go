@@ -36,25 +36,50 @@ func IsInstalled(root string) bool {
 }
 
 func ListFiles() []string {
-	var names []string
-	err := fs.WalkDir(Files(), ".", func(name string, entry fs.DirEntry, err error) error {
-		if err == nil && !entry.IsDir() {
-			names = append(names, name)
-		}
-		return err
-	})
+	names, err := filesIn(Files())
 	if err != nil {
 		panic(err)
 	}
 	return names
 }
 
+func filesIn(source fs.FS) ([]string, error) {
+	var names []string
+	err := fs.WalkDir(source, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err == nil && !entry.IsDir() {
+			names = append(names, name)
+		}
+		return err
+	})
+	return names, err
+}
+
 func Write(dir, version string) error {
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("clear %s: %w", dir, err)
+	return writeFrom(Files(), dir, version)
+}
+
+func writeFrom(source fs.FS, dir, version string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(dir), err)
 	}
-	for _, name := range ListFiles() {
-		content, err := fs.ReadFile(Files(), name)
+	staging, err := os.MkdirTemp(filepath.Dir(dir), "."+filepath.Base(dir)+"-staging-")
+	if err != nil {
+		return fmt.Errorf("stage the skill beside %s: %w", dir, err)
+	}
+	defer os.RemoveAll(staging)
+	if err := fill(source, staging, version); err != nil {
+		return err
+	}
+	return swap(staging, dir)
+}
+
+func fill(source fs.FS, dir, version string) error {
+	names, err := filesIn(source)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		content, err := fs.ReadFile(source, name)
 		if err != nil {
 			return err
 		}
@@ -69,6 +94,31 @@ func Write(dir, version string) error {
 		}
 		if err := os.WriteFile(out, content, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", out, err)
+		}
+	}
+	return nil
+}
+
+func swap(staged, dir string) error {
+	retired := staged + "-retired"
+	_, err := os.Lstat(dir)
+	held := err == nil
+	if held {
+		if err := os.Rename(dir, retired); err != nil {
+			return fmt.Errorf("set aside %s: %w", dir, err)
+		}
+	}
+	if err := os.Rename(staged, dir); err != nil {
+		if held {
+			if restoreErr := os.Rename(retired, dir); restoreErr != nil {
+				return fmt.Errorf("install %s: %w; the previous skill is left at %s", dir, err, retired)
+			}
+		}
+		return fmt.Errorf("install %s: %w", dir, err)
+	}
+	if held {
+		if err := os.RemoveAll(retired); err != nil {
+			return fmt.Errorf("remove the previous skill at %s: %w", retired, err)
 		}
 	}
 	return nil
