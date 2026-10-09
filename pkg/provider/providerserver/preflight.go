@@ -165,11 +165,11 @@ type bootstrapStatus struct {
 }
 
 func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier environment.Tier, req *contractv1.PreflightRequest, skipChecks bool) (status bootstrapStatus, err error) {
-	if status.own, err = gate.Status(ctx, tier); err != nil {
+	if status.own, err = gate.SessionStatus(ctx, tier); err != nil {
 		return status, err
 	}
 	if !status.own.Present {
-		sibling, err := gate.Status(ctx, tier.Sibling())
+		sibling, err := gate.SessionStatus(ctx, tier.Sibling())
 		status.siblingPresent = sibling.Present
 		return status, err
 	}

@@ -33,6 +33,7 @@ func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
 		KeyValues: p.KeyValues(),
 		WrittenBy: h.session.writer,
 		Edge:      kind,
+		Statuses:  &h.session.bootstrapStatuses,
 	}, nil
 }
 

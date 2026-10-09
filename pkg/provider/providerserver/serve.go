@@ -140,6 +140,8 @@ type session struct {
 	provider   provider.Provider
 	settings   provider.Settings
 	outputRoot string
+
+	bootstrapStatuses BootstrapStatuses
 }
 
 func (s *session) transforms() []string {

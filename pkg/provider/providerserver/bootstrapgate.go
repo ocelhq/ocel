@@ -23,6 +23,7 @@ type Gate struct {
 	KeyValues keyvalue.Store
 	WrittenBy provider.WrittenBy
 	Edge      edge.Kind
+	Statuses  *BootstrapStatuses
 }
 
 type BootstrapStatus struct {
@@ -243,7 +244,9 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.T
 	if req.RepairOnDeploy != nil {
 		repairOnDeploy = *req.RepairOnDeploy
 	}
-	if err := g.Bootstrap.Apply(ctx, change.request(tier, req, g.WrittenBy), progress); err != nil {
+	err = g.Bootstrap.Apply(ctx, change.request(tier, req, g.WrittenBy), progress)
+	g.Statuses.forget()
+	if err != nil {
 		return err
 	}
 	return g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
@@ -262,7 +265,9 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.
 			return err
 		}
 	}
-	if err := g.Bootstrap.Remove(ctx, tier, progress); err != nil {
+	err := g.Bootstrap.Remove(ctx, tier, progress)
+	g.Statuses.forget()
+	if err != nil {
 		return err
 	}
 	if tier == environment.TierPreview {
@@ -333,7 +338,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 }
 
 func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, repair bool, progress progress.Log) (BootstrapStatus, error) {
-	status, err := g.Status(ctx, tier)
+	status, err := g.SessionStatus(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
@@ -345,7 +350,7 @@ func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required [
 		return status, err
 	}
 	if repair && g.repair(ctx, status, required, progress) {
-		if status, err = g.Status(ctx, tier); err != nil {
+		if status, err = g.SessionStatus(ctx, tier); err != nil {
 			return BootstrapStatus{}, err
 		}
 	}
@@ -388,6 +393,7 @@ func (g Gate) repair(ctx context.Context, status BootstrapStatus, required []str
 		Repair:             true,
 		WrittenBy:          g.WrittenBy,
 	}, progress)
+	g.Statuses.forget()
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeDenied {
 		warn(progress, denied(refused))
@@ -432,7 +438,9 @@ func (g Gate) RecordBootstrap(ctx context.Context, tier environment.Tier, state 
 	if err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
-	if _, err := g.KeyValues.Write(ctx, recorded); err != nil {
+	_, err = g.KeyValues.Write(ctx, recorded)
+	g.Statuses.forget()
+	if err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
 	return nil
