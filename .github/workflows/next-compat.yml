@@ -452,7 +452,7 @@ jobs:
 
       - name: Ensure Playwright browser
         working-directory: nextjs
-        run: pnpm playwright install chromium
+        run: pnpm playwright install --with-deps chromium
 
       - name: Warm the Pulumi runtime before the concurrent deploys install it
         run: |
