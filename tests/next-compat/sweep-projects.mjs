@@ -80,7 +80,12 @@ if (stranded.length === 0) {
 
 console.error(`[ocel-e2e] ${stranded.length} stranded e2e project(s): ${stranded.join(", ")}`);
 
-const failed = stranded.filter((slug) => !destroyProject(slug, target));
+const failed = [];
+for (const slug of stranded) {
+  if (!(await destroyProject(slug, target))) {
+    failed.push(slug);
+  }
+}
 if (failed.length > 0) {
   console.error(
     `[ocel-e2e] could not reclaim ${failed.join(", ")} — their preview footprint keeps billing`,

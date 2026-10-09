@@ -27,10 +27,13 @@ import {
   GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
   goldenDifferences,
+  heldLeaseWaitMs,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
   isProductionTarget,
   isrToken,
+  LEASE_EXPIRY_SLACK_MS,
+  LEASE_RETRY_MIN_WAIT_MS,
   lambdaFunctionNames,
   logWindowVerdict,
   MAX_SLUG_LEN,
@@ -1677,6 +1680,41 @@ describe("selectStrandedAppSlugs", () => {
       "e2e-41-abcd1234",
       "e2e-420-abcd1234",
     ]);
+  });
+});
+
+describe("heldLeaseWaitMs", () => {
+  const refusal =
+    "✗ Destroy preview failed in 7s — aborted: a deploy to next-test-17-01280553 is running: " +
+    "remove it again once it ends, or once its lease runs out at 2026-10-09 12:05:00 UTC if it was interrupted";
+  const expiry = Date.parse("2026-10-09T12:05:00Z");
+
+  it("waits until the stated lease expiry, plus slack, when a deploy's lease refused the destroy", () => {
+    const now = expiry - 60_000;
+    expect(heldLeaseWaitMs(refusal, { now, deadline: now + 600_000 })).toBe(
+      60_000 + LEASE_EXPIRY_SLACK_MS,
+    );
+  });
+
+  it("waits a short pause rather than retrying hot when the stated expiry has already passed", () => {
+    const now = expiry + 60_000;
+    expect(heldLeaseWaitMs(refusal, { now, deadline: now + 600_000 })).toBe(
+      LEASE_RETRY_MIN_WAIT_MS,
+    );
+  });
+
+  it("gives up when the lease outlasts the deadline, so a deploy still renewing it fails the teardown", () => {
+    const now = expiry - 60_000;
+    expect(heldLeaseWaitMs(refusal, { now, deadline: now + 30_000 })).toBeNull();
+  });
+
+  it("gives up on any failure other than a held lease", () => {
+    expect(
+      heldLeaseWaitMs("✗ Destroy preview failed in 7s — internal: boom", {
+        now: 0,
+        deadline: 600_000,
+      }),
+    ).toBeNull();
   });
 });
 

@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 import { listProjectSlugs, readAccessToken } from "./gcp.mjs";
 import {
+  heldLeaseExpiry,
+  heldLeaseWaitMs,
   isProductionTarget,
+  LEASE_TTL_MS,
   ocelBinary,
   projectSlugForRun,
   readCompatTarget,
@@ -29,10 +33,10 @@ async function main(named) {
   requireNamespace();
   const target = readCompatTarget();
   if (named) {
-    return destroyProject(named, target) ? 0 : 1;
+    return (await destroyProject(named, target)) ? 0 : 1;
   }
   if (!isProductionTarget(target)) {
-    return destroyProject(projectSlugForRun(), target) ? 0 : 1;
+    return (await destroyProject(projectSlugForRun(), target)) ? 0 : 1;
   }
   const run = projectSlugForRun();
   const slugs = selectRunSlugs(
@@ -47,11 +51,16 @@ async function main(named) {
     console.error(`[ocel-e2e] nothing of ${run} is left`);
     return 0;
   }
-  const failed = slugs.filter((slug) => !destroyProject(slug, target));
+  const failed = [];
+  for (const slug of slugs) {
+    if (!(await destroyProject(slug, target))) {
+      failed.push(slug);
+    }
+  }
   return failed.length === 0 ? 0 : 1;
 }
 
-export function destroyProject(slug, target = readCompatTarget()) {
+export async function destroyProject(slug, target = readCompatTarget()) {
   requireNamespace();
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
@@ -64,27 +73,60 @@ export function destroyProject(slug, target = readCompatTarget()) {
   linkSidecar(dir, sidecarDir);
 
   const tier = isProductionTarget(target) ? "production" : "preview";
-  console.error(`[ocel-e2e] destroying the ${tier} footprint of project ${slug} (from ${dir})`);
-  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "destroy", tier, "--yes"], {
-    cwd: dir,
-    stdio: ["ignore", "inherit", "inherit"],
-    timeout: TEARDOWN_TIMEOUT_MS,
-    env: withoutSkipDriftChecks(process.env),
-  });
-
-  if (res.error || res.signal || res.status !== 0) {
-    const why =
-      res.error?.message ??
-      (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+  let deadline;
+  for (;;) {
+    console.error(`[ocel-e2e] destroying the ${tier} footprint of project ${slug} (from ${dir})`);
+    const res = await runDestroy(adapterDir, tier, dir);
+    if (!res.error && !res.signal && res.status === 0) {
+      console.error(`[ocel-e2e] project ${slug} destroyed`);
+      return true;
+    }
+    deadline ??= Date.now() + LEASE_TTL_MS + 60_000;
+    const wait = heldLeaseWaitMs(res.output, { now: Date.now(), deadline });
+    if (wait === null) {
+      reportTeardownFailure(slug, res, deadline);
+      return false;
+    }
     console.error(
-      `[ocel-e2e] PROJECT TEARDOWN FAILED for ${slug}: ${why}\n` +
-        `[ocel-e2e] its preview footprint is still billing — store instance, staged ` +
-        `deployments and assets — and the slug stays taken. Other projects keep deploying ` +
-        `onto the bootstrap's preview domain regardless. Retry with ` +
-        `\`node tests/next-compat/project-teardown.mjs ${slug}\`.`,
+      `[ocel-e2e] an interrupted deploy's lease still holds ${slug}; destroying again in ${Math.ceil(wait / 1000)}s, once it runs out`,
     );
-    return false;
+    await sleep(wait);
   }
-  console.error(`[ocel-e2e] project ${slug} destroyed`);
-  return true;
+}
+
+function runDestroy(adapterDir, tier, dir) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [ocelBinary(adapterDir), "destroy", tier, "--yes"], {
+      cwd: dir,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: TEARDOWN_TIMEOUT_MS,
+      env: withoutSkipDriftChecks(process.env),
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk;
+      process.stderr.write(chunk);
+    });
+    child.on("error", (error) => resolve({ error, output }));
+    child.on("close", (status, signal) => resolve({ status, signal, output }));
+  });
+}
+
+function reportTeardownFailure(slug, res, deadline) {
+  const why =
+    res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+  console.error(
+    `[ocel-e2e] PROJECT TEARDOWN FAILED for ${slug}: ${why}` +
+      (heldLeaseExpiry(res.output) !== null
+        ? ` — a deploy's lease still held it at the deadline of ${new Date(deadline).toISOString()}, so that deploy is still renewing it`
+        : "") +
+      `\n[ocel-e2e] its preview footprint is still billing — store instance, staged ` +
+      `deployments and assets — and the slug stays taken. Other projects keep deploying ` +
+      `onto the bootstrap's preview domain regardless. Retry with ` +
+      `\`node tests/next-compat/project-teardown.mjs ${slug}\`.`,
+  );
 }
