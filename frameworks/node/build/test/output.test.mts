@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -148,4 +149,51 @@ describe("BuildOutput", () => {
     expect(readlinkSync(dest)).toBe("../vendor/pkg");
     expect(readFileSync(path.join(dest, "index.js"), "utf8")).toBe("module.exports = 1");
   });
+
+  it("refuses an asset that would land outside its function, writing nothing there", async () => {
+    const root = scratch();
+    writeFileSync(path.join(root, "secret.txt"), "x");
+    const output = new BuildOutput(path.join(root, "out"), "web");
+
+    await expect(
+      output.copyIntoFunction(
+        "bundle-0",
+        { "../escaped.txt": path.join(root, "secret.txt") },
+        root,
+      ),
+    ).rejects.toThrow(/outside the function/);
+    expect(existsSync(path.join(output.dir, "functions", "escaped.txt"))).toBe(false);
+  });
+
+  it("leaves out an asset with no source on disk", async () => {
+    const root = scratch();
+    const output = new BuildOutput(path.join(root, "out"), "web");
+
+    await output.copyIntoFunction("bundle-0", { "gone.js": path.join(root, "gone.js") }, root);
+
+    expect(existsSync(path.join(output.functionDir("bundle-0"), "gone.js"))).toBe(false);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "fails rather than leave out an asset it cannot read",
+    async () => {
+      const root = scratch();
+      mkdirSync(path.join(root, "locked"));
+      writeFileSync(path.join(root, "locked/index.js"), "x");
+      chmodSync(path.join(root, "locked"), 0o000);
+      const output = new BuildOutput(path.join(root, "out"), "web");
+
+      try {
+        await expect(
+          output.copyIntoFunction(
+            "bundle-0",
+            { "locked/index.js": path.join(root, "locked/index.js") },
+            root,
+          ),
+        ).rejects.toThrow(/EACCES/);
+      } finally {
+        chmodSync(path.join(root, "locked"), 0o755);
+      }
+    },
+  );
 });

@@ -73,7 +73,13 @@ export class BuildOutput {
     const functionDir = this.functionDir(id);
     const mirrored = mirroredPaths(Object.keys(assets));
     for (const [dest, src] of Object.entries(assets)) {
-      await copyAsset(src, path.join(functionDir, dest), root, functionDir, mirrored);
+      const placed = path.join(functionDir, dest);
+      if (containedIn(functionDir, placed) === undefined) {
+        throw new Error(
+          `ocel: the traced asset ${src} would land at ${dest}, outside the function ${id}, so the function cannot carry it`,
+        );
+      }
+      await copyAsset(src, placed, root, functionDir, mirrored);
     }
   }
 }
@@ -101,6 +107,11 @@ function mirroredPaths(destKeys: readonly string[]): ReadonlySet<string> {
   return paths;
 }
 
+function nothingIfMissing(error: NodeJS.ErrnoException): undefined {
+  if (error.code === "ENOENT") return undefined;
+  throw error;
+}
+
 async function copyAsset(
   srcAbs: string,
   dest: string,
@@ -108,12 +119,8 @@ async function copyAsset(
   functionDir: string,
   mirrored: ReadonlySet<string>,
 ): Promise<void> {
-  let info;
-  try {
-    info = await lstat(srcAbs);
-  } catch {
-    return;
-  }
+  const info = await lstat(srcAbs).catch(nothingIfMissing);
+  if (!info) return;
   await mkdir(path.dirname(dest), { recursive: true });
   if (info.isSymbolicLink()) {
     const raw = await readlink(srcAbs);
@@ -125,12 +132,8 @@ async function copyAsset(
       await symlink(toSlash(path.relative(path.dirname(dest), path.join(functionDir, rel))), dest);
       return;
     }
-    let targetInfo;
-    try {
-      targetInfo = await stat(target);
-    } catch {
-      return;
-    }
+    const targetInfo = await stat(target).catch(nothingIfMissing);
+    if (!targetInfo) return;
     if (targetInfo.isDirectory()) {
       await cp(target, dest, { recursive: true, dereference: true });
       return;

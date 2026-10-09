@@ -139,15 +139,19 @@ function readHosting(app: OutputBuild, adapter: Adapter): Hosting {
     new Error(
       `ocel: app "${app.name}" built, but ${why}, so its build did not run through ${adapter.name}. ${adapter.setup}`,
     );
-  let hosting: Partial<Hosting>;
+  let parsed: unknown;
   try {
-    hosting = JSON.parse(readFileSync(path.join(app.outputDir, HOSTING_FILE), "utf8"));
+    parsed = JSON.parse(readFileSync(path.join(app.outputDir, HOSTING_FILE), "utf8"));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       throw refuseUnadapted(`nothing wrote ${HOSTING_FILE} to ${app.outputDir}`);
     }
     throw err;
   }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw refuseUnadapted(`the ${HOSTING_FILE} it wrote is not an object`);
+  }
+  const hosting = parsed as Partial<Hosting>;
   if (hosting.framework !== adapter.framework) {
     throw refuseUnadapted(
       `the ${HOSTING_FILE} it wrote names framework ${JSON.stringify(hosting.framework)}`,
