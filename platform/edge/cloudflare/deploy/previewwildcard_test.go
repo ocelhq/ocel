@@ -52,6 +52,44 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 	}
 }
 
+func TestPreviewWildcardBehind(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	t.Run("the shared worker this build uploaded is current", func(t *testing.T) {
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
+		p := m.provider(t)
+		if _, err := p.ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+
+		if behind, err := p.PreviewWildcardBehind(t.Context(), previewWildcardSpec()); err != nil || behind {
+			t.Errorf("PreviewWildcardBehind() = %v, %v, want current: it runs the module this build uploads", behind, err)
+		}
+	})
+
+	t.Run("a shared worker another build uploaded is behind", func(t *testing.T) {
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
+		p := m.provider(t)
+		if _, err := p.ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+		newer := previewWildcardSpec()
+		newer.Program.Worker.Main.Content = append(bytes.Clone(newer.Program.Worker.Main.Content), "\n// newer\n"...)
+
+		if behind, err := p.PreviewWildcardBehind(t.Context(), newer); err != nil || !behind {
+			t.Errorf("PreviewWildcardBehind() = %v, %v, want behind: its module is not the one this build uploads", behind, err)
+		}
+	})
+
+	t.Run("a missing shared worker is behind", func(t *testing.T) {
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
+
+		if behind, err := m.provider(t).PreviewWildcardBehind(t.Context(), previewWildcardSpec()); err != nil || !behind {
+			t.Errorf("PreviewWildcardBehind() = %v, %v, want behind: nothing serves the wildcard", behind, err)
+		}
+	})
+}
+
 func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 

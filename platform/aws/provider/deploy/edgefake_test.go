@@ -105,6 +105,10 @@ func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWi
 	return "", nil
 }
 
+func (f *recordingEdge) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (f *recordingEdge) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func (f *recordingEdge) Open(state edge.StackState) (edge.EdgeStack, error) {

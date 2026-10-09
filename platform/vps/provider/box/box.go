@@ -155,6 +155,10 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	return address, nil
 }
 
+func (*Edge) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	return e.machine.RemovePreviewEntry(ctx, baseDomain)
 }

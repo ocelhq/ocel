@@ -87,6 +87,8 @@ type Edge interface {
 
 	ReconcilePreviewWildcard(ctx context.Context, spec PreviewWildcardSpec) (string, error)
 
+	PreviewWildcardBehind(ctx context.Context, spec PreviewWildcardSpec) (bool, error)
+
 	DestroyPreviewWildcard(ctx context.Context, baseDomain string) error
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)

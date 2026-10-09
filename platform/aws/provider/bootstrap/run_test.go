@@ -585,6 +585,10 @@ func (f *fakeEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcar
 	return "", errors.New("bootstrap never reconciles the preview wildcard")
 }
 
+func (f *fakeEdge) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, errors.New("bootstrap never reads the preview wildcard")
+}
+
 func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
 	return errors.New("bootstrap never destroys the preview wildcard")
 }
