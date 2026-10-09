@@ -11,6 +11,7 @@ import type * as PageTree from "fumadocs-core/page-tree";
 import { type InferPageType, loader } from "fumadocs-core/source";
 import { defineDocs } from "fumadocs-mdx/macro";
 import { createElement } from "react";
+import { withoutCodeAnnotations } from "./llms";
 
 const docs = defineDocs({
   dir: "content/docs",
@@ -52,7 +53,8 @@ export async function pageMarkdown(page: DocsPage): Promise<string> {
   const heading = page.data.description
     ? `# ${page.data.title}\n\n> ${page.data.description}`
     : `# ${page.data.title}`;
-  return `${heading}\n\n${(await page.data.getText("processed")).trim()}\n`;
+  const body = withoutCodeAnnotations(await page.data.getText("processed")).trim();
+  return `${heading}\n\n${body}\n`;
 }
 
 export const tabColors: Record<string, string> = {

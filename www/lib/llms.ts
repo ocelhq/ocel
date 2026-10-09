@@ -9,6 +9,13 @@ export function pageSlugs(slug: string[] | undefined): string[] {
   return slugs.length === 1 && slugs[0] === "index" ? [] : slugs;
 }
 
+const codeAnnotation =
+  /[ \t]*(?:\/\/|#|\{\/\*|\/\*|<!--)[ \t]*\[!code [^\]\n]*\][ \t]*(?:\*\/\}|\*\/|-->)?[ \t]*$/gm;
+
+export function withoutCodeAnnotations(markdown: string): string {
+  return markdown.replace(codeAnnotation, "");
+}
+
 type Entry = { section: string; line: string };
 
 const text = (node: unknown) => (typeof node === "string" ? node.trim() : "");
