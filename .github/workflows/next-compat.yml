@@ -220,7 +220,7 @@ jobs:
       - name: Reclaim every e2e project that is not this run's
         run: node adapter/tests/next-compat/sweep-projects.mjs
 
-      - name: Reconcile the shared preview entry worker
+      - name: Bootstrap the preview tier and reconcile the shared preview entry worker
         env:
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
         run: node adapter/tests/next-compat/reconcile-entry.mjs

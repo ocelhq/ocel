@@ -10,6 +10,7 @@ import {
   DEFAULT_COMPAT_TARGET,
   ENTRY_SLUG,
   ocelBinary,
+  PREVIEW_BOOTSTRAP_FEATURES,
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
@@ -17,6 +18,7 @@ import {
 } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
+const BOOTSTRAP_TIMEOUT_MS = 30 * 60 * 1000;
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -46,24 +48,32 @@ export function reconcileEntry(wildcard) {
   writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: ENTRY_SLUG }));
   linkSidecar(dir, sidecarDir);
 
-  console.error(`[ocel-e2e] reconciling the shared preview entry on ${wildcard} (from ${dir})`);
-  const res = spawnSync(
-    process.execPath,
-    [ocelBinary(adapterDir), "domain", "use", wildcard, "--preview"],
-    {
-      cwd: dir,
-      stdio: ["ignore", "inherit", "inherit"],
-      timeout: RECONCILE_TIMEOUT_MS,
-      env: withoutSkipDriftChecks(process.env),
-    },
+  const features = PREVIEW_BOOTSTRAP_FEATURES.join(",");
+  console.error(`[ocel-e2e] bootstrapping the preview tier with ${features} (from ${dir})`);
+  const bootstrapFailure = failureOf(
+    adapterDir,
+    dir,
+    ["bootstrap", "preview", "--features", features, "--yes"],
+    BOOTSTRAP_TIMEOUT_MS,
   );
-
-  if (res.error || res.signal || res.status !== 0) {
-    const why =
-      res.error?.message ??
-      (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+  if (bootstrapFailure) {
     console.error(
-      `[ocel-e2e] ENTRY RECONCILE FAILED for ${wildcard}: ${why}\n` +
+      `[ocel-e2e] PREVIEW BOOTSTRAP FAILED: ${bootstrapFailure}\n` +
+        `[ocel-e2e] nothing in this namespace can deploy, reconcile or destroy a preview without it.`,
+    );
+    return false;
+  }
+
+  console.error(`[ocel-e2e] reconciling the shared preview entry on ${wildcard} (from ${dir})`);
+  const reconcileFailure = failureOf(
+    adapterDir,
+    dir,
+    ["domain", "use", wildcard, "--preview"],
+    RECONCILE_TIMEOUT_MS,
+  );
+  if (reconcileFailure) {
+    console.error(
+      `[ocel-e2e] ENTRY RECONCILE FAILED for ${wildcard}: ${reconcileFailure}\n` +
         `[ocel-e2e] every preview this run deploys would serve through whichever entry ` +
         `worker was uploaded last, by whoever uploaded it — so the matrix would be ` +
         `measuring someone else's edge build, not this commit's.`,
@@ -72,4 +82,19 @@ export function reconcileEntry(wildcard) {
   }
   console.error(`[ocel-e2e] shared preview entry reconciled on ${wildcard}`);
   return true;
+}
+
+function failureOf(adapterDir, dir, args, timeout) {
+  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), ...args], {
+    cwd: dir,
+    stdio: ["ignore", "inherit", "inherit"],
+    timeout,
+    env: withoutSkipDriftChecks(process.env),
+  });
+  if (res.error || res.signal || res.status !== 0) {
+    return (
+      res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`)
+    );
+  }
+  return "";
 }
