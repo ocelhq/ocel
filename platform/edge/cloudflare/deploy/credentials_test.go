@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -135,6 +136,41 @@ func verifiedAgainst(t *testing.T, answers ...answer) error {
 	client, _, _ := scriptedClient(t, answers...)
 	_, err := (&cloudflare{namespace: "ocel", client: client}).verifyCredentials(context.Background())
 	return err
+}
+
+func TestVerifyCredentialsReturnsTheCancellationOfACheckItWasStoppedFrom(t *testing.T) {
+	t.Setenv(envAccountID, "acct-1")
+	t.Setenv(envAPIToken, "test")
+	client, _, _ := scriptedClient(t, answer{status: http.StatusOK, body: accountBody})
+	for _, tc := range []struct {
+		name string
+		ctx  func() (context.Context, context.CancelFunc)
+		want error
+	}{
+		{"cancelled", func() (context.Context, context.CancelFunc) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			return ctx, cancel
+		}, context.Canceled},
+		{"past its deadline", func() (context.Context, context.CancelFunc) {
+			return context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		}, context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := tc.ctx()
+			defer cancel()
+			_, err := (&cloudflare{namespace: "ocel", client: client}).verifyCredentials(ctx)
+			var refused refusal.Refusal
+			if !errors.Is(err, tc.want) || errors.As(err, &refused) {
+				t.Errorf("verifyCredentials() error = %#v, want %v itself, not a refusal that says Cloudflare could not be reached", err, tc.want)
+			}
+			dns := &dnsRecords{zones: client.Zones, accountID: "acct-1"}
+			err = dns.VerifyCredentials(ctx)
+			if !errors.Is(err, tc.want) || errors.As(err, &refused) {
+				t.Errorf("dnsRecords.VerifyCredentials() error = %#v, want %v itself", err, tc.want)
+			}
+		})
+	}
 }
 
 func TestVerifyCredentialsSaysARateLimitedAccountIsRateLimitedNotThatItsTokenWasRejected(t *testing.T) {

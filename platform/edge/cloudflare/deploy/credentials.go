@@ -97,14 +97,17 @@ func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIden
 		return edge.CredentialIdentity{Account: accountID}, nil
 	}
 	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
-		return edge.CredentialIdentity{}, refuseUnverifiedToken(accountID, err)
+		return edge.CredentialIdentity{}, refuseUnverifiedToken(ctx, accountID, err)
 	}
 	return edge.CredentialIdentity{Account: accountID}, nil
 }
 
 var invalidTokenCodes = []int64{1000, 6003, 6111, 9109}
 
-func refuseUnverifiedToken(accountID string, err error) error {
+func refuseUnverifiedToken(ctx context.Context, accountID string, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("check %s for account %s: %w", envAPIToken, accountID, err)
+	}
 	var answered *cf.Error
 	switch {
 	case isRateLimited(err):
