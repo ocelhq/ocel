@@ -2,16 +2,10 @@ import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import type { PointerMove, ReleaseRecord } from "../src/store";
-import { ensureSchema, recordRouteTable, SCHEMA_VERSION } from "../src/store";
+import { ensureSchema, SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
-}
-
-const ROUTE_TABLE_KEY = `prod/acme-web/web/deploy-1/route-table/${"a".repeat(64)}.json`;
-
-function routeTableKeyNumbered(n: number): string {
-  return `prod/acme-web/web/deploy-${n}/route-table/${"b".repeat(64)}.json`;
 }
 
 function storeStub() {
@@ -25,7 +19,7 @@ function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routeTable: { format: "next", key: ROUTE_TABLE_KEY },
+    routeTable: { format: "next", table: { pathnames: [] } },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
@@ -387,59 +381,6 @@ describe("destroy", () => {
 
     await store.initialize("owner-2", "fresh", false);
     expect(await store.authorized("fresh")).toBe(true);
-  });
-});
-
-describe("destroy of recorded route tables", () => {
-  it("deletes every recorded route table from the cache store, past one delete's batch", async () => {
-    const store = storeStub();
-    const keys = Array.from({ length: 1001 }, (_, n) => routeTableKeyNumbered(n));
-    await runInDurableObject(store, (_instance, ctx) => {
-      for (const key of keys) recordRouteTable(ctx.storage, key);
-    });
-    const stored = [keys[0], keys[999], keys[1000]];
-    for (const key of stored) await env.OCEL_CACHE_STORE.put(key, "{}");
-    const batches: number[] = [];
-
-    await runInDurableObject(store, async (instance) => {
-      const target = instance as unknown as { env: Env };
-      const bucket = target.env.OCEL_CACHE_STORE;
-      target.env = {
-        ...target.env,
-        OCEL_CACHE_STORE: {
-          delete: async (deleted: string | string[]) => {
-            batches.push(Array.isArray(deleted) ? deleted.length : 1);
-            await bucket.delete(deleted);
-          },
-        } as R2Bucket,
-      };
-      await instance.destroy();
-    });
-
-    expect(batches).toEqual([1000, 1]);
-    for (const key of stored) expect(await env.OCEL_CACHE_STORE.head(key), key).toBeNull();
-  });
-
-  it("leaves a route table it was told to forget in the cache store", async () => {
-    const store = storeStub();
-    await store.recordRouteTable(ROUTE_TABLE_KEY);
-    await store.forgetRouteTable(ROUTE_TABLE_KEY);
-    await env.OCEL_CACHE_STORE.put(ROUTE_TABLE_KEY, "{}");
-
-    await store.destroy();
-
-    expect(await env.OCEL_CACHE_STORE.head(ROUTE_TABLE_KEY)).not.toBeNull();
-  });
-
-  it("forgets the route tables it recorded once it is destroyed", async () => {
-    const store = storeStub();
-    await store.recordRouteTable(ROUTE_TABLE_KEY);
-    await store.destroy();
-    await env.OCEL_CACHE_STORE.put(ROUTE_TABLE_KEY, "{}");
-
-    await store.destroy();
-
-    expect(await env.OCEL_CACHE_STORE.head(ROUTE_TABLE_KEY)).not.toBeNull();
   });
 });
 

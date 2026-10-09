@@ -154,6 +154,13 @@ func (p *cloudflare) storeRequest(ctx context.Context, state edge.StackState, me
 }
 
 func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
+	if endpoint == "" {
+		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
+	}
+	if slug == "" {
+		return nil, fmt.Errorf("releases store: no project slug")
+	}
+
 	var encoded []byte
 	if body != nil {
 		marshalled, err := json.Marshal(body)
@@ -161,16 +168,6 @@ func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret,
 			return nil, fmt.Errorf("marshal releases-store request body: %w", err)
 		}
 		encoded = marshalled
-	}
-	return p.sendStoreRequest(ctx, endpoint, slug, secret, method, subpath, encoded, out)
-}
-
-func (p *cloudflare) sendStoreRequest(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
-	if endpoint == "" {
-		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
-	}
-	if slug == "" {
-		return nil, fmt.Errorf("releases store: no project slug")
 	}
 
 	var res *http.Response

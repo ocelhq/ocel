@@ -604,10 +604,15 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 			return provider.StackResult{}, fmt.Errorf("register %s's ISR prefix with the %s edge's writer: %w", spec.App.App, spec.Edge.Kind(), err)
 		}
 	}
+	routeTableKey, err := s.p.putEdgeRouteTable(ctx, spec, runProgress)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
 	result, err := s.Stacks.Provision(ctx, spec, runProgress)
 	if err != nil {
 		return result, err
 	}
+	result.RouteTableKey = routeTableKey
 	if writer.IsConfigured() {
 		result.ISRWriteSecret = cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)
 	}

@@ -153,6 +153,14 @@ func (r *release) assetSets(spec provider.StackSpec, app string, bundle appBundl
 	if edgeSet != nil {
 		sets = append(sets, *edgeSet)
 	}
+	routeSet, err := routeTableSet(r.cfg, app, spec.App.EdgeRouteTable)
+	if err != nil {
+		return nil, edgeDelivery{}, err
+	}
+	if routeSet != nil {
+		sets = append(sets, *routeSet)
+		delivery.RouteTableKey = spec.App.EdgeRouteTable.Location.Key
+	}
 	return sets, delivery, nil
 }
 

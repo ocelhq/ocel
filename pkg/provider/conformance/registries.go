@@ -167,8 +167,8 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 			if front.Facts().RunsCode && !routerFacts.SignsOriginForwards {
 				t.Errorf("the %q router signs no origin forward, and the %q edge it pairs with runs code; the code it runs reaches the origin with the credentials it was bootstrapped, so its router must sign", pairing.Router, pairing.Edge)
 			}
-			if front.Facts().RunsCode && opened.Hooks().RouteTables == nil {
-				t.Errorf("the %q router keeps no route table, and the %q edge it pairs with runs the code that dispatches a release's paths by one", pairing.Router, pairing.Edge)
+			if front.Facts().RunsCode && !routerFacts.Dispatches {
+				t.Errorf("the %q router dispatches no path, and the %q edge it pairs with runs the code that dispatches a release's paths", pairing.Router, pairing.Edge)
 			}
 		}
 	})

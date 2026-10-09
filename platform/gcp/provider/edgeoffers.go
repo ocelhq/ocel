@@ -28,6 +28,7 @@ type adoptedEdge struct {
 	ReleasesStore     adoptedWorker            `json:"releasesStore"`
 	ISRWriter         adoptedWorker            `json:"isrWriter"`
 	ClientCertificate adoptedClientCertificate `json:"clientCertificate"`
+	CacheStore        adoptedCacheStore        `json:"cacheStore"`
 	Values            map[string]string        `json:"values,omitempty"`
 }
 
@@ -41,9 +42,17 @@ type adoptedClientCertificate struct {
 	Authorities string `json:"authorities"`
 }
 
+type adoptedCacheStore struct {
+	Bucket   string `json:"bucket"`
+	Endpoint string `json:"endpoint"`
+	Region   string `json:"region"`
+}
+
 type edgeCredentials struct {
-	ReleasesStore string `json:"releasesStore"`
-	ISRWriter     string `json:"isrWriter"`
+	ReleasesStore             string `json:"releasesStore"`
+	ISRWriter                 string `json:"isrWriter"`
+	CacheStoreAccessKeyID     string `json:"cacheStoreAccessKeyId,omitempty"`
+	CacheStoreSecretAccessKey string `json:"cacheStoreSecretAccessKey,omitempty"`
 }
 
 func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) keyvalue.Key {
@@ -102,7 +111,19 @@ func adoptEdgeOffers(
 				Authorities: offer.Values[edge.OfferKeyClientCertificateAuthorities],
 			}
 		case edge.OfferCacheStore:
-			say.Say(fmt.Sprintf("Leaving the %s edge's cache store to its workers: a GCP origin reaches it through the ISR writer", kind))
+			say.Say(fmt.Sprintf("Adopting the %s edge's cache store (Secret Manager)", kind))
+			adopted.CacheStore = adoptedCacheStore{
+				Bucket:   offer.Values[edge.OfferKeyBucket],
+				Endpoint: offer.Values[edge.OfferKeyEndpoint],
+				Region:   offer.Values[edge.OfferKeyRegion],
+			}
+			accessKeyID := offer.Values[edge.OfferKeyAccessKeyID]
+			if offered := offer.Values[edge.OfferKeySecretAccessKey]; offered != "" {
+				credentials.CacheStoreAccessKeyID, credentials.CacheStoreSecretAccessKey = accessKeyID, offered
+			}
+			if credentials.CacheStoreAccessKeyID != accessKeyID || credentials.CacheStoreSecretAccessKey == "" {
+				return cacheStoreCredentialUnrecorded(c, tier, kind, accessKeyID, adopted.CacheStore.Bucket)
+			}
 		default:
 			say.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", kind, offer.Kind))
 		}
@@ -132,6 +153,14 @@ func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind,
 			"but secret %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
 			"back, so delete the bootstrap credential set on %q at the %s edge and re-run bootstrap to mint a fresh one",
 		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
+}
+
+func cacheStoreCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind, accessKeyID, bucket string) error {
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the %s edge reoffered cache-store credential %q without a secret, meaning it minted that credential before, "+
+			"but secret %s stores no secret for it: a prior bootstrap minted it and failed before storing it. Its secret cannot be read "+
+			"back, so delete credential %q for bucket %q at the %s edge and re-run bootstrap to mint a fresh one",
+		kind, accessKeyID, c.EdgeCredentialsSecret(tier, kind), accessKeyID, bucket, kind)
 }
 
 func readAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {

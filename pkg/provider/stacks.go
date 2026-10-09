@@ -88,10 +88,11 @@ type AppSpec struct {
 
 	Grants []Binding
 
-	Routing  *RoutingSpec
-	Guard    *OriginGuard
-	ISR      *ISRSpec
-	Bytecode *BytecodeSpec
+	Routing        *RoutingSpec
+	EdgeRouteTable *EdgeRouteTable
+	Guard          *OriginGuard
+	ISR            *ISRSpec
+	Bytecode       *BytecodeSpec
 
 	AssetPrefix string
 	Static      *edge.Static
@@ -106,6 +107,11 @@ type AppSpec struct {
 type RoutingSpec struct {
 	RootFunction string
 	RouteTable   router.RouteTable
+}
+
+type EdgeRouteTable struct {
+	Location router.RouteTableLocation
+	Table    []byte
 }
 
 type OriginGuard struct {
@@ -187,6 +193,8 @@ type StackResult struct {
 	Containers []AppContainer
 
 	EdgeBundleKey string
+
+	RouteTableKey string
 
 	Envelope string
 

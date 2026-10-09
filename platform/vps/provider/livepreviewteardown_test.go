@@ -172,8 +172,6 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	promoteRecord(t, p, stack, pointer, promotion, record, hosts...)
 }
 
-func keepsNoRouteTable(context.Context, string) error { return nil }
-
 func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string) *said {
 	t.Helper()
 
@@ -187,7 +185,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err != nil {
 		t.Fatalf("ledger RemovePointer(%s) = %v", pointer, err)
 	}
-	if err := providerserver.ReclaimPreview(ctx, p, nil, keepsNoRouteTable, teardownSlug, pointer, removed, spoken); err != nil {
+	if err := providerserver.ReclaimPreview(ctx, p, nil, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := provider.StackRef{Project: teardownSlug, Tier: environment.TierPreview, Name: naming.InfraStack(pointer)}

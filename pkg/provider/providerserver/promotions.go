@@ -191,7 +191,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 			return err
 		}
 		images := removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)
-		if err := reclaimUnnamed(ctx, session.provider, images, session.ledger, session.forgetRouteTable, pointer, pruned, progress); err != nil {
+		if err := reclaimUnnamed(ctx, session.provider, images, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {

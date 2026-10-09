@@ -117,7 +117,7 @@ func certificateOffer() edge.Offer {
 }
 
 func cacheOffer() edge.Offer {
-	return edge.Offer{Kind: edge.OfferCacheStore, Values: map[string]string{edge.OfferKeyBucket: "ocel-edge-cache", edge.OfferKeySecretAccessKey: "r2-secret"}}
+	return cacheOfferAt("https://account.r2.cloudflarestorage.com", "r2-key", "r2-secret")
 }
 
 func fullOffers(storeCredential, writerCredential string) []edge.Offer {
@@ -148,7 +148,7 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkersAndCertificateAndKeepsTheirCre
 	if adopted.Values["cacheBucket"] != "ocel-edge-cache" {
 		t.Errorf("values = %v, want the bootstrap's cacheBucket", adopted.Values)
 	}
-	if got, want := h.credentials(t), `{"releasesStore":"c1","isrWriter":"c2"}`; got != want {
+	if got, want := h.credentials(t), `{"releasesStore":"c1","isrWriter":"c2","cacheStoreAccessKeyId":"r2-key","cacheStoreSecretAccessKey":"r2-secret"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q", got, want)
 	}
 	seed, _ := h.secrets.latest(t, h.clients.ISRWriterSeedSecret(environment.TierProduction, cloudflareKind))
@@ -202,7 +202,7 @@ func TestABootstrapReofferedWithoutCredentialsKeepsTheStoredOnes(t *testing.T) {
 	if got, want := h.secrets.versionsAdded(), added+1; got != want {
 		t.Errorf("a new credential for one worker added %d versions, want 1", got-added)
 	}
-	if got, want := h.credentials(t), `{"releasesStore":"c9","isrWriter":"c2"}`; got != want {
+	if got, want := h.credentials(t), `{"releasesStore":"c9","isrWriter":"c2","cacheStoreAccessKeyId":"r2-key","cacheStoreSecretAccessKey":"r2-secret"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q: the other worker's credential is kept", got, want)
 	}
 }
@@ -226,7 +226,7 @@ func TestABootstrapRefusesAWorkerReofferedWithoutACredentialItNeverStored(t *tes
 	}
 }
 
-func TestABootstrapLeavesTheEdgesCacheStoreToItsWorkers(t *testing.T) {
+func TestABootstrapAdoptsTheEdgesCacheStoreAndKeepsItsKeyPairOnlyInSecretManager(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 
@@ -234,15 +234,82 @@ func TestABootstrapLeavesTheEdgesCacheStoreToItsWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n := h.count("WARN"); n != 0 {
-		t.Errorf("%d warnings, want none: the cache store is on every bootstrap by design", n)
-	}
-	if n := h.count("INFO Leaving the cloudflare edge's cache store"); n != 1 {
-		t.Errorf("%d notices about the cache store, want 1: %v", n, h.log.Lines())
+		t.Errorf("%d warnings, want none: %v", n, h.log.Lines())
 	}
 	adopted, _ := h.record(t)
+	if want := (adoptedCacheStore{Bucket: cacheStoreBucket, Endpoint: "https://account.r2.cloudflarestorage.com", Region: "auto"}); adopted.CacheStore != want {
+		t.Errorf("cache store = %+v, want %+v", adopted.CacheStore, want)
+	}
 	raw, _ := json.Marshal(adopted)
-	if strings.Contains(string(raw), "r2-secret") || strings.Contains(h.credentials(t), "r2-secret") {
-		t.Errorf("the cache store's key pair was stored: %s", raw)
+	if strings.Contains(string(raw), "r2-secret") {
+		t.Errorf("the adopted-edge record keeps the cache store's secret: %s", raw)
+	}
+	credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials.CacheStoreAccessKeyID != "r2-key" || credentials.CacheStoreSecretAccessKey != "r2-secret" {
+		t.Errorf("credentials = %+v, want the cache store's key pair", credentials)
+	}
+	for _, line := range h.log.Lines() {
+		if strings.Contains(line, "r2-secret") {
+			t.Errorf("progress logged the cache store's secret: %q", line)
+		}
+	}
+}
+
+func TestABootstrapReofferingTheCacheStoreWithoutASecretKeepsTheStoredOne(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+	added := h.secrets.versionsAdded()
+
+	reoffer := []edge.Offer{storeOffer(""), writerOffer(""), certificateOffer(), cacheOfferAt("https://account.r2.cloudflarestorage.com", "r2-key", "")}
+	if err := h.adopt(reoffer, nil); err != nil {
+		t.Fatalf("adopt = %v", err)
+	}
+	if got := h.secrets.versionsAdded(); got != added {
+		t.Errorf("a re-offer that changed nothing added %d secret versions", got-added)
+	}
+	credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials.CacheStoreSecretAccessKey != "r2-secret" {
+		t.Errorf("credentials = %+v, want the stored secret kept", credentials)
+	}
+}
+
+func TestABootstrapRefusesACacheStoreReofferedWithoutASecretItNeverStored(t *testing.T) {
+	t.Parallel()
+	for name, stored := range map[string][]edge.Offer{
+		"nothing stored":          {storeOffer("c1"), writerOffer("c2")},
+		"another credential kept": {storeOffer("c1"), writerOffer("c2"), cacheOfferAt("https://e", "old-key", "old-secret")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newOffersHarness(t)
+			if err := h.adopt(stored, nil); err != nil {
+				t.Fatal(err)
+			}
+			before, _ := h.record(t)
+
+			err := h.adopt([]edge.Offer{storeOffer(""), writerOffer(""), cacheOfferAt("https://e", "r2-key", "")}, nil)
+
+			if refusalCode(err) != refusal.CodeInvalid {
+				t.Fatalf("adopt = %v, want an invalid refusal", err)
+			}
+			for _, mentioned := range []string{"r2-key", cacheStoreBucket, h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind)} {
+				if !strings.Contains(err.Error(), mentioned) {
+					t.Errorf("refusal %q does not name %q", err, mentioned)
+				}
+			}
+			if after, _ := h.record(t); after.CacheStore != before.CacheStore {
+				t.Errorf("the record moved from %+v to %+v although the adoption was refused", before.CacheStore, after.CacheStore)
+			}
+		})
 	}
 }
 

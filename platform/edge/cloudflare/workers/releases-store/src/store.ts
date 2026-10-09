@@ -8,7 +8,7 @@ export interface ReleaseRecord {
   framework: string;
   release: string;
   buildId: string;
-  routeTable?: { format: "next"; key: string } | null;
+  routeTable?: unknown;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;
@@ -94,10 +94,7 @@ export function ensureSchema(store: SqlStore): void {
        pointer TEXT NOT NULL,
        app TEXT NOT NULL
      );
-     CREATE INDEX IF NOT EXISTS labels_pointer ON labels (pointer);
-     CREATE TABLE IF NOT EXISTS route_tables (
-       key TEXT PRIMARY KEY
-     );`,
+     CREATE INDEX IF NOT EXISTS labels_pointer ON labels (pointer);`,
   );
   setMeta(store, SCHEMA_KEY, String(SCHEMA_VERSION));
 }
@@ -169,21 +166,6 @@ export function removePointer(store: SqlStore, pointer: string): void {
     store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
   });
-}
-
-export function recordRouteTable(store: SqlStore, key: string): void {
-  store.sql.exec(`INSERT OR IGNORE INTO route_tables (key) VALUES (?)`, key);
-}
-
-export function forgetRouteTable(store: SqlStore, key: string): void {
-  store.sql.exec(`DELETE FROM route_tables WHERE key = ?`, key);
-}
-
-export function listRouteTables(store: SqlStore): string[] {
-  return store.sql
-    .exec<{ key: string }>(`SELECT key FROM route_tables ORDER BY key`)
-    .toArray()
-    .map((r) => r.key);
 }
 
 export function listApps(store: SqlStore): string[] {

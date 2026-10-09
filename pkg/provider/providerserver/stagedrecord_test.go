@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -240,18 +239,23 @@ func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t
 	}
 }
 
-func TestARecordBehindAnEdgeThatRunsCodeNamesTheRouteTableItsRouterStoredByDigest(t *testing.T) {
+func relayRoutedDeploy(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
+	t.Helper()
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	webFunctions(req).Functions[0].RouteId = "bundle-0"
+	result, _ := deploy(t, client, req)
+	return result
+}
+
+func TestARecordBehindAnEdgeThatRunsCodeNamesTheRouteTableItsProviderStoredByDigest(t *testing.T) {
 	builtProject(t)
 	table := []byte("{\"routes\": [{\"id\": \"bundle-0\", \"source\": \"^/(?<slug>[^/]+)$\"}]}")
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, table)
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 
-	req := deployRequest()
-	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-	webFunctions(req).Functions[0].RouteId = "bundle-0"
-	result, _ := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
+	if result := relayRoutedDeploy(t, client); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
@@ -270,39 +274,28 @@ func TestARecordBehindAnEdgeThatRunsCodeNamesTheRouteTableItsRouterStoredByDiges
 	if staged[0].RouteTable.Format != edge.RouteTableNext {
 		t.Errorf("routeTable.format = %q, want %q", staged[0].RouteTable.Format, edge.RouteTableNext)
 	}
-	stored, found := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).RouteTable(staged[0].RouteTable.Key)
+	stored, found := vendor.FakeStacks().RouteTable(staged[0].RouteTable.Key)
 	if !found || !bytes.Equal(stored, compact.Bytes()) {
-		t.Errorf("the router holds %q at the record's key (found %v), want the compact table %q", stored, found, compact.Bytes())
+		t.Errorf("the provider stored %q at the record's key (found %v), want the compact table %q", stored, found, compact.Bytes())
 	}
 }
 
-func relayRoutedDeploy(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
-	t.Helper()
-	req := deployRequest()
-	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-	webFunctions(req).Functions[0].RouteId = "bundle-0"
-	result, _ := deploy(t, client, req)
-	return result
-}
-
-func builtRelayRoutedApp(t *testing.T) {
-	t.Helper()
+func TestADeployWhoseProviderStoredNoRouteTableWhereTheEdgeReadsIsRefusedNamingBootstrap(t *testing.T) {
 	builtProject(t)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
-}
-
-func TestADeployWhoseRouteTableStoreWentUnansweredForgetsTheTableItMayHaveStored(t *testing.T) {
-	builtRelayRoutedApp(t)
 	client, vendor := deployServed(t)
-	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
-	plane.LoseNextRouteTableAnswer(errors.New("the connection closed before the store answered"))
+	vendor.FakeStacks().WithholdRouteTables()
+	stager := staging(t, vendor)
 
-	if result := relayRoutedDeploy(t, client); result != nil && result.GetSuccess() {
-		t.Fatal("Deploy() succeeded, want the unanswered store to fail it")
+	result := relayRoutedDeploy(t, client)
+	if result == nil || result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused: the edge would have no route table to read")
 	}
-
-	if keys := plane.ListRouteTableKeys(); len(keys) != 0 {
-		t.Errorf("the router holds route tables %v, want none: the failed deploy reclaims what it may have stored", keys)
+	if !strings.Contains(result.GetError(), "bootstrap") {
+		t.Errorf("Deploy() error = %q, want it to say to re-run bootstrap", result.GetError())
+	}
+	if staged := stager.records(); len(staged) != 0 {
+		t.Errorf("records %+v, want none staged naming a table no store holds", staged)
 	}
 }
 
@@ -323,9 +316,6 @@ func TestARecordBehindAnEdgeThatRunsNoCodeNamesNoRouteTable(t *testing.T) {
 	staged := stager.records()
 	if len(staged) != 1 || staged[0].RouteTable != nil {
 		t.Errorf("records %+v, want one naming no route table: the root function routes the app with the table it ships", staged)
-	}
-	if keys := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).ListRouteTableKeys(); len(keys) != 0 {
-		t.Errorf("the relay router holds route tables %v, want none", keys)
 	}
 }
 

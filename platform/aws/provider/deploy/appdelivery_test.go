@@ -29,6 +29,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec.App.VendorState = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
+	spec.App.EdgeRouteTable = edgeRouteTable(appCoordinate(spec).RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
 	work, err := release.appWork(spec, nil)
@@ -52,6 +53,10 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if want := appEdgeBundleKey(appCoordinate(spec)); result.EdgeBundleKey != want {
 		t.Errorf("EdgeBundleKey = %q, want %q: the record the edge loads code by names the key only the vendor's upload knows",
 			result.EdgeBundleKey, want)
+	}
+	if result.RouteTableKey != spec.App.EdgeRouteTable.Location.Key {
+		t.Errorf("RouteTableKey = %q, want %q: the record the edge dispatches by names the table this release uploaded",
+			result.RouteTableKey, spec.App.EdgeRouteTable.Location.Key)
 	}
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
@@ -79,9 +84,9 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeApp() = %v", err)
 	}
-	if result.EdgeBundleKey != "" || result.Envelope != "" {
-		t.Errorf("EdgeBundleKey = %q, Envelope = %q, want nothing named where no bundle was uploaded",
-			result.EdgeBundleKey, result.Envelope)
+	if result.EdgeBundleKey != "" || result.Envelope != "" || result.RouteTableKey != "" {
+		t.Errorf("EdgeBundleKey = %q, Envelope = %q, RouteTableKey = %q, want nothing named where nothing was uploaded",
+			result.EdgeBundleKey, result.Envelope, result.RouteTableKey)
 	}
 	if result.ISRWriteSecret != "" {
 		t.Errorf("ISRWriteSecret = %q, want nothing where the account adopts no cache store", result.ISRWriteSecret)

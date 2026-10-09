@@ -416,6 +416,7 @@ func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (pr
 	}
 	result := provider.StackResult{
 		EdgeBundleKey: work.delivery.BundleKey,
+		RouteTableKey: work.delivery.RouteTableKey,
 		Envelope:      work.delivery.Envelope,
 	}
 	if work.cache != nil {

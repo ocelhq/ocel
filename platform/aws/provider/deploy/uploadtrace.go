@@ -25,6 +25,7 @@ const (
 	uploadKindStaticAsset
 	uploadKindPrerenderAsset
 	uploadKindEdgeBundle
+	uploadKindRouteTable
 )
 
 func uploadBatchSpanName(k uploadKind) string {
@@ -37,6 +38,8 @@ func uploadBatchSpanName(k uploadKind) string {
 		return "upload prerender assets"
 	case uploadKindEdgeBundle:
 		return "upload edge bundles"
+	case uploadKindRouteTable:
+		return "upload route tables"
 	default:
 		return "upload batch"
 	}
@@ -64,6 +67,11 @@ func uploadStandoutName(k uploadKind, failed bool) string {
 			return "edge bundle upload failed"
 		}
 		return "slow edge bundle upload"
+	case uploadKindRouteTable:
+		if failed {
+			return "route table upload failed"
+		}
+		return "slow route table upload"
 	default:
 		if failed {
 			return "upload failed"

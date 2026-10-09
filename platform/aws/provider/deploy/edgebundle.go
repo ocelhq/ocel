@@ -48,8 +48,9 @@ func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
 }
 
 type edgeDelivery struct {
-	BundleKey string
-	Envelope  string
+	BundleKey     string
+	RouteTableKey string
+	Envelope      string
 }
 
 func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, edgeDelivery, error) {

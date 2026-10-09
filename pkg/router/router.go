@@ -37,6 +37,7 @@ type Facts struct {
 	SignsOriginForwards         bool
 	ReachesFunctions            bool
 	ReachesContainers           bool
+	Dispatches                  bool
 	AnswersHostnames            bool
 	StopsServingRemovedPointers bool
 	ServesPreviewDeployments    bool
@@ -55,13 +56,7 @@ type Router interface {
 }
 
 type Hooks struct {
-	Origin      *OriginHooks
-	RouteTables *RouteTableHooks
-}
-
-type RouteTableHooks struct {
-	Store  func(ctx context.Context, state StackState, key string, table []byte) error
-	Forget func(ctx context.Context, state StackState, key string) error
+	Origin *OriginHooks
 }
 
 type OriginHooks struct {

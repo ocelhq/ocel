@@ -170,6 +170,9 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 	if err := a.retireISRWriter(ctx, tier, prefix); err != nil {
 		errs = append(errs, err)
 	}
+	if err := a.clearCacheStore(ctx, tier, prefix); err != nil {
+		errs = append(errs, err)
+	}
 	for _, store := range artifactStores {
 		list, keeps := store+"/"+prefix, func(string) bool { return true }
 		if store == provider.StoreCache {
@@ -244,4 +247,16 @@ func (a artifacts) retireISRWriter(ctx context.Context, tier environment.Tier, p
 		return fmt.Errorf("retire the isr writer's record of %s: %w", isrPrefix, err)
 	}
 	return nil
+}
+
+func (a artifacts) clearCacheStore(ctx context.Context, tier environment.Tier, prefix string) error {
+	c, err := a.p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	store, adopted, err := readAdoptedCacheStore(ctx, c, a.p.KeyValues(), tier, cloudflare.Kind)
+	if err != nil || !adopted {
+		return err
+	}
+	return store.removePrefix(ctx, prefix)
 }

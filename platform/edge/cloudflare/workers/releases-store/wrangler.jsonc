@@ -11,12 +11,6 @@
   "vars": {
     "BOOTSTRAP_SECRET": "dev-secret"
   },
-  "r2_buckets": [
-    {
-      "binding": "OCEL_CACHE_STORE",
-      "bucket_name": "ocel-cache-store"
-    }
-  ],
   "durable_objects": {
     "bindings": [
       {

@@ -122,8 +122,11 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 	if facts.OriginDispatch != nil {
 		t.Errorf("OriginDispatch = %+v where the edge runs the code, want the origin left out of dispatch", facts.OriginDispatch)
 	}
-	if facts.EdgeDispatch == nil || !bytes.Equal(facts.EdgeDispatch.RouteTable.Table, manifest) {
-		t.Fatalf("EdgeDispatch = %+v, want the route table the edge serves static assets and dispatches by", facts.EdgeDispatch)
+	if facts.EdgeRouteTable == nil || !bytes.Equal(facts.EdgeRouteTable.Table, manifest) {
+		t.Fatalf("EdgeRouteTable = %+v, want the route table the edge serves static assets and dispatches by", facts.EdgeRouteTable)
+	}
+	if want := query.Coordinate.RouteTableKey(""); !strings.HasPrefix(facts.EdgeRouteTable.Location.Key, strings.TrimSuffix(want, ".json")) {
+		t.Errorf("EdgeRouteTable.Location.Key = %q, want a route-table key in the release's storage prefix", facts.EdgeRouteTable.Location.Key)
 	}
 }
 
@@ -139,8 +142,8 @@ func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) 
 			if err != nil {
 				t.Fatalf("AppServingFor() = %v", err)
 			}
-			if facts.OriginDispatch != nil || facts.EdgeDispatch != nil {
-				t.Errorf("OriginDispatch = %+v, EdgeDispatch = %+v, want neither: a container is one service with no function to dispatch to", facts.OriginDispatch, facts.EdgeDispatch)
+			if facts.OriginDispatch != nil || facts.EdgeRouteTable != nil {
+				t.Errorf("OriginDispatch = %+v, EdgeRouteTable = %+v, want neither: a container is one service with no function to dispatch to", facts.OriginDispatch, facts.EdgeRouteTable)
 			}
 		})
 	}
@@ -163,8 +166,8 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if facts.EdgeDispatch != nil {
-		t.Errorf("EdgeDispatch = %+v where the origin dispatches, want the edge left out of dispatch", facts.EdgeDispatch)
+	if facts.EdgeRouteTable != nil {
+		t.Errorf("EdgeRouteTable = %+v where the origin dispatches, want the edge left out of dispatch", facts.EdgeRouteTable)
 	}
 }
 
