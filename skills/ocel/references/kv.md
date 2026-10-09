@@ -42,7 +42,7 @@ n, err := infra.Visits.Increment(ctx, "home", 1)
 ```python
 cache = ocel.kv("cache", eviction="allkeys-lru", memory="256mb")
 visits = cache.counter("visits", "visits/:page")
-profile = cache.json("profile", "profile/:userId", schema=Profile)
+profile = cache.json("profile", "profile/:userId", model=Profile)
 
 visits.increment(page="home")       # or increment(5, page="home"); *_async twins exist
 p = profile.get(userId=user_id)
@@ -63,6 +63,6 @@ In TypeScript, `ioredis` is a peer dependency the app installs itself.
 
 - **Eviction:** `noeviction` is the default, so a full store refuses writes. A cache wants `allkeys-lru`.
 - **TTLs:** `ttl` on an entry applies to every write; a write can override it.
-- **Entry names:** names start with a letter. `client` and `connectionString` are reserved.
+- **Entry names:** names start with a letter. `client`, `connectionString`, `connection_string`, `then` and `constructor` are reserved.
 
 The SDK's own types and docstrings are the full API.
