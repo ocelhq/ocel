@@ -132,6 +132,21 @@ func TestACloudflareCallThatIsRateLimitedWithoutRetryAfterWaitsForTheWindowItsRa
 	}
 }
 
+func TestACloudflareCallThatIsRateLimitedWaitsOnlyForTheLimitItRanOutOf(t *testing.T) {
+	t.Parallel()
+	client, _, clock := scriptedClient(t,
+		answer{status: http.StatusTooManyRequests, header: map[string]string{"Ratelimit": `"burst";r=0;t=40, "default";r=250;t=360`}, body: rateLimitedBody},
+		answer{status: http.StatusOK, body: accountBody},
+	)
+
+	if err := readAccount(client); err != nil {
+		t.Fatalf("Accounts.Get() error = %v, want the rate limit waited out", err)
+	}
+	if len(clock.waited) != 1 || clock.waited[0] < 40*time.Second || clock.waited[0] > 40*time.Second+rateLimitMaxJitter {
+		t.Errorf("waited %v, want one wait for the 40s the exhausted burst limit needs, not the default limit that still has quota", clock.waited)
+	}
+}
+
 func TestACloudflareCallStillRateLimitedAfterTheBudgetSaysTheAccountIsRateLimited(t *testing.T) {
 	t.Parallel()
 	client, api, clock := scriptedClient(t,
