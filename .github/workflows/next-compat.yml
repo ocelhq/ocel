@@ -364,7 +364,7 @@ jobs:
           name: smoke-logs
           path: |
             ${{ env.SMOKE_APP }}/.adapter-build.log
-            ${{ env.SMOKE_APP }}/.ocel/logs/ocel.log
+            ${{ env.SMOKE_APP }}/.ocel/runs/
             ${{ env.SMOKE_APP }}/logs.txt
           if-no-files-found: ignore
 
