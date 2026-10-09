@@ -177,16 +177,17 @@ type deployRun struct {
 	spec         provider.DeploySpec
 	spans        deploySpans
 
-	wildcard   stackrecords.Wildcard
-	previewOn  string
-	previewKey edge.PreviewKey
-	builtAlias string
-	aliasToken string
-	aliases    []edge.PreviewHost
-	deployment []edge.PreviewHost
-	selection  *contractv1.EdgeSelection
-	configured []ConfiguredHost
-	pending    []string
+	wildcard    stackrecords.Wildcard
+	previewOn   string
+	previewKey  edge.PreviewKey
+	previewKeys *openedPreviewKeys
+	builtAlias  string
+	aliasToken  string
+	aliases     []edge.PreviewHost
+	deployment  []edge.PreviewHost
+	selection   *contractv1.EdgeSelection
+	configured  []ConfiguredHost
+	pending     []string
 
 	values    variablestore.Store
 	scope     variablestore.Scope
@@ -283,6 +284,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 			tunnel:      readTunnelToOrigin(front),
 		},
 		gate:           gate,
+		previewKeys:    &h.session.previewKeys,
 		features:       features,
 		transforms:     h.session.transforms(),
 		artifactRoot:   h.session.artifactRoot(),
@@ -497,7 +499,7 @@ func (r *deployRun) ensureSignedPreviewHosts(ctx context.Context, progress progr
 	if r.spec.Tier != environment.TierPreview {
 		return nil
 	}
-	key, err := openOrEnsurePreviewKey(ctx, r.provider, r.dry)
+	key, err := openOrEnsurePreviewKey(ctx, r.provider, r.previewKeys, r.dry)
 	if err != nil {
 		return err
 	}

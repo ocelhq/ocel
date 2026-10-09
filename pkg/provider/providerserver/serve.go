@@ -142,6 +142,7 @@ type session struct {
 	outputRoot string
 
 	bootstrapStatuses BootstrapStatuses
+	previewKeys       openedPreviewKeys
 }
 
 func (s *session) transforms() []string {
