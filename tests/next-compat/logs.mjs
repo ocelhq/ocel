@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
@@ -29,7 +29,7 @@ for (const line of markerLines({ buildId: readFrameworkBuildID(), deploymentId: 
 }
 
 replay(BUILD_LOG_FILE, join(appDir, BUILD_LOG_FILE));
-replay("ocel.log", join(appDir, ".ocel", "logs", "ocel.log"));
+replayRuns(join(appDir, ".ocel", "runs"));
 printLambdaLogs();
 
 function readFrameworkBuildID() {
@@ -51,6 +51,21 @@ function replay(label, path) {
     return;
   }
   console.log(readFileSync(path, "utf8"));
+}
+
+function replayRuns(dir) {
+  const logs = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((name) => name.endsWith(".ndjson"))
+        .map((name) => join(dir, name))
+        .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
+    : [];
+  if (logs.length === 0) {
+    console.log("=== ocel runs ===\n(no ocel run log)");
+  }
+  for (const path of logs) {
+    replay(`ocel run ${path.slice(dir.length + 1)}`, path);
+  }
 }
 
 function printLambdaLogs() {
