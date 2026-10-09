@@ -110,13 +110,33 @@ func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) 
 
 type countedEntries struct {
 	keyvalue.Store
-	listed int
+	listed   int
+	listings int
 }
 
 func (c *countedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
 	entries, err := c.Store.List(ctx, in, under...)
 	c.listed += len(entries)
+	c.listings++
 	return entries, err
+}
+
+func TestForgettingAStackThatRanNoImageListsNoOtherStack(t *testing.T) {
+	t.Parallel()
+
+	store, _ := shopStacks(t)
+	imageless := naming.AppStack("pr-9", "web", naming.NewReleaseToken("b4", ""))
+	recordImage(t, store, environment.TierPreview, "shop", imageless)
+	counted := &countedEntries{Store: store}
+
+	err := forgetImages(context.Background(), counted, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: imageless}, "web", nil, progress.Discard())
+	if err != nil {
+		t.Fatalf("forgetImages() = %v", err)
+	}
+
+	if counted.listings != 0 {
+		t.Errorf("forgetting a stack that ran no image listed the project's stacks %d times, want none: there is no image to keep or reclaim", counted.listings)
+	}
 }
 
 func TestAReconcileReadsTheStacksOfItsOwnAppAlone(t *testing.T) {
