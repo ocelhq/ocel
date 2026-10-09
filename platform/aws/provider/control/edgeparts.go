@@ -25,9 +25,10 @@ func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tie
 		parts, err := describe(ctx, tier)
 		if err != nil {
 			stacks = append(stacks, provider.BootstrapStack{
-				Name:    string(kind) + "/bootstrap",
-				Feature: feature,
-				Present: true,
+				Name:      string(kind) + "/bootstrap",
+				Feature:   feature,
+				Present:   true,
+				ReadError: err.Error(),
 			})
 			continue
 		}

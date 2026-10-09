@@ -17,9 +17,10 @@ func (b bootstrap) edgeBootstrapStacks(ctx context.Context, read survey) ([]prov
 		parts, err := describe(ctx, read.Tier)
 		if err != nil {
 			stacks = append(stacks, provider.BootstrapStack{
-				Name:    string(front.Kind()) + "/bootstrap",
-				Feature: feature.Name,
-				Present: true,
+				Name:      string(front.Kind()) + "/bootstrap",
+				Feature:   feature.Name,
+				Present:   true,
+				ReadError: err.Error(),
 			})
 			return nil
 		}

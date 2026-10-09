@@ -479,6 +479,8 @@ message BootstrapStack {
   string written_by = 5;
 
   bool required = 6;
+
+  string read_error = 7;
 }
 
 message BootstrapStatus {

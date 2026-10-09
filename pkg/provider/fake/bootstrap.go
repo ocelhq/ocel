@@ -21,6 +21,7 @@ type Bootstrap struct {
 	mu          sync.Mutex
 	applied     map[environment.Tier][]string
 	stale       map[string]bool
+	unreadable  map[string]string
 	writer      string
 	refusal     error
 	requests    []provider.BootstrapRequest
@@ -36,9 +37,10 @@ type Bootstrap struct {
 
 func NewBootstrap() *Bootstrap {
 	return &Bootstrap{
-		applied: map[environment.Tier][]string{},
-		stale:   map[string]bool{},
-		writer:  "1.0.0",
+		applied:    map[environment.Tier][]string{},
+		stale:      map[string]bool{},
+		unreadable: map[string]string{},
+		writer:     "1.0.0",
 	}
 }
 
@@ -115,6 +117,12 @@ func (b *Bootstrap) MarkStale(features ...string) {
 	}
 }
 
+func (b *Bootstrap) MarkUnreadable(feature, cause string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.unreadable[feature] = cause
+}
+
 func (b *Bootstrap) SetWriter(writer string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -174,8 +182,9 @@ func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.Bootst
 		Name:          stackNameOf(tier, feature),
 		Feature:       feature,
 		Present:       true,
-		DigestCurrent: !b.stale[feature],
+		DigestCurrent: !b.stale[feature] && b.unreadable[feature] == "",
 		WrittenBy:     b.writer,
+		ReadError:     b.unreadable[feature],
 	}
 }
 
@@ -222,6 +231,7 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 	b.requests = append(b.requests, req)
 	b.applied[req.Tier] = slices.Clone(req.Features)
 	b.stale = map[string]bool{}
+	b.unreadable = map[string]string{}
 	if progress != nil {
 		progress.Say("Applied the " + string(req.Tier) + " bootstrap")
 	}

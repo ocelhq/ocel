@@ -20,11 +20,12 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 
 	tests := []struct {
-		name     string
-		status   *contractv1.BootstrapStatus
-		missing  []string
-		stale    []string
-		features []string
+		name       string
+		status     *contractv1.BootstrapStatus
+		missing    []string
+		stale      []string
+		unreadable []string
+		features   []string
 	}{
 		{
 			name:   "a bootstrap nothing has been deployed into asks for nothing",
@@ -81,6 +82,14 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 			stale:    []string{"ocel-bootstrap-isr"},
 			features: []string{"image-optimization", "isr"},
 		},
+		{
+			name: "a part that could not be read is named with why, never as behind",
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "cloudflare/bootstrap", Feature: "cloudflare-edge", Present: true, Required: true, ReadError: "rate limited"},
+			),
+			unreadable: []string{"cloudflare/bootstrap (rate limited)"},
+			features:   []string{"cloudflare-edge"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -91,6 +100,9 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 			}
 			if !slices.Equal(gap.Stale, tt.stale) {
 				t.Errorf("stale = %v, want %v", gap.Stale, tt.stale)
+			}
+			if !slices.Equal(gap.Unreadable, tt.unreadable) {
+				t.Errorf("unreadable = %v, want %v", gap.Unreadable, tt.unreadable)
 			}
 			if !slices.Equal(gap.Features, tt.features) {
 				t.Errorf("features = %v, want %v", gap.Features, tt.features)

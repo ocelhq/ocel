@@ -172,6 +172,7 @@ func resolveContainers(ctx context.Context, dependencies Dependencies, check *ru
 
 func refuseStaleBootstrap(policy consent.Policy, check *run.Span, status *contractv1.BootstrapStatus, tier environmentv1.Tier) error {
 	gap := readiness.NewGap(status)
+	gap.WarnUnreadable(tier, check)
 	if policy.DryRun {
 		return gap.RefuseIncomplete(tier)
 	}

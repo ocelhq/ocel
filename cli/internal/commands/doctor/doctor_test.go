@@ -390,6 +390,29 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 	}
 }
 
+func TestRunDoctorWarnsAboutAStackItCouldNotReadWithoutCallingItStale(t *testing.T) {
+	project := healthyProject(t)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.FeatureCache)
+	project.Provider.FakeBootstrap().MarkUnreadable(fake.FeatureCache, "the edge was rate limited")
+
+	invocation := clitest.NewInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
+	if code := exitCode(t, err); code != 0 {
+		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	out := rendered(t, stdout.String())
+	if strings.Contains(out, "is stale") {
+		t.Errorf("stdout calls a stack it could not read stale; got:\n%s", out)
+	}
+	if want := "  ⚠ fake-production-cache (the edge was rate limited) is unreadable"; !strings.Contains(out, want) {
+		t.Errorf("stdout missing %q; got:\n%s", want, out)
+	}
+}
+
 func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.FakeBootstrap().MarkUnfinished()

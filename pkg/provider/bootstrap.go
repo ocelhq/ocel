@@ -40,6 +40,8 @@ type BootstrapStack struct {
 	DigestCurrent bool
 
 	WrittenBy string
+
+	ReadError string
 }
 
 type Feature struct {

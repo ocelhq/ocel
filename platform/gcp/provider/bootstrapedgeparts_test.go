@@ -33,7 +33,7 @@ func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testin
 	}
 }
 
-func TestAGCPBootstrapStatusReportsAnUndescribableEdgeAsStaleRatherThanFailing(t *testing.T) {
+func TestAGCPBootstrapStatusReportsAnUndescribableEdgeAsUnreadableRatherThanFailingOrStale(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
@@ -44,7 +44,7 @@ func TestAGCPBootstrapStatusReportsAnUndescribableEdgeAsStaleRatherThanFailing(t
 		t.Fatalf("edgeBootstrapStacks = %v, want the status to survive an edge it cannot read", err)
 	}
 	want := []provider.BootstrapStack{
-		{Name: string(registry.front.Kind()) + "/bootstrap", Feature: albFeature, Present: true, DigestCurrent: false},
+		{Name: string(registry.front.Kind()) + "/bootstrap", Feature: albFeature, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"},
 	}
 	if !reflect.DeepEqual(stacks, want) {
 		t.Errorf("edge stacks = %+v, want %+v", stacks, want)
