@@ -96,7 +96,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 
 	var status bootstrapStatus
 	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
-		status, err = readBootstrap(ctx, p, gate, tier, req)
+		status, err = readBootstrap(ctx, p, gate, tier, req, h.skipChecks)
 		return err
 	})
 	if err != nil {
@@ -164,7 +164,7 @@ type bootstrapStatus struct {
 	previewWildcard *contractv1.PreviewWildcard
 }
 
-func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier environment.Tier, req *contractv1.PreflightRequest) (status bootstrapStatus, err error) {
+func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier environment.Tier, req *contractv1.PreflightRequest, skipChecks bool) (status bootstrapStatus, err error) {
 	if status.own, err = gate.Status(ctx, tier); err != nil {
 		return status, err
 	}
@@ -177,7 +177,7 @@ func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier env
 		return status, err
 	}
 	if tier == environment.TierPreview {
-		status.previewWildcard, err = recordedPreviewWildcard(ctx, p)
+		status.previewWildcard, err = recordedPreviewWildcard(ctx, p, skipChecks)
 	}
 	return status, err
 }

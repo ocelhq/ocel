@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
@@ -82,7 +83,7 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, questions: asked, leases: newEnvironmentLeases(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
+	services := &handlers{session: s, questions: asked, leases: newEnvironmentLeases(), skipChecks: processenv.SkipChecks(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
@@ -103,6 +104,8 @@ type handlers struct {
 	questions *questions
 	forwards  openForwards
 	leases    *environmentLeases
+
+	skipChecks bool
 }
 
 var (

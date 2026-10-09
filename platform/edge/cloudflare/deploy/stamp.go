@@ -5,22 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 )
-
-const envSkipEdgeReconcile = "OCEL_SKIP_EDGE_RECONCILE"
-
-func skipEdgeReconcile() bool {
-	switch strings.ToLower(os.Getenv(envSkipEdgeReconcile)) {
-	case "1", "true":
-		return true
-	default:
-		return false
-	}
-}
 
 type stampedSpec struct {
 	Generic             edge.Worker

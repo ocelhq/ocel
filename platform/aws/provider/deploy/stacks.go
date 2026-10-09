@@ -5,10 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
@@ -19,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -51,9 +50,10 @@ func edgeKindOf(spec provider.StackSpec) edge.Kind {
 type ReleaseConfig func(ctx context.Context, scope Scope) (Config, error)
 
 type Stacks struct {
-	resolve  ReleaseConfig
-	realized *Realized
-	engine   pulumi.Engine
+	resolve    ReleaseConfig
+	realized   *Realized
+	engine     pulumi.Engine
+	skipChecks bool
 
 	served *servedApps
 
@@ -80,12 +80,13 @@ func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 
 func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) *Stacks {
 	return &Stacks{
-		resolve:  resolve,
-		realized: realized,
-		engine:   engine,
-		served:   newServedApps(),
-		pending:  newPendingSets(),
-		opened:   map[Scope]*release{},
+		resolve:    resolve,
+		realized:   realized,
+		engine:     engine,
+		skipChecks: processenv.SkipChecks(),
+		served:     newServedApps(),
+		pending:    newPendingSets(),
+		opened:     map[Scope]*release{},
 	}
 }
 
@@ -121,7 +122,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 		Configure: created.Configure,
 		Secrets:   created.Secrets,
 		Decode:    created.Decode,
-		Refresh:   refreshPolicy(r.realized),
+		Refresh:   r.refreshPolicy(),
 		Engine:    r.engine,
 		Plugins:   []pulumi.Plugin{plugin},
 	})
@@ -133,22 +134,12 @@ func Serves() []provider.BindingType {
 	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic, provider.BindingRealtime}
 }
 
-const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
-
-func skipTeardownRefresh() bool {
-	switch strings.ToLower(os.Getenv(skipTeardownRefreshEnv)) {
-	case "1", "true":
-		return true
-	}
-	return false
-}
-
-func refreshPolicy(realized *Realized) func(provider.StackRef, pulumi.Operation) bool {
+func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool {
 	return func(ref provider.StackRef, op pulumi.Operation) bool {
-		if op != pulumi.OperationDestroy || skipTeardownRefresh() {
+		if op != pulumi.OperationDestroy || r.skipChecks {
 			return false
 		}
-		return !realized.realizedHere(naming.Sanitize(ref.Project), ref.Name)
+		return !r.realized.realizedHere(naming.Sanitize(ref.Project), ref.Name)
 	}
 }
 

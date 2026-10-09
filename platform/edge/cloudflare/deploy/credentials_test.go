@@ -5,7 +5,44 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
+
+func TestVerifyingCredentialsAsksCloudflareForTheAccountUnlessTheChecksAreSkipped(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	t.Setenv(envAPIToken, "tok")
+
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+	_, _ = m.provider(t).Hooks().VerifyCredentials(t.Context())
+	if m.requests == 0 {
+		t.Error("VerifyCredentials() sent Cloudflare nothing, want the account read to prove the token")
+	}
+
+	m = &cfMock{zoneID: "zone1", zoneName: "app.com"}
+	p := m.provider(t)
+	p.skipChecks = true
+	identity, err := p.Hooks().VerifyCredentials(t.Context())
+	if err != nil {
+		t.Fatalf("VerifyCredentials() with the checks skipped error = %v", err)
+	}
+	if m.requests != 0 {
+		t.Errorf("VerifyCredentials() with the checks skipped sent Cloudflare %d requests, want none", m.requests)
+	}
+	if identity.Account != "acct" {
+		t.Errorf("VerifyCredentials() with the checks skipped answered account %q, want the one the environment names", identity.Account)
+	}
+}
+
+func TestAnEdgeSkipsItsChecksOnlyWhenTheEnvironmentSaysSo(t *testing.T) {
+	t.Setenv(processenv.SkipChecksEnvVar, "1")
+	if !newCloudflare("ocel", Options{}).skipChecks {
+		t.Errorf("an edge opened with %s=1 runs its checks, want them skipped", processenv.SkipChecksEnvVar)
+	}
+	t.Setenv(processenv.SkipChecksEnvVar, "")
+	if newCloudflare("ocel", Options{}).skipChecks {
+		t.Errorf("an edge opened without %s skips its checks, want them run", processenv.SkipChecksEnvVar)
+	}
+}
 
 func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 	for _, tc := range []struct {

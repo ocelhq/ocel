@@ -88,6 +88,9 @@ func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIden
 	if os.Getenv(envAPIToken) == "" {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
 	}
+	if p.skipChecks {
+		return edge.CredentialIdentity{Account: accountID}, nil
+	}
 	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
 	}

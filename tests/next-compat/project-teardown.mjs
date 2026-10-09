@@ -19,7 +19,7 @@ import {
   renderOcelConfig,
   requireNamespace,
   selectRunSlugs,
-  withoutSkipDriftChecks,
+  withoutSkipChecks,
 } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
@@ -100,7 +100,7 @@ function runDestroy(adapterDir, tier, dir) {
       cwd: dir,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: TEARDOWN_TIMEOUT_MS,
-      env: withoutSkipDriftChecks(process.env),
+      env: withoutSkipChecks(process.env),
     });
     let output = "";
     child.stdout.on("data", (chunk) => {

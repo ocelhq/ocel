@@ -26,7 +26,7 @@ import {
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
-  SKIP_DRIFT_CHECK_ENV,
+  SKIP_CHECKS_ENV,
   STATE_FILE,
   tail,
   withBuildScript,
@@ -54,7 +54,7 @@ const CHILD_ENV = {
   NEXT_PRIVATE_TEST_MODE: "e2e",
   OCEL_E2E_VERCEL_CACHE_HEADER: "1",
   OCEL_EDGE_OBSERVABILITY: "off",
-  ...SKIP_DRIFT_CHECK_ENV,
+  ...SKIP_CHECKS_ENV,
   ...(hasTypeScriptNextConfig() ? { __NEXT_NODE_NATIVE_TS_LOADER_ENABLED: "true" } : {}),
 };
 

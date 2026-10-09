@@ -39,9 +39,8 @@ export const MAX_SLUG_LEN = Math.min(
   63 - "-".length - PREVIEW_TAIL_LEN,
 );
 
-export const SKIP_DRIFT_CHECK_ENV = Object.freeze({
-  OCEL_SKIP_EDGE_RECONCILE: "1",
-  OCEL_SKIP_TEARDOWN_REFRESH: "1",
+export const SKIP_CHECKS_ENV = Object.freeze({
+  OCEL_SKIP_CHECKS: "1",
 });
 
 export const NAMESPACE_ENV = "OCEL_NAMESPACE";
@@ -69,9 +68,9 @@ export function requireNamespace(env = process.env) {
   }
 }
 
-export function withoutSkipDriftChecks(env) {
+export function withoutSkipChecks(env) {
   const out = { ...env };
-  for (const name of Object.keys(SKIP_DRIFT_CHECK_ENV)) {
+  for (const name of Object.keys(SKIP_CHECKS_ENV)) {
     delete out[name];
   }
   return out;

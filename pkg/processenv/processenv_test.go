@@ -2,6 +2,18 @@ package processenv
 
 import "testing"
 
+func TestSkipChecksIsOnOnlyWhenItsVariableIsOneOrTrue(t *testing.T) {
+	if SkipChecksEnvVar != "OCEL_SKIP_CHECKS" {
+		t.Errorf("skip checks environment name = %q, want OCEL_SKIP_CHECKS", SkipChecksEnvVar)
+	}
+	for value, want := range map[string]bool{"": false, "0": false, "no": false, "1": true, "true": true, "TRUE": true} {
+		t.Setenv(SkipChecksEnvVar, value)
+		if got := SkipChecks(); got != want {
+			t.Errorf("SkipChecks() with %s=%q = %v, want %v", SkipChecksEnvVar, value, got, want)
+		}
+	}
+}
+
 func TestProcessEnvironmentNames(t *testing.T) {
 	t.Parallel()
 

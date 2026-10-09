@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/contenttype"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/bundles"
 )
 
@@ -65,6 +66,7 @@ type cloudflare struct {
 
 	workerClientCertificate bool
 	trustClientCertificate  ClientCertificateTrust
+	skipChecks              bool
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
@@ -85,11 +87,11 @@ func NewWithWorkerClientCertificate(namespace string, options Options, trust Cli
 }
 
 func newCloudflare(namespace string, options Options) *cloudflare {
-	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace, options: options}
+	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace, options: options, skipChecks: processenv.SkipChecks()}
 }
 
 func NewAt(namespace, baseURL string) edge.Edge {
-	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace}
+	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace, skipChecks: processenv.SkipChecks()}
 }
 
 const clientMaxRetries = 5
