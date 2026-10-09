@@ -3,10 +3,12 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -22,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -628,7 +631,7 @@ func TestARemovalOpensItsDNSForTheEdgeTheProjectRunsOnWhenTheConfigNamesNone(t *
 	}
 }
 
-func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *testing.T) {
+func TestADestroySaysWhichHostnamesAndEdgeItRemoves(t *testing.T) {
 	client, _ := deployedProject(t)
 
 	stream, err := client.RemoveProject(context.Background(), projectRequest())
@@ -644,7 +647,6 @@ func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *t
 	for _, want := range []string{
 		"Unbinding shop.example from the relay edge",
 		"Removing the @production routing pointer",
-		"Destroying stack prod--infra (2 of 2)",
 		"Destroying the stack that serves shop through the relay edge",
 		"Removing the stored variable values of shop in production",
 		"Forgetting shop in production: nothing of it is left",
@@ -652,11 +654,6 @@ func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *t
 		if !slices.Contains(said, want) {
 			t.Errorf("the destroy said %q, want %q among it", said, want)
 		}
-	}
-	if !slices.ContainsFunc(said, func(line string) bool {
-		return strings.HasPrefix(line, "Destroying stack prod--web--") && strings.HasSuffix(line, " (1 of 2)")
-	}) {
-		t.Errorf("the destroy said %q, want the web stack named as the first of 2", said)
 	}
 }
 
@@ -773,5 +770,154 @@ func TestRemovingEveryPreviewRefusesAFirstDeployToANewPreviewUntilItEnds(t *test
 	}
 	if _, err := vendor.KeyValues().Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierPreview, "shop")); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("reading the removal's lease on shop after it ended = %v, want it freed", err)
+	}
+}
+
+func recordAppStacks(t *testing.T, vendor *fake.Provider, n int) []naming.StackName {
+	t.Helper()
+	stacks := make([]naming.StackName, 0, n)
+	for i := range n {
+		stack := naming.AppStack(stackrecords.ProductionEnv, fmt.Sprintf("app%d", i), releaseOf(t, releaseFor(100+i)))
+		if err := stackrecords.Write(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop", stack, stackrecords.Stack{Kind: provider.StackApp}); err != nil {
+			t.Fatal(err)
+		}
+		stacks = append(stacks, stack)
+	}
+	return stacks
+}
+
+func recordedStacks(t *testing.T, vendor *fake.Provider) []naming.StackName {
+	t.Helper()
+	entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stacks := make([]naming.StackName, 0, len(entries))
+	for _, entry := range entries {
+		stacks = append(stacks, entry.Name)
+	}
+	return stacks
+}
+
+func countConcurrentAppDestroys(stacks *fake.Stacks) func() int {
+	var mu sync.Mutex
+	inFlight, most := 0, 0
+	full := make(chan struct{})
+	stacks.Destroying(func(ref provider.StackRef) error {
+		if ref.Name.IsInfra() {
+			return nil
+		}
+		mu.Lock()
+		inFlight++
+		most = max(most, inFlight)
+		if inFlight == providerserver.StackDestroyConcurrency {
+			close(full)
+		}
+		mu.Unlock()
+		select {
+		case <-full:
+		case <-time.After(time.Second):
+		}
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	})
+	return func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return most
+	}
+}
+
+func TestRemoveProjectDestroysItsAppStacksConcurrentlyButNeverMoreThanTheBoundAtOnce(t *testing.T) {
+	client, vendor := deployedProject(t)
+	recordAppStacks(t, vendor, 2*providerserver.StackDestroyConcurrency)
+	most := countConcurrentAppDestroys(vendor.FakeStacks())
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+
+	if most() != providerserver.StackDestroyConcurrency {
+		t.Errorf("at most %d app stacks were destroyed at once, want %d", most(), providerserver.StackDestroyConcurrency)
+	}
+}
+
+func TestRemoveProjectDestroysNoInfraStackUntilEveryAppStackIsDestroyed(t *testing.T) {
+	client, vendor := deployedProject(t)
+	recordAppStacks(t, vendor, 2*providerserver.StackDestroyConcurrency)
+	apps := 0
+	for _, stack := range recordedStacks(t, vendor) {
+		if !stack.IsInfra() {
+			apps++
+		}
+	}
+	var mu sync.Mutex
+	destroyed := 0
+	var early []string
+	vendor.FakeStacks().Destroying(func(ref provider.StackRef) error {
+		if ref.Name.IsInfra() {
+			mu.Lock()
+			defer mu.Unlock()
+			if destroyed < apps {
+				early = append(early, fmt.Sprintf("%s after %d of %d app stacks", ref.Name, destroyed, apps))
+			}
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		destroyed++
+		return nil
+	})
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+
+	if len(early) > 0 {
+		t.Errorf("the removal started destroying %v, want every app stack destroyed before any infra stack", early)
+	}
+}
+
+func TestRemoveProjectDestroysEveryOtherStackWhenOneAppStackFailsAndReportsTheFailure(t *testing.T) {
+	client, vendor := deployedProject(t)
+	failing := recordAppStacks(t, vendor, 2*providerserver.StackDestroyConcurrency)[3]
+	vendor.FakeStacks().Destroying(func(ref provider.StackRef) error {
+		if ref.Name == failing {
+			return errors.New("the stack's state is locked")
+		}
+		return nil
+	})
+
+	result := removeProject(t, client, projectRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), failing.String()) {
+		t.Errorf("RemoveProject() = success %v, %q, want it to fail naming %s", result.GetSuccess(), result.GetError(), failing)
+	}
+	if left := recordedStacks(t, vendor); !slices.Equal(left, []naming.StackName{failing}) {
+		t.Errorf("after the removal %v are still recorded, want only %s, whose destroy failed", left, failing)
+	}
+}
+
+func TestRemoveProjectOpensASpanForEveryStackItDestroys(t *testing.T) {
+	client, vendor := deployedProject(t)
+	stacks := recordedStacks(t, vendor)
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	opened := openedSpans(recorded(stream))
+
+	for _, stack := range stacks {
+		want := openedSpan{stack.String(), "Destroying everything this release of " + stack.App + " provisioned"}
+		if stack.IsInfra() {
+			want.message = "Destroying the resources every app in " + stack.Env + " binds to"
+		}
+		if !slices.Contains(opened, want) {
+			t.Errorf("the removal opened spans %v, want %v among them", opened, want)
+		}
 	}
 }
