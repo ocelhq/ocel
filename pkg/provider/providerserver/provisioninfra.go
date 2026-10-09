@@ -150,21 +150,13 @@ func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log) err
 }
 
 func (r *deployRun) ensureProject(ctx context.Context) error {
-	name := stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, r.provider.KeyValues(), name)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
-	}
-	if len(recorded.Value) > 0 {
-		return nil
-	}
-	if recorded.Value, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	if _, err := r.provider.KeyValues().Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
+	return keyvalue.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry keyvalue.Entry) ([]byte, bool, error) {
+		if len(entry.Value) > 0 {
+			return nil, false, nil
+		}
+		value, err := json.Marshal(stackrecords.Project{Features: r.features})
+		return value, true, err
+	})
 }
 
 func (r *deployRun) ensurePreviewRecorded(ctx context.Context) error {

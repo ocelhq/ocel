@@ -369,7 +369,7 @@ func boundHere(ctx context.Context, store keyvalue.Store, tier environment.Tier,
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (edgeStateStore{keyValues: store, name: stackrecords.EdgeStackKey(tier, slug)}).read(ctx)
+	state, err := (&edgeStateStore{keyValues: store, name: stackrecords.EdgeStackKey(tier, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}
