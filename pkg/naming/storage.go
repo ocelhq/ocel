@@ -29,6 +29,10 @@ func (c Coordinate) ISRPrefix() string {
 	return c.StoragePrefix() + "isr" + PathSeparator
 }
 
+func (c Coordinate) RouteTableKey(digest string) string {
+	return c.StoragePrefix() + path("route-table", digest+".json")
+}
+
 func (c Coordinate) BytecodePrefix() string {
 	return c.StoragePrefix() + "bytecode" + PathSeparator
 }

@@ -75,6 +75,16 @@ func TestAReleaseRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testing.
 		}
 	})
 
+	t.Run("a route table marshals as the format and key of the table its router stored", func(t *testing.T) {
+		t.Parallel()
+
+		key := "production/shop/web/r1a2b3c4d/route-table/ab.json"
+		raw := marshalRecord(t, ReleaseRecord{RouteTable: &RouteTableLocation{Format: edge.RouteTableNext, Key: key}})
+		if want := `"routeTable":{"format":"next","key":"` + key + `"}`; !strings.Contains(raw, want) {
+			t.Errorf("record = %s, want %s", raw, want)
+		}
+	})
+
 	t.Run("need fields are omitted when empty", func(t *testing.T) {
 		t.Parallel()
 

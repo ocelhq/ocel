@@ -219,6 +219,20 @@ type deployRun struct {
 	bindings       []provider.Binding
 	provisioning   map[string]bool
 	addresses      map[string]string
+	routeTables    map[string]string
+}
+
+func (r *deployRun) recordRouteTable(app, key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.routeTables[app] = key
+}
+
+func (r *deployRun) readRouteTable(app string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key, stored := r.routeTables[app]
+	return key, stored
 }
 
 func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
@@ -297,6 +311,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
+		routeTables:    map[string]string{},
 		inline:         inline,
 
 		infraProvisioned: req.GetInfraProvisioned(),
@@ -1535,10 +1550,15 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
-	var routeTable *router.RouteTable
+	var routeTable *router.RouteTableLocation
 	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
-		routeTable = &facts.EdgeDispatch.RouteTable
+		stored, err := r.storeRouteTable(ctx, r.appRouters[entry.App], coordinate, facts.EdgeDispatch.RouteTable)
+		if err != nil {
+			return err
+		}
+		r.recordRouteTable(entry.App, stored.Key)
+		routeTable = stored
 		if origin == "" {
 			origin = urlByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)]
 		}

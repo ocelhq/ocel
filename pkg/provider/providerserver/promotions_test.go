@@ -13,6 +13,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -750,6 +751,49 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 				t.Errorf("the prune said %q, want %q", said, tc.wants)
 			}
 		})
+	}
+}
+
+func TestAPruneForgetsTheRouteTablesOfTheReleasesItDropsAndKeepsTheRest(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	relay, err := vendor.Routers().Open(fake.RouterRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
+	replaces := ""
+	var keys []string
+	for i, id := range []string{"p1", "p2", "p3"} {
+		key := fmt.Sprintf("production/shop/web/r%08x/route-table/%064x.json", i+1, i+1)
+		keys = append(keys, key)
+		if err := relay.Hooks().RouteTables.Store(context.Background(), router.StackState{}, key, []byte(`{"routes":[]}`)); err != nil {
+			t.Fatal(err)
+		}
+		record := router.ReleaseRecord{App: "web", Release: releaseFor(i), RouteTable: &router.RouteTableLocation{Format: edge.RouteTableNext, Key: key}}
+		if err := releases.PutStaged(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Releases: map[string]string{"web": releaseFor(i)}}
+		if _, err := releases.Promote(context.Background(), promotion, "", replaces); err != nil {
+			t.Fatal(err)
+		}
+		replaces = id
+	}
+
+	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug:        "shop",
+		KeepN:       2,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("RemoveStalePromotions() error = %v", err)
+	}
+	recorded(stream)
+
+	if got := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).ListRouteTableKeys(); !slices.Equal(got, keys[1:]) {
+		t.Errorf("the router holds route tables %v, want only those of the kept releases %v", got, keys[1:])
 	}
 }
 

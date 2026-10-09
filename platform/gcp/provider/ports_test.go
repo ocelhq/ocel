@@ -159,8 +159,11 @@ func TestTheCloudflareRouterOnGCPSignsAndDispatchesAndHasNoOriginHooks(t *testin
 		t.Fatalf("Open(cloudflare router) = %v", err)
 	}
 	facts := opened.Facts()
-	if !facts.SignsOriginForwards || !facts.Dispatches || !facts.ReachesFunctions || facts.ReachesContainers {
-		t.Errorf("facts = %+v, want a router that signs and dispatches to functions but reaches no container", facts)
+	if !facts.SignsOriginForwards || !facts.ReachesFunctions || facts.ReachesContainers {
+		t.Errorf("facts = %+v, want a router that signs and reaches functions but no container", facts)
+	}
+	if opened.Hooks().RouteTables == nil {
+		t.Error("the cloudflare router keeps no route table, and the edge dispatches a release's paths by one")
 	}
 	if hooks := opened.Hooks(); hooks.Origin != nil {
 		t.Error("the cloudflare router has origin hooks, and the deploy would treat it as one that forwards to an origin")
@@ -174,8 +177,8 @@ func TestTheALBRoutersFactsAreUnchangedByTheCloudflareEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if facts := opened.Facts(); facts.SignsOriginForwards || facts.Dispatches {
-		t.Errorf("alb router facts = %+v, want neither: the origin guard behind the plain load balancer depends on it", facts)
+	if facts := opened.Facts(); facts.SignsOriginForwards || opened.Hooks().RouteTables != nil {
+		t.Errorf("alb router facts = %+v, want it to sign nothing and keep no route table: the origin guard behind the plain load balancer depends on it", facts)
 	}
 }
 

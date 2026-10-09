@@ -28,7 +28,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}, tables: map[string][]byte{}}
 	}
 	return routers
 }
@@ -80,6 +80,7 @@ type DataPlane struct {
 	served     map[projectPointer]map[string]string
 	writes     map[projectPointer]int
 	hosts      map[string]projectPointer
+	tables     map[string][]byte
 }
 
 type projectPointer struct {
@@ -112,6 +113,33 @@ func (d *DataPlane) ListServedHostnames() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return slices.Sorted(maps.Keys(d.hosts))
+}
+
+func (d *DataPlane) RouteTable(key string) ([]byte, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	table, stored := d.tables[key]
+	return slices.Clone(table), stored
+}
+
+func (d *DataPlane) ListRouteTableKeys() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Sorted(maps.Keys(d.tables))
+}
+
+func (d *DataPlane) storeRouteTable(_ context.Context, _ router.StackState, key string, table []byte) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.tables[key] = slices.Clone(table)
+	return nil
+}
+
+func (d *DataPlane) forgetRouteTable(_ context.Context, _ router.StackState, key string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.tables, key)
+	return nil
 }
 
 func (d *DataPlane) FailNextPointerMove(err error) {
@@ -243,12 +271,16 @@ func (r Router) Hooks() router.Hooks {
 	if r.kind != r.edge.routedBy {
 		return router.Hooks{}
 	}
-	return router.Hooks{Origin: &router.OriginHooks{
+	hooks := router.Hooks{Origin: &router.OriginHooks{
 		PlanProjectRemoval:      r.planProjectRemoval,
 		ClaimPreviewEntry:       r.claimPreviewEntry,
 		DisclaimPreviewEntry:    r.disclaimPreviewEntry,
 		PlanPreviewEntryRemoval: r.planPreviewEntryRemoval,
 	}}
+	if r.edge.kind == KindRelay {
+		hooks.RouteTables = &router.RouteTableHooks{Store: r.plane.storeRouteTable, Forget: r.plane.forgetRouteTable}
+	}
+	return hooks
 }
 
 func (e *Edge) routerFacts() router.Facts {
@@ -265,7 +297,6 @@ func (e *Edge) routerFacts() router.Facts {
 		AddressesItself:             e.addressesItself,
 		ReachesFunctions:            true,
 		ReachesContainers:           true,
-		Dispatches:                  e.kind == KindRelay,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
 		ServesPreviewDeployments:    true,

@@ -297,17 +297,17 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 	if err != nil {
 		return nil, err
 	}
-	storeWorker := edge.Worker{Main: workerModule(releasesStoreBundle)}
-	writerScript, err := isrWriterScriptNameFor(namespace, tier)
-	if err != nil {
-		return nil, err
-	}
-	writerWorker := edge.Worker{Main: workerModule(isrWriterBundle)}
 	bucket, err := cacheStoreNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
 	}
-	writerWorker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: bucket}
+	cacheStore := edge.ObjectStore{Binding: cacheStoreBinding, Bucket: bucket}
+	storeWorker := edge.Worker{Main: workerModule(releasesStoreBundle), ObjectStore: cacheStore}
+	writerScript, err := isrWriterScriptNameFor(namespace, tier)
+	if err != nil {
+		return nil, err
+	}
+	writerWorker := edge.Worker{Main: workerModule(isrWriterBundle), ObjectStore: cacheStore}
 
 	return []bootstrapWorker{
 		{

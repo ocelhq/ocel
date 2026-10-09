@@ -10,6 +10,25 @@ declare module "cloudflare:test" {
 const BOOTSTRAP = "dev-secret"; // matches wrangler.jsonc's vars.BOOTSTRAP_SECRET
 const SLUG = "acme-web";
 const SECRET = "project-secret"; // per-project secret seeded via /initialize
+const ROUTE_TABLE_KEY = `prod/${SLUG}/web/deploy-1/route-table/${"a".repeat(64)}.json`;
+const ROUTE_TABLE = JSON.stringify({ buildId: "build-1", pathnames: ["/a"] });
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function routeTableKey(body: string, slug = SLUG): Promise<string> {
+  return `prod/${slug}/web/deploy-1/route-table/${await sha256Hex(body)}.json`;
+}
+
+function routeTableReq(key: string, init: RequestInit = {}) {
+  return authedReq(`/route-table?key=${encodeURIComponent(key)}`, init);
+}
+
+async function putRouteTable(key: string, body = ROUTE_TABLE) {
+  return SELF.fetch(routeTableReq(key, { method: "PUT", body }));
+}
 
 function req(path: string, init: RequestInit = {}) {
   return new Request(`https://store.example${path}`, init);
@@ -41,7 +60,7 @@ function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routeTable: { format: "next", table: { pathnames: [] } },
+    routeTable: { format: "next", key: ROUTE_TABLE_KEY },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
@@ -244,6 +263,118 @@ describe("authenticated endpoints", () => {
   it("returns 404 when no slug is given", async () => {
     const res = await SELF.fetch(bearerReq("/move-pointer", SECRET, { method: "POST" }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("route tables", () => {
+  it("stores a route table as JSON at its key", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+
+    expect((await putRouteTable(key)).status).toBe(204);
+
+    const object = await env.OCEL_CACHE_STORE.get(key);
+    expect(await object?.text()).toBe(ROUTE_TABLE);
+    expect(object?.httpMetadata?.contentType).toBe("application/json");
+  });
+
+  it("answers 204 to a repeated put of the same route table", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+    await putRouteTable(key);
+
+    expect((await putRouteTable(key)).status).toBe(204);
+    expect(await (await env.OCEL_CACHE_STORE.get(key))?.text()).toBe(ROUTE_TABLE);
+  });
+
+  it("refuses a route table whose body does not hash to its key's digest", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+
+    const res = await putRouteTable(key, JSON.stringify({ pathnames: ["/b"] }));
+
+    expect(res.status).toBe(400);
+    expect(await env.OCEL_CACHE_STORE.head(key)).toBeNull();
+  });
+
+  it("refuses a route table key of another project", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE, "other-web");
+
+    expect((await putRouteTable(key)).status).toBe(400);
+    expect((await SELF.fetch(routeTableReq(key, { method: "DELETE" }))).status).toBe(400);
+    expect(await env.OCEL_CACHE_STORE.head(key)).toBeNull();
+  });
+
+  it("refuses a route table key of any other shape", async () => {
+    await initialize();
+    const digest = await sha256Hex(ROUTE_TABLE);
+    const malformed = [
+      `${SLUG}/web/deploy-1/route-table/${digest}.json`,
+      `prod/${SLUG}/web/deploy-1/extra/route-table/${digest}.json`,
+      `prod/${SLUG}/../deploy-1/route-table/${digest}.json`,
+      `prod/${SLUG}/./deploy-1/route-table/${digest}.json`,
+      `prod/${SLUG}//deploy-1/route-table/${digest}.json`,
+      `prod/${SLUG}/web/deploy-1/edge/${digest}.json`,
+      `prod/${SLUG}/web/deploy-1/route-table/${digest.toUpperCase()}.json`,
+      `prod/${SLUG}/web/deploy-1/route-table/${digest}`,
+      `prod/${SLUG}/web/deploy-1/route-table/${digest.slice(1)}.json`,
+      "",
+    ];
+
+    for (const key of malformed) {
+      expect((await putRouteTable(key)).status, key).toBe(400);
+    }
+    expect(
+      (await SELF.fetch(authedReq("/route-table", { method: "PUT", body: ROUTE_TABLE }))).status,
+    ).toBe(400);
+  });
+
+  it("refuses a route table put without the project secret", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+
+    const res = await SELF.fetch(
+      req(`/${SLUG}/route-table?key=${encodeURIComponent(key)}`, {
+        method: "PUT",
+        body: ROUTE_TABLE,
+      }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(await env.OCEL_CACHE_STORE.head(key)).toBeNull();
+  });
+
+  it("deletes the route table at its key", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+    await putRouteTable(key);
+
+    const res = await SELF.fetch(routeTableReq(key, { method: "DELETE" }));
+
+    expect(res.status).toBe(204);
+    expect(await env.OCEL_CACHE_STORE.head(key)).toBeNull();
+  });
+
+  it("answers 204 deleting a route table that was never stored", async () => {
+    await initialize();
+    const key = await routeTableKey(ROUTE_TABLE);
+
+    expect((await SELF.fetch(routeTableReq(key, { method: "DELETE" }))).status).toBe(204);
+  });
+
+  it("removes every route table it stored when the instance is destroyed", async () => {
+    await initialize();
+    const first = await routeTableKey(ROUTE_TABLE);
+    const secondBody = JSON.stringify({ pathnames: ["/b"] });
+    const second = await routeTableKey(secondBody);
+    await putRouteTable(first);
+    await putRouteTable(second, secondBody);
+
+    expect((await SELF.fetch(authedReq("/destroy", { method: "POST" }))).status).toBe(204);
+
+    expect(await env.OCEL_CACHE_STORE.head(first)).toBeNull();
+    expect(await env.OCEL_CACHE_STORE.head(second)).toBeNull();
   });
 });
 
