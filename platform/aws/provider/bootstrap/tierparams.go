@@ -51,7 +51,7 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 	}
 	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return TierParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
+		return TierParams{}, refuseMissingPassphrase(passphraseParam, tier)
 	}
 	secret, secretErr := originSecretIn(found, origin)
 	return TierParams{
@@ -74,6 +74,11 @@ func originSecretIn(found map[string]string, name string) (OriginSecret, error) 
 			"%s contains something other than the origin secret bootstrap writes (%v): delete the parameter and re-run `ocel bootstrap` to mint a fresh one, then re-deploy every project in the tier", name, err)
 	}
 	return secret, nil
+}
+
+func refuseMissingPassphrase(name string, tier environment.Tier) error {
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s, the passphrase the %s tier's Pulumi state is encrypted under, does not exist: run `ocel bootstrap %s` first", name, tier, tier)
 }
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
@@ -104,7 +109,7 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 
 	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return TierParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
+		return TierParams{}, refuseMissingPassphrase(passphraseParam, tier)
 	}
 	p.Passphrase = passphrase
 
