@@ -360,7 +360,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	}, nil
 }
 
-func recordedPreviewWildcard(ctx context.Context, p provider.Provider, skipChecks bool) (*contractv1.PreviewWildcard, error) {
+func recordedPreviewWildcard(ctx context.Context, p provider.Provider, checkRoute, skipChecks bool) (*contractv1.PreviewWildcard, error) {
 	recorded, err := stackrecords.ReadWildcard(ctx, p.KeyValues())
 	if err != nil {
 		return nil, err
@@ -369,7 +369,10 @@ func recordedPreviewWildcard(ctx context.Context, p provider.Provider, skipCheck
 		return nil, nil
 	}
 	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded, skipChecks: skipChecks}
-	wildcard := w.proto(ctx)
+	wildcard := w.recordedProto()
+	if checkRoute {
+		wildcard.RouteInstalled = w.routeInstalled(ctx)
+	}
 	answering, err := findEdgeRouter(p, recorded.Edge)
 	if err != nil {
 		return nil, err
@@ -389,10 +392,15 @@ func renewalOf(wildcard *contractv1.PreviewWildcard, health provider.Certificate
 }
 
 func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
+	wildcard := w.recordedProto()
+	wildcard.RouteInstalled = w.routeInstalled(ctx)
+	return wildcard
+}
+
+func (w *wildcards) recordedProto() *contractv1.PreviewWildcard {
 	return &contractv1.PreviewWildcard{
-		BaseDomain:     w.recorded.BaseDomain,
-		EdgeScope:      w.recorded.Scope,
-		RouteInstalled: w.routeInstalled(ctx),
+		BaseDomain: w.recorded.BaseDomain,
+		EdgeScope:  w.recorded.Scope,
 	}
 }
 

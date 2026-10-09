@@ -177,7 +177,7 @@ func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier env
 		return status, err
 	}
 	if tier == environment.TierPreview {
-		status.previewWildcard, err = recordedPreviewWildcard(ctx, p, skipChecks)
+		status.previewWildcard, err = recordedPreviewWildcard(ctx, p, req.GetCheckPreviewRoute(), skipChecks)
 	}
 	return status, err
 }

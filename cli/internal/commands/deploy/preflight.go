@@ -41,6 +41,8 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 		ClaimsDomains:   true,
 		ProjectRegistry: true,
 		Policy:          policy,
+
+		CheckPreviewRoute: true,
 	}
 }
 

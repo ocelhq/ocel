@@ -26,6 +26,8 @@ type OpenOptions struct {
 	Feature         string
 	ProjectRegistry bool
 	Policy          consent.Policy
+
+	CheckPreviewRoute bool
 }
 
 func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
@@ -61,6 +63,8 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 		RequireHostname: opts.RequireHostname,
 		Feature:         opts.Feature,
 		Registry:        registry,
+
+		CheckPreviewRoute: opts.CheckPreviewRoute,
 	}
 	if opts.ClaimsDomains {
 		req.Domains = cfg.HostnameNames(opts.Tier)

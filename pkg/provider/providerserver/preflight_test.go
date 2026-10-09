@@ -332,7 +332,7 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	resp, err = preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	resp, err = preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW, CheckPreviewRoute: true})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
@@ -358,13 +358,38 @@ func TestPreflightTakesThePreviewEntryRouteAsInstalledWithoutAskingTheEdgeWhenTh
 		}
 		vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
 
-		resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+		resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW, CheckPreviewRoute: true})
 		if err != nil {
 			t.Fatalf("Preflight() error = %v", err)
 		}
 		if got := resp.GetPreviewWildcard().GetRouteInstalled(); got != skipped {
 			t.Errorf("Preflight() with the checks skipped = %v says the shared entry route installed = %v, want %v: only an edge asked who owns it can say it is not", skipped, got, skipped)
 		}
+	}
+}
+
+func TestAPreflightThatDoesNotCheckThePreviewRouteReadsNoOwnerFromTheEdge(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+	front := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	before := front.OwnerReads()
+
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	if resp.GetPreviewWildcard().GetBaseDomain() != "preview.acme.com" {
+		t.Errorf("Preflight() wildcard = %+v, want the recorded base domain", resp.GetPreviewWildcard())
+	}
+	if read := front.OwnerReads() - before; read != 0 {
+		t.Errorf("a preflight that does not check the preview route read the edge's route owners %d times, want none", read)
 	}
 }
 

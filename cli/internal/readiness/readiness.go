@@ -34,6 +34,8 @@ type Request struct {
 	RequireHostname  bool
 	Feature          string
 	Registry         *contractv1.ImageRegistry
+
+	CheckPreviewRoute bool
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
