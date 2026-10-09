@@ -1,15 +1,10 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { traceIntoFunction } from "@framework/node-build/function-trace";
+import { BuildOutput, ROOT_FUNCTION, toSlash } from "@framework/node-build/output";
 import type { Adapter, Builder } from "@sveltejs/kit";
-import {
-  describeHosting,
-  describeStaticRules,
-  FRAMEWORK,
-  ROOT_FUNCTION,
-  tableServedFiles,
-} from "./output.js";
-import { bundleFunction } from "./trace.js";
+import { describeHosting, describeStaticRules, FRAMEWORK, tableServedFiles } from "./output.js";
 
 /** How the adapter writes the build. */
 export interface Options {
@@ -17,10 +12,7 @@ export interface Options {
   out?: string;
 }
 
-const OUTPUT_DIR_ENV = "OCEL_OUTPUT_DIR";
-const APP_NAME_ENV = "OCEL_APP_NAME";
-
-const FUNCTION_DIR = "functions/index.func";
+const SERVE_FILE = "index.js";
 
 const files = fileURLToPath(new URL("../files", import.meta.url));
 
@@ -77,16 +69,15 @@ export default function ocel(options: Options = {}): Adapter {
     },
     async adapt(kitBuilder) {
       const builder = kitBuilder as AnyBuilder;
-      const out = resolve(process.env[OUTPUT_DIR_ENV] || options.out || "build");
+      const output = BuildOutput.fromEnv({ dir: options.out || "build", app: "" });
       const kit = readKitConfig(builder);
       const base = kit.paths.base;
       const appPath = builder.getAppPath();
       const tmp = builder.getBuildDirectory("ocel");
-      const staticDir = join(out, "static");
+      const staticDir = output.staticDir;
 
-      for (const owned of ["static", "functions", "hosting.json", "index.js"]) {
-        rmSync(join(out, owned), { force: true, recursive: true });
-      }
+      output.clean();
+      rmSync(join(output.dir, SERVE_FILE), { force: true });
       rmSync(tmp, { force: true, recursive: true });
       mkdirSync(tmp, { recursive: true });
 
@@ -117,27 +108,15 @@ export default function ocel(options: Options = {}): Adapter {
         });
       }
 
-      const functionDir = join(out, FUNCTION_DIR);
-      const bundled = await bundleFunction(entry, functionDir, builder.log);
-      const entryDir = join(functionDir, bundled.entryFile, "..");
-      builder.copy(staticDir, join(entryDir, "static"));
-      writeFileSync(
-        join(functionDir, "function-config.json"),
-        JSON.stringify({
-          framework: { name: FRAMEWORK },
-          entryFile: bundled.entryFile,
-          id: ROOT_FUNCTION,
-          app: process.env[APP_NAME_ENV] ?? "",
-        }),
-      );
+      const functionDir = output.functionDir(ROOT_FUNCTION);
+      const entryFile = await traceIntoFunction(output, ROOT_FUNCTION, entry, builder.log);
+      builder.copy(staticDir, join(functionDir, entryFile, "..", "static"));
+      output.writeFunctionConfig(ROOT_FUNCTION, FRAMEWORK, entryFile);
 
-      builder.copy(`${files}/serve.js`, join(out, "index.js"), {
-        replace: { ENTRY: `./${FUNCTION_DIR}/${bundled.entryFile}` },
+      builder.copy(`${files}/serve.js`, join(output.dir, SERVE_FILE), {
+        replace: { ENTRY: `./${toSlash(relative(output.dir, functionDir))}/${entryFile}` },
       });
-      writeFileSync(
-        join(out, "hosting.json"),
-        JSON.stringify(describeHosting(kit.version.name, describeStaticRules(appPath))),
-      );
+      output.writeHosting(describeHosting(kit.version.name, describeStaticRules(appPath)));
     },
   };
 }

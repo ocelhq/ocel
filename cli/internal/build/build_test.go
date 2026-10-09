@@ -48,7 +48,7 @@ func writeFile(t *testing.T, path, body string) {
 
 func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg buildoutput.FunctionConfig) {
 	t.Helper()
-	dir := filepath.Join(outDir, "apps", app, functionsDirName, funcRel)
+	dir := filepath.Join(outDir, "apps", app, buildoutput.FunctionsDir, funcRel)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestBuild(t *testing.T) {
 			for _, bundle := range []string{"bundle-0.func", "bundle-1.func"} {
 				writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", bundle,
 					buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
-				functionDir := filepath.Join(out, functionsDirName, bundle)
+				functionDir := filepath.Join(out, buildoutput.FunctionsDir, bundle)
 				writeDarwinSharp(t, functionDir)
 				functionDirs = append(functionDirs, functionDir)
 			}
@@ -272,7 +272,7 @@ func TestBuild(t *testing.T) {
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
 				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
-			functionDir = filepath.Join(out, functionsDirName, "bundle-0.func")
+			functionDir = filepath.Join(out, buildoutput.FunctionsDir, "bundle-0.func")
 			writeDarwinSharp(t, functionDir)
 			return nil
 		}}
@@ -300,7 +300,7 @@ func TestBuild(t *testing.T) {
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
 				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
-			functionDir := filepath.Join(out, functionsDirName, "bundle-0.func")
+			functionDir := filepath.Join(out, buildoutput.FunctionsDir, "bundle-0.func")
 			writeDarwinSharp(t, functionDir)
 			writeFile(t, filepath.Join(functionDir, "server.js"), strings.Repeat("x", 1500))
 			return nil
@@ -333,7 +333,7 @@ func TestBuild(t *testing.T) {
 			out := got.Apps[0].OutputDir
 			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
 				buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
-			writeDarwinSharp(t, filepath.Join(out, functionsDirName, "bundle-0.func"))
+			writeDarwinSharp(t, filepath.Join(out, buildoutput.FunctionsDir, "bundle-0.func"))
 			return nil
 		}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
@@ -616,7 +616,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, root), "api"), functionsDirName, entryFunctionDirName)
+		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, root), "api"), buildoutput.FunctionsDir, buildoutput.RootFunctionDir)
 		want := nodeAppBuild{Framework: "node", Name: "api", Cwd: source, Entrypoint: filepath.Join(source, "src", "server.ts"), FunctionDir: functionDir}
 		if len(got.Apps) != 1 || got.Apps[0].Framework != want.Framework || got.Apps[0].Name != want.Name || got.Apps[0].Cwd != want.Cwd || got.Apps[0].Entrypoint != want.Entrypoint || got.Apps[0].FunctionDir != want.FunctionDir {
 			t.Fatalf("request apps = %+v, want [%+v]", got.Apps, want)
@@ -706,7 +706,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "src/server.js", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, fixtureRoot), "api"), functionsDirName, entryFunctionDirName)
+		functionDir := filepath.Join(buildoutput.AppRoot(outputRoot(t, fixtureRoot), "api"), buildoutput.FunctionsDir, buildoutput.RootFunctionDir)
 		for _, rel := range []string{"src/server.js", "node_modules/express/package.json"} {
 			if _, err := os.Stat(filepath.Join(functionDir, filepath.FromSlash(rel))); err != nil {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)

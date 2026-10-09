@@ -1,26 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { extname, join } from "node:path";
-
-export const HOSTING_VERSION = 1;
+import { ROOT_FUNCTION } from "@framework/node-build/output";
+import type { Hosting, Static } from "@platform/edge-contract/hosting";
 
 export const FRAMEWORK = "sveltekit";
-
-export const ROOT_FUNCTION = "/";
-
-export interface StaticRules {
-  immutablePrefixes: string[];
-  mustRevalidatePrefixes?: string[];
-}
-
-export interface Hosting {
-  version: typeof HOSTING_VERSION;
-  framework: typeof FRAMEWORK;
-  frameworkBuildId: string;
-  rootFunction: string;
-  static: StaticRules;
-  needs: Record<string, never>;
-}
 
 export interface Asset {
   file: string;
@@ -41,13 +25,12 @@ export interface Served {
   redirects: Record<string, Redirect>;
 }
 
-export function describeStaticRules(appPath: string): StaticRules {
+export function describeStaticRules(appPath: string): Static {
   return { immutablePrefixes: [`/${appPath}/immutable/`] };
 }
 
-export function describeHosting(buildId: string, rules: StaticRules): Hosting {
+export function describeHosting(buildId: string, rules: Static): Omit<Hosting, "version"> {
   return {
-    version: HOSTING_VERSION,
     framework: FRAMEWORK,
     frameworkBuildId: buildId,
     rootFunction: ROOT_FUNCTION,
