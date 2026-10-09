@@ -54,17 +54,18 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 			return nil, err
 		}
 		defer func() { _ = hold.release(ctx) }()
-		result, err := h.rollBack(hold.context(ctx), hold, req, sender)
+		result, err := h.rollBack(ctx, hold, req, sender)
 		return result, hold.explain(err)
 	})
 }
 
 func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
-	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
+	leased := hold.context(ctx)
+	session, err := h.openEdgeSession(leased, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
-	current, err := session.ledger.Read(ctx, "")
+	current, err := session.ledger.Read(leased, "")
 	if err != nil {
 		return nil, err
 	}
