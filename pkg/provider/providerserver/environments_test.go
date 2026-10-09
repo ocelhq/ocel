@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -826,6 +827,33 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 	web := "Destroying stack " + naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7))).String() + " (1 of 2)"
 	if !slices.Contains(said, web) {
 		t.Errorf("the removal said %q, want %q among it", said, web)
+	}
+}
+
+func TestRemovingAPreviewDestroysItsAppStacksConcurrentlyButNeverMoreThanTheBoundAtOnce(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	stacks := []naming.StackName{naming.InfraStack("pr-7")}
+	for i := range 2 * providerserver.StackDestroyConcurrency {
+		stacks = append(stacks, naming.AppStack("pr-7", fmt.Sprintf("app%d", i), releaseOf(t, releaseFor(i))))
+	}
+	seedEnvironment(t, vendor, "shop", stacks...)
+	most := countConcurrentAppDestroys(vendor.FakeStacks())
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %v, %q, want the preview removed", err, result.GetError())
+	}
+
+	if most() != providerserver.StackDestroyConcurrency {
+		t.Errorf("at most %d app stacks were destroyed at once, want %d", most(), providerserver.StackDestroyConcurrency)
 	}
 }
 
