@@ -803,6 +803,7 @@ func countConcurrentAppDestroys(stacks *fake.Stacks) func() int {
 	var mu sync.Mutex
 	inFlight, most := 0, 0
 	full := make(chan struct{})
+	var filled sync.Once
 	stacks.Destroying(func(ref provider.StackRef) error {
 		if ref.Name.IsInfra() {
 			return nil
@@ -811,7 +812,7 @@ func countConcurrentAppDestroys(stacks *fake.Stacks) func() int {
 		inFlight++
 		most = max(most, inFlight)
 		if inFlight == providerserver.StackDestroyConcurrency {
-			close(full)
+			filled.Do(func() { close(full) })
 		}
 		mu.Unlock()
 		select {
