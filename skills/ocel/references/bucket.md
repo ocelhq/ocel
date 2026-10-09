@@ -11,6 +11,7 @@ Object storage for files. In `ocel dev` it runs in Docker.
 import { bucket } from "ocel/bucket"; // ocel/bucket/next | /hono | /express add upload routes
 export const uploads = bucket("uploads");
 
+// app code
 await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
 const object = await uploads.get("reports/q3.pdf"); // null when missing
 if (object) await object.bytes();
@@ -19,8 +20,10 @@ const url = await uploads.signedUrl("reports/q3.pdf");
 ```
 
 ```go
+// a package in the discovery folder
 var Uploads = ocel.Bucket("uploads") // ocel.BucketPublic(), ocel.BucketAllowedOrigins(...)
 
+// app code
 err := infra.Uploads.WriteAll(ctx, "reports/q3.pdf", data)
 data, err := infra.Uploads.ReadAll(ctx, "reports/q3.pdf") // errors.Is(err, ocel.ErrObjectNotFound)
 for obj, err := range infra.Uploads.List(ctx) { /* … */ }
@@ -29,8 +32,10 @@ url, err := infra.Uploads.SignedURL(ctx, "reports/q3.pdf")
 ```
 
 ```python
+# a module in the discovery folder
 uploads = ocel.bucket("uploads")  # public=True, allowed_origins=[...]
 
+# app code
 uploads.put("reports/q3.pdf", data, content_type="application/pdf")
 body = uploads.get("reports/q3.pdf")  # raises ocel.ObjectNotFound when missing
 for info in uploads.list(prefix="reports/"): ...
@@ -42,6 +47,7 @@ url = uploads.signed_url("reports/q3.pdf")
 #[ocel(name = "uploads")] // public, allowed_origins = ["https://..."]
 pub uploads: ocel::Bucket,
 
+// app code
 infra.uploads.put("reports/q3.pdf", bytes).await?;
 let object = infra.uploads.get("reports/q3.pdf").await?;
 ```
