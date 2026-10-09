@@ -20,8 +20,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func ReclaimPreview(ctx context.Context, p provider.Provider, images provider.ImageStore, forgetRouteTable func(context.Context, string) error, slug, pointer string, removed router.PruneResult, progress progress.Log) error {
-	if err := reclaimUnnamed(ctx, p, images, openProjectLedger(p, environment.TierPreview, slug), forgetRouteTable, pointer, removed, progress); err != nil {
+func ReclaimPreview(ctx context.Context, p provider.Provider, images provider.ImageStore, slug, pointer string, removed router.PruneResult, progress progress.Log) error {
+	if err := reclaimUnnamed(ctx, p, images, openProjectLedger(p, environment.TierPreview, slug), pointer, removed, progress); err != nil {
 		return err
 	}
 	return destroyPointerStacks(ctx, p, images, slug, pointer,
@@ -168,7 +168,7 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, images provider.ImageS
 	if err := s.removeDeployments(ctx, unnamed.DeploymentRemovals, progress); err != nil {
 		return err
 	}
-	if err := reclaimUnnamed(ctx, s.provider, images, s.ledger, s.forgetRouteTable, pointer, unnamed, progress); err != nil {
+	if err := reclaimUnnamed(ctx, s.provider, images, s.ledger, pointer, unnamed, progress); err != nil {
 		return err
 	}
 	return s.forgetRemovedDeployments(ctx, pointer, unnamed.DeploymentRemovals)
@@ -179,7 +179,7 @@ func unreclaimedWarning(promotionID string, err error) string {
 		promotionID, ledger.KeptPromotions, err)
 }
 
-func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.ImageStore, l projectLedger, forgetRouteTable func(context.Context, string) error, pointer string, unnamed router.PruneResult, progress progress.Log) error {
+func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.ImageStore, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Log) error {
 	removed, err := l.ReadRecords(ctx, unnamed.UnnamedRecordKeys)
 	if err != nil {
 		return err
@@ -195,16 +195,6 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.Im
 		if err := destroyReclaimTarget(ctx, p, images, l.slug, l.tier, target, progress); err != nil {
 			errs = append(errs, err)
 			unreclaimed[ledger.RecordKey(target.App, target.Release.String())] = true
-		}
-	}
-	for _, record := range removed {
-		key := ledger.RecordKey(record.App, record.Release)
-		if record.RouteTable == nil || unreclaimed[key] {
-			continue
-		}
-		if err := forgetRouteTable(ctx, record.RouteTable.Key); err != nil {
-			errs = append(errs, err)
-			unreclaimed[key] = true
 		}
 	}
 	reclaimed := slices.DeleteFunc(slices.Clone(unnamed.UnnamedRecordKeys), func(key string) bool { return unreclaimed[key] })
@@ -289,12 +279,6 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 		if err := destroyReclaimTarget(ctx, r.provider, r.images, r.spec.Slug, r.spec.Tier, target, progress); err != nil {
 			errs = append(errs, err)
 			continue
-		}
-		if key, stored := r.readRouteTable(target.App); stored {
-			if err := r.forgetRouteTable(ctx, key); err != nil {
-				errs = append(errs, err)
-				continue
-			}
 		}
 		reclaimed = append(reclaimed, ledger.RecordKey(target.App, target.Release.String()))
 	}

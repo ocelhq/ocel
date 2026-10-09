@@ -30,6 +30,9 @@ type Stacks struct {
 	taken         []string
 	destroyedWith []provider.ImageStore
 	entered       func(provider.StackSpec) error
+
+	routeTables          map[string][]byte
+	withholdsRouteTables bool
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
@@ -95,6 +98,7 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	result.Containers = ProvisionedContainers(spec)
 	if spec.App != nil {
 		result.EdgeBundleKey = r.deliveredEdgeBundle(spec)
+		result.RouteTableKey = r.deliverRouteTable(spec)
 		if spec.App.ISR != nil {
 			result.ISRWriteSecret = "isr-" + spec.Ref.Name.String()
 		}
@@ -143,6 +147,32 @@ func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
 	return provider.InspectedStack{Present: present, Result: result}
+}
+
+func (r *Stacks) WithholdRouteTables() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.withholdsRouteTables = true
+}
+
+func (r *Stacks) RouteTable(key string) ([]byte, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	table, delivered := r.routeTables[key]
+	return slices.Clone(table), delivered
+}
+
+func (r *Stacks) deliverRouteTable(spec provider.StackSpec) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if spec.App.EdgeRouteTable == nil || r.withholdsRouteTables {
+		return ""
+	}
+	if r.routeTables == nil {
+		r.routeTables = map[string][]byte{}
+	}
+	r.routeTables[spec.App.EdgeRouteTable.Location.Key] = slices.Clone(spec.App.EdgeRouteTable.Table)
+	return spec.App.EdgeRouteTable.Location.Key
 }
 
 func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {

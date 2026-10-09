@@ -1,6 +1,10 @@
 package providerserver
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -32,7 +36,7 @@ type AppServingInput struct {
 type AppServing struct {
 	RootFunction   string
 	OriginDispatch *provider.RoutingSpec
-	EdgeDispatch   *provider.RoutingSpec
+	EdgeRouteTable *provider.EdgeRouteTable
 	Guard          *provider.OriginGuard
 	ISR            *provider.ISRSpec
 	Bytecode       *provider.BytecodeSpec
@@ -65,7 +69,9 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 			return AppServing{}, err
 		}
 		if q.EdgeRunsCode {
-			facts.EdgeDispatch = routing
+			if facts.EdgeRouteTable, err = locateRouteTable(q.Coordinate, routing); err != nil {
+				return AppServing{}, err
+			}
 		} else {
 			facts.OriginDispatch = routing
 		}
@@ -118,4 +124,19 @@ var routeTableFiles = map[edge.RouteTableFormat]string{
 
 func withoutSlash(prefix string) string {
 	return strings.TrimSuffix(prefix, naming.PathSeparator)
+}
+
+func locateRouteTable(coordinate naming.Coordinate, routing *provider.RoutingSpec) (*provider.EdgeRouteTable, error) {
+	if routing == nil {
+		return nil, nil
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, routing.RouteTable.Table); err != nil {
+		return nil, refusal.Refuse(refusal.CodeInvalid, "the route table app %s routes by is not JSON (%v); rebuild the app", coordinate.App, err)
+	}
+	digest := sha256.Sum256(compact.Bytes())
+	return &provider.EdgeRouteTable{
+		Location: router.RouteTableLocation{Format: routing.RouteTable.Format, Key: coordinate.RouteTableKey(hex.EncodeToString(digest[:]))},
+		Table:    compact.Bytes(),
+	}, nil
 }

@@ -219,20 +219,6 @@ type deployRun struct {
 	bindings       []provider.Binding
 	provisioning   map[string]bool
 	addresses      map[string]string
-	routeTables    map[string]string
-}
-
-func (r *deployRun) recordRouteTable(app, key string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.routeTables[app] = key
-}
-
-func (r *deployRun) readRouteTable(app string) (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key, stored := r.routeTables[app]
-	return key, stored
 }
 
 func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
@@ -311,7 +297,6 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
-		routeTables:    map[string]string{},
 		inline:         inline,
 
 		infraProvisioned: req.GetInfraProvisioned(),
@@ -1177,6 +1162,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Values:                    values,
 					Grants:                    grants,
 					Routing:                   facts.OriginDispatch,
+					EdgeRouteTable:            facts.EdgeRouteTable,
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
@@ -1552,16 +1538,13 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
 	var routeTable *router.RouteTableLocation
 	origin := originOf(result.Containers, entry.App)
-	if facts.EdgeDispatch != nil {
-		location, table, err := locateRouteTable(coordinate, facts.EdgeDispatch.RouteTable)
-		if err != nil {
-			return err
+	if facts.EdgeRouteTable != nil {
+		if result.RouteTableKey != facts.EdgeRouteTable.Location.Key {
+			return refusal.Refuse(refusal.CodeNotReady,
+				"%s is routed at %s by its route table, and this provider stored none where the edge reads it. Re-run `%s` so this account adopts the edge's cache store",
+				entry.App, describeFront(r.front.Kind()), provider.BootstrapCommand(r.spec.Tier))
 		}
-		r.recordRouteTable(entry.App, location.Key)
-		if err := r.storeRouteTable(ctx, r.appRouters[entry.App], entry.App, location.Key, table); err != nil {
-			return err
-		}
-		routeTable = &location
+		routeTable = &facts.EdgeRouteTable.Location
 		if origin == "" {
 			origin = urlByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)]
 		}

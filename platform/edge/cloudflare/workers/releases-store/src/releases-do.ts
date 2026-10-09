@@ -2,7 +2,6 @@ import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
 import type { Env } from "./env";
-import { ROUTE_TABLE_DELETE_MAX } from "./route-table";
 import type { Initialization, PointerMove, PointerMoveOutcome, PointerRecordResult } from "./store";
 import * as store from "./store";
 
@@ -23,20 +22,8 @@ export class ReleasesStore extends DurableObject<Env> {
   }
 
   async destroy(): Promise<void> {
-    const keys = store.listRouteTables(this.ctx.storage);
-    for (let i = 0; i < keys.length; i += ROUTE_TABLE_DELETE_MAX) {
-      await this.env.OCEL_CACHE_STORE.delete(keys.slice(i, i + ROUTE_TABLE_DELETE_MAX));
-    }
     await this.ctx.storage.deleteAll();
     store.ensureSchema(this.ctx.storage);
-  }
-
-  async recordRouteTable(key: string): Promise<void> {
-    store.recordRouteTable(this.ctx.storage, key);
-  }
-
-  async forgetRouteTable(key: string): Promise<void> {
-    store.forgetRouteTable(this.ctx.storage, key);
   }
 
   async movePointer(move: PointerMove): Promise<PointerMoveOutcome> {
