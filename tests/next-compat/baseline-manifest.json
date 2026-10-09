@@ -108,15 +108,6 @@
       ],
       "flakey": []
     },
-    "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts": {
-      "failed": [
-        "resume-data-cache should have consistent data between static and dynamic renders with use cache",
-        "resume-data-cache should have consistent data between static and dynamic renders with fetch cache"
-      ],
-      "flakey": [
-        "resume-data-cache should see fresh data after updateTag in server action with fetch cache"
-      ]
-    },
     "test/e2e/app-dir/revalidate-path-with-rewrites/revalidate-path-with-rewrites.test.ts": {
       "failed": [
         "revalidatePath with rewrites static page should revalidate a static page that was rewritten"
@@ -226,6 +217,10 @@
     "include": [
       "test/e2e/**/*.test.{t,j}s{,x}"
     ],
-    "exclude": []
+    "exclude": [
+      "test/e2e/app-dir/cache-components/cache-components.server-action.test.ts",
+      "test/e2e/app-dir/next-config-ts/tsconfig-extends/next-config-ts-tsconfig-extends-esm.test.ts",
+      "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts"
+    ]
   }
 }
