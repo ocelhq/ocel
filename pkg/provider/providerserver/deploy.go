@@ -1553,12 +1553,15 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 	var routeTable *router.RouteTableLocation
 	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
-		stored, err := r.storeRouteTable(ctx, r.appRouters[entry.App], coordinate, facts.EdgeDispatch.RouteTable)
+		location, table, err := locateRouteTable(coordinate, facts.EdgeDispatch.RouteTable)
 		if err != nil {
 			return err
 		}
-		r.recordRouteTable(entry.App, stored.Key)
-		routeTable = stored
+		r.recordRouteTable(entry.App, location.Key)
+		if err := r.storeRouteTable(ctx, r.appRouters[entry.App], entry.App, location.Key, table); err != nil {
+			return err
+		}
+		routeTable = &location
 		if origin == "" {
 			origin = urlByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)]
 		}

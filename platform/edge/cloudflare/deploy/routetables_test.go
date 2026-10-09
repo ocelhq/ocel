@@ -22,15 +22,15 @@ func routeTableServer(t *testing.T, status int) (*httptest.Server, func() []rout
 	t.Helper()
 	var mu sync.Mutex
 	var seen []routeTableRequest
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		seen = append(seen, routeTableRequest{method: r.Method, path: r.URL.Path, key: r.URL.Query().Get("key"), authorization: r.Header.Get("Authorization"), body: body})
 		mu.Unlock()
 		w.WriteHeader(status)
 	}))
-	t.Cleanup(srv.Close)
-	return srv, func() []routeTableRequest {
+	t.Cleanup(server.Close)
+	return server, func() []routeTableRequest {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]routeTableRequest(nil), seen...)
@@ -44,10 +44,10 @@ func routeTableState(endpoint string) router.StackState {
 const routeTableKey = "production/shop/web/r1a2b3c4d/route-table/ab.json"
 
 func TestTheRouterStoresARouteTableByPuttingItsExactBytesToTheReleasesStore(t *testing.T) {
-	srv, seen := routeTableServer(t, http.StatusNoContent)
+	server, seen := routeTableServer(t, http.StatusNoContent)
 	table := []byte(`{"routes":[{"source":"^/(?<slug>[^/]+)$","has":"a&b"}]}`)
 
-	err := NewRouter("ns").Hooks().RouteTables.Store(context.Background(), routeTableState(srv.URL), routeTableKey, table)
+	err := NewRouter("ns").Hooks().RouteTables.Store(context.Background(), routeTableState(server.URL), routeTableKey, table)
 	if err != nil {
 		t.Fatalf("Store() = %v", err)
 	}
@@ -69,9 +69,9 @@ func TestTheRouterStoresARouteTableByPuttingItsExactBytesToTheReleasesStore(t *t
 }
 
 func TestTheRouterForgetsARouteTableByDeletingItFromTheReleasesStore(t *testing.T) {
-	srv, seen := routeTableServer(t, http.StatusNoContent)
+	server, seen := routeTableServer(t, http.StatusNoContent)
 
-	if err := NewRouter("ns").Hooks().RouteTables.Forget(context.Background(), routeTableState(srv.URL), routeTableKey); err != nil {
+	if err := NewRouter("ns").Hooks().RouteTables.Forget(context.Background(), routeTableState(server.URL), routeTableKey); err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}
 
@@ -82,9 +82,9 @@ func TestTheRouterForgetsARouteTableByDeletingItFromTheReleasesStore(t *testing.
 }
 
 func TestARouteTableTheReleasesStoreRefusesFailsTheStore(t *testing.T) {
-	srv, _ := routeTableServer(t, http.StatusBadRequest)
+	server, _ := routeTableServer(t, http.StatusBadRequest)
 
-	err := NewRouter("ns").Hooks().RouteTables.Store(context.Background(), routeTableState(srv.URL), routeTableKey, []byte(`{}`))
+	err := NewRouter("ns").Hooks().RouteTables.Store(context.Background(), routeTableState(server.URL), routeTableKey, []byte(`{}`))
 	if err == nil {
 		t.Fatal("Store() = nil, want the refusal the releases store answered")
 	}

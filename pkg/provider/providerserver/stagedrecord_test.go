@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,7 +16,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -270,6 +273,36 @@ func TestARecordBehindAnEdgeThatRunsCodeNamesTheRouteTableItsRouterStoredByDiges
 	stored, found := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).RouteTable(staged[0].RouteTable.Key)
 	if !found || !bytes.Equal(stored, compact.Bytes()) {
 		t.Errorf("the router holds %q at the record's key (found %v), want the compact table %q", stored, found, compact.Bytes())
+	}
+}
+
+func relayRoutedDeploy(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
+	t.Helper()
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	webFunctions(req).Functions[0].RouteId = "bundle-0"
+	result, _ := deploy(t, client, req)
+	return result
+}
+
+func builtRelayRoutedApp(t *testing.T) {
+	t.Helper()
+	builtProject(t)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "bundle-0", FrameworkBuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+}
+
+func TestADeployWhoseRouteTableStoreWentUnansweredForgetsTheTableItMayHaveStored(t *testing.T) {
+	builtRelayRoutedApp(t)
+	client, vendor := deployServed(t)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	plane.LoseNextRouteTableAnswer(errors.New("the connection closed before the store answered"))
+
+	if result := relayRoutedDeploy(t, client); result != nil && result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want the unanswered store to fail it")
+	}
+
+	if keys := plane.ListRouteTableKeys(); len(keys) != 0 {
+		t.Errorf("the router holds route tables %v, want none: the failed deploy reclaims what it may have stored", keys)
 	}
 }
 
