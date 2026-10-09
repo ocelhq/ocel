@@ -11,9 +11,13 @@ export const DEPLOY_REPORT_FILE = join(".ocel", "deploy-report.json");
 
 const LOCAL_RUN_ID = "local";
 
-export const PREVIEW_ROOT_STACK_PARAM_PREFIX = "/ocel/rootstack-preview/";
-
 export const SLUG_PREFIX = "e2e-";
+
+export const ENTRY_SLUG = "e2e-edge";
+
+export const DEPLOYED_PARTITIONS = ["projects", "edgestacks"];
+
+const KEY_SEPARATOR = "#";
 
 export const APP_NAME = "app";
 
@@ -119,12 +123,13 @@ export function selectStrandedSlugs(slugs, keepSlug) {
   return [...new Set(stranded)].sort();
 }
 
-export function strandedProjectSlugs(parameterNames, keepSlug) {
-  const slugs = (parameterNames ?? [])
-    .map((name) => String(name ?? ""))
-    .filter((name) => name.startsWith(PREVIEW_ROOT_STACK_PARAM_PREFIX))
-    .map((name) => name.slice(PREVIEW_ROOT_STACK_PARAM_PREFIX.length));
-  return selectStrandedSlugs(slugs, keepSlug);
+export function strandedProjectSlugs(stateItems, keepSlug) {
+  const slugs = (stateItems ?? []).flatMap((item) => {
+    const sk = String(item?.sk?.S ?? "");
+    const path = sk.endsWith(KEY_SEPARATOR) ? sk.slice(0, -1).split(KEY_SEPARATOR) : [];
+    return path.length === 1 && path[0] !== "" ? [decodeURIComponent(path[0])] : [];
+  });
+  return selectStrandedSlugs(slugs, keepSlug).filter((slug) => slug !== ENTRY_SLUG);
 }
 
 function cutRunSlug(runSlug) {

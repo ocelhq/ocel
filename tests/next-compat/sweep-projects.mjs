@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { listParameterNames, POLL_INTERVAL_MS, sleep } from "./aws.mjs";
+import { POLL_INTERVAL_MS, previewStateTable, queryStatePartition, sleep } from "./aws.mjs";
 import { listProjectSlugs, readAccessToken } from "./gcp.mjs";
 import {
-  PREVIEW_ROOT_STACK_PARAM_PREFIX,
+  DEPLOYED_PARTITIONS,
   projectSlugForRun,
   readCompatTarget,
   requireNamespace,
@@ -19,22 +19,23 @@ requireNamespace();
 
 const target = readCompatTarget();
 
-async function listRootStackParams() {
+async function listDeployedProjects() {
   const deadline = Date.now() + LIST_DEADLINE_MS;
   for (;;) {
     try {
-      return listParameterNames(PREVIEW_ROOT_STACK_PARAM_PREFIX);
+      const table = previewStateTable();
+      return table ? DEPLOYED_PARTITIONS.flatMap((pk) => queryStatePartition(table, pk)) : [];
     } catch (err) {
       if (Date.now() >= deadline) {
         console.error(
-          `[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} at all within ` +
+          `[ocel-e2e] could not read the preview state table at all within ` +
             `${LIST_DEADLINE_MS / 1000}s — every attempt failed, so nothing here says which projects are ` +
-            `stranded: ${err.message}`,
+            `stranded: ${err.stderr || err.message}`,
         );
         process.exit(1);
       }
       console.error(
-        `[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} (${err.message}); will retry`,
+        `[ocel-e2e] could not read the preview state table (${err.stderr || err.message}); will retry`,
       );
       await sleep(POLL_INTERVAL_MS);
     }
@@ -69,7 +70,7 @@ async function listGcpProjectSlugs() {
 const keep = projectSlugForRun();
 const stranded =
   target.name === "aws-cloudflare"
-    ? strandedProjectSlugs(await listRootStackParams(), keep)
+    ? strandedProjectSlugs(await listDeployedProjects(), keep)
     : selectStrandedAppSlugs(await listGcpProjectSlugs(), keep);
 
 if (stranded.length === 0) {
