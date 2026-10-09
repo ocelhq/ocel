@@ -34,7 +34,7 @@ const DefaultReadyTimeout = 10 * time.Second
 
 const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
-const DefaultGracePeriod = 2 * time.Second
+const DefaultGracePeriod = 10 * time.Second
 
 const DefaultReapTimeout = 2 * time.Second
 

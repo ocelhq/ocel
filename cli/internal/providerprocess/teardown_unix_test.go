@@ -77,6 +77,30 @@ func assertProcessDead(t *testing.T, pid int) {
 	}
 }
 
+func TestCloseGivesTheProviderLongerThanTwoSecondsToFinishItsCleanup(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	r, _ := spawnFake(t, context.Background(), "slow-cleanup", LaunchSpec{Env: []string{fakeProviderCleanupDirEnvVar + "=" + dir}})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "handling")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the fake provider never started handling SIGTERM")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	r.Close()
+
+	if _, err := os.Stat(filepath.Join(dir, "cleaned")); err != nil {
+		t.Fatalf("Close() killed the provider before its 3s cleanup finished (stat err = %v), want it given the provider's own shutdown window so its leases are released", err)
+	}
+}
+
 func TestTeardownBound(t *testing.T) {
 	t.Parallel()
 
