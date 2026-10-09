@@ -6,7 +6,7 @@ its data until `ocel dev --reset`.
 ## Declare and query
 
 ```ts
-// infra/index.ts
+// a file in the discovery folder
 import { postgres } from "ocel/postgres";
 export const db = postgres("main"); // a `pg` pool, connected on first use
 
@@ -15,7 +15,7 @@ const { rows } = await db.query("SELECT * FROM orders WHERE id = $1", [id]);
 ```
 
 ```go
-// infra/infra.go
+// a package in the discovery folder
 var DB = ocel.Postgres("main", ocel.PostgresVersion("17"))
 
 // app code: hand the string to pgx, database/sql or an ORM
@@ -23,7 +23,7 @@ dsn, err := infra.DB.ConnectionString()
 ```
 
 ```python
-# infra/__init__.py
+# a module in the discovery folder
 db = ocel.postgres("main")
 
 # app code (asyncpg)

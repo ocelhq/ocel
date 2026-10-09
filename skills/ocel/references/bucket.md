@@ -7,7 +7,7 @@ Object storage for files. In `ocel dev` it runs in Docker.
 ## Declare, write, read
 
 ```ts
-// infra/index.ts
+// a file in the discovery folder
 import { bucket } from "ocel/bucket"; // ocel/bucket/next | /hono | /express add upload routes
 export const uploads = bucket("uploads");
 
