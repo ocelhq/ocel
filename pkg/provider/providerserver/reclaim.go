@@ -1,7 +1,6 @@
 package providerserver
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -47,39 +46,37 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, images provi
 	for _, stack := range restored {
 		provisioned = append(provisioned, stackrecords.NamedStack{Name: stack})
 	}
-	slices.SortStableFunc(provisioned, func(a, b stackrecords.NamedStack) int {
-		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))
-	})
+	var apps, infra []naming.StackName
+	for _, entry := range provisioned {
+		if entry.Name.IsInfra() {
+			infra = append(infra, entry.Name)
+		} else {
+			apps = append(apps, entry.Name)
+		}
+	}
+	position := map[naming.StackName]int{}
+	for i, stack := range append(slices.Clone(apps), infra...) {
+		position[stack] = i + 1
+	}
 	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
 
-	var errs []error
-	for i, entry := range provisioned {
-		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", entry.Name, i+1, len(provisioned)))
-		ref := provider.StackRef{Project: slug, Tier: environment.TierPreview, Name: entry.Name}
+	return errors.Join(destroyAppsThenInfra(apps, infra, func(stack naming.StackName) error {
+		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", stack, position[stack], len(provisioned)))
+		ref := provider.StackRef{Project: slug, Tier: environment.TierPreview, Name: stack}
 		if err := p.Stacks().Destroy(ctx, ref, images, progress); err != nil {
-			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
-			continue
+			return fmt.Errorf("destroy %s: %w", stack, err)
 		}
-		if err := stackrecords.Forget(ctx, p.KeyValues(), environment.TierPreview, slug, entry.Name); err != nil {
-			errs = append(errs, err)
+		errs := []error{stackrecords.Forget(ctx, p.KeyValues(), environment.TierPreview, slug, stack)}
+		if stack.IsInfra() {
+			return errors.Join(errs...)
 		}
-		if entry.Name.IsInfra() {
-			continue
-		}
-		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
+		for _, prefix := range reclaimedPrefixes(slug, pointer, stack.App, stack.Release, elsewhere, here) {
 			if err := p.Artifacts().RemovePrefix(ctx, environment.TierPreview, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}
-	}
-	return errors.Join(errs...)
-}
-
-func infraLast(name naming.StackName) int {
-	if name.IsInfra() {
-		return 1
-	}
-	return 0
+		return errors.Join(errs...)
+	})...)
 }
 
 type ReclaimTarget struct {
@@ -190,11 +187,19 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.Im
 	for _, key := range refused {
 		unreclaimed[key] = true
 	}
-	for i, target := range targets {
+	positions := make([]int, len(targets))
+	for i := range positions {
+		positions[i] = i
+	}
+	failures := destroyAppsThenInfra(positions, nil, func(i int) error {
+		target := targets[i]
 		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
-		if err := destroyReclaimTarget(ctx, p, images, l.slug, l.tier, target, progress); err != nil {
+		return destroyReclaimTarget(ctx, p, images, l.slug, l.tier, target, progress)
+	})
+	for i, err := range failures {
+		if err != nil {
 			errs = append(errs, err)
-			unreclaimed[ledger.RecordKey(target.App, target.Release.String())] = true
+			unreclaimed[ledger.RecordKey(targets[i].App, targets[i].Release.String())] = true
 		}
 	}
 	reclaimed := slices.DeleteFunc(slices.Clone(unnamed.UnnamedRecordKeys), func(key string) bool { return unreclaimed[key] })
