@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -35,8 +36,9 @@ type Provider struct {
 
 	deployed memo[environment.Tier, bootstrap.Reading]
 	params   memo[tierEdge, bootstrap.TierParams]
-	account  memo[struct{}, string]
+	identity memo[struct{}, *sts.GetCallerIdentityOutput]
 	opened   edges.Opened
+	sts      control.STSAPI
 
 	stacks *deploy.Stacks
 
@@ -62,7 +64,7 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 }
 
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
-	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
+	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns, sts: sts.NewFromConfig(cfg)}
 	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
 	return p
@@ -127,7 +129,9 @@ func (p *Provider) Cipher() seal.Cipher {
 }
 
 func (p *Provider) Credentials() provider.Credentials {
-	return control.CredentialsFor(p.aws, p.namespace)
+	credentials := control.CredentialsFor(p.aws, p.namespace)
+	credentials.STS = rememberedIdentity{p}
+	return credentials
 }
 
 func (p *Provider) Edges() provider.Edges { return p.edges() }

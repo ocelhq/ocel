@@ -43,12 +43,18 @@ func (p *Provider) tierParams(ctx context.Context, tier environment.Tier, kind e
 }
 
 func (p *Provider) accountID(ctx context.Context) (string, error) {
-	return p.account.resolve(struct{}{}, func() (string, error) {
-		out, err := sts.NewFromConfig(p.aws).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-		if err != nil {
-			return "", fmt.Errorf("resolve AWS account id: %w", err)
-		}
-		return aws.ToString(out.Account), nil
+	out, err := rememberedIdentity{p}.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", fmt.Errorf("resolve AWS account id: %w", err)
+	}
+	return aws.ToString(out.Account), nil
+}
+
+type rememberedIdentity struct{ *Provider }
+
+func (r rememberedIdentity) GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
+	return r.identity.resolve(struct{}{}, func() (*sts.GetCallerIdentityOutput, error) {
+		return r.sts.GetCallerIdentity(ctx, in, optFns...)
 	})
 }
 
