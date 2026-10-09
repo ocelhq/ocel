@@ -157,6 +157,29 @@ export function retryDelayMs(attempt, random = Math.random) {
   return Math.round(doubled / 2 + (doubled / 2) * random());
 }
 
+export const LEASE_TTL_MS = 5 * 60 * 1000;
+
+export const LEASE_EXPIRY_SLACK_MS = 15_000;
+
+export const LEASE_RETRY_MIN_WAIT_MS = 5_000;
+
+const HELD_LEASE =
+  /is running: .* once its lease runs out at (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) UTC if it was interrupted/;
+
+export function heldLeaseExpiry(output) {
+  const held = HELD_LEASE.exec(output);
+  return held ? Date.parse(`${held[1]}T${held[2]}Z`) : null;
+}
+
+export function heldLeaseWaitMs(output, { now, deadline }) {
+  const expiry = heldLeaseExpiry(output);
+  if (expiry === null) {
+    return null;
+  }
+  const wait = Math.max(LEASE_RETRY_MIN_WAIT_MS, expiry + LEASE_EXPIRY_SLACK_MS - now);
+  return now + wait > deadline ? null : wait;
+}
+
 export function projectSlugForApp(appDir, target) {
   const run = projectSlugForRun();
   if (!isProductionTarget(target)) {
