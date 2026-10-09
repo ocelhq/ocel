@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -78,7 +79,7 @@ func runInstall(invocation commands.Invocation, opts installOptions, cwd, cliVer
 	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, result)
 	}
-	printInstall(stdout, result, opts)
+	printInstall(stdout, result, opts, invocation.ConfigPath())
 	return nil
 }
 
@@ -93,7 +94,7 @@ func installBase(invocation commands.Invocation, opts installOptions, cwd string
 	return project.FindRoot(cwd, invocation.ConfigPath())
 }
 
-func printInstall(stdout io.Writer, result *resultv1.SkillInstallResult, opts installOptions) {
+func printInstall(stdout io.Writer, result *resultv1.SkillInstallResult, opts installOptions, configPath string) {
 	verb := "Would write"
 	if result.GetWritten() {
 		verb = "Wrote"
@@ -108,8 +109,15 @@ func printInstall(stdout io.Writer, result *resultv1.SkillInstallResult, opts in
 		return
 	}
 	again := "ocel skill install --yes"
-	if opts.global {
+	switch {
+	case opts.global:
 		again = "ocel skill install --global --yes"
+	case configPath != "":
+		again = "ocel skill install --config " + shellQuoted(configPath) + " --yes"
 	}
 	fmt.Fprintf(stdout, "Nothing was written. Run `%s` to write them.\n", again)
+}
+
+func shellQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

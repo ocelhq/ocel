@@ -62,6 +62,26 @@ func TestInstallWithoutYesListsTheFilesItWouldWriteUnderTheProjectRootAndWritesN
 	}
 }
 
+func TestInstallWithoutYesNamesTheExplicitConfigInTheCommandThatWrites(t *testing.T) {
+	root, _ := setUpProject(t)
+	elsewhere := filepath.Join(t.TempDir(), "my app")
+	if err := os.MkdirAll(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(elsewhere, "ocel.json")
+	if err := os.WriteFile(config, []byte(`{"slug":"other","provider":"aws"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	invocation := clitest.NewInvocation()
+	invocation.ConfigPath = func() string { return config }
+
+	out := install(t, invocation, installOptions{}, root)
+
+	if want := "ocel skill install --config '" + config + "' --yes"; !strings.Contains(out, want) {
+		t.Errorf("listing does not say %q:\n%s", want, out)
+	}
+}
+
 func TestInstallWithYesWritesTheSkillIntoBothProjectSkillDirs(t *testing.T) {
 	root, nested := setUpProject(t)
 
