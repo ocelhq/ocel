@@ -35,6 +35,9 @@ func forgetImages(ctx context.Context, store keyvalue.Store, api registry.ECRAPI
 	if err := stackrecords.ForgetAppImages(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
 		return err
 	}
+	if len(recorded.Images()) == 0 {
+		return nil
+	}
 	keptNow := otherStacksImages(store, ref)
 	kept, err := keptNow(ctx)
 	if err != nil {
