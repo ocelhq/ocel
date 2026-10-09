@@ -3,11 +3,15 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -22,6 +26,7 @@ const (
 	environmentLeaseMargin         = time.Minute
 	environmentLeaseReleaseTimeout = 30 * time.Second
 	environmentLeaseWatch          = 30 * time.Second
+	environmentLeaseConcurrency    = 8
 )
 
 type environmentScope struct {
@@ -261,33 +266,68 @@ func (h *environmentHold) release(ctx context.Context) error {
 	return h.scope.forget(ctx, h.store, h.token)
 }
 
-type environmentHolds []*environmentHold
+func (l *environmentLeases) sayRunOutWatch(leased map[string]stackrecords.EnvironmentLease, progress progress.Log) {
+	now, runOut := l.now(), 0
+	for _, lease := range leased {
+		switch {
+		case lease.Token == "":
+		case now.Before(time.Unix(lease.ExpiresAt, 0)):
+			return
+		default:
+			runOut++
+		}
+	}
+	if runOut == 0 {
+		return
+	}
+	environments := "environments"
+	if runOut == 1 {
+		environments = "environment"
+	}
+	progress.Say(fmt.Sprintf("Waiting until %s to take over the leases interrupted runs left on %d %s, in case one still renews its lease",
+		now.Add(l.ttl).UTC().Format("15:04 MST"), runOut, environments))
+}
+
+type environmentHolds struct {
+	held   []*environmentHold
+	leased context.Context
+	cancel context.CancelCauseFunc
+}
 
 func (l *environmentLeases) takeEach(ctx context.Context, store keyvalue.Store, token string, scopes []leaseSubject, holder stackrecords.LeaseHolder) (environmentHolds, error) {
-	var holds environmentHolds
-	for _, scope := range scopes {
-		hold, err := l.take(holds.context(ctx), store, scope, token, holder)
-		if err != nil {
-			_ = holds.release(ctx)
-			return nil, err
-		}
-		holds = append(holds, hold)
+	leased, cancel := context.WithCancelCause(ctx)
+	holds := environmentHolds{held: make([]*environmentHold, len(scopes)), leased: leased, cancel: cancel}
+	bounded := newBoundedStore(store, environmentLeaseConcurrency)
+	var group errgroup.Group
+	for i, scope := range scopes {
+		group.Go(func() error {
+			hold, err := l.take(leased, bounded, scope, token, holder)
+			if err != nil {
+				cancel(err)
+				return err
+			}
+			context.AfterFunc(hold.leased, func() { cancel(context.Cause(hold.leased)) })
+			holds.held[i] = hold
+			return nil
+		})
+	}
+	if group.Wait() != nil {
+		err := context.Cause(leased)
+		_ = holds.release(ctx)
+		return environmentHolds{}, err
 	}
 	return holds, nil
 }
 
-func (hs environmentHolds) context(ctx context.Context) context.Context {
-	if len(hs) == 0 {
-		return ctx
-	}
-	return hs[len(hs)-1].leased
+func (hs environmentHolds) context() context.Context {
+	return hs.leased
 }
 
 func (hs environmentHolds) explain(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, hold := range hs {
+	for _, hold := range hs.held {
 		if lost := hold.readLoss(); lost != nil {
 			return lost
 		}
@@ -297,9 +337,10 @@ func (hs environmentHolds) explain(err error) error {
 
 func (hs environmentHolds) release(ctx context.Context) error {
 	var errs []error
-	for i := len(hs) - 1; i >= 0; i-- {
-		errs = append(errs, hs[i].release(ctx))
+	for i := len(hs.held) - 1; i >= 0; i-- {
+		errs = append(errs, hs.held[i].release(ctx))
 	}
+	hs.cancel(nil)
 	return errors.Join(errs...)
 }
 
@@ -358,4 +399,62 @@ func (h *handlers) AbandonDeploy(ctx context.Context, req *contractv1.AbandonDep
 		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.AbandonDeployResponse{}, nil
+}
+
+type boundedStore struct {
+	keyvalue.Store
+	slots chan struct{}
+}
+
+func newBoundedStore(store keyvalue.Store, calls int) *boundedStore {
+	return &boundedStore{Store: store, slots: make(chan struct{}, calls)}
+}
+
+func (s *boundedStore) acquire(ctx context.Context) error {
+	select {
+	case s.slots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *boundedStore) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	if err := s.acquire(ctx); err != nil {
+		return keyvalue.Entry{}, err
+	}
+	defer func() { <-s.slots }()
+	return s.Store.Read(ctx, key)
+}
+
+func (s *boundedStore) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if err := s.acquire(ctx); err != nil {
+		return "", err
+	}
+	defer func() { <-s.slots }()
+	return s.Store.Write(ctx, entry)
+}
+
+func (s *boundedStore) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
+	defer func() { <-s.slots }()
+	return s.Store.WritePair(ctx, first, second)
+}
+
+func (s *boundedStore) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
+	defer func() { <-s.slots }()
+	return s.Store.Remove(ctx, key, expected)
+}
+
+func (s *boundedStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	if err := s.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer func() { <-s.slots }()
+	return s.Store.List(ctx, in, under...)
 }
