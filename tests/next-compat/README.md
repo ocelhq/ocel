@@ -90,6 +90,7 @@ prepared:
 | `E2E_OCEL_API_URL`        | Ocel API base URL                                          |
 | `E2E_AWS_REGION`          | region to deploy into                                      |
 | `E2E_PREVIEW_DOMAIN`      | the preview wildcard, e.g. `*.ocel.site`; each run reinstalls the shared entry worker on it |
+| `DOGFOOD_AWS_VARS_KEY`    | the KMS key ARN every Ocel bootstrap in the account brings for its variables, shared with the e2e suite; the preview bootstrap records it rather than minting a key of its own |
 | `E2E_GCP_PROJECT`         | the Google Cloud project the gcp targets deploy into, shared with E2E Tests (Cloud) |
 | `E2E_GCP_REGION`          | the region they deploy into                                |
 | `E2E_GCP_WIF_PROVIDER`    | the Workload Identity Federation provider the jobs authenticate through |
