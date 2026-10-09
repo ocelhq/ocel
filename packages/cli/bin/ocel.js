@@ -21,7 +21,9 @@ try {
 
 const child = spawn(binary, process.argv.slice(2), { stdio: "inherit" });
 
-process.on("SIGINT", () => {});
+process.on("SIGINT", () => {
+  if (process.platform !== "win32") child.kill("SIGTERM");
+});
 process.on("SIGTERM", () => child.kill("SIGTERM"));
 
 child.on("error", (error) => {
