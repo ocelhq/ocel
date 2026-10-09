@@ -88,12 +88,15 @@ func describeProject(tier environment.Tier, slug string) string {
 }
 
 func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string, holder LeaseHolder, terms LeaseTerms) (held bool, err error) {
+	if err := forgetStoppedProjectLease(ctx, store, tier, slug, token, holder, terms); err != nil {
+		return false, err
+	}
 	name := EnvironmentLeaseKey(tier, slug, env)
 	held, err = takeLease(ctx, store, name, env, token, holder, terms)
 	if err != nil {
 		return false, err
 	}
-	if err := refuseHeldProject(ctx, store, tier, slug, token, holder, terms); err != nil {
+	if err := refuseHeldProject(ctx, store, tier, slug, token, holder); err != nil {
 		if !held {
 			err = errors.Join(err, forgetLease(ctx, store, name, token))
 		}
@@ -102,17 +105,53 @@ func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier enviro
 	return held, nil
 }
 
-func refuseHeldProject(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder, terms LeaseTerms) error {
-	name := ProjectLeaseKey(tier, slug)
+func readLease(ctx context.Context, store keyvalue.Store, name keyvalue.Key) (keyvalue.Entry, EnvironmentLease, error) {
 	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
+		return keyvalue.Entry{}, EnvironmentLease{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	current, err := decodeEnvironmentLease(name, recorded)
+	return recorded, current, err
+}
+
+func forgetStoppedProjectLease(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder, terms LeaseTerms) error {
+	name := ProjectLeaseKey(tier, slug)
+	recorded, current, err := readLease(ctx, store, name)
 	if err != nil {
 		return err
 	}
-	if current.Token == "" || current.Token == token || !terms.Now().Before(time.Unix(current.ExpiresAt, 0)) {
+	if current.Token == "" || current.Token == token {
+		return nil
+	}
+	if terms.Now().Before(time.Unix(current.ExpiresAt, 0)) {
+		return refuseHeldLease(describeProject(tier, slug), current, holder)
+	}
+	watched, watchedSince := recorded.Revision, terms.Now()
+	for elapsed := time.Duration(0); elapsed < terms.TTL; elapsed = terms.Now().Sub(watchedSince) {
+		if err := terms.Wait(ctx, min(terms.Watch, terms.TTL-elapsed)); err != nil {
+			return err
+		}
+		if recorded, current, err = readLease(ctx, store, name); err != nil {
+			return err
+		}
+		if current.Token == "" {
+			return nil
+		}
+		if recorded.Revision != watched {
+			return refuseHeldLease(describeProject(tier, slug), current, holder)
+		}
+	}
+	return keyvalue.ForgetMatching(ctx, store, name, func(recorded keyvalue.Entry) (bool, error) {
+		return recorded.Revision == watched, nil
+	})
+}
+
+func refuseHeldProject(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, token string, holder LeaseHolder) error {
+	_, current, err := readLease(ctx, store, ProjectLeaseKey(tier, slug))
+	if err != nil {
+		return err
+	}
+	if current.Token == "" || current.Token == token {
 		return nil
 	}
 	return refuseHeldLease(describeProject(tier, slug), current, holder)

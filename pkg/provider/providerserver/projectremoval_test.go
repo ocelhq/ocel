@@ -172,7 +172,7 @@ func TestRemoveProjectHoldsProductionWhileItRemovesItAndLeavesNoLeaseBehind(t *t
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	if during == nil || !strings.Contains(during.Error(), "a removal of prod is running") {
+	if during == nil || !strings.Contains(during.Error(), "a removal of shop in production is running") {
 		t.Errorf("a deploy taking production while it was removed = %v, want it refused because the removal holds production", during)
 	}
 	if isLeaseHeld(t, vendor.KeyValues(), environment.TierProduction, stackrecords.ProductionEnv) {
