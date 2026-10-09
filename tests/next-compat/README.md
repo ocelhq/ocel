@@ -26,15 +26,11 @@ prepared:
    `ocel domain use` plants a proxied placeholder record and binds the shared
    entry worker; a record you made yourself is left alone but must be **proxied
    (orange cloud)**, since an unproxied hostname never reaches a worker.
-2. Provision the preview bootstrap once and give it the wildcard — both are
-   account-global, not per-project. From a scratch directory containing an
-   `ocel.config.ts` that declares the AWS provider:
-   ```bash
-   ocel bootstrap preview --features all
-   ocel domain use '*.ocel.site' --preview
-   ```
-   No project declares a preview domain of its own; every run's previews serve
-   on this one, at `<slug>--<name>.ocel.site`.
+2. Nothing else in AWS is made by hand. Every run's sweep job bootstraps the
+   preview tier of its namespace with the features `PREVIEW_BOOTSTRAP_FEATURES`
+   in `lib.mjs` names, then runs `ocel domain use` on the wildcard. No project
+   declares a preview domain of its own; every run's previews serve on this one,
+   at `<slug>--<name>.ocel.site`.
 3. Create the **AWS role the workflow assumes** — no access key is stored. It
    needs a GitHub OIDC trust policy (provider
    `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, subject
