@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -698,6 +699,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 
 	r := &Process{
 		cmd:         cmd,
+		stdin:       io.NopCloser(nil),
 		gracePeriod: 50 * time.Millisecond,
 		reapTimeout: 100 * time.Millisecond,
 		done:        make(chan struct{}),
