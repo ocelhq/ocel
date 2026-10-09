@@ -20,6 +20,8 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		CheckHosts:       req.CheckHosts,
 		HostCheckDomains: req.HostCheckDomains,
 		ProjectRegistry:  req.Registry,
+
+		CheckPreviewRoute: req.CheckPreviewRoute,
 	}
 }
 

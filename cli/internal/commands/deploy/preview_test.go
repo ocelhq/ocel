@@ -841,6 +841,24 @@ func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 	})
 }
 
+func TestOnlyAPreviewUpAsksThePreflightToCheckThePreviewRoute(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	dependencies := previewDependencies("feature/login", "")
+
+	previewUp(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true})
+	if !onlyPreflight(t, fixture).GetCheckPreviewRoute() {
+		t.Error("`ocel preview up` did not ask the preflight to check the preview route, which it refuses to deploy without")
+	}
+
+	before := len(sentPreflights(t, fixture))
+	previewRemove(t, fixture, dependencies, previewRemoveOptions{name: "staging", yes: true})
+	for _, sent := range sentPreflights(t, fixture)[before:] {
+		if sent.GetCheckPreviewRoute() {
+			t.Error("`ocel preview rm` asked the preflight to check the preview route, which nothing it does reads")
+		}
+	}
+}
+
 func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testing.T) {
 	const why = "the provider refuses a global-preview account mismatch only for a preflight that includes a slug and no domains, " +
 		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"

@@ -660,6 +660,8 @@ message PreflightRequest {
   repeated ContainerApp containers = 9;
 
   ImageRegistry project_registry = 10;
+
+  bool check_preview_route = 11;
 }
 
 message ContainerApp {

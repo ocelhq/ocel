@@ -180,6 +180,7 @@ type Edge struct {
 }
 
 type edgeAccount struct {
+	ownerReads      int
 	mu              sync.Mutex
 	kind            edge.Kind
 	routedBy        router.Kind
@@ -733,9 +734,16 @@ func (e *Edge) DestroyPreviewWildcard(_ context.Context, baseDomain string) erro
 	return nil
 }
 
+func (e *Edge) OwnerReads() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.ownerReads
+}
+
 func (e *Edge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.ownerReads++
 	if e.unreadable != nil {
 		return "", e.unreadable
 	}
