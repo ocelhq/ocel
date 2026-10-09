@@ -144,6 +144,14 @@ type bootstrapState struct {
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
+	state, err := p.readVisibleState(ctx, accountID, tier)
+	if err == nil {
+		err = state.store.tokensRefused
+	}
+	return state, err
+}
+
+func (p *cloudflare) readVisibleState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
 	store, err := p.cacheStore().read(ctx, accountID, tier)
 	if err != nil {
 		return bootstrapState{}, err
@@ -175,7 +183,7 @@ func (p *cloudflare) readState(ctx context.Context, accountID string, tier envir
 func (s bootstrapState) changes() []edge.PlanChange {
 	changes := []edge.PlanChange{
 		{Kind: kindR2Bucket, Name: s.store.name, Action: presence(s.store.bucketPresent), Reason: keptReason(s.store.bucketPresent)},
-		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenPresent), Reason: keptReason(s.store.tokenPresent)},
+		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenKept()), Reason: keptReason(s.store.tokenKept())},
 	}
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)

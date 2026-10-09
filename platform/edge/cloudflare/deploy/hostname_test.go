@@ -42,6 +42,7 @@ type cfMock struct {
 	refuseScriptDeletes   map[string]bool
 	existingBuckets       []string
 	existingTokens        []map[string]any
+	refusesTokenListing   bool
 
 	requests   int
 	zoneLists  int
@@ -625,6 +626,11 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("GET /user/tokens", func(w http.ResponseWriter, r *http.Request) {
+		if m.refusesTokenListing {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":9109,"message":"Unauthorized to access requested resource"}]}`))
+			return
+		}
 		if !firstPage(r) {
 			writeResult(w, []any{})
 			return

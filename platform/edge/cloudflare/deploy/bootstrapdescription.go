@@ -15,7 +15,7 @@ func (p *cloudflare) describeBootstrap(ctx context.Context, tier environment.Tie
 	if p.skipChecks {
 		return []edge.BootstrapPart{{Name: "bootstrap", Current: true}}, nil
 	}
-	state, err := p.readState(ctx, accountID, tier)
+	state, err := p.readVisibleState(ctx, accountID, tier)
 	if err != nil {
 		return nil, err
 	}

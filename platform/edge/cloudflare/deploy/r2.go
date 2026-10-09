@@ -116,6 +116,7 @@ type cacheStoreState struct {
 	bucketPresent bool
 	token         shared.Token
 	tokenPresent  bool
+	tokensRefused error
 }
 
 func (s cacheStore) read(ctx context.Context, accountID string, tier environment.Tier) (cacheStoreState, error) {
@@ -128,10 +129,18 @@ func (s cacheStore) read(ctx context.Context, accountID string, tier environment
 		return cacheStoreState{}, err
 	}
 	token, tokenPresent, err := s.findToken(ctx, name)
-	if err != nil {
+	if err != nil && !refusedCredential(err) {
 		return cacheStoreState{}, err
 	}
-	return cacheStoreState{name: name, bucketPresent: bucketPresent, token: token, tokenPresent: tokenPresent}, nil
+	return cacheStoreState{name: name, bucketPresent: bucketPresent, token: token, tokenPresent: tokenPresent, tokensRefused: err}, nil
+}
+
+func refusedCredential(err error) bool {
+	return hasStatus(err, http.StatusForbidden) || hasStatus(err, http.StatusUnauthorized)
+}
+
+func (s cacheStoreState) tokenKept() bool {
+	return s.tokenPresent || s.tokensRefused != nil
 }
 
 func (s cacheStore) bucketPresent(ctx context.Context, accountID, name string) (bool, error) {
