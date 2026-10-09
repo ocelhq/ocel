@@ -273,7 +273,7 @@ describe("strandedProjectSlugs", () => {
 });
 
 describe("renderOcelConfig", () => {
-  const config = renderOcelConfig({ slug: "e2e-42" });
+  const config = renderOcelConfig({ slug: "e2e-42", variablesKey: "" });
 
   it("names the run's project slug and the provider", () => {
     expect(config).toContain(`slug: "e2e-42"`);
@@ -290,6 +290,27 @@ describe("renderOcelConfig", () => {
     expect(config).toContain(
       `apps: [{ name: "app", path: ".", compute: { serverless: { framework: "next" } } }]`,
     );
+  });
+
+  it("brings the shared variables key it is given, so no bootstrap mints one of its own", () => {
+    const key = "arn:aws:kms:us-east-1:111122223333:key/shared";
+    expect(renderOcelConfig({ slug: "e2e-42", variablesKey: key })).toContain(
+      `provider: awsProvider({ edge: cloudflare(), variablesKey: "${key}" }),`,
+    );
+  });
+
+  it("takes the shared variables key from OCEL_AWS_VARIABLES_KEY", () => {
+    vi.stubEnv("OCEL_AWS_VARIABLES_KEY", "arn:aws:kms:us-east-1:111122223333:key/env");
+    expect(renderOcelConfig({ slug: "e2e-42" })).toContain(
+      `variablesKey: "arn:aws:kms:us-east-1:111122223333:key/env"`,
+    );
+    vi.unstubAllEnvs();
+  });
+
+  it("names no variables key when none is set", () => {
+    vi.stubEnv("OCEL_AWS_VARIABLES_KEY", "");
+    expect(renderOcelConfig({ slug: "e2e-42" })).not.toContain("variablesKey");
+    vi.unstubAllEnvs();
   });
 
   it("is pure, so cleanup and teardown re-render byte-for-byte what deploy wrote", () => {
@@ -1507,10 +1528,10 @@ describe("renderOcelConfig for a target", () => {
   ].join("\n");
 
   it("renders the aws config byte for byte when no target is named", () => {
-    expect(renderOcelConfig({ slug: "e2e-42" })).toBe(awsConfig);
-    expect(renderOcelConfig({ slug: "e2e-42", target: { name: "aws-cloudflare" } })).toBe(
-      awsConfig,
-    );
+    expect(renderOcelConfig({ slug: "e2e-42", variablesKey: "" })).toBe(awsConfig);
+    expect(
+      renderOcelConfig({ slug: "e2e-42", target: { name: "aws-cloudflare" }, variablesKey: "" }),
+    ).toBe(awsConfig);
   });
 
   it("renders gcp-direct with its project and region as literals and no edge", () => {
