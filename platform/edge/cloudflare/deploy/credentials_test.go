@@ -1,11 +1,15 @@
 package cloudflare
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestVerifyingCredentialsAsksCloudflareForTheAccountUnlessTheChecksAreSkipped(t *testing.T) {
@@ -121,5 +125,50 @@ func TestAnEdgeOpenedForAMutualTLSOriginsBootstrapTokenMayEditAccountCertificate
 				t.Errorf("DescribeCredentialPermissions(%v) = %q, includes %q = %v, want %v", tc.purpose, doc.Document, permission, got, tc.want)
 			}
 		})
+	}
+}
+
+func verifiedAgainst(t *testing.T, answers ...answer) error {
+	t.Helper()
+	t.Setenv(envAccountID, "acct-1")
+	t.Setenv(envAPIToken, "test")
+	client, _, _ := scriptedClient(t, answers...)
+	_, err := (&cloudflare{namespace: "ocel", client: client}).verifyCredentials(context.Background())
+	return err
+}
+
+func TestVerifyCredentialsSaysARateLimitedAccountIsRateLimitedNotThatItsTokenWasRejected(t *testing.T) {
+	err := verifiedAgainst(t, answer{status: http.StatusTooManyRequests, header: map[string]string{"Retry-After": "600"}, body: rateLimitedBody})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("verifyCredentials() error = %#v, want a busy refusal", err)
+	}
+	if strings.Contains(err.Error(), "rejected") {
+		t.Errorf("verifyCredentials() error = %q, want no claim the token was rejected", err)
+	}
+	if !strings.Contains(err.Error(), "rate limiting") {
+		t.Errorf("verifyCredentials() error = %q, want it to say the account is being rate limited", err)
+	}
+}
+
+func TestVerifyCredentialsSaysATokenCloudflareRefusesWasRejected(t *testing.T) {
+	err := verifiedAgainst(t, answer{status: http.StatusForbidden, body: `{"success":false,"errors":[{"code":9109,"message":"Unauthorized to access requested resource"}]}`})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(err.Error(), "rejected") {
+		t.Fatalf("verifyCredentials() error = %#v, want a denied refusal saying the token was rejected", err)
+	}
+}
+
+func TestVerifyCredentialsSaysCloudflareCouldNotBeReachedWhenItKeepsFailing(t *testing.T) {
+	err := verifiedAgainst(t, answer{status: http.StatusServiceUnavailable, body: `{"success":false,"errors":[{"code":10000,"message":"unavailable"}]}`})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("verifyCredentials() error = %#v, want a not-ready refusal", err)
+	}
+	if strings.Contains(err.Error(), "rejected") {
+		t.Errorf("verifyCredentials() error = %q, want no claim the token was rejected", err)
 	}
 }

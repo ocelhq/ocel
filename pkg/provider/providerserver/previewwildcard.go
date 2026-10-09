@@ -351,7 +351,10 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	wildcard := w.proto(ctx)
+	wildcard, err := w.proto(ctx)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
 	wildcard.Certificate = certificateState(w.recorded.Host, w.recorded.Host.Probe, nil, health.Status)
 	renewalOf(wildcard, health)
 	return &contractv1.GetPreviewWildcardResponse{
@@ -371,7 +374,11 @@ func recordedPreviewWildcard(ctx context.Context, p provider.Provider, checkRout
 	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded, skipChecks: skipChecks}
 	wildcard := w.recordedProto()
 	if checkRoute {
-		wildcard.RouteInstalled = w.routeInstalled(ctx)
+		installed, err := w.isRouteInstalled(ctx)
+		if err != nil {
+			return nil, err
+		}
+		wildcard.RouteInstalled = installed
 	}
 	answering, err := findEdgeRouter(p, recorded.Edge)
 	if err != nil {
@@ -391,10 +398,14 @@ func renewalOf(wildcard *contractv1.PreviewWildcard, health provider.Certificate
 	wildcard.ExpiringSoon = health.ExpiringSoon
 }
 
-func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
+func (w *wildcards) proto(ctx context.Context) (*contractv1.PreviewWildcard, error) {
+	installed, err := w.isRouteInstalled(ctx)
+	if err != nil {
+		return nil, err
+	}
 	wildcard := w.recordedProto()
-	wildcard.RouteInstalled = w.routeInstalled(ctx)
-	return wildcard
+	wildcard.RouteInstalled = installed
+	return wildcard, nil
 }
 
 func (w *wildcards) recordedProto() *contractv1.PreviewWildcard {
@@ -404,22 +415,22 @@ func (w *wildcards) recordedProto() *contractv1.PreviewWildcard {
 	}
 }
 
-func (w *wildcards) routeInstalled(ctx context.Context) bool {
+func (w *wildcards) isRouteInstalled(ctx context.Context) (bool, error) {
 	if !w.recorded.IsRecorded() {
-		return false
+		return false, nil
 	}
 	if w.skipChecks {
-		return true
+		return true, nil
 	}
 	front, err := w.provider.Edges().Open(w.recorded.Edge, nil)
 	if err != nil {
-		return false
+		return false, err
 	}
 	owner, err := front.DomainOwner(ctx, w.recorded.Hostname())
 	if err != nil {
-		return false
+		return false, fmt.Errorf("read whether %s's route is installed on the %s edge: %w", w.recorded.Hostname(), w.recorded.Edge, err)
 	}
-	return owner == edge.PreviewEntryOwner
+	return owner == edge.PreviewEntryOwner, nil
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {

@@ -112,6 +112,7 @@ func TestACredentialProblemSaysWhatWentWrongByTheRefusalsCode(t *testing.T) {
 		refusal.CodeDenied:   "could not authenticate",
 		refusal.CodeNotReady: "could not reach",
 		refusal.CodeInvalid:  "misconfigured",
+		refusal.CodeBusy:     "rate limited",
 	} {
 		refused := refusal.Refuse(code, "ada@box port 22 said so\nFix it")
 		problem := providerserver.CredentialProblemProto(fake.Vendor, refused)
@@ -359,11 +360,17 @@ func TestPreflightTakesThePreviewEntryRouteAsInstalledWithoutAskingTheEdgeWhenTh
 		vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
 
 		resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW, CheckPreviewRoute: true})
-		if err != nil {
-			t.Fatalf("Preflight() error = %v", err)
+		if !skipped {
+			if err == nil {
+				t.Errorf("Preflight() with the checks run = %+v, want the edge asked and its failure to read the owner returned", resp.GetPreviewWildcard())
+			}
+			continue
 		}
-		if got := resp.GetPreviewWildcard().GetRouteInstalled(); got != skipped {
-			t.Errorf("Preflight() with the checks skipped = %v says the shared entry route installed = %v, want %v: only an edge asked who owns it can say it is not", skipped, got, skipped)
+		if err != nil {
+			t.Fatalf("Preflight() with the checks skipped error = %v, want the edge never asked", err)
+		}
+		if !resp.GetPreviewWildcard().GetRouteInstalled() {
+			t.Error("Preflight() with the checks skipped says the shared entry route is not installed, want it taken as installed: only an edge asked who owns it can say it is not")
 		}
 	}
 }
@@ -390,6 +397,44 @@ func TestAPreflightThatDoesNotCheckThePreviewRouteReadsNoOwnerFromTheEdge(t *tes
 	}
 	if read := front.OwnerReads() - before; read != 0 {
 		t.Errorf("a preflight that does not check the preview route read the edge's route owners %d times, want none", read)
+	}
+}
+
+func TestPreflightSaysTheGlobalPreviewWildcardsRouteIsNotInstalledWhenTheEdgeAnswersThatNobodyOwnsIt(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns(edge.PreviewWildcard("preview.acme.com"), "")
+
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW, CheckPreviewRoute: true})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetPreviewWildcard().GetRouteInstalled() {
+		t.Error("Preflight() says the shared entry route is installed, though the edge answers that nobody owns it")
+	}
+}
+
+func TestPreflightFailsWithTheReasonWhenTheGlobalPreviewWildcardsRouteCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was rate limited reading its routes"))
+
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW, CheckPreviewRoute: true})
+	if err == nil {
+		t.Fatalf("Preflight() = %+v, want an error: a route that could not be read is not a route that is missing", resp.GetPreviewWildcard())
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("Preflight() error = %v, want the reason the route could not be read", err)
 	}
 }
 

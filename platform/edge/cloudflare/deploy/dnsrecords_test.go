@@ -3,10 +3,12 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/packages/pagination"
@@ -387,6 +389,14 @@ func TestDNSRecordsDeleteRecords(t *testing.T) {
 	}
 }
 
+func forbidden() error {
+	return &cf.Error{
+		StatusCode: http.StatusForbidden,
+		Request:    httptest.NewRequest(http.MethodGet, "https://api.cloudflare.com/client/v4/zones", nil),
+		Response:   &http.Response{StatusCode: http.StatusForbidden},
+	}
+}
+
 func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -408,8 +418,15 @@ func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 			name:      "a token Cloudflare refuses the zone list to is named with the account it was tried against",
 			accountID: testAccountID,
 			apiToken:  "a-secret-token",
-			zones:     &fakeZones{err: errors.New("403 Forbidden")},
+			zones:     &fakeZones{err: forbidden()},
 			want:      envAPIToken + " was rejected by Cloudflare for account " + testAccountID,
+		},
+		{
+			name:      "a rate limited account is named as rate limited, not as a rejected token",
+			accountID: testAccountID,
+			apiToken:  "a-secret-token",
+			zones:     &fakeZones{err: &rateLimitedError{method: http.MethodGet, path: "/zones"}},
+			want:      "Cloudflare is rate limiting this account's API requests",
 		},
 		{
 			name:      "a named zone the token can see is accepted",
