@@ -311,7 +311,7 @@ func TestTheRemovalHoldingAProjectTakesTheLeasesOfItsEnvironments(t *testing.T) 
 	}
 }
 
-func TestAnEnvironmentLeaseIsTakenOnceTheRemovalHoldingItsProjectRanOut(t *testing.T) {
+func TestAnEnvironmentLeaseIsTakenOnceTheRemovalHoldingItsProjectWentUnrenewedForAFullTTL(t *testing.T) {
 	store := fake.NewKeyValues()
 	clock := clockAt(leaseStart)
 	if err := takeProjectLease(store, otherLease, clock.terms()); err != nil {
@@ -319,7 +319,36 @@ func TestAnEnvironmentLeaseIsTakenOnceTheRemovalHoldingItsProjectRanOut(t *testi
 	}
 	clock.now = clock.now.Add(leaseTTL)
 
-	if err := takeLease(store, firstLease, clock.terms()); err != nil {
+	if err := takeLease(store, firstLease, clock.watchingTerms()); err != nil {
 		t.Fatalf("TakeEnvironmentLease() after the removal's lease ran out = %v, want it taken", err)
+	}
+	if clock.waited < leaseTTL {
+		t.Errorf("the deploy watched the removal's lease for %s, want a full TTL of %s on its own clock before it trusts the removal stopped", clock.waited, leaseTTL)
+	}
+	if _, err := store.Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierProduction, "shop")); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the stopped removal's lease = %v, want it forgotten", err)
+	}
+}
+
+func TestADeployWhoseClockRunsAheadIsRefusedWhileTheRemovalHoldingItsProjectStillRenews(t *testing.T) {
+	store := fake.NewKeyValues()
+	removal := clockAt(leaseStart)
+	if err := takeProjectLease(store, otherLease, removal.terms()); err != nil {
+		t.Fatal(err)
+	}
+	deploy := clockAt(leaseStart.Add(2 * leaseTTL))
+	deploy.watching = func() {
+		if err := stackrecords.RenewProjectLease(context.Background(), store, environment.TierProduction, "shop", otherLease, stackrecords.LeaseRemoval, removal.terms()); err != nil {
+			t.Errorf("renewing the removal's lease = %v", err)
+		}
+	}
+
+	err := takeLease(store, firstLease, deploy.watchingTerms())
+
+	if err == nil || !strings.Contains(err.Error(), "a removal of shop in production is running") {
+		t.Fatalf("TakeEnvironmentLease() on a clock ahead of the removal's = %v, want it refused because the removal still renews its lease", err)
+	}
+	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the refused deploy's lease = %v, want nothing left behind", err)
 	}
 }
