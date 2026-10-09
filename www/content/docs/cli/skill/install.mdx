@@ -14,12 +14,11 @@ Writes the skill this CLI carries into .claude/skills/ocel and .agents/skills/oc
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--global` | `bool` | `false` | Write into ~/.claude/skills/ocel and ~/.agents/skills/ocel instead of the project |
-| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+| `-y, --yes` | `bool` | `false` | Write the files; without it, list what would be written and write nothing |
 
 Every command also takes the [global flags](/docs/cli#global-flags).
 
 ## Behaviour
 
 - Changes state.
-- Asks before it changes anything: `--yes` consents in advance.
 - Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema skill install` prints.

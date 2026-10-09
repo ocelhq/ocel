@@ -54,7 +54,7 @@ func newInstallCommand(invocation commands.Invocation) *cobra.Command {
 			return runInstall(invocation, opts, cwd, version.Version, cmd.OutOrStdout())
 		},
 	}
-	commands.AddYesFlag(cmd, &opts.yes)
+	commands.AddWriteYesFlag(cmd, &opts.yes, "Write the files; without it, list what would be written and write nothing")
 	cmd.Flags().BoolVar(&opts.global, "global", false, "Write into ~/.claude/skills/ocel and ~/.agents/skills/ocel instead of the project")
 	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.SkillInstallResult{})
 }

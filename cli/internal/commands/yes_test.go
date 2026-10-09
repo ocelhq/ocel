@@ -48,6 +48,24 @@ func TestACommandWithOnlyAYesFlagHasAConfirmationFlag(t *testing.T) {
 	}
 }
 
+func TestACommandWhoseYesOnlyWritesHasNoConfirmationFlag(t *testing.T) {
+	var yes bool
+	cmd := &cobra.Command{Use: "install"}
+
+	commands.AddWriteYesFlag(cmd, &yes, "Write the files")
+
+	if commands.HasConfirmationFlag(cmd) {
+		t.Errorf("a command whose --yes only writes has a confirmation flag")
+	}
+	flag := cmd.Flags().Lookup("yes")
+	if flag == nil || flag.Shorthand != "y" || flag.Usage != "Write the files" {
+		t.Fatalf("--yes = %+v, want shorthand y and the given usage", flag)
+	}
+	if err := cmd.Flags().Parse([]string{"-y"}); err != nil || !yes {
+		t.Errorf("-y parsed to %v (err %v), want true", yes, err)
+	}
+}
+
 func TestACommandWithNeitherYesNorDryHasNoConfirmationFlag(t *testing.T) {
 	if commands.HasConfirmationFlag(&cobra.Command{Use: "doctor"}) {
 		t.Errorf("a command with neither --yes nor --dry has a confirmation flag")
