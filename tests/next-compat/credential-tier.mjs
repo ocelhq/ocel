@@ -78,18 +78,25 @@ export function writePolicyParts(tier, dir) {
 }
 
 export function printPolicy(tier) {
-  const res = ocel(["bootstrap", "policy", tier], {
+  const res = ocel(["permissions", tier, "--json"], {
     cwd: configuredDir(`policy-${tier}`),
     stdio: ["ignore", "pipe", "inherit"],
     timeout: POLICY_TIMEOUT_MS,
   });
-  const document = res.stdout.toString().trim();
-  if (!document.startsWith("{")) {
+  return awsPolicyDocument(res.stdout.toString());
+}
+
+export function awsPolicyDocument(stdout) {
+  const groups = JSON.parse(stdout).data?.groups ?? [];
+  const policy = groups
+    .map((group) => group.document)
+    .find((document) => Array.isArray(document?.Statement));
+  if (!policy) {
     throw new Error(
-      `ocel bootstrap policy ${tier} wrote no policy document, only: ${document || "(nothing)"}`,
+      `ocel permissions wrote no IAM policy document, only: ${stdout.trim() || "(nothing)"}`,
     );
   }
-  return document;
+  return JSON.stringify(policy);
 }
 
 function runTier(tier) {
