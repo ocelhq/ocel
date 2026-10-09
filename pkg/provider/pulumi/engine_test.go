@@ -38,6 +38,8 @@ func (e *recordingEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.O
 	return e.outputs, e.err
 }
 
+func (*recordingEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }
+
 type decoding struct{ program }
 
 func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
