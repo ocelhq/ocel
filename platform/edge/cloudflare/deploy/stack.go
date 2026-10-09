@@ -200,7 +200,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
-		prune:           spec.PruneRoutes && (!spec.PruneOnly || !p.skipChecks || stamps[program.Name] != ""),
+		prune:           spec.PruneRoutes,
 		pruneStem:       program.PruneWorkerStem,
 		requiredRecord:  program.RequiredRecord,
 		owns:            projectOwnsScript(p.namespace, slug),
