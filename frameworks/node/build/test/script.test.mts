@@ -56,6 +56,18 @@ describe("runAdapterBuild", () => {
     );
   });
 
+  for (const body of ["null", "[]", '"sveltekit"']) {
+    it(`refuses hosting.json holding ${body}, naming the file`, async () => {
+      const built = app();
+      buildProcess.spawn = async () =>
+        writeFileSync(path.join(built.outputDir, "hosting.json"), body);
+
+      await expect(runAdapterBuild(built, adapter, {})).rejects.toThrow(
+        /hosting\.json it wrote is not an object/,
+      );
+    });
+  }
+
   it("refuses hosting another adapter wrote", async () => {
     const built = app();
     buildProcess.spawn = async () =>
