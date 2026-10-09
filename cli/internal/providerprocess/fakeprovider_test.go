@@ -43,6 +43,8 @@ const fakeProviderKnownHostsEnvVar = "OCEL_TEST_PROVIDER_PROCESS_KNOWN_HOSTS"
 
 const fakeProviderDrivesEnvVar = "OCEL_TEST_PROVIDER_PROCESS_DRIVES"
 
+const fakeProviderCleanupDirEnvVar = "OCEL_TEST_PROVIDER_PROCESS_CLEANUP_DIR"
+
 const fakeProviderVersionEnvVar = "OCEL_TEST_PROVIDER_PROCESS_VERSION"
 
 const fakeChattyLine = "fake provider: warming the cache"
@@ -96,6 +98,19 @@ func runFakeProvider() int {
 			return 1
 		}
 		select {}
+	case "slow-cleanup":
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM)
+		dir := os.Getenv(fakeProviderCleanupDirEnvVar)
+		if err := os.WriteFile(filepath.Join(dir, "handling"), nil, 0o600); err != nil {
+			return 1
+		}
+		<-sig
+		time.Sleep(3 * time.Second)
+		if err := os.WriteFile(filepath.Join(dir, "cleaned"), nil, 0o600); err != nil {
+			return 1
+		}
+		return 0
 	case "serves":
 		if err := providerserver.Serve(providerserver.Config{Version: fakeProviderVersion(), New: fake.New}); err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider:", err)
