@@ -58,6 +58,8 @@ type Engine interface {
 	Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) error
 
 	Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error)
+
+	Unlock(ctx context.Context, setup WorkspaceSpec) error
 }
 
 type Config struct {
@@ -255,7 +257,9 @@ func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op
 		}
 		progress.Say("Planning " + planned + " stack " + setup.Stack)
 	}
-	changes, err := a.engine().Preview(ctx, setup, op, progress)
+	changes, err := runReleasingStaleLock(ctx, a, setup, progress, func() ([]provider.Change, error) {
+		return a.engine().Preview(ctx, setup, op, progress)
+	})
 	if err != nil {
 		return provider.Plan{}, masked(busy(err, setup), setup.Secrets)
 	}
@@ -326,7 +330,9 @@ func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress 
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	outputs, err := a.engine().Up(ctx, setup, progress)
+	outputs, err := runReleasingStaleLock(ctx, a, setup, progress, func() (auto.OutputMap, error) {
+		return a.engine().Up(ctx, setup, progress)
+	})
 	if err != nil {
 		return provider.StackResult{}, masked(busy(err, setup), setup.Secrets)
 	}
@@ -341,7 +347,10 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 	if err != nil {
 		return err
 	}
-	if err := a.engine().Destroy(ctx, setup, progress); err != nil {
+	_, err = runReleasingStaleLock(ctx, a, setup, progress, func() (struct{}, error) {
+		return struct{}{}, a.engine().Destroy(ctx, setup, progress)
+	})
+	if err != nil {
 		return masked(busy(err, setup), setup.Secrets)
 	}
 	return nil
@@ -361,8 +370,12 @@ func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progres
 
 const lockedMessage = "the stack is currently locked"
 
+func isLocked(err error) bool {
+	return err != nil && strings.Contains(err.Error(), lockedMessage)
+}
+
 func busy(err error, setup WorkspaceSpec) error {
-	if err == nil || !strings.Contains(err.Error(), lockedMessage) {
+	if !isLocked(err) {
 		return err
 	}
 	return refusal.Refuse(refusal.CodeBusy,
@@ -516,6 +529,17 @@ func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (auto.Output
 		return nil, fmt.Errorf("read what stack %s already provisions: %w", setup.Stack, err)
 	}
 	return outputs, nil
+}
+
+func (autoEngine) Unlock(ctx context.Context, setup WorkspaceSpec) error {
+	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
+	if auto.IsSelectStack404Error(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("select stack %s: %w", setup.Stack, err)
+	}
+	return stack.Cancel(ctx)
 }
 
 func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) error {

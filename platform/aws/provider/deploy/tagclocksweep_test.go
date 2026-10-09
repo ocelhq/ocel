@@ -39,6 +39,8 @@ func (f *fakeEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.Output
 	return auto.OutputMap{}, nil
 }
 
+func (*fakeEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }
+
 type sweepingClock struct {
 	order []string
 	err   error

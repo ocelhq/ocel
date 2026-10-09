@@ -154,6 +154,8 @@ func (e *mockedEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.Outp
 	return e.outputs, nil
 }
 
+func (*mockedEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }
+
 type standInCloud struct{}
 
 func (standInCloud) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {

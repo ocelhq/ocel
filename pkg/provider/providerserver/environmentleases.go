@@ -52,6 +52,10 @@ func (s environmentScope) forget(ctx context.Context, store keyvalue.Store, toke
 
 func (s environmentScope) describe() string { return s.env }
 
+func (s environmentScope) lease() provider.Lease {
+	return provider.Lease{Tier: s.tier, Project: s.slug, Env: s.env}
+}
+
 type projectScope struct {
 	tier environment.Tier
 	slug string
@@ -71,11 +75,14 @@ func (s projectScope) forget(ctx context.Context, store keyvalue.Store, token st
 
 func (s projectScope) describe() string { return s.slug + " in " + string(s.tier) }
 
+func (s projectScope) lease() provider.Lease { return provider.Lease{Tier: s.tier, Project: s.slug} }
+
 type leaseSubject interface {
 	take(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error)
 	renew(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error
 	forget(ctx context.Context, store keyvalue.Store, token string) error
 	describe() string
+	lease() provider.Lease
 }
 
 type environmentLeases struct {
@@ -152,7 +159,7 @@ func (l *environmentLeases) keep(ctx context.Context, store keyvalue.Store, scop
 }
 
 func (l *environmentLeases) startHold(ctx context.Context, store keyvalue.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
-	leased, cancel := context.WithCancelCause(ctx)
+	leased, cancel := context.WithCancelCause(provider.WithLease(ctx, scope.lease()))
 	h := &environmentHold{
 		leases: l, store: store, scope: scope, token: token, holder: holder, held: held,
 		leased: leased, cancel: cancel,
@@ -315,6 +322,9 @@ func (l *environmentLeases) takeEach(ctx context.Context, store keyvalue.Store, 
 		err := context.Cause(leased)
 		_ = holds.release(ctx)
 		return environmentHolds{}, err
+	}
+	for _, hold := range holds.held {
+		holds.leased = provider.WithLease(holds.leased, hold.scope.lease())
 	}
 	return holds, nil
 }

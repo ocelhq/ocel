@@ -11,6 +11,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -506,5 +508,72 @@ func TestLosingAnyOfManyHeldLeasesStopsTheWorkTheyHold(t *testing.T) {
 				t.Errorf("the work stopped with %v, want the busy refusal of the lost lease", cause)
 			}
 		})
+	}
+}
+
+func TestAHeldLeaseCoversTheStacksOfItsScopeForTheWorkRunUnderIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	leases := newEnvironmentLeases()
+	project, err := leases.take(ctx, store, projectScope{tier: environment.TierPreview, slug: "shop"}, renewedLease, stackrecords.LeaseRemoval)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = project.release(ctx) }()
+	inPreview := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
+	if !provider.HasLease(project.context(ctx), inPreview) {
+		t.Error("work under a project lease is not covered on one of the project's stacks")
+	}
+
+	production, err := leases.take(ctx, store, shopProduction, renewedLease, stackrecords.LeaseDeploy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inProduction := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}
+	leased := production.context(ctx)
+	if !provider.HasLease(leased, inProduction) {
+		t.Error("work under an environment lease is not covered on that environment's stack")
+	}
+	if provider.HasLease(leased, inPreview) {
+		t.Error("work under the production lease is covered on a preview stack")
+	}
+	if err := production.release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if provider.HasLease(leased, inProduction) {
+		t.Error("work is still covered by a lease its holder released")
+	}
+}
+
+func TestTheWorkOfARemovalOverSeveralEnvironmentLeasesIsCoveredOnAnAppStackInEachOfThem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	leases := newEnvironmentLeases()
+	envs := []string{"pr-7", "pr-8", "pr-9"}
+	scopes := make([]leaseSubject, 0, len(envs))
+	for _, env := range envs {
+		scopes = append(scopes, environmentScope{tier: environment.TierPreview, slug: "shop", env: env})
+	}
+	holds, err := leases.takeEach(ctx, store, renewedLease, scopes, stackrecords.LeaseRemoval)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removing := holds.context()
+	for _, env := range envs {
+		app := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack(env, "web", naming.NewReleaseToken("b1", ""))}
+		if !provider.HasLease(removing, app) {
+			t.Errorf("the removal's work is not covered on app stack %s, which one of its leases holds", app.Name)
+		}
+	}
+	if provider.HasLease(removing, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-10")}) {
+		t.Error("the removal's work is covered on an environment none of its leases holds")
+	}
+	if err := holds.release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if provider.HasLease(removing, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}) {
+		t.Error("the removal's work is still covered after its leases were released")
 	}
 }
