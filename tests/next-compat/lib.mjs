@@ -252,6 +252,7 @@ export function renderOcelConfig({
   if (target.name === DEFAULT_COMPAT_TARGET) {
     return [
       `import { defineConfig } from "ocel/config";`,
+      `import { cloudflareDns } from "ocel/dns";`,
       `import { cloudflare } from "ocel/edge";`,
       `import awsProvider from "ocel/providers/aws";`,
       ``,
@@ -260,6 +261,7 @@ export function renderOcelConfig({
       `  slug: ${JSON.stringify(slug)},`,
       `  provider: awsProvider({ ${[
         "edge: cloudflare()",
+        "dns: cloudflareDns()",
         ...(variablesKey ? [`variablesKey: ${JSON.stringify(variablesKey)}`] : []),
       ].join(", ")} }),`,
       app,
