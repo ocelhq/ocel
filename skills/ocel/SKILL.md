@@ -8,8 +8,9 @@ description: Ocel deploys apps into the user's own cloud account (AWS, GCP or a 
 Ocel builds, provisions and releases apps into the user's own provider account. There is no
 separate infrastructure file: a resource exists because app code calls the SDK for it, and
 that call is the **declaration**. Ocel finds declarations by running the files under the
-project's discovery folder (`infra/` by convention), so every declaration lives there and
-app code imports the handle from it.
+project's discovery folder, so every declaration lives there and app code imports the handle
+from it. `https://ocel.dev/docs/configuration.md` names the default folder, and
+`discovery.paths` in the project config replaces it.
 
 Everything the user owns sits in their account under their billing. Treat each change to it
 as theirs to approve.
