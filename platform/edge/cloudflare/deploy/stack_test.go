@@ -554,32 +554,13 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a prune-only spec with the checks skipped still prunes the routes of a worker an earlier spec stamped", func(t *testing.T) {
-		store := fakeStoreServer(t, "s3cr3t")
-		m := previewZoneMock()
-		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-		}
-		p := m.provider(t)
-		p.skipChecks = true
-		spec := pruneOnlySpec(store.URL, "v2")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: "v1.earlier"})
-
-		if _, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t")); err != nil {
-			t.Fatalf("Reconcile: %v", err)
-		}
-
-		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale"})
-		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
-			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
-		}
-	})
-
-	t.Run("a prune-only spec with the checks skipped and no earlier stamp retires its worker without listing the account's routes", func(t *testing.T) {
+	t.Run("a prune-only spec with the checks skipped still prunes the stale routes of its worker and its stem's siblings", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
 			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview--web"},
+			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
 		}
 		p := m.provider(t)
 		p.skipChecks = true
@@ -589,12 +570,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if m.zoneLists != 0 || m.routeLists != 0 {
-			t.Errorf("zone lists = %d, route lists = %d, want none: with the checks skipped a prune-only stack prunes no routes", m.zoneLists, m.routeLists)
-		}
-		if len(m.deletedRoutes) != 0 {
-			t.Errorf("deleted routes = %v, want none", m.deletedRoutes)
-		}
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
 		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
 			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
