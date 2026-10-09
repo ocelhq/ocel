@@ -1,6 +1,6 @@
 import type * as PageTree from "fumadocs-core/page-tree";
 import { describe, expect, it } from "vitest";
-import { llmsIndex, markdownUrl, pageSlugs } from "./llms";
+import { llmsIndex, markdownUrl, pageSlugs, withoutCodeAnnotations } from "./llms";
 
 const page = (name: string, url: string, description?: string): PageTree.Item => ({
   type: "page",
@@ -115,5 +115,35 @@ describe("llms.txt", () => {
 
   it("returns to the outer section after a folder", () => {
     expect(section("Elsewhere")).toContain("[Telemetry]");
+  });
+});
+
+describe("the markdown of a code block", () => {
+  it("keeps a line marked as removed, without its marker", () => {
+    expect(withoutCodeAnnotations("  provider: awsProvider(), // [!code --]\n")).toBe(
+      "  provider: awsProvider(),\n",
+    );
+  });
+
+  it("keeps a line marked as added, without its marker", () => {
+    expect(withoutCodeAnnotations('  "provider": "aws", // [!code ++]')).toBe(
+      '  "provider": "aws",',
+    );
+  });
+
+  it("drops the marker in every comment style", () => {
+    expect(
+      withoutCodeAnnotations(
+        ["a = 1 # [!code highlight]", "<b /> {/* [!code focus] */}", "c <!-- [!code --] -->"].join(
+          "\n",
+        ),
+      ),
+    ).toBe(["a = 1", "<b />", "c"].join("\n"));
+  });
+
+  it("leaves prose that only mentions a marker alone", () => {
+    expect(withoutCodeAnnotations("Write `// [!code ++]` after a line.")).toBe(
+      "Write `// [!code ++]` after a line.",
+    );
   });
 });
