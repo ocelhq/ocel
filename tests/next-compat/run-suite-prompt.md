@@ -9,7 +9,7 @@ Read `tests/next-compat/README.md` first for the account setup this depends on.
 
 - Adapter repo: `/home/vndaba/Dev/ocelhq`
 - Next.js repo: `/home/vndaba/Dev/next.js` — all `pnpm jest` invocations run here
-- Sidecar (prebuilt `ocel` and `@ocel/*`): `/home/vndaba/Dev/ocelhq-work/sidecar`
+- Sidecar (prebuilt `ocel`): `/home/vndaba/Dev/ocelhq-work/sidecar`
 - The `ocel` CLI is **not on PATH**: `node <adapter repo>/packages/cli/bin/ocel.js <args>`
 
 If the Next.js repo is not in your context, stop and tell the user to run
