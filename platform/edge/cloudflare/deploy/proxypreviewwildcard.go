@@ -29,6 +29,10 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 	return spec.Origin.Address, nil
 }
 
+func (*Proxy) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {

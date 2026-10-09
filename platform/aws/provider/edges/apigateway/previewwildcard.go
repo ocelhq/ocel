@@ -44,6 +44,10 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	return front, nil
 }
 
+func (*apiGateway) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (p *apiGateway) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
