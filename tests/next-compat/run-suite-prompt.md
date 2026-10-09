@@ -162,7 +162,7 @@ Same command with three changes — this leaves the deployment up:
 - `NEXT_TEST_SKIP_CLEANUP=1` guards **only** the `rmSync` of the temp dir.
 - Omitting `NEXT_TEST_CLEANUP_SCRIPT_PATH` is what keeps the deployment alive —
   `next-deploy.ts` runs the cleanup script only when it is non-empty. This is
-  why one deploy is enough; no second `ocel preview up --prebuilt` pass.
+  why one deploy is enough; no second `ocel preview up` pass.
 - `-t` keeps the test phase to one case and gives a fresh reproduction. **At
   least one test must match**, or Jest never runs `beforeAll` and nothing
   deploys.

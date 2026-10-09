@@ -41,6 +41,8 @@ const deadline =
 
 const FAILURE_LOG_LINES = 200;
 
+const PLAN_FIRST = process.env.OCEL_E2E_PLAN_FIRST === "1";
+
 const HARNESS_TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 const NOT_APP_SOURCE = new Set(["node_modules", ".next", ".ocel", ".git"]);
@@ -92,13 +94,12 @@ function deploy() {
   ensureDeps();
   linkSidecar(appDir, sidecarDir);
 
-  runOcel(adapterDir, ["build"]);
   if (isProductionTarget(target)) {
-    planProduction(adapterDir);
-    runOcel(adapterDir, ["deploy", "--prebuilt", "--yes"]);
+    if (PLAN_FIRST) planProduction(adapterDir);
+    runOcel(adapterDir, ["deploy", "--yes"]);
   } else {
-    planFirst(adapterDir, name);
-    runOcel(adapterDir, ["preview", "up", name, "--prebuilt"]);
+    if (PLAN_FIRST) planFirst(adapterDir, name);
+    runOcel(adapterDir, ["preview", "up", name]);
   }
 
   const resultPath = join(appDir, DEPLOY_REPORT_FILE);
@@ -147,7 +148,7 @@ function patchPackageJson() {
 function planProduction(adapterDir) {
   const logPath = join(appDir, BUILD_LOG_FILE);
   const before = existsSync(logPath) ? readFileSync(logPath, "utf8").length : 0;
-  runOcel(adapterDir, ["deploy", "--prebuilt", "--dry"]);
+  runOcel(adapterDir, ["deploy", "--dry"]);
   const planned = readFileSync(logPath, "utf8").slice(before);
   const problems = deployPlanProblems(planned, {
     resultWritten: existsSync(join(appDir, DEPLOY_REPORT_FILE)),
@@ -161,7 +162,7 @@ function planProduction(adapterDir) {
 function planFirst(adapterDir, name) {
   const logPath = join(appDir, BUILD_LOG_FILE);
   const before = existsSync(logPath) ? readFileSync(logPath, "utf8").length : 0;
-  runOcel(adapterDir, ["preview", "up", name, "--prebuilt", "--dry"]);
+  runOcel(adapterDir, ["preview", "up", name, "--dry"]);
   const planned = readFileSync(logPath, "utf8").slice(before);
   const listedFrom = readFileSync(logPath, "utf8").length;
   runOcel(adapterDir, ["preview", "ls"]);
