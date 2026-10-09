@@ -85,6 +85,9 @@ func TestAReconcileWaitsForTheLockAPromoteOfTheSameAppHoldsAndForNoOtherApps(t *
 
 func TestAReconcileWaitingOnAScopeAForgetRemovedWaitsForThePromoteThatMadeItAgain(t *testing.T) {
 	root := releasesDir(t)
+	if _, err := os.Stat("/proc/locks"); err != nil {
+		t.Skip("no /proc/locks on this machine, and the test reads the reconcile waiting on the lock from it")
+	}
 	removed := filepath.Join(root, "shop", "web")
 	if err := os.MkdirAll(removed, 0o755); err != nil {
 		t.Fatal(err)
@@ -139,8 +142,13 @@ func TestAReconcileWaitingOnAScopeAForgetRemovedWaitsForThePromoteThatMadeItAgai
 	if err := slow.Wait(); err != nil {
 		t.Fatalf("the promote exited: %v", err)
 	}
-	if code := <-web; code != 0 {
-		t.Fatalf("the reconcile exited %d", code)
+	select {
+	case code := <-web:
+		if code != 0 {
+			t.Fatalf("the reconcile exited %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reconcile never finished after the promote released its lock")
 	}
 	if log := dock.log(t); strings.Contains(log, "rmi ocel/shop/web:one") || !strings.Contains(log, "rmi ocel/shop/web:gone") {
 		t.Errorf("the sweep ran\n%s\nwant the promoted ref kept and ocel/shop/web:gone removed", log)
