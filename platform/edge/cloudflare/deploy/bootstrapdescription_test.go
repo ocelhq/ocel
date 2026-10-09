@@ -97,6 +97,36 @@ func TestDescribingTheBootstrapWithTheChecksSkippedReadsNothingAndCallsItCurrent
 	}
 }
 
+func TestATokenThatMayNotListAPITokensDescribesAnInstalledBootstrapAsCurrent(t *testing.T) {
+	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+	m := bootstrapMock(t, true)
+	p := m.provider(t)
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	m.refusesTokenListing = true
+
+	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("DescribeBootstrap: %v", err)
+	}
+	for _, part := range parts {
+		if !part.Current {
+			t.Errorf("part %q is described as behind, want every installed part current: %+v", part.Name, parts)
+		}
+	}
+}
+
+func TestPlanningACloudflareBootstrapWithATokenThatMayNotListAPITokensIsAnError(t *testing.T) {
+	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+	m := bootstrapMock(t, true)
+	m.refusesTokenListing = true
+
+	if _, err := planner(t, m)(t.Context(), environment.TierProduction); err == nil || !strings.Contains(err.Error(), "list Cloudflare API tokens") {
+		t.Fatalf("PlanBootstrap error = %v, want the refused token listing", err)
+	}
+}
+
 func TestDescribingACloudflareBootstrapWithoutCredentialsIsAnError(t *testing.T) {
 	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 	m := bootstrapMock(t, true)
