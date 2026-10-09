@@ -80,6 +80,47 @@ func TestWriteReplacesWhatTheDirHeldBefore(t *testing.T) {
 	}
 }
 
+type unreadable struct {
+	fs.FS
+	name string
+}
+
+func (u unreadable) Open(name string) (fs.File, error) {
+	if name == u.name {
+		return nil, fs.ErrPermission
+	}
+	return u.FS.Open(name)
+}
+
+func TestAWriteThatFailsPartwayLeavesThePreviousSkillWhole(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ".claude", "skills", Name)
+	if err := Write(dir, "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	names := ListFiles()
+
+	err := writeFrom(unreadable{FS: Files(), name: names[len(names)-1]}, dir, "2.0.0")
+
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("writeFrom = %v, want the unreadable file's error", err)
+	}
+	if version, err := ReadVersion(dir); err != nil || version != "1.0.0" {
+		t.Errorf("ReadVersion = %q, %v, want the previous skill stamped 1.0.0", version, err)
+	}
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
+			t.Errorf("previous skill lost %s: %v", name, err)
+		}
+	}
+	siblings, err := os.ReadDir(filepath.Dir(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(siblings) != 1 {
+		t.Errorf("skills dir holds %d entries, want only the skill and no staging left behind", len(siblings))
+	}
+}
+
 func TestStampAddsTheVersionToTheFrontmatterMetadataAndKeepsTheRest(t *testing.T) {
 	source := "---\nname: ocel\ndescription: Deploys apps.\n---\n\n# Ocel\n"
 
