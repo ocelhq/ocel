@@ -26,6 +26,7 @@ env:
   OCEL_NAMESPACE: ${{ inputs.target == 'gcp-direct' && 'e2e-nc-direct' || inputs.target == 'gcp-alb' && 'e2e-nc-alb' || inputs.target == 'gcp-cloudflare' && 'e2e-nc-cf' || 'e2e-next-compat' }}
   OCEL_GCP_PROJECT: ${{ vars.E2E_GCP_PROJECT }}
   OCEL_GCP_REGION: ${{ vars.E2E_GCP_REGION }}
+  OCEL_PROVIDERS_DIR: ${{ github.workspace }}/adapter/dist/providers
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
   ADAPTER_BASELINE: ${{ startsWith(inputs.target, 'gcp') && format('tests/next-compat/baseline-manifest.{0}.json', inputs.target) || 'tests/next-compat/baseline-manifest.json' }}
   # FIXME: must match PinnedVersion in pkg/provider/pulumi/runtime.go —
