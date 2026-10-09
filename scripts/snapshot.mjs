@@ -12,6 +12,9 @@ const PROVIDERS = join(DIST, "providers");
 function build(argv) {
   const args = ["build", "--snapshot", "--clean"];
   if (!argv.includes("--all")) args.push("--single-target");
+  argv.forEach((arg, i) => {
+    if (arg === "--id" && argv[i + 1]) args.push("--id", argv[i + 1]);
+  });
   const result = spawnSync("goreleaser", args, {
     cwd: REPO_ROOT,
     stdio: ["inherit", 2, "inherit"],

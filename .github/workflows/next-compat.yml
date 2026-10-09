@@ -137,7 +137,7 @@ jobs:
         working-directory: adapter
         run: |
           set -euo pipefail
-          node scripts/snapshot.mjs > "$RUNNER_TEMP/snapshot.env"
+          node scripts/snapshot.mjs --id ocel --id "provider-${{ startsWith(inputs.target, 'gcp') && 'gcp' || 'aws' }}" > "$RUNNER_TEMP/snapshot.env"
           . "$RUNNER_TEMP/snapshot.env"
           install -D -m 0755 "$OCEL_BIN" packages/cli-linux-x64/bin/ocel
 
@@ -151,14 +151,20 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/tarballs/*.tgz
 
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Pack the build every later job runs from
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build"
+          tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE" nextjs adapter sidecar
+          tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache" ms-playwright
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
+          name: build
+          path: ${{ runner.temp }}/build
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
 
   sweep:
     name: sweep
@@ -177,15 +183,18 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: build
+          path: ${{ runner.temp }}/build
+
+      - name: Unpack the build job's output
+        run: |
+          set -euo pipefail
+          tar -I zstd -xf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/.cache"
+          tar -I zstd -xf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache"
+          rm -rf "$RUNNER_TEMP/build"
 
       - name: Take the versions the repository pins
         id: versions
@@ -243,15 +252,18 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: build
+          path: ${{ runner.temp }}/build
+
+      - name: Unpack the build job's output
+        run: |
+          set -euo pipefail
+          tar -I zstd -xf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/.cache"
+          tar -I zstd -xf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache"
+          rm -rf "$RUNNER_TEMP/build"
 
       - name: Take the versions the repository pins
         id: versions
@@ -409,15 +421,18 @@ jobs:
             20/20,
           ]
     steps:
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: build
+          path: ${{ runner.temp }}/build
+
+      - name: Unpack the build job's output
+        run: |
+          set -euo pipefail
+          tar -I zstd -xf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/.cache"
+          tar -I zstd -xf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache"
+          rm -rf "$RUNNER_TEMP/build"
 
       - name: Take the versions the repository pins
         id: versions
@@ -536,15 +551,18 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: build
+          path: ${{ runner.temp }}/build
+
+      - name: Unpack the build job's output
+        run: |
+          set -euo pipefail
+          tar -I zstd -xf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/.cache"
+          tar -I zstd -xf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache"
+          rm -rf "$RUNNER_TEMP/build"
 
       - name: Take the versions the repository pins
         id: versions
@@ -670,15 +688,18 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: build
+          path: ${{ runner.temp }}/build
+
+      - name: Unpack the build job's output
+        run: |
+          set -euo pipefail
+          tar -I zstd -xf "$RUNNER_TEMP/build/workspace.tar.zst" -C "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/.cache"
+          tar -I zstd -xf "$RUNNER_TEMP/build/playwright.tar.zst" -C "$HOME/.cache"
+          rm -rf "$RUNNER_TEMP/build"
 
       - name: Take the versions the repository pins
         id: versions
@@ -713,22 +734,6 @@ jobs:
 
       - name: Destroy the project this run deployed into
         run: node adapter/tests/next-compat/project-teardown.mjs
-
-  evict:
-    name: evict
-    needs: [build, destroy, baseline]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Delete the cache entry, which no later run can restore
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          KEY: build-${{ github.sha }}-${{ github.run_id }}
-        run: gh cache delete "$KEY" || echo "no $KEY to delete"
 
   baseline:
     name: baseline
