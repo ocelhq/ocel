@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
@@ -50,25 +53,55 @@ func Serve(config Config) error {
 		fmt.Fprintf(os.Stderr, "ocel provider %s: bound %s\n", config.Version, addr)
 	}
 
-	srv := &http.Server{Handler: newMux(config)}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	return serve(cancelWhenStdinCloses(ctx, os.Stdin), ln, newMux(config), shutdownWindow, func() {
+		fmt.Println(localrpc.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
+	})
+}
+
+const shutdownWindow = 10 * time.Second
+
+func serve(ctx context.Context, ln net.Listener, handler http.Handler, window time.Duration, announce func()) error {
+	calls, cancelCalls := context.WithCancel(context.Background())
+	defer cancelCalls()
+	srv := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return calls }}
 
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 
-	fmt.Println(localrpc.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
+	announce()
 
 	select {
 	case <-ctx.Done():
-		return srv.Close()
 	case err := <-served:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 		return nil
 	}
+
+	cancelCalls()
+	drained, cancel := context.WithTimeout(context.Background(), window)
+	defer cancel()
+	if err := srv.Shutdown(drained); err != nil {
+		return srv.Close()
+	}
+	return nil
+}
+
+func cancelWhenStdinCloses(ctx context.Context, stdin *os.File) context.Context {
+	info, err := stdin.Stat()
+	if err != nil || info.Mode()&os.ModeNamedPipe == 0 {
+		return ctx
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer cancel()
+		_, _ = io.Copy(io.Discard, stdin)
+	}()
+	return ctx
 }
 
 func ConformanceMux(config Config) *http.ServeMux { return newMux(config) }

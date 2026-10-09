@@ -107,6 +107,7 @@ func (e *OperationFailedError) Error() string {
 
 type Process struct {
 	cmd             *exec.Cmd
+	stdin           io.Closer
 	identity        *localrpc.Identity
 	providerConfig  *contractv1.ProviderConfig
 	providerName    string
@@ -159,6 +160,10 @@ func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 	cmd.Env = env
 	childprocess.SetOwnGroup(cmd)
 
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("provider: attach stdin pipe: %w", err)
+	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("provider: attach stdout pipe: %w", err)
@@ -174,6 +179,7 @@ func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 
 	r := &Process{
 		cmd:             cmd,
+		stdin:           stdin,
 		identity:        identity,
 		providerConfig:  spec.ProviderConfig,
 		providerName:    spec.ProviderName,
@@ -553,6 +559,7 @@ func (r *Process) Close() {
 }
 
 func (r *Process) teardown() {
+	_ = r.stdin.Close()
 	if r.cmd.Process == nil {
 		return
 	}

@@ -26,6 +26,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -94,6 +96,12 @@ func runFakeProvider() int {
 			return 1
 		}
 		select {}
+	case "serves":
+		if err := providerserver.Serve(providerserver.Config{Version: fakeProviderVersion(), New: fake.New}); err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider:", err)
+			return 1
+		}
+		return 0
 	case "grandchild-survivor":
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGTERM)
