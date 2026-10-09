@@ -92,18 +92,56 @@ export function fetchFunctionLogs(functionName, startTime, filterPattern) {
   return response.events ?? [];
 }
 
-export function listParameterNames(pathPrefix) {
-  const response = JSON.parse(
-    aws([
-      "ssm",
-      "describe-parameters",
-      "--parameter-filters",
-      `Key=Name,Option=BeginsWith,Values=${pathPrefix}`,
+export function previewStateTable() {
+  const stack = previewBootstrapStack();
+  let name;
+  try {
+    name = aws([
+      "cloudformation",
+      "describe-stacks",
+      "--stack-name",
+      stack,
+      "--query",
+      "Stacks[0].Outputs[?OutputKey=='StateTableName']|[0].OutputValue",
       "--output",
-      "json",
-    ]),
-  );
-  return (response.Parameters ?? []).map((entry) => entry.Name);
+      "text",
+    ]);
+  } catch (err) {
+    if (/does not exist/i.test(String(err.stderr ?? err.message))) {
+      return undefined;
+    }
+    throw err;
+  }
+  if (!name || name === "None") {
+    throw new Error(`the ${stack} stack publishes no StateTableName output`);
+  }
+  return name;
+}
+
+export function queryStatePartition(table, pk) {
+  const items = [];
+  let start;
+  do {
+    const page = JSON.parse(
+      aws([
+        "dynamodb",
+        "query",
+        "--table-name",
+        table,
+        "--consistent-read",
+        "--key-condition-expression",
+        "pk = :pk",
+        "--expression-attribute-values",
+        JSON.stringify({ ":pk": { S: pk } }),
+        ...(start ? ["--starting-token", start] : []),
+        "--output",
+        "json",
+      ]),
+    );
+    items.push(...(page.Items ?? []));
+    start = page.NextToken;
+  } while (start);
+  return items;
 }
 
 export function getObject(bucket, key, maxBuffer = 128 * 1024 * 1024) {

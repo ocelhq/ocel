@@ -199,8 +199,8 @@ ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
 ```
 
 `project-teardown.mjs` is the only path that reliably clears everything,
-including the project's `/ocel/rootstack-preview/<slug>` SSM parameter, which
-`preview rm` leaves behind even when it does delete the compute.
+including the project's record in the preview state table, which `preview rm`
+leaves behind even when it does delete the compute.
 
 If teardown fails, **leave the app directory in place** and report the name and
 slug — its Lambdas, worker scripts and DNS label are still live, and deleting

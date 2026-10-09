@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   DEFAULT_COMPAT_TARGET,
+  ENTRY_SLUG,
   ocelBinary,
   readCompatTarget,
   renderOcelConfig,
@@ -17,7 +18,6 @@ import {
 import { linkSidecar } from "./sidecar.mjs";
 
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
-const SLUG = "e2e-edge";
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const wildcard = process.argv[2] || process.env.OCEL_E2E_PREVIEW_DOMAIN;
@@ -43,7 +43,7 @@ export function reconcileEntry(wildcard) {
   }
 
   const dir = mkdtempSync(join(tmpdir(), "ocel-e2e-entry-"));
-  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: SLUG }));
+  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: ENTRY_SLUG }));
   linkSidecar(dir, sidecarDir);
 
   console.error(`[ocel-e2e] reconciling the shared preview entry on ${wildcard} (from ${dir})`);

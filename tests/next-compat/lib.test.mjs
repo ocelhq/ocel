@@ -20,6 +20,7 @@ import {
   DNS_LABEL,
   deployPlanProblems,
   deployURL,
+  ENTRY_SLUG,
   embeddedArtifactPairs,
   embeddedBytecodePath,
   GOLDEN_MARKER,
@@ -40,7 +41,6 @@ import {
   namespaceProblem,
   ocelBinary,
   PLAN_APPLY_HINT,
-  PREVIEW_ROOT_STACK_PARAM_PREFIX,
   PREVIEW_TAIL_LEN,
   planProblems,
   previewName,
@@ -243,24 +243,30 @@ describe("projectSlugForRun and previewNameForApp", () => {
 });
 
 describe("strandedProjectSlugs", () => {
-  const param = (slug) => `${PREVIEW_ROOT_STACK_PARAM_PREFIX}${slug}`;
+  const item = (sk) => ({ pk: { S: "projects" }, sk: { S: sk } });
 
-  it("reclaims every e2e project but the running run's own", () => {
-    const names = [param("e2e-1"), param("e2e-2"), param("e2e-3")];
-    expect(strandedProjectSlugs(names, "e2e-2")).toEqual(["e2e-1", "e2e-3"]);
+  it("reclaims every e2e project the state table holds but the running run's own", () => {
+    const items = [item("e2e-1#"), item("e2e-2#"), item("e2e-3#")];
+    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-1", "e2e-3"]);
   });
 
-  it("leaves projects that are not this suite's alone", () => {
-    const names = [param("acme-shop"), param("e2e-1"), "/ocel/rootstack/e2e-9"];
-    expect(strandedProjectSlugs(names, "e2e-2")).toEqual(["e2e-1"]);
+  it("leaves projects that are not this suite's alone, and the shared entry worker's", () => {
+    const items = [item("acme-shop#"), item("e2e-1#"), item(`${ENTRY_SLUG}#`)];
+    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-1"]);
   });
 
-  it("reclaims a slug in the shape earlier runs minted, one project per temp app", () => {
-    expect(strandedProjectSlugs([param("e2e-42-abcd1234")], "e2e-42")).toEqual(["e2e-42-abcd1234"]);
+  it("names a project once however many partitions record it", () => {
+    const edge = { pk: { S: "edgestacks" }, sk: { S: "e2e-1#" } };
+    expect(strandedProjectSlugs([item("e2e-1#"), edge], "e2e-2")).toEqual(["e2e-1"]);
+  });
+
+  it("reads only entries directly under the partition, decoding escaped segments", () => {
+    const items = [item("e2e-1#nested#"), item("e2e-4%23x#"), item("#"), item("e2e-5")];
+    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-4#x"]);
   });
 
   it("has nothing to do when the run's own project is the only one", () => {
-    expect(strandedProjectSlugs([param("e2e-2")], "e2e-2")).toEqual([]);
+    expect(strandedProjectSlugs([item("e2e-2#")], "e2e-2")).toEqual([]);
     expect(strandedProjectSlugs([], "e2e-2")).toEqual([]);
     expect(strandedProjectSlugs(undefined, "e2e-2")).toEqual([]);
   });
