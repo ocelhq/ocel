@@ -6,8 +6,10 @@
   "description": "the build-time adapter that traces a plain node function into its artifact",
   "license": "Apache-2.0",
   "exports": {
-    "./trace": "./src/trace.mts",
-    "./script": "./src/script.mts"
+    "./function-trace": "./src/function-trace.mts",
+    "./output": "./src/output.mts",
+    "./script": "./src/script.mts",
+    "./trace": "./src/trace.mts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -20,6 +22,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@platform/edge-contract": "workspace:*",
     "@types/node": "^24",
     "express": "~5.0.0",
     "vitest": "^3.2.7"

@@ -303,7 +303,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 }
 
 func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
-	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), functionsDirName, "*"+functionDirSuffix))
+	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), buildoutput.FunctionsDir, "*"+buildoutput.FunctionDirSuffix))
 	if err != nil {
 		return err
 	}
@@ -363,7 +363,7 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 		Framework:        buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
 		Source:           source,
 		Entrypoint:       entrypoint,
-		FunctionDir:      filepath.Join(appDir, functionsDirName, entryFunctionDirName),
+		FunctionDir:      filepath.Join(appDir, buildoutput.FunctionsDir, buildoutput.RootFunctionDir),
 		AppDir:           appDir,
 		WorkerSource:     workerSource,
 		WorkerResolveDir: workerResolveDir,

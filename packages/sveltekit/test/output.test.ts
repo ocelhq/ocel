@@ -21,7 +21,6 @@ function tree(files: Record<string, string>): string {
 describe("describeHosting", () => {
   it("states the root function, the app's immutable chunks and no needs", () => {
     expect(describeHosting("v1", describeStaticRules("docs/_app"))).toEqual({
-      version: 1,
       framework: "sveltekit",
       frameworkBuildId: "v1",
       rootFunction: "/",

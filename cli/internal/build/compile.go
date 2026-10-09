@@ -33,7 +33,7 @@ func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir
 		Source:         source,
 		Entrypoint:     a.Serverless.Entrypoint,
 		WorkerPackage:  workerPackage,
-		FunctionDir:    filepath.Join(appDir, functionsDirName, entryFunctionDirName),
+		FunctionDir:    filepath.Join(appDir, buildoutput.FunctionsDir, buildoutput.RootFunctionDir),
 		AppDir:         appDir,
 		DiscoveryRoots: roots,
 		Env:            env.set,

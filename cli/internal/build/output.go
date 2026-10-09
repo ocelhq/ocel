@@ -14,12 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-const functionsDirName = "functions"
-
-const functionDirSuffix = ".func"
-
-const entryFunctionDirName = "index" + functionDirSuffix
-
 var ErrNoBuildOutput = errors.New("no build output")
 
 type Function struct {
@@ -122,7 +116,7 @@ func readFunctions(outputDir string) ([]Function, error) {
 }
 
 func readAppFunctions(outputDir, appDir string) ([]Function, error) {
-	functionsDir := filepath.Join(appDir, functionsDirName)
+	functionsDir := filepath.Join(appDir, buildoutput.FunctionsDir)
 	if _, err := os.Stat(functionsDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
@@ -135,7 +129,7 @@ func readAppFunctions(outputDir, appDir string) ([]Function, error) {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() || dir == functionsDir || !strings.HasSuffix(d.Name(), functionDirSuffix) {
+		if !d.IsDir() || dir == functionsDir || !strings.HasSuffix(d.Name(), buildoutput.FunctionDirSuffix) {
 			return nil
 		}
 
@@ -161,7 +155,7 @@ func readFunction(outputDir, functionsDir, functionDir string) (Function, error)
 	if err != nil {
 		return Function{}, err
 	}
-	route := strings.TrimSuffix(filepath.ToSlash(routeRel), functionDirSuffix)
+	route := strings.TrimSuffix(filepath.ToSlash(routeRel), buildoutput.FunctionDirSuffix)
 
 	configPath := filepath.Join(functionDir, buildoutput.FunctionConfigFile)
 	data, err := os.ReadFile(configPath)

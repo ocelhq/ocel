@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The SvelteKit adapter that builds an app into what ocel deploys",
   "files": [
-    "dist/",
+    "dist/index.js",
+    "dist/index.d.ts",
     "files/",
     "README.md",
     "LICENSE",
@@ -19,7 +20,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "bun build.mjs && tsc --emitDeclarationOnly",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -30,6 +31,8 @@
     "@sveltejs/kit": "^2.31.0 || ^3.0.0"
   },
   "devDependencies": {
+    "@framework/node-build": "workspace:*",
+    "@platform/edge-contract": "workspace:*",
     "@sveltejs/kit": "3.0.1",
     "@types/node": "^20",
     "typescript": "^5.9.3",

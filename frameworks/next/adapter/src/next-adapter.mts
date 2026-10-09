@@ -1,24 +1,13 @@
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, writeFileSync } from "node:fs";
-import {
-  copyFile,
-  cp,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  rm,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { createReadStream, createWriteStream } from "node:fs";
+import { copyFile, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
+import { BuildOutput } from "@framework/node-build/output";
 import type { Hosting } from "@platform/edge-contract/hosting";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
@@ -49,10 +38,6 @@ function waivedNeeds(declared: string | undefined): Set<string> {
       .map((name) => name.trim())
       .filter(Boolean),
   );
-}
-
-function resolveOutputRoot(): string {
-  return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
 
 function readMaxFunctionBytes(): number | undefined {
@@ -139,10 +124,11 @@ const adapter = {
       );
     }
 
-    const outputRoot = resolveOutputRoot();
+    const output = BuildOutput.fromEnv({
+      dir: join(process.cwd(), ".ocel/output"),
+      app: basename(projectDir),
+    });
     const appRel = relative(repoRoot, projectDir);
-
-    const appName = process.env.OCEL_APP_NAME || basename(projectDir);
 
     const groups = new Map<string, typeof functionRoutes>();
     for (const route of functionRoutes) {
@@ -247,12 +233,8 @@ const adapter = {
 
     await Promise.all(
       bundles.map(async (bundle) => {
-        const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
-
-        const mirrored = mirroredPaths(Object.keys(bundle.assets));
-        for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
-          await copyAsset(srcAbs, join(funcDir, destRel), repoRoot, funcDir, mirrored);
-        }
+        const funcDir = output.functionDir(bundle.name);
+        await output.copyIntoFunction(bundle.name, bundle.assets, repoRoot);
 
         const dispatchDest = join(funcDir, appRel, dispatchName);
         await mkdir(dirname(dispatchDest), { recursive: true });
@@ -287,15 +269,7 @@ const adapter = {
           renderLauncher(entries, primaryEntryKey(bundle.members), routes, nextConfigProjection),
         );
 
-        await writeFile(
-          join(funcDir, "function-config.json"),
-          JSON.stringify({
-            framework: { name: "next" },
-            entryFile: launcherRel,
-            id: bundle.name,
-            app: appName,
-          }),
-        );
+        output.writeFunctionConfig(bundle.name, "next", launcherRel);
 
         await writeFile(join(funcDir, variantHeadersFile), variantHeaders);
       }),
@@ -315,10 +289,10 @@ const adapter = {
     ];
     const assetHashes: Record<string, string> = {};
     for (const [pathname, filePath] of staticAssets) {
-      assetHashes[pathname] = await copyHashedFile(filePath, join(outputRoot, "static", pathname));
+      assetHashes[pathname] = await copyHashedFile(filePath, join(output.staticDir, pathname));
     }
     for (const { dataKey } of nextDataStaticFiles) {
-      assetHashes[dataKey] = await writeHashedFile(join(outputRoot, "static", dataKey), "{}");
+      assetHashes[dataKey] = await writeHashedFile(join(output.staticDir, dataKey), "{}");
     }
 
     if (originMiddleware) {
@@ -329,8 +303,8 @@ const adapter = {
       ]);
     }
 
-    await emitCacheEntries(outputRoot, prerenderGroups, routeKinds);
-    await emitFetchEntries(outputRoot, distDir);
+    await emitCacheEntries(output.dir, prerenderGroups, routeKinds);
+    await emitFetchEntries(output.dir, distDir);
 
     const functionDispatch = [...functionRoutes, ...originEdgeRoutes].map((o) => {
       const routeKey = routeKeyOf(o, basePath);
@@ -476,7 +450,7 @@ const adapter = {
     const routeTable = exactly<NextRouteTable>()({
       rootFunction,
       buildId,
-      appName,
+      appName: output.app,
       basePath: config.basePath || "",
       trailingSlash: !!config.trailingSlash,
       skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
@@ -505,8 +479,7 @@ const adapter = {
       dispatch,
     });
 
-    await mkdir(outputRoot, { recursive: true });
-    writeFileSync(join(outputRoot, "next-route-table.json"), JSON.stringify(routeTable));
+    output.writeFile("next-route-table.json", JSON.stringify(routeTable));
     const pprRoutes = outputs.prerenders
       .filter((p) => p.pprChain && isUserFacingPathname(p.pathname))
       .map((p) => p.pathname);
@@ -537,23 +510,21 @@ const adapter = {
       }),
     };
 
-    const hosting: Hosting = {
-      version: 1,
+    output.writeHosting({
       framework: "next",
       frameworkBuildId: buildId,
       rootFunction,
       routeTable: "next",
       static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
       needs,
-    };
-    writeFileSync(join(outputRoot, "hosting.json"), JSON.stringify(hosting));
+    });
 
     if (images) {
-      await writeFile(join(outputRoot, "image-config.json"), serializeImageConfig(images));
+      output.writeFile("image-config.json", serializeImageConfig(images));
     }
 
     await emitEdgeBundle(
-      outputRoot,
+      output.dir,
       distDir,
       assetSuffix,
       programmableEdge ? [...edgeRoutes, ...(edgeMiddleware ? [edgeMiddleware] : [])] : [],
@@ -1360,72 +1331,6 @@ async function collectPublicFiles(
     files.push({ pathname: `/${rel.split(sep).join("/")}`, filePath: abs });
   }
   return files;
-}
-
-function containedIn(root: string, target: string): string | undefined {
-  const rel = relative(root, target);
-  if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) {
-    return undefined;
-  }
-  return rel;
-}
-
-function mirroredPaths(destKeys: readonly string[]): ReadonlySet<string> {
-  const paths = new Set<string>();
-  for (const key of destKeys) {
-    const parts = key.split("/");
-    for (let i = 1; i <= parts.length; i++) {
-      paths.add(parts.slice(0, i).join("/"));
-    }
-  }
-  return paths;
-}
-
-async function copyAsset(
-  srcAbs: string,
-  dest: string,
-  repoRoot: string,
-  funcDir: string,
-  mirrored: ReadonlySet<string>,
-): Promise<void> {
-  let info;
-  try {
-    info = await lstat(srcAbs);
-  } catch {
-    return;
-  }
-  await mkdir(dirname(dest), { recursive: true });
-  if (info.isSymbolicLink()) {
-    const raw = await readlink(srcAbs);
-    const target = isAbsolute(raw) ? raw : resolve(dirname(srcAbs), raw);
-    const contained = containedIn(repoRoot, target);
-    const rel =
-      contained !== undefined && mirrored.has(contained.split(sep).join("/"))
-        ? contained
-        : undefined;
-    await rm(dest, { recursive: true, force: true });
-    if (rel !== undefined) {
-      await symlink(relative(dirname(dest), join(funcDir, rel)).split(sep).join("/"), dest);
-      return;
-    }
-    let targetInfo;
-    try {
-      targetInfo = await stat(target);
-    } catch {
-      return;
-    }
-    if (targetInfo.isDirectory()) {
-      await cp(target, dest, { recursive: true, dereference: true });
-      return;
-    }
-    await copyFile(target, dest);
-    return;
-  }
-  if (info.isDirectory()) {
-    await cp(srcAbs, dest, { recursive: true });
-    return;
-  }
-  await copyFile(srcAbs, dest);
 }
 
 export default adapter;

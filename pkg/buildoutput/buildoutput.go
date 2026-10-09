@@ -11,6 +11,11 @@ const (
 	Dir = statedir.Name + "/output"
 
 	appsDir = "apps"
+
+	FunctionsDir      = "functions"
+	FunctionDirSuffix = ".func"
+	RootFunction      = "/"
+	RootFunctionDir   = "index" + FunctionDirSuffix
 )
 
 func Root(projectDir string) (string, error) {

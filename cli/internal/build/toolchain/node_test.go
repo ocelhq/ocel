@@ -126,7 +126,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: rootFunctionRouteID, App: "api"}
+		want := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "node"}, EntryFile: handlerFile, ID: buildoutput.RootFunction, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", buildoutput.FunctionConfigFile, cfg, want)
 		}

@@ -26,19 +26,35 @@ function nextApp(
   return dir;
 }
 
+function outputDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "next-out-"));
+  roots.push(dir);
+  return dir;
+}
+
 function app(overrides: Partial<NextBuild> = {}): NextBuild {
   return {
     name: "web",
     cwd: nextApp(),
-    outputDir: "/out/apps/web",
+    outputDir: outputDir(),
     buildId: "0123456789abcdef0123456789abcdef",
     ...overrides,
   };
 }
 
+function writeNextHosting(env: Record<string, string>): void {
+  writeFileSync(
+    path.join(env.OCEL_OUTPUT_DIR ?? "", "hosting.json"),
+    '{"version":1,"framework":"next"}',
+  );
+}
+
 async function envOf(build: NextBuild): Promise<Record<string, string>> {
   let env: Record<string, string> = {};
-  buildProcess.spawn = async (_command, _args, _cwd, e) => void (env = e);
+  buildProcess.spawn = async (_command, _args, _cwd, e) => {
+    env = e;
+    writeNextHosting(e);
+  };
   await buildNext(build, ADAPTER);
   return env;
 }
@@ -49,9 +65,20 @@ describe("buildNext", () => {
     await expect(buildNext(app({ cwd }), ADAPTER)).rejects.toThrow(/no "build" script/);
   });
 
+  it("names the next release that runs the adapter when the build wrote no hosting", async () => {
+    buildProcess.spawn = async () => {};
+
+    await expect(buildNext(app(), ADAPTER)).rejects.toThrow(
+      /nothing wrote hosting\.json.*upgrade next to 16\.2\.10/,
+    );
+  });
+
   it("runs the resolved build command in the app's directory", async () => {
     const calls: string[][] = [];
-    buildProcess.spawn = async (command, args, cwd) => void calls.push([cwd, command, ...args]);
+    buildProcess.spawn = async (command, args, cwd, env) => {
+      calls.push([cwd, command, ...args]);
+      writeNextHosting(env);
+    };
     const build = app();
 
     await buildNext(build, ADAPTER);
@@ -67,8 +94,9 @@ describe("buildNext", () => {
   });
 
   it("passes the app's own output subtree to the build as OCEL_OUTPUT_DIR", async () => {
-    const env = await envOf(app({ outputDir: "/out/apps/marketing" }));
-    expect(env.OCEL_OUTPUT_DIR).toBe("/out/apps/marketing");
+    const marketing = outputDir();
+    const env = await envOf(app({ outputDir: marketing }));
+    expect(env.OCEL_OUTPUT_DIR).toBe(marketing);
   });
 
   it("points Next at the adapter and the build id it builds under", async () => {

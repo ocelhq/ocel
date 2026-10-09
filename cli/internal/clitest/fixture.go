@@ -22,10 +22,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func DiscoveryDir(root string) string {
@@ -52,7 +52,8 @@ func ResolveJSONPresentation(io.Writer) terminal.Presentation {
 
 func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
-	dir := filepath.Join(root, statedir.Name, "output", "apps", app, "functions", route+".func")
+	appDir := buildoutput.AppRoot(filepath.Join(root, filepath.FromSlash(buildoutput.Dir)), app)
+	dir := filepath.Join(appDir, buildoutput.FunctionsDir, route+buildoutput.FunctionDirSuffix)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,7 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "function-config.json"), config, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionConfigFile), config, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -20,8 +20,6 @@ const (
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
 
-const rootFunctionRouteID = "/"
-
 const nativeDirName = "native"
 
 const nodeModulesDir = "node_modules"

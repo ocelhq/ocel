@@ -2,7 +2,15 @@ import { execFile, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import type { Hosting } from "@platform/edge-contract/hosting";
 import { detect, resolveCommand } from "package-manager-detector";
+import {
+  APP_FOLDER_ENV,
+  APP_NAME_ENV,
+  HOSTING_FILE,
+  HOSTING_VERSION,
+  OUTPUT_DIR_ENV,
+} from "./output.mjs";
 
 export interface ScriptBuild {
   name: string;
@@ -97,4 +105,58 @@ async function spawnBuild(
         : reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`)),
     );
   });
+}
+
+export interface OutputBuild extends ScriptBuild {
+  outputDir: string;
+  folder?: string;
+}
+
+export interface Adapter {
+  framework: string;
+  name: string;
+  setup: string;
+  upgrade: string;
+}
+
+export async function runAdapterBuild(
+  app: OutputBuild,
+  adapter: Adapter,
+  env: Record<string, string>,
+): Promise<Hosting> {
+  await runBuildScript(app, {
+    NODE_ENV: "production",
+    [APP_NAME_ENV]: app.name,
+    [OUTPUT_DIR_ENV]: app.outputDir,
+    [APP_FOLDER_ENV]: app.folder ?? "",
+    ...env,
+  });
+  return readHosting(app, adapter);
+}
+
+function readHosting(app: OutputBuild, adapter: Adapter): Hosting {
+  const refuseUnadapted = (why: string) =>
+    new Error(
+      `ocel: app "${app.name}" built, but ${why}, so its build did not run through ${adapter.name}. ${adapter.setup}`,
+    );
+  let hosting: Partial<Hosting>;
+  try {
+    hosting = JSON.parse(readFileSync(path.join(app.outputDir, HOSTING_FILE), "utf8"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw refuseUnadapted(`nothing wrote ${HOSTING_FILE} to ${app.outputDir}`);
+    }
+    throw err;
+  }
+  if (hosting.framework !== adapter.framework) {
+    throw refuseUnadapted(
+      `the ${HOSTING_FILE} it wrote names framework ${JSON.stringify(hosting.framework)}`,
+    );
+  }
+  if (hosting.version !== HOSTING_VERSION) {
+    throw new Error(
+      `ocel: app "${app.name}" built, but ${adapter.name} wrote ${HOSTING_FILE} version ${JSON.stringify(hosting.version)}, and this CLI reads version ${HOSTING_VERSION}. ${adapter.upgrade}`,
+    );
+  }
+  return hosting as Hosting;
 }

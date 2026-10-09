@@ -1,0 +1,10 @@
+{
+  "hostingFile": "hosting.json",
+  "hostingVersion": 1,
+  "functionConfigFile": "function-config.json",
+  "functionsDir": "functions",
+  "functionDirSuffix": ".func",
+  "rootFunction": "/",
+  "rootFunctionDir": "index.func",
+  "staticDir": "static"
+}
