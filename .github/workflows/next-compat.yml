@@ -316,6 +316,7 @@ jobs:
         working-directory: ${{ env.SMOKE_APP }}
         env:
           NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
+          OCEL_E2E_PLAN_FIRST: "1"
         run: |
           set -euo pipefail
           url=$(node "$ADAPTER_DIR/tests/next-compat/deploy.mjs")
