@@ -30,6 +30,7 @@ type Stacks struct {
 	taken         []string
 	destroyedWith []provider.ImageStore
 	entered       func(provider.StackSpec) error
+	destroying    func(provider.StackRef) error
 
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
@@ -48,6 +49,12 @@ func (r *Stacks) Entering(hook func(provider.StackSpec) error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entered = hook
+}
+
+func (r *Stacks) Destroying(hook func(provider.StackRef) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.destroying = hook
 }
 
 func (r *Stacks) Provisioned() []provider.StackSpec {
@@ -127,6 +134,14 @@ func (r *Stacks) DestroyedWith() []provider.ImageStore {
 
 func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
+	r.mu.Lock()
+	destroying := r.destroying
+	r.mu.Unlock()
+	if destroying != nil {
+		if err := destroying(ref); err != nil {
+			return err
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.destroyedWith = append(r.destroyedWith, images)

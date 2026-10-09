@@ -42,6 +42,7 @@ type projectRemoval struct {
 	pointer []string
 
 	images provider.ImageStore
+	spans  *spanEvents
 }
 
 func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectRequest) (*projectRemoval, error) {
@@ -223,7 +224,7 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(naming.SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		if req.GetSlug() == "" {
 			return errUnnamedProject
 		}
@@ -262,6 +263,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		defer func() { _ = environments.release(ctx) }()
 		holds := append(slices.Clone(project), environments...)
 		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
+		removal.spans = newSpanEvents(sender)
 		return holds.explain(removal.run(environments.context(project.context(ctx)), progress))
 	})
 }
@@ -322,13 +324,9 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 	if err := r.unbind(ctx, progress); err != nil {
 		errs = append(errs, err)
 	}
-	stacks := append(slices.Clone(r.apps), r.infra...)
-	for i, stack := range stacks {
-		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", stack, i+1, len(stacks)))
-		if err := r.destroyStack(ctx, stack, progress); err != nil {
-			errs = append(errs, err)
-		}
-	}
+	errs = append(errs, destroyAppsThenInfra(r.apps, r.infra, func(stack naming.StackName) error {
+		return r.destroyStack(ctx, stack)
+	})...)
 	if err := r.destroyUnrecordedHolders(ctx, progress); err != nil {
 		errs = append(errs, err)
 	}
@@ -406,12 +404,24 @@ func (r *projectRemoval) pointers() []string {
 	return r.pointer
 }
 
-func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName, progress progress.Log) error {
-	ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
-	if err := r.provider.Stacks().Destroy(ctx, ref, r.images, progress); err != nil {
-		return fmt.Errorf("destroy %s: %w", stack, err)
+func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName) error {
+	span := RootSpan(stack.String(), stack.String(), stackDestroyTitle(stack), progressv1.Phase_PHASE_DESTROY)
+	return r.spans.run(span, func(u *spanRun) error {
+		return u.phase(func(progress progress.Log) error {
+			ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
+			if err := r.provider.Stacks().Destroy(ctx, ref, r.images, progress); err != nil {
+				return fmt.Errorf("destroy %s: %w", stack, err)
+			}
+			return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
+		})
+	})
+}
+
+func stackDestroyTitle(stack naming.StackName) progress.Title {
+	if stack.IsInfra() {
+		return progress.Destroying.Title("the resources every app in " + stack.Env + " binds to")
 	}
-	return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
+	return progress.Destroying.Title("everything this release of " + stack.App + " provisioned")
 }
 
 func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress progress.Log) error {
@@ -423,7 +433,7 @@ func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress 
 	var errs []error
 	for _, stack := range restored {
 		progress.Say(fmt.Sprintf("Destroying stack %s: its record was gone, and it still holds what its releases share", stack))
-		if err := r.destroyStack(ctx, stack, progress); err != nil {
+		if err := r.destroyStack(ctx, stack); err != nil {
 			errs = append(errs, err)
 		}
 	}
