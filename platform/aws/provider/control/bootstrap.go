@@ -48,11 +48,12 @@ type Bootstrap struct {
 	Kinds        []edge.Kind
 	Region       string
 	VariablesKey string
+	Read         func(context.Context, environment.Tier) (bootstrap.Reading, error)
 
 	Namespace bootstrap.Namespace
 }
 
-func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, variablesKey string, ns bootstrap.Namespace) Bootstrap {
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, variablesKey string, ns bootstrap.Namespace, read func(context.Context, environment.Tier) (bootstrap.Reading, error)) Bootstrap {
 	return Bootstrap{
 		CFN:          cloudformation.NewFromConfig(cfg),
 		SSM:          ssm.NewFromConfig(cfg),
@@ -66,6 +67,7 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		Kinds:        kinds,
 		Region:       cfg.Region,
 		VariablesKey: variablesKey,
+		Read:         read,
 
 		Namespace: ns,
 	}
@@ -88,7 +90,7 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
 
 func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
+	read, err := b.read(ctx, tier)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -141,6 +143,13 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	}
 	plan.Groups = append(plan.Groups, fronts...)
 	return plan, nil
+}
+
+func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
+	if b.Read == nil {
+		return bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
+	}
+	return b.Read(ctx, tier)
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {

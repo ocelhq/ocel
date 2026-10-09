@@ -136,8 +136,8 @@ func forgetOf(t *testing.T, p *Provider) func() {
 
 func primed(t *testing.T, p *Provider, table string) {
 	t.Helper()
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
-		return bootstrap.Deployed{StateTable: table}, nil
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
+		return bootstrap.Reading{Deployed: bootstrap.Deployed{StateTable: table}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +150,8 @@ func primed(t *testing.T, p *Provider, table string) {
 
 func resolvedAfter(t *testing.T, p *Provider) (string, string) {
 	t.Helper()
-	deployed, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
-		return bootstrap.Deployed{StateTable: "after"}, nil
+	deployed, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
+		return bootstrap.Reading{Deployed: bootstrap.Deployed{StateTable: "after"}}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ func resolvedAfter(t *testing.T, p *Provider) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return deployed.StateTable, params.Passphrase
+	return deployed.Deployed.StateTable, params.Passphrase
 }
 
 func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
@@ -208,6 +208,27 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	table, passphrase := resolvedAfter(t, p)
 	if table != "before" || passphrase != "before" {
 		t.Fatalf("a failed Apply forgot %q/%q, want what the account still has", table, passphrase)
+	}
+}
+
+func TestDescribingTheBootstrapReadsTheAccountTheProviderAlreadyRead(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
+		return bootstrap.Reading{Deployed: bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{}}}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	boot, err := p.Bootstrap(edges.DefaultKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	described, err := boot.Describe(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Describe() error = %v, want the bootstrap this provider already read, with no call to the account", err)
+	}
+	if !described.Present {
+		t.Error("Describe() reads no bootstrap, want the one this provider already read")
 	}
 }
 
@@ -276,15 +297,15 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 
 func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
-		return bootstrap.Deployed{
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
+		return bootstrap.Reading{Deployed: bootstrap.Deployed{
 			ArtifactBucket: "functions",
 			AssetBucket:    "assets",
 			Features: bootstrap.FeatureSet{
 				bootstrap.FeatureCloudflareEdge: true,
 				bootstrap.FeatureCloudFrontEdge: true,
 			},
-		}, nil
+		}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -330,12 +351,12 @@ func TestTheEdgeCacheStoreCarriesTheISRWriterAdoptedWithIt(t *testing.T) {
 		{Endpoint: "https://writer.example"},
 	} {
 		p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-		if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
-			return bootstrap.Deployed{
+		if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
+			return bootstrap.Reading{Deployed: bootstrap.Deployed{
 				ArtifactBucket: "functions",
 				AssetBucket:    "assets",
 				Features:       bootstrap.FeatureSet{bootstrap.FeatureCloudflareEdge: true},
-			}, nil
+			}}, nil
 		}); err != nil {
 			t.Fatal(err)
 		}
