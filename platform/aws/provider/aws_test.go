@@ -232,6 +232,25 @@ func TestDescribingTheBootstrapReadsTheAccountTheProviderAlreadyRead(t *testing.
 	}
 }
 
+func TestTheProviderOpensEachEdgeOnceForEveryCallThatAsksForTheSameOptions(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	open := func(options provider.Options) edge.Edge {
+		t.Helper()
+		front, err := p.Edges().Open(cloudflare.Kind, options)
+		if err != nil {
+			t.Fatalf("Open() error = %v", err)
+		}
+		return front
+	}
+
+	if first, again := open(nil), open(provider.Options{}); first != again {
+		t.Error("two opens of the cloudflare edge with no options built two edges, want the zones it read shared between them")
+	}
+	if plain, tunnelled := open(nil), open(provider.Options{"tunnel": true}); plain == tunnelled {
+		t.Error("an open with other options got the edge opened without them, want one built for its own options")
+	}
+}
+
 func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	for _, kind := range edges.SupportedEdges() {

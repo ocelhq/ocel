@@ -2,9 +2,11 @@ package edges
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
@@ -67,7 +69,13 @@ func constructWithOptions[O any](kind edge.Kind, construct func(Deps, O) edge.Ed
 const DefaultKind = cloudfront.Kind
 
 type Registry struct {
-	Deps Deps
+	Deps   Deps
+	Opened *Opened
+}
+
+type Opened struct {
+	mu    sync.Mutex
+	edges map[string]edge.Edge
 }
 
 var _ provider.Edges = Registry{}
@@ -78,7 +86,35 @@ func (r Registry) Open(kind edge.Kind, options provider.Options) (edge.Edge, err
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
 	}
-	return construct(r.Deps, options)
+	if r.Opened == nil {
+		return construct(r.Deps, options)
+	}
+	return r.Opened.open(kind, options, func() (edge.Edge, error) { return construct(r.Deps, options) })
+}
+
+func (o *Opened) open(kind edge.Kind, options provider.Options, construct func() (edge.Edge, error)) (edge.Edge, error) {
+	if len(options) == 0 {
+		options = nil
+	}
+	encoded, err := json.Marshal(options)
+	if err != nil {
+		return nil, fmt.Errorf("read the %s edge's options: %w", kind, err)
+	}
+	key := string(kind) + "\x00" + string(encoded)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if front, found := o.edges[key]; found {
+		return front, nil
+	}
+	front, err := construct()
+	if err != nil {
+		return nil, err
+	}
+	if o.edges == nil {
+		o.edges = map[string]edge.Edge{}
+	}
+	o.edges[key] = front
+	return front, nil
 }
 
 func SupportedEdges() []edge.Kind {

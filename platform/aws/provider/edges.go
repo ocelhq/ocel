@@ -12,7 +12,7 @@ import (
 )
 
 func (p *Provider) edges() edges.Registry {
-	return edges.Registry{Deps: p.edgeDeps()}
+	return edges.Registry{Deps: p.edgeDeps(), Opened: &p.opened}
 }
 
 func (p *Provider) edgeDeps() edges.Deps {
