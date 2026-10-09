@@ -23,8 +23,13 @@ type tierEdge struct {
 func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
-	return p.deployed.resolve(tier, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
+	read, err := p.readBootstrap(ctx, tier)
+	return read.Deployed, err
+}
+
+func (p *Provider) readBootstrap(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
+	return p.deployed.resolve(tier, func() (bootstrap.Reading, error) {
+		return bootstrap.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
 	})
 }
 
