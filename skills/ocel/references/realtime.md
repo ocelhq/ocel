@@ -48,12 +48,12 @@ app = live.asgi()  # the token endpoint to mount; live.wsgi() for WSGI apps
 
 ```rust
 #[derive(ocel::Channel)]
-#[ocel(realtime = "app", pattern = "orders/:orderId", event = OrderEvent)]
+#[ocel(realtime = "app", pattern = "orders/:order_id", event = OrderEvent)]
 struct Orders { order_id: String }
 
-let rt = ocel::Realtime::builder("app").authorize(read_caller).subscribe::<Orders>(rule).build()?;
+let rt = ocel::realtime::Realtime::builder("app").authorize(read_caller).subscribe::<Orders>(rule).build()?;
 rt.publish(&Orders { order_id }, &event).await?;
-// requires the `realtime` feature; ocel::realtime::axum::router(rt) serves the token endpoint
+// requires the `realtime` feature; with `axum` too, ocel::realtime::axum::router(rt) serves the token endpoint
 ```
 
 ## Limits
