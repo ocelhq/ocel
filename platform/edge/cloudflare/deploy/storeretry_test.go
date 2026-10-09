@@ -48,7 +48,7 @@ func TestStoreRetryable(t *testing.T) {
 	}
 }
 
-func TestParseStoreRetryAfter(t *testing.T) {
+func TestParseRetryAfter(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
@@ -93,9 +93,9 @@ func TestParseStoreRetryAfter(t *testing.T) {
 			for k, v := range tc.header {
 				h.Set(k, v)
 			}
-			got, ok := parseStoreRetryAfter(h, now)
+			got, ok := parseRetryAfter(h, now)
 			if ok != tc.wantOK || (tc.wantOK && got != tc.want) {
-				t.Errorf("parseStoreRetryAfter = %v, %v; want %v, %v", got, ok, tc.want, tc.wantOK)
+				t.Errorf("parseRetryAfter = %v, %v; want %v, %v", got, ok, tc.want, tc.wantOK)
 			}
 		})
 	}

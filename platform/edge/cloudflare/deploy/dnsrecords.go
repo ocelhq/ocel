@@ -45,7 +45,7 @@ type dnsRecords struct {
 }
 
 func NewDNS(zone string) edge.DNSRecords {
-	client := cf.NewClient(option.WithMaxRetries(clientMaxRetries))
+	client := newAPIClient()
 	return &dnsRecords{
 		records:   client.DNS.Records,
 		zones:     client.Zones,
@@ -74,7 +74,7 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 	}
 	res, err := w.zones.List(ctx, params)
 	if err != nil {
-		return fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, w.accountID, err)
+		return refuseUnverifiedToken(w.accountID, err)
 	}
 	if w.named != "" && !slices.ContainsFunc(res.Result, func(z zones.Zone) bool { return strings.EqualFold(z.Name, w.named) }) {
 		return fmt.Errorf("no zone named %q is reachable with %s in account %s", w.named, envAPIToken, w.accountID)

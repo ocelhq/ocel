@@ -87,14 +87,12 @@ func NewWithWorkerClientCertificate(namespace string, options Options, trust Cli
 }
 
 func newCloudflare(namespace string, options Options) *cloudflare {
-	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace, options: options, skipChecks: processenv.SkipChecks()}
+	return &cloudflare{client: newAPIClient(), namespace: namespace, options: options, skipChecks: processenv.SkipChecks()}
 }
 
 func NewAt(namespace, baseURL string) edge.Edge {
-	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace, skipChecks: processenv.SkipChecks()}
+	return &cloudflare{client: newAPIClient(option.WithBaseURL(baseURL)), namespace: namespace, skipChecks: processenv.SkipChecks()}
 }
-
-const clientMaxRetries = 5
 
 func (p *cloudflare) Kind() edge.Kind { return Kind }
 

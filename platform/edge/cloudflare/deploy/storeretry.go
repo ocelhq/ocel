@@ -25,7 +25,7 @@ func storeRetryable(res *http.Response, err error) bool {
 
 func storeRetryDelay(res *http.Response, attempt int, jitter float64) time.Duration {
 	if res != nil {
-		if asked, ok := parseStoreRetryAfter(res.Header, time.Now()); ok && asked < storeMaxRetryAfter {
+		if asked, ok := parseRetryAfter(res.Header, time.Now()); ok && asked < storeMaxRetryAfter {
 			return asked
 		}
 	}
@@ -36,7 +36,7 @@ func storeRetryDelay(res *http.Response, attempt int, jitter float64) time.Durat
 	return delay - time.Duration(jitter*float64(delay/4))
 }
 
-func parseStoreRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
+func parseRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
 	if ms := header.Get("Retry-After-Ms"); ms != "" {
 		if parsed, err := strconv.ParseFloat(ms, 64); err == nil && parsed >= 0 {
 			return time.Duration(parsed * float64(time.Millisecond)), true

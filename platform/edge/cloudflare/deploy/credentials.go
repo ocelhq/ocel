@@ -2,14 +2,19 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
+	"github.com/cloudflare/cloudflare-go/v4/shared"
+
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const credentialHeading = "Cloudflare API token"
@@ -92,7 +97,27 @@ func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIden
 		return edge.CredentialIdentity{Account: accountID}, nil
 	}
 	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
+		return edge.CredentialIdentity{}, refuseUnverifiedToken(accountID, err)
 	}
 	return edge.CredentialIdentity{Account: accountID}, nil
+}
+
+var invalidTokenCodes = []int64{1000, 6003, 6111, 9109}
+
+func refuseUnverifiedToken(accountID string, err error) error {
+	var answered *cf.Error
+	switch {
+	case isRateLimited(err):
+		return refusal.Refuse(refusal.CodeBusy, "%s could not be checked for account %s: %v", envAPIToken, accountID, err)
+	case errors.As(err, &answered) && isTokenRejection(answered):
+		return refusal.Refuse(refusal.CodeDenied, "%s was rejected by Cloudflare for account %s: %v", envAPIToken, accountID, err)
+	}
+	return refusal.Refuse(refusal.CodeNotReady, "%s could not be checked for account %s: %v", envAPIToken, accountID, err)
+}
+
+func isTokenRejection(answered *cf.Error) bool {
+	if answered.StatusCode == http.StatusUnauthorized || answered.StatusCode == http.StatusForbidden {
+		return true
+	}
+	return slices.ContainsFunc(answered.Errors, func(e shared.ErrorData) bool { return slices.Contains(invalidTokenCodes, e.Code) })
 }

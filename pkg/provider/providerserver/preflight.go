@@ -418,6 +418,7 @@ var credentialTrouble = map[refusal.Code]string{
 	refusal.CodeDenied:   "could not authenticate",
 	refusal.CodeNotReady: "could not reach",
 	refusal.CodeInvalid:  "misconfigured",
+	refusal.CodeBusy:     "rate limited",
 }
 
 func CredentialProblemProto(vendor provider.Vendor, err error) *contractv1.CredentialProblem {
