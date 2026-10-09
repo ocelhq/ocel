@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -746,6 +747,50 @@ func TestRemoveProjectDestroysAStackRecordedBeforeItTookTheProject(t *testing.T)
 	}
 	if entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop"); err != nil || len(entries) != 0 {
 		t.Errorf("after the removal %d stacks are still recorded (%v), want %s, recorded before the removal took the project, destroyed with the rest", len(entries), err, late)
+	}
+}
+
+func TestRemovingEveryPreviewSaysUntilWhenItWaitsOutTheLeasesInterruptedRunsLeft(t *testing.T) {
+	client, vendor := deployedProject(t)
+	for _, env := range []string{"pr-1", "pr-2"} {
+		value, err := json.Marshal(stackrecords.EnvironmentLease{Token: otherEnvironmentLease, Holder: stackrecords.LeaseDeploy, ExpiresAt: time.Now().Add(-time.Hour).Unix()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := vendor.KeyValues().Write(context.Background(), keyvalue.Entry{Key: stackrecords.EnvironmentLeaseKey(environment.TierPreview, "shop", env), Value: value}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	began := time.Now().UTC()
+
+	stream, err := client.RemoveProject(ctx, &contractv1.ProjectRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+	})
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	defer stream.Close()
+	var said []string
+	for stream.Receive() {
+		line := saidLine(stream.Msg())
+		if line == "" {
+			continue
+		}
+		said = append(said, line)
+		if strings.HasPrefix(line, "Waiting") {
+			break
+		}
+	}
+
+	var wants []string
+	for _, at := range []time.Time{began, time.Now().UTC()} {
+		wants = append(wants, "Waiting until "+at.Add(5*time.Minute).Format("15:04 MST")+" to take over the leases interrupted runs left on 2 environments, in case one still renews its lease")
+	}
+	if !slices.ContainsFunc(said, func(line string) bool { return slices.Contains(wants, line) }) {
+		t.Errorf("the removal said %q, want %q among it", said, wants[0])
 	}
 }
 

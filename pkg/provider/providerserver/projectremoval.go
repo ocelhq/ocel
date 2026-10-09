@@ -245,39 +245,39 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 			return err
 		}
 		defer func() { _ = project.release(ctx) }()
-		removal, err := h.openRemoval(project.context(ctx), req)
+		removal, err := h.openRemoval(project.context(), req)
 		if err != nil {
 			return project.explain(err)
 		}
 		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return project.explain(err)
 		}
-		removed, err := removal.listRemovedEnvironments(project.context(ctx))
+		removed, leased, err := removal.listRemovedEnvironments(project.context())
 		if err != nil {
 			return project.explain(err)
 		}
-		environments, err := h.leases.takeEach(project.context(ctx), vendor.KeyValues(), token, removed, stackrecords.LeaseRemoval)
+		h.leases.sayRunOutWatch(leased, progress)
+		environments, err := h.leases.takeEach(project.context(), vendor.KeyValues(), token, removed, stackrecords.LeaseRemoval)
 		if err != nil {
 			return project.explain(err)
 		}
 		defer func() { _ = environments.release(ctx) }()
-		holds := append(slices.Clone(project), environments...)
 		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
 		removal.spans = newSpanEvents(sender)
-		return holds.explain(removal.run(environments.context(project.context(ctx)), progress))
+		return project.explain(environments.explain(removal.run(environments.context(), progress)))
 	})
 }
 
-func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]leaseSubject, error) {
+func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]leaseSubject, map[string]stackrecords.EnvironmentLease, error) {
 	envs := r.environments()
 	leased, err := stackrecords.ListEnvironmentLeases(ctx, r.provider.KeyValues(), r.tier, r.slug)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	envs = append(envs, leased...)
+	envs = append(envs, slices.Collect(maps.Keys(leased))...)
 	metas, err := stackrecords.EnvironmentMetas(ctx, r.provider.KeyValues(), r.tier, r.slug)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	envs = append(envs, slices.Collect(maps.Keys(metas))...)
 	slices.Sort(envs)
@@ -285,7 +285,7 @@ func (r *projectRemoval) listRemovedEnvironments(ctx context.Context) ([]leaseSu
 	for _, env := range slices.Compact(envs) {
 		scopes = append(scopes, environmentScope{tier: r.tier, slug: r.slug, env: env})
 	}
-	return scopes, nil
+	return scopes, leased, nil
 }
 
 func removalTitle(env *environmentv1.Environment) progress.Title {
