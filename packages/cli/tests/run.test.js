@@ -55,7 +55,7 @@ describe.runIf(process.platform !== "win32")("the ocel wrapper", () => {
       wrapper.stdout.on("data", (chunk) => {
         output += chunk;
       });
-      const exited = new Promise((resolve) => wrapper.on("exit", resolve));
+      const exited = new Promise((resolve) => wrapper.on("close", resolve));
       await vi.waitFor(() => expect(output).toMatch(/^\d+\n/), { timeout: 5000 });
       const binary = Number(output.split("\n")[0]);
 
