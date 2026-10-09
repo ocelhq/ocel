@@ -177,19 +177,21 @@ only when `ocel/config` resolution changes.
 SIDECAR=<sidecar dir>
 TARBALLS=$(mktemp -d)
 cd <adapter repo> && pnpm --filter ocel build
-for pkg in ocel @ocel/cli-linux-x64; do
-  pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
-done
+pnpm --filter ocel exec pnpm pack --pack-destination "$TARBALLS"
 cd "$SIDECAR" && npm init -y >/dev/null
 npm install --no-audit --no-fund "$TARBALLS"/*.tgz
 test -d node_modules/ocel
 ```
 
 A worker-source or Next-adapter change needs a rebuild of the CLI binary in the
-adapter repo instead, not a sidecar repack:
+adapter repo instead, not a sidecar repack. The scripts run the CLI the
+`@ocel/cli-linux-x64` workspace package holds, and it deploys with the providers
+at `OCEL_PROVIDERS_DIR`:
 
 ```bash
-node scripts/snapshot.mjs
+node scripts/snapshot.mjs > snapshot.env && . ./snapshot.env
+install -D -m 0755 "$OCEL_BIN" packages/cli-linux-x64/bin/ocel
+export OCEL_PROVIDERS_DIR
 ```
 
 ## Reclaiming a stranded project
