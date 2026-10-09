@@ -64,13 +64,27 @@ func (g Gate) Status(ctx context.Context, tier environment.Tier) (BootstrapStatu
 func (s BootstrapStatus) Stale(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
-		if !stack.Present || stack.DigestCurrent {
+		if !stack.Present || stack.DigestCurrent || stack.ReadError != "" {
 			continue
 		}
 		if stack.Feature != "" && !slices.Contains(required, stack.Feature) {
 			continue
 		}
 		out = append(out, stack.Name)
+	}
+	return out
+}
+
+func (s BootstrapStatus) Unreadable(required []string) []string {
+	var out []string
+	for _, stack := range s.Stacks {
+		if stack.ReadError == "" {
+			continue
+		}
+		if stack.Feature != "" && !slices.Contains(required, stack.Feature) {
+			continue
+		}
+		out = append(out, stack.Name+" ("+stack.ReadError+")")
 	}
 	return out
 }
@@ -82,7 +96,7 @@ func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
 func (s BootstrapStatus) repairable(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
-		if stack.Feature == "" || stack.DigestCurrent || !stack.Present {
+		if stack.Feature == "" || stack.DigestCurrent || !stack.Present || stack.ReadError != "" {
 			continue
 		}
 		if slices.Contains(required, stack.Feature) {
@@ -358,6 +372,11 @@ func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required [
 		warn(progress, fmt.Sprintf(
 			"This account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
 			strings.Join(stale, ", "), command))
+	}
+	if unreadable := status.Unreadable(required); len(unreadable) > 0 {
+		warn(progress, fmt.Sprintf(
+			"Could not read part of this account's Ocel bootstrap, so it is neither refreshed nor reported as behind: %s",
+			strings.Join(unreadable, ", ")))
 	}
 	return status, nil
 }

@@ -14,9 +14,10 @@ import (
 )
 
 type Gap struct {
-	Missing  []string
-	Stale    []string
-	Features []string
+	Missing    []string
+	Stale      []string
+	Unreadable []string
+	Features   []string
 }
 
 func NewGap(status *contractv1.BootstrapStatus) Gap {
@@ -28,7 +29,11 @@ func NewGap(status *contractv1.BootstrapStatus) Gap {
 		feature := stack.GetFeature()
 		switch {
 		case stack.GetPresent():
-			if stack.GetRequired() && !stack.GetDigestCurrent() {
+			switch {
+			case !stack.GetRequired():
+			case stack.GetReadError() != "":
+				gap.Unreadable = append(gap.Unreadable, stack.GetName()+" ("+stack.GetReadError()+")")
+			case !stack.GetDigestCurrent():
 				gap.Stale = append(gap.Stale, stack.GetName())
 			}
 			if feature != "" {
@@ -130,6 +135,14 @@ func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
 		"the %s bootstrap is behind what this build has: %s.\nRun `%s` and try again",
 		TierName(tier), strings.Join(g.Stale, ", "), g.RepairCommand(tier),
 	)
+}
+
+func (g Gap) WarnUnreadable(tier environmentv1.Tier, span *run.Span) {
+	if len(g.Unreadable) == 0 {
+		return
+	}
+	span.Warn(fmt.Sprintf("Could not read part of the %s bootstrap, so whether it is current is unknown: %s.",
+		TierName(tier), strings.Join(g.Unreadable, ", ")))
 }
 
 func (g Gap) WarnStale(tier environmentv1.Tier, span *run.Span) {

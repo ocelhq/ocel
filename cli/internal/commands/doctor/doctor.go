@@ -584,8 +584,8 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	}
 
 	gap := readiness.NewGap(status)
-	stale := staleStacks(status)
-	if len(gap.Missing) == 0 && len(stale) == 0 {
+	stale, unreadable := staleStacks(status), unreadableStacks(status)
+	if len(gap.Missing) == 0 && len(stale) == 0 && len(unreadable) == 0 {
 		s.pass("bootstrapped, current")
 		return s
 	}
@@ -595,14 +595,27 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	if len(stale) > 0 {
 		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"` to refresh "+them(len(stale)))
 	}
+	if len(unreadable) > 0 {
+		s.warn(listText(unreadable, "unreadable"), "run `ocel doctor` again once the cause is cleared")
+	}
 	return s
 }
 
 func staleStacks(status *contractv1.BootstrapStatus) []string {
 	var out []string
 	for _, stack := range status.GetStacks() {
-		if stack.GetPresent() && !stack.GetDigestCurrent() {
+		if stack.GetPresent() && !stack.GetDigestCurrent() && stack.GetReadError() == "" {
 			out = append(out, stack.GetName())
+		}
+	}
+	return out
+}
+
+func unreadableStacks(status *contractv1.BootstrapStatus) []string {
+	var out []string
+	for _, stack := range status.GetStacks() {
+		if stack.GetPresent() && stack.GetReadError() != "" {
+			out = append(out, stack.GetName()+" ("+stack.GetReadError()+")")
 		}
 	}
 	return out

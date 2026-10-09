@@ -220,6 +220,7 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 			DigestCurrent: stack.DigestCurrent,
 			WrittenBy:     stack.WrittenBy,
 			Required:      stack.Feature == "" || slices.Contains(required, stack.Feature),
+			ReadError:     stack.ReadError,
 		})
 	}
 	for _, feature := range required {

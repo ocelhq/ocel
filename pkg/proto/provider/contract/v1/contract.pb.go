@@ -2962,6 +2962,7 @@ type BootstrapStack struct {
 	DigestCurrent bool                   `protobuf:"varint,4,opt,name=digest_current,json=digestCurrent,proto3" json:"digest_current,omitempty"`
 	WrittenBy     string                 `protobuf:"bytes,5,opt,name=written_by,json=writtenBy,proto3" json:"written_by,omitempty"`
 	Required      bool                   `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
+	ReadError     string                 `protobuf:"bytes,7,opt,name=read_error,json=readError,proto3" json:"read_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3036,6 +3037,13 @@ func (x *BootstrapStack) GetRequired() bool {
 		return x.Required
 	}
 	return false
+}
+
+func (x *BootstrapStack) GetReadError() string {
+	if x != nil {
+		return x.ReadError
+	}
+	return ""
 }
 
 type BootstrapStatus struct {
@@ -6822,7 +6830,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x9b\x01\n" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
-	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\xba\x01\n" +
+	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\xd9\x01\n" +
 	"\x0eBootstrapStack\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\afeature\x18\x02 \x01(\tR\afeature\x12\x18\n" +
@@ -6830,7 +6838,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0edigest_current\x18\x04 \x01(\bR\rdigestCurrent\x12\x1d\n" +
 	"\n" +
 	"written_by\x18\x05 \x01(\tR\twrittenBy\x12\x1a\n" +
-	"\brequired\x18\x06 \x01(\bR\brequired\"\x9a\x02\n" +
+	"\brequired\x18\x06 \x01(\bR\brequired\x12\x1d\n" +
+	"\n" +
+	"read_error\x18\a \x01(\tR\treadError\"\x9a\x02\n" +
 	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x12(\n" +

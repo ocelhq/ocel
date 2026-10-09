@@ -254,6 +254,38 @@ func TestEnsureReadyAsksForNoRepairAndGetsNone(t *testing.T) {
 	}
 }
 
+func TestEnsureReadyNeverRepairsOrCallsStaleABootstrapPartItCouldNotRead(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, environment.TierProduction, stackrecords.BootstrapSettings{RepairOnDeploy: true}); err != nil {
+		t.Fatal(err)
+	}
+	bootstrap.MarkUnreadable(fake.FeatureCache, "the edge was rate limited")
+
+	progress := &recorder{}
+	status, err := gate.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	if err != nil {
+		t.Fatalf("EnsureReady() error = %v", err)
+	}
+	if got := len(bootstrap.Applied()); got != 1 {
+		t.Errorf("Apply() ran %d times, want no repair of a part nobody could read", got)
+	}
+	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 0 {
+		t.Errorf("EnsureReady() reports %v behind, want nothing called stale that could not be read", stale)
+	}
+	warned := progress.warnings()
+	if strings.Contains(warned, "its content is behind") {
+		t.Errorf("EnsureReady() warned %q, want no claim the bootstrap is behind", warned)
+	}
+	if !strings.Contains(warned, "the edge was rate limited") {
+		t.Errorf("EnsureReady() warned %q, want it to say why the part could not be read", warned)
+	}
+}
+
 func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
 	t.Parallel()
 
