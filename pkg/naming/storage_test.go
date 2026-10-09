@@ -1,6 +1,7 @@
 package naming_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -10,6 +11,15 @@ func TestTheISRPrefixUnderAReleasePrefixIsItsIsrFolder(t *testing.T) {
 	got, ok := naming.ISRPrefixUnder("production/shop/web/r1a2b3c4d/")
 	if !ok || got != "production/shop/web/r1a2b3c4d/isr" {
 		t.Errorf("ISRPrefixUnder(release prefix) = %q, %v, want its isr folder without a trailing slash", got, ok)
+	}
+}
+
+func TestARouteTableKeySitsInItsReleasePrefixNamedByItsDigest(t *testing.T) {
+	coordinate := naming.Coordinate{Project: "shop", Env: "production", App: "web", Release: naming.NewReleaseToken("dep1", "fp1")}
+	digest := strings.Repeat("ab", 32)
+	want := coordinate.StoragePrefix() + "route-table/" + digest + ".json"
+	if got := coordinate.RouteTableKey(digest); got != want {
+		t.Errorf("RouteTableKey = %q, want %q", got, want)
 	}
 }
 

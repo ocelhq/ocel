@@ -9,6 +9,7 @@ import {
   resolveRelease,
 } from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
+import { routeTableKey } from "./route-table-store";
 
 function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
@@ -16,7 +17,7 @@ function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routeTable: { format: "next", table: { pathnames: [] } },
+    routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",

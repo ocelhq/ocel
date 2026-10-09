@@ -25,7 +25,6 @@ func (r Router) Facts() router.Facts {
 		CachesRecords:               true,
 		SignsOriginForwards:         true,
 		ReachesFunctions:            true,
-		Dispatches:                  true,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
 		ServesPreviewDeployments:    true,
@@ -44,7 +43,9 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 	return routerStack{s: s}, nil
 }
 
-func (r Router) Hooks() router.Hooks { return router.Hooks{} }
+func (r Router) Hooks() router.Hooks {
+	return router.Hooks{RouteTables: &router.RouteTableHooks{Store: r.storeRouteTable, Forget: r.forgetRouteTable}}
+}
 
 type routerStack struct{ s *stack }
 

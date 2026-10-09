@@ -61,7 +61,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 	if record.App == "" || record.Release == "" {
 		return fmt.Errorf("stage a release record: it names app %q and release %q, and the ledger keys records by both", record.App, record.Release)
 	}
-	staging, err := canonicalRecord(record)
+	staging, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("encode the release record for %s: %w", record.App, err)
 	}
@@ -91,7 +91,7 @@ func refuseDifferentRecord(record router.ReleaseRecord, stored, staging []byte) 
 	if err := json.Unmarshal(stored, &held); err != nil {
 		return fmt.Errorf("decode the release record %s/%s: %w", record.App, record.Release, err)
 	}
-	canonical, err := canonicalRecord(held)
+	canonical, err := json.Marshal(held)
 	if err != nil {
 		return fmt.Errorf("encode the release record %s/%s: %w", record.App, record.Release, err)
 	}
@@ -101,18 +101,6 @@ func refuseDifferentRecord(record router.ReleaseRecord, stored, staging []byte) 
 	return refusal.Refuse(refusal.CodeInvalid,
 		"stage the record of %s release %s: the ledger already holds another record for that release, and a release's record is written once, by the deploy that provisioned it. Run `ocel deploy` again to stage a new release",
 		record.App, record.Release)
-}
-
-func canonicalRecord(record router.ReleaseRecord) ([]byte, error) {
-	encoded, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
-	var decoded router.ReleaseRecord
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		return nil, err
-	}
-	return json.Marshal(decoded)
 }
 
 func (l *Ledger) Record(ctx context.Context, app, release string) (router.ReleaseRecord, bool, error) {

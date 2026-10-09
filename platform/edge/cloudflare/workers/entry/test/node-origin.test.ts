@@ -9,6 +9,7 @@ import {
   makeRecord,
   withGlobalFetch,
 } from "./origin-deps";
+import { objectStoreHolding, routeTableKey } from "./route-table-store";
 
 function bindingReturning(record: ReleaseRecord): ReleasesBinding {
   return answerEveryRecordWith(async () => {
@@ -257,18 +258,19 @@ describe("node runtime serve path", () => {
     const record = makeRecord({
       framework: "next",
       functionUrls: {},
-      routeTable: {
-        format: "next",
-        table: {
-          buildId: "build-1",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: {},
-        },
+      routeTable: { format: "next", key: routeTableKey() },
+    });
+    const routeTableStore = objectStoreHolding({
+      [routeTableKey()]: {
+        rootFunction: "/",
+        buildId: "build-1",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {},
       },
     });
-    const serve = (await resolved(record)) as ServeFetch;
+    const serve = (await resolved(record, { routeTableStore })) as ServeFetch;
 
     const response = await serve(new Request("https://api.example.com//doubled"));
 

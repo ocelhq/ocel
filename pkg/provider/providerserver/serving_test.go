@@ -251,43 +251,6 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
-	builtProject(t)
-	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
-	client, vendor := deployServed(t)
-	stager := staging(t, vendor)
-
-	req := deployRequest()
-	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-
-	result, _ := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-
-	staged := stager.records()
-	if len(staged) != 1 {
-		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
-	}
-	encoded, err := json.Marshal(staged[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	var record struct {
-		RouteTable struct {
-			Format string          `json:"format"`
-			Table  json.RawMessage `json:"table"`
-		} `json:"routeTable"`
-	}
-	if err := json.Unmarshal(encoded, &record); err != nil {
-		t.Fatal(err)
-	}
-	if record.RouteTable.Format != "next" || string(record.RouteTable.Table) != string(routing) {
-		t.Errorf("the staged record routes by a %q table %s, want the next table %s: an edge that runs the code reads its routing from the record, and without it proxies every static asset to the origin", record.RouteTable.Format, record.RouteTable.Table, routing)
-	}
-}
-
 type recordingStacks struct {
 	provider.Stacks
 

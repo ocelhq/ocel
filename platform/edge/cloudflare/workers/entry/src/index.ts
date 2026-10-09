@@ -1,3 +1,4 @@
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import {
   type RouteDeps as DispatchDeps,
   serve as dispatch,
@@ -20,6 +21,7 @@ import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
+import { ownRouteTableKey, readRouteTable } from "./route-table";
 import { invalidateSnapshot } from "./tag-clock";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
@@ -96,6 +98,7 @@ export type ResolveBase = Omit<
   interception?: Omit<InterceptionTier, "config">;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   imagesAtDeployment?: boolean;
+  routeTableStore?: EdgeObjectStore;
   edgeRuntime?: {
     loader: WorkerLoader;
     store: EdgeObjectStore;
@@ -106,21 +109,26 @@ export type ResolveBase = Omit<
 
 export type ServeFetch = (request: Request) => Promise<Response>;
 
+interface ServedRelease {
+  record: ReleaseRecord;
+  routeTable?: NextRouteTable;
+}
+
 interface ServeRuntime {
-  serve: (record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase) => ServeFetch;
-  routeDeps?: (record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase) => RouteDeps;
+  serve: (served: ServedRelease, releases: ReleaseLookup, base: ResolveBase) => ServeFetch;
+  routeDeps?: (served: ServedRelease, releases: ReleaseLookup, base: ResolveBase) => RouteDeps;
 }
 
 const routedRuntime: ServeRuntime = {
-  serve: (record, releases, base) => {
-    const deps = bound(routedDeps(record, releases, base));
+  serve: (served, releases, base) => {
+    const deps = bound(routedDeps(served, releases, base));
     return async (request) => withRouterHeader(await dispatch(request, deps));
   },
   routeDeps: routedDeps,
 };
 
 const originRuntime: ServeRuntime = {
-  serve: (record, releases, base) =>
+  serve: ({ record }, releases, base) =>
     nodeOrigin({
       app: releases.app ?? record.app,
       functionUrls: record.functionUrls,
@@ -132,21 +140,43 @@ function runtimeFor(record: ReleaseRecord): ServeRuntime {
   return record.routeTable ? routedRuntime : originRuntime;
 }
 
-async function resolveRecord(releases: ReleaseLookup): Promise<ReleaseRecord | Response> {
+async function resolveServedRelease(
+  releases: ReleaseLookup,
+  base: ResolveBase,
+): Promise<ServedRelease | Response> {
   const resolution = await resolveRelease(releases);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
-  return resolution.record;
+  const { record } = resolution;
+  if (!record.routeTable) return { record };
+
+  const { key } = record.routeTable;
+  const refuse = (reason: unknown) => {
+    console.error(
+      `ocel: cannot read the route table of release ${record.release} at ${key}; answering 503`,
+      reason,
+    );
+    return unavailableResponse();
+  };
+  if (!base.routeTableStore) return refuse("no cache store is bound to read it from");
+  if (!ownRouteTableKey(key, releases.slug)) {
+    return refuse(`the key lies outside the route tables of ${releases.slug}`);
+  }
+  try {
+    return { record, routeTable: await readRouteTable(base.routeTableStore, key) };
+  } catch (error) {
+    return refuse(error);
+  }
 }
 
 export async function resolveServe(
   releases: ReleaseLookup,
   base: ResolveBase,
 ): Promise<ServeFetch | Response> {
-  const record = await resolveRecord(releases);
-  if (record instanceof Response) return record;
+  const served = await resolveServedRelease(releases, base);
+  if (served instanceof Response) return served;
 
-  const serving = runtimeFor(record).serve(record, releases, base);
+  const serving = runtimeFor(served.record).serve(served, releases, base);
   return async (request) => withRouterHeader(await serving(request));
 }
 
@@ -154,19 +184,22 @@ export async function resolveRouteDeps(
   releases: ReleaseLookup,
   base: ResolveBase,
 ): Promise<RouteDeps | Response> {
-  const record = await resolveRecord(releases);
-  if (record instanceof Response) return record;
+  const served = await resolveServedRelease(releases, base);
+  if (served instanceof Response) return served;
 
-  const runtime = runtimeFor(record);
-  if (!runtime.routeDeps) return unroutedFrameworkResponse(record.framework);
+  const runtime = runtimeFor(served.record);
+  if (!runtime.routeDeps) return unroutedFrameworkResponse(served.record.framework);
 
-  return runtime.routeDeps(record, releases, base);
+  return runtime.routeDeps(served, releases, base);
 }
 
-function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase): RouteDeps {
-  const { edgeRuntime, imagesAtDeployment, ...rest } = base;
+function routedDeps(
+  { record, routeTable: manifest }: ServedRelease,
+  releases: ReleaseLookup,
+  base: ResolveBase,
+): RouteDeps {
+  const { edgeRuntime, imagesAtDeployment, routeTableStore, ...rest } = base;
   const { edgeWorkers } = record;
-  const manifest = record.routeTable?.table;
   if (!manifest) {
     throw new Error(`release ${record.release} has no route table to route with`);
   }
@@ -296,6 +329,7 @@ export default {
       imagesAtDeployment:
         !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,
       imageStore: store,
+      routeTableStore: store,
       assetStore: {
         store,
         cache: caches.default,
