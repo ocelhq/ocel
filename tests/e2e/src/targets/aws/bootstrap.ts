@@ -4,6 +4,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
+import type { Variant } from "../../matrix/types";
 import { ocel, runOcel } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { fixturesOn } from "../../plan";
@@ -16,7 +17,11 @@ import type { AwsWorld } from "./world";
 
 const DEFAULT_VPC_TRIES = 30;
 
-const EVERY_FEATURE = "all";
+const EDGE_FEATURES: Record<string, string> = {
+  cloudfront: "cloudfront-edge",
+  "api-gateway": "apigateway-edge",
+  cloudflare: "cloudflare-edge",
+};
 const FLOCI_FEATURES = [
   "isr",
   "image-optimization",
@@ -25,7 +30,15 @@ const FLOCI_FEATURES = [
   "variables-key",
 ];
 
-const CELL_BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
+export function cellBootstrapArgs(variant: Pick<Variant, "config">): string[] {
+  const edge = EDGE_FEATURES[variant.config.edge ?? "cloudfront"];
+  if (!edge) {
+    throw new Error(`no AWS bootstrap feature fronts the ${variant.config.edge} edge`);
+  }
+  const features = ["isr", "image-optimization", edge, "variables-key"];
+  return ["bootstrap", "production", "--yes", "--features", features.join(",")];
+}
+
 export const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
 export const BOOTSTRAP_REFRESH_ARGS = ["bootstrap", "production", "--yes"];
 
@@ -101,7 +114,7 @@ export class AwsBootstrap {
         dir,
         "deploy",
         "bootstrap",
-        CELL_BOOTSTRAP_ARGS,
+        cellBootstrapArgs(cell.variant),
         ocelEnvIn(dir, namespace),
       );
     }
