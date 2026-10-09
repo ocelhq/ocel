@@ -77,7 +77,10 @@ func EnvironmentLeaseKey(tier environment.Tier, slug, env string) keyvalue.Key {
 	return EnvironmentLeasesPartition(tier, slug).Key(env)
 }
 
-const leaseWriteAttempts = 5
+const (
+	leaseWriteAttempts  = 5
+	leaseCleanupTimeout = 30 * time.Second
+)
 
 func ProjectLeaseKey(tier environment.Tier, slug string) keyvalue.Key {
 	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootProjectLeases}.Key(slug)
@@ -98,7 +101,9 @@ func TakeEnvironmentLease(ctx context.Context, store keyvalue.Store, tier enviro
 	}
 	if err := refuseHeldProject(ctx, store, tier, slug, token, holder); err != nil {
 		if !held {
-			err = errors.Join(err, forgetLease(ctx, store, name, token))
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), leaseCleanupTimeout)
+			defer cancel()
+			err = errors.Join(err, forgetLease(cleanup, store, name, token))
 		}
 		return false, err
 	}

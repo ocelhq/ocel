@@ -352,3 +352,47 @@ func TestADeployWhoseClockRunsAheadIsRefusedWhileTheRemovalHoldingItsProjectStil
 		t.Errorf("reading the refused deploy's lease = %v, want nothing left behind", err)
 	}
 }
+
+type cancellingKeyValues struct {
+	*fake.KeyValues
+	cancelAfterWriting keyvalue.Key
+	cancel             context.CancelFunc
+}
+
+func (s *cancellingKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return keyvalue.Entry{}, err
+	}
+	return s.KeyValues.Read(ctx, key)
+}
+
+func (s *cancellingKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	revision, err := s.KeyValues.Write(ctx, entry)
+	if entry.Key.String() == s.cancelAfterWriting.String() {
+		s.cancel()
+	}
+	return revision, err
+}
+
+func (s *cancellingKeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.KeyValues.Remove(ctx, key, expected)
+}
+
+func TestAnEnvironmentLeaseWhoseRequestEndsBeforeItsProjectCheckLeavesNoLeaseBehind(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	name := stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")
+	store := &cancellingKeyValues{KeyValues: fake.NewKeyValues(), cancelAfterWriting: name, cancel: cancel}
+
+	_, err := stackrecords.TakeEnvironmentLease(ctx, store, environment.TierProduction, "shop", "production", firstLease, stackrecords.LeaseDeploy, clockAt(leaseStart).terms())
+
+	if err == nil {
+		t.Fatal("TakeEnvironmentLease() succeeded though its request ended before it checked the project, want it to stop")
+	}
+	if _, err := store.KeyValues.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("reading the lease after the request ended = %v, want the lease it wrote forgotten rather than left to run out", err)
+	}
+}
