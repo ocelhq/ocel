@@ -31,6 +31,7 @@ type Bootstrap struct {
 	planned     *provider.Plan
 	planRefusal error
 	removal     *provider.Plan
+	described   int
 }
 
 func NewBootstrap() *Bootstrap {
@@ -138,9 +139,16 @@ func (b *Bootstrap) Applied() []provider.BootstrapRequest {
 	return slices.Clone(b.requests)
 }
 
+func (b *Bootstrap) Described() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.described
+}
+
 func (b *Bootstrap) Describe(_ context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.described++
 	features, present := b.applied[tier]
 	described := provider.BootstrapDescription{Tier: tier, Present: present, Unfinished: present && b.unfinished}
 	if !present {
