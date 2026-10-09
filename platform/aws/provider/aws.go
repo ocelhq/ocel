@@ -36,6 +36,7 @@ type Provider struct {
 	deployed memo[environment.Tier, bootstrap.Reading]
 	params   memo[tierEdge, bootstrap.TierParams]
 	account  memo[struct{}, string]
+	opened   edges.Opened
 
 	stacks *deploy.Stacks
 
