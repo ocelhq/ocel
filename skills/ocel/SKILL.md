@@ -19,9 +19,9 @@ as theirs to approve.
 
 1. **Orient.** Run `ocel doctor --json`. It is done when `data` reports every check passing.
    Each failing check names its fix; apply it, or hand it to the human when it needs an
-   account, credentials or money. With no project config, the error is `project.no_config`:
-   ask the human which provider (`aws`, `gcp` or `vps`) and run
-   `ocel init --provider <id>`. When init answers `input_required` for a provider option
+   account, credentials or money. With no project config, the Project check fails (other
+   commands answer `project.no_config`): ask the human which provider (`aws`, `gcp` or
+   `vps`) and run `ocel init --provider <id>`. When init answers `input_required` for a provider option
    (`--option ssh=<target>` for a VPS, for example), the value names the human's own
    machine or account. Local work never uses it: when the task stays in `ocel dev`, pass a
    placeholder such as `deploy@example.invalid` and tell the human to replace it before
