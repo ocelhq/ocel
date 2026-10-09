@@ -422,6 +422,38 @@ func (callerIdentity) GetCallerIdentity(context.Context, *sts.GetCallerIdentityI
 	}, nil
 }
 
+type countedCallerIdentity struct {
+	callerIdentity
+	calls int
+}
+
+func (c *countedCallerIdentity) GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
+	c.calls++
+	return c.callerIdentity.GetCallerIdentity(ctx, in, optFns...)
+}
+
+func TestTheAccountIdAfterAWhoamiAsksSTSNothingMore(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	counted := &countedCallerIdentity{}
+	p.sts = counted
+
+	principal, err := p.Credentials().Whoami(context.Background())
+	if err != nil {
+		t.Fatalf("Whoami() = %v", err)
+	}
+	account, err := p.accountID(context.Background())
+	if err != nil {
+		t.Fatalf("accountID() = %v", err)
+	}
+
+	if account != principal.Account {
+		t.Errorf("accountID() = %q, want the account Whoami named, %q", account, principal.Account)
+	}
+	if counted.calls != 1 {
+		t.Errorf("a Whoami and an account id asked STS who the caller is %d times, want once", counted.calls)
+	}
+}
+
 func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 	t.Parallel()
 
