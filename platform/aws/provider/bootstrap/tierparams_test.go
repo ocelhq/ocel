@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type fakeBatchSSM struct {
@@ -149,16 +150,32 @@ func TestReadTierParamsUnknownTier(t *testing.T) {
 	}
 }
 
-func TestReadTierParamsMissingPassphrase(t *testing.T) {
-	params := fullProductionParams()
-	delete(params, passphraseParam)
-
-	_, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, environment.TierProduction, KindCloudflare)
-	if err == nil {
-		t.Fatal("ReadTierParams without a passphrase = nil error, want an error")
-	}
-	if !strings.Contains(err.Error(), passphraseParam) {
-		t.Errorf("error = %v, want it to name %s", err, passphraseParam)
+func TestReadingATierWithoutItsPassphraseRefusesUntilThatTierIsBootstrapped(t *testing.T) {
+	for _, tier := range bothTiers {
+		param := defaultNamespace.PassphraseParamFor(tier)
+		readers := map[string]func(SSMBatchAPI) error{
+			"ReadTierParams": func(api SSMBatchAPI) error {
+				_, err := ReadTierParams(context.Background(), api, defaultNamespace, tier, KindCloudflare)
+				return err
+			},
+			"ReadCoreParams": func(api SSMBatchAPI) error {
+				_, err := ReadCoreParams(context.Background(), api, defaultNamespace, tier)
+				return err
+			},
+		}
+		for name, read := range readers {
+			err := read(&fakeBatchSSM{params: map[string]string{}})
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+				t.Errorf("%s for the %s tier without %s = %v, want a %s refusal", name, tier, param, err, refusal.CodeNotReady)
+				continue
+			}
+			for _, want := range []string{param, "`ocel bootstrap " + string(tier) + "`"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%s for the %s tier refused with %q, want it to name %s", name, tier, err, want)
+				}
+			}
+		}
 	}
 }
 
