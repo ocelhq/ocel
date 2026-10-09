@@ -554,16 +554,16 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a prune-only spec with the checks skipped still prunes the routes of a worker an earlier spec stamped", func(t *testing.T) {
+	t.Run("a prune-only spec with the checks skipped still prunes the routes of a worker an unstamped reconcile left behind", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
 			{"id": "stale", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
 		}
+		m.scriptSettings = map[string]map[string]any{"ocel-preview": {}}
 		p := m.provider(t)
 		p.skipChecks = true
 		spec := pruneOnlySpec(store.URL, "v2")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: "v1.earlier"})
 
 		if _, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t")); err != nil {
 			t.Fatalf("Reconcile: %v", err)
@@ -575,7 +575,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a prune-only spec with the checks skipped and no earlier stamp retires its worker without listing the account's routes", func(t *testing.T) {
+	t.Run("a prune-only spec with the checks skipped and no worker left retires it without listing the account's routes", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{

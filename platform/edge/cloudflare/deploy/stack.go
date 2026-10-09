@@ -196,11 +196,19 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 	}
 
+	prune := spec.PruneRoutes
+	if prune && spec.PruneOnly && p.skipChecks {
+		settings, err := p.scriptSettings(ctx, accountID, program.Name)
+		if err != nil {
+			return nil, err
+		}
+		prune = settings != nil
+	}
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routeSpec{
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
-		prune:           spec.PruneRoutes && (!spec.PruneOnly || !p.skipChecks || stamps[program.Name] != ""),
+		prune:           prune,
 		pruneStem:       program.PruneWorkerStem,
 		requiredRecord:  program.RequiredRecord,
 		owns:            projectOwnsScript(p.namespace, slug),
