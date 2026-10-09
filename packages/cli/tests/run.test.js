@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { platformPackage } from "../bin/resolve.js";
 
 const wrapperSource = join(dirname(fileURLToPath(import.meta.url)), "..", "bin");
@@ -42,6 +42,41 @@ describe.runIf(process.platform !== "win32")("the ocel wrapper", () => {
     const run = spawnSync(process.execPath, [entry], { encoding: "utf8" });
     expect(run.status).toBe(3);
   });
+
+  it.each(["SIGINT", "SIGTERM"])(
+    "stops the platform binary when the wrapper alone is sent %s",
+    async (signal) => {
+      install(
+        '#!/bin/sh\ntrap \'echo "stopped by TERM"; exit 0\' TERM\necho "$$"\nwhile :; do sleep 0.05; done\n',
+      );
+      const wrapper = spawn(process.execPath, [entry], { stdio: ["ignore", "pipe", "inherit"] });
+      let output = "";
+      wrapper.stdout.setEncoding("utf8");
+      wrapper.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      const exited = new Promise((resolve) => wrapper.on("exit", resolve));
+      await vi.waitFor(() => expect(output).toMatch(/^\d+\n/), { timeout: 5000 });
+      const binary = Number(output.split("\n")[0]);
+
+      try {
+        wrapper.kill(signal);
+        const outcome = await Promise.race([
+          exited.then(() => "exited"),
+          new Promise((resolve) => setTimeout(() => resolve("running"), 5000)),
+        ]);
+        expect(outcome).toBe("exited");
+        expect(output).toContain("stopped by TERM");
+        expect(() => process.kill(binary, 0)).toThrow();
+      } finally {
+        wrapper.kill("SIGKILL");
+        try {
+          process.kill(binary, "SIGKILL");
+        } catch {}
+      }
+    },
+    10000,
+  );
 
   it("reports the missing platform package rather than a stack trace", () => {
     const run = spawnSync(process.execPath, [entry], { encoding: "utf8" });
