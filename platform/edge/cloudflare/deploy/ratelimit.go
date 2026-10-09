@@ -118,21 +118,37 @@ func rateLimitDelay(header http.Header, attempt int, jitter float64, now time.Ti
 }
 
 func parseRateLimitReset(header http.Header) (time.Duration, bool) {
-	var longest time.Duration
-	found := false
+	var longest, longestExhausted time.Duration
+	found, foundExhausted := false, false
 	for _, item := range strings.Split(header.Get("Ratelimit"), ",") {
+		reset, remaining := -1.0, -1.0
 		for _, param := range strings.Split(item, ";")[1:] {
 			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
-			if !ok || key != "t" {
+			if !ok {
 				continue
 			}
-			seconds, err := strconv.ParseFloat(value, 64)
-			if err != nil || seconds < 0 {
+			parsed, err := strconv.ParseFloat(value, 64)
+			if err != nil || parsed < 0 {
 				continue
 			}
-			found = true
-			longest = max(longest, time.Duration(seconds*float64(time.Second)))
+			switch key {
+			case "t":
+				reset = parsed
+			case "r":
+				remaining = parsed
+			}
 		}
+		if reset < 0 {
+			continue
+		}
+		wait := time.Duration(reset * float64(time.Second))
+		found, longest = true, max(longest, wait)
+		if remaining == 0 {
+			foundExhausted, longestExhausted = true, max(longestExhausted, wait)
+		}
+	}
+	if foundExhausted {
+		return longestExhausted, true
 	}
 	return longest, found
 }
