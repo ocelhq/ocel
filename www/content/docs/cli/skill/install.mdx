@@ -1,0 +1,25 @@
+---
+title: "ocel skill install"
+description: "Write the ocel skill where coding agents look for it."
+---
+
+```bash
+ocel skill install [flags]
+```
+
+Writes the skill this CLI carries into .claude/skills/ocel and .agents/skills/ocel at the project root, or under your home directory with `--global`, replacing what those two directories held. Its SKILL.md records this CLI's version, so `ocel doctor` can say when it falls behind. Without `--yes` it lists the files it would write and writes nothing.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--global` | `bool` | `false` | Write into ~/.claude/skills/ocel and ~/.agents/skills/ocel instead of the project |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema skill install` prints.
