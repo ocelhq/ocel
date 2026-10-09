@@ -218,7 +218,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 		}
 		spec.Origin = claimed.origin
 	} else {
-		key, err := ensurePreviewKey(ctx, w.provider)
+		key, err := ensurePreviewKey(ctx, w.provider, nil)
 		if err != nil {
 			return "", err
 		}
