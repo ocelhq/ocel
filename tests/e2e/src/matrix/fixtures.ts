@@ -42,6 +42,7 @@ import {
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
+  cloudfrontShielded,
   container,
   defaults,
   registry,
@@ -132,7 +133,7 @@ export const deploy = {
     checks: [...NODE_CHECKS, ...NEXT_ROUTING_AND_CACHE_CHECKS],
     on: {
       dev: [defaults],
-      aws: [defaults, container, cloudflare],
+      aws: [defaults, container, cloudflare, cloudfrontShielded],
       vps: [defaults],
       gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
     },

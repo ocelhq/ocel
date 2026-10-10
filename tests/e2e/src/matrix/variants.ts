@@ -1,3 +1,4 @@
+import { cloudfrontShieldChecks } from "../checks/cloudfrontShield";
 import {
   CLIENT_CERTIFICATE_CHECKS,
   forwardedAppChecks,
@@ -17,6 +18,12 @@ export const container = variant("container", {
 export const apiGateway = variant("api-gateway", {
   offeredOn: ["aws"],
   config: { edge: "api-gateway" },
+});
+
+export const cloudfrontShielded = variant("cloudfront-shield", {
+  offeredOn: ["aws"],
+  config: { edge: "cloudfront" },
+  checks: cloudfrontShieldChecks,
 });
 
 export const cloudflare = variant("cloudflare", {
