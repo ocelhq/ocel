@@ -1416,6 +1416,88 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
   expect(config.cacheMaxMemorySize).toBe(1);
 });
 
+test.each([
+  ["a production build", PHASE_PRODUCTION_BUILD],
+  ["the dev server", PHASE_DEVELOPMENT_SERVER],
+])("%s defines the declared public variables as one JSON string", async (_name, phase) => {
+  vi.stubEnv("OCEL_PUBLIC_KEYS", "NEXT_PUBLIC_API_URL,NEXT_PUBLIC_RETRIES");
+  vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+  vi.stubEnv("NEXT_PUBLIC_RETRIES", "3");
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({} as never, { phase, nextVersion: "16.2.10" });
+
+  const defined = config.compiler?.define?.["process.env.OCEL_PUBLIC_ENV"];
+  expect(typeof defined).toBe("string");
+  expect(JSON.parse(defined as string)).toEqual({
+    NEXT_PUBLIC_API_URL: "https://api.example.com",
+    NEXT_PUBLIC_RETRIES: "3",
+  });
+});
+
+test("defines no NEXT_PUBLIC_ variable the app did not declare", async () => {
+  vi.stubEnv("OCEL_PUBLIC_KEYS", "NEXT_PUBLIC_API_URL");
+  vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+  vi.stubEnv("NEXT_PUBLIC_STRAY", "from the shell");
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({} as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
+
+  const defined = config.compiler?.define?.["process.env.OCEL_PUBLIC_ENV"] as string;
+  expect(JSON.parse(defined)).toEqual({ NEXT_PUBLIC_API_URL: "https://api.example.com" });
+});
+
+test("leaves a declared public variable with no value out of the define", async () => {
+  vi.stubEnv("OCEL_PUBLIC_KEYS", "NEXT_PUBLIC_SET,NEXT_PUBLIC_UNSET");
+  vi.stubEnv("NEXT_PUBLIC_SET", "yes");
+  vi.stubEnv("NEXT_PUBLIC_UNSET", undefined);
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({} as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
+
+  const defined = config.compiler?.define?.["process.env.OCEL_PUBLIC_ENV"] as string;
+  expect(JSON.parse(defined)).toEqual({ NEXT_PUBLIC_SET: "yes" });
+});
+
+test("defines an empty set of public variables when the app declared none", async () => {
+  vi.stubEnv("OCEL_PUBLIC_KEYS", undefined);
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({} as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
+
+  const defined = config.compiler?.define?.["process.env.OCEL_PUBLIC_ENV"] as string;
+  expect(JSON.parse(defined)).toEqual({});
+});
+
+test("keeps the compiler defines the app set itself", async () => {
+  vi.stubEnv("OCEL_PUBLIC_KEYS", "NEXT_PUBLIC_API_URL");
+  vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!(
+    { compiler: { define: { "process.env.BUILD_TAG": '"v1"' }, removeConsole: true } } as never,
+    { phase: PHASE_PRODUCTION_BUILD, nextVersion: "16.2.10" },
+  );
+
+  expect(config.compiler?.define?.["process.env.BUILD_TAG"]).toBe('"v1"');
+  expect(config.compiler?.removeConsole).toBe(true);
+  expect(config.compiler?.define?.["process.env.OCEL_PUBLIC_ENV"]).toBeDefined();
+});
+
 test("leaves the cache handlers in required-server-files as Next wrote them", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);

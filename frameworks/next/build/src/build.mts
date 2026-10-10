@@ -7,6 +7,7 @@ export interface NextBuild extends OutputBuild {
   buildId: string;
   edgeKind?: string;
   allowDegraded?: string[];
+  publicKeys?: string[];
   maxFunctionBytes?: number;
 }
 
@@ -26,6 +27,7 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     {
       OCEL_EDGE_KIND: app.edgeKind ?? "",
       OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
+      OCEL_PUBLIC_KEYS: (app.publicKeys ?? []).join(","),
       OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
       [ADAPTER_PATH_ENV]: adapterPath,
       [DEPLOYMENT_ID_ENV]: app.buildId,
