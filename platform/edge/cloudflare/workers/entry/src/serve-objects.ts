@@ -1,6 +1,6 @@
 import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 import type { EdgeObjectStore, EdgeStoredObject } from "./edge";
-import { objectCall, type ServeProps } from "./serve-key";
+import { buildObjectCall, buildServeRequest, type ServeProps } from "./serve-key";
 
 export type ServeFactory = (options: { props: ServeProps }) => {
   fetch(request: Request): Promise<Response>;
@@ -14,8 +14,8 @@ export function serveObjects(
 ): EdgeObjectStore & AssetBucket & { get(key: string): Promise<ServedObject | null> } {
   return {
     async get(key) {
-      const { url, props } = objectCall(host, key);
-      const res = await serve({ props }).fetch(new Request(url));
+      const { url, props } = buildObjectCall(host, key);
+      const res = await serve({ props }).fetch(buildServeRequest(url));
       if (res.status === 404) {
         await res.body?.cancel();
         return null;

@@ -28,16 +28,18 @@ const env: Env = {
 
 function ctxWithServe(answer: (key: string) => Response) {
   const asked: { key: string; props: ServeProps }[] = [];
+  const headers: Headers[] = [];
   const serve = ({ props }: { props: ServeProps }) => ({
     fetch: async (request: Request) => {
       const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
       asked.push({ key, props });
+      headers.push(request.headers);
       return answer(key);
     },
   });
   const ctx = createExecutionContext();
   Object.defineProperty(ctx, "exports", { value: { Serve: serve, CacheEntrypoint: () => ({}) } });
-  return { asked, ctx };
+  return { asked, headers, ctx };
 }
 
 describe("the gateway reading a release's immutable objects", () => {
@@ -63,5 +65,25 @@ describe("the gateway reading a release's immutable objects", () => {
       hosts.push(asked[0].props.host);
     }
     expect(hosts).toEqual(["a.example.com", "b.example.com"]);
+  });
+});
+
+describe("the gateway calling Serve", () => {
+  it("hands Serve none of the visitor's cookies or credentials", async () => {
+    const { headers, ctx } = ctxWithServe(() => new Response("Not Found", { status: 404 }));
+
+    await worker.fetch(
+      new Request("https://shop.example.com/users", {
+        headers: { cookie: "session=1", authorization: "Bearer t" },
+      }),
+      env,
+      ctx,
+    );
+
+    expect(headers.length).toBeGreaterThan(0);
+    for (const sent of headers) {
+      expect(sent.get("cookie")).toBeNull();
+      expect(sent.get("authorization")).toBeNull();
+    }
   });
 });

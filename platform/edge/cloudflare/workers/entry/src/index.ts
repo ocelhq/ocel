@@ -303,15 +303,12 @@ function unavailableResponse(): Response {
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
+    const host = new URL(request.url).host;
     const store = env.OCEL_CACHE_STORE;
     const serve = ctx.exports?.Serve as ServeFactory | undefined;
-    const objects =
-      serve && (store || env.OCEL_ASSET_BUCKET)
-        ? serveObjects(serve, new URL(request.url).host)
-        : store;
+    const objects = serve && (store || env.OCEL_ASSET_BUCKET) ? serveObjects(serve, host) : store;
     const originFetch = originFetchFor(env);
 
-    const host = new URL(request.url).host;
     let releases: ReleaseLookup = {
       binding: env.RELEASES,
       slug: env.OCEL_SLUG,
