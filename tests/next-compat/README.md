@@ -221,7 +221,10 @@ With no slug, gcp-direct takes every per-app project of the run.
 Workers observability is uploaded **off** — one run serves hundreds of
 deployments through the entrypoint worker and Cloudflare bills logs per event —
 so there is nothing to see in the Cloudflare dashboard. Debug from
-`deploy-build.log` in the temp app, and from `logs.mjs`, which replays it. To
+`deploy-build.log` in the temp app, and from `logs.mjs`, which replays it. On an
+AWS target, `cleanup.mjs` prints the tail of each function's CloudWatch logs from
+deploy to teardown before it removes the preview; `run-tests.js` shows that
+output only for a suite that failed. To
 get the dashboard back for one investigation, unset `OCEL_EDGE_OBSERVABILITY`
 and redeploy; the disable is uploaded explicitly, so the next upload turns it
 back on.

@@ -4,7 +4,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { printFunctionLogs } from "./aws.mjs";
 import {
+  DEPLOY_REPORT_FILE,
   isProductionTarget,
   ocelBinary,
   previewNameForApp,
@@ -14,9 +16,18 @@ import {
   requireNamespace,
   SKIP_CHECKS_ENV,
   STATE_FILE,
+  tailLogEvents,
 } from "./lib.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 20 * 60 * 1000;
+
+const FALLBACK_LOG_WINDOW_MS = 60 * 60 * 1000;
+
+const MAX_EVENTS_SCANNED = 20_000;
+
+const MAX_TAIL_LINES = 300;
+
+const MAX_TAIL_BYTES = 64 * 1024;
 
 requireNamespace();
 
@@ -29,7 +40,10 @@ if (!adapterDir) {
 
 const target = readCompatTarget();
 const production = isProductionTarget(target);
-const { slug, name } = resolveIdentity();
+const { slug, name, startedAt } = resolveIdentity();
+if (!target.gcp) {
+  printTestWindowLogs();
+}
 ensureConfig(slug);
 const command = production ? ["destroy", "production", "--yes"] : ["preview", "rm", name, "--yes"];
 console.error(
@@ -74,7 +88,34 @@ function resolveIdentity() {
   return {
     slug: state.slug || projectSlugForApp(appDir, target),
     name: state.name || previewNameForApp(appDir),
+    startedAt: Number(state.startedAt) || Date.now() - FALLBACK_LOG_WINDOW_MS,
   };
+}
+
+function printTestWindowLogs() {
+  console.log(
+    `=== lambda logs from deploy to teardown (the last ${MAX_TAIL_LINES} lines or ${MAX_TAIL_BYTES} bytes per function) ===`,
+  );
+  let storagePrefix;
+  try {
+    storagePrefix = JSON.parse(readFileSync(join(appDir, DEPLOY_REPORT_FILE), "utf8"))?.apps?.[0]
+      ?.storagePrefix;
+  } catch {}
+  printFunctionLogs({
+    slug,
+    storagePrefix,
+    startTime: startedAt,
+    endTime: Date.now(),
+    query: ["--max-items", String(MAX_EVENTS_SCANNED)],
+    toLines: (events) => [
+      ...(events.length >= MAX_EVENTS_SCANNED
+        ? [
+            `(the window holds more than ${MAX_EVENTS_SCANNED} events; these are the last of the first ${MAX_EVENTS_SCANNED})`,
+          ]
+        : []),
+      ...tailLogEvents(events, { maxLines: MAX_TAIL_LINES, maxBytes: MAX_TAIL_BYTES }),
+    ],
+  });
 }
 
 function ensureConfig(slug) {

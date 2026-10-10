@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { DEFAULT_NAMESPACE, lambdaFunctionNames } from "./lib.mjs";
+import { DEFAULT_NAMESPACE, lambdaFunctionNames, storageCoordinate } from "./lib.mjs";
 
 export const POLL_INTERVAL_MS = 3_000;
 
@@ -204,4 +204,81 @@ export function resolveBootstrapBucket(logicalId, envHint, fail) {
     fail(`could not resolve the bootstrap's ${logicalId}; set ${envHint}`);
   }
   return found;
+}
+
+const FUNCTION_LOG_TIMEOUT_MS = 60_000;
+
+function awsJSON(args) {
+  return JSON.parse(
+    execFileSync("aws", [...args, "--output", "json"], {
+      encoding: "utf8",
+      timeout: FUNCTION_LOG_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, ...AWS_CLI_RETRY_ENV },
+    }),
+  );
+}
+
+export function printFunctionLogs({ slug, storagePrefix, startTime, endTime, query, toLines }) {
+  if (!slug) {
+    console.log("(no deploy state; cannot resolve this app's functions)");
+    return;
+  }
+
+  const env = storageCoordinate(storagePrefix)?.env ?? "";
+  const filters = [
+    `Key=ocel:project,Values=${slug}`,
+    ...(env ? [`Key=ocel:env,Values=${env}`] : []),
+  ];
+
+  let functionNames;
+  try {
+    functionNames = lambdaFunctionNames(
+      awsJSON([
+        "resourcegroupstaggingapi",
+        "get-resources",
+        "--tag-filters",
+        ...filters,
+        "--resource-type-filters",
+        "lambda:function",
+      ]),
+    );
+  } catch (err) {
+    console.log(`(could not resolve this app's functions: ${err.message})`);
+    return;
+  }
+
+  if (functionNames.length === 0) {
+    console.log(`(no functions tagged ${filters.join(" ")})`);
+    return;
+  }
+
+  for (const functionName of functionNames) {
+    let group;
+    try {
+      group = functionLogGroup(functionName);
+    } catch (err) {
+      console.log(`(could not resolve the log group of ${functionName}: ${err.message})`);
+      continue;
+    }
+    console.log(`--- ${group} ---`);
+    try {
+      const events = awsJSON([
+        "logs",
+        "filter-log-events",
+        "--log-group-name",
+        group,
+        "--start-time",
+        String(startTime),
+        ...(endTime === undefined ? [] : ["--end-time", String(endTime)]),
+        ...query,
+      ]);
+      for (const line of toLines(events.events ?? [])) {
+        console.log(line);
+      }
+    } catch (err) {
+      console.log(`(could not read ${group}: ${err.message})`);
+    }
+  }
 }

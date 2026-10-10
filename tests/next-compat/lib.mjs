@@ -832,6 +832,32 @@ export function tail(text, maxLines) {
   return lines.slice(Math.max(0, lines.length - maxLines)).join("\n");
 }
 
+function cutToBytes(text, maxBytes) {
+  let cut = Buffer.from(text).subarray(0, maxBytes).toString();
+  while (Buffer.byteLength(cut) > maxBytes) cut = cut.slice(0, -1);
+  return cut;
+}
+
+export function tailLogEvents(events, { maxLines, maxBytes }) {
+  const kept = [];
+  let bytes = 0;
+  for (let i = events.length - 1; i >= 0 && kept.length < maxLines; i--) {
+    const { timestamp, message } = events[i];
+    const line = `${new Date(timestamp).toISOString()} ${(message ?? "").trimEnd()}`;
+    const size = Buffer.byteLength(line) + 1;
+    if (bytes + size > maxBytes) {
+      if (kept.length === 0) kept.push(cutToBytes(line, maxBytes));
+      break;
+    }
+    bytes += size;
+    kept.push(line);
+  }
+  kept.reverse();
+  const leftOut = events.length - kept.length;
+  if (leftOut === 0) return kept;
+  return [`(${leftOut} earlier ${leftOut === 1 ? "event" : "events"} left out)`, ...kept];
+}
+
 export const PLAN_APPLY_HINT = "Run without --dry to apply.";
 
 export function deployPlanProblems(output, { resultWritten }) {

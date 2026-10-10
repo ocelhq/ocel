@@ -1,24 +1,14 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
-import {
-  BUILD_LOG_FILE,
-  DEPLOY_REPORT_FILE,
-  lambdaFunctionNames,
-  markerLines,
-  STATE_FILE,
-  storageCoordinate,
-} from "./lib.mjs";
+import { printFunctionLogs } from "./aws.mjs";
+import { BUILD_LOG_FILE, DEPLOY_REPORT_FILE, markerLines, STATE_FILE } from "./lib.mjs";
 
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
 
 const MAX_EVENTS_PER_GROUP = 200;
-
-const AWS_TIMEOUT_MS = 60_000;
 
 const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
@@ -70,82 +60,15 @@ function replayRuns(dir) {
 
 function printLambdaLogs() {
   console.log("=== lambda logs ===");
-  if (!state.slug) {
-    console.log("(no deploy state; cannot resolve this app's functions)");
-    return;
-  }
-
-  const env = storageCoordinate(result.apps?.[0]?.storagePrefix)?.env ?? "";
-  const filters = [
-    `Key=ocel:project,Values=${state.slug}`,
-    ...(env ? [`Key=ocel:env,Values=${env}`] : []),
-  ];
-
-  let functionNames;
-  try {
-    functionNames = lambdaFunctionNames(
-      JSON.parse(
-        aws([
-          "resourcegroupstaggingapi",
-          "get-resources",
-          "--tag-filters",
-          ...filters,
-          "--resource-type-filters",
-          "lambda:function",
-        ]),
+  printFunctionLogs({
+    slug: state.slug,
+    storagePrefix: result.apps?.[0]?.storagePrefix,
+    startTime: Number(state.startedAt) || Date.now() - DEFAULT_LOG_WINDOW_MS,
+    query: ["--limit", String(MAX_EVENTS_PER_GROUP)],
+    toLines: (events) =>
+      events.map(
+        (event) => `${new Date(event.timestamp).toISOString()} ${(event.message ?? "").trimEnd()}`,
       ),
-    );
-  } catch (err) {
-    console.log(`(could not resolve this app's functions: ${err.message})`);
-    return;
-  }
-
-  if (functionNames.length === 0) {
-    console.log(`(no functions tagged ${filters.join(" ")})`);
-    return;
-  }
-
-  const startTime = Number(state.startedAt) || Date.now() - DEFAULT_LOG_WINDOW_MS;
-  for (const functionName of functionNames) {
-    let group;
-    try {
-      group = functionLogGroup(functionName);
-    } catch (err) {
-      console.log(`(could not resolve the log group of ${functionName}: ${err.message})`);
-      continue;
-    }
-    console.log(`--- ${group} ---`);
-    try {
-      const events = JSON.parse(
-        aws([
-          "logs",
-          "filter-log-events",
-          "--log-group-name",
-          group,
-          "--start-time",
-          String(startTime),
-          "--limit",
-          String(MAX_EVENTS_PER_GROUP),
-        ]),
-      );
-      for (const event of events.events ?? []) {
-        console.log(
-          `${new Date(event.timestamp).toISOString()} ${(event.message ?? "").trimEnd()}`,
-        );
-      }
-    } catch (err) {
-      console.log(`(could not read ${group}: ${err.message})`);
-    }
-  }
-}
-
-function aws(args) {
-  return execFileSync("aws", [...args, "--output", "json"], {
-    encoding: "utf8",
-    timeout: AWS_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 32 * 1024 * 1024,
-    env: { ...process.env, ...AWS_CLI_RETRY_ENV },
   });
 }
 

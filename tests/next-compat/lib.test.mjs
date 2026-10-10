@@ -70,6 +70,7 @@ import {
   summarizeOutcomes,
   TYPESCRIPT_PIN,
   tail,
+  tailLogEvents,
   tarEntryNames,
   UNRUNNABLE_TARGETS,
   WARM_SUMMARY_MARKER,
@@ -1254,6 +1255,45 @@ describe("tail", () => {
   it("returns short input unchanged", () => {
     expect(tail("a\nb", 5)).toBe("a\nb");
     expect(tail("", 5)).toBe("");
+  });
+});
+
+describe("tailLogEvents", () => {
+  const at = Date.UTC(2026, 9, 10, 12, 0, 0);
+  const event = (i, message = `line ${i}`) => ({ timestamp: at + i * 1000, message });
+
+  it("prints each event as its time and message, oldest first", () => {
+    expect(
+      tailLogEvents([event(0), event(1, "END RequestId: r1\n")], { maxLines: 10, maxBytes: 1024 }),
+    ).toEqual(["2026-10-10T12:00:00.000Z line 0", "2026-10-10T12:00:01.000Z END RequestId: r1"]);
+  });
+
+  it("keeps the newest events up to the line cap and says how many it left out", () => {
+    const events = Array.from({ length: 5 }, (_, i) => event(i));
+    expect(tailLogEvents(events, { maxLines: 2, maxBytes: 1024 })).toEqual([
+      "(3 earlier events left out)",
+      "2026-10-10T12:00:03.000Z line 3",
+      "2026-10-10T12:00:04.000Z line 4",
+    ]);
+  });
+
+  it("keeps the newest events that fit the byte cap", () => {
+    const events = [event(0, "a".repeat(100)), event(1, "b".repeat(10)), event(2, "c".repeat(10))];
+    expect(tailLogEvents(events, { maxLines: 10, maxBytes: 80 })).toEqual([
+      "(1 earlier event left out)",
+      `2026-10-10T12:00:01.000Z ${"b".repeat(10)}`,
+      `2026-10-10T12:00:02.000Z ${"c".repeat(10)}`,
+    ]);
+  });
+
+  it("cuts a newest event larger than the byte cap rather than printing nothing", () => {
+    const [line] = tailLogEvents([event(0, "x".repeat(500))], { maxLines: 10, maxBytes: 100 });
+    expect(Buffer.byteLength(line)).toBeLessThanOrEqual(100);
+    expect(line.startsWith("2026-10-10T12:00:00.000Z xxx")).toBe(true);
+  });
+
+  it("prints nothing for an empty window", () => {
+    expect(tailLogEvents([], { maxLines: 10, maxBytes: 1024 })).toEqual([]);
   });
 });
 
