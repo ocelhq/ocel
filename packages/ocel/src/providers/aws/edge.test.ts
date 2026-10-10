@@ -5,6 +5,10 @@ describe("cloudfront", () => {
   it("keys its options by the cloudfront edge", () => {
     expect(cloudfront()).toEqual({ cloudfront: {} });
   });
+
+  it("passes the origin shield option through", () => {
+    expect(cloudfront({ originShield: false })).toEqual({ cloudfront: { originShield: false } });
+  });
 });
 
 describe("apiGateway", () => {

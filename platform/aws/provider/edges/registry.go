@@ -48,8 +48,8 @@ var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error)
 		}
 		return cloudflare.New(string(deps.Namespace), decoded), nil
 	},
-	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, _ cloudfront.Options) edge.Edge {
-		return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS))
+	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, options cloudfront.Options) edge.Edge {
+		return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS), options)
 	}),
 	apigateway.Kind: constructWithOptions(apigateway.Kind, func(deps Deps, _ apigateway.Options) edge.Edge {
 		return apigateway.New(deps.Namespace, apigateway.FromConfig(deps.AWS))

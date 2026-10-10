@@ -14,7 +14,7 @@ import (
 type Router struct{ p *cloudFront }
 
 func NewRouter(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) Router {
-	return Router{p: newCloudFront(ns, open)}
+	return Router{p: newCloudFront(ns, open, Options{})}
 }
 
 func (r Router) Kind() router.Kind { return router.Kind(Kind) }
