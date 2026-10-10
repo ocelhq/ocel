@@ -318,6 +318,24 @@ export function renderOcelConfig({
   ].join("\n");
 }
 
+export const BROWSER_TIMEOUT_ENV = "OCEL_E2E_BROWSER_TIMEOUT_MS";
+
+const HARNESS_BROWSER_TIMEOUT =
+  /const defaultTimeout = process\.env\.NEXT_E2E_TEST_TIMEOUT\n(\s*)\? parseInt\(process\.env\.NEXT_E2E_TEST_TIMEOUT, 10\)/;
+
+export function withBrowserTimeoutEnv(source) {
+  if (!HARNESS_BROWSER_TIMEOUT.test(source)) {
+    throw new Error(
+      "the harness's Playwright defaultTimeout no longer reads NEXT_E2E_TEST_TIMEOUT, " +
+        `so ${BROWSER_TIMEOUT_ENV} would not bound its browser steps`,
+    );
+  }
+  return source.replace(
+    HARNESS_BROWSER_TIMEOUT,
+    `const defaultTimeout = process.env.${BROWSER_TIMEOUT_ENV}\n$1? parseInt(process.env.${BROWSER_TIMEOUT_ENV}, 10)`,
+  );
+}
+
 export function withBuildScript(pkg) {
   if (!pkg.scripts?.build) {
     return { ...pkg, scripts: { ...pkg.scripts, build: "next build" } };

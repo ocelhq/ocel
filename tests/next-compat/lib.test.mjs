@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APP_NAME,
   BASELINE_INCLUDE_PATTERN,
+  BROWSER_TIMEOUT_ENV,
   BYTECODE_EMBED_ENV,
   BYTECODE_EMBEDDED_MARKER,
   BYTECODE_S3_REHYDRATE_MARKER,
@@ -74,6 +75,7 @@ import {
   WARM_SUMMARY_MARKER,
   warmCoverage,
   warmSummaryOutcome,
+  withBrowserTimeoutEnv,
   withBuildScript,
   withoutSkipChecks,
   withPinnedTypeScript,
@@ -350,6 +352,34 @@ describe("renderOcelConfig", () => {
 
   it("declares no preview domain, so previews serve on the bootstrap's", () => {
     expect(config).not.toContain("domains");
+  });
+});
+
+describe("withBrowserTimeoutEnv", () => {
+  const upstream = [
+    "const tracePlaywright = process.env.TRACE_PLAYWRIGHT",
+    "",
+    "const defaultTimeout = process.env.NEXT_E2E_TEST_TIMEOUT",
+    "  ? parseInt(process.env.NEXT_E2E_TEST_TIMEOUT, 10)",
+    "  : // In development mode, compilation can take longer due to lower CPU",
+    "    // availability in GitHub Actions.",
+    "    60 * 1000",
+    "",
+  ].join("\n");
+
+  it("makes Playwright's default timeout read its own variable instead of Jest's", () => {
+    const patched = withBrowserTimeoutEnv(upstream);
+    expect(patched).toContain(
+      `const defaultTimeout = process.env.${BROWSER_TIMEOUT_ENV}\n` +
+        `  ? parseInt(process.env.${BROWSER_TIMEOUT_ENV}, 10)`,
+    );
+    expect(patched).not.toContain("NEXT_E2E_TEST_TIMEOUT");
+    expect(patched).toContain("    60 * 1000");
+  });
+
+  it("refuses a harness whose default timeout no longer reads NEXT_E2E_TEST_TIMEOUT", () => {
+    const moved = upstream.replace(/NEXT_E2E_TEST_TIMEOUT/g, "SOMETHING_ELSE");
+    expect(() => withBrowserTimeoutEnv(moved)).toThrow(/defaultTimeout/);
   });
 });
 

@@ -85,6 +85,9 @@ jobs:
             exit 1
           fi
 
+      - name: Give Playwright in the Next.js checkout a timeout of its own, apart from Jest's
+        run: node adapter/tests/next-compat/patch-browser-timeout.mjs nextjs
+
       - uses: ./adapter/.github/actions/real-aws-session
         if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
@@ -491,6 +494,8 @@ jobs:
         env:
           NEXT_TEST_MODE: deploy
           NEXT_E2E_TEST_TIMEOUT: 240000
+          OCEL_E2E_BROWSER_TIMEOUT_MS: 50000
+          OCEL_E2E_DEPLOY_TIMEOUT_MS: 210000
           IS_TURBOPACK_TEST: 1
           NEXT_ENABLE_ADAPTER: 1
           NEXT_TEST_JOB: 1
