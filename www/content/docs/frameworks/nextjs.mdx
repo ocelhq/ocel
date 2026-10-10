@@ -4,3 +4,27 @@ description: Deploy a Next.js app.
 ---
 
 Dummy content.
+
+## Environment variables
+
+Declare variables with `defineEnv` from `ocel/env/next`. A key with the `NEXT_PUBLIC_` prefix is
+public: Next inlines it into the browser bundle, so it must be class `plain`, and declaring one as
+`sensitive` or `secret` is a type error and refused at runtime.
+
+```ts title="src/env.ts"
+import { defineEnv } from "ocel/env/next";
+import { z } from "zod";
+
+export const env = defineEnv({
+  STRIPE_KEY: { class: "secret" },
+  NEXT_PUBLIC_API_URL: { class: "plain", schema: z.string().url() },
+});
+```
+
+In the browser, `env.NEXT_PUBLIC_API_URL` is parsed through its schema and any other key throws,
+saying it is server-only. The server and the edge read the same inlined value for a public key, so a
+page renders the same on the server as in the browser. Groups work like they do in `ocel/env`.
+
+Next inlines the value when it builds, so `ocel env set` on a public key needs a rebuild; under
+`ocel dev`, ocel restarts the dev server. `NEXT_PUBLIC_OCEL_URL` holds the URL the deployment is
+served from. Ocel writes nothing into your `tsconfig.json`.

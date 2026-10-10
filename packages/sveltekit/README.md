@@ -45,8 +45,8 @@ runtime in front of a container reaches it). That is what a container runs, so g
 | --- | --- | --- |
 | `out` | `"build"` | Where `vite build` writes when `ocel build` names no directory. |
 
-## Client values
+## Environment variables
 
-`ocel/env/client` is not wired for SvelteKit yet: SvelteKit writes the `tsconfig.json` paths
-ocel maps it through for other apps, and its browser bundle does not inline `process.env`. Read
-values on the server, in `+page.server.ts` or `+server.ts`, and hand the page what it needs.
+Declare variables with `defineEnvVars` from `ocel/env/sveltekit` and re-export the result as
+`variables` from `src/env.ts`. SvelteKit keeps `public`, `static`, `schema` and `description`; ocel
+reads `class` and `folders`. See the SvelteKit page of the docs for what it refuses.
