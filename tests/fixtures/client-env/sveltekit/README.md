@@ -1,7 +1,7 @@
 # client-env/sveltekit
 
 A SvelteKit 3 app that declares one public plain variable and one sensitive variable through
-`ocel/env/sveltekit`, under `infra/` where ocel looks, re-exported from `src/env.ts` where
+`ocel/env/sveltekit`, in the discovery folder where ocel looks, re-exported from `src/env.ts` where
 SvelteKit looks. An e2e cell asks whether the page renders the public value and the deployment
 url, whether the client starts with the public value, and whether neither the page nor a script
 it loads holds the sensitive value.
