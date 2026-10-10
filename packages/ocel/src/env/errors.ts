@@ -9,3 +9,7 @@ export class EnvValueError extends Error {
 export class EnvEdgeError extends Error {
   override name = "EnvEdgeError";
 }
+
+export class EnvClientError extends Error {
+  override name = "EnvClientError";
+}

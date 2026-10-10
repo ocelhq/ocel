@@ -12,12 +12,10 @@ import {
 import { EnvValueError } from "./errors.js";
 import { readLiveFile } from "./file.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
-import { sourceOf } from "./schema.js";
 import { assertInScope, inScope } from "./scope.js";
 import { coerce, readDelivered } from "./value.js";
 
 export type { Env } from "./access.js";
-export { EnvClientError } from "./client.js";
 export type {
   Definitions,
   EnvDefinitions,
@@ -38,7 +36,7 @@ export function defineEnv<const TDefinitions extends EnvDefinitions>(
   const flat = validateDefinitions(definitions, source);
 
   if (process.env.OCEL_PHASE === "discovery") {
-    defer(declareEnv(flat, source, sourceOf(definitions)));
+    defer(declareEnv(flat, source));
   }
 
   const env = envAccessor(definitions, { resolve, delivered, generationOf });

@@ -27,7 +27,6 @@ vi.mock("../runtime/rpc", () => ({
 const { defineEnv, group, EnvDefinitionError, EnvScopeError, EnvValueError } = await import(
   "./index.js"
 );
-const { envSchema } = await import("./schema.js");
 
 async function flushDeclarations() {
   const pending = globalThis.__ocelRegister ?? [];
@@ -97,8 +96,8 @@ describe("definition errors", () => {
     }
   });
 
-  it("rejects the deployment url under every class, since ocel writes both names for every node and next.js app", () => {
-    for (const key of ["OCEL_URL", "NEXT_PUBLIC_OCEL_URL"]) {
+  it("rejects the deployment url under every class, since ocel writes both names for every node, next.js and sveltekit app", () => {
+    for (const key of ["OCEL_URL", "NEXT_PUBLIC_OCEL_URL", "PUBLIC_OCEL_URL"]) {
       for (const variableClass of ["plain", "sensitive", "secret"] as const) {
         expect(() => defineEnv({ [key]: { class: variableClass } })).toThrow(/deployment\.url/);
       }
@@ -107,8 +106,8 @@ describe("definition errors", () => {
 
   it("allows a name a provider or a bundler gives its own meaning", () => {
     expect(() => defineEnv({ AWS_REGION: { class: "plain" } })).not.toThrow();
-    expect(() => defineEnv({ NEXT_PUBLIC_ID: { class: "plain", client: true } })).not.toThrow();
-    expect(() => defineEnv({ VITE_ID: { class: "plain", client: true } })).not.toThrow();
+    expect(() => defineEnv({ NEXT_PUBLIC_ID: { class: "plain" } })).not.toThrow();
+    expect(() => defineEnv({ PUBLIC_ID: { class: "plain" } })).not.toThrow();
   });
 
   it("rejects a name that is not a usable environment variable name", () => {
@@ -125,17 +124,6 @@ describe("definition errors", () => {
     );
   });
 
-  it("rejects client access on an encrypted class from an untyped caller", () => {
-    expect(() =>
-      // @ts-expect-error the pairing this asserts on does not typecheck
-      defineEnv({ CLIENT_SENSITIVE: { class: "sensitive", client: true } }),
-    ).toThrow(/client/i);
-    expect(() =>
-      // @ts-expect-error the pairing this asserts on does not typecheck
-      defineEnv({ CLIENT_SECRET_KEY: { class: "secret", client: true } }),
-    ).toThrow(/client/i);
-  });
-
   it("rejects a schema default on a live class", () => {
     expect(() =>
       defineEnv({
@@ -147,27 +135,6 @@ describe("definition errors", () => {
         BAKED_DEFAULTED: { class: "plain", schema: z.string().default("x") },
       }),
     ).not.toThrow();
-  });
-
-  it("rejects a schema that accepts a missing value on a client-accessible key", () => {
-    expect(() =>
-      defineEnv({
-        CLIENT_DEFAULTED: {
-          class: "plain",
-          client: true,
-          schema: z.string().default("x"),
-        },
-      }),
-    ).toThrow(/accepts a missing value/i);
-    expect(() =>
-      defineEnv({
-        CLIENT_OPTIONAL: {
-          class: "plain",
-          client: true,
-          schema: z.string().optional(),
-        },
-      }),
-    ).toThrow(/accepts a missing value/i);
   });
 });
 
@@ -205,7 +172,7 @@ describe("the declaration payload", () => {
   it("declares every variable of one call, with its class and whether it is required", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
-      PAYLOAD_PLAIN: { class: "plain", client: true, description: "Shown in the dashboard" },
+      PAYLOAD_PLAIN: { class: "plain", description: "Shown in the dashboard" },
       PAYLOAD_SECRET: { class: "secret" },
       PAYLOAD_DEFAULTED: { class: "sensitive", schema: z.string().default("d") },
     });
@@ -218,65 +185,34 @@ describe("the declaration payload", () => {
         {
           key: "PAYLOAD_PLAIN",
           class: 1,
-          clientAccessible: true,
           required: true,
           folders: [],
           source: declaredIn,
-          schemaSource: "",
-          hasSchema: false,
           description: "Shown in the dashboard",
         },
         {
           key: "PAYLOAD_SECRET",
           class: 3,
-          clientAccessible: false,
           required: true,
           folders: [],
           source: declaredIn,
-          schemaSource: "",
-          hasSchema: false,
         },
         {
           key: "PAYLOAD_DEFAULTED",
           class: 2,
-          clientAccessible: false,
           required: false,
           folders: [],
           source: declaredIn,
-          schemaSource: "",
-          hasSchema: true,
         },
       ],
       groups: [],
     });
   });
 
-  it("names the module containing an envSchema() declaration apart from the one calling defineEnv", async () => {
-    source.override = "/app/src/env.ts";
-    const schema = envSchema({
-      PAYLOAD_SCHEMA_MODULE: { class: "plain", client: true, schema: z.coerce.number() },
-    });
-    source.override = "/app/src/main.ts";
-    defineEnv(schema);
-    await flushDeclarations();
-
-    expect(declareEnvMock).toHaveBeenCalledWith({
-      definitions: [
-        expect.objectContaining({
-          key: "PAYLOAD_SCHEMA_MODULE",
-          source: "/app/src/main.ts",
-          schemaSource: "/app/src/env.ts",
-          hasSchema: true,
-        }),
-      ],
-      groups: [],
-    });
-  });
-
-  it("reports a client-accessible value its schema rejects before anything is built", async () => {
+  it("reports a plain value its schema rejects before anything is built", async () => {
     declareEnvMock.mockResolvedValue({ cells: [cell("NEXT_PUBLIC_PORT", "eighty")] });
     defineEnv({
-      NEXT_PUBLIC_PORT: { class: "plain", client: true, schema: z.coerce.number() },
+      NEXT_PUBLIC_PORT: { class: "plain", schema: z.coerce.number() },
     });
     await flushDeclarations();
 

@@ -41,32 +41,16 @@ describe("the object defineEnv hands back", () => {
     env.TYPED_READONLY = "reassigned";
   });
 
-  it("types a scoped variable and a client-accessible one like any other", () => {
+  it("types a scoped variable like any other", () => {
     const env = defineEnv({
       TYPED_SCOPED: {
         class: "plain",
         folders: ["/web", "/admin"],
         schema: z.coerce.number(),
       },
-      TYPED_CLIENT: { class: "plain", client: true, schema: z.string() },
     });
 
     expectTypeOf(env.TYPED_SCOPED).toEqualTypeOf<number>();
-    expectTypeOf(env.TYPED_CLIENT).toEqualTypeOf<string>();
-  });
-});
-
-describe("client access on an encrypted class", () => {
-  it("does not compile", () => {
-    defineEnv({
-      // @ts-expect-error an encrypted-baked value is not readable by a browser
-      TYPED_CLIENT_SEALED: { class: "sensitive", client: true },
-    });
-    defineEnv({
-      // @ts-expect-error a live value is not readable by a browser
-      TYPED_CLIENT_LIVE: { class: "secret", client: true },
-    });
-    defineEnv({ TYPED_CLIENT_OK: { class: "plain", client: true } });
   });
 });
 
