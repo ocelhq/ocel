@@ -53,6 +53,8 @@ type edgeCredentials struct {
 	ISRWriter                 string `json:"isrWriter"`
 	CacheStoreAccessKeyID     string `json:"cacheStoreAccessKeyId,omitempty"`
 	CacheStoreSecretAccessKey string `json:"cacheStoreSecretAccessKey,omitempty"`
+	AssetStoreAccessKeyID     string `json:"assetStoreAccessKeyId,omitempty"`
+	AssetStoreSecretAccessKey string `json:"assetStoreSecretAccessKey,omitempty"`
 }
 
 func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) keyvalue.Key {

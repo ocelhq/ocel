@@ -83,6 +83,11 @@ loads names the app's own `cacheHandler`, `cacheHandlers.default` or `cacheHandl
 `NEXT_REMOTE_CACHE_HANDLER_PATH` does under `next start`. Other Node processes the app starts are
 left alone.
 
+A serverless Next app's static files (the `public` directory, `_next/static` and the prerendered
+fallbacks) and its image config are uploaded at deploy to the tier's Cloud Storage bucket, under
+the release's storage prefix, and the service reads them from there: its image carries none. A
+service account may read only its own app's files. Removing a release removes them with it.
+
 Each prerendered page renders on its first request after a deploy and is then served from the
 cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
 next request starts cold. See [Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings).
