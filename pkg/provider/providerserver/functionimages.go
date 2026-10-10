@@ -41,7 +41,7 @@ func (r *deployRun) imageFunctions(
 	root := r.artifactRoot
 	var pushes []provider.ImagePush
 	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
-		push, err := r.imageFunction(ctx, hooks, root, entry, fn, overlayFor(pack.Overlay, fn, routing), findStaticSourceDir(root, entry, fn, routing))
+		push, err := r.imageFunction(ctx, hooks, root, entry, fn, overlayFor(pack.Overlay, fn, routing))
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +58,6 @@ func (r *deployRun) imageFunction(
 	entry provider.AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
-	staticSourceDir string,
 ) (provider.ImagePush, error) {
 	name := fn.GetLogicalName()
 	dir, err := stagedDir(root, fn)
@@ -75,9 +74,8 @@ func (r *deployRun) imageFunction(
 		return provider.ImagePush{}, err
 	}
 	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
-		Overlay:         overlay,
-		Runtime:         runtime,
-		StaticSourceDir: staticSourceDir,
+		Overlay: overlay,
+		Runtime: runtime,
 	})
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
@@ -99,13 +97,6 @@ func (r *deployRun) imageFunction(
 		Function: true,
 		Built:    image,
 	}, nil
-}
-
-func findStaticSourceDir(root string, entry provider.AppEntry, fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) string {
-	if routing == nil || resolveRouteID(fn) != routing.RootFunction {
-		return ""
-	}
-	return buildoutput.AppRoot(root, entry.App)
 }
 
 func (r *deployRun) wrapFunction(ctx context.Context, name string, framework buildoutput.Framework, image v1.Image) (v1.Image, error) {

@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -135,7 +134,6 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 		"OCEL_APP":              "web",
 		"OCEL_BUILD_ID":         "dpl_7",
 		"OCEL_ROUTER_KIND":      "cloudrun",
-		"OCEL_STATIC_DIR":       images.StaticRoot,
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("the Next service reads %s=%q, want %q", name, got, want)
@@ -605,7 +603,7 @@ func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.
 
 	env := envOf(service.Template.Containers[0])
 	for _, name := range []string{
-		routeTableEnvVar, routerKindEnvVar, staticDirEnvVar,
+		routeTableEnvVar, routerKindEnvVar, assetBucketEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {

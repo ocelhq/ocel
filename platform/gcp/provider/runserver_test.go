@@ -93,6 +93,8 @@ func (s *runServer) signedJWTs() []signedJWT {
 type upload struct {
 	name, ifGenerationMatch string
 	body                    []byte
+	contentType             string
+	cacheControl            string
 }
 
 func (s *runServer) open(t *testing.T) *Provider {
@@ -167,6 +169,8 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
 		case r.Method == http.MethodGet && strings.Contains(path, "/operations/"):
 			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/storage/v1/b/") && strings.Contains(path, "/o/"):
+			s.objectAttrs(w, path)
 		case r.Method == http.MethodGet:
 			s.get(w)
 		default:
@@ -561,18 +565,28 @@ func (s *runServer) store(t *testing.T, w http.ResponseWriter, r *http.Request) 
 	}
 	parts := multipart.NewReader(r.Body, params["boundary"])
 	var body []byte
+	var attrs struct {
+		ContentType  string `json:"contentType"`
+		CacheControl string `json:"cacheControl"`
+	}
 	for i := 0; ; i++ {
 		part, err := parts.NextPart()
 		if err != nil {
 			break
 		}
-		if i == 1 {
+		switch i {
+		case 0:
+			_ = json.NewDecoder(part).Decode(&attrs)
+		case 1:
 			body, _ = io.ReadAll(part)
 		}
 	}
 	query := r.URL.Query()
 	name := query.Get("name")
-	s.uploads = append(s.uploads, upload{name: name, ifGenerationMatch: query.Get("ifGenerationMatch"), body: body})
+	s.uploads = append(s.uploads, upload{
+		name: name, ifGenerationMatch: query.Get("ifGenerationMatch"), body: body,
+		contentType: attrs.ContentType, cacheControl: attrs.CacheControl,
+	})
 	s.events = append(s.events, "upload "+name)
 	if query.Get("ifGenerationMatch") == "0" && s.present[name] {
 		w.WriteHeader(http.StatusPreconditionFailed)
@@ -580,6 +594,16 @@ func (s *runServer) store(t *testing.T, w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeBody(w, map[string]string{"bucket": "b", "name": name, "generation": "1"})
+}
+
+func (s *runServer) objectAttrs(w http.ResponseWriter, path string) {
+	bucket, name, _ := strings.Cut(strings.TrimPrefix(path, "/storage/v1/b/"), "/o/")
+	if !s.present[name] {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"No such object"}}`))
+		return
+	}
+	writeBody(w, map[string]string{"bucket": bucket, "name": name, "generation": "1"})
 }
 
 func (s *runServer) stored() []upload {

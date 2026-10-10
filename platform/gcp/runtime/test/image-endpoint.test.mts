@@ -1,8 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   configHash,
   imageConfig,
@@ -13,23 +10,30 @@ import type { Invoke } from "@framework/node-runtime/host";
 import sharp from "sharp";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { newImageEndpointInvoke } from "../src/next/image-endpoint.mjs";
+import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
+import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
 const assetPrefix = "prod/shop/web/r1/assets";
 
-let dir: string;
+const bucket = newCloudStorageBucket();
+let stored: ServedBucket;
 let origin: string;
 let server: http.Server;
 const handedToNext: string[] = [];
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ocel-gcp-image-endpoint-"));
-  const staticDir = join(dir, "static");
-  await mkdir(join(staticDir, "assets"), { recursive: true });
-  await writeFile(join(staticDir, "assets", "logo.png"), await solid("png", 400, 200));
-  await writeFile(join(staticDir, "image-config.json"), serialize(imageConfig()));
+  bucket.objects.set(`assets/${assetPrefix}/logo.png`, {
+    body: await solid("png", 400, 200),
+    generation: "1",
+  });
+  bucket.objects.set("assets/prod/shop/web/r1/image-config.json", {
+    body: serialize(imageConfig()),
+    generation: "1",
+  });
+  stored = await serveBucket(bucket);
   const env = {
-    OCEL_STATIC_DIR: staticDir,
-    OCEL_ASSET_PREFIX: assetPrefix,
+    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_STORAGE_ENDPOINT: stored.endpoint,
     OCEL_IMAGE_ENDPOINT: "1",
   };
 
@@ -47,7 +51,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server.close();
-  await rm(dir, { recursive: true, force: true });
+  await stored.close();
 });
 
 function payload(over: Record<string, unknown> = {}) {
@@ -122,7 +126,5 @@ test("the GCP service installs no image path where it holds no assets", () => {
 test("the GCP service installs no image path unless it is told an edge posts images to it", () => {
   const next: Invoke = () => {};
 
-  expect(
-    newImageEndpointInvoke(next, { OCEL_STATIC_DIR: dir, OCEL_ASSET_PREFIX: assetPrefix }),
-  ).toBe(next);
+  expect(newImageEndpointInvoke(next, { OCEL_ASSET_BUCKET: "ocel-acme-production" })).toBe(next);
 });

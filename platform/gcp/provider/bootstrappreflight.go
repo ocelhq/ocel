@@ -82,6 +82,14 @@ var bootstrapPermissions = []string{
 	"cloudscheduler.jobs.enable",
 }
 
+var assetStorePermissions = []string{
+	"storage.hmacKeys.create",
+	"storage.hmacKeys.list",
+	"storage.hmacKeys.get",
+	"storage.hmacKeys.update",
+	"storage.hmacKeys.delete",
+}
+
 var bootstrapRoles = []string{
 	"roles/datastore.owner",
 	"roles/storage.admin",
@@ -223,6 +231,7 @@ func permissionsFor(features []string) []string {
 	switch {
 	case slices.Contains(features, albShieldedFeature):
 		permissions = appendMissing(permissions, alb.ShieldedPermissions)
+		permissions = appendMissing(permissions, assetStorePermissions)
 	case slices.Contains(features, albFeature):
 		permissions = appendMissing(permissions, alb.Permissions)
 	}

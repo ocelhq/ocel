@@ -163,7 +163,11 @@ each deployment's records, the worker that writes pages and tags into R2, a refr
 the worker that drains it. Pages and tags live in R2 behind the edge: the app's service
 writes them through the edge, and revalidating a tag purges nothing at Google Cloud. A stale
 page is refreshed through the queue, and the worker renders it itself after five minutes if
-the queue has not. Container apps are not served by the worker: they are forwarded through
+the queue has not. An app's static files stay in the tier's Cloud Storage bucket rather than
+R2: the worker reads them from there over Cloud Storage's S3-compatible API, signing each read
+with an HMAC key of a service account that bootstrapping keeps for the tier and that may read
+the bucket's static files and nothing else. Removing the bootstrap deletes the key and the
+account. Container apps are not served by the worker: they are forwarded through
 the tier's load balancer as a proxied record, as a VPS is.
 
 Besides the permissions above, the token needs Account SSL and Certificates Edit on the

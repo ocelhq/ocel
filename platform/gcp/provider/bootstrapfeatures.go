@@ -37,7 +37,8 @@ func (bootstrap) Catalogue() []provider.Feature {
 	}, {
 		Name: albShieldedFeature,
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
-			"a recurring cost, about $18 a month plus egress",
+			"a recurring cost, about $18 a month plus egress, " +
+			"and a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with",
 		Edges: []edge.Kind{cloudflare.Kind},
 	}, {
 		Name: networkFeature,
@@ -129,7 +130,15 @@ func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapReques
 		if err != nil {
 			return err
 		}
-		return adoptEdgeOffers(ctx, b.clients, b.records, req.Tier, front.Kind(), out, progress)
+		if err := adoptEdgeOffers(ctx, b.clients, b.records, req.Tier, front.Kind(), out, progress); err != nil {
+			return err
+		}
+		if !front.Facts().RunsCode {
+			return nil
+		}
+		ensureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader (service account and HMAC key) for " + string(req.Tier) +
+			": the edge reads this tier's static files from its bucket as that account")
+		return b.clients.raiseAssetStore(ctx, req.Tier, front.Kind())
 	})
 }
 
@@ -156,10 +165,7 @@ func (b bootstrap) dropFronts(
 	return b.eachFront(dropping, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
 			": this bootstrap no longer requests feature " + feature.Name)
-		if err := front.Teardown(ctx, req.Tier); err != nil {
-			return err
-		}
-		return forgetEdgeOffers(ctx, b.clients, b.records, req.Tier, front.Kind())
+		return b.retireFront(ctx, req.Tier, front)
 	})
 }
 
@@ -216,11 +222,20 @@ func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, 
 
 func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, features []string) error {
 	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
-		if err := front.Teardown(ctx, tier); err != nil {
+		return b.retireFront(ctx, tier, front)
+	})
+}
+
+func (b bootstrap) retireFront(ctx context.Context, tier environment.Tier, front edge.Edge) error {
+	if err := front.Teardown(ctx, tier); err != nil {
+		return err
+	}
+	if front.Facts().RunsCode {
+		if err := b.clients.takeAssetStore(ctx, tier); err != nil {
 			return err
 		}
-		return forgetEdgeOffers(ctx, b.clients, b.records, tier, front.Kind())
-	})
+	}
+	return forgetEdgeOffers(ctx, b.clients, b.records, tier, front.Kind())
 }
 
 func (b bootstrap) frontInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
@@ -296,18 +311,24 @@ func appendMissing(listed, more []string) []string {
 func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
-		plan := front.Hooks().PlanBootstrap
-		if plan == nil {
+		var planned []edge.PlanChange
+		if plan := front.Hooks().PlanBootstrap; plan != nil {
+			var err error
+			if planned, err = plan(ctx, tier); err != nil {
+				return fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
+			}
+		}
+		var assets []provider.Change
+		if front.Facts().RunsCode {
+			var err error
+			if assets, err = b.clients.plannedAssetStore(ctx, tier, front.Kind()); err != nil {
+				return fmt.Errorf("plan the %s edge's asset reader: %w", front.Kind(), err)
+			}
+		}
+		if len(planned) == 0 && len(assets) == 0 {
 			return nil
 		}
-		planned, err := plan(ctx, tier)
-		if err != nil {
-			return fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
-		}
-		if len(planned) == 0 {
-			return nil
-		}
-		group, err := bootstrapplan.EdgeGroup(front.Kind(), feature.Name, planned)
+		group, err := bootstrapplan.EdgeGroup(front.Kind(), feature.Name, planned, assets...)
 		groups = append(groups, group)
 		return err
 	})
@@ -317,18 +338,26 @@ func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, fea
 func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
-		plan := front.Hooks().PlanRemoveBootstrap
-		if plan == nil {
+		var changes []provider.Change
+		if plan := front.Hooks().PlanRemoveBootstrap; plan != nil {
+			planned, err := plan(ctx, tier)
+			if err != nil {
+				return fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
+			}
+			if changes, err = bootstrapplan.EdgeChanges(front.Kind(), planned); err != nil {
+				return err
+			}
+		}
+		if front.Facts().RunsCode {
+			assets, err := b.clients.plannedAssetStoreRemoval(ctx, tier, front.Kind())
+			if err != nil {
+				return fmt.Errorf("plan what removing the %s edge's asset reader takes: %w", front.Kind(), err)
+			}
+			changes = append(changes, assets...)
+		}
+		if len(changes) == 0 {
 			return nil
 		}
-		planned, err := plan(ctx, tier)
-		if err != nil {
-			return fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
-		}
-		if len(planned) == 0 {
-			return nil
-		}
-		changes, err := bootstrapplan.EdgeChanges(front.Kind(), planned)
 		groups = append(groups, provider.ChangeGroup{
 			Kind:    edge.EdgeGroupKind,
 			Name:    edge.EdgeGroupName(front.Kind()),
@@ -336,7 +365,7 @@ func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, fea
 			Action:  provider.ActionDelete,
 			Changes: changes,
 		})
-		return err
+		return nil
 	})
 	return groups, err
 }

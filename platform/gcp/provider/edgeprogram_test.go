@@ -15,6 +15,18 @@ func programming(h *offersHarness) *Provider {
 	return &Provider{namespace: "ocel", resolved: h.clients, records: h.records}
 }
 
+func (h *offersHarness) keyAssets(t *testing.T, tier environment.Tier) {
+	t.Helper()
+	credentials, err := readEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials.AssetStoreAccessKeyID, credentials.AssetStoreSecretAccessKey = "GOOG1EREADER", "reader-secret"
+	if err := writeEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind, credentials); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func entryRequest(tier environment.Tier, slug string) provider.EdgeProgramRequest {
 	return provider.EdgeProgramRequest{
 		Tier: tier, Kind: cloudflareKind, Slug: slug, Env: "main",
@@ -29,6 +41,7 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	if err := h.adopt(fullOffers("c1", "c2"), map[string]string{"cacheBucket": "b"}); err != nil {
 		t.Fatal(err)
 	}
+	h.keyAssets(t, environment.TierProduction)
 
 	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
 	if err != nil {
@@ -73,6 +86,7 @@ func TestTheSharedPreviewEntryProgramReadsEveryReleaseRecordThroughTheAdoptedSto
 	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
 		t.Fatal(err)
 	}
+	h.keyAssets(t, environment.TierPreview)
 
 	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierPreview, ""))
 	if err != nil {
@@ -119,6 +133,8 @@ func TestAGCPEntryWorkerSendsRefreshesToItsTiersQueue(t *testing.T) {
 	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
 		t.Fatal(err)
 	}
+	h.keyAssets(t, environment.TierProduction)
+	h.keyAssets(t, environment.TierPreview)
 
 	for tier, want := range map[environment.Tier]string{environment.TierProduction: "ocel-refresh", environment.TierPreview: "ocel-refresh-preview"} {
 		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier, "shop"))
@@ -131,5 +147,52 @@ func TestAGCPEntryWorkerSendsRefreshesToItsTiersQueue(t *testing.T) {
 		if program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding] == "" {
 			t.Errorf("%s worker binds no client certificate", tier)
 		}
+	}
+}
+
+func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+	h.keyAssets(t, environment.TierProduction)
+
+	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	if err != nil {
+		t.Fatalf("ProgramEdge = %v", err)
+	}
+
+	worker := program.Spec.Worker
+	for name, want := range map[string]string{
+		edge.AssetStoreEndpointVar:    "https://storage.googleapis.com",
+		edge.AssetStoreBucketVar:      h.clients.Bucket(environment.TierProduction),
+		edge.AssetStorePrefixVar:      "assets/",
+		edge.AssetStoreAccessKeyIDVar: "GOOG1EREADER",
+	} {
+		if got := worker.Variables[name]; got != want {
+			t.Errorf("worker variable %s = %q, want %q", name, got, want)
+		}
+	}
+	if got := worker.Secrets[edge.AssetStoreSecretKeyVar]; got != "reader-secret" {
+		t.Errorf("worker secret %s = %q, want the reader's secret", edge.AssetStoreSecretKeyVar, got)
+	}
+	for name, got := range worker.Variables {
+		if strings.Contains(got, "reader-secret") {
+			t.Errorf("worker variable %s holds the reader's secret in the clear", name)
+		}
+	}
+}
+
+func TestProgrammingAnEntryWorkerWithoutAnAssetReaderKeyIsNotReady(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "asset-store") || !strings.Contains(err.Error(), "ocel bootstrap production") {
+		t.Errorf("ProgramEdge = %v, want a not-ready refusal naming the asset-store credential and the bootstrap", err)
 	}
 }

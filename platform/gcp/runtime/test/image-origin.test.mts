@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,19 +11,28 @@ import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import sharp from "sharp";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
+import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
+import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
 const assetPrefix = "prod/shop/web/r1/assets";
 
+const bucket = newCloudStorageBucket();
+let stored: ServedBucket;
 let dir: string;
 let env: NodeJS.ProcessEnv;
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-image-"));
   const config = imageConfig();
-  const staticDir = join(dir, "static");
-  await mkdir(join(staticDir, "assets"), { recursive: true });
-  await writeFile(join(staticDir, "assets", "logo.png"), await solid("png", 400, 200));
-  await writeFile(join(staticDir, "image-config.json"), serialize(config));
+  bucket.objects.set(`assets/${assetPrefix}/logo.png`, {
+    body: await solid("png", 400, 200),
+    generation: "1",
+  });
+  bucket.objects.set("assets/prod/shop/web/r1/image-config.json", {
+    body: serialize(config),
+    generation: "1",
+  });
+  stored = await serveBucket(bucket);
   await writeFile(
     join(dir, "routing.json"),
     JSON.stringify({
@@ -45,12 +54,14 @@ beforeAll(async () => {
   );
   env = {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
-    OCEL_STATIC_DIR: staticDir,
+    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_STORAGE_ENDPOINT: stored.endpoint,
     OCEL_ASSET_PREFIX: assetPrefix,
   };
 });
 
 afterAll(async () => {
+  await stored.close();
   await rm(dir, { recursive: true, force: true });
 });
 

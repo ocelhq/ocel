@@ -180,6 +180,16 @@ func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
 	return n.RealtimeAccount(tier) + "@" + n.project + accountDomain
 }
 
+const assetReaderInfix = "assets"
+
+func (n Names) AssetReaderAccount(tier environment.Tier) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), assetReaderInfix)
+}
+
+func (n Names) AssetReaderAccountEmail(tier environment.Tier) string {
+	return n.AssetReaderAccount(tier) + "@" + n.project + accountDomain
+}
+
 var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
 func serviceHash(parts ...string) string { return truncatedHash(serviceHashLength, parts...) }
