@@ -15,6 +15,8 @@ import (
 const (
 	slotLabel = "ocel.test.slot"
 	slotCount = 6
+
+	InternalBridge = "com.docker.network.bridge.inhibit_ipv4=true"
 )
 
 type slotLease struct {
@@ -27,6 +29,16 @@ type slotLease struct {
 var lease slotLease
 
 func Network(t *testing.T, role string) string {
+	t.Helper()
+	return leasedNetwork(t, role)
+}
+
+func InternalNetwork(t *testing.T, role string) string {
+	t.Helper()
+	return leasedNetwork(t, role+"-internal", "--opt", InternalBridge)
+}
+
+func leasedNetwork(t *testing.T, role string, options ...string) string {
 	t.Helper()
 	requireDocker(t)
 	lease.once.Do(func() {
@@ -47,7 +59,7 @@ func Network(t *testing.T, role string) string {
 	if lease.refused != "" {
 		t.Skip(lease.refused)
 	}
-	name, err := slotNetwork(lease.slot, role)
+	name, err := slotNetwork(lease.slot, role, options...)
 	if err != nil {
 		t.Skipf("this machine's engine will not provide the %s network the run's containers resolve each other across: %v", role, err)
 	}
@@ -67,12 +79,13 @@ func slotNetworkName(slot int, role string) string {
 	return rootPrefix + strconv.Itoa(slot) + "-" + role
 }
 
-func slotNetwork(slot int, role string) (string, error) {
+func slotNetwork(slot int, role string, options ...string) (string, error) {
 	name := slotNetworkName(slot, role)
 	if exec.Command(engine, "network", "inspect", name).Run() == nil {
 		return name, nil
 	}
-	said, err := exec.Command(engine, "network", "create", "--label", slotLabel+"="+strconv.Itoa(slot), name).CombinedOutput()
+	argv := append(append([]string{"network", "create", "--label", slotLabel + "=" + strconv.Itoa(slot)}, options...), name)
+	said, err := exec.Command(engine, argv...).CombinedOutput()
 	if err != nil && exec.Command(engine, "network", "inspect", name).Run() != nil {
 		return "", fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(said)))
 	}
