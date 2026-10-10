@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^24",
+    "next": "catalog:",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }

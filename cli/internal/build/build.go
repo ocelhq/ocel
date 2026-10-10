@@ -145,10 +145,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	defer log.flushShared()
 	defer func() { err = log.hidden.HideError(err) }()
 
-	if err := RefuseNextFunctionsWithOwnAdapter(cfg); err != nil {
-		return err
-	}
-
 	outputDir, err := buildoutput.Root(cfg.Dir)
 	if err != nil {
 		return err
