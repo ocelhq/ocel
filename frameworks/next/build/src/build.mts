@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import path from "node:path";
+import { Refusal } from "@framework/node-build/refusal";
 import { type OutputBuild, prependScriptBins, runAdapterBuild } from "@framework/node-build/script";
 
 export interface NextBuild extends OutputBuild {
@@ -42,7 +43,7 @@ async function refuseOwnAdapter(
   const loaded = await readLoadedAdapter(app.cwd, env);
   if (!loaded?.adapterPath || loaded.adapterPath === realpathSync(adapterPath)) return;
   const file = path.relative(app.cwd, loaded.configFile);
-  throw new Error(
+  throw new Refusal(
     `ocel: app "${app.name}" sets adapterPath to ${loaded.adapterPath} in ${file}, and next build then runs that adapter in place of ocel's, which writes the output ocel deploys: delete adapterPath from ${file}`,
   );
 }

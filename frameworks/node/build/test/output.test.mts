@@ -23,6 +23,7 @@ import {
   ROOT_FUNCTION_DIR,
   STATIC_DIR,
 } from "../src/output.mjs";
+import { Refusal } from "../src/refusal.mjs";
 
 function scratch(): string {
   return mkdtempSync(path.join(tmpdir(), "ocel-build-output-"));
@@ -155,13 +156,14 @@ describe("BuildOutput", () => {
     writeFileSync(path.join(root, "secret.txt"), "x");
     const output = new BuildOutput(path.join(root, "out"), "web");
 
-    await expect(
-      output.copyIntoFunction(
-        "bundle-0",
-        { "../escaped.txt": path.join(root, "secret.txt") },
-        root,
-      ),
-    ).rejects.toThrow(/outside the function/);
+    const refused = output.copyIntoFunction(
+      "bundle-0",
+      { "../escaped.txt": path.join(root, "secret.txt") },
+      root,
+    );
+
+    await expect(refused).rejects.toThrow(/outside the function/);
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
     expect(existsSync(path.join(output.dir, "functions", "escaped.txt"))).toBe(false);
   });
 

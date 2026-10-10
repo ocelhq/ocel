@@ -1,3 +1,4 @@
+import { Refusal } from "@framework/node-build/refusal";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isReported,
@@ -135,5 +136,47 @@ describe("protocol records", () => {
 
     expect(lines).toHaveLength(reported);
     expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("reports a refusal by its message alone, so the user reads no stack trace", async () => {
+    const { lines } = captureStdout();
+    const refusal = new Refusal('ocel: app "web" has no "build" script in package.json');
+
+    await expect(
+      withSpan("build", "web", async () => {
+        throw refusal;
+      }),
+    ).rejects.toBe(refusal);
+
+    expect(lines.map(parseRecord)[1]).toEqual({
+      type: "error",
+      message: 'ocel: app "web" has no "build" script in package.json',
+      app: "web",
+      stage: "build",
+    });
+  });
+
+  it("reports a refusal no span reported by its message alone", () => {
+    const { lines } = captureStdout();
+
+    reportFailure(new Refusal("ocel: the build request names no apps"));
+
+    expect(parseRecord(lines[0]!)).toEqual({
+      type: "error",
+      message: "ocel: the build request names no apps",
+    });
+  });
+
+  it("reports an unexpected error with its stack, which debugging it needs", async () => {
+    const { lines } = captureStdout();
+    const crash = new TypeError("Cannot read properties of undefined (reading 'name')");
+
+    await expect(
+      withSpan("build", "web", async () => {
+        throw crash;
+      }),
+    ).rejects.toBe(crash);
+
+    expect((lines.map(parseRecord)[1] as { message: string }).message).toBe(crash.stack);
   });
 });

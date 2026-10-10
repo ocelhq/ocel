@@ -1,3 +1,5 @@
+import { Refusal } from "@framework/node-build/refusal";
+
 export const PROTOCOL_PREFIX = "@@OCEL_V1@@";
 
 type Level = "debug" | "info" | "warn" | "error";
@@ -25,6 +27,7 @@ export function reportError(message: string, app?: string, stage?: string): void
 }
 
 function errorMessage(err: unknown): string {
+  if (err instanceof Refusal) return err.message;
   return err instanceof Error ? (err.stack ?? err.message) : String(err);
 }
 
