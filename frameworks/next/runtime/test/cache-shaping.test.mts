@@ -1,4 +1,8 @@
-import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
+import {
+  dispatchesAtOrigin,
+  invalidatesByCacheTag,
+  servesOnlyFresh,
+} from "@framework/node-runtime/host";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,
@@ -95,6 +99,12 @@ test("only a front the deploy declared tag-purging is given cache tags", () => {
   expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "1" } as NodeJS.ProcessEnv)).toBe(true);
   expect(invalidatesByCacheTag({} as NodeJS.ProcessEnv)).toBe(false);
   expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "" } as NodeJS.ProcessEnv)).toBe(false);
+});
+
+test("only an origin the deploy declared fresh-only serves nothing stale", () => {
+  expect(servesOnlyFresh({ OCEL_ORIGIN_FRESH_ONLY: "1" } as NodeJS.ProcessEnv)).toBe(true);
+  expect(servesOnlyFresh({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(servesOnlyFresh({ OCEL_ORIGIN_FRESH_ONLY: "" } as NodeJS.ProcessEnv)).toBe(false);
 });
 
 test("leaves the tag header off a front that invalidates by nothing", () => {
@@ -220,7 +230,7 @@ test("refuses to shape an error, a cookie-bearing response, or a mutation", () =
   ).toBeUndefined();
 });
 
-test("clamps a stale serve without promoting it to public", () => {
+test("leaves the window of a response Next calls stale as Next set it", () => {
   const headers = serve(
     shaping(),
     "/isr",
@@ -231,7 +241,7 @@ test("clamps a stale serve without promoting it to public", () => {
     }),
   );
 
-  expect(headers["cache-control"]).toBe("s-maxage=0, must-revalidate");
+  expect(headers["cache-control"]).toBe("s-maxage=60, stale-while-revalidate=600");
 });
 
 test("leaves a hit on its own window", () => {

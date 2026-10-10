@@ -172,6 +172,12 @@ export function invalidatesByCacheTag(env: NodeJS.ProcessEnv): boolean {
   return Boolean(env[cacheTagPurgeVar]);
 }
 
+const originFreshOnlyVar = "OCEL_ORIGIN_FRESH_ONLY";
+
+export function servesOnlyFresh(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[originFreshOnlyVar]);
+}
+
 const originSecretVar = "OCEL_ORIGIN_SECRET";
 
 const originSecretPreviousVar = "OCEL_ORIGIN_SECRET_PREVIOUS";
