@@ -190,3 +190,58 @@ func TestABroughtVariablesKeyIsAdmittedOnlyIfItEncryptsAndDecrypts(t *testing.T)
 		})
 	}
 }
+
+func TestABroughtVariablesKeyRefusalNamesThePolicyThatDenied(t *testing.T) {
+	ctx := context.Background()
+	const denial = "operation error KMS: DescribeKey, https response error StatusCode: 400, api error AccessDeniedException: User: arn:aws:sts::123456789012:assumed-role/ocel-ci/session is not authorized to perform: kms:DescribeKey on resource: " + broughtKeyARN + " because "
+
+	for _, tc := range []struct {
+		name    string
+		because string
+		says    []string
+		saysNot []string
+	}{
+		{
+			name:    "no session policy allows it",
+			because: "no session policy allows the kms:DescribeKey action",
+			says:    []string{"ocel permissions bootstrap"},
+			saysNot: []string{"key policy"},
+		},
+		{
+			name:    "no identity-based policy allows it",
+			because: "no identity-based policy allows the kms:DescribeKey action",
+			says:    []string{"ocel permissions bootstrap"},
+			saysNot: []string{"key policy"},
+		},
+		{
+			name:    "no resource-based policy allows it",
+			because: "no resource-based policy allows the kms:DescribeKey action",
+			says:    []string{"key policy"},
+			saysNot: []string{"ocel permissions bootstrap"},
+		},
+		{
+			name:    "the denial names no policy",
+			because: "access was denied",
+			says:    []string{"key policy", "ocel permissions bootstrap"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			crypto := workingKey()
+			crypto.describe = errors.New(denial + tc.because)
+			_, err := validateBroughtKey(ctx, variablesKeyAPIs(crypto), defaultNamespace, environment.TierProduction, Request{VariablesKey: broughtKeyARN})
+			if err == nil {
+				t.Fatal("validateBroughtKey = nil, want a refusal")
+			}
+			for _, want := range tc.says {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal = %v, want it to say %q", err, want)
+				}
+			}
+			for _, unwanted := range tc.saysNot {
+				if strings.Contains(err.Error(), unwanted) {
+					t.Errorf("refusal = %v, want it not to say %q", err, unwanted)
+				}
+			}
+		})
+	}
+}
