@@ -29,6 +29,22 @@ describe("the variables ocel/env/sveltekit hands to SvelteKit", () => {
       StandardSchemaV1.InferOutput<typeof variables.STRIPE_KEY.schema>
     >().toEqualTypeOf<string>();
   });
+
+  it("types a sensitive variable's schema as the standard schema ocel hands SvelteKit, its output kept", () => {
+    const variables = defineEnvVars({
+      API_PORT: { class: "sensitive", schema: z.coerce.number() },
+      RETRIES: { class: "sensitive", schema: (value: string | undefined) => Number(value) },
+    });
+
+    expectTypeOf<
+      StandardSchemaV1.InferOutput<typeof variables.API_PORT.schema>
+    >().toEqualTypeOf<number>();
+    expectTypeOf<
+      StandardSchemaV1.InferOutput<typeof variables.RETRIES.schema>
+    >().toEqualTypeOf<number>();
+    // @ts-expect-error ocel wraps the schema, so zod's own methods are not on it
+    variables.API_PORT.schema.parse("8443");
+  });
 });
 
 describe("a variable SvelteKit would accept and ocel refuses", () => {
