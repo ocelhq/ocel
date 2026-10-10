@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
 import { getNextHost } from "./host.mjs";
@@ -28,6 +29,8 @@ interface ClockState {
 const syncIntervalMs = 2_000;
 
 const syncDeadlineMs = 3_000;
+
+const outsideAnyRender = AsyncLocalStorage.snapshot();
 
 const stateKey = Symbol.for("ocel.use-cache.tag-clock.v1");
 
@@ -105,7 +108,7 @@ function syncWithinDeadline(): Promise<void> {
   const deadline = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, syncDeadlineMs);
   });
-  return Promise.race([sync(), deadline]).finally(() => clearTimeout(timer));
+  return Promise.race([outsideAnyRender(sync), deadline]).finally(() => clearTimeout(timer));
 }
 
 function startSync(): Promise<void> {
