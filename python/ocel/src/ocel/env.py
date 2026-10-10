@@ -798,7 +798,6 @@ def _declare_entries(entries: Sequence[_Variable | _Group], site: _Site) -> None
                     required=variable.required,
                     folders=list(variable.folders),
                     source=source,
-                    has_schema=variable.has_schema,
                     description=variable.description,
                     group=group_key,
                 )

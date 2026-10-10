@@ -124,21 +124,21 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
         .iter()
         .map(|definition| {
             format!(
-                "{} {:?} required={} schema={}",
-                definition.key, definition.class, definition.required, definition.has_schema,
+                "{} {:?} required={}",
+                definition.key, definition.class, definition.required,
             )
         })
         .collect();
     assert_eq!(
         shapes,
         [
-            "DATABASE_NAME VARIABLE_CLASS_PLAIN required=true schema=false",
-            "PORT VARIABLE_CLASS_PLAIN required=false schema=true",
-            "MISSING_ONE VARIABLE_CLASS_SENSITIVE required=true schema=true",
-            "API_PORT VARIABLE_CLASS_SENSITIVE required=true schema=true",
-            "SCOPED VARIABLE_CLASS_PLAIN required=true schema=false",
-            "READY VARIABLE_CLASS_PLAIN required=true schema=true",
-            "STARTED VARIABLE_CLASS_PLAIN required=true schema=true",
+            "DATABASE_NAME VARIABLE_CLASS_PLAIN required=true",
+            "PORT VARIABLE_CLASS_PLAIN required=false",
+            "MISSING_ONE VARIABLE_CLASS_SENSITIVE required=true",
+            "API_PORT VARIABLE_CLASS_SENSITIVE required=true",
+            "SCOPED VARIABLE_CLASS_PLAIN required=true",
+            "READY VARIABLE_CLASS_PLAIN required=true",
+            "STARTED VARIABLE_CLASS_PLAIN required=true",
         ]
     );
 

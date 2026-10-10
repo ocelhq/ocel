@@ -354,7 +354,6 @@ def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(
         VariableClass.PLAIN,
     ]
     assert [d.required for d in definitions] == [True, True, True, False, False, True]
-    assert [d.has_schema for d in definitions] == [False, False, False, True, True, True]
     assert definitions[1].description == "Used to call Stripe"
     assert list(definitions[5].folders) == ["/apps/web", "/apps/api"]
     for definition in definitions:
