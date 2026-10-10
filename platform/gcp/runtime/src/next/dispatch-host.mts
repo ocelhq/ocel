@@ -2,7 +2,7 @@ import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { type DispatchHost, readDispatchHost } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
 import { fetchUndecoded } from "@framework/node-runtime/undecoded-fetch";
-import { readAssetStorage } from "./asset-store.mjs";
+import { readAssetStorage } from "./asset-storage.mjs";
 import { cloudCdnRelease, newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
 import { newCloudStorageAssetBucket, newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
