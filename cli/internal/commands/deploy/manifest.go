@@ -92,7 +92,7 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 		return nil, nil, err
 	}
 	steps := newBuildSteps(a.phase)
-	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers(), resources, inline, usages)
+	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, declarations.Definitions(), values), placement.HostedWorkers(), resources, inline, usages)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
@@ -358,4 +360,31 @@ func TestScopedFolders(t *testing.T) {
 			t.Fatalf("ScopedFolders[API_BASE] = %v, want %v: both declarations' folders, once each", got["API_BASE"], want)
 		}
 	})
+}
+
+func TestTheDevServerNamesThePublicKeysDeclaredForTheNextAppsItRuns(t *testing.T) {
+	t.Parallel()
+
+	s, url := serveValues(t, map[string]string{}, variables.Scope{})
+	declareEnv(t, url,
+		&resourcesv1.VariableDefinition{Key: "NEXT_PUBLIC_SHARED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		&resourcesv1.VariableDefinition{Key: "NEXT_PUBLIC_ADMIN_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Folders: []string{"/admin"}},
+	)
+	web := variables.App{Name: "web", Folder: "/web", Framework: buildoutput.FrameworkNext}
+	admin := variables.App{Name: "admin", Folder: "/admin", Framework: buildoutput.FrameworkNext}
+	kit := variables.App{Name: "kit", Framework: buildoutput.FrameworkSvelteKit}
+
+	for _, tc := range []struct {
+		name string
+		apps []variables.App
+		want []string
+	}{
+		{"one next app, without another app's scoped key", []variables.App{web}, []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}},
+		{"every next app the command runs", []variables.App{web, admin}, []string{"NEXT_PUBLIC_ADMIN_URL", processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}},
+		{"no next app", []variables.App{kit}, nil},
+	} {
+		if got := s.PublicKeys(tc.apps); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: PublicKeys = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 }

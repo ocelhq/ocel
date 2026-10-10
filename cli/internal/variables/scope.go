@@ -28,9 +28,12 @@ func (s Scope) isPreview() bool {
 	return s.Tier == environmentv1.Tier_TIER_PREVIEW
 }
 
+func (a App) IsInScope(folders []string) bool {
+	return len(folders) == 0 || slices.Contains(folders, a.Folder)
+}
+
 func (s Scope) IsWrittenByOcel(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
-		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
-		return reached && processenv.IsInjected(app.Framework, app.ClientBundle, key)
+		return app.IsInScope(folders) && processenv.IsInjected(app.Framework, app.ClientBundle, key)
 	})
 }

@@ -3,12 +3,11 @@ package dev
 import (
 	"cmp"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
@@ -51,18 +50,17 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	return merged
 }
 
-func nextAppEnv(scope variables.Scope, adapterPath string, declared []string) map[string]string {
-	if !slices.ContainsFunc(scope.Apps, func(app variables.App) bool { return app.Framework == buildoutput.FrameworkNext }) {
-		return nil
+func nextEnvOf(projectDir string, publicKeys []string) (map[string]string, error) {
+	if len(publicKeys) == 0 {
+		return nil, nil
 	}
-	keys := slices.Clone(declared)
-	if scope.IsWrittenByOcel(processenv.ClientURLEnvVar, nil) {
-		keys = append(keys, processenv.ClientURLEnvVar)
+	if err := node.Ensure(projectDir); err != nil {
+		return nil, err
 	}
 	return map[string]string{
-		processenv.NextAdapterPathEnvVar: adapterPath,
-		processenv.PublicKeysEnvVar:      strings.Join(keys, ","),
-	}
+		processenv.NextAdapterPathEnvVar: node.NextAdapterPath(projectDir),
+		processenv.PublicKeysEnvVar:      strings.Join(publicKeys, ","),
+	}, nil
 }
 
 func localURL(port string) string {

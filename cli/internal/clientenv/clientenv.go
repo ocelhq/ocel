@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -24,45 +24,36 @@ import (
 var recordPath = filepath.Join(statedir.Name, "output", "client-digests.json")
 
 type App struct {
-	Name         string
-	Dir          string
-	Framework    string
-	ClientBundle bool
-	Variables    []variables.Variable
+	variables.App
+	Declared  []*resourcesv1.VariableDefinition
+	Variables []variables.Variable
 }
 
-func AppsOf(cfg *project.Project, values map[string][]variables.Variable) []App {
-	apps := make([]App, 0, len(cfg.Apps))
-	for _, a := range cfg.Apps {
-		dir := filepath.Join(cfg.Dir, a.Path)
-		apps = append(apps, App{
-			Name:         a.Name,
-			Dir:          dir,
-			Framework:    a.Framework(),
-			ClientBundle: language.HasClientBundle(a.Framework(), dir),
-			Variables:    values[a.Name],
-		})
+func AppsOf(cfg *project.Project, definitions []*resourcesv1.VariableDefinition, values map[string][]variables.Variable) []App {
+	scoped := variablescope.Apps(cfg)
+	apps := make([]App, 0, len(scoped))
+	for _, app := range scoped {
+		apps = append(apps, App{App: app, Declared: declaredFor(app, definitions), Variables: values[app.Name]})
 	}
 	return apps
 }
 
-func PublicKeys(app App) []string {
+func declaredFor(app variables.App, definitions []*resourcesv1.VariableDefinition) []*resourcesv1.VariableDefinition {
+	var declared []*resourcesv1.VariableDefinition
+	for _, definition := range definitions {
+		if app.IsInScope(definition.GetFolders()) {
+			declared = append(declared, definition)
+		}
+	}
+	return declared
+}
+
+func PublicKeys(app variables.App, definitions []*resourcesv1.VariableDefinition) []string {
 	if app.Framework != buildoutput.FrameworkNext {
 		return nil
 	}
-	var keys []string
-	for _, v := range app.Variables {
-		if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && processenv.IsNextPublic(v.Key) {
-			keys = append(keys, v.Key)
-		}
-	}
-	slices.Sort(keys)
-	return slices.Compact(keys)
-}
-
-func DeclaredPublicKeys(definitions []*resourcesv1.VariableDefinition) []string {
-	var keys []string
-	for _, definition := range definitions {
+	keys := []string{processenv.ClientURLEnvVar}
+	for _, definition := range declaredFor(app, definitions) {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && processenv.IsNextPublic(definition.GetKey()) {
 			keys = append(keys, definition.GetKey())
 		}
@@ -166,8 +157,12 @@ func digests(app App) map[string]string {
 	for _, v := range app.Variables {
 		values[v.Key] = v.Value
 	}
-	for _, key := range PublicKeys(app) {
-		sum := sha256.Sum256([]byte(values[key]))
+	for _, key := range PublicKeys(app.App, app.Declared) {
+		value, resolved := values[key]
+		if !resolved {
+			continue
+		}
+		sum := sha256.Sum256([]byte(value))
 		out[key] = hex.EncodeToString(sum[:])
 	}
 	return out

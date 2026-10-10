@@ -26,7 +26,7 @@ func (v AppVariables) SecretValues() []string {
 func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
 	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
-		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}, PublicKeys: clientenv.PublicKeys(app)}
+		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}, PublicKeys: clientenv.PublicKeys(app.App, app.Declared)}
 		for _, v := range app.Variables {
 			switch v.Class {
 			case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:

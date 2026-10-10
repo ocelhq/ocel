@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -245,6 +246,45 @@ export default {
 	}
 	if got, want := env["web"].Env[processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
 		t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
+	}
+}
+
+func TestBuildHandsEachNextAppTheKeysOfThePublicVariablesDeclaredForIt(t *testing.T) {
+	root := clitest.SetUpProject(t).Root
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  apps: [
+    { name: "web", path: ".", compute: { serverless: { framework: "next" } } },
+    { name: "admin", path: "admin", folder: "/admin", compute: { serverless: { framework: "next" } } },
+  ],
+};
+`)
+	clitest.WriteFile(t, filepath.Join(root, "admin", "package.json"), "{}\n")
+
+	dependencies := newTestDependencies()
+	dependencies.CollectDeclarations = func(ctx context.Context, _ *project.Project, declarations *variables.Declarations, _, _ io.Writer) ([]declaration.Resource, error) {
+		_, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "NEXT_PUBLIC_API_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true},
+			{Key: "NEXT_PUBLIC_ADMIN_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Folders: []string{"/admin"}},
+		}})
+		return nil, err
+	}
+	var env map[string]build.AppVariables
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		env = handed
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if want := []string{"NEXT_PUBLIC_API_URL", processenv.ClientURLEnvVar}; !slices.Equal(env["web"].PublicKeys, want) {
+		t.Errorf("web public keys = %v, want %v: the adapter inlines every NEXT_PUBLIC_ key declared for the app, though ocel build resolves no value", env["web"].PublicKeys, want)
+	}
+	if want := []string{"NEXT_PUBLIC_ADMIN_URL", "NEXT_PUBLIC_API_URL", processenv.ClientURLEnvVar}; !slices.Equal(env["admin"].PublicKeys, want) {
+		t.Errorf("admin public keys = %v, want %v", env["admin"].PublicKeys, want)
 	}
 }
 
