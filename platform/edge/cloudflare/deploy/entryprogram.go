@@ -16,6 +16,8 @@ const (
 	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
 )
 
+const serveEntrypoint = "Serve"
+
 type OriginBindings struct {
 	Variables map[string]string
 	Secrets   map[string]string
@@ -97,7 +99,7 @@ func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker
 	}
 	variables := map[string]string{}
 	maps.Copy(variables, origin.Variables)
-	worker := edge.Worker{Main: entry, Variables: variables}
+	worker := edge.Worker{Main: entry, Variables: variables, CachedEntrypoints: []string{serveEntrypoint}}
 	if len(origin.Secrets) > 0 {
 		worker.Secrets = maps.Clone(origin.Secrets)
 	}

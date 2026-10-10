@@ -64,7 +64,7 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var sqsSend, invoke, invokeTagged, invokeTiered bool
+			var sqsSend, invoke, invokeTagged, invokeTiered, readObjects bool
 			for _, st := range stmts {
 				for _, action := range listPolicyActions(st.Action) {
 					if strings.HasPrefix(action, "dynamodb:") {
@@ -73,6 +73,9 @@ func TestEdgeUser(t *testing.T) {
 				}
 				if st.Resource == paramRevalidateQueueARN {
 					sqsSend = hasAction(st.Action, "sqs:SendMessage")
+				}
+				if hasAction(st.Action, "s3:GetObject") {
+					readObjects = len(listPolicyActions(st.Action)) == 1 && readsOnlyImmutableObjects(st.Resource)
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
@@ -89,6 +92,9 @@ func TestEdgeUser(t *testing.T) {
 			if !sqsSend {
 				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature provisioned")
 			}
+			if !readObjects {
+				t.Error("missing s3:GetObject, alone, on a release's assets, route table and edge bundle in the asset bucket, and nothing else in it")
+			}
 			if !invoke {
 				t.Error("missing the lambda:Invoke* grant")
 			}
@@ -100,6 +106,20 @@ func TestEdgeUser(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readsOnlyImmutableObjects(resource any) bool {
+	const bucket = "arn:aws:s3:::assets"
+	prefix := bucket + "/prod/shop/web/r1a2b3c4d/"
+	reads := func(object string) bool {
+		return iamResourceMatchesAny(yamlStrings(resource), prefix+object)
+	}
+	return reads("assets/_next/static/app.js") &&
+		reads("route-table/"+strings.Repeat("a", 64)+".json") &&
+		reads("edge/bundle.json") &&
+		reads("edge/sealed.bin") &&
+		!reads("origin.json") &&
+		!reads("image-config.json")
 }
 
 type mintingEdge struct {

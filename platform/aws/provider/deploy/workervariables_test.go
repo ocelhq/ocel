@@ -17,6 +17,8 @@ func awsWorkerValues() WorkerValues {
 	return WorkerValues{
 		ImageOptimizerURL:  "https://optimizer.example",
 		RevalidateQueueURL: "https://queue.example",
+		AssetBucket:        "assets-bucket",
+		Region:             "eu-west-2",
 		EdgeAccessKeyID:    "AKIA",
 		EdgeSecretKey:      "secret",
 	}
@@ -43,6 +45,8 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 	awsVariables := map[string]string{
 		"OCEL_IMAGE_OPTIMIZER_URL":  "https://optimizer.example",
 		"OCEL_REVALIDATE_QUEUE_URL": "https://queue.example",
+		"OCEL_ASSET_BUCKET":         "assets-bucket",
+		"OCEL_AWS_REGION":           "eu-west-2",
 		"OCEL_EDGE_ACCESS_KEY_ID":   "AKIA",
 	}
 	with := func(extra map[string]string) map[string]string {
@@ -68,7 +72,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 	}{
 		"a production project": {production, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--prod--root",
-			Worker:              edge.Worker{Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
+			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
@@ -77,7 +81,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		"a preview project": {previewProject, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--preview--root",
 			PruneWorkerStem:     "ocel--proj--preview",
-			Worker:              edge.Worker{Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
+			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
@@ -85,10 +89,11 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		}}},
 		"the shared preview entry": {sharedEntry, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Worker: edge.Worker{
-				Main:      entry,
-				Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_GLOBAL": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}),
-				Secrets:   map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key},
-				Services:  map[string]string{"RELEASES": "ocel-releases-store-preview"},
+				CachedEntrypoints: []string{"Serve"},
+				Main:              entry,
+				Variables:         with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_GLOBAL": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}),
+				Secrets:           map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key},
+				Services:          map[string]string{"RELEASES": "ocel-releases-store-preview"},
 			},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
@@ -114,6 +119,8 @@ func TestWorkerValuesBindEveryValueTheEntryWorkerReads(t *testing.T) {
 	wantVariables := map[string]string{
 		edge.ImageOptimizerURLVar:  "https://optimizer.example",
 		edge.RevalidateQueueURLVar: "https://queue.example",
+		edge.AssetBucketVar:        "assets-bucket",
+		edge.AWSRegionVar:          "eu-west-2",
 		edge.EdgeAccessKeyIDVar:    "AKIA",
 	}
 	if !maps.Equal(got.Variables, wantVariables) {
@@ -151,5 +158,15 @@ func TestWorkerValuesLeaveOutValuesTheBootstrapDidNotRecord(t *testing.T) {
 	got := values.Bindings()
 	if _, set := got.Variables[edge.ImageOptimizerURLVar]; set {
 		t.Errorf("Variables has %s = %q, want none", edge.ImageOptimizerURLVar, got.Variables[edge.ImageOptimizerURLVar])
+	}
+}
+
+func TestWorkerValuesLeaveOutTheAssetBucketWithoutItsRegion(t *testing.T) {
+	values := awsWorkerValues()
+	values.Region = ""
+
+	got := values.Bindings()
+	if _, set := got.Variables[edge.AssetBucketVar]; set {
+		t.Errorf("Variables has %s, want it left out: the edge cannot sign a read without the bucket's region", edge.AssetBucketVar)
 	}
 }

@@ -614,3 +614,39 @@ func TestCloudflareCachesResponses(t *testing.T) {
 		t.Error("Facts().CachesResponses = false, but Workers Cache stores an origin's responses and revalidates them itself")
 	}
 }
+
+func TestCachedEntrypoints(t *testing.T) {
+	t.Run("a worker naming a cached entrypoint turns the worker's cache off and that entrypoint's on", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")
+
+		cache, _ := meta["cache_options"].(map[string]any)
+		if cache["enabled"] != false || cache["cross_version_cache"] != true {
+			t.Errorf("cache_options = %v, want the worker uncached and its entries kept across versions", meta["cache_options"])
+		}
+		exports, _ := meta["exports"].(map[string]any)
+		serve, _ := exports["Serve"].(map[string]any)
+		entrypointCache, _ := serve["cache"].(map[string]any)
+		if serve["type"] != "worker" || entrypointCache["enabled"] != true || len(exports) != 1 {
+			t.Errorf("exports = %v, want only Serve, a worker with its cache on", meta["exports"])
+		}
+	})
+
+	t.Run("a worker naming none carries no cache configuration", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")
+
+		for _, key := range []string{"cache_options", "exports"} {
+			if _, ok := meta[key]; ok {
+				t.Errorf("metadata has %s: %v", key, meta[key])
+			}
+		}
+	})
+
+	t.Run("the compatibility date already enables ctx.exports, so no flag asks for it again", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")
+
+		flags, _ := meta["compatibility_flags"].([]any)
+		if slices.Contains(flags, any("enable_ctx_exports")) {
+			t.Errorf("compatibility_flags = %v, want no enable_ctx_exports: workerd refuses it from 2025-11-17", flags)
+		}
+	})
+}

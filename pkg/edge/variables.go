@@ -11,6 +11,8 @@ const (
 	AWSRegionVar = "OCEL_AWS_REGION"
 )
 
+const AssetBucketVar = "OCEL_ASSET_BUCKET"
+
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 
 const StaticRulesVar = "OCEL_STATIC_RULES"

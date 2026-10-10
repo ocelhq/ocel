@@ -189,6 +189,8 @@ type Worker struct {
 	ClientCertificates map[string]string
 
 	Queues map[string]string
+
+	CachedEntrypoints []string
 }
 
 type ObjectStore struct {

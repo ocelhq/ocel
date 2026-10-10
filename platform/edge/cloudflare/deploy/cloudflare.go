@@ -523,6 +523,14 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 		"observability":       observability(),
 		"bindings":            scriptBindings(worker, includeAssets),
 	}
+	if len(worker.CachedEntrypoints) > 0 {
+		metadata["cache_options"] = map[string]any{"enabled": false, "cross_version_cache": true}
+		exports := make(map[string]any, len(worker.CachedEntrypoints))
+		for _, name := range worker.CachedEntrypoints {
+			exports[name] = map[string]any{"type": "worker", "cache": map[string]any{"enabled": true}}
+		}
+		metadata["exports"] = exports
+	}
 	if includeAssets {
 		metadata["assets"] = map[string]any{
 			"jwt":    assetsJWT,
