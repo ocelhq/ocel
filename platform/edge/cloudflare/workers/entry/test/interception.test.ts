@@ -79,6 +79,7 @@ function appPage(
     segmentData?: Record<string, string>;
     segmentHeaders?: Record<string, string> | null;
     rscHeaders?: Record<string, string>;
+    status?: number;
   } = {},
 ) {
   const segmentHeaders =
@@ -91,7 +92,7 @@ function appPage(
       kind: "APP_PAGE",
       html: "<html>hi</html>",
       rscData: btoa("RSC-PAYLOAD"),
-      status: 200,
+      status: opts.status ?? 200,
       headers: opts.tags ? { "x-next-cache-tags": opts.tags } : {},
       ...(opts.rscHeaders ? { rscHeaders: opts.rscHeaders } : {}),
       ...(segmentHeaders ? { segmentHeaders } : {}),
@@ -142,6 +143,38 @@ describe("intercept, complete entries", () => {
 
     expect(res!.headers.get("content-type")).toBe("text/x-component");
     expect(await res!.text()).toBe("RSC-PAYLOAD");
+  });
+
+  it("serves a redirected page's RSC payload with 200, as the redirect travels in the payload", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ status: 307 }) });
+    const res = await served(
+      req({ headers: { RSC: "1" } }),
+      target(),
+      cfg,
+      storeDeps(store, { now: () => 2_000 }),
+    );
+
+    expect(res!.status).toBe(200);
+    expect(await res!.text()).toBe("RSC-PAYLOAD");
+  });
+
+  it("serves a redirected page's html with its stored redirect status", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ status: 307 }) });
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+
+    expect(res!.status).toBe(307);
+  });
+
+  it("serves the RSC payload with a stored status that is not a redirect", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ status: 404 }) });
+    const res = await served(
+      req({ headers: { RSC: "1" } }),
+      target(),
+      cfg,
+      storeDeps(store, { now: () => 2_000 }),
+    );
+
+    expect(res!.status).toBe(404);
   });
 
   it("fails open (null) on a store miss", async () => {

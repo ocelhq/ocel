@@ -295,9 +295,11 @@ function headersFrom(map: Record<string, any> | undefined): Headers {
   return headers;
 }
 
+const redirectStatuses = new Set([303, 307, 308]);
+
 function reconstruct(request: Request, value: Record<string, any>): Response | null {
   const restored = deserialize(value);
-  const status = typeof value.status === "number" ? value.status : 200;
+  let status = typeof value.status === "number" ? value.status : 200;
 
   let body: BodyInit;
   let headers: Headers;
@@ -308,6 +310,7 @@ function reconstruct(request: Request, value: Record<string, any>): Response | n
     if (request.headers.get("RSC") === "1") {
       if (!restored.rscData) return null; // Negotiated RSC but the entry has none.
       body = restored.rscData;
+      if (redirectStatuses.has(status)) status = 200;
       headers = headersFrom(value.rscHeaders);
       if (!headers.has("content-type")) {
         headers.set("content-type", "text/x-component");
