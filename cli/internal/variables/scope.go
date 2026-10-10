@@ -10,6 +10,7 @@ import (
 type App struct {
 	Name         string
 	Folder       string
+	Framework    string
 	ClientBundle bool
 }
 
@@ -30,6 +31,6 @@ func (s Scope) isPreview() bool {
 func (s Scope) IsWrittenByOcel(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
 		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
-		return reached && processenv.IsInjected(app.ClientBundle, key)
+		return reached && processenv.IsInjected(app.Framework, app.ClientBundle, key)
 	})
 }

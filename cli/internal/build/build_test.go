@@ -217,6 +217,35 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("hands each next app the public keys it declared and no other app's", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web"), nextApp("admin", "apps/admin")}}
+
+		var got nodeBuildRequest
+		builder := nodeOnly{node: requestOf(&got)}
+		variables := map[string]AppVariables{
+			"web":   {PublicKeys: []string{"NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_RETRIES"}},
+			"admin": {PublicKeys: []string{"NEXT_PUBLIC_ADMIN_URL"}},
+		}
+		if err := builder.Build(context.Background(), cfg, variables, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		byName := map[string][]string{}
+		for _, app := range got.Apps {
+			byName[app.Name] = app.PublicKeys
+		}
+		if want := []string{"NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_RETRIES"}; !slices.Equal(byName["web"], want) {
+			t.Errorf("web public keys = %v, want %v", byName["web"], want)
+		}
+		if want := []string{"NEXT_PUBLIC_ADMIN_URL"}; !slices.Equal(byName["admin"], want) {
+			t.Errorf("admin public keys = %v, want %v", byName["admin"], want)
+		}
+	})
+
 	t.Run("installs sharp's linux build once for every bundle of a next app", func(t *testing.T) {
 		runs := installLinuxArm64SharpNpm(t)
 

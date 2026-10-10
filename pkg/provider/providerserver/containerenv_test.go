@@ -409,6 +409,46 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordLeavesOutThePublicURLOcelWritesForASvelteKitApp(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	for name, tc := range map[string]struct {
+		framework string
+		want      []string
+	}{
+		"a sveltekit app reads it":      {framework: "sveltekit", want: []string{"REGION"}},
+		"another app's own value of it": {framework: "next", want: []string{processenv.SvelteKitPublicURLEnvVar, "REGION"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			builtProject(t)
+			client, vendor := deployServed(t)
+			stager := staging(t, vendor)
+
+			req := namingARegistry(containerDeployRequest("/healthz"))
+			req.Manifest.Apps[0].Framework = &contractv1.Framework{Name: tc.framework}
+			req.Manifest.Apps[0].ClientBundle = true
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.SvelteKitPublicURLEnvVar, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
+
+			result, _ := deploy(t, client, req)
+			if result == nil || !result.GetSuccess() {
+				t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+			}
+
+			staged := stager.records()
+			if len(staged) != 1 {
+				t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+			}
+			var named []string
+			for _, variable := range staged[0].Variables {
+				named = append(named, variable.Key)
+			}
+			if !slices.Equal(named, tc.want) {
+				t.Errorf("%s: the staged record names %v, want %v", name, named, tc.want)
+			}
+		})
+	}
+}
+
 func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndIncludesNone(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)

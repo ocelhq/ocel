@@ -196,8 +196,9 @@ func builtInClients(cfg *project.Project, urls map[string]string) []clientenv.Ap
 		apps = append(apps, clientenv.App{
 			Name:         a.Name,
 			Dir:          dir,
+			Framework:    a.Framework(),
 			ClientBundle: bundle,
-			Variables:    appurl.Variables(bundle, urls[a.Name]),
+			Variables:    appurl.Variables(a.Framework(), bundle, urls[a.Name]),
 		})
 	}
 	return apps

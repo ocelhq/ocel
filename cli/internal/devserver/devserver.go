@@ -221,10 +221,10 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) ClientKeys() ([]clientenv.Key, error) {
+func (s *Server) PublicKeys() []string {
 	_, declarations := s.env.current()
 	if declarations == nil {
-		return nil, nil
+		return nil
 	}
-	return clientenv.Declared(declarations.Definitions())
+	return clientenv.DeclaredPublicKeys(declarations.Definitions())
 }

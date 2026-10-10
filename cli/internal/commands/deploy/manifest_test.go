@@ -102,7 +102,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	}
 
 	s, _ := newBuildSpan(t)
-	cfg := prebuiltConfig(root)
+	cfg := prebuiltNextConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
 	manifest, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: urls})
 	if err != nil {
@@ -127,13 +127,9 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		}
 	})
 
-	t.Run("the client accessor inlines it", func(t *testing.T) {
-		accessor, err := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
-		if err != nil {
-			t.Fatalf("no client accessor was generated: %v", err)
-		}
-		if !strings.Contains(string(accessor), processenv.ClientURLEnvVar) {
-			t.Errorf("accessor = %s, want it to read %s", accessor, processenv.ClientURLEnvVar)
+	t.Run("the build names it among the public keys the adapter inlines", func(t *testing.T) {
+		if want := []string{processenv.ClientURLEnvVar}; !slices.Equal(built["api"].PublicKeys, want) {
+			t.Errorf("public keys = %v, want %v", built["api"].PublicKeys, want)
 		}
 	})
 }
@@ -143,7 +139,7 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
 	dependencies := newTestDependencies()
 	recordBuildApp(&dependencies)
-	cfg := prebuiltConfig(root)
+	cfg := prebuiltNextConfig(root)
 
 	s, _ := newBuildSpan(t)
 	if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s, urls: map[string]string{"api": "https://api.acme.com"}}); err != nil {
@@ -297,30 +293,6 @@ func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps client accessibility from the declaration", func(t *testing.T) {
-		t.Parallel()
-
-		definitions := []*resourcesv1.VariableDefinition{
-			{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, ClientAccessible: true},
-			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
-		}
-		resolved := map[string]variables.ResolvedValue{
-			"PUBLIC_SITE_URL": {Value: "https://example.com"},
-			"INTERNAL_URL":    {Value: "http://internal"},
-		}
-
-		got := appVariables(definitions, resolved)
-		if len(got) != 2 {
-			t.Fatalf("appVariables = %+v, want both declarations", got)
-		}
-		if !got[0].ClientAccessible {
-			t.Errorf("PUBLIC_SITE_URL = %+v, want it marked client-accessible", got[0])
-		}
-		if got[1].ClientAccessible {
-			t.Errorf("INTERNAL_URL = %+v, want it left server-only", got[1])
-		}
-	})
-
 	t.Run("keeps the version each value resolved at", func(t *testing.T) {
 		t.Parallel()
 
@@ -453,16 +425,15 @@ func functionsOnDisk(cfg *project.Project) (build.Output, error) {
 
 func declarationsWithClientValue(t *testing.T, cfg *project.Project, value string) *variables.Declarations {
 	t.Helper()
-	cell := variables.Cell{Key: "PUBLIC_SITE_URL"}
+	cell := variables.Cell{Key: "NEXT_PUBLIC_SITE_URL"}
 	declarations := variables.NewDeclarations(oneValue{cell: cell, value: value}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
 	if err := declarations.Prefetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	_, err := declarations.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
 		Definitions: []*resourcesv1.VariableDefinition{{
-			Key:              cell.Key,
-			Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
-			ClientAccessible: true,
+			Key:   cell.Key,
+			Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
 		}},
 	})
 	if err != nil {
@@ -482,6 +453,12 @@ func (v oneValue) List(context.Context) ([]variables.ValueMetadata, error) {
 
 func (v oneValue) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return map[variables.Coordinate]string{{Cell: v.cell}: v.value}, nil
+}
+
+func prebuiltNextConfig(root string) *project.Project {
+	cfg := prebuiltConfig(root)
+	cfg.Apps[0].Serverless.Framework = buildoutput.FrameworkNext
+	return cfg
 }
 
 func prebuiltConfig(root string) *project.Project {
@@ -505,11 +482,10 @@ func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variable
 }
 
 func recordedClientValue() clientenv.App {
-	return clientenv.App{Name: "api", Variables: []variables.Variable{{
-		Key:              "PUBLIC_SITE_URL",
-		Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
-		Value:            "https://example.com",
-		ClientAccessible: true,
+	return clientenv.App{Name: "api", Framework: buildoutput.FrameworkNext, Variables: []variables.Variable{{
+		Key:   "NEXT_PUBLIC_SITE_URL",
+		Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		Value: "https://example.com",
 	}}}
 }
 
@@ -615,32 +591,31 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		}
 	})
 
-	t.Run("the client accessor is generated before the build", func(t *testing.T) {
+	t.Run("the build is handed the public keys the app declared and records their values", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
-		generated := ""
+		var handed []string
 		dependencies := newTestDependencies()
 		stubRecordedBuildIDs(&dependencies)
-		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
-			data, err := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
-			if err != nil {
-				return build.Output{}, err
-			}
-			generated = string(data)
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, values map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+			handed = values["api"].PublicKeys
 			return functionsOnDisk(cfg)
 		}
 
 		s, _ := newBuildSpan(t)
-		cfg := prebuiltConfig(root)
+		cfg := prebuiltNextConfig(root)
 		if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: declarationsWithClientValue(t, cfg, "https://example.com"), phase: s, span: s}); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
-		if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
-			t.Errorf("accessor the build saw = %q, want it to read the key under its declared name", generated)
+		if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
+			t.Errorf("public keys the build was handed = %v, want %v", handed, want)
 		}
 		if _, err := os.Stat(filepath.Join(root, statedir.Name, "output", "client-digests.json")); err != nil {
-			t.Errorf("the build recorded no client values: %v", err)
+			t.Errorf("the build recorded no public values: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); err == nil {
+			t.Error("the build wrote a client accessor, which ocel no longer generates")
 		}
 	})
 
@@ -649,7 +624,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
-		cfg := prebuiltConfig(root)
+		cfg := prebuiltNextConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
 			t.Fatal(err)
@@ -661,7 +636,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for a build predating the client value, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "PUBLIC_SITE_URL") {
+		if !strings.Contains(err.Error(), "NEXT_PUBLIC_SITE_URL") {
 			t.Errorf("error = %q, want it to name the changed key", err)
 		}
 		if !strings.Contains(err.Error(), "--prebuilt") {
@@ -674,8 +649,8 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
-		cfg := prebuiltConfig(root)
-		if err := clientenv.Record(root, []clientenv.App{{Name: "api"}}); err != nil {
+		cfg := prebuiltNextConfig(root)
+		if err := clientenv.Record(root, []clientenv.App{{Name: "api", Framework: buildoutput.FrameworkNext}}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -684,7 +659,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for an `ocel build` output, want a refusal")
 		}
-		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
+		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -699,7 +674,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
-		cfg := prebuiltConfig(root)
+		cfg := prebuiltNextConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
 			t.Fatal(err)

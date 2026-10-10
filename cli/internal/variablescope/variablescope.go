@@ -53,6 +53,7 @@ func Apps(cfg *project.Project) []variables.App {
 		apps = append(apps, variables.App{
 			Name:         a.Name,
 			Folder:       a.Folder,
+			Framework:    a.Framework(),
 			ClientBundle: language.HasClientBundle(a.Framework(), filepath.Join(cfg.Dir, a.Path)),
 		})
 	}

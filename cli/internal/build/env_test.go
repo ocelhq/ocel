@@ -1,16 +1,18 @@
 package build
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
 	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
-		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
+		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 	}}}, nil)["storefront"]
@@ -23,6 +25,18 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 	}
 	if _, ok := built.Env["STRIPE_API_KEY"]; ok {
 		t.Error("env contains STRIPE_API_KEY; an encrypted class never enters the build's environment")
+	}
+}
+
+func TestANextAppIsBuiltWithTheKeysOfItsPublicValues(t *testing.T) {
+	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Framework: buildoutput.FrameworkNext, Variables: []variables.Variable{
+		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com"},
+		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
+		{Key: "NEXT_PUBLIC_TOKEN", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
+	}}}, nil)["storefront"]
+
+	if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(built.PublicKeys, want) {
+		t.Errorf("PublicKeys = %v, want %v: a build inlines only a plaintext NEXT_PUBLIC_ value", built.PublicKeys, want)
 	}
 }
 

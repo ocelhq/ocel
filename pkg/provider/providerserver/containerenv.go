@@ -53,7 +53,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := refuseOwnedNames(entry.App, entry.Manifest.GetClientBundle(), values); err != nil {
+		if err := refuseOwnedNames(entry.App, entry.Manifest.GetFramework().GetName(), entry.Manifest.GetClientBundle(), values); err != nil {
 			return err
 		}
 		if len(values.Secrets) == 0 {
@@ -88,9 +88,9 @@ func (r *deployRun) storedCells(ctx context.Context) (map[variablestore.Cell]boo
 	return stored, nil
 }
 
-func refuseOwnedNames(app string, clientBundle bool, values provider.AppValues) error {
+func refuseOwnedNames(app, framework string, clientBundle bool, values provider.AppValues) error {
 	var injected, served, owned []string
-	for _, key := range declaredNames(clientBundle, values) {
+	for _, key := range declaredNames(framework, clientBundle, values) {
 		switch {
 		case key == containerimage.PortEnvVar:
 			injected = append(injected, key)
@@ -118,11 +118,11 @@ func refuseOwnedNames(app string, clientBundle bool, values provider.AppValues) 
 	return nil
 }
 
-func declaredNames(clientBundle bool, values provider.AppValues) []string {
+func declaredNames(framework string, clientBundle bool, values provider.AppValues) []string {
 	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
 	for _, named := range []map[string]string{values.Plain, values.Sensitive} {
 		for key := range named {
-			if processenv.IsInjected(clientBundle, key) {
+			if processenv.IsInjected(framework, clientBundle, key) {
 				continue
 			}
 			names = append(names, key)

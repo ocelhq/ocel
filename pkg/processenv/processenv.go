@@ -3,6 +3,8 @@ package processenv
 import (
 	"os"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const PhaseEnvVar = "OCEL_PHASE"
@@ -27,6 +29,14 @@ const LiveDirEnvVar = "OCEL_LIVE_DIR"
 
 const ClientURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
+const SvelteKitPublicURLEnvVar = "PUBLIC_OCEL_URL"
+
+const PublicKeysEnvVar = "OCEL_PUBLIC_KEYS"
+
+const NextAdapterPathEnvVar = "NEXT_ADAPTER_PATH"
+
+const NextPublicPrefix = "NEXT_PUBLIC_"
+
 const SkipChecksEnvVar = "OCEL_SKIP_CHECKS"
 
 func SkipChecks() bool {
@@ -37,12 +47,18 @@ func SkipChecks() bool {
 	return false
 }
 
-func IsInjected(clientBundle bool, key string) bool {
+func IsNextPublic(key string) bool {
+	return strings.HasPrefix(key, NextPublicPrefix)
+}
+
+func IsInjected(framework string, clientBundle bool, key string) bool {
 	switch key {
 	case AppURLEnvVar:
 		return true
 	case ClientURLEnvVar:
 		return clientBundle
+	case SvelteKitPublicURLEnvVar:
+		return clientBundle && framework == buildoutput.FrameworkSvelteKit
 	}
 	return false
 }

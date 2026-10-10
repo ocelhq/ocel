@@ -302,18 +302,8 @@ async function compiledConfig() {
   return { ...compiled, configHash: imageConfigHash(compiled) };
 }
 
-async function clientEnv() {
-  await run("go", ["run", "github.com/ocelhq/ocel/cli/ocel", "generate"], { cwd: appRoot });
-  const accessor = await readFile(join(appRoot, ".ocel", "env-client.ts"), "utf8");
-  const env = {};
-  for (const [, key] of accessor.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
-    env[key] = "image-fixtures";
-  }
-  return env;
-}
-
-async function generateVariant(variant, baseEnv) {
-  const env = { ...baseEnv, OCEL_IMAGE_FIXTURES: variant };
+async function generateVariant(variant) {
+  const env = { OCEL_IMAGE_FIXTURES: variant };
   await run(join(appRoot, "node_modules", ".bin", "next"), ["build"], {
     cwd: appRoot,
     env: { ...process.env, ...env },
@@ -345,10 +335,9 @@ async function main() {
 
   await run("pnpm", ["--filter", "@framework/next-adapter", "build"], { cwd: repoRoot });
 
-  const baseEnv = await clientEnv();
   const variants = [];
   for (const variant of ["default", "svg"]) {
-    variants.push(await generateVariant(variant, baseEnv));
+    variants.push(await generateVariant(variant));
   }
 
   await mkdir(dirname(fixtureFile), { recursive: true });

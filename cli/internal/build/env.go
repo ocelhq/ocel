@@ -12,6 +12,7 @@ type AppVariables struct {
 	Env             map[string]string
 	Live            map[string]string
 	BindingProxyEnv map[string]string
+	PublicKeys      []string
 }
 
 func (v AppVariables) SecretValues() []string {
@@ -25,7 +26,7 @@ func (v AppVariables) SecretValues() []string {
 func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
 	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
-		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}}
+		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}, PublicKeys: clientenv.PublicKeys(app)}
 		for _, v := range app.Variables {
 			switch v.Class {
 			case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:

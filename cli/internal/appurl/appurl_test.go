@@ -92,14 +92,16 @@ func TestPrepend(t *testing.T) {
 	cfg := &project.Project{Apps: []project.App{
 		{Name: "web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
 		{Name: "api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}},
+		{Name: "kit", Serverless: &project.Serverless{Framework: buildoutput.FrameworkSvelteKit}},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]variables.Variable{
 		"web":  {{Key: "LOG_LEVEL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "info"}},
 		"api":  nil,
+		"kit":  nil,
 		"docs": nil,
 	}
-	appurl.Prepend(cfg, byApp, map[string]string{"web": "https://acme.com", "api": "https://api.acme.com"})
+	appurl.Prepend(cfg, byApp, map[string]string{"web": "https://acme.com", "api": "https://api.acme.com", "kit": "https://kit.acme.com"})
 
 	variables := map[string]variables.Variable{}
 	for _, v := range byApp["web"] {
@@ -111,17 +113,17 @@ func TestPrepend(t *testing.T) {
 	if got, want := variables[processenv.ClientURLEnvVar].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", processenv.ClientURLEnvVar, got)
 	}
-	if !variables[processenv.ClientURLEnvVar].ClientAccessible {
-		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", processenv.ClientURLEnvVar)
-	}
-	if variables[processenv.AppURLEnvVar].ClientAccessible {
-		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", processenv.AppURLEnvVar)
-	}
 	if variables["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
 	if got := keys(byApp["api"]); !slices.Equal(got, []string{processenv.AppURLEnvVar}) {
 		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, processenv.ClientURLEnvVar)
+	}
+	if got := keys(byApp["kit"]); !slices.Equal(got, []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar, processenv.SvelteKitPublicURLEnvVar}) {
+		t.Errorf("kit variables = %v, want the deployment url under each name a sveltekit app can read it by", got)
+	}
+	if got := keys(byApp["web"]); slices.Contains(got, processenv.SvelteKitPublicURLEnvVar) {
+		t.Errorf("web variables = %v, want no %s: only a sveltekit app reads it", got, processenv.SvelteKitPublicURLEnvVar)
 	}
 	if len(byApp["docs"]) != 0 {
 		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])

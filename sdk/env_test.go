@@ -387,9 +387,9 @@ func TestEnvDeclaresEveryVariableWithItsClassAndWhetherItIsRequired(t *testing.T
 		{"key": "PLAIN", "class": "VARIABLE_CLASS_PLAIN", "required": true},
 		{"key": "SENSITIVE", "class": "VARIABLE_CLASS_SENSITIVE", "required": true},
 		{"key": "SECRET", "class": "VARIABLE_CLASS_SECRET", "required": true},
-		{"key": "DEFAULTED", "class": "VARIABLE_CLASS_PLAIN", "hasSchema": true},
-		{"key": "OPTIONAL", "class": "VARIABLE_CLASS_PLAIN", "hasSchema": true},
-		{"key": "SCOPED", "class": "VARIABLE_CLASS_PLAIN", "required": true, "hasSchema": true, "folders": []any{"/apps/web", "/apps/api"}},
+		{"key": "DEFAULTED", "class": "VARIABLE_CLASS_PLAIN"},
+		{"key": "OPTIONAL", "class": "VARIABLE_CLASS_PLAIN"},
+		{"key": "SCOPED", "class": "VARIABLE_CLASS_PLAIN", "required": true, "folders": []any{"/apps/web", "/apps/api"}},
 	}
 	for i, w := range want {
 		d := definitions[i].(map[string]any)
