@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -91,21 +93,21 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier 
 	}
 	described, err := apis.KMS.DescribeKey(ctx, &kms.DescribeKeyInput{KeyId: aws.String(req.VariablesKey)})
 	if err != nil {
-		return nil, refuseBroughtKey(req.VariablesKey, "it could not be described: %v", err)
+		return nil, refuseBroughtKey(req.VariablesKey, err, "it could not be described: %v", err)
 	}
 	metadata := described.KeyMetadata
 	named := aws.ToString(metadata.Arn)
 	region, err := keyRegion(named)
 	switch {
 	case metadata.KeySpec != kmstypes.KeySpecSymmetricDefault || metadata.KeyUsage != kmstypes.KeyUsageTypeEncryptDecrypt:
-		return nil, refuseBroughtKey(req.VariablesKey,
+		return nil, refuseBroughtKey(req.VariablesKey, nil,
 			"it is a %s key for %s, and a variable is sealed under a symmetric ENCRYPT_DECRYPT key", metadata.KeySpec, metadata.KeyUsage)
 	case !metadata.Enabled:
-		return nil, refuseBroughtKey(req.VariablesKey, "it is not enabled, and a key that is not enabled seals and opens nothing")
+		return nil, refuseBroughtKey(req.VariablesKey, nil, "it is not enabled, and a key that is not enabled seals and opens nothing")
 	case err != nil:
-		return nil, refuseBroughtKey(req.VariablesKey, "%v", err)
+		return nil, refuseBroughtKey(req.VariablesKey, nil, "%v", err)
 	case region != apis.Region:
-		return nil, refuseBroughtKey(req.VariablesKey,
+		return nil, refuseBroughtKey(req.VariablesKey, nil,
 			"it lives in region %s and this bootstrap is in region %s, which a function reading a value never reaches",
 			region, apis.Region)
 	}
@@ -121,7 +123,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier 
 		EncryptionContext: bound,
 	})
 	if err != nil {
-		return nil, refuseBroughtKey(req.VariablesKey, "nothing could be encrypted under it: %v", err)
+		return nil, refuseBroughtKey(req.VariablesKey, err, "nothing could be encrypted under it: %v", err)
 	}
 	opened, err := apis.KMS.Decrypt(ctx, &kms.DecryptInput{
 		KeyId:             aws.String(req.VariablesKey),
@@ -129,18 +131,39 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier 
 		EncryptionContext: bound,
 	})
 	if err != nil {
-		return nil, refuseBroughtKey(req.VariablesKey, "what was encrypted under it could not be decrypted again: %v", err)
+		return nil, refuseBroughtKey(req.VariablesKey, err, "what was encrypted under it could not be decrypted again: %v", err)
 	}
 	if !bytes.Equal(opened.Plaintext, probe) {
-		return nil, refuseBroughtKey(req.VariablesKey, "what it decrypted is not what was encrypted under it")
+		return nil, refuseBroughtKey(req.VariablesKey, nil, "what it decrypted is not what was encrypted under it")
 	}
 	return nil, nil
 }
 
-func refuseBroughtKey(named, why string, args ...any) error {
+const broughtKeyPolicyRemedy = "Its key policy must admit this principal, the app execution roles that read a value and the env source sync that writes one; ocel never edits a key policy it does not own"
+
+const broughtKeyCredentialRemedy = "The policy of the credential running this bootstrap must allow it on this key, as `ocel permissions bootstrap` prints with variablesKey set"
+
+var identityPolicyDenials = []string{"identity-based policy", "session policy", "permissions boundary"}
+
+func refuseBroughtKey(named string, cause error, why string, args ...any) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s cannot seal this account's variables: %s.\nIts key policy must admit this principal, the app execution roles that read a value and the env source sync that writes one; ocel never edits a key policy it does not own",
-		named, fmt.Sprintf(why, args...))
+		"%s cannot seal this account's variables: %s.\n%s",
+		named, fmt.Sprintf(why, args...), broughtKeyRemedy(cause))
+}
+
+func broughtKeyRemedy(cause error) string {
+	if cause == nil {
+		return broughtKeyPolicyRemedy
+	}
+	text := cause.Error()
+	switch {
+	case slices.ContainsFunc(identityPolicyDenials, func(denial string) bool { return strings.Contains(text, denial) }):
+		return broughtKeyCredentialRemedy
+	case strings.Contains(text, "AccessDenied") && !strings.Contains(text, "resource-based policy"):
+		return broughtKeyPolicyRemedy + ".\n" + broughtKeyCredentialRemedy
+	default:
+		return broughtKeyPolicyRemedy
+	}
 }
 
 func keyRegion(named string) (string, error) {
