@@ -32,6 +32,13 @@ func databaseCondition(project string, ns provider.Namespace) *cloudresourcemana
 	}
 }
 
+func (c *clients) objectPrefixCondition(title string, tier environment.Tier, prefix string) *cloudresourcemanager.Expr {
+	return &cloudresourcemanager.Expr{
+		Title:      title,
+		Expression: fmt.Sprintf("resource.name.startsWith(%q)", "projects/_/buckets/"+c.Bucket(tier)+"/objects/"+prefix),
+	}
+}
+
 func sameCondition(current, want *cloudresourcemanager.Expr) bool {
 	if current == nil || want == nil {
 		return current == nil && want == nil

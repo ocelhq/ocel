@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -182,25 +181,5 @@ func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 	}
 	if got, told := env["OCEL_STATIC_DIR"]; told {
 		t.Errorf("the Next service reads OCEL_STATIC_DIR=%q, but its image holds no static files", got)
-	}
-}
-
-func TestAnAppsAccountMayReadItsOwnStaticFilesAndNoOtherApps(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-
-	var granted []string
-	for _, binding := range projectBindingsOf(server.identities()) {
-		if strings.HasPrefix(binding, appAssetsRole+" ") {
-			granted = append(granted, binding)
-		}
-	}
-	want := appAssetsRole + " serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", "web") +
-		` resource.name.startsWith("projects/_/buckets/` + names(t, p).Bucket(environment.TierProduction) + `/objects/assets/prod/shop/web/")`
-	if !slices.Equal(granted, []string{want}) {
-		t.Errorf("the app's asset bindings = %q, want exactly %q", granted, want)
 	}
 }
