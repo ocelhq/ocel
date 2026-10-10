@@ -169,6 +169,8 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
 		case r.Method == http.MethodGet && strings.Contains(path, "/operations/"):
 			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/storage/v1/b/") && strings.Contains(path, "/o/"):
+			s.objectAttrs(w, path)
 		case r.Method == http.MethodGet:
 			s.get(w)
 		default:
@@ -592,6 +594,16 @@ func (s *runServer) store(t *testing.T, w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeBody(w, map[string]string{"bucket": "b", "name": name, "generation": "1"})
+}
+
+func (s *runServer) objectAttrs(w http.ResponseWriter, path string) {
+	bucket, name, _ := strings.Cut(strings.TrimPrefix(path, "/storage/v1/b/"), "/o/")
+	if !s.present[name] {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"No such object"}}`))
+		return
+	}
+	writeBody(w, map[string]string{"bucket": bucket, "name": name, "generation": "1"})
 }
 
 func (s *runServer) stored() []upload {
