@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,12 +13,10 @@ import (
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/contenttype"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -27,8 +24,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-const singleRequestUploadLimit = 32 << 20
 
 type staticFile struct {
 	src, key string
@@ -126,39 +121,4 @@ func staticFileCount(n int) string {
 		return "1 static file"
 	}
 	return fmt.Sprintf("%d static files", n)
-}
-
-func (p *Provider) createObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
-	return p.writeObject(ctx, tier, store, key, attrs, body, &storage.Conditions{DoesNotExist: true})
-}
-
-func (p *Provider) replaceObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
-	return p.writeObject(ctx, tier, store, key, attrs, body, nil)
-}
-
-func (p *Provider) writeObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte, conditions *storage.Conditions) error {
-	objects := artifacts{p}
-	object, err := objects.object(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: key})
-	if err != nil {
-		return err
-	}
-	if conditions != nil {
-		object = object.If(*conditions)
-	}
-	writer := object.NewWriter(ctx)
-	writer.ContentType = attrs.ContentType
-	writer.CacheControl = attrs.CacheControl
-	if len(body) < singleRequestUploadLimit {
-		writer.ChunkSize = len(body) + 1
-	}
-	_, err = writer.Write(body)
-	if closed := writer.Close(); err == nil {
-		err = closed
-	}
-	var failure *googleapi.Error
-	switch {
-	case err == nil, errors.As(err, &failure) && failure.Code == http.StatusPreconditionFailed:
-		return nil
-	}
-	return objects.storeless(ctx, tier, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
 }
