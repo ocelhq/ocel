@@ -70,6 +70,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 		ProxiesRecords:        declared.ProxiesRecords,
 		ProxiedRecordNote:     declared.ProxiedRecordNote,
 		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
+		CachesResponses:       declared.CachesResponses,
 	}
 }
 

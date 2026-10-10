@@ -60,6 +60,9 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	if !front.Facts().InvalidatesByCacheTag {
 		t.Error("Facts() says the alb edge does not invalidate by cache tag, and Cloud CDN invalidates by Cache-Tag")
 	}
+	if !front.Facts().CachesResponses {
+		t.Error("Facts() says the alb edge does not cache responses, and Cloud CDN does")
+	}
 	routes, err := p.Routers().Open(router.Kind(alb.Kind))
 	if err != nil {
 		t.Fatalf("Routers().Open(%q) = %v", alb.Kind, err)

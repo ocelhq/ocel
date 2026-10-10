@@ -273,6 +273,21 @@ func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
 	}
 }
 
+func TestAnOriginBehindACachingEdgeIsToldToServeOnlyFreshPages(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []edge.Kind{cloudfront.Kind, cloudflare.Kind} {
+		env := plannedEnv(t, routedConfig(t, kind), routedApp(), fakeEdgeOf(kind))
+		if env[edge.OriginFreshOnlyVar] != "1" {
+			t.Errorf("%s = %q behind %s, want \"1\": the edge revalidates stale pages itself", edge.OriginFreshOnlyVar, env[edge.OriginFreshOnlyVar], kind)
+		}
+	}
+
+	if _, told := plannedEnv(t, Config{}, routedApp(), nil)[edge.OriginFreshOnlyVar]; told {
+		t.Errorf("%s is set with no edge, want it unset: nothing in front revalidates a stale page", edge.OriginFreshOnlyVar)
+	}
+}
+
 func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 	t.Parallel()
 

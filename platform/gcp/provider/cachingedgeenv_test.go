@@ -49,3 +49,45 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 		})
 	}
 }
+
+func TestANextServiceBehindAnEdgeThatCachesResponsesServesOnlyFreshPages(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	front, err := p.Edges().Open(alb.Kind, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := routedNextSpec()
+	spec.Edge = front
+
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	if got := envOf(server.created[0].Template.Containers[0])[edge.OriginFreshOnlyVar]; got != "1" {
+		t.Errorf("the Next service reads %s=%q, want 1: Cloud CDN revalidates a stale page itself", edge.OriginFreshOnlyVar, got)
+	}
+}
+
+func TestANextServiceBehindNoCachingEdgeServesStalePages(t *testing.T) {
+	none, err := (&runServer{}).open(t).Edges().Open(edge.None, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, front := range map[string]edge.Edge{"no edge": nil, "cloud run": none} {
+		t.Run(name, func(t *testing.T) {
+			server := &runServer{}
+			p := server.open(t)
+			spec := routedNextSpec()
+			spec.Edge = front
+
+			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+				t.Fatalf("ProvisionFunctions() = %v", err)
+			}
+
+			if got, set := envOf(server.created[0].Template.Containers[0])[edge.OriginFreshOnlyVar]; set {
+				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it revalidates a stale page", edge.OriginFreshOnlyVar, got)
+			}
+		})
+	}
+}

@@ -119,6 +119,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		Supported:          edge.AllNeeds(),
 		Compatibility:      edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:           true,
+		CachesResponses:    true,
 		Entry:              workerModule(entryBundle),
 		ServesUnbound:      true,
 		ProxiesRecords:     true,

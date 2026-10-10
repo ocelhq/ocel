@@ -606,3 +606,11 @@ func TestCompatibility(t *testing.T) {
 		}
 	})
 }
+
+func TestCloudflareCachesResponses(t *testing.T) {
+	t.Parallel()
+
+	if !New("ocel", Options{}).Facts().CachesResponses {
+		t.Error("Facts().CachesResponses = false, but Workers Cache stores an origin's responses and revalidates them itself")
+	}
+}
