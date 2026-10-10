@@ -49,7 +49,7 @@ func (c *clients) ensureAssetReaderKey(ctx context.Context, tier environment.Tie
 		return err
 	}
 	email := c.AssetReaderAccountEmail(tier)
-	if credentials.AssetStoreAccessKeyID != "" && credentials.AssetStoreSecretAccessKey != "" {
+	if credentials.hasAssetStoreKey() {
 		key, err := client.HMACKeyHandle(c.project, credentials.AssetStoreAccessKeyID).Get(ctx)
 		switch {
 		case err == nil && key.State == storage.Active && key.ServiceAccountEmail == email:
@@ -124,11 +124,11 @@ func (c *clients) plannedAssetStore(ctx context.Context, tier environment.Tier, 
 		accountAction, accountReason = provider.ActionKeep, provider.ReasonCurrent
 	}
 	keyAction, keyReason := provider.ActionCreate, "the key the edge's worker signs its reads of this tier's static files with"
-	live, err := c.assetReaderKeyLive(ctx, tier, kind)
+	active, err := c.hasActiveAssetReaderKey(ctx, tier, kind)
 	if err != nil {
 		return nil, err
 	}
-	if live {
+	if active {
 		keyAction, keyReason = provider.ActionKeep, provider.ReasonCurrent
 	}
 	return []provider.Change{
@@ -152,9 +152,9 @@ func (c *clients) plannedAssetStoreRemoval(ctx context.Context, tier environment
 	return planned, nil
 }
 
-func (c *clients) assetReaderKeyLive(ctx context.Context, tier environment.Tier, kind edge.Kind) (bool, error) {
+func (c *clients) hasActiveAssetReaderKey(ctx context.Context, tier environment.Tier, kind edge.Kind) (bool, error) {
 	credentials, err := readEdgeCredentials(ctx, c, tier, kind)
-	if err != nil || credentials.AssetStoreAccessKeyID == "" || credentials.AssetStoreSecretAccessKey == "" {
+	if err != nil || !credentials.hasAssetStoreKey() {
 		return false, err
 	}
 	client, err := c.Storage()
