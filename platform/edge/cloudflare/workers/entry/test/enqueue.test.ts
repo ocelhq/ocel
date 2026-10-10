@@ -10,6 +10,7 @@ import {
   refreshThroughQueue,
   sentinelUrl,
   serveCached,
+  storeInColo,
 } from "../src/cache";
 import { dispatchResult, type RouteDeps } from "../src/index";
 import {
@@ -151,13 +152,13 @@ describe("the colo tier's admitted refresh", () => {
     expect(JSON.stringify(sender.sent[0])).not.toContain("o.example.com");
   });
 
-  it("holds the colo's claim for the retry window on an accepted enqueue", async () => {
+  it("re-arms the colo's claim for the usual cadence on an accepted enqueue", async () => {
     const sender = queue(true);
     const { cache } = await serveStale("re-armed", {
       deps: { enqueueRevalidation: sender.enqueueRevalidation },
     });
 
-    expect(cache.ttls).toEqual([refreshSentinelTtlSeconds, revalidationRetryWindowMs / 1000]);
+    expect(cache.ttls).toEqual([refreshSentinelTtlSeconds, refreshSentinelTtlSeconds]);
     expect(cache.deletes).toBe(0);
   });
 
@@ -283,20 +284,6 @@ async function staleAt(name: string, enqueueRevalidation: CacheDeps["enqueueReva
 }
 
 describe("a queued refresh that stays stale", () => {
-  it("enqueues a stale entry's refresh at most once per retry window", async () => {
-    const sender = queue(true);
-    const run = await staleAt("once-per-window", sender.enqueueRevalidation);
-
-    await run.hit();
-    await run.hit();
-    expect(sender.sent).toHaveLength(1);
-
-    await run.expireSentinel();
-    await run.hit();
-    expect(sender.sent).toHaveLength(2);
-    expect(run.blocking.calls).toBe(0);
-  });
-
   it("renders a queued refresh itself once the queue has not landed it within five minutes", async () => {
     const sender = queue(true);
     const run = await staleAt("deadline", sender.enqueueRevalidation);
@@ -340,7 +327,7 @@ describe("a queued refresh that stays stale", () => {
     await refreshThroughQueue(withClock, key, revalidation, 0, render);
     clock.ms = queuedRefreshDeadlineMs - 1;
     await refreshThroughQueue(withClock, key, revalidation, 400_000, render);
-    clock.ms = queuedRefreshDeadlineMs + 1_000;
+    clock.ms = queuedRefreshDeadlineMs + revalidationRetryWindowMs;
     const outcome = await refreshThroughQueue(withClock, key, revalidation, 400_000, render);
 
     expect(outcome).toBe("queued");
@@ -457,6 +444,98 @@ describe("a queued refresh's deadline", () => {
 
     expect(claims).toBe(3);
     expect(blocking.calls).toBe(1);
+  });
+});
+
+function clockedSentinels(clock: { ms: number }) {
+  const real = caches.default;
+  const expiries = new Map<string, number>();
+  return {
+    match: async (request: Request) => {
+      const expiry = expiries.get(request.url);
+      if (expiry !== undefined && clock.ms >= expiry) {
+        expiries.delete(request.url);
+        await real.delete(request);
+        return undefined;
+      }
+      return real.match(request);
+    },
+    put: (request: Request, response: Response) => {
+      const maxAge = deltaSeconds(response.headers.get("cache-control"), "max-age");
+      if (maxAge !== undefined) expiries.set(request.url, clock.ms + maxAge * 1_000);
+      return real.put(request, response);
+    },
+    delete: (request: Request) => real.delete(request),
+  } as unknown as Cache;
+}
+
+async function queuedColo(name: string) {
+  const sender = queue(true);
+  const clock = { ms: 0 };
+  const below = { landed: false };
+  const target: CacheTarget = {
+    key: `https://cache.ocel/enqueue/${name}`,
+    refreshKey: `build:/${name}`,
+    revalidate: 3,
+    expiration: 100_000,
+    revalidation,
+  };
+  const deps: ReturnType<typeof testDeps> = testDeps(clock, clockedSentinels(clock), {
+    enqueueRevalidation: sender.enqueueRevalidation,
+    satisfiedFromBelow: async (refreshing) => {
+      if (!below.landed) return false;
+      await storeInColo(
+        target,
+        deps,
+        new Response(`landed after ${refreshing}`, { headers: { "cache-control": "s-maxage=3" } }),
+      );
+      return true;
+    },
+  });
+  const request = new Request(`https://app.example/${name}`);
+  const blocking = countingOrigin();
+  await serveCached(request, target, deps, countingOrigin(), blocking);
+  await deps.flush();
+  return {
+    sender,
+    clock,
+    below,
+    blocking,
+    hitAt: async (ms: number) => {
+      clock.ms = ms;
+      const response = await serveCached(request, target, deps, countingOrigin(), blocking);
+      await deps.flush();
+      return response;
+    },
+  };
+}
+
+describe("a colo whose refresh is queued", () => {
+  it("serves the entry the queue landed below within the usual cadence, not the retry window", async () => {
+    const colo = await queuedColo("landed-below");
+
+    await colo.hitAt(5_000);
+    colo.below.landed = true;
+    await colo.hitAt(5_000 + refreshSentinelTtlSeconds * 1_000 + 1_000);
+    const served = await colo.hitAt(5_000 + refreshSentinelTtlSeconds * 1_000 + 1_000);
+
+    expect(await served.text()).toBe("landed after 0");
+    expect(served.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(colo.sender.sent).toHaveLength(1);
+    expect(colo.blocking.calls).toBe(0);
+  });
+
+  it("enqueues a stale entry's refresh at most once per retry window", async () => {
+    const colo = await queuedColo("once-per-window");
+
+    for (let ms = 5_000; ms < 5_000 + revalidationRetryWindowMs; ms += 6_000) {
+      await colo.hitAt(ms);
+    }
+    expect(colo.sender.sent).toHaveLength(1);
+
+    await colo.hitAt(5_000 + revalidationRetryWindowMs);
+    expect(colo.sender.sent).toHaveLength(2);
+    expect(colo.blocking.calls).toBe(0);
   });
 });
 

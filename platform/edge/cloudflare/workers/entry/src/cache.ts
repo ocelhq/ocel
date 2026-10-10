@@ -356,13 +356,7 @@ async function recordRefreshOutcome(
     else {
       await cache.put(
         sentinel,
-        sentinelRecord(
-          outcome === "refused"
-            ? refreshBackoffSeconds
-            : outcome === "queued"
-              ? revalidationRetryWindowMs / 1000
-              : refreshSentinelTtlSeconds,
-        ),
+        sentinelRecord(outcome === "refused" ? refreshBackoffSeconds : refreshSentinelTtlSeconds),
       );
     }
   } catch {}
@@ -372,6 +366,7 @@ const queuedMarkerTtlSeconds = 86_400;
 
 const QUEUED_MODIFIED = "x-ocel-queued-modified";
 const QUEUED_AT = "x-ocel-queued-at";
+const QUEUED_SENT_AT = "x-ocel-queued-sent-at";
 
 function locateQueuedMarker(key: string): string {
   return `https://queued.refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
@@ -380,14 +375,17 @@ function locateQueuedMarker(key: string): string {
 async function readQueuedMarker(
   cache: Cache,
   marker: Request,
-): Promise<{ modified: number; at: number } | undefined> {
+): Promise<{ modified: number; at: number; sentAt: number } | undefined> {
   try {
     const stored = await cache.match(marker);
     if (!stored) return undefined;
     const modified = Number(stored.headers.get(QUEUED_MODIFIED));
     const at = Number(stored.headers.get(QUEUED_AT));
-    if (!Number.isFinite(modified) || !Number.isFinite(at)) return undefined;
-    return { modified, at };
+    const sentAt = Number(stored.headers.get(QUEUED_SENT_AT));
+    if (!Number.isFinite(modified) || !Number.isFinite(at) || !Number.isFinite(sentAt)) {
+      return undefined;
+    }
+    return { modified, at, sentAt };
   } catch {
     return undefined;
   }
@@ -411,21 +409,24 @@ export async function refreshThroughQueue(
     } catch {}
     return direct();
   }
-  if (!(await enqueued(deps.enqueueRevalidation, route, modified))) return direct();
-  if (!queuedForThisEntry) {
-    try {
-      await deps.cache.put(
-        marker,
-        new Response(null, {
-          headers: {
-            "cache-control": `max-age=${queuedMarkerTtlSeconds}`,
-            [QUEUED_MODIFIED]: String(modified),
-            [QUEUED_AT]: String(now()),
-          },
-        }),
-      );
-    } catch {}
+  if (queuedForThisEntry && now() - queuedForThisEntry.sentAt < revalidationRetryWindowMs) {
+    return "queued";
   }
+  if (!(await enqueued(deps.enqueueRevalidation, route, modified))) return direct();
+  const sentAt = now();
+  try {
+    await deps.cache.put(
+      marker,
+      new Response(null, {
+        headers: {
+          "cache-control": `max-age=${queuedMarkerTtlSeconds}`,
+          [QUEUED_MODIFIED]: String(modified),
+          [QUEUED_AT]: String(queuedForThisEntry?.at ?? sentAt),
+          [QUEUED_SENT_AT]: String(sentAt),
+        },
+      }),
+    );
+  } catch {}
   return "queued";
 }
 
