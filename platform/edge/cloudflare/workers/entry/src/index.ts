@@ -13,6 +13,7 @@ import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
+import { readHmacAssetStore } from "./hmac-asset-bucket";
 import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
@@ -331,7 +332,7 @@ export default {
       imageStore: store,
       routeTableStore: store,
       assetStore: {
-        store,
+        store: readHmacAssetStore(env) ?? store,
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
