@@ -1,4 +1,4 @@
-import { type Env, envAccessor, FIXED } from "./access.js";
+import { type Access, type Env, envAccessor, FIXED } from "./access.js";
 import {
   type Definitions,
   type EnvDefinitions,
@@ -7,23 +7,24 @@ import {
   type VariableDefinition,
 } from "./definition.js";
 import { EnvClientError, EnvDefinitionError } from "./errors.js";
+import { assertInScope } from "./scope.js";
 import { coerce } from "./value.js";
 
-export const PUBLIC_PREFIX = "NEXT_PUBLIC_";
+const NEXT_PUBLIC_PREFIX = "NEXT_PUBLIC_";
 
-type PublicKey = `${typeof PUBLIC_PREFIX}${string}`;
+type NextPublicKey = `${typeof NEXT_PUBLIC_PREFIX}${string}`;
 
 type RefusedClass<TKey extends string> =
   `'${TKey}' starts with NEXT_PUBLIC_, so Next inlines it into the browser bundle: declare it class "plain", or rename it without the prefix`;
 
-type PlainWhenPublic<TKey extends string, TDefinition> = TKey extends PublicKey
+type PlainWhenNextPublic<TKey extends string, TDefinition> = TKey extends NextPublicKey
   ? TDefinition extends { readonly class: "plain" }
     ? unknown
     : { readonly class: RefusedClass<TKey> }
   : unknown;
 
-type PublicMembersPlain<TMembers extends Definitions> = {
-  readonly [K in keyof TMembers & string]: PlainWhenPublic<K, TMembers[K]>;
+type NextPublicMembersPlain<TMembers extends Definitions> = {
+  readonly [K in keyof TMembers & string]: PlainWhenNextPublic<K, TMembers[K]>;
 };
 
 export type PublicPlain<TDefinitions extends EnvDefinitions> = {
@@ -31,32 +32,32 @@ export type PublicPlain<TDefinitions extends EnvDefinitions> = {
     infer TMembers,
     boolean
   >
-    ? { readonly definitions: PublicMembersPlain<TMembers> }
-    : PlainWhenPublic<K, TDefinitions[K]>;
+    ? { readonly definitions: NextPublicMembersPlain<TMembers> }
+    : PlainWhenNextPublic<K, TDefinitions[K]>;
 };
 
-export function isPublic(key: string): boolean {
-  return key.startsWith(PUBLIC_PREFIX);
+function isNextPublic(key: string): boolean {
+  return key.startsWith(NEXT_PUBLIC_PREFIX);
 }
 
 export function refusePublicConfidential(definitions: EnvDefinitions): void {
   for (const [key, definition] of Object.entries(flattenDefinitions(definitions))) {
-    if (isPublic(key) && definition.class !== "plain") {
+    if (isNextPublic(key) && definition.class !== "plain") {
       throw new EnvDefinitionError(
-        `'${key}' starts with ${PUBLIC_PREFIX}, so Next inlines it into the browser bundle, and it is class '${definition.class}'. Declare it class 'plain', or rename it without ${PUBLIC_PREFIX}.`,
+        `'${key}' starts with ${NEXT_PUBLIC_PREFIX}, so Next inlines it into the browser bundle, and it is class '${definition.class}'. Declare it class 'plain', or rename it without ${NEXT_PUBLIC_PREFIX}.`,
       );
     }
   }
 }
 
-export function inlinedValues(): Record<string, string> | undefined {
+function findInlinedValues(): Record<string, string> | undefined {
   const raw = process.env.OCEL_PUBLIC_ENV;
   if (typeof raw !== "string") return undefined;
   return JSON.parse(raw) as Record<string, string>;
 }
 
-function inlinedOrRefuse(): Record<string, string> {
-  const values = inlinedValues();
+function readInlinedValues(): Record<string, string> {
+  const values = findInlinedValues();
   if (values === undefined) {
     throw new EnvClientError(
       "no public variables were inlined into this bundle: the build ran without ocel's Next adapter, which defines them. Build with `ocel build` or `ocel deploy`, and run the dev server with `ocel dev`.",
@@ -65,50 +66,41 @@ function inlinedOrRefuse(): Record<string, string> {
   return values;
 }
 
-function serverOnly(key: string): EnvClientError {
+function newServerOnlyError(key: string): EnvClientError {
   return new EnvClientError(
-    `'${key}' is server-only and cannot be read in the browser: only variables starting with ${PUBLIC_PREFIX} reach client code. Read '${key}' in a server component, route handler or server action.`,
+    `'${key}' is server-only and cannot be read in the browser: only variables starting with ${NEXT_PUBLIC_PREFIX} reach client code. Read '${key}' in a server component, route handler or server action.`,
   );
 }
 
-export function inlinedEnv<const TDefinitions extends EnvDefinitions>(
+export function defineInlinedEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
   return envAccessor(definitions, {
     resolve(key: string, definition: VariableDefinition) {
-      if (!isPublic(key)) throw serverOnly(key);
-      return coerce(key, definition, inlinedOrRefuse()[key]);
+      if (!isNextPublic(key)) throw newServerOnlyError(key);
+      return coerce(key, definition, readInlinedValues()[key]);
     },
     delivered(key: string) {
-      if (!isPublic(key)) throw serverOnly(key);
-      return inlinedOrRefuse()[key] !== undefined;
+      if (!isNextPublic(key)) throw newServerOnlyError(key);
+      return readInlinedValues()[key] !== undefined;
     },
     generationOf: () => FIXED,
   });
 }
 
-function isInlined(definitions: EnvDefinitions, name: string): boolean {
-  const definition = definitions[name];
-  if (!definition) return false;
-  if ("definitions" in definition) return Object.keys(definition.definitions).every(isPublic);
-  return isPublic(name);
-}
-
-export function overlayInlined<const TDefinitions extends EnvDefinitions>(
-  definitions: TDefinitions,
-  server: Env<TDefinitions>,
-): Env<TDefinitions> {
-  const inlined = inlinedEnv(definitions);
-  return new Proxy(server, {
-    get(target, property, receiver) {
-      if (
-        typeof property === "string" &&
-        isInlined(definitions, property) &&
-        inlinedValues() !== undefined
-      ) {
-        return inlined[property as keyof TDefinitions];
-      }
-      return Reflect.get(target, property, receiver);
+export function withInlinedPublicValues(access: Access): Access {
+  return {
+    resolve(key, definition) {
+      const inlined = findInlinedValues();
+      if (!isNextPublic(key) || inlined === undefined) return access.resolve(key, definition);
+      assertInScope(key, definition.folders ?? []);
+      return coerce(key, definition, inlined[key]);
     },
-  });
+    delivered(key, definition) {
+      const inlined = findInlinedValues();
+      if (!isNextPublic(key) || inlined === undefined) return access.delivered(key, definition);
+      return inlined[key] !== undefined;
+    },
+    generationOf: (definition) => access.generationOf(definition),
+  };
 }

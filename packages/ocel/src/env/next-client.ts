@@ -1,6 +1,6 @@
 import type { Env } from "./access.js";
 import type { EnvDefinitions } from "./definition.js";
-import { inlinedEnv, type PublicPlain, refusePublicConfidential } from "./next-public.js";
+import { defineInlinedEnv, type PublicPlain, refusePublicConfidential } from "./next-public.js";
 
 export type { Env } from "./access.js";
 export type {
@@ -23,5 +23,5 @@ export function defineEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions & PublicPlain<TDefinitions>,
 ): Env<TDefinitions> {
   refusePublicConfidential(definitions);
-  return inlinedEnv(definitions);
+  return defineInlinedEnv(definitions);
 }
