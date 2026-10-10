@@ -8,12 +8,13 @@ import { checkPreview, hashPreviewPassword, type PreviewGate } from "../src/prev
 interface Expectation {
   forward?: boolean;
   forwardHeaders?: Record<string, string>;
+  forwardHeadersAbsent?: string[];
   responseHeaders?: Record<string, string>;
   status?: number;
   headers?: Record<string, string>;
+  headersAbsent?: string[];
   bodyContains?: string[];
   bodyExcludes?: string[];
-  absent?: string[];
 }
 
 interface Case {
@@ -23,39 +24,49 @@ interface Case {
     method: string;
     host: string;
     target: string;
-    headers: Record<string, string>;
+    headers: Record<string, string | string[]>;
     body?: string;
   };
   expect: Expectation;
 }
 
-const vectors = rawVectors as unknown as { now: number; gate: PreviewGate; cases: Case[] };
+const vectors = rawVectors as unknown as { nowSeconds: number; gate: PreviewGate; cases: Case[] };
+
+function encodeWireHeaders(headers: Case["request"]["headers"]): Headers {
+  const wire = new Headers();
+  for (const [name, values] of Object.entries(headers)) {
+    for (const value of [values].flat()) {
+      wire.append(name, String.fromCharCode(...new TextEncoder().encode(value)));
+    }
+  }
+  return wire;
+}
 
 describe("the preview gate answers every conformance vector", () => {
-  for (const c of vectors.cases) {
-    it(c.name, async () => {
-      const gate: PreviewGate = { ...vectors.gate, ...c.gate };
+  for (const example of vectors.cases) {
+    it(example.name, async () => {
+      const gate: PreviewGate = { ...vectors.gate, ...example.gate };
       const verdict = await checkPreview(
         gate,
         {
-          method: c.request.method,
-          host: c.request.host,
-          target: c.request.target,
-          headers: new Headers(c.request.headers),
-          body: c.request.body,
+          method: example.request.method,
+          host: example.request.host,
+          target: example.request.target,
+          headers: encodeWireHeaders(example.request.headers),
+          body: example.request.body,
         },
-        vectors.now,
+        vectors.nowSeconds,
       );
 
-      if (c.expect.forward) {
+      if (example.expect.forward) {
         expect(verdict.kind, "forwarded").toBe("forward");
         if (verdict.kind !== "forward") return;
-        for (const [name, want] of Object.entries(c.expect.forwardHeaders ?? {})) {
+        for (const [name, want] of Object.entries(example.expect.forwardHeaders ?? {})) {
           expect(verdict.headers.get(name), name).toBe(want);
         }
-        for (const name of c.expect.absent ?? [])
+        for (const name of example.expect.forwardHeadersAbsent ?? [])
           expect(verdict.headers.has(name), name).toBe(false);
-        for (const [name, want] of Object.entries(c.expect.responseHeaders ?? {})) {
+        for (const [name, want] of Object.entries(example.expect.responseHeaders ?? {})) {
           expect(verdict.responseHeaders.get(name), name).toBe(want);
         }
         return;
@@ -63,14 +74,15 @@ describe("the preview gate answers every conformance vector", () => {
 
       expect(verdict.kind, "answered").toBe("respond");
       if (verdict.kind !== "respond") return;
-      expect(verdict.response.status).toBe(c.expect.status);
-      for (const [name, want] of Object.entries(c.expect.headers ?? {})) {
+      expect(verdict.response.status).toBe(example.expect.status);
+      for (const [name, want] of Object.entries(example.expect.headers ?? {})) {
         expect(verdict.response.headers.get(name), name).toBe(want);
       }
-      for (const name of c.expect.absent ?? [])
+      for (const name of example.expect.headersAbsent ?? [])
         expect(verdict.response.headers.has(name), name).toBe(false);
-      for (const want of c.expect.bodyContains ?? []) expect(verdict.response.body).toContain(want);
-      for (const unwanted of c.expect.bodyExcludes ?? [])
+      for (const want of example.expect.bodyContains ?? [])
+        expect(verdict.response.body).toContain(want);
+      for (const unwanted of example.expect.bodyExcludes ?? [])
         expect(verdict.response.body).not.toContain(unwanted);
     });
   }
