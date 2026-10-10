@@ -1,0 +1,11 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "client-env-sveltekit",
+  "provider": "aws",
+  "apps": [
+    {
+      "name": "web",
+      "path": "."
+    }
+  ]
+}

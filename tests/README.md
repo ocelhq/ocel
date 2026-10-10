@@ -23,7 +23,10 @@ resources; `lifecycle` asks whether a release can be replaced and rolled back th
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
 usable, from `fixtures/sdk/`; `build-variables` asks whether a Next build that reads a
 sensitive and a secret value at import deploys, leaving neither in `.ocel/output`, `.next`
-or a live dir, from `fixtures/build-variables/`; `prerender` asks whether `ocel deploy` hands
+or a live dir, from `fixtures/build-variables/`; `client-env` asks whether a Next and a SvelteKit
+app read a public value through `ocel/env/next` and `ocel/env/sveltekit` on the server and in the
+browser, render the deployment url, and leave a sensitive value out of the page and every script it
+loads, from `fixtures/client-env/`; `prerender` asks whether `ocel deploy` hands
 a build the bindings of the postgres it reads while prerendering, over a port forward, from
 `fixtures/prerender/`; `pre-build` asks whether `lifecycle.preBuild` runs a migration against the
 deployed postgres before the app is built, whether a Next build then prerenders the rows only that

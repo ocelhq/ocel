@@ -8,6 +8,7 @@ import {
   kvChecks,
   nativeModuleChecks,
   nextCacheChecks,
+  nextClientEnvChecks,
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
@@ -22,6 +23,7 @@ import {
   realtimeChecks,
   staticChecks,
   svelteKitChecks,
+  svelteKitClientEnvChecks,
   tasksChecks,
   tasksWireChecks,
   todoAndDocumentChecks,
@@ -238,6 +240,28 @@ export const buildVariables = {
   }),
 };
 
+export const clientEnv = {
+  next: fixture("client-env/next", {
+    apps: ["web"],
+    checks: [...healthChecks, ...nextClientEnvChecks],
+    on: {
+      aws: [defaults],
+      gcp: [defaults],
+    },
+    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+  }),
+  sveltekit: fixture("client-env/sveltekit", {
+    apps: ["web"],
+    checks: [...healthChecks, ...svelteKitClientEnvChecks],
+    on: {
+      dev: [defaults],
+      aws: [defaults],
+      vps: [defaults],
+      gcp: [defaults],
+    },
+  }),
+};
+
 export const prerender = {
   next: fixture("prerender/next", {
     apps: ["web"],
@@ -356,6 +380,7 @@ export const fixtures: Fixture[] = [
   ...Object.values(lifecycle),
   ...Object.values(sdk),
   ...Object.values(buildVariables),
+  ...Object.values(clientEnv),
   ...Object.values(prerender),
   ...Object.values(preBuild),
   ...Object.values(kv),

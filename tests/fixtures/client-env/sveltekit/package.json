@@ -1,0 +1,23 @@
+{
+  "name": "@ocel-fixtures/client-env-sveltekit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port ${PORT:-5173} --strictPort",
+    "build": "vite build",
+    "start": "node build"
+  },
+  "dependencies": {
+    "ocel": "workspace:^",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@ocel/sveltekit": "workspace:^",
+    "@sveltejs/kit": "3.0.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^20",
+    "svelte": "^5.57.1",
+    "vite": "^8.1.3"
+  }
+}

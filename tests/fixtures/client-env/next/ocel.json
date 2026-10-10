@@ -1,0 +1,11 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "client-env-next",
+  "provider": "aws",
+  "apps": [
+    {
+      "name": "web",
+      "path": "."
+    }
+  ]
+}

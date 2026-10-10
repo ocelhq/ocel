@@ -39,6 +39,7 @@ export type Concern =
   | "lifecycle"
   | "sdk"
   | "build-variables"
+  | "client-env"
   | "prerender"
   | "pre-build"
   | "kv"
@@ -51,6 +52,7 @@ export const CONCERNS: Concern[] = [
   "lifecycle",
   "sdk",
   "build-variables",
+  "client-env",
   "prerender",
   "pre-build",
   "kv",
