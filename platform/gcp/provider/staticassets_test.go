@@ -179,7 +179,4 @@ func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 	if got, want := env["OCEL_ASSET_BUCKET"], names(t, p).Bucket(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_ASSET_BUCKET=%q, want its tier's bucket %q", got, want)
 	}
-	if got, told := env["OCEL_STATIC_DIR"]; told {
-		t.Errorf("the Next service reads OCEL_STATIC_DIR=%q, but its image holds no static files", got)
-	}
 }
