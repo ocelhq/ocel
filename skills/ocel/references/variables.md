@@ -55,7 +55,7 @@ An optional variable is a pointer (Go), an `Option` (Rust), or `optional` on a g
 Import from the framework's own entry instead of `ocel/env`; ocel writes nothing into `tsconfig.json`.
 
 - **Next:** `export const env = defineEnv({ … })` from `ocel/env/next` in a file in the discovery folder, which app code imports `env` from. A `NEXT_PUBLIC_` key is public and must be class `plain`; a confidential one is a type error. Every other key is server-only and throws when read in the browser. Groups work. A value is inlined when Next builds, so `ocel env set` needs a rebuild; under `ocel dev` it restarts the dev server.
-- **SvelteKit 3:** `export const variables = defineEnvVars({ … })` from `ocel/env/sveltekit` in a file in the discovery folder, re-exported from `src/env.ts`. SvelteKit owns `public`, `static` and `schema`; class `secret`, `public` on a confidential class and `static` on `sensitive` are refused. `PUBLIC_OCEL_URL` is the deployment URL.
+- **SvelteKit 3:** `export const variables = defineEnvVars({ … })` from `ocel/env/sveltekit` in a file in the discovery folder, re-exported from `src/env.ts`. SvelteKit owns `public`, `static` and `schema`; class `secret`, `public` on a confidential class and `static` on `sensitive` are refused. `PUBLIC_OCEL_URL` is the deployment URL. Like `OCEL_URL` and `NEXT_PUBLIC_OCEL_URL`, it comes from the hostname the deploy serves the app on, so an app served on none, such as one reached only at its provider's own address, gets none.
 
 ## Setting values
 
