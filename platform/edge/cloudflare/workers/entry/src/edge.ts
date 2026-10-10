@@ -32,8 +32,6 @@ const SEALED_FILE = "sealed.bin";
 
 const NONCE_BYTES = 12;
 
-const VARIABLE_PREFIX = "OCEL_VAR_";
-
 export interface EdgeVariables {
   env?: Record<string, string>;
   envelope?: string;
@@ -116,11 +114,9 @@ export function createEdgeInvoker(
         ...(bundle.env ?? {}),
         ...(variables?.env ?? {}),
         ...(envelope && sealed
-          ? prefixed(
-              await unseal(
-                await dataKey(envelope, variables?.envelopeKey),
-                await sealed.arrayBuffer(),
-              ),
+          ? await unseal(
+              await dataKey(envelope, variables?.envelopeKey),
+              await sealed.arrayBuffer(),
             )
           : {}),
         ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
@@ -181,14 +177,6 @@ async function unseal(dataKey: ArrayBuffer, sealed: ArrayBuffer): Promise<Record
   } catch {
     throw new Error("ocel: sealed edge variables are not JSON");
   }
-}
-
-function prefixed(values: Record<string, string>): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(values)) {
-    env[VARIABLE_PREFIX + key] = value;
-  }
-  return env;
 }
 
 function base64Bytes(base64: string): ArrayBuffer {

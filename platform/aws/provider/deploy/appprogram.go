@@ -70,7 +70,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	if err != nil {
 		return nil, err
 	}
-	if err := checkRuntimeOwnedNames(app.App, app.Values.Plain); err != nil {
+	if err := checkRuntimeOwnedNames(app.App, app.Values); err != nil {
 		return nil, err
 	}
 	if err := checkAppEdgeVariables(r.cfg, app.App, app.Values, bundle); err != nil {

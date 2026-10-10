@@ -17,13 +17,5 @@ func composeEnvironment(values AppVariables, liveDir string) environment {
 	maps.Copy(env, values.Env)
 	maps.Copy(env, values.BindingProxyEnv)
 	env[processenv.LiveDirEnvVar] = liveDir
-	var unset []string
-	for key := range values.Env {
-		unset = append(unset, processenv.DeliveredVariablePrefix+key)
-	}
-	for key := range values.Live {
-		unset = append(unset, key, processenv.DeliveredVariablePrefix+key)
-	}
-	slices.Sort(unset)
-	return environment{set: env, unset: slices.Compact(unset)}
+	return environment{set: env, unset: slices.Sorted(maps.Keys(values.Live))}
 }

@@ -9,7 +9,6 @@ fn env() -> MutexGuard<'static, ()> {
 fn clear(keys: &[&str]) {
     for key in keys {
         std::env::remove_var(key);
-        std::env::remove_var(format!("OCEL_VAR_{key}"));
     }
 }
 
@@ -42,16 +41,38 @@ struct Toggles {
     spare: Option<bool>,
 }
 
+#[derive(ocel::Env, Clone, Debug)]
+struct Sealed {
+    #[ocel(sensitive)]
+    sealed_value: String,
+}
+
 #[test]
-fn a_delivered_value_is_read_before_the_plain_one() {
+fn a_sensitive_value_is_read_under_the_name_the_process_environment_holds() {
     let _env = env();
-    clear(&["DATABASE_NAME", "PORT", "TIMEOUT"]);
-    std::env::set_var("DATABASE_NAME", "plain");
-    std::env::set_var("OCEL_VAR_DATABASE_NAME", "delivered");
+    clear(&["SEALED_VALUE"]);
+    std::env::set_var("SEALED_VALUE", "delivered");
 
-    let loaded = Basics::load().expect("the struct loads");
+    let loaded = Sealed::load().expect("the struct loads");
 
-    assert_eq!(loaded.database_name, "delivered");
+    assert_eq!(loaded.sealed_value, "delivered");
+    assert_eq!(std::env::var("SEALED_VALUE").as_deref(), Ok("delivered"));
+}
+
+#[test]
+fn a_value_under_the_name_the_runtime_once_namespaced_a_sealed_value_with_is_unset() {
+    let _env = env();
+    clear(&["SEALED_VALUE"]);
+    std::env::set_var("OCEL_VAR_SEALED_VALUE", "delivered");
+
+    let loaded = Sealed::load();
+    std::env::remove_var("OCEL_VAR_SEALED_VALUE");
+
+    let err = loaded.expect_err("nothing was delivered under SEALED_VALUE");
+    assert!(
+        err.to_string().contains("'SEALED_VALUE' has no value"),
+        "error = {err}"
+    );
 }
 
 #[test]
@@ -62,6 +83,7 @@ fn a_default_fills_in_an_unset_value_and_an_option_stays_none() {
 
     let loaded = Basics::load().expect("the struct loads");
 
+    assert_eq!(loaded.database_name, "shop");
     assert_eq!(loaded.port, 3000);
     assert_eq!(loaded.timeout, None);
 }
@@ -289,7 +311,7 @@ fn a_delivered_value_is_read_before_the_live_directory_file() {
         ],
     );
     std::env::set_var("OCEL_LIVE_DIR", &dir);
-    std::env::set_var("OCEL_VAR_FILE_SHADOWED", "delivered");
+    std::env::set_var("FILE_SHADOWED", "delivered");
     std::env::set_var("FILE_BARE", "plain");
 
     let loaded = Shadowed::load().expect("the struct loads");
@@ -331,8 +353,7 @@ fn a_secret_reads_the_rotated_live_directory_file_on_the_next_read() {
 fn the_deployment_url_is_read_from_what_ocel_delivered() {
     let _env = env();
     clear(&["OCEL_URL"]);
-    std::env::set_var("OCEL_URL", "https://plain.example");
-    std::env::set_var("OCEL_VAR_OCEL_URL", "https://delivered.example");
+    std::env::set_var("OCEL_URL", "https://delivered.example");
 
     assert_eq!(
         ocel::deployment_url().expect("a url"),

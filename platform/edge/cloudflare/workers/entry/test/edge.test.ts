@@ -1661,7 +1661,7 @@ describe("the variables a deployment declares", () => {
     expect(values.OCEL_CACHE_RPC).not.toBe("hijacked");
   });
 
-  it("unseals what the origin sealed in Go, prefixed and never bare", async () => {
+  it("unseals what the origin sealed in Go, each value under its own name", async () => {
     const sealed = bytesOf(GO_SEALED);
     expect(sealed.length).toBe(NONCE_BYTES + JSON.stringify(GO_VALUES).length + TAG_BYTES);
 
@@ -1671,10 +1671,19 @@ describe("the variables a deployment declares", () => {
     });
 
     const values = await workerEnv(edge);
-    expect(values.OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
-    expect(values.OCEL_VAR_WEBHOOK_SECRET).toBe("whsec-xyz");
-    expect(values.STRIPE_API_KEY).toBeUndefined();
-    expect(values.WEBHOOK_SECRET).toBeUndefined();
+    expect(values.STRIPE_API_KEY).toBe("sk-live-abc");
+    expect(values.WEBHOOK_SECRET).toBe("whsec-xyz");
+    expect(Object.keys(values).some((key) => key.startsWith("OCEL_VAR_"))).toBe(false);
+  });
+
+  it("lets a sealed value win over the same name in the bundle's env", async () => {
+    const { edge } = variablesInvoker({
+      bundleEnv: { __NEXT_BUILD_ID: "t", STRIPE_API_KEY: "from-bundle" },
+      variables: { envelope: GO_ENVELOPE },
+      sealed: bytesOf(GO_SEALED),
+    });
+
+    expect((await workerEnv(edge)).STRIPE_API_KEY).toBe("sk-live-abc");
   });
 
   it("unseals a nonce-prefixed AES-GCM payload of its own making", async () => {
@@ -1684,7 +1693,7 @@ describe("the variables a deployment declares", () => {
 
     const { edge } = variablesInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
 
-    expect((await workerEnv(edge)).OCEL_VAR_TOKEN).toBe("t0ken");
+    expect((await workerEnv(edge)).TOKEN).toBe("t0ken");
   });
 
   const WRAPPING_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
@@ -1715,8 +1724,8 @@ describe("the variables a deployment declares", () => {
     });
 
     const values = await workerEnv(edge);
-    expect(values.OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
-    expect(values.OCEL_VAR_WEBHOOK_SECRET).toBe("whsec-xyz");
+    expect(values.STRIPE_API_KEY).toBe("sk-live-abc");
+    expect(values.WEBHOOK_SECRET).toBe("whsec-xyz");
   });
 
   it("unwraps what the origin's stack wrapped in Go", async () => {
@@ -1728,7 +1737,7 @@ describe("the variables a deployment declares", () => {
       sealed: bytesOf(GO_SEALED),
     });
 
-    expect((await workerEnv(edge)).OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
+    expect((await workerEnv(edge)).STRIPE_API_KEY).toBe("sk-live-abc");
   });
 
   it("refuses an envelope wrapped for another worker", async () => {

@@ -267,13 +267,16 @@ func TestUploadEdgeSeal(t *testing.T) {
 }
 
 func appValuesOf(app *contractv1.ManifestApp) provider.AppValues {
-	plain := map[string]string{}
+	plain, sensitive := map[string]string{}, map[string]string{}
 	for _, v := range app.GetVariables() {
-		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+		switch v.GetClass() {
+		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 			plain[v.GetKey()] = v.GetValue()
+		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
+			sensitive[v.GetKey()] = v.GetValue()
 		}
 	}
-	return provider.AppValues{Plain: plain, Folder: app.GetFolder()}
+	return provider.AppValues{Plain: plain, Sensitive: sensitive, Folder: app.GetFolder()}
 }
 
 func TestCheckAppEdgeVariables(t *testing.T) {

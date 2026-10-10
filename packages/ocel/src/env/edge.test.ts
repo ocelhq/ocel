@@ -54,23 +54,8 @@ describe("reading on the edge", () => {
     expect(env.EDGE_PLAIN).toBe("bare");
   });
 
-  it("prefers the runtime's name over the bare one, for both readable classes", () => {
-    write("EDGE_PLAIN_BOTH", "bare");
-    write("OCEL_VAR_EDGE_PLAIN_BOTH", "delivered");
-    write("EDGE_SENSITIVE_BOTH", "bare");
-    write("OCEL_VAR_EDGE_SENSITIVE_BOTH", "delivered");
-
-    const env = defineEnv({
-      EDGE_PLAIN_BOTH: { class: "plain" },
-      EDGE_SENSITIVE_BOTH: { class: "sensitive" },
-    });
-
-    expect(env.EDGE_PLAIN_BOTH).toBe("delivered");
-    expect(env.EDGE_SENSITIVE_BOTH).toBe("delivered");
-  });
-
-  it("reads a sensitive value, which arrives unsealed under the runtime's name", () => {
-    write("OCEL_VAR_EDGE_SENSITIVE", "unsealed");
+  it("reads a sensitive value, which arrives unsealed under its own name", () => {
+    write("EDGE_SENSITIVE", "unsealed");
     const env = defineEnv({
       EDGE_SENSITIVE: { class: "sensitive", schema: z.string() },
     });
@@ -88,7 +73,7 @@ describe("reading on the edge", () => {
   });
 
   it("refuses a secret, naming the key, its class and the two remedies", () => {
-    write("OCEL_VAR_EDGE_SECRET", "would-be-stale");
+    write("EDGE_SECRET", "would-be-stale");
     const env = defineEnv({ EDGE_SECRET: { class: "secret" } });
 
     let thrown: unknown;
@@ -112,7 +97,7 @@ describe("reading on the edge", () => {
   });
 
   it("asserts the folder scope against the app's binding", () => {
-    write("OCEL_VAR_EDGE_SCOPED", "for-web");
+    write("EDGE_SCOPED", "for-web");
     const env = defineEnv({
       EDGE_SCOPED: { class: "plain", folders: ["/web"] },
     });
@@ -133,11 +118,11 @@ describe("reading on the edge", () => {
   });
 
   it("reads a value once and answers every later read from the memo", () => {
-    write("OCEL_VAR_EDGE_MEMO", "first");
+    write("EDGE_MEMO", "first");
     const env = defineEnv({ EDGE_MEMO: { class: "plain" } });
     expect(env.EDGE_MEMO).toBe("first");
 
-    process.env.OCEL_VAR_EDGE_MEMO = "second";
+    process.env.EDGE_MEMO = "second";
     expect(env.EDGE_MEMO).toBe("first");
   });
 
@@ -145,7 +130,7 @@ describe("reading on the edge", () => {
     const env = defineEnv({ EDGE_MEMO_UNSET: { class: "plain" } });
     expect(() => void env.EDGE_MEMO_UNSET).toThrow(EnvValueError);
 
-    write("OCEL_VAR_EDGE_MEMO_UNSET", "set-late");
+    write("EDGE_MEMO_UNSET", "set-late");
     expect(env.EDGE_MEMO_UNSET).toBe("set-late");
   });
 });
@@ -172,7 +157,7 @@ describe("reading a group on the edge", () => {
 
   it("resolves every member once one of them is delivered", () => {
     write("EDGE_GROUP_ON_ID", "an-id");
-    write("OCEL_VAR_EDGE_GROUP_ON_SECRET", "a-secret");
+    write("EDGE_GROUP_ON_SECRET", "a-secret");
     const env = defineEnv({
       github: group(
         { EDGE_GROUP_ON_ID: { class: "plain" }, EDGE_GROUP_ON_SECRET: { class: "sensitive" } },
@@ -214,7 +199,7 @@ describe("reading a group on the edge", () => {
   });
 
   it("refuses a secret member, as it refuses a secret beside a group", () => {
-    write("OCEL_VAR_EDGE_GROUP_SECRET", "would-be-stale");
+    write("EDGE_GROUP_SECRET", "would-be-stale");
     const env = defineEnv({
       stripe: group({ EDGE_GROUP_SECRET: { class: "secret" } }),
     });

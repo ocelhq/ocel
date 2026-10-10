@@ -152,7 +152,7 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 			},
 		}
 
-		err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app).Plain)
+		err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app))
 		if err == nil {
 			t.Fatal("AWS_REGION was accepted; the Lambda runtime would overwrite it")
 		}
@@ -160,6 +160,30 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to name %s", err, want)
 			}
+		}
+	})
+
+	t.Run("refuses a sensitive variable under a name Lambda injects", func(t *testing.T) {
+		t.Parallel()
+
+		app := &contractv1.ManifestApp{
+			Name: "web",
+			Variables: []*contractv1.ManifestVariable{
+				variable("AWS_ACCESS_KEY_ID", "AKIA-mine", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+			},
+		}
+
+		err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app))
+		if err == nil {
+			t.Fatal("a sensitive AWS_ACCESS_KEY_ID was accepted; delivered under its own name it would replace the function's own credentials")
+		}
+		for _, want := range []string{"AWS_ACCESS_KEY_ID", "web"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %s", err, want)
+			}
+		}
+		if strings.Contains(err.Error(), "reclassify") {
+			t.Errorf("error = %q, which offers reclassifying, and every class is delivered under its own name", err)
 		}
 	})
 
@@ -172,11 +196,11 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 				variable("NEXT_PUBLIC_APP_ID", "app_1", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("VITE_APP_ID", "app_2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				variable("AWS_ROTATION_TOKEN", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 			},
 		}
 
-		if err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app).Plain); err != nil {
+		if err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app)); err != nil {
 			t.Errorf("checkRuntimeOwnedNames = %v, want every one of these accepted", err)
 		}
 	})
@@ -185,16 +209,24 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 func TestCheckEdgeOwnedNames(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{"OCEL_CACHE_RPC", "OCEL_CACHE_SCOPE", "OCEL_VAR_STRIPE_API_KEY"} {
-		t.Run("refuses "+key, func(t *testing.T) {
+	for _, tc := range []struct {
+		key   string
+		class resourcesv1.VariableClass
+	}{
+		{"OCEL_CACHE_RPC", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		{"OCEL_CACHE_SCOPE", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		{"OCEL_CACHE_RPC", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE},
+	} {
+		key := tc.key
+		t.Run("refuses "+tc.class.String()+" "+key, func(t *testing.T) {
 			t.Parallel()
 
 			app := &contractv1.ManifestApp{
 				Name:      "web",
-				Variables: []*contractv1.ManifestVariable{variable(key, "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+				Variables: []*contractv1.ManifestVariable{variable(key, "mine", tc.class)},
 			}
 
-			err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app).Plain)
+			err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app))
 			if err == nil {
 				t.Fatalf("%s was accepted; the entry worker would overwrite it", key)
 			}
@@ -214,11 +246,11 @@ func TestCheckEdgeOwnedNames(t *testing.T) {
 			Variables: []*contractv1.ManifestVariable{
 				variable("OCEL_CACHE_TTL", "60", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				variable("OCEL_CACHE_RPC", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 			},
 		}
 
-		if err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app).Plain); err != nil {
+		if err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app)); err != nil {
 			t.Errorf("checkEdgeOwnedNames = %v, want every one of these accepted", err)
 		}
 	})

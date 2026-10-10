@@ -234,12 +234,12 @@ func TestNodeStartsBesideThePrefetchAndAFailedPrefetchIsReportedAsItself(t *test
 
 func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T) {
 	t.Run("passes the live declaration beside the delivered class", func(t *testing.T) {
-		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
+		bakedEnv := []string{"STRIPE_KEY=sk_baked"}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}
 
 		got := childEnv(bakedEnv, l, nil)
 
-		for _, want := range []string{"OCEL_VAR_STRIPE_KEY=sk_baked", "OCEL_LIVE_KEYS=DB_PASSWORD"} {
+		for _, want := range []string{"STRIPE_KEY=sk_baked", "OCEL_LIVE_KEYS=DB_PASSWORD"} {
 			if !slices.Contains(got, want) {
 				t.Errorf("childEnv = %q, missing %q", got, want)
 			}
@@ -283,7 +283,7 @@ func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T
 		}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}
 
-		got := childEnv([]string{"OCEL_VAR_STRIPE_KEY=sk_baked"}, l, proxyEnv)
+		got := childEnv([]string{"STRIPE_KEY=sk_baked"}, l, proxyEnv)
 
 		for _, want := range proxyEnv {
 			if !slices.Contains(got, want) {

@@ -50,13 +50,26 @@ def test_a_name_ocel_delivers_bare_is_refused_for_the_plain_class():
     assert "reserved prefix OCEL_" in str(raised.value)
 
 
-def test_a_name_ocel_delivers_bare_is_taken_under_a_class_delivered_namespaced(monkeypatch):
-    monkeypatch.setenv("OCEL_VAR_OCEL_THING", "v")
+def test_a_name_ocel_delivers_bare_is_refused_for_the_sensitive_class():
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
 
-    class Env(ocel.Env):
-        thing: str = ocel.var(key="OCEL_THING", sensitive=True)
+        class Env(ocel.Env):
+            thing: str = ocel.var(key="OCEL_THING", sensitive=True)
 
-    assert Env().thing == "v"
+        _ = Env
+
+    assert "reserved prefix OCEL_" in str(raised.value)
+
+
+def test_a_name_ocel_delivers_bare_is_refused_for_the_secret_class():
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            ocel_thing: ocel.Secret
+
+        _ = Env
+
+    assert "reserved prefix OCEL_" in str(raised.value)
 
 
 @pytest.mark.parametrize(
@@ -430,14 +443,28 @@ def test_a_live_cell_without_a_value_counts_as_set_and_is_never_checked(collecto
     assert collector.reported() == []
 
 
-def test_the_namespaced_value_wins_over_a_bare_name_of_the_same_key(monkeypatch):
-    monkeypatch.setenv("OCEL_VAR_NAME", "baked")
-    monkeypatch.setenv("NAME", "bare")
+def test_a_sensitive_value_is_read_under_the_name_the_process_environment_holds(monkeypatch):
+    monkeypatch.setenv("NAME", "baked")
 
     class Env(ocel.Env):
-        name: str
+        name: str = ocel.var(sensitive=True)
 
     assert Env().name == "baked"
+    assert os.environ["NAME"] == "baked"
+
+
+def test_a_value_under_the_name_the_runtime_once_namespaced_a_sealed_value_with_is_unset(
+    monkeypatch,
+):
+    monkeypatch.delenv("UNPREFIXED", raising=False)
+    monkeypatch.setenv("OCEL_VAR_UNPREFIXED", "baked")
+
+    class Env(ocel.Env):
+        unprefixed: str = ocel.var(sensitive=True)
+
+    with pytest.raises(ocel.EnvValueError) as raised:
+        _ = Env().unprefixed
+    assert raised.value.key == "UNPREFIXED"
 
 
 def test_a_default_applies_only_where_nothing_is_set(monkeypatch):
@@ -622,7 +649,7 @@ def test_a_variable_reached_through_the_class_hands_back_what_declares_it():
 
 
 def test_a_secret_resolves_on_every_read(monkeypatch):
-    monkeypatch.setenv("OCEL_VAR_SIGNING_KEY", "first")
+    monkeypatch.setenv("SIGNING_KEY", "first")
 
     class Env(ocel.Env):
         signing_key: ocel.Secret
@@ -630,13 +657,12 @@ def test_a_secret_resolves_on_every_read(monkeypatch):
     key = Env().signing_key
     assert key.key == "SIGNING_KEY"
     assert key.value == "first"
-    monkeypatch.setenv("OCEL_VAR_SIGNING_KEY", "rotated")
+    monkeypatch.setenv("SIGNING_KEY", "rotated")
     assert key.value == "rotated"
 
 
 def test_a_value_only_the_live_directory_has_is_read_from_its_file(monkeypatch, tmp_path):
     monkeypatch.delenv("FILE_ONLY", raising=False)
-    monkeypatch.delenv("OCEL_VAR_FILE_ONLY", raising=False)
     (tmp_path / "FILE_ONLY").write_bytes(b"from the file\n")
     monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
 
@@ -652,7 +678,7 @@ def test_a_delivered_variable_wins_over_the_live_directory_file_of_the_same_key(
     (tmp_path / "FILE_SHADOWED").write_text("from the file")
     (tmp_path / "FILE_BARE").write_text("from the file")
     monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
-    monkeypatch.setenv("OCEL_VAR_FILE_SHADOWED", "baked")
+    monkeypatch.setenv("FILE_SHADOWED", "baked")
     monkeypatch.setenv("FILE_BARE", "bare")
 
     class Env(ocel.Env):
@@ -677,7 +703,6 @@ def test_a_key_the_live_directory_has_no_file_for_is_unset(monkeypatch, tmp_path
 
 def test_a_secret_reads_the_rotated_live_directory_file_on_the_next_read(monkeypatch, tmp_path):
     monkeypatch.delenv("ROTATING_KEY", raising=False)
-    monkeypatch.delenv("OCEL_VAR_ROTATING_KEY", raising=False)
     (tmp_path / "ROTATING_KEY").write_text("first")
     monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
 
@@ -756,13 +781,9 @@ def test_the_deployment_url_reads_what_ocel_wrote(monkeypatch):
     monkeypatch.setenv("OCEL_URL", "https://web-j-1.ocel.site")
     assert ocel.deployment_url() == "https://web-j-1.ocel.site"
 
-    monkeypatch.setenv("OCEL_VAR_OCEL_URL", "https://baked.ocel.site")
-    assert ocel.deployment_url() == "https://baked.ocel.site"
-
 
 def test_the_deployment_url_says_what_delivers_one_when_none_was(monkeypatch):
     monkeypatch.delenv("OCEL_URL", raising=False)
-    monkeypatch.delenv("OCEL_VAR_OCEL_URL", raising=False)
 
     with pytest.raises(ocel.EnvValueError) as raised:
         ocel.deployment_url()
@@ -784,7 +805,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
 
 
 def test_an_instance_taken_during_discovery_reads_the_environment_it_runs_in(collector):
-    os.environ["OCEL_VAR_GREETING"] = "hello"
+    os.environ["GREETING"] = "hello"
     try:
 
         class Env(ocel.Env):
@@ -792,7 +813,7 @@ def test_an_instance_taken_during_discovery_reads_the_environment_it_runs_in(col
 
         assert Env().greeting == "hello"
     finally:
-        del os.environ["OCEL_VAR_GREETING"]
+        del os.environ["GREETING"]
 
 
 def declare_env_bodies(collector):
@@ -829,7 +850,7 @@ def test_an_optional_group_every_member_is_delivered_for_resolves(monkeypatch):
 
 
 def test_a_secret_in_a_group_resolves_on_every_read(monkeypatch):
-    monkeypatch.setenv("OCEL_VAR_GITHUB_CLIENT_SECRET", "first")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "first")
 
     class GitHub(ocel.Group):
         client_secret: ocel.Secret = ocel.var(key="GITHUB_CLIENT_SECRET")
@@ -839,7 +860,7 @@ def test_a_secret_in_a_group_resolves_on_every_read(monkeypatch):
 
     secret = Env().github.client_secret
     assert secret.value == "first"
-    monkeypatch.setenv("OCEL_VAR_GITHUB_CLIENT_SECRET", "rotated")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "rotated")
     assert secret.value == "rotated"
 
 

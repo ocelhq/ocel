@@ -137,23 +137,28 @@ func TestEnvRejectsAnUnusableDescription(t *testing.T) {
 	})
 }
 
-func TestEnvRejectsAnOcelOwnedNameForABareKeyClass(t *testing.T) {
-	type env struct {
-		Name string `ocel:"OCEL_THING"`
-	}
-	err := definitionError(t, func() { ocel.Env[env]() })
-	if !strings.Contains(err.Error(), "reserved prefix OCEL_") {
-		t.Errorf("error = %q", err)
-	}
-}
-
-func TestEnvAllowsAnOcelOwnedNameForAClassNeverDeliveredBare(t *testing.T) {
-	t.Setenv("OCEL_VAR_OCEL_THING", "v")
-	type env struct {
-		Name string `ocel:"OCEL_THING,sensitive"`
-	}
-	if got := ocel.Env[env]().Name; got != "v" {
-		t.Errorf("Name = %q, want %q", got, "v")
+func TestEnvRejectsAnOcelOwnedNameUnderEveryClass(t *testing.T) {
+	for class, run := range map[string]func(){
+		"plain": func() {
+			ocel.Env[struct {
+				Name string `ocel:"OCEL_THING"`
+			}]()
+		},
+		"sensitive": func() {
+			ocel.Env[struct {
+				Name string `ocel:"OCEL_THING,sensitive"`
+			}]()
+		},
+		"secret": func() {
+			ocel.Env[struct {
+				Name ocel.Secret `ocel:"OCEL_THING"`
+			}]()
+		},
+	} {
+		err := definitionError(t, run)
+		if !strings.Contains(err.Error(), "reserved prefix OCEL_") {
+			t.Errorf("%s: error = %q", class, err)
+		}
 	}
 }
 
@@ -548,15 +553,27 @@ func TestEnvParsesEveryFieldIntoItsType(t *testing.T) {
 	}
 }
 
-func TestEnvPrefersTheNamespacedValueOverABareNameOfTheSameKey(t *testing.T) {
-	t.Setenv("OCEL_VAR_KEY", "baked")
-	t.Setenv("KEY", "bare")
+func TestEnvReadsASensitiveValueUnderTheNameTheProcessEnvironmentHolds(t *testing.T) {
+	t.Setenv("KEY", "baked")
 
 	got := ocel.Env[struct {
-		Key string `ocel:"KEY"`
+		Key string `ocel:"KEY,sensitive"`
 	}]()
-	if got.Key != "baked" {
-		t.Errorf("Key = %q, want %q", got.Key, "baked")
+	if got.Key != "baked" || os.Getenv("KEY") != "baked" {
+		t.Errorf("Key = %q, os.Getenv = %q, want both %q", got.Key, os.Getenv("KEY"), "baked")
+	}
+}
+
+func TestEnvIgnoresAValueUnderTheNameTheRuntimeOnceNamespacedASealedValueWith(t *testing.T) {
+	t.Setenv("OCEL_VAR_UNPREFIXED", "baked")
+
+	err := valueError(t, func() {
+		ocel.Env[struct {
+			Key string `ocel:"UNPREFIXED,sensitive"`
+		}]()
+	})
+	if err.Key != "UNPREFIXED" {
+		t.Errorf("error = %v, want UNPREFIXED unset", err)
 	}
 }
 
@@ -608,7 +625,7 @@ func TestEnvKeepsAnEncryptedValueOutOfTheErrorARead(t *testing.T) {
 }
 
 func TestASecretResolvesOnEveryRead(t *testing.T) {
-	t.Setenv("OCEL_VAR_SIGNING_KEY", "first")
+	t.Setenv("SIGNING_KEY", "first")
 	got := ocel.Env[struct {
 		Key ocel.Secret `ocel:"SIGNING_KEY"`
 	}]()
@@ -616,7 +633,7 @@ func TestASecretResolvesOnEveryRead(t *testing.T) {
 	if got.Key.Key() != "SIGNING_KEY" || got.Key.Value() != "first" {
 		t.Fatalf("Key = %s, Value() = %q", got.Key, got.Key.Value())
 	}
-	t.Setenv("OCEL_VAR_SIGNING_KEY", "rotated")
+	t.Setenv("SIGNING_KEY", "rotated")
 	if v := got.Key.Value(); v != "rotated" {
 		t.Errorf("Value() after rotation = %q, want %q", v, "rotated")
 	}
@@ -636,7 +653,7 @@ func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableSetsIt(t *testing.T) {
 func TestEnvPrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *testing.T) {
 	dir := liveDir(t, map[string]string{"FILE_SHADOWED": "from the file", "FILE_BARE": "from the file"})
 	t.Setenv("OCEL_LIVE_DIR", dir)
-	t.Setenv("OCEL_VAR_FILE_SHADOWED", "baked")
+	t.Setenv("FILE_SHADOWED", "baked")
 	t.Setenv("FILE_BARE", "bare")
 
 	got := ocel.Env[struct {
@@ -823,8 +840,8 @@ func TestEnvReportsTheMissingMemberOfAHalfDeliveredOptionalGroup(t *testing.T) {
 }
 
 func TestEnvResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
-	t.Setenv("OCEL_VAR_GITHUB_ID", "id")
-	t.Setenv("OCEL_VAR_GITHUB_SECRET", "s3cret")
+	t.Setenv("GITHUB_ID", "id")
+	t.Setenv("GITHUB_SECRET", "s3cret")
 
 	got := ocel.Env[struct {
 		GitHub *githubGroup `ocel:"github"`
@@ -889,7 +906,7 @@ func TestEnvDoesNotRequireAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *testin
 }
 
 func TestEnvResolvesAGroupMemberSpelledOptionalToNothing(t *testing.T) {
-	t.Setenv("OCEL_VAR_MIXED_ANCHOR", "a")
+	t.Setenv("MIXED_ANCHOR", "a")
 
 	got := ocel.Env[struct {
 		Mixed *mixedGroup `ocel:"mixed"`
@@ -908,8 +925,8 @@ func TestEnvResolvesASecretInsideAGroup(t *testing.T) {
 		Account string      `ocel:"STRIPE_ACCOUNT"`
 		Key     ocel.Secret `ocel:"STRIPE_KEY"`
 	}
-	t.Setenv("OCEL_VAR_STRIPE_ACCOUNT", "acct")
-	t.Setenv("OCEL_VAR_STRIPE_KEY", "first")
+	t.Setenv("STRIPE_ACCOUNT", "acct")
+	t.Setenv("STRIPE_KEY", "first")
 
 	got := ocel.Env[struct {
 		Stripe stripe `ocel:"stripe"`
@@ -918,7 +935,7 @@ func TestEnvResolvesASecretInsideAGroup(t *testing.T) {
 	if got.Stripe.Key.Key() != "STRIPE_KEY" || got.Stripe.Key.Value() != "first" {
 		t.Fatalf("Key = %s, Value() = %q", got.Stripe.Key, got.Stripe.Key.Value())
 	}
-	t.Setenv("OCEL_VAR_STRIPE_KEY", "rotated")
+	t.Setenv("STRIPE_KEY", "rotated")
 	if v := got.Stripe.Key.Value(); v != "rotated" {
 		t.Errorf("Value() after rotation = %q, want %q", v, "rotated")
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/variables/baked"
@@ -32,8 +33,8 @@ func dataKey() []byte { return bytes.Repeat([]byte{9}, baked.KeyBytes) }
 
 func envelope(key []byte) string { return base64.StdEncoding.EncodeToString(key) }
 
-func TestBakedVariablesAreInjectedUnderTheirNamespacedNamesOnly(t *testing.T) {
-	t.Run("injects under the namespaced name only", func(t *testing.T) {
+func TestBakedVariablesAreInjectedUnderTheirOwnNames(t *testing.T) {
+	t.Run("injects each value under the name it was declared under", func(t *testing.T) {
 		root := sealedTaskRoot(t, dataKey(), map[string]string{"STRIPE_API_KEY": "sk-live", "WEBHOOK_SECRET": "whsec"})
 
 		env, err := bakedVariablesEnv(envelope(dataKey()), root)
@@ -41,13 +42,27 @@ func TestBakedVariablesAreInjectedUnderTheirNamespacedNamesOnly(t *testing.T) {
 			t.Fatalf("bakedVariablesEnv: %v", err)
 		}
 
-		want := []string{"OCEL_VAR_STRIPE_API_KEY=sk-live", "OCEL_VAR_WEBHOOK_SECRET=whsec"}
+		want := []string{"STRIPE_API_KEY=sk-live", "WEBHOOK_SECRET=whsec"}
 		if !slices.Equal(env, want) {
 			t.Fatalf("env = %v, want %v", env, want)
 		}
-		for _, entry := range env {
-			if len(entry) > 0 && entry[0] != 'O' {
-				t.Errorf("entry %q is not namespaced", entry)
+	})
+
+	t.Run("a sealed value wins over the same name in the function's configuration", func(t *testing.T) {
+		t.Setenv("STRIPE_API_KEY", "from-the-function-configuration")
+		root := sealedTaskRoot(t, dataKey(), map[string]string{"STRIPE_API_KEY": "sk-live"})
+		sealed, err := bakedVariablesEnv(envelope(dataKey()), root)
+		if err != nil {
+			t.Fatalf("bakedVariablesEnv: %v", err)
+		}
+		extra := childEnv(sealed, nil, nil)
+
+		for name, env := range map[string][]string{
+			"node":       nodeChildEnv("/tmp/ocel-control.sock", extra),
+			"executable": executableEnv(4321, extra),
+		} {
+			if got := lastValue(env, "STRIPE_API_KEY"); got != "sk-live" {
+				t.Errorf("%s child reads STRIPE_API_KEY = %q, want the sealed value", name, got)
 			}
 		}
 	})
@@ -132,8 +147,18 @@ func TestBakedVariablesOpenWithNoCredentialsAndNoEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveBakedVariablesEnv: %v", err)
 		}
-		if want := []string{"OCEL_VAR_STRIPE_API_KEY=sk-live"}; !slices.Equal(env, want) {
+		if want := []string{"STRIPE_API_KEY=sk-live"}; !slices.Equal(env, want) {
 			t.Fatalf("env = %v, want %v", env, want)
 		}
 	})
+}
+
+func lastValue(env []string, key string) string {
+	value := ""
+	for _, entry := range env {
+		if name, v, ok := strings.Cut(entry, "="); ok && name == key {
+			value = v
+		}
+	}
+	return value
 }

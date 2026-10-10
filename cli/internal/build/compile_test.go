@@ -273,7 +273,7 @@ fn main() {
     let dir = env::var("OCEL_LIVE_DIR").expect("OCEL_LIVE_DIR");
     assert_eq!(fs::read_to_string(Path::new(&dir).join("SESSION_SECRET")).unwrap(), "ss_live", "secret SESSION_SECRET");
     assert_eq!(fs::read_to_string(Path::new(&dir).join("STRIPE_API_KEY")).unwrap(), "sk_live", "sensitive STRIPE_API_KEY");
-    for shadow in ["SESSION_SECRET", "STRIPE_API_KEY", "OCEL_VAR_SESSION_SECRET", "OCEL_VAR_POSTHOG_ID"] {
+    for shadow in ["SESSION_SECRET", "STRIPE_API_KEY"] {
         assert!(env::var(shadow).is_err(), "{shadow} is inherited from the deployer's shell");
     }
 }
@@ -308,8 +308,6 @@ func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShe
 	t.Setenv("TMPDIR", tmp)
 	t.Setenv("SESSION_SECRET", "stale-from-the-shell")
 	t.Setenv("STRIPE_API_KEY", "stale-from-the-shell")
-	t.Setenv("OCEL_VAR_SESSION_SECRET", "stale-from-the-shell")
-	t.Setenv("OCEL_VAR_POSTHOG_ID", "stale-from-the-shell")
 
 	_, cfg := writeRustApp(t, buildScriptReadingEveryValue)
 	values := map[string]AppVariables{"api": {

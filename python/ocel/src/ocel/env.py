@@ -33,7 +33,6 @@ __all__ = [
     "var",
 ]
 
-DELIVERED_PREFIX = "OCEL_VAR_"
 APP_FOLDER_ENV = "OCEL_APP_FOLDER"
 RESERVED_PREFIX = "OCEL_"
 URL_KEY = "OCEL_URL"
@@ -649,12 +648,11 @@ def _build_variable(cls: type, attribute: str, annotation: Any) -> _Variable:
             "so a declared one would be overwritten before anything read it. Read it with "
             "`ocel.deployment_url()`.",
         )
-    if variable_class is VariableClass.PLAIN and key.startswith(RESERVED_PREFIX):
+    if key.startswith(RESERVED_PREFIX):
         raise EnvDefinitionError(
             key,
-            f"starts with the reserved prefix {RESERVED_PREFIX}. A "
-            f"'{_CLASS_NAMES[variable_class]}' variable is delivered under its own name, so Ocel "
-            f"would overwrite it.",
+            f"starts with the reserved prefix {RESERVED_PREFIX}. Every variable is delivered "
+            f"under its own name, so Ocel would overwrite it.",
         )
     if live and marker.default is not _UNSET:
         raise EnvDefinitionError(
@@ -880,12 +878,9 @@ def _parse_value(target: Any, raw: str) -> Any:
 
 
 def _read_delivered_value(key: str) -> str | None:
-    delivered = os.environ.get(DELIVERED_PREFIX + key)
+    delivered = os.environ.get(key)
     if delivered is not None:
         return delivered
-    plain = os.environ.get(key)
-    if plain is not None:
-        return plain
     return live_value(key)
 
 

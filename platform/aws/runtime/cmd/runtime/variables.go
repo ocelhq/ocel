@@ -29,7 +29,7 @@ func bakedVariablesEnv(envelope, taskRoot string) ([]string, error) {
 
 	env := make([]string, 0, len(values))
 	for key, value := range values {
-		env = append(env, baked.Prefix+key+"="+value)
+		env = append(env, key+"="+value)
 	}
 	slices.Sort(env)
 	return env, nil

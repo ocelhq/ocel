@@ -161,7 +161,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		}
 	})
 
-	t.Run("names every form of a delivered key the deployer's shell could shadow its value with, for the build to drop", func(t *testing.T) {
+	t.Run("names every key the build reads from a file, for the build to drop the deployer's shell copy of it", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -173,7 +173,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		if err := builder.Build(context.Background(), cfg, values, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		want := []string{"OCEL_VAR_POSTHOG_ID", "OCEL_VAR_SESSION_SECRET", "OCEL_VAR_STRIPE_API_KEY", "SESSION_SECRET", "STRIPE_API_KEY"}
+		want := []string{"SESSION_SECRET", "STRIPE_API_KEY"}
 		if !slices.Equal(got.Apps[0].Unset, want) {
 			t.Errorf("Unset = %v, want %v", got.Apps[0].Unset, want)
 		}

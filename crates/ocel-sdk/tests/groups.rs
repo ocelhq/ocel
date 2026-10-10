@@ -9,7 +9,6 @@ fn env() -> MutexGuard<'static, ()> {
 fn clear(keys: &[&str]) {
     for key in keys {
         std::env::remove_var(key);
-        std::env::remove_var(format!("OCEL_VAR_{key}"));
     }
 }
 
@@ -151,7 +150,7 @@ fn an_optional_group_whose_members_are_all_optional_stays_off_until_one_is_deliv
 fn a_live_member_delivered_on_its_own_switches_its_optional_group_on() {
     let _env = env();
     baseline();
-    std::env::set_var("OCEL_VAR_TELEMETRY_TOKEN", "tk_live");
+    std::env::set_var("TELEMETRY_TOKEN", "tk_live");
 
     let loaded = Env::load().expect("the struct loads");
     let telemetry = loaded
@@ -166,7 +165,7 @@ fn a_live_member_delivered_on_its_own_switches_its_optional_group_on() {
 fn a_live_member_switches_its_group_on_even_where_the_group_is_incomplete() {
     let _env = env();
     baseline();
-    std::env::set_var("OCEL_VAR_GITHUB_CLIENT_SECRET", "shhh");
+    std::env::set_var("GITHUB_CLIENT_SECRET", "shhh");
 
     let err = Env::load().expect_err("the group is on and its client id is missing");
 

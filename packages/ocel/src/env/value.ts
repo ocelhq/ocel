@@ -2,10 +2,8 @@ import { complaint, type VariableDefinition } from "./definition.js";
 import { EnvValueError } from "./errors.js";
 import { parse } from "./standard.js";
 
-const BAKED_PREFIX = "OCEL_VAR_";
-
 export function readDelivered(key: string): string | undefined {
-  return process.env[BAKED_PREFIX + key] ?? process.env[key];
+  return process.env[key];
 }
 
 export function coerce(
