@@ -183,3 +183,43 @@ export default defineConfig({
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
+
+### CloudFront origin shield
+
+A page nothing has cached yet reaches your function once from every CloudFront edge location
+that sees a request for it, each in an execution environment of its own. For a Next.js release
+with prerendered pages, including pages rendered on first request and cached after, CloudFront
+routes the cache misses of `GET` and `HEAD` requests to the app's function through
+[Origin Shield](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html)
+in the function's region, which consolidates simultaneous requests for one page into as few as
+one call to the function. Where CloudFront offers no Origin Shield in the function's region,
+Ocel uses the nearest region that has it; a region Ocel does not know is left unshielded.
+Static files and every other method never pass through it.
+
+CloudFront bills Origin Shield per request that reaches it: $0.0075 per 10,000 requests in
+the US. A response cached for less than an hour (3,600 seconds), or not cached at all, counts
+as dynamic, and every such `GET` or `HEAD` that misses the edge cache is billed. Only a
+response cached for an hour or longer skips the charge when its request arrives through the
+regional edge cache in the shield's own region. A release with no prerendered page is never
+shielded, nor is a container. To turn it off for the project:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+import { cloudfront } from "ocel/providers/aws/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ edge: cloudfront({ originShield: false }) }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "aws": { "edge": { "cloudfront": { "originShield": false } } } },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
