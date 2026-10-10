@@ -133,6 +133,27 @@ describe("the client-env checks", () => {
       );
     });
 
+    it("fails naming a chunk a loaded script imports, however deep", async () => {
+      const fetch = served({
+        "/": page({ head }),
+        "/chunks/page.js": `import{a}from"./shared.js";import("../nodes/2.js")`,
+        "/chunks/shared.js": `export const a=1`,
+        "/nodes/2.js": `import "/chunks/deep.js";`,
+        "/chunks/deep.js": `const t = "${CLIENT_ENV_SENSITIVE_VALUE}"`,
+      });
+      await expect(clientEnvSensitiveUnsentCheck.run(context(fetch))).rejects.toThrow(
+        /chunks\/deep\.js/,
+      );
+    });
+
+    it("never follows an import to another origin or a bare package name", async () => {
+      const fetch = served({
+        "/": page({ head }),
+        "/chunks/page.js": `import "https://cdn.elsewhere.test/x.js";import "svelte/internal.js";`,
+      });
+      await clientEnvSensitiveUnsentCheck.run(context(fetch));
+    });
+
     it("fails when the page loads no script to look through", async () => {
       await expect(
         clientEnvSensitiveUnsentCheck.run(context(served({ "/": page() }))),
