@@ -50,6 +50,13 @@ let env = Env::load()?;
 
 An optional variable is a pointer (Go), an `Option` (Rust), or `optional` on a group (TS). A variable can be scoped to app folders with `folders`.
 
+## Values a browser reads (TypeScript)
+
+Import from the framework's own entry instead of `ocel/env`; ocel writes nothing into `tsconfig.json`.
+
+- **Next:** `import { defineEnv } from "ocel/env/next"`. A `NEXT_PUBLIC_` key is public and must be class `plain`; a confidential one is a type error. Every other key is server-only and throws when read in the browser. Groups work. A value is inlined when Next builds, so `ocel env set` needs a rebuild; under `ocel dev` it restarts the dev server.
+- **SvelteKit 3:** `export const variables = defineEnvVars({ … })` from `ocel/env/sveltekit` in a file under `infra/`, re-exported from `src/env.ts`. SvelteKit owns `public`, `static` and `schema`; class `secret`, `public` on a confidential class and `static` on `sensitive` are refused. `PUBLIC_OCEL_URL` is the deployment URL.
+
 ## Setting values
 
 - **Local dev:** values come from `.env` and `.env.local` (`.env.local` wins). The `envSource` setting in `ocel.json` can point elsewhere.

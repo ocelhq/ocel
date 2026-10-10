@@ -31,5 +31,37 @@ To run the app in a container, give it a `"start": "node build"` script. Outside
 `vite build` writes to `build/`, and `node build` serves it on `PORT` at `HOST`, which is
 `127.0.0.1` unless you set it.
 
-`ocel/env/client` is not available in a SvelteKit app yet. Read values on the server, in
-`+page.server.ts` or `+server.ts`.
+## Environment variables
+
+SvelteKit 3 reads its variables from the `variables` object `src/env.ts` exports. Declare them with
+`defineEnvVars` from `ocel/env/sveltekit`, in the file under `infra/` where ocel already looks, and
+re-export that object from `src/env.ts`:
+
+```ts title="infra/env.ts"
+import { defineEnvVars } from "ocel/env/sveltekit";
+import * as v from "valibot";
+
+export const variables = defineEnvVars({
+  STRIPE_KEY: { class: "sensitive", description: "Stripe key" },
+  PUBLIC_API_URL: { class: "plain", public: true, schema: v.pipe(v.string(), v.url()) },
+});
+```
+
+```ts title="src/env.ts"
+export { variables } from "../infra/env";
+```
+
+Each variable takes `class` and `folders`, which ocel reads, beside SvelteKit's own `public`,
+`static`, `schema` and `description`. SvelteKit generates the `$app/env/*` types and reads the
+values from the environment, where ocel delivers each under its own name. Ocel writes nothing
+into your `tsconfig.json`.
+
+`defineEnvVars` refuses what SvelteKit would accept and ocel cannot keep safe:
+
+- `public: true` on a class other than `plain`.
+- `class: "secret"`. SvelteKit reads a value once, at startup, so a rotated secret would never
+  arrive. Declare it with `defineEnv` from `ocel/env`, whose accessor reads it live.
+- `static: true` on a `sensitive` variable, which would inline its value into the server bundle.
+
+`PUBLIC_OCEL_URL` holds the URL the deployment is served from. It is in the object `defineEnvVars`
+returns, so `$app/env/public` has it; declaring it yourself is refused.
