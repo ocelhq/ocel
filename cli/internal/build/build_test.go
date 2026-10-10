@@ -90,6 +90,10 @@ func nextApp(name, path string) project.App {
 	return project.App{Name: name, Path: path, Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}
 }
 
+func nextContainerApp(name, path string) project.App {
+	return project.App{Name: name, Path: path, Compute: provider.ComputeContainer, Container: &project.Container{Framework: buildoutput.FrameworkNext}}
+}
+
 func requestOf(got *nodeBuildRequest) nodeRun {
 	return func(_ context.Context, _ string, request []byte, _ Log) error {
 		return json.Unmarshal(request, got)
@@ -341,12 +345,18 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a serverless next app that names its own adapter before next build runs", func(t *testing.T) {
+	t.Run("hands a serverless next app whose next.config defers adapterPath to NEXT_ADAPTER_PATH to the node build", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		writeBuildScript(t, root)
-		writeNextConfig(t, root, "web", "next.config.mjs", `export default { adapterPath: "./a.mjs" }`)
+		if err := os.MkdirAll(filepath.Join(root, "web"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		config := "module.exports = { adapterPath: process.env.NEXT_ADAPTER_PATH ?? require.resolve('./my-adapter.js') }\n"
+		if err := os.WriteFile(filepath.Join(root, "web", "next.config.js"), []byte(config), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "web")}}
 		ran := false
 
@@ -354,11 +364,11 @@ func TestBuild(t *testing.T) {
 			ran = true
 			return nil
 		}}.Build(context.Background(), cfg, nil, Log{})
-		if err == nil || !strings.Contains(err.Error(), "sets adapterPath in next.config.mjs") {
-			t.Errorf("Build() = %v, want a refusal naming adapterPath in next.config.mjs", err)
+		if err != nil {
+			t.Errorf("Build() = %v, want nil", err)
 		}
-		if ran {
-			t.Error("Build() ran the node build for an app whose adapter ocel cannot run")
+		if !ran {
+			t.Error("Build() refused the app before the node build, which loads next.config as next build does, could run")
 		}
 	})
 

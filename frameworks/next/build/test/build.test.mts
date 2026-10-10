@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildProcess } from "@framework/node-build/script";
@@ -253,5 +254,103 @@ describe("buildNext", () => {
     } finally {
       buildProcess.node = nodeOf;
     }
+  });
+
+  describe("when the next.config next build loads names the adapter it runs", () => {
+    const nextPackage = path.dirname(createRequire(import.meta.url).resolve("next/package.json"));
+
+    function ocelAdapter(): string {
+      const dir = mkdtempSync(path.join(tmpdir(), "ocel-adapter-"));
+      roots.push(dir);
+      const file = path.join(dir, "next-adapter.mjs");
+      writeFileSync(file, 'export default { name: "ocel" };\n');
+      return file;
+    }
+
+    function configuredApp(file: string, config: string): string {
+      const cwd = nextApp();
+      mkdirSync(path.join(cwd, "node_modules"));
+      symlinkSync(nextPackage, path.join(cwd, "node_modules", "next"), "dir");
+      writeFileSync(path.join(cwd, "my-adapter.js"), 'module.exports = { name: "mine" };\n');
+      writeFileSync(path.join(cwd, file), config);
+      return cwd;
+    }
+
+    function build(cwd: string, adapter: string, env?: Record<string, string>) {
+      let ran = false;
+      buildProcess.spawn = async (_command, _args, _cwd, e) => {
+        ran = true;
+        writeNextHosting(e);
+      };
+      const result = buildNext(app({ cwd, env }), adapter).then(() => ran);
+      return { result, ran: () => ran };
+    }
+
+    it("builds an app whose adapterPath defers to NEXT_ADAPTER_PATH", async () => {
+      const cwd = configuredApp(
+        "next.config.js",
+        "module.exports = { adapterPath: process.env.NEXT_ADAPTER_PATH ?? require.resolve('./my-adapter.js') };\n",
+      );
+
+      await expect(build(cwd, ocelAdapter()).result).resolves.toBe(true);
+    });
+
+    it("builds an app whose adapterPath reaches ocel's adapter through a symlink", async () => {
+      const adapter = ocelAdapter();
+      const links = nextApp();
+      const linked = path.join(links, "linked-adapter.mjs");
+      symlinkSync(adapter, linked);
+      const cwd = configuredApp(
+        "next.config.js",
+        `module.exports = { adapterPath: ${JSON.stringify(linked)} };\n`,
+      );
+
+      await expect(build(cwd, adapter).result).resolves.toBe(true);
+    });
+
+    for (const [form, file, config] of [
+      [
+        "an object literal",
+        "next.config.js",
+        "module.exports = { adapterPath: require.resolve('./my-adapter.js') };\n",
+      ],
+      [
+        "an assignment",
+        "next.config.js",
+        "const nextConfig = {};\nnextConfig.adapterPath = require.resolve('./my-adapter.js');\nmodule.exports = nextConfig;\n",
+      ],
+      [
+        "a TypeScript config",
+        "next.config.ts",
+        "import path from 'node:path';\nexport default { adapterPath: path.join(process.cwd(), 'my-adapter.js') };\n",
+      ],
+    ] as const) {
+      it(`refuses an app that names its own adapter in ${form} before next build runs`, async () => {
+        const cwd = configuredApp(file, config);
+
+        const { result, ran } = build(cwd, ocelAdapter());
+
+        await expect(result).rejects.toThrow(
+          `app "web" sets adapterPath to ${realpathSync(path.join(cwd, "my-adapter.js"))} in ${file}, and next build then runs that adapter in place of ocel's, which writes the output ocel deploys: delete adapterPath from ${file}`,
+        );
+        expect(ran()).toBe(false);
+      });
+    }
+
+    it("refuses an adapterPath read from a value the app builds with", async () => {
+      const cwd = configuredApp(
+        "next.config.js",
+        "module.exports = { adapterPath: process.env.APP_ADAPTER };\n",
+      );
+
+      const { result, ran } = build(cwd, ocelAdapter(), {
+        APP_ADAPTER: path.join(cwd, "my-adapter.js"),
+      });
+
+      await expect(result).rejects.toThrow(
+        /sets adapterPath to \S*my-adapter\.js in next\.config\.js/,
+      );
+      expect(ran()).toBe(false);
+    });
   });
 });

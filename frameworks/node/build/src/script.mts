@@ -38,7 +38,7 @@ async function readBuildNode(cwd: string, env: Record<string, string>): Promise<
   return { version, readsLiveDir: builtin === "function" };
 }
 
-function prependScriptBins(cwd: string, inherited = ""): string {
+export function prependScriptBins(cwd: string, inherited = ""): string {
   const bins: string[] = [];
   for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
     bins.push(path.join(dir, "node_modules", ".bin"));
@@ -50,6 +50,7 @@ function prependScriptBins(cwd: string, inherited = ""): string {
 export async function runBuildScript(
   app: ScriptBuild,
   owned: Record<string, string>,
+  refuseBuild?: (env: Record<string, string>) => Promise<void>,
 ): Promise<void> {
   for (const name of Object.keys(owned)) {
     if (app.env && name in app.env) {
@@ -83,6 +84,7 @@ export async function runBuildScript(
       );
     }
   }
+  await refuseBuild?.(env);
   await buildProcess.spawn(resolved.command, resolved.args, app.cwd, env);
 }
 
@@ -117,6 +119,7 @@ export interface Adapter {
   name: string;
   setup: string;
   upgrade: string;
+  refuseBuild?: (env: Record<string, string>) => Promise<void>;
 }
 
 export async function runAdapterBuild(
@@ -124,13 +127,17 @@ export async function runAdapterBuild(
   adapter: Adapter,
   env: Record<string, string>,
 ): Promise<Hosting> {
-  await runBuildScript(app, {
-    NODE_ENV: "production",
-    [APP_NAME_ENV]: app.name,
-    [OUTPUT_DIR_ENV]: app.outputDir,
-    [APP_FOLDER_ENV]: app.folder ?? "",
-    ...env,
-  });
+  await runBuildScript(
+    app,
+    {
+      NODE_ENV: "production",
+      [APP_NAME_ENV]: app.name,
+      [OUTPUT_DIR_ENV]: app.outputDir,
+      [APP_FOLDER_ENV]: app.folder ?? "",
+      ...env,
+    },
+    adapter.refuseBuild,
+  );
   return readHosting(app, adapter);
 }
 
