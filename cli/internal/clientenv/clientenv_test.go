@@ -58,7 +58,7 @@ func TestANextAppIsHandedTheKeysOfThePlainNextPublicVariablesDeclaredForIt(t *te
 
 	got := PublicKeys(web, definitions)
 
-	want := []string{"NEXT_PUBLIC_API_URL", processenv.ClientURLEnvVar, "NEXT_PUBLIC_RETRIES"}
+	want := []string{"NEXT_PUBLIC_API_URL", processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_RETRIES"}
 	if !slices.Equal(got, want) {
 		t.Errorf("PublicKeys = %v, want %v: the deployment url and the plain NEXT_PUBLIC_ keys declared for every app or for /web, never another app's or a confidential one", got, want)
 	}
@@ -89,10 +89,10 @@ func TestAppsOfHandsEachAppOnlyTheDeclarationsThatReachIt(t *testing.T) {
 		byName[app.Name] = PublicKeys(app.App, app.Declared)
 	}
 
-	if want := []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}; !slices.Equal(byName["web"], want) {
+	if want := []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SHARED"}; !slices.Equal(byName["web"], want) {
 		t.Errorf("web public keys = %v, want %v", byName["web"], want)
 	}
-	if want := []string{"NEXT_PUBLIC_ADMIN_URL", processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}; !slices.Equal(byName["admin"], want) {
+	if want := []string{"NEXT_PUBLIC_ADMIN_URL", processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SHARED"}; !slices.Equal(byName["admin"], want) {
 		t.Errorf("admin public keys = %v, want %v", byName["admin"], want)
 	}
 }

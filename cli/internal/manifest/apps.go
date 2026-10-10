@@ -2,13 +2,11 @@ package manifest
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -22,7 +20,6 @@ type app struct {
 	Path            string
 	Framework       string
 	Arch            string
-	ClientBundle    bool
 	Compute         provider.Compute
 	Domains         []string
 	Folder          string
@@ -32,7 +29,7 @@ type app struct {
 	Instances       provider.Instances
 }
 
-func appsOf(projectDir string, configured []project.App, usages []attribution.Usage, images map[string]string) []app {
+func appsOf(configured []project.App, usages []attribution.Usage, images map[string]string) []app {
 	byApp := make(map[string][]usage, len(configured))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -45,7 +42,6 @@ func appsOf(projectDir string, configured []project.App, usages []attribution.Us
 			Path:            a.Path,
 			Framework:       a.Framework(),
 			Arch:            a.Arch,
-			ClientBundle:    language.HasClientBundle(a.Framework(), filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.ProductionDomains,
 			Folder:          a.Folder,
@@ -107,12 +103,11 @@ func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[s
 			framework = frameworkByApp[a.Name]
 		}
 		manifestApp := &contractv1.ManifestApp{
-			Name:         a.Name,
-			Framework:    frameworkProto(framework.Name, framework.Arch),
-			Domains:      tierDomains(project.Domains{Production: a.Domains}),
-			Variables:    manifestVariables(values[a.Name]),
-			Folder:       a.Folder,
-			ClientBundle: a.ClientBundle,
+			Name:      a.Name,
+			Framework: frameworkProto(framework.Name, framework.Arch),
+			Domains:   tierDomains(project.Domains{Production: a.Domains}),
+			Variables: manifestVariables(values[a.Name]),
+			Folder:    a.Folder,
 		}
 		if err := attachArtifact(manifestApp, a, functionsByApp[a.Name]); err != nil {
 			return nil, err

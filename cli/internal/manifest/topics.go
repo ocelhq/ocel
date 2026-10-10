@@ -24,7 +24,7 @@ type Placement struct {
 
 func PlaceConsumers(cfg *project.Project, resources []declaration.Resource) (Placement, error) {
 	declarations := declaredResources(cfg.Dir, resources)
-	topics, workers, err := placeConsumers(appsOf(cfg.Dir, cfg.Apps, nil, nil), declarations, nil)
+	topics, workers, err := placeConsumers(appsOf(cfg.Apps, nil, nil), declarations, nil)
 	if err != nil {
 		return Placement{}, err
 	}

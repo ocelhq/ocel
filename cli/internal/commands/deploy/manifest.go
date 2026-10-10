@@ -316,7 +316,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.A
 	for _, app := range build.ImageApps(cfg.Apps) {
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
-			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(app.Framework(), true, v.Key) {
+			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(app.Framework(), v.Key) {
 				keys = append(keys, v.Key)
 			}
 		}

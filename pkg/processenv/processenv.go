@@ -27,7 +27,7 @@ const ResourceEnvVarPrefix = "OCEL_RESOURCE_"
 
 const LiveDirEnvVar = "OCEL_LIVE_DIR"
 
-const ClientURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
+const NextPublicURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
 const SvelteKitPublicURLEnvVar = "PUBLIC_OCEL_URL"
 
@@ -51,14 +51,14 @@ func IsNextPublic(key string) bool {
 	return strings.HasPrefix(key, NextPublicPrefix)
 }
 
-func IsInjected(framework string, clientBundle bool, key string) bool {
+func IsInjected(framework, key string) bool {
 	switch key {
 	case AppURLEnvVar:
 		return true
-	case ClientURLEnvVar:
-		return clientBundle
+	case NextPublicURLEnvVar:
+		return framework == buildoutput.FrameworkNext
 	case SvelteKitPublicURLEnvVar:
-		return clientBundle && framework == buildoutput.FrameworkSvelteKit
+		return framework == buildoutput.FrameworkSvelteKit
 	}
 	return false
 }

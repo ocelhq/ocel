@@ -277,8 +277,6 @@ message ManifestApp {
 
   string build_id = 6;
 
-  bool client_bundle = 8;
-
   oneof artifact {
     option (buf.validate.oneof).required = true;
 

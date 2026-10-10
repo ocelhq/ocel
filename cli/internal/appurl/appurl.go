@@ -41,17 +41,17 @@ func byApp(cfg *project.Project, projectHosts []string, declared func(project.Ap
 	return urls
 }
 
-func Variables(framework string, clientBundle bool, url string) []variables.Variable {
+func Variables(framework, url string) []variables.Variable {
 	if url == "" {
 		return nil
 	}
 	var written []variables.Variable
 	for _, v := range []variables.Variable{
 		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: processenv.ClientURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
+		{Key: processenv.NextPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
 		{Key: processenv.SvelteKitPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
 	} {
-		if processenv.IsInjected(framework, clientBundle, v.Key) {
+		if processenv.IsInjected(framework, v.Key) {
 			written = append(written, v)
 		}
 	}
@@ -65,7 +65,7 @@ func Prepend(cfg *project.Project, byApp map[string][]variables.Variable, byURL 
 	}
 	for app, variables := range byApp {
 		a := scoped[app]
-		byApp[app] = append(Variables(a.Framework, a.ClientBundle, byURL[app]), variables...)
+		byApp[app] = append(Variables(a.Framework, byURL[app]), variables...)
 	}
 }
 

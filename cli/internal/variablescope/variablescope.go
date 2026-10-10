@@ -1,9 +1,6 @@
 package variablescope
 
 import (
-	"path/filepath"
-
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -51,10 +48,9 @@ func Apps(cfg *project.Project) []variables.App {
 	apps := make([]variables.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		apps = append(apps, variables.App{
-			Name:         a.Name,
-			Folder:       a.Folder,
-			Framework:    a.Framework(),
-			ClientBundle: language.HasClientBundle(a.Framework(), filepath.Join(cfg.Dir, a.Path)),
+			Name:      a.Name,
+			Folder:    a.Folder,
+			Framework: a.Framework(),
 		})
 	}
 	return apps

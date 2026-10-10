@@ -157,14 +157,6 @@ func OfApp(framework, dir string) Language {
 	return JS
 }
 
-func HasClientBundle(framework, dir string) bool {
-	if framework != "" {
-		return buildoutput.FrameworkBundlesClient(framework)
-	}
-	language, ok := Of(dir)
-	return ok && language == JS
-}
-
 func isRegularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()

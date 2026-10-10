@@ -242,11 +242,11 @@ func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t 
 	daemonWithTheBuiltImage(t, "amd64")
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.AppURLEnvVar, "https://shop.example")
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.ClientURLEnvVar, "https://shop.example")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.NextPublicURLEnvVar, "https://shop.example")
 
 	delivered := deliveredBy(t, req, nil)
 
-	for _, key := range []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar} {
+	for _, key := range []string{processenv.AppURLEnvVar, processenv.NextPublicURLEnvVar} {
 		if got, want := delivered[key], "https://shop.example"; got != want {
 			t.Errorf("a container is handed %s=%q, want %q: ocel writes it for every app, so the guard on its own prefix must not refuse its own entry", key, got, want)
 		}
@@ -369,54 +369,15 @@ func TestAServerlessAppIsSubjectToNeitherReservation(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
-	daemonWithTheBuiltImage(t, "amd64")
-	for name, tc := range map[string]struct {
-		clientBundle bool
-		want         []string
-	}{
-		"an app whose bundle reads the client url": {clientBundle: true, want: []string{"REGION"}},
-		"an app whose bundle never reads it":       {want: []string{processenv.ClientURLEnvVar, "REGION"}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			builtProject(t)
-			client, vendor := deployServed(t)
-			stager := staging(t, vendor)
-
-			req := namingARegistry(containerDeployRequest("/healthz"))
-			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
-			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.AppURLEnvVar, "https://shop.example")
-			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.ClientURLEnvVar, "https://shop.example")
-			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
-
-			result, _ := deploy(t, client, req)
-			if result == nil || !result.GetSuccess() {
-				t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-			}
-
-			staged := stager.records()
-			if len(staged) != 1 {
-				t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
-			}
-			var named []string
-			for _, variable := range staged[0].Variables {
-				named = append(named, variable.Key)
-			}
-			if !slices.Equal(named, tc.want) {
-				t.Errorf("%s: the staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", name, named, tc.want, processenv.ClientURLEnvVar)
-			}
-		})
-	}
-}
-
-func TestTheStagedRecordLeavesOutThePublicURLOcelWritesForASvelteKitApp(t *testing.T) {
+func TestTheStagedRecordLeavesOutOnlyTheURLNamesOcelWritesForTheAppsFramework(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	for name, tc := range map[string]struct {
 		framework string
 		want      []string
 	}{
-		"a sveltekit app reads it":      {framework: "sveltekit", want: []string{"REGION"}},
-		"another app's own value of it": {framework: "next", want: []string{processenv.SvelteKitPublicURLEnvVar, "REGION"}},
+		"a next app":      {framework: "next", want: []string{processenv.SvelteKitPublicURLEnvVar, "REGION"}},
+		"a sveltekit app": {framework: "sveltekit", want: []string{processenv.NextPublicURLEnvVar, "REGION"}},
+		"a node app":      {framework: "node", want: []string{processenv.NextPublicURLEnvVar, processenv.SvelteKitPublicURLEnvVar, "REGION"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			builtProject(t)
@@ -425,7 +386,8 @@ func TestTheStagedRecordLeavesOutThePublicURLOcelWritesForASvelteKitApp(t *testi
 
 			req := namingARegistry(containerDeployRequest("/healthz"))
 			req.Manifest.Apps[0].Framework = &contractv1.Framework{Name: tc.framework}
-			req.Manifest.Apps[0].ClientBundle = true
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.AppURLEnvVar, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.NextPublicURLEnvVar, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, processenv.SvelteKitPublicURLEnvVar, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
 
@@ -443,7 +405,7 @@ func TestTheStagedRecordLeavesOutThePublicURLOcelWritesForASvelteKitApp(t *testi
 				named = append(named, variable.Key)
 			}
 			if !slices.Equal(named, tc.want) {
-				t.Errorf("%s: the staged record names %v, want %v", name, named, tc.want)
+				t.Errorf("%s: the staged record names %v, want %v: ocel writes each public name of the url only for the framework that reads it, so on any other app it is the app's own value", name, named, tc.want)
 			}
 		})
 	}

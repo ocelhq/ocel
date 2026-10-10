@@ -23,10 +23,6 @@ func RunsOnNode(framework string) bool {
 	return framework == FrameworkNode || framework == FrameworkNext || framework == FrameworkSvelteKit
 }
 
-func FrameworkBundlesClient(framework string) bool {
-	return RunsOnNode(framework)
-}
-
 func BuildsWithItsOwnScript(framework string) bool {
 	return framework == FrameworkNext || framework == FrameworkSvelteKit
 }

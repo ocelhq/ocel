@@ -423,33 +423,35 @@ func TestDeclaringVariablesAnswersTheCellsThatHoldTheirValues(t *testing.T) {
 	t.Run("refuses the deployment url only where ocel writes it for an app in scope", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
-			name         string
-			clientBundle bool
-			key          string
-			refused      bool
+			name      string
+			framework string
+			key       string
+			refused   bool
 		}{
-			{name: "an app with no client bundle", key: processenv.AppURLEnvVar, refused: true},
-			{name: "an app whose bundle reads it", clientBundle: true, key: processenv.ClientURLEnvVar, refused: true},
-			{name: "an app whose bundle never reads it", key: processenv.ClientURLEnvVar, refused: false},
+			{name: "a go app", framework: "go", key: processenv.AppURLEnvVar, refused: true},
+			{name: "a next app", framework: "next", key: processenv.NextPublicURLEnvVar, refused: true},
+			{name: "a sveltekit app", framework: "sveltekit", key: processenv.SvelteKitPublicURLEnvVar, refused: true},
+			{name: "a sveltekit app", framework: "sveltekit", key: processenv.NextPublicURLEnvVar, refused: false},
+			{name: "a node app", framework: "node", key: processenv.NextPublicURLEnvVar, refused: false},
 		} {
 			t.Run(tc.key+" for "+tc.name, func(t *testing.T) {
 				t.Parallel()
-				g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api", ClientBundle: tc.clientBundle}}})
+				g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "api", Framework: tc.framework}}})
 
 				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
 					Definitions: []*resourcesv1.VariableDefinition{def(tc.key, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 				})
 				if refused := err != nil; refused != tc.refused {
-					t.Errorf("err = %v, want refused %v — ocel writes %s only for an app whose bundle reads it", err, tc.refused, processenv.ClientURLEnvVar)
+					t.Errorf("err = %v, want refused %v — ocel writes each public name of the deployment url only for the framework that reads it", err, tc.refused)
 				}
 			})
 		}
 	})
 
-	t.Run("refuses the browser's deployment url only where the declaration reaches an app whose bundle reads it", func(t *testing.T) {
+	t.Run("refuses the browser's deployment url only where the declaration reaches a next app", func(t *testing.T) {
 		t.Parallel()
 		mixed := variables.Scope{Apps: []variables.App{
-			{Name: "web", Folder: "/web", ClientBundle: true},
+			{Name: "web", Folder: "/web", Framework: "next"},
 			{Name: "api", Folder: "/api"},
 		}}
 		for _, tc := range []struct {
@@ -466,7 +468,7 @@ func TestDeclaringVariablesAnswersTheCellsThatHoldTheirValues(t *testing.T) {
 				g := prefetched(t, newFakeValues(), mixed)
 
 				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
-					Definitions: []*resourcesv1.VariableDefinition{scoped(processenv.ClientURLEnvVar, tc.folders...)},
+					Definitions: []*resourcesv1.VariableDefinition{scoped(processenv.NextPublicURLEnvVar, tc.folders...)},
 				})
 				if refused := err != nil; refused != tc.refused {
 					t.Errorf("err = %v, want refused %v — a declaration is refused for the apps its folders reach, not for the project", err, tc.refused)

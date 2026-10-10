@@ -113,8 +113,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		if got, want := built["api"].Env[processenv.AppURLEnvVar], "https://api.acme.com"; got != want {
 			t.Errorf("build env = %v, want %s = %q", built["api"].Env, processenv.AppURLEnvVar, want)
 		}
-		if got, want := built["api"].Env[processenv.ClientURLEnvVar], "https://api.acme.com"; got != want {
-			t.Errorf("build env = %v, want %s = %q for the browser bundle", built["api"].Env, processenv.ClientURLEnvVar, want)
+		if got, want := built["api"].Env[processenv.NextPublicURLEnvVar], "https://api.acme.com"; got != want {
+			t.Errorf("build env = %v, want %s = %q for the browser bundle", built["api"].Env, processenv.NextPublicURLEnvVar, want)
 		}
 	})
 
@@ -122,13 +122,13 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		if got, want := manifestVariable(t, manifest, "api", processenv.AppURLEnvVar).GetValue(), "https://api.acme.com"; got != want {
 			t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got, want)
 		}
-		if got, want := manifestVariable(t, manifest, "api", processenv.ClientURLEnvVar).GetValue(), "https://api.acme.com"; got != want {
-			t.Errorf("%s = %q, want %q", processenv.ClientURLEnvVar, got, want)
+		if got, want := manifestVariable(t, manifest, "api", processenv.NextPublicURLEnvVar).GetValue(), "https://api.acme.com"; got != want {
+			t.Errorf("%s = %q, want %q", processenv.NextPublicURLEnvVar, got, want)
 		}
 	})
 
 	t.Run("the build names it among the public keys the adapter inlines", func(t *testing.T) {
-		if want := []string{processenv.ClientURLEnvVar}; !slices.Equal(built["api"].PublicKeys, want) {
+		if want := []string{processenv.NextPublicURLEnvVar}; !slices.Equal(built["api"].PublicKeys, want) {
 			t.Errorf("public keys = %v, want %v", built["api"].PublicKeys, want)
 		}
 	})
@@ -151,7 +151,7 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	if err == nil {
 		t.Fatal("collectBuildAndAssemble = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")
 	}
-	if !strings.Contains(err.Error(), processenv.ClientURLEnvVar) {
+	if !strings.Contains(err.Error(), processenv.NextPublicURLEnvVar) {
 		t.Errorf("error = %q, want it to name the key whose value changed", err)
 	}
 }
@@ -612,7 +612,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
-		if want := []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
+		if want := []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
 			t.Errorf("public keys the build was handed = %v, want %v", handed, want)
 		}
 		if _, err := os.Stat(filepath.Join(root, statedir.Name, "output", "client-digests.json")); err != nil {

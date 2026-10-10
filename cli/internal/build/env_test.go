@@ -38,7 +38,7 @@ func TestANextAppIsBuiltWithTheKeysOfThePublicVariablesItDeclaresWhetherOrNotOce
 		},
 	}}, nil)["storefront"]
 
-	if want := []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(built.PublicKeys, want) {
+	if want := []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(built.PublicKeys, want) {
 		t.Errorf("PublicKeys = %v, want %v: the adapter inlines what the build reads for every declared NEXT_PUBLIC_ key", built.PublicKeys, want)
 	}
 }

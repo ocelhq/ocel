@@ -49,9 +49,6 @@ func TestSvelteKitIsAFrameworkThatRunsOnNodeAndBuildsWithItsOwnScript(t *testing
 	if !buildoutput.RunsOnNode(buildoutput.FrameworkSvelteKit) {
 		t.Error("a SvelteKit function is served by something other than node")
 	}
-	if !buildoutput.FrameworkBundlesClient(buildoutput.FrameworkSvelteKit) {
-		t.Error("a SvelteKit app ships no client bundle")
-	}
 	if !buildoutput.BuildsWithItsOwnScript(buildoutput.FrameworkSvelteKit) {
 		t.Error("a SvelteKit app is built by something other than its own build script")
 	}

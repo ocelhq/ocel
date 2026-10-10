@@ -113,13 +113,13 @@ const RESERVED_PREFIXES = ["OCEL_"];
 
 export const URL_KEY = "OCEL_URL";
 
-export const CLIENT_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
+export const NEXT_PUBLIC_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
 
 export const SVELTEKIT_PUBLIC_URL_KEY = "PUBLIC_OCEL_URL";
 
 const RESERVED_KEYS: ReadonlyMap<string, string> = new Map([
   [URL_KEY, "every app"],
-  [CLIENT_URL_KEY, "every JavaScript app"],
+  [NEXT_PUBLIC_URL_KEY, "every Next app"],
   [SVELTEKIT_PUBLIC_URL_KEY, "every SvelteKit app"],
 ]);
 

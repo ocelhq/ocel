@@ -52,7 +52,7 @@ func PublicKeys(app variables.App, definitions []*resourcesv1.VariableDefinition
 	if app.Framework != buildoutput.FrameworkNext {
 		return nil
 	}
-	keys := []string{processenv.ClientURLEnvVar}
+	keys := []string{processenv.NextPublicURLEnvVar}
 	for _, definition := range declaredFor(app, definitions) {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && processenv.IsNextPublic(definition.GetKey()) {
 			keys = append(keys, definition.GetKey())
