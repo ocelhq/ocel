@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import {
   mergeRecord,
@@ -18,6 +18,7 @@ import {
   readBodyText,
   requireEnv,
 } from "./object-store.mjs";
+import { newDynamoDBClient, newS3Client } from "./sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 function objectName(key: string): string {
@@ -54,8 +55,8 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const bucket = requireEnv("OCEL_ISR_BUCKET");
   const prefix = requireEnv("OCEL_ISR_PREFIX");
 
-  const ddb = new DynamoDBClient({});
-  const s3 = new S3Client({});
+  const ddb = newDynamoDBClient();
+  const s3 = newS3Client();
 
   const edgeTags = entriesAdopted() ? openAdoptedIsrWriter(prefix) : null;
 

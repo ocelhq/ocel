@@ -1,5 +1,6 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { type IsrWriterClient, newIsrWriterClient } from "@platform/edge-contract/isr-writer";
+import { newS3Client } from "./sdk-clients.mjs";
 
 export interface ObjectStore {
   client: S3Client;
@@ -45,5 +46,5 @@ export function openAdoptedIsrWriter(isrPrefix: string): IsrWriterClient {
 }
 
 export function providerObjectStore(): ObjectStore {
-  return { bucket: requireEnv("OCEL_ISR_BUCKET"), client: new S3Client({}) };
+  return { bucket: requireEnv("OCEL_ISR_BUCKET"), client: newS3Client() };
 }

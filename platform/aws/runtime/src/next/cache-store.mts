@@ -1,4 +1,4 @@
-import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
@@ -11,6 +11,7 @@ import {
   readBodyText,
   requireEnv,
 } from "./object-store.mjs";
+import { newDynamoDBClient } from "./sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 interface EntryStore {
@@ -33,7 +34,7 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
 
   const provider = providerObjectStore();
 
-  const ddb = new DynamoDBClient({});
+  const ddb = newDynamoDBClient();
 
   const objectKey = (key: string) => {
     const addressed = entryObjectKey(prefix, key);
