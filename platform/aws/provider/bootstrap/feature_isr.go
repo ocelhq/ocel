@@ -3,12 +3,14 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 var isrFeature = feature{
 	name:       FeatureISR,
 	summary:    "incremental static regeneration — queue, revalidator, invalidator",
-	frameworks: []string{"next"},
+	serves:     buildoutput.Uses{ISR: true},
 	template:   isrTemplate,
 	payloads:   isrPayloads,
 	placements: isrPlacements,

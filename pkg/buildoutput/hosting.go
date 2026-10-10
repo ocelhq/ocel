@@ -28,6 +28,7 @@ type Hosting struct {
 	RootFunction     string                   `json:"rootFunction"`
 	RouteTable       edge.RouteTableFormat    `json:"routeTable,omitempty"`
 	Static           *edge.Static             `json:"static,omitempty"`
+	ISR              bool                     `json:"isr,omitempty"`
 	Needs            map[edge.Need]NeedDetail `json:"needs"`
 }
 

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -95,16 +96,16 @@ func (b *Bootstrap) Catalogue() []provider.Feature {
 	}
 	return []provider.Feature{
 		{
-			Name:       FeatureCache,
-			Summary:    "the reference provider's response cache",
-			Frameworks: []string{"next"},
+			Name:    FeatureCache,
+			Summary: "the reference provider's response cache",
+			Serves:  buildoutput.Uses{ISR: true},
 		},
 		{
-			Name:       FeatureImages,
-			Summary:    "the reference provider's image optimizer",
-			DependsOn:  []string{FeatureCache},
-			Frameworks: []string{"next"},
-			Edges:      []edge.Kind{"relay"},
+			Name:      FeatureImages,
+			Summary:   "the reference provider's image optimizer",
+			DependsOn: []string{FeatureCache},
+			Serves:    buildoutput.Uses{ImageOptimization: true},
+			Edges:     []edge.Kind{"relay"},
 		},
 	}
 }

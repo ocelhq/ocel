@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -60,11 +61,11 @@ type stepDeps struct {
 }
 
 type feature struct {
-	name       string
-	summary    string
-	dependsOn  []string
-	frameworks []string
-	edges      []edge.Kind
+	name      string
+	summary   string
+	dependsOn []string
+	serves    buildoutput.Uses
+	edges     []edge.Kind
 
 	template   func(featureInputs) featureStack
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
@@ -117,11 +118,11 @@ func Catalogue() []provider.Feature {
 	out := make([]provider.Feature, 0, len(featureRegistry))
 	for _, f := range featureRegistry {
 		out = append(out, provider.Feature{
-			Name:       f.name,
-			Summary:    f.summary,
-			DependsOn:  slices.Clone(f.dependsOn),
-			Frameworks: slices.Clone(f.frameworks),
-			Edges:      slices.Clone(f.edges),
+			Name:      f.name,
+			Summary:   f.summary,
+			DependsOn: slices.Clone(f.dependsOn),
+			Serves:    f.serves,
+			Edges:     slices.Clone(f.edges),
 		})
 	}
 	return out
