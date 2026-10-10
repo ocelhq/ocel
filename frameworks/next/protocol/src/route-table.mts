@@ -97,6 +97,7 @@ export interface NextRouteTable {
   buildId: string;
   appName?: string;
   basePath: string;
+  assetPrefixPathname?: string;
   trailingSlash?: boolean;
   skipTrailingSlashRedirect?: boolean;
   skipMiddlewareUrlNormalize?: boolean;
