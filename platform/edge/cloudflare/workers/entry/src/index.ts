@@ -22,10 +22,12 @@ import { findPreviewTarget } from "./preview";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
 import { ownRouteTableKey, readRouteTable } from "./route-table";
+import { type ServeFactory, serveObjects } from "./serve-objects";
 import { invalidateSnapshot } from "./tag-clock";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
+export { Serve } from "./serve";
 
 const ROUTER_HEADER = "x-ocel-router";
 
@@ -302,6 +304,11 @@ function unavailableResponse(): Response {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const store = env.OCEL_CACHE_STORE;
+    const serve = ctx.exports?.Serve as ServeFactory | undefined;
+    const objects =
+      serve && (store || env.OCEL_ASSET_BUCKET)
+        ? serveObjects(serve, new URL(request.url).host)
+        : store;
     const originFetch = originFetchFor(env);
 
     const host = new URL(request.url).host;
@@ -329,9 +336,9 @@ export default {
       imagesAtDeployment:
         !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,
       imageStore: store,
-      routeTableStore: store,
+      routeTableStore: objects,
       assetStore: {
-        store,
+        store: objects,
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
@@ -348,10 +355,10 @@ export default {
           }
         : undefined,
       edgeRuntime:
-        env.LOADER && store
+        env.LOADER && objects
           ? {
               loader: env.LOADER,
-              store,
+              store: objects,
               cacheEntrypoint: ctx.exports.CacheEntrypoint,
               envelopeKey: env.OCEL_ENVELOPE_KEY,
             }
