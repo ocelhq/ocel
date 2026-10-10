@@ -114,6 +114,24 @@ func TestEdgeGroupThatAccountsForNothingIsNotCalledCurrent(t *testing.T) {
 	}
 }
 
+func TestEdgeGroupRollsUpWhatTheOriginRaisesForTheEdgeAfterTheEdgesOwnChanges(t *testing.T) {
+	t.Parallel()
+
+	group, err := bootstrapplan.EdgeGroup("cloudflare", "cloudflare-edge",
+		[]edge.PlanChange{{Kind: "worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: provider.ReasonCurrent}},
+		provider.Change{Kind: "storage:hmackey", Name: "reader", Action: provider.ActionCreate, Reason: "the edge reads assets with it"},
+	)
+	if err != nil {
+		t.Fatalf("EdgeGroup() error = %v", err)
+	}
+	if len(group.Changes) != 2 || group.Changes[0].Name != "ocel-isr-writer" || group.Changes[1].Name != "reader" {
+		t.Fatalf("group changes = %+v, want the edge's worker and then the origin's key", group.Changes)
+	}
+	if group.Action == provider.ActionKeep {
+		t.Errorf("group action = %s, want the origin's create to roll up", group.Action)
+	}
+}
+
 func TestEdgeGroupFromPlanGroup(t *testing.T) {
 	t.Parallel()
 

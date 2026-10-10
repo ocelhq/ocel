@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (provider.ChangeGroup, error) {
+func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange, origin ...provider.Change) (provider.ChangeGroup, error) {
 	changes, err := EdgeChanges(kind, planned)
 	if err != nil {
 		return provider.ChangeGroup{}, err
@@ -16,7 +16,7 @@ func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (provi
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
-		Changes: changes,
+		Changes: append(changes, origin...),
 	}
 	group.Action, group.Reason = provider.RollUp(group.Changes)
 	return group, nil

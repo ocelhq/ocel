@@ -311,30 +311,26 @@ func appendMissing(listed, more []string) []string {
 func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
-		var changes []provider.Change
+		var planned []edge.PlanChange
 		if plan := front.Hooks().PlanBootstrap; plan != nil {
-			planned, err := plan(ctx, tier)
-			if err != nil {
+			var err error
+			if planned, err = plan(ctx, tier); err != nil {
 				return fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
 			}
-			if changes, err = bootstrapplan.EdgeChanges(front.Kind(), planned); err != nil {
-				return err
-			}
 		}
+		var assets []provider.Change
 		if front.Facts().RunsCode {
-			assets, err := b.clients.plannedAssetStore(ctx, tier, front.Kind())
-			if err != nil {
+			var err error
+			if assets, err = b.clients.plannedAssetStore(ctx, tier, front.Kind()); err != nil {
 				return fmt.Errorf("plan the %s edge's asset reader: %w", front.Kind(), err)
 			}
-			changes = append(changes, assets...)
 		}
-		if len(changes) == 0 {
+		if len(planned) == 0 && len(assets) == 0 {
 			return nil
 		}
-		group := provider.ChangeGroup{Kind: edge.EdgeGroupKind, Name: edge.EdgeGroupName(front.Kind()), Feature: feature.Name, Changes: changes}
-		group.Action, group.Reason = provider.RollUp(changes)
+		group, err := bootstrapplan.EdgeGroup(front.Kind(), feature.Name, planned, assets...)
 		groups = append(groups, group)
-		return nil
+		return err
 	})
 	return groups, err
 }
