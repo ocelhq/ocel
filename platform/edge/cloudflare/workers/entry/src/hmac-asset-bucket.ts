@@ -3,19 +3,17 @@ import { AwsClient } from "aws4fetch";
 import type { Env } from "./env";
 
 export interface HmacAssetStore {
+  endpoint: string;
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
   prefix: string;
-  endpoint?: string;
 }
-
-const defaultEndpoint = "https://storage.googleapis.com";
 
 const readAttempts = 3;
 
 export function newHmacAssetBucket(store: HmacAssetStore): AssetBucket {
-  const origin = (store.endpoint ?? defaultEndpoint).replace(/\/$/, "");
+  const origin = store.endpoint.replace(/\/$/, "");
   const client = new AwsClient({
     accessKeyId: store.accessKeyId,
     secretAccessKey: store.secretAccessKey,
@@ -35,7 +33,7 @@ export function newHmacAssetBucket(store: HmacAssetStore): AssetBucket {
       if (!response.ok) {
         await response.body?.cancel();
         throw new Error(
-          `ocel: Cloud Storage answered ${response.status} for ${store.bucket}/${name}`,
+          `ocel: the asset bucket ${store.bucket} answered ${response.status} for ${name}`,
         );
       }
       return { body: response.body, httpEtag: response.headers.get("etag") ?? undefined };
@@ -43,20 +41,23 @@ export function newHmacAssetBucket(store: HmacAssetStore): AssetBucket {
   };
 }
 
-export function readHmacAssetStore(
+export function readHmacAssetBucket(
   env: Pick<
     Env,
+    | "OCEL_ASSET_STORE_ENDPOINT"
     | "OCEL_ASSET_STORE_BUCKET"
     | "OCEL_ASSET_STORE_PREFIX"
     | "OCEL_ASSET_STORE_ACCESS_KEY_ID"
     | "OCEL_ASSET_STORE_SECRET_KEY"
   >,
 ): AssetBucket | undefined {
+  const endpoint = env.OCEL_ASSET_STORE_ENDPOINT;
   const bucket = env.OCEL_ASSET_STORE_BUCKET;
   const accessKeyId = env.OCEL_ASSET_STORE_ACCESS_KEY_ID;
   const secretAccessKey = env.OCEL_ASSET_STORE_SECRET_KEY;
-  if (!bucket || !accessKeyId || !secretAccessKey) return undefined;
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return undefined;
   return newHmacAssetBucket({
+    endpoint,
     bucket,
     accessKeyId,
     secretAccessKey,
