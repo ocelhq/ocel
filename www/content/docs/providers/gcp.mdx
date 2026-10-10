@@ -464,7 +464,7 @@ the custom role that clears Cloud CDN, and no others:
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/resourcemanager.projectIamAdmin \
-  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'projects/my-project/roles/ocel_cdn_purge'])"
+  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'roles/storage.objectViewer', 'projects/my-project/roles/ocel_cdn_purge'])"
 ```
 
 A serverless Next app behind the load balancer is also granted that role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.

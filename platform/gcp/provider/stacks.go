@@ -84,6 +84,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
 	}
+	if err := grantAssets(ctx, c, spec, account); err != nil {
+		return nil, err
+	}
 	if gated {
 		allowWarming(ctx, c, spec.App.App, account, progress)
 	}
@@ -106,6 +109,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err := p.seedPrerenders(ctx, spec, writer, progress); err != nil {
 			return nil, err
 		}
+	}
+	if err := p.uploadStaticFiles(ctx, spec, progress); err != nil {
+		return nil, err
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	var refresh *nextRefresh

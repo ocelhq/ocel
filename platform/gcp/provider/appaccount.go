@@ -24,6 +24,7 @@ const (
 	appRecordsRole = "roles/datastore.viewer"
 	appOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
 	appObjectsRole = "roles/storage.objectUser"
+	appAssetsRole  = "roles/storage.objectViewer"
 
 	appAccountVisibleAttempts = 20
 	maxDisplayNameBytes       = 100
@@ -34,7 +35,7 @@ const (
 	appDescriptionSuffix = " tier"
 )
 
-var appGrantedRoles = []string{appRecordsRole, taskRecordsRole, appOpeningRole, appObjectsRole}
+var appGrantedRoles = []string{appRecordsRole, taskRecordsRole, appOpeningRole, appObjectsRole, appAssetsRole}
 
 func listGrantedRoles(names Names) []string {
 	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
