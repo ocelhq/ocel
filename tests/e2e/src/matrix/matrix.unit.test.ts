@@ -184,6 +184,7 @@ describe("Cloudflare in front of gcp", () => {
 describe("the needs a Google Cloud origin does not serve", () => {
   const WAIVED = {
     "build-variables/next": ["edge-runtime", "edge-cache"],
+    "client-env/next": ["edge-runtime", "edge-cache"],
     "deploy/next": ["edge-runtime", "edge-cache"],
     "lifecycle/next": ["edge-runtime", "edge-cache"],
     "sdk/next": ["edge-runtime", "edge-cache"],
@@ -569,6 +570,53 @@ describe("the build-variables concern", () => {
     expect(planOn("aws.floci").skipped["build-variables/next"]?.map((gap) => gap.issue)).toEqual([
       852,
     ]);
+  });
+});
+
+describe("the client-env concern", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const cellsOn = (lane: Lane) =>
+    planOn(lane, {}, EVERY_CELL)
+      .cells.map((cell) => cell.name)
+      .filter((name) => name.startsWith("client-env/"));
+
+  it("deploys its Next app on aws and gcp, and its SvelteKit app on every lane", () => {
+    for (const lane of LANES) {
+      expect(cellsOn(lane)).toEqual(
+        lane === "dev" || lane.startsWith("vps")
+          ? ["client-env/sveltekit"]
+          : ["client-env/next", "client-env/sveltekit"],
+      );
+    }
+  });
+
+  it("skips the Next cell on floci's aws, whose CloudFront serves no Next app", () => {
+    const planned = planOn("aws.floci");
+    expect(planned.skipped["client-env/next"]?.map((gap) => gap.issue)).toEqual([852]);
+    expect(planned.skipped["client-env/sveltekit"]).toBeUndefined();
+  });
+
+  it("expects only the deployment url red on gcp, where a cell declares no hostname", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const { expectedFailures } = planOn(lane);
+      for (const cell of ["client-env/next/web", "client-env/sveltekit/web"]) {
+        const listed = Object.entries(expectedFailures[cell] ?? {});
+        expect(listed.map(([title]) => title)).toEqual([
+          expect.stringContaining("renders the url the deployment is served from"),
+        ]);
+        for (const [, gapsListed] of listed) {
+          expect(gapsListed.map((gap) => gap.id)).toEqual(["cloud-run-hands-no-deployment-url"]);
+        }
+      }
+    }
+  });
+
+  it("expects nothing red where the deploy writes the deployment url", () => {
+    for (const lane of ["aws", "dev", "vps", "vps.incus"] as const) {
+      const { expectedFailures } = planOn(lane);
+      expect(expectedFailures["client-env/next/web"] ?? {}).toEqual({});
+      expect(expectedFailures["client-env/sveltekit/web"] ?? {}).toEqual({});
+    }
   });
 });
 

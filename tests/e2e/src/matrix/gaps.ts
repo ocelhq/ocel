@@ -3,6 +3,7 @@ import {
   bindingCheck,
   bindingQueryCheck,
   clientAddressCheck,
+  clientEnvDeploymentUrlCheck,
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
@@ -41,6 +42,7 @@ import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
 import {
   buildVariables,
+  clientEnv,
   deploy,
   iac,
   kv,
@@ -357,7 +359,12 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [...EVERY_NEXT_BEARING, buildVariables.next, prerender.nextBucket],
+        fixtures: [
+          ...EVERY_NEXT_BEARING,
+          buildVariables.next,
+          clientEnv.next,
+          prerender.nextBucket,
+        ],
         variants: [defaults],
         fails: [step.deploy],
         skipsCell: true,
@@ -458,6 +465,19 @@ export const gaps: Gap[] = [
         fixtures: [deploy.next, lifecycle.next, sdk.next],
         variants: [defaults, alb, cloudflareOnGoogleCloud],
         fails: [check(runtimeStampCheck)],
+      },
+    ],
+  },
+  {
+    id: "cloud-run-hands-no-deployment-url",
+    reason:
+      "a gcp cell nothing fronts is served on the url Cloud Run gives its service and declares no hostname, and ocel writes the deployment url from the hostname an app is served on",
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: Object.values(clientEnv),
+        variants: [defaults],
+        fails: [check(clientEnvDeploymentUrlCheck)],
       },
     ],
   },

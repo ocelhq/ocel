@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { migrates, setsEnv, setsSecret } from "../checks";
+import { clientEnvValuesOf, migrates, setsEnv, setsSecret } from "../checks";
 import {
   INITIAL_GREETING,
   JOURNEY_NONCE_ENV,
@@ -544,6 +544,9 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
     }
     if (setsJourneyNonce(cell.fixture.checks)) {
       await drive("env-journey-nonce", ["env", "set", `${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`]);
+    }
+    for (const [key, value] of Object.entries(clientEnvValuesOf(cell.fixture.checks))) {
+      await drive(`env-${key}`, ["env", "set", `${key}=${value}`]);
     }
     const deployed = await this.diagnosedOnFailure(cell, "deploy", () =>
       drive("deploy", ["deploy", "--yes"]),

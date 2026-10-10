@@ -1,6 +1,13 @@
 import { access, rm } from "node:fs/promises";
 import { setTimeout as pause } from "node:timers/promises";
-import { BUILD_VARIABLES, migrates, setsBuildVariables, setsEnv, setsSecret } from "../../checks";
+import {
+  BUILD_VARIABLES,
+  clientEnvValuesOf,
+  migrates,
+  setsBuildVariables,
+  setsEnv,
+  setsSecret,
+} from "../../checks";
 import {
   INITIAL_GREETING,
   JOURNEY_NONCE_ENV,
@@ -96,6 +103,9 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
       for (const [key, value] of Object.entries(BUILD_VARIABLES)) {
         await this.run(cell, dir, "deploy", `env-${key}`, ["env", "set", `${key}=${value}`], env);
       }
+    }
+    for (const [key, value] of Object.entries(clientEnvValuesOf(cell.fixture.checks))) {
+      await this.run(cell, dir, "deploy", `env-${key}`, ["env", "set", `${key}=${value}`], env);
     }
     if (setsJourneyNonce(cell.fixture.checks)) {
       await this.run(
