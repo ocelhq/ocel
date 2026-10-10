@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,8 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { newGcpDispatchInvoke, readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
 import { newRefreshEndpoint } from "../src/next/refresh-endpoint.mjs";
 import { refreshSignatureHeader, signRefreshTask } from "../src/next/refresh-signature.mjs";
+import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
+import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
 const manifest: NextRouteTable = {
   rootFunction: "bundle-0",
@@ -31,6 +33,9 @@ const manifest: NextRouteTable = {
   },
 };
 
+const bucket = newCloudStorageBucket();
+let stored: ServedBucket;
+let assetEnv: NodeJS.ProcessEnv;
 let dir: string;
 let local: http.Server;
 let localOrigin: string;
@@ -41,8 +46,16 @@ const gzipped = gzipSync(Buffer.from("compressed by the app"));
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-dispatch-"));
   await writeFile(join(dir, "routing.json"), JSON.stringify(manifest));
-  await mkdir(join(dir, "static", "assets"), { recursive: true });
-  await writeFile(join(dir, "static", "assets", "logo.svg"), "<svg/>");
+  bucket.objects.set("assets/prod/shop/web/r1/assets/logo.svg", {
+    body: "<svg/>",
+    generation: "3",
+  });
+  stored = await serveBucket(bucket);
+  assetEnv = {
+    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_STORAGE_ENDPOINT: stored.endpoint,
+    OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
+  };
   local = http.createServer((req, res) => {
     if (req.headers["x-ocel-entry"] === "/gzipped") {
       res.writeHead(200, { "content-encoding": "gzip", "content-length": gzipped.length });
@@ -60,6 +73,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => local.close(() => resolve()));
+  await stored.close();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -98,13 +112,9 @@ test("a body the app gzipped itself reaches the client with its own bytes and en
   expect(Buffer.from(await response.arrayBuffer())).toEqual(gzipped);
 });
 
-test("a static asset is served from the directory the service's image holds it in", async () => {
+test("a static asset is served from the bucket the service is told holds it", async () => {
   const host = readGcpDispatchHost(
-    {
-      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
-      OCEL_STATIC_DIR: join(dir, "static"),
-      OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
-    },
+    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"), ...assetEnv },
     localOrigin,
   );
 
@@ -191,11 +201,7 @@ test("a service told no refresh url routes the refresh path like any other", asy
 test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
   const invoke = newGcpDispatchInvoke(
     localOrigin,
-    {
-      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
-      OCEL_STATIC_DIR: join(dir, "static"),
-      OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
-    },
+    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"), ...assetEnv },
     undefined,
   );
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));

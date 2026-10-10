@@ -1,5 +1,5 @@
 export interface StoredObject {
-  body: string;
+  body: string | Uint8Array;
   generation: string;
 }
 
@@ -38,7 +38,9 @@ export function newCloudStorageBucket(): CloudStorageBucket {
       if (url.searchParams.get("ifGenerationNotMatch") === stored.generation) {
         return new Response(null, { status: 304 });
       }
-      return new Response(stored.body, { headers: { "x-goog-generation": stored.generation } });
+      return new Response(stored.body as ConstructorParameters<typeof Response>[0], {
+        headers: { "x-goog-generation": stored.generation },
+      });
     }
 
     if (lostWrites > 0) {
