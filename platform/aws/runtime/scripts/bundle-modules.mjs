@@ -13,7 +13,13 @@ const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
-const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store", "tag-index"];
+const bundledInternals = [
+  "dispatch-assets",
+  "dispatch-signing",
+  "object-store",
+  "sdk-clients",
+  "tag-index",
+];
 
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',

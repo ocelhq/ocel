@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   newTagPublisher,
   type PublishTag,
@@ -9,6 +9,7 @@ import {
   tagSnapshotKey,
 } from "@framework/next-cache";
 import { isNotFound, requireEnv } from "./object-store.mjs";
+import { newS3Client } from "./sdk-clients.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;
@@ -81,7 +82,7 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
 export function newAwsTagPublisher(): PublishTag {
   return newTagPublisher(
     new S3TagSnapshotStore(
-      new S3Client({}),
+      newS3Client(),
       { GetObjectCommand, PutObjectCommand },
       requireEnv("OCEL_ISR_BUCKET"),
       requireEnv("OCEL_ISR_PREFIX"),
