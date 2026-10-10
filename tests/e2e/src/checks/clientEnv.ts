@@ -18,6 +18,8 @@ const SVELTEKIT_VALUES: Record<string, string> = {
 };
 
 const SCRIPT_PATH = /["'](\.?\/[^"'\s<>\\]+?\.m?js(?:\?[^"'\s<>\\]*)?)\\?["']/g;
+const IMPORT_SPECIFIER = /\b(?:from|import)\s*\(?\s*["']([^"'\s]+?\.m?js(?:\?[^"'\s]*)?)["']/g;
+const MAX_SCRIPTS = 500;
 const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
 
 function sha256(value: string): string {
@@ -46,16 +48,26 @@ async function home(ctx: CheckContext): Promise<string> {
   return html;
 }
 
+export function importsIn(script: string): string[] {
+  const specifiers = [...script.matchAll(IMPORT_SPECIFIER)].map((found) => found[1] ?? "");
+  return [...new Set(specifiers.filter((one) => /^\.{0,2}\//.test(one)))];
+}
+
 async function scriptsLoadedBy(ctx: CheckContext, html: string): Promise<Map<string, string>> {
   const paths = scriptPathsIn(html);
   assert.ok(paths.length > 0, "GET / loads no script to look through");
+  const origin = new URL(ctx.baseUrl).origin;
+  const queue = paths.map((one) => new URL(one, `${ctx.baseUrl}/`));
   const loaded = new Map<string, string>();
-  for (const one of paths) {
-    const url = new URL(one, `${ctx.baseUrl}/`);
+  while (queue.length > 0) {
+    const url = queue.shift() as URL;
+    if (url.origin !== origin || loaded.has(url.pathname)) continue;
+    assert.ok(loaded.size < MAX_SCRIPTS, `GET / reaches more than ${MAX_SCRIPTS} scripts`);
     const res = await ctx.fetch(url.href);
     const body = await res.text();
     assert.equal(res.status, 200, `GET ${url.pathname} ${describeResponse(res, body)}`);
     loaded.set(url.pathname, body);
+    for (const specifier of importsIn(body)) queue.push(new URL(specifier, url));
   }
   return loaded;
 }
