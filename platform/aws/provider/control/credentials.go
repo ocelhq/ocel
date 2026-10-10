@@ -41,16 +41,18 @@ type Credentials struct {
 	Region  string
 	Profile string
 
-	Namespace bootstrap.Namespace
+	Namespace    bootstrap.Namespace
+	VariablesKey string
 }
 
-func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
+func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace, variablesKey string) Credentials {
 	return Credentials{
 		STS:     sts.NewFromConfig(cfg),
 		Region:  cfg.Region,
 		Profile: os.Getenv("AWS_PROFILE"),
 
-		Namespace: ns,
+		Namespace:    ns,
+		VariablesKey: variablesKey,
 	}
 }
 
@@ -75,9 +77,9 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 	)
 	switch purpose {
 	case edge.PurposeBootstrap:
-		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace, tier)
+		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace, tier, c.VariablesKey)
 	case edge.PurposeDeploy:
-		document, err = bootstrap.DeployCredentialPermissions(c.Namespace, tier)
+		document, err = bootstrap.DeployCredentialPermissions(c.Namespace, tier, c.VariablesKey)
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")

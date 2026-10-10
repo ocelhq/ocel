@@ -1399,12 +1399,31 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func deployGrants(r ScopedARNs) []GrantStatement {
-	return slices.Concat(bootstrapAccess(r), appProvisioning(r), runtimeProvisioning(r))
+func broughtVariablesKeyAccess(broughtKey string) []GrantStatement {
+	if broughtKey == "" {
+		return nil
+	}
+	return []GrantStatement{
+		{
+			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt"},
+			Resources: []string{broughtKey},
+		},
+		{
+			Actions:   []string{"kms:CreateGrant"},
+			Resources: []string{broughtKey},
+			Condition: map[string]any{
+				"Bool": map[string]any{"kms:GrantIsForAWSResource": "true"},
+			},
+		},
+	}
 }
 
-func bootstrapGrants(r ScopedARNs) []GrantStatement {
-	return slices.Concat(bootstrapAccess(r), appProvisioning(r), runtimeProvisioning(r), bootstrapProvisioning(r), edgePrincipal(r))
+func deployGrants(r ScopedARNs, broughtKey string) []GrantStatement {
+	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r))
+}
+
+func bootstrapGrants(r ScopedARNs, broughtKey string) []GrantStatement {
+	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), bootstrapProvisioning(r), edgePrincipal(r))
 }
 
 func refuseUnservedTier(tier environment.Tier) error {
@@ -1414,18 +1433,18 @@ func refuseUnservedTier(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeInvalid, "credential permissions are rendered for the production or preview tier, not %q", tier)
 }
 
-func DeployCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
+func DeployCredentialPermissions(ns Namespace, tier environment.Tier, broughtKey string) (string, error) {
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("deploy", deployGrants(ns.ScopedARNs(tier)))
+	return credentialPolicy("deploy", deployGrants(ns.ScopedARNs(tier), broughtKey))
 }
 
-func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier) (string, error) {
+func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier, broughtKey string) (string, error) {
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("bootstrap", bootstrapGrants(ns.ScopedARNs(tier)))
+	return credentialPolicy("bootstrap", bootstrapGrants(ns.ScopedARNs(tier), broughtKey))
 }
 
 func PolicyStatements(grants []GrantStatement) []map[string]any {

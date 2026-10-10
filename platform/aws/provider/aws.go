@@ -129,7 +129,7 @@ func (p *Provider) Cipher() seal.Cipher {
 }
 
 func (p *Provider) Credentials() provider.Credentials {
-	credentials := control.CredentialsFor(p.aws, p.namespace)
+	credentials := control.CredentialsFor(p.aws, p.namespace, p.options.VariablesKey)
 	credentials.STS = rememberedIdentity{p}
 	return credentials
 }
