@@ -208,6 +208,57 @@ describe("the resolver", () => {
     expect(origins[0].timeouts).toEqual({ readTimeout: 60 });
   });
 
+  describe("the origin shield", () => {
+    const SHIELDED = { ...ROUTE, shieldRegion: "eu-west-1" };
+
+    function as(method, uri = "/blog") {
+      const event = request(uri);
+      event.request.method = method;
+      return event;
+    }
+
+    for (const method of ["GET", "HEAD"]) {
+      it(`shields a ${method} to the entry function of a route that names a shield region`, async () => {
+        const { origins } = await resolve(as(method), { "shop.example.com": SHIELDED });
+
+        expect(origins[0].domainName).toBe(ROUTE.origin);
+        expect(origins[0].originShield).toEqual({ enabled: true, region: "eu-west-1" });
+      });
+    }
+
+    for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      it(`never shields a ${method}, which no cache can answer`, async () => {
+        const { origins } = await resolve(as(method), { "shop.example.com": SHIELDED });
+
+        expect(origins[0].originShield).toEqual({ enabled: false });
+      });
+    }
+
+    it("shields nothing on a route that names no shield region", async () => {
+      const { origins } = await resolve(as("GET"));
+
+      expect(origins[0].originShield).toEqual({ enabled: false });
+    });
+
+    it("never shields a static file served from the bucket", async () => {
+      const { origins } = await resolve(as("GET", "/_next/static/chunks/main.js"), {
+        "shop.example.com": SHIELDED,
+      });
+
+      expect(origins[0].domainName).toBe(ROUTE.assets);
+      expect(origins[0]).not.toHaveProperty("originShield");
+    });
+
+    it("never touches the shield of a container, whose VPC origin it cannot rewrite", async () => {
+      const { origins, selected } = await resolve(as("GET"), {
+        "shop.example.com": { ...SHIELDED, container: "web-container" },
+      });
+
+      expect(origins).toEqual([]);
+      expect(selected).toEqual(["containers"]);
+    });
+  });
+
   it("sends everything else to the release's entry function with the secret it demands", async () => {
     const { answered, origins } = await resolve(request("/blog"));
 

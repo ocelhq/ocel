@@ -22,6 +22,7 @@ var CONTROL_HEADERS = [
   CLIENT_ADDRESS_HEADER,
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
+var SHIELDED_METHODS = ['GET', 'HEAD'];
 
 function isUnderAnyPrefix(uri, prefixes) {
   if (!prefixes) return false;
@@ -75,6 +76,13 @@ function assetOriginPath(prefix) {
   while (path.length > 0 && path.charAt(0) === '/') path = path.slice(1);
   while (path.length > 0 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
   return path === '' ? '' : '/' + path;
+}
+
+function originShieldFor(route, method) {
+  if (route.shieldRegion && SHIELDED_METHODS.indexOf(method) >= 0) {
+    return { enabled: true, region: route.shieldRegion };
+  }
+  return { enabled: false };
 }
 
 function refusal(statusCode, statusDescription, body) {
@@ -165,6 +173,7 @@ async function handler(event) {
     customOriginConfig: { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
     customHeaders: originHeaders,
     timeouts: { readTimeout: ORIGIN_READ_TIMEOUT_SECONDS },
+    originShield: originShieldFor(route, request.method),
   });
   return request;
 }
