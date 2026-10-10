@@ -111,7 +111,13 @@ func CheckFresh(projectDir string, apps []App) error {
 	var missing, changed []string
 	for _, app := range apps {
 		recorded := record.Digests[app.Name]
-		for key, digest := range digests(app) {
+		current := digests(app)
+		for key, built := range recorded {
+			if _, selected := current[key]; !selected && built != unsetDigest {
+				changed = append(changed, key)
+			}
+		}
+		for key, digest := range current {
 			built, ok := recorded[key]
 			switch {
 			case !ok && digest == unsetDigest:

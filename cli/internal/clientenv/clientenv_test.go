@@ -205,6 +205,38 @@ func TestCheckFresh(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a bundle that inlined a value of a key no longer declared", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		if err := Record(root, []App{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		err := CheckFresh(root, []App{nextApp("storefront")})
+		if err == nil {
+			t.Fatal("CheckFresh = nil for a bundle holding a value of a key the deploy no longer declares, want a refusal")
+		}
+		if !strings.Contains(err.Error(), "NEXT_PUBLIC_THEME") {
+			t.Errorf("error = %q, want it to name the undeclared key", err)
+		}
+	})
+
+	t.Run("allows a bundle whose unset key is no longer declared", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		unset := nextApp("storefront")
+		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
+		if err := Record(root, []App{unset}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		if err := CheckFresh(root, []App{nextApp("storefront")}); err != nil {
+			t.Errorf("CheckFresh = %v, want it to proceed: the bundle never inlined a value for the key", err)
+		}
+	})
+
 	t.Run("allows a bundle built and deployed without a value for a declared key", func(t *testing.T) {
 		t.Parallel()
 
