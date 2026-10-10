@@ -42,7 +42,7 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	}
 	merged[processenv.AppFolderEnvVar] = appFolder
 	merged[processenv.AppURLEnvVar] = localURL(merged[portEnv])
-	for _, key := range []string{processenv.ClientURLEnvVar, processenv.SvelteKitPublicURLEnvVar} {
+	for _, key := range []string{processenv.NextPublicURLEnvVar, processenv.SvelteKitPublicURLEnvVar} {
 		if scope.IsWrittenByOcel(key, nil) {
 			merged[key] = merged[processenv.AppURLEnvVar]
 		}

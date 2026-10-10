@@ -21,7 +21,7 @@ type InfraInput struct {
 func AssembleInfra(input InfraInput) (*contractv1.Manifest, error) {
 	cfg := input.Project
 	declarations := declaredResources(cfg.Dir, input.Resources)
-	topics, workers, err := placeConsumers(appsOf(cfg.Dir, cfg.Apps, nil, nil), declarations, input.WorkerCeilings)
+	topics, workers, err := placeConsumers(appsOf(cfg.Apps, nil, nil), declarations, input.WorkerCeilings)
 	if err != nil {
 		return nil, err
 	}

@@ -105,29 +105,3 @@ func TestOfAppReadsAnAppWithNoManifestAsJS(t *testing.T) {
 		t.Errorf("OfApp = %q, want %q", got, language.JS)
 	}
 }
-
-func TestHasClientBundle(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name      string
-		framework string
-		files     []string
-		want      bool
-	}{
-		{"a next app bundles a client", "next", nil, true},
-		{"a sveltekit app bundles a client", "sveltekit", nil, true},
-		{"a go app bundles none", "go", []string{"package.json"}, false},
-		{"an undeclared node app with a native addon bundles a client", "", []string{"package.json", "Cargo.toml"}, true},
-		{"an undeclared go app with a package.json for its tooling bundles none", "", []string{"package.json", "go.mod"}, false},
-		{"an app with no manifest bundles none", "", []string{"Dockerfile"}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := language.HasClientBundle(tc.framework, dirContaining(t, tc.files...)); got != tc.want {
-				t.Errorf("HasClientBundle = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}

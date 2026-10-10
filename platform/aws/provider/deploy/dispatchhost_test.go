@@ -248,11 +248,11 @@ func TestAppEnvPassesTheDeploymentURLToTheFunction(t *testing.T) {
 	app := routedApp()
 	app.Variables = []*contractv1.ManifestVariable{
 		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
-		{Key: processenv.ClientURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: processenv.NextPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 	}
 
 	env := plannedEnv(t, Config{}, app, nil)
-	for _, key := range []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar} {
+	for _, key := range []string{processenv.AppURLEnvVar, processenv.NextPublicURLEnvVar} {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}

@@ -46,22 +46,24 @@ func TestTheDeploymentURLIsInjectedUnderTheNameEachFrameworkReadsPublicValuesBy(
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name         string
-		framework    string
-		clientBundle bool
-		key          string
-		want         bool
+		name      string
+		framework string
+		key       string
+		want      bool
 	}{
-		{"every app gets OCEL_URL", "go", false, AppURLEnvVar, true},
-		{"a next app gets NEXT_PUBLIC_OCEL_URL", "next", true, ClientURLEnvVar, true},
-		{"a next app gets no PUBLIC_OCEL_URL", "next", true, SvelteKitPublicURLEnvVar, false},
-		{"a sveltekit app gets PUBLIC_OCEL_URL", "sveltekit", true, SvelteKitPublicURLEnvVar, true},
-		{"an app without a client bundle gets no NEXT_PUBLIC_OCEL_URL", "go", false, ClientURLEnvVar, false},
-		{"an app without a client bundle gets no PUBLIC_OCEL_URL", "go", false, SvelteKitPublicURLEnvVar, false},
-		{"another name is never injected", "next", true, "NEXT_PUBLIC_API_URL", false},
+		{"every app gets OCEL_URL", "go", AppURLEnvVar, true},
+		{"a next app gets NEXT_PUBLIC_OCEL_URL", "next", NextPublicURLEnvVar, true},
+		{"a next app gets no PUBLIC_OCEL_URL", "next", SvelteKitPublicURLEnvVar, false},
+		{"a sveltekit app gets PUBLIC_OCEL_URL", "sveltekit", SvelteKitPublicURLEnvVar, true},
+		{"a sveltekit app gets no NEXT_PUBLIC_OCEL_URL", "sveltekit", NextPublicURLEnvVar, false},
+		{"a node app gets no NEXT_PUBLIC_OCEL_URL", "node", NextPublicURLEnvVar, false},
+		{"a node app gets no PUBLIC_OCEL_URL", "node", SvelteKitPublicURLEnvVar, false},
+		{"an app of no named framework gets no NEXT_PUBLIC_OCEL_URL", "", NextPublicURLEnvVar, false},
+		{"a go app gets no NEXT_PUBLIC_OCEL_URL", "go", NextPublicURLEnvVar, false},
+		{"another name is never injected", "next", "NEXT_PUBLIC_API_URL", false},
 	} {
-		if got := IsInjected(tc.framework, tc.clientBundle, tc.key); got != tc.want {
-			t.Errorf("%s: IsInjected(%q, %v, %q) = %v, want %v", tc.name, tc.framework, tc.clientBundle, tc.key, got, tc.want)
+		if got := IsInjected(tc.framework, tc.key); got != tc.want {
+			t.Errorf("%s: IsInjected(%q, %q) = %v, want %v", tc.name, tc.framework, tc.key, got, tc.want)
 		}
 	}
 }

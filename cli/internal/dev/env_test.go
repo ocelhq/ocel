@@ -539,7 +539,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { s
 		if _, statErr := os.Stat(env[processenv.NextAdapterPathEnvVar]); statErr != nil {
 			t.Errorf("the adapter next is pointed at does not exist: %v", statErr)
 		}
-		if got, want := env[processenv.PublicKeysEnvVar], processenv.ClientURLEnvVar+",NEXT_PUBLIC_SITE_URL"; got != want {
+		if got, want := env[processenv.PublicKeysEnvVar], processenv.NextPublicURLEnvVar+",NEXT_PUBLIC_SITE_URL"; got != want {
 			t.Errorf("%s = %q, want the declared public keys %q: STRIPE_API_KEY is not public", processenv.PublicKeysEnvVar, got, want)
 		}
 		if _, statErr := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); statErr == nil {
@@ -700,48 +700,51 @@ func dumpDevEnv(t *testing.T, deps testDeps, root string) (map[string]string, st
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {
-	node := variables.Scope{Apps: []variables.App{{Name: "web", ClientBundle: true}}}
+	next := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkNext}}}
 
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
-		for _, key := range []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar} {
+		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", next)
+		for _, key := range []string{processenv.AppURLEnvVar, processenv.NextPublicURLEnvVar} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
 		}
 	})
 
-	t.Run("the browser's copy only where an app's bundle reads it", func(t *testing.T) {
+	t.Run("the browser's copy only for a next app", func(t *testing.T) {
 		t.Setenv("PORT", "")
-		dotfile := map[string]string{processenv.ClientURLEnvVar: "https://mine.example"}
+		dotfile := map[string]string{processenv.NextPublicURLEnvVar: "https://mine.example"}
 
 		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", variables.Scope{Apps: []variables.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[processenv.AppURLEnvVar] != want {
 			t.Errorf("%s = %q, want %q for every app", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
-		if want := "https://mine.example"; got[processenv.ClientURLEnvVar] != want {
-			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", processenv.ClientURLEnvVar, got[processenv.ClientURLEnvVar], want)
+		if want := "https://mine.example"; got[processenv.NextPublicURLEnvVar] != want {
+			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", processenv.NextPublicURLEnvVar, got[processenv.NextPublicURLEnvVar], want)
 		}
 	})
 
 	t.Run("the name a sveltekit app reads it by, only for a sveltekit app", func(t *testing.T) {
 		t.Setenv("PORT", "")
-		kit := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkSvelteKit, ClientBundle: true}}}
+		kit := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkSvelteKit}}}
 
 		if got, want := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", kit)[processenv.SvelteKitPublicURLEnvVar], "http://localhost:3000"; got != want {
 			t.Errorf("%s = %q, want %q", processenv.SvelteKitPublicURLEnvVar, got, want)
 		}
-		if _, written := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)[processenv.SvelteKitPublicURLEnvVar]; written {
+		if _, written := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", next)[processenv.SvelteKitPublicURLEnvVar]; written {
 			t.Errorf("%s written for an app that is not a sveltekit app", processenv.SvelteKitPublicURLEnvVar)
+		}
+		if _, written := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", kit)[processenv.NextPublicURLEnvVar]; written {
+			t.Errorf("%s written for a sveltekit app, which reads only %s", processenv.NextPublicURLEnvVar, processenv.SvelteKitPublicURLEnvVar)
 		}
 	})
 
 	t.Run("the port the project names", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "", node)
+		got := resolvedEnv(nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "", next)
 		if want := "http://localhost:4321"; got[processenv.AppURLEnvVar] != want {
 			t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
@@ -750,7 +753,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the shell exports", func(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
-		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
+		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", next)
 		if want := "http://localhost:8080"; got[processenv.AppURLEnvVar] != want {
 			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
 		}
@@ -793,14 +796,14 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{name: "inside the go app", cwd: filepath.Join(root, "apps", "api", "cmd"), written: false},
 		{name: "inside an app whose path only shares a prefix with the next app's", cwd: filepath.Join(root, "apps", "web-hooks"), written: false},
 		{name: "inside the next app", cwd: filepath.Join(root, "apps", "web"), written: true},
-		{name: "inside a container app whose directory contains a package.json", cwd: filepath.Join(root, "apps", "store"), written: true},
+		{name: "inside a container app of no named framework, though its directory contains a package.json", cwd: filepath.Join(root, "apps", "store"), written: false},
 		{name: "inside a container app whose directory contains a go.mod", cwd: filepath.Join(root, "apps", "worker"), written: false},
 		{name: "at the project root, where no one app is the target", cwd: root, written: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", targetScope(cfg, tc.cwd))
-			if _, written := got[processenv.ClientURLEnvVar]; written != tc.written {
-				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", processenv.ClientURLEnvVar, written, tc.written)
+			if _, written := got[processenv.NextPublicURLEnvVar]; written != tc.written {
+				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", processenv.NextPublicURLEnvVar, written, tc.written)
 			}
 		})
 	}

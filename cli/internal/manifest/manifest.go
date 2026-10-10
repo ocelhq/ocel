@@ -31,7 +31,7 @@ type Input struct {
 func Assemble(in Input) (*contractv1.Manifest, error) {
 	cfg := in.Project
 	functions := servedByFunctions(in.Built.Functions, cfg)
-	apps := appsOf(cfg.Dir, cfg.Apps, in.Usages, in.Built.Images)
+	apps := appsOf(cfg.Apps, in.Usages, in.Built.Images)
 	manifest, err := assemble(assembly{
 		slug:         cfg.Slug,
 		domains:      cfg.Domains,

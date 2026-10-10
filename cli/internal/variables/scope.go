@@ -8,10 +8,9 @@ import (
 )
 
 type App struct {
-	Name         string
-	Folder       string
-	Framework    string
-	ClientBundle bool
+	Name      string
+	Folder    string
+	Framework string
 }
 
 type Scope struct {
@@ -34,6 +33,6 @@ func (a App) IsInScope(folders []string) bool {
 
 func (s Scope) IsWrittenByOcel(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
-		return app.IsInScope(folders) && processenv.IsInjected(app.Framework, app.ClientBundle, key)
+		return app.IsInScope(folders) && processenv.IsInjected(app.Framework, key)
 	})
 }

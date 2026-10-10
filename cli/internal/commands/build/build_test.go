@@ -244,8 +244,8 @@ export default {
 	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
-	if got, want := env["web"].Env[processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
-		t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
+	if got, want := env["web"].Env[processenv.NextPublicURLEnvVar], "https://shop.acme.com"; got != want {
+		t.Errorf("web was built with %s = %q, want %q", processenv.NextPublicURLEnvVar, got, want)
 	}
 }
 
@@ -280,10 +280,10 @@ export default {
 	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
-	if want := []string{"NEXT_PUBLIC_API_URL", processenv.ClientURLEnvVar}; !slices.Equal(env["web"].PublicKeys, want) {
+	if want := []string{"NEXT_PUBLIC_API_URL", processenv.NextPublicURLEnvVar}; !slices.Equal(env["web"].PublicKeys, want) {
 		t.Errorf("web public keys = %v, want %v: the adapter inlines every NEXT_PUBLIC_ key declared for the app, though ocel build resolves no value", env["web"].PublicKeys, want)
 	}
-	if want := []string{"NEXT_PUBLIC_ADMIN_URL", "NEXT_PUBLIC_API_URL", processenv.ClientURLEnvVar}; !slices.Equal(env["admin"].PublicKeys, want) {
+	if want := []string{"NEXT_PUBLIC_ADMIN_URL", "NEXT_PUBLIC_API_URL", processenv.NextPublicURLEnvVar}; !slices.Equal(env["admin"].PublicKeys, want) {
 		t.Errorf("admin public keys = %v, want %v", env["admin"].PublicKeys, want)
 	}
 }

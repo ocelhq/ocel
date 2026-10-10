@@ -110,17 +110,17 @@ func TestPrepend(t *testing.T) {
 	if got, want := variables[processenv.AppURLEnvVar].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want %q", processenv.AppURLEnvVar, got, want)
 	}
-	if got, want := variables[processenv.ClientURLEnvVar].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", processenv.ClientURLEnvVar, got)
+	if got, want := variables[processenv.NextPublicURLEnvVar].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", processenv.NextPublicURLEnvVar, got)
 	}
 	if variables["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
 	if got := keys(byApp["api"]); !slices.Equal(got, []string{processenv.AppURLEnvVar}) {
-		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, processenv.ClientURLEnvVar)
+		t.Errorf("api variables = %v, want only %s: nothing in a go app reads %s, and a value of its own under that name would be overwritten", got, processenv.AppURLEnvVar, processenv.NextPublicURLEnvVar)
 	}
-	if got := keys(byApp["kit"]); !slices.Equal(got, []string{processenv.AppURLEnvVar, processenv.ClientURLEnvVar, processenv.SvelteKitPublicURLEnvVar}) {
-		t.Errorf("kit variables = %v, want the deployment url under each name a sveltekit app can read it by", got)
+	if got := keys(byApp["kit"]); !slices.Equal(got, []string{processenv.AppURLEnvVar, processenv.SvelteKitPublicURLEnvVar}) {
+		t.Errorf("kit variables = %v, want the deployment url under its own name and the one sveltekit hands the browser, and no other framework's", got)
 	}
 	if got := keys(byApp["web"]); slices.Contains(got, processenv.SvelteKitPublicURLEnvVar) {
 		t.Errorf("web variables = %v, want no %s: only a sveltekit app reads it", got, processenv.SvelteKitPublicURLEnvVar)

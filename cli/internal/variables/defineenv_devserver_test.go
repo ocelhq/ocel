@@ -61,7 +61,7 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 
 		t.Run("a NEXT_PUBLIC_ declaration arrives as a public key", func(t *testing.T) {
 			web := []variables.App{{Name: "web", Folder: "/web", Framework: buildoutput.FrameworkNext}}
-			if got, want := srv.PublicKeys(web), []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(got, want) {
+			if got, want := srv.PublicKeys(web), []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(got, want) {
 				t.Errorf("public keys = %v, want %v: the deployment url and what was declared", got, want)
 			}
 		})

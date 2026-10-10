@@ -1576,14 +1576,13 @@ func (x *Framework) GetArch() string {
 }
 
 type ManifestApp struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Name         string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Framework    *Framework             `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
-	Domains      []*TierDomains         `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
-	Variables    []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
-	Folder       string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
-	BuildId      string                 `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	ClientBundle bool                   `protobuf:"varint,8,opt,name=client_bundle,json=clientBundle,proto3" json:"client_bundle,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Framework *Framework             `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
+	Domains   []*TierDomains         `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
+	Variables []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
+	Folder    string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
+	BuildId   string                 `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	// Types that are valid to be assigned to Artifact:
 	//
 	//	*ManifestApp_Serverless
@@ -1663,13 +1662,6 @@ func (x *ManifestApp) GetBuildId() string {
 		return x.BuildId
 	}
 	return ""
-}
-
-func (x *ManifestApp) GetClientBundle() bool {
-	if x != nil {
-		return x.ClientBundle
-	}
-	return false
 }
 
 func (x *ManifestApp) GetArtifact() isManifestApp_Artifact {
@@ -6722,15 +6714,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x02 \x03(\tR\thostnames\"|\n" +
 	"\tFramework\x12B\n" +
 	"\x04name\x18\x01 \x01(\tB.\xbaH+r)R\x04nodeR\x04nextR\tsveltekitR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x85\x04\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xe0\x03\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
 	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x128\n" +
 	"\x06folder\x18\x05 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x19\n" +
-	"\bbuild_id\x18\x06 \x01(\tR\abuildId\x12#\n" +
-	"\rclient_bundle\x18\b \x01(\bR\fclientBundle\x12J\n" +
+	"\bbuild_id\x18\x06 \x01(\tR\abuildId\x12J\n" +
 	"\n" +
 	"serverless\x18\t \x01(\v2(.provider.contract.v1.ServerlessArtifactH\x00R\n" +
 	"serverless\x12G\n" +

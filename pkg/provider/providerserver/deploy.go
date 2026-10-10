@@ -1519,10 +1519,10 @@ func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Func
 	return warmFunctions(ctx, targets, progress)
 }
 
-func declaredVariables(framework string, clientBundle bool, values provider.AppValues) []router.VariableRecord {
+func declaredVariables(framework string, values provider.AppValues) []router.VariableRecord {
 	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(values.Plain)) {
-		if !processenv.IsInjected(framework, clientBundle, key) {
+		if !processenv.IsInjected(framework, key) {
 			names = append(names, key)
 		}
 	}
@@ -1590,7 +1590,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		IsrWriteSecret:       result.ISRWriteSecret,
 		CreatedAt:            time.Now().Unix(),
 		ReleaseFingerprint:   entry.Release.Fingerprint(),
-		Variables:            declaredVariables(entry.Manifest.GetFramework().GetName(), entry.Manifest.GetClientBundle(), values),
+		Variables:            declaredVariables(entry.Manifest.GetFramework().GetName(), values),
 		Needs:                r.needs[entry.App].Needs,
 		SupportInEffect:      r.needs[entry.App].InEffect,
 		Waived:               r.needs[entry.App].Waived,

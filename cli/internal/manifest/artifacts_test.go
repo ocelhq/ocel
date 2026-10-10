@@ -91,7 +91,7 @@ func TestAConfiguredContainerAppReachesTheManifestWithItsInstanceCountsResolved(
 	t.Parallel()
 
 	three := 3
-	apps := appsOf(t.TempDir(), []project.App{
+	apps := appsOf([]project.App{
 		{Name: "api", Compute: "container", Container: &project.Container{MinInstances: &three}},
 		{Name: "web", Compute: "container", Container: &project.Container{}},
 	}, nil, nil)

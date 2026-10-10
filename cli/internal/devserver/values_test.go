@@ -379,8 +379,8 @@ func TestTheDevServerNamesThePublicKeysDeclaredForTheNextAppsItRuns(t *testing.T
 		apps []variables.App
 		want []string
 	}{
-		{"one next app, without another app's scoped key", []variables.App{web}, []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}},
-		{"every next app the command runs", []variables.App{web, admin}, []string{"NEXT_PUBLIC_ADMIN_URL", processenv.ClientURLEnvVar, "NEXT_PUBLIC_SHARED"}},
+		{"one next app, without another app's scoped key", []variables.App{web}, []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SHARED"}},
+		{"every next app the command runs", []variables.App{web, admin}, []string{"NEXT_PUBLIC_ADMIN_URL", processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SHARED"}},
 		{"no next app", []variables.App{kit}, nil},
 	} {
 		if got := s.PublicKeys(tc.apps); !slices.Equal(got, tc.want) {
