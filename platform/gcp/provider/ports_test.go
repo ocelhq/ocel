@@ -373,7 +373,7 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 	for _, want := range []string{
 		"projects/acme-prod/roles/ocel_app_accounts",
 		"roles/resourcemanager.projectIamAdmin, on the condition api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])." +
-			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'projects/acme-prod/roles/ocel_cdn_purge'])",
+			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'roles/storage.objectViewer', 'projects/acme-prod/roles/ocel_cdn_purge'])",
 		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
 		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-preview-delays",
 	} {

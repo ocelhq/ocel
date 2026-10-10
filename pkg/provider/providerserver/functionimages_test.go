@@ -282,7 +282,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeFromTheNextRuntimeDirectory(t *te
 	}
 }
 
-func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
+func TestNoFunctionsImageCarriesTheAppsStaticAssets(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, []byte(`{"rootFunction":"index"}`))
 	app := filepath.Join(workingOutputRoot(t), "apps", "web")
@@ -316,17 +316,16 @@ func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	asset := strings.TrimPrefix(images.StaticRoot, "/") + "/assets/_next/static/app.js"
-	config := strings.TrimPrefix(images.StaticRoot, "/") + "/image-config.json"
-	pushed := map[string][]string{}
-	for _, push := range vendor.ImageStore().Pushed() {
-		pushed[push.App] = regularFiles(t, push.Built)
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) == 0 {
+		t.Fatal("the deploy pushed no function image")
 	}
-	if !slices.Contains(pushed["server"], asset) || !slices.Contains(pushed["server"], config) {
-		t.Errorf("the root function's image holds %v, want %s and %s: a function run from an image has no asset store to read them from", pushed["server"], asset, config)
-	}
-	if slices.Contains(pushed["feed"], asset) {
-		t.Errorf("a function that routes nothing holds the app's static assets at %s", asset)
+	for _, push := range pushed {
+		for _, file := range regularFiles(t, push.Built) {
+			if strings.HasSuffix(file, "_next/static/app.js") || strings.HasSuffix(file, "image-config.json") {
+				t.Errorf("%s's image holds %s, want the app's static files in its release's storage and not in an image", push.App, file)
+			}
+		}
 	}
 }
 

@@ -38,7 +38,7 @@ const (
 	isrWriterURLEnvVar      = "OCEL_ISR_WRITER_URL"
 	isrWriterSecretEnvVar   = "OCEL_ISR_WRITER_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
-	staticDirEnvVar         = "OCEL_STATIC_DIR"
+	assetBucketEnvVar       = "OCEL_ASSET_BUCKET"
 	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
 	refreshURLEnvVar        = "OCEL_REFRESH_URL"
 	refreshQueueEnvVar      = "OCEL_REFRESH_QUEUE"
@@ -164,7 +164,10 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 			}
 		}
 		env[routeTableEnvVar] = routeTableInImage
-		env[staticDirEnvVar] = images.StaticRoot
+		env[assetBucketEnvVar] = cache.bucket
+		if cache.storageEndpoint != "" {
+			env[storageEndpointEnvVar] = cache.storageEndpoint
+		}
 		if rules := app.Static.Variable(); rules != "" {
 			env[edge.StaticRulesVar] = rules
 		}

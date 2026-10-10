@@ -2,15 +2,12 @@ package gcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -78,21 +75,5 @@ func prerenderCount(n int) string {
 }
 
 func (p *Provider) createSeed(ctx context.Context, spec provider.StackSpec, key string, body []byte) error {
-	store := artifacts{p}
-	object, err := store.object(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreCache, Key: key})
-	if err != nil {
-		return err
-	}
-	writer := object.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
-	writer.ChunkSize = len(body) + 1
-	_, err = writer.Write(body)
-	if closed := writer.Close(); err == nil {
-		err = closed
-	}
-	var failure *googleapi.Error
-	switch {
-	case err == nil, errors.As(err, &failure) && failure.Code == http.StatusPreconditionFailed:
-		return nil
-	}
-	return store.storeless(ctx, spec.Ref.Tier, fmt.Errorf("seed %s: %w", object.ObjectName(), err))
+	return p.createObject(ctx, spec.Ref.Tier, provider.StoreCache, key, storage.ObjectAttrs{}, body)
 }
