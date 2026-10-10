@@ -73,6 +73,45 @@ func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T
 	}
 }
 
+func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T) {
+	t.Parallel()
+
+	cached := buildoutput.Hosting{Needs: map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Count: 1}}}
+
+	t.Run("a Next build whose only cached route is dynamic, with no page prerendered at build time", func(t *testing.T) {
+		t.Parallel()
+		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", cached, nil), "web", buildoutput.FrameworkNext))
+		if err != nil {
+			t.Fatalf("AppServingFor() = %v", err)
+		}
+		if !facts.Prerenders {
+			t.Error("Prerenders = false, want true: the first requests for each of its pages all miss the edge cache at once")
+		}
+	})
+
+	t.Run("a Next build that caches no route", func(t *testing.T) {
+		t.Parallel()
+		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{}, nil), "web", buildoutput.FrameworkNext))
+		if err != nil {
+			t.Fatalf("AppServingFor() = %v", err)
+		}
+		if facts.Prerenders {
+			t.Error("Prerenders = true, want false")
+		}
+	})
+
+	t.Run("another framework's cached routes are not Next's prerenders", func(t *testing.T) {
+		t.Parallel()
+		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", cached, nil), "web", "astro"))
+		if err != nil {
+			t.Fatalf("AppServingFor() = %v", err)
+		}
+		if facts.Prerenders {
+			t.Error("Prerenders = true for a framework that revalidates nothing, want false")
+		}
+	})
+}
+
 func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 	next, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", buildoutput.FrameworkNext))
 	if err != nil {

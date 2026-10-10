@@ -74,20 +74,21 @@ type Clients struct {
 }
 
 type cloudFront struct {
-	ns     bootstrap.Namespace
-	open   func(context.Context) (Clients, error)
-	pacing Rollout
+	ns      bootstrap.Namespace
+	open    func(context.Context) (Clients, error)
+	options Options
+	pacing  Rollout
 
 	mu      sync.Mutex
 	clients *Clients
 }
 
-func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
-	return newCloudFront(ns, open)
+func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error), options Options) edge.Edge {
+	return newCloudFront(ns, open, options)
 }
 
-func newCloudFront(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *cloudFront {
-	return &cloudFront{ns: ns, open: open, pacing: NewRollout()}
+func newCloudFront(ns bootstrap.Namespace, open func(context.Context) (Clients, error), options Options) *cloudFront {
+	return &cloudFront{ns: ns, open: open, options: options, pacing: NewRollout()}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
@@ -293,6 +294,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	own.StateTable = deployed.StateTable
 	own.AssetBucket = deployed.AssetBucket
 	own.Region = c.Region
+	own.ShieldsOrigin = p.options.ShieldsOrigin()
 	own.Function = set.functionARN
 	own.EmptyBodyFunction = set.emptyBodyFunctionARN
 	own.KeyValueStore = set.keyValueStoreARN
