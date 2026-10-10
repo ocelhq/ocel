@@ -31,7 +31,7 @@ func appAssetPrefix(c naming.Coordinate) string {
 func assetPlaneTargets(cfg Config) []uploadTarget {
 	return []uploadTarget{
 		{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier},
-		{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier},
+		{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: true},
 	}
 }
 
@@ -123,9 +123,9 @@ func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, pr
 						stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: readErr})
 						return readErr
 					}
-					return tracedPut(ctx, to.up, to.bucket, u.key, u.headers, data, stats)
+					return tracedPut(ctx, to.up, to.bucket, u.key, u.headers.taggedFor(to), data, stats)
 				}
-				return tracedUpload(ctx, to.up, to.bucket, u.key, u.headers, read, stats)
+				return tracedUpload(ctx, to.up, to.bucket, u.key, u.headers.taggedFor(to), read, stats)
 			})
 		}
 	}

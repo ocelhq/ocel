@@ -131,7 +131,7 @@ func TestWorkerValuesBindEveryValueTheEntryWorkerReads(t *testing.T) {
 	}
 }
 
-func TestWorkerValuesBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
+func TestWorkerValuesBindNoEdgeKeyNorAssetBucketWithoutBothHalves(t *testing.T) {
 	for name, mutate := range map[string]func(*WorkerValues){
 		"a key id with no secret": func(f *WorkerValues) { f.EdgeSecretKey = "" },
 		"a secret with no key id": func(f *WorkerValues) { f.EdgeAccessKeyID = "" },
@@ -146,6 +146,11 @@ func TestWorkerValuesBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
 			}
 			if got.Secrets != nil {
 				t.Errorf("Secrets = %v, want nil", got.Secrets)
+			}
+			for _, name := range []string{edge.AssetBucketVar, edge.AWSRegionVar} {
+				if _, set := got.Variables[name]; set {
+					t.Errorf("Variables has %s, want it left out: the edge cannot sign a read of the bucket without its key", name)
+				}
 			}
 		})
 	}

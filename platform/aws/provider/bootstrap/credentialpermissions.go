@@ -372,6 +372,7 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 				"s3:GetObject",
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
+				"s3:PutObjectTagging",
 			},
 			Resources: r.bootstrapObjects,
 			Condition: inCallerAccount(),

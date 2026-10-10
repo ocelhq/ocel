@@ -119,9 +119,10 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 }
 
 type uploadTarget struct {
-	up     payloads.ObjectStore
-	bucket string
-	tier   environment.Tier
+	up           payloads.ObjectStore
+	bucket       string
+	tier         environment.Tier
+	edgeReadable bool
 }
 
 func (t uploadTarget) validate() error {

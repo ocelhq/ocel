@@ -19,6 +19,11 @@ func (c Coordinate) AssetKey(assetPath string) string {
 
 const AssetsSegment = "assets"
 
+const (
+	EdgeReadableTagKey   = "ocel:edge"
+	EdgeReadableTagValue = "readable"
+)
+
 const ImageConfigFile = "image-config.json"
 
 func (c Coordinate) ImageConfigKey() string {

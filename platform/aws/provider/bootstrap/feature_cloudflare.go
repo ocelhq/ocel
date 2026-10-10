@@ -72,7 +72,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, reads a release's objects and enqueues ISR revalidations."
+      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, lists the asset bucket and reads the objects in it the deploy tagged edge-readable, and enqueues ISR revalidations."
     Properties:
       UserName: %s
       Policies:
@@ -91,10 +91,13 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                     'aws:ResourceTag/%s': '%s'
               - Effect: Allow
                 Action: s3:GetObject
-                Resource:
-                  - !Sub '${%s}/*/assets/*'
-                  - !Sub '${%s}/*/route-table/*'
-                  - !Sub '${%s}/*/edge/*'
+                Resource: !Sub '${%s}/*'
+                Condition:
+                  StringEquals:
+                    's3:ExistingObjectTag/%s': '%s'
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Ref %s
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref %s
@@ -108,7 +111,8 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, tier, userName, ns.PolicyName("edge-cache"),
 		naming.EnvTierTagKey, tier,
-		paramAssetBucketARN, paramAssetBucketARN, paramAssetBucketARN, paramRevalidateQueueARN, invoke)
+		paramAssetBucketARN, naming.EdgeReadableTagKey, naming.EdgeReadableTagValue, paramAssetBucketARN,
+		paramRevalidateQueueARN, invoke)
 }
 
 func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {
