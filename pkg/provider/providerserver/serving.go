@@ -42,6 +42,7 @@ type AppServing struct {
 	Bytecode       *provider.BytecodeSpec
 	AssetPrefix    string
 	Static         *edge.Static
+	Prerenders     bool
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
@@ -62,6 +63,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
+		_, facts.Prerenders = hosting.Needs[edge.NeedEdgeCache]
 	}
 	if q.Compute != provider.ComputeContainer {
 		routing, err := routingFor(q, hosting, present)

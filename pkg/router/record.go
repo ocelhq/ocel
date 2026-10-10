@@ -25,6 +25,7 @@ type ReleaseRecord struct {
 	AssetPrefix          string              `json:"assetPrefix"`
 	IsrPrefix            string              `json:"isrPrefix"`
 	IsrWriteSecret       string              `json:"isrWriteSecret,omitempty"`
+	Prerenders           bool                `json:"prerenders,omitempty"`
 	CreatedAt            int64               `json:"createdAt"`
 	EdgeWorkers          *Code               `json:"edgeWorkers,omitempty"`
 	ReleaseFingerprint   string              `json:"releaseFingerprint,omitempty"`

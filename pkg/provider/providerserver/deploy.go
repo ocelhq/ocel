@@ -1587,6 +1587,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		FunctionURLs:         urls,
 		AssetPrefix:          coordinate.AssetKey(""),
 		IsrPrefix:            withoutSlash(coordinate.ISRPrefix()),
+		Prerenders:           facts.Prerenders,
 		IsrWriteSecret:       result.ISRWriteSecret,
 		CreatedAt:            time.Now().Unix(),
 		ReleaseFingerprint:   entry.Release.Fingerprint(),

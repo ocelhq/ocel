@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
@@ -183,6 +184,35 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	}
 	if strings.HasSuffix(staged[0].IsrPrefix, "/") {
 		t.Errorf("isrPrefix = %q, want no trailing slash", staged[0].IsrPrefix)
+	}
+}
+
+func TestTheStagedRecordSaysWhetherTheBuildCachesAnyRoute(t *testing.T) {
+	deployedRecord := func(t *testing.T, prerendered bool) router.ReleaseRecord {
+		builtProject(t)
+		if prerendered {
+			declaresNeed(t, "web", edge.NeedEdgeCache)
+		}
+		client, provider := deployServed(t)
+		stager := staging(t, provider)
+		req := deployRequest()
+		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+		result, _ := deploy(t, client, req)
+		if result == nil || !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+		}
+		staged := stager.records()
+		if len(staged) != 1 {
+			t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+		}
+		return staged[0]
+	}
+
+	if record := deployedRecord(t, true); !record.Prerenders {
+		t.Error("prerenders = false for a build that declares cached routes, want true: the edge reads it to decide what to shield")
+	}
+	if record := deployedRecord(t, false); record.Prerenders {
+		t.Error("prerenders = true for a build that caches no route, want false")
 	}
 }
 
