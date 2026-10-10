@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func staticAppTree(t *testing.T) string {
@@ -46,7 +47,7 @@ func mirrorConfig(root string, store, asset *fakeArtifactStore) Config {
 }
 
 func publishedImageConfig(key string) bool {
-	return strings.HasSuffix(key, "/"+imageConfigFile) && !strings.Contains(key, "/assets/")
+	return strings.HasSuffix(key, "/"+naming.ImageConfigFile) && !strings.Contains(key, "/assets/")
 }
 
 func assetPrefixFor(app, buildID string) string {
