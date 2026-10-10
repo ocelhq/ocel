@@ -888,3 +888,11 @@ func TestEveryOriginServingTheAppWaitsOnItForTheRequestTimeout(t *testing.T) {
 		t.Errorf("the resolver waits %ss on a function origin, want %ds", got, want)
 	}
 }
+
+func TestCloudFrontCachesResponses(t *testing.T) {
+	t.Parallel()
+
+	if !newWorld().edge().Facts().CachesResponses {
+		t.Error("Facts().CachesResponses = false, but CloudFront caches an origin's responses and revalidates them itself")
+	}
+}

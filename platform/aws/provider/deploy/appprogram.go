@@ -357,6 +357,9 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 		if facts.InvalidatesByCacheTag {
 			env[edge.CacheTagPurgeVar] = "1"
 		}
+		if facts.CachesResponses {
+			env[edge.OriginFreshOnlyVar] = "1"
+		}
 	}
 	if app.Proxied {
 		env[envStateTable] = r.cfg.StateTable

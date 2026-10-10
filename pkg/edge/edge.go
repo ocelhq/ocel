@@ -67,6 +67,7 @@ type Facts struct {
 	TunnelsToOrigin       bool
 	OriginFacingRanges    []string
 	InvalidatesByCacheTag bool
+	CachesResponses       bool
 	CredentialScope       string
 }
 

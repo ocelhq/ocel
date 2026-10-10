@@ -23,6 +23,7 @@ const (
 	OriginSignedVar         = "OCEL_ORIGIN_SIGNED"
 	OriginDispatchVar       = "OCEL_ORIGIN_DISPATCH"
 	CacheTagPurgeVar        = "OCEL_CACHE_TAG_PURGE"
+	OriginFreshOnlyVar      = "OCEL_ORIGIN_FRESH_ONLY"
 	OriginSecretHeader      = "x-ocel-origin-secret"
 
 	OriginContainerHeader = "x-ocel-container"

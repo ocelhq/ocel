@@ -137,7 +137,7 @@ func refreshURLOf(service string, projectNumber int64, region string) string {
 func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache, refresh *nextRefresh) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
-	maps.Copy(env, newCacheTagPurgeEnv(spec.Edge))
+	maps.Copy(env, newCachingEdgeEnv(spec.Edge))
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
