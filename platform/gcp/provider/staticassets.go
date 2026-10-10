@@ -81,6 +81,12 @@ func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpe
 	for _, file := range files {
 		group.Go(func() error {
 			defer resources.TakeUploadSlot()()
+			if file.key != keys.imageConfig {
+				present, err := artifacts{p}.Has(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreAssets, Key: file.key})
+				if err != nil || present {
+					return err
+				}
+			}
 			body, err := os.ReadFile(file.src)
 			if err != nil {
 				return fmt.Errorf("static file %s: %w", file.key, err)
