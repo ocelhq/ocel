@@ -32,7 +32,7 @@ on:
         type: choice
         options: [sampled, every-cell]
       concern:
-        description: "Concerns each target covers, space separated: deploy, lifecycle, sdk, build-variables, pre-build, kv, tasks, realtime, and iac, which runs only when named here and only with skips set to run. Empty covers every one but iac."
+        description: "Concerns each target covers, space separated: deploy, lifecycle, sdk, build-variables, prerender, pre-build, client-env, kv, tasks, realtime, and iac, which runs only when named here and only with skips set to run. Empty covers every one but iac."
         default: ""
         type: string
       fixtures:
