@@ -16,10 +16,15 @@ export type ObjectRead =
   | { status: "absent" }
   | { status: "unchanged" };
 
+export type ObjectStream =
+  | { status: "found"; body: ReadableStream | null; size: number | null; etag: string }
+  | { status: "absent" };
+
 export type ObjectWrite = { status: "written"; generation: string } | { status: "lost" };
 
 export interface CloudStorage {
   read(name: string, conditions?: { ifGenerationNotMatch?: string }): Promise<ObjectRead>;
+  open(name: string): Promise<ObjectStream>;
   write(
     name: string,
     body: string,
@@ -129,8 +134,29 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
     return value as ObjectRead;
   }
 
+  async function open(name: string): Promise<ObjectStream> {
+    const url = `${origin}/storage/v1/b/${bucket}/o/${encodeURIComponent(name)}?alt=media`;
+    const { value } = await request("read", name, url, { method: "GET" }, (res) => {
+      if (res.status === 404) return Promise.resolve<ObjectStream>({ status: "absent" });
+      if (res.status !== 200) return undefined;
+      const generation = res.headers.get("x-goog-generation");
+      if (generation === null) {
+        throw new Error(`ocel: Cloud Storage answered ${name} with no generation`);
+      }
+      const length = res.headers.get("content-length");
+      return Promise.resolve<ObjectStream>({
+        status: "found",
+        body: res.body,
+        size: length === null ? null : Number(length),
+        etag: `"${generation}"`,
+      });
+    });
+    return value as ObjectStream;
+  }
+
   return {
     read,
+    open,
 
     async write(name, body, conditions) {
       const query = new URLSearchParams({ uploadType: "media", name });

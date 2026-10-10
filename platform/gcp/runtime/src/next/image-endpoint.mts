@@ -2,21 +2,18 @@ import type { ImageOriginRequest } from "@framework/next-router/image";
 import { originImagePath } from "@framework/next-router/image";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { newDiskObjectStore } from "./disk-assets.mjs";
+import { readAssetStorage } from "./asset-store.mjs";
+import { newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
 
 const maxBodyBytes = 16 * 1024;
 
-const staticDirVar = "OCEL_STATIC_DIR";
-
 const imageEndpointVar = "OCEL_IMAGE_ENDPOINT";
 
 export function newImageEndpointInvoke(next: Invoke, env: NodeJS.ProcessEnv): Invoke {
-  const staticDir = env[staticDirVar];
-  if (!staticDir || env[imageEndpointVar] !== "1") return next;
-  const optimize = newInProcessImageOrigin(
-    newDiskObjectStore(staticDir, env.OCEL_ASSET_PREFIX ?? ""),
-  );
+  const storage = readAssetStorage(env);
+  if (!storage || env[imageEndpointVar] !== "1") return next;
+  const optimize = newInProcessImageOrigin(newCloudStorageObjectStore(storage));
   const answer = fetchToNodeHandler(async (request) => {
     if (request.method !== "POST") {
       return text(405, "POST the image request to this path.", { allow: "POST" });

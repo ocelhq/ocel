@@ -460,10 +460,13 @@ test("the GCP host refuses an isr-writer beside a tags database", () => {
 test("the GCP host's origin invoke answers the optimizer's image path and leaves every other request to Next", async () => {
   const withAssets = newGcpNextHost({
     PORT: "8080",
-    OCEL_STATIC_DIR: "/ocel/static",
+    OCEL_ASSET_BUCKET: "ocel-acme-production",
     OCEL_IMAGE_ENDPOINT: "1",
   });
-  const withoutEndpoint = newGcpNextHost({ PORT: "8080", OCEL_STATIC_DIR: "/ocel/static" });
+  const withoutEndpoint = newGcpNextHost({
+    PORT: "8080",
+    OCEL_ASSET_BUCKET: "ocel-acme-production",
+  });
   const without = newGcpNextHost({ PORT: "8080" });
   const next = async () => {};
 
