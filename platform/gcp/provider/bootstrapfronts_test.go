@@ -39,7 +39,10 @@ type countingFront struct {
 	plan      []edge.PlanChange
 	out       edge.BootstrapOutput
 	describe  error
+	runsCode  bool
 }
+
+func (f *countingFront) Facts() edge.Facts { return edge.Facts{RunsCode: f.runsCode} }
 
 func (f *countingFront) Hooks() edge.Hooks {
 	if f.silent {
