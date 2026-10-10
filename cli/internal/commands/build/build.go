@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -87,11 +86,11 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
-	workers, err := hostedWorkers(ctx, dependencies, cfg, phase)
+	declarations, workers, err := collectDeclarations(ctx, dependencies, cfg, phase)
 	if err != nil {
 		return err
 	}
-	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
+	clients := clientenv.AppsOf(cfg, declarations.Definitions(), builtInValues(cfg, appurl.FormatProductionURLs(cfg)))
 	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.SplitVariablesByClass(clients, nil), declaredArchs(cfg), workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
@@ -107,18 +106,18 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	return nil
 }
 
-func hostedWorkers(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (build.HostedWorkers, error) {
+func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (*variables.Declarations, build.HostedWorkers, error) {
 	said := phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	placement, err := manifest.PlaceConsumers(cfg, resources)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return placement.HostedWorkers(), nil
+	return declarations, placement.HostedWorkers(), nil
 }
 
 func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, host build.Host, err error) {
@@ -188,18 +187,11 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func builtInClients(cfg *project.Project, urls map[string]string) []clientenv.App {
-	apps := make([]clientenv.App, 0, len(cfg.Apps))
+func builtInValues(cfg *project.Project, urls map[string]string) map[string][]variables.Variable {
+	values := make(map[string][]variables.Variable, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		dir := filepath.Join(cfg.Dir, a.Path)
-		bundle := language.HasClientBundle(a.Framework(), dir)
-		apps = append(apps, clientenv.App{
-			Name:         a.Name,
-			Dir:          dir,
-			Framework:    a.Framework(),
-			ClientBundle: bundle,
-			Variables:    appurl.Variables(a.Framework(), bundle, urls[a.Name]),
-		})
+		values[a.Name] = nil
 	}
-	return apps
+	appurl.Prepend(cfg, values, urls)
+	return values
 }

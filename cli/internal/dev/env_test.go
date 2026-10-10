@@ -539,7 +539,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { s
 		if _, statErr := os.Stat(env[processenv.NextAdapterPathEnvVar]); statErr != nil {
 			t.Errorf("the adapter next is pointed at does not exist: %v", statErr)
 		}
-		if got, want := env[processenv.PublicKeysEnvVar], "NEXT_PUBLIC_SITE_URL,"+processenv.ClientURLEnvVar; got != want {
+		if got, want := env[processenv.PublicKeysEnvVar], processenv.ClientURLEnvVar+",NEXT_PUBLIC_SITE_URL"; got != want {
 			t.Errorf("%s = %q, want the declared public keys %q: STRIPE_API_KEY is not public", processenv.PublicKeysEnvVar, got, want)
 		}
 		if _, statErr := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); statErr == nil {
@@ -757,36 +757,19 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	})
 }
 
-func TestNextAppEnv(t *testing.T) {
-	next := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkNext, ClientBundle: true}}}
+func TestACommandThatRunsNoNextAppIsHandedNoAdapter(t *testing.T) {
+	root := t.TempDir()
 
-	t.Run("points next at ocel's adapter and names the declared public keys, deployment url included", func(t *testing.T) {
-		got := nextAppEnv(next, "/proj/.ocel/dist/next-adapter/next-adapter.mjs", []string{"NEXT_PUBLIC_API_URL"})
-
-		if want := "/proj/.ocel/dist/next-adapter/next-adapter.mjs"; got[processenv.NextAdapterPathEnvVar] != want {
-			t.Errorf("%s = %q, want %q", processenv.NextAdapterPathEnvVar, got[processenv.NextAdapterPathEnvVar], want)
-		}
-		if want := "NEXT_PUBLIC_API_URL," + processenv.ClientURLEnvVar; got[processenv.PublicKeysEnvVar] != want {
-			t.Errorf("%s = %q, want %q", processenv.PublicKeysEnvVar, got[processenv.PublicKeysEnvVar], want)
-		}
-	})
-
-	t.Run("names no keys but the deployment url when the app declared none", func(t *testing.T) {
-		got := nextAppEnv(next, "/adapter.mjs", nil)
-
-		if got[processenv.PublicKeysEnvVar] != processenv.ClientURLEnvVar {
-			t.Errorf("%s = %q, want only %s", processenv.PublicKeysEnvVar, got[processenv.PublicKeysEnvVar], processenv.ClientURLEnvVar)
-		}
-	})
-
-	t.Run("leaves a command that runs no next app alone", func(t *testing.T) {
-		for _, framework := range []string{buildoutput.FrameworkSvelteKit, buildoutput.FrameworkNode, buildoutput.FrameworkGo} {
-			scope := variables.Scope{Apps: []variables.App{{Name: "web", Framework: framework, ClientBundle: true}}}
-			if got := nextAppEnv(scope, "/adapter.mjs", []string{"NEXT_PUBLIC_API_URL"}); len(got) != 0 {
-				t.Errorf("%s app got %v, want nothing written", framework, got)
-			}
-		}
-	})
+	got, err := nextEnvOf(root, nil)
+	if err != nil {
+		t.Fatalf("nextEnvOf: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("nextEnvOf = %v, want nothing written where no next app declared a public key", got)
+	}
+	if _, statErr := os.Stat(node.NextAdapterPath(root)); statErr == nil {
+		t.Error("the adapter was unpacked for a command that runs no next app")
+	}
 }
 
 func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {

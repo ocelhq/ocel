@@ -7,11 +7,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
+	built := SplitVariablesByClass([]clientenv.App{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
@@ -28,20 +29,22 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 	}
 }
 
-func TestANextAppIsBuiltWithTheKeysOfItsPublicValues(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Framework: buildoutput.FrameworkNext, Variables: []variables.Variable{
-		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com"},
-		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
-		{Key: "NEXT_PUBLIC_TOKEN", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-	}}}, nil)["storefront"]
+func TestANextAppIsBuiltWithTheKeysOfThePublicVariablesItDeclaresWhetherOrNotOcelResolvedAValue(t *testing.T) {
+	built := SplitVariablesByClass([]clientenv.App{{
+		App: variables.App{Name: "storefront", Framework: buildoutput.FrameworkNext},
+		Declared: []*resourcesv1.VariableDefinition{
+			{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		},
+	}}, nil)["storefront"]
 
-	if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(built.PublicKeys, want) {
-		t.Errorf("PublicKeys = %v, want %v: a build inlines only a plaintext NEXT_PUBLIC_ value", built.PublicKeys, want)
+	if want := []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(built.PublicKeys, want) {
+		t.Errorf("PublicKeys = %v, want %v: the adapter inlines what the build reads for every declared NEXT_PUBLIC_ key", built.PublicKeys, want)
 	}
 }
 
 func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
+	built := SplitVariablesByClass([]clientenv.App{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 	}}}, nil)["storefront"]
@@ -56,8 +59,8 @@ func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
 
 func TestEachAppIsBuiltWithItsOwnValueForADivergedKey(t *testing.T) {
 	built := SplitVariablesByClass([]clientenv.App{
-		{Name: "storefront", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
-		{Name: "admin", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
+		{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
+		{App: variables.App{Name: "admin"}, Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 	}, nil)
 
 	if got, want := built["storefront"].Env["POSTHOG_ID"], "ph-store"; got != want {

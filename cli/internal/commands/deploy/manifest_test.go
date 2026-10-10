@@ -482,11 +482,15 @@ func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variable
 }
 
 func recordedClientValue() clientenv.App {
-	return clientenv.App{Name: "api", Framework: buildoutput.FrameworkNext, Variables: []variables.Variable{{
-		Key:   "NEXT_PUBLIC_SITE_URL",
-		Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
-		Value: "https://example.com",
-	}}}
+	return clientenv.App{
+		App:      variables.App{Name: "api", Framework: buildoutput.FrameworkNext},
+		Declared: []*resourcesv1.VariableDefinition{{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN}},
+		Variables: []variables.Variable{{
+			Key:   "NEXT_PUBLIC_SITE_URL",
+			Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+			Value: "https://example.com",
+		}},
+	}
 }
 
 func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
@@ -608,7 +612,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 
-		if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
+		if want := []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
 			t.Errorf("public keys the build was handed = %v, want %v", handed, want)
 		}
 		if _, err := os.Stat(filepath.Join(root, statedir.Name, "output", "client-digests.json")); err != nil {
@@ -650,7 +654,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
-		if err := clientenv.Record(root, []clientenv.App{{Name: "api", Framework: buildoutput.FrameworkNext}}); err != nil {
+		if err := clientenv.Record(root, []clientenv.App{{App: variables.App{Name: "api", Framework: buildoutput.FrameworkNext}}}); err != nil {
 			t.Fatal(err)
 		}
 

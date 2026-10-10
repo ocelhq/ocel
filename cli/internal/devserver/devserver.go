@@ -221,10 +221,15 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) PublicKeys() []string {
+func (s *Server) PublicKeys(apps []variables.App) []string {
 	_, declarations := s.env.current()
 	if declarations == nil {
 		return nil
 	}
-	return clientenv.DeclaredPublicKeys(declarations.Definitions())
+	var keys []string
+	for _, app := range apps {
+		keys = append(keys, clientenv.PublicKeys(app, declarations.Definitions())...)
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys)
 }

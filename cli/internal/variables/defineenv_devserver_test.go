@@ -18,6 +18,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
@@ -58,8 +60,9 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 		})
 
 		t.Run("a NEXT_PUBLIC_ declaration arrives as a public key", func(t *testing.T) {
-			if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(srv.PublicKeys(), want) {
-				t.Errorf("public keys = %v, want %v — only what was declared, since the deployment url is offered per app, where ocel writes it for that app's runtime", srv.PublicKeys(), want)
+			web := []variables.App{{Name: "web", Folder: "/web", Framework: buildoutput.FrameworkNext}}
+			if got, want := srv.PublicKeys(web), []string{processenv.ClientURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(got, want) {
+				t.Errorf("public keys = %v, want %v: the deployment url and what was declared", got, want)
 			}
 		})
 
