@@ -24,7 +24,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 			"the %s edge's worker reaches GCP only through its client certificate, and the bootstrap adopted none: run `%s` again",
 			req.Kind, provider.BootstrapCommand(req.Tier))
 	}
-	if credentials.AssetStoreAccessKeyID == "" || credentials.AssetStoreSecretAccessKey == "" {
+	if !credentials.hasAssetStoreKey() {
 		return provider.EdgeProgram{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
 	}
 	return cloudflare.EntryProgram{

@@ -57,6 +57,10 @@ type edgeCredentials struct {
 	AssetStoreSecretAccessKey string `json:"assetStoreSecretAccessKey,omitempty"`
 }
 
+func (c edgeCredentials) hasAssetStoreKey() bool {
+	return c.AssetStoreAccessKeyID != "" && c.AssetStoreSecretAccessKey != ""
+}
+
 func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) keyvalue.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(kind), adoptedEdgeRecord)
 }
