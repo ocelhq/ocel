@@ -20,6 +20,8 @@ export interface Env {
   OCEL_PREVIEW_KEY?: string;
   OCEL_CACHE_STORE?: R2Bucket;
   ISR_WRITER?: IsrWriterBinding;
+  OCEL_ASSET_BUCKET?: string;
+  OCEL_AWS_REGION?: string;
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
   OCEL_ORIGIN_CLIENT_CERTIFICATE?: Fetcher;
