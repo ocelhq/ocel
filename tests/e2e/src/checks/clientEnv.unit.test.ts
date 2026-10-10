@@ -146,6 +146,29 @@ describe("the client-env checks", () => {
       );
     });
 
+    it("reads a script once for each query it is loaded with", async () => {
+      const bodies: Record<string, string> = {
+        "?one": "render()",
+        "?two": `const t = "${CLIENT_ENV_SENSITIVE_VALUE}"`,
+      };
+      const fetch: Fetch = async (input) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === "/") {
+          return new Response(
+            page({
+              head: `<script src="/chunk.js?one"></script><script src="/chunk.js?two"></script>`,
+            }),
+          );
+        }
+        return new Response(bodies[url.search] ?? "missing", {
+          status: url.search in bodies ? 200 : 404,
+        });
+      };
+      await expect(clientEnvSensitiveUnsentCheck.run(context(fetch))).rejects.toThrow(
+        /chunk\.js\?two/,
+      );
+    });
+
     it("never follows an import to another origin or a bare package name", async () => {
       const fetch = served({
         "/": page({ head }),

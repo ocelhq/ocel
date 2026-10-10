@@ -61,12 +61,12 @@ async function scriptsLoadedBy(ctx: CheckContext, html: string): Promise<Map<str
   const loaded = new Map<string, string>();
   while (queue.length > 0) {
     const url = queue.shift() as URL;
-    if (url.origin !== origin || loaded.has(url.pathname)) continue;
+    if (url.origin !== origin || loaded.has(url.href)) continue;
     assert.ok(loaded.size < MAX_SCRIPTS, `GET / reaches more than ${MAX_SCRIPTS} scripts`);
     const res = await ctx.fetch(url.href);
     const body = await res.text();
     assert.equal(res.status, 200, `GET ${url.pathname} ${describeResponse(res, body)}`);
-    loaded.set(url.pathname, body);
+    loaded.set(url.href, body);
     for (const specifier of importsIn(body)) queue.push(new URL(specifier, url));
   }
   return loaded;
