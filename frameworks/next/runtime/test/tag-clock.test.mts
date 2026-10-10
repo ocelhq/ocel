@@ -568,3 +568,59 @@ test("holds the request's last byte for the tag writes an update makes", async (
   expect(held).toHaveLength(1);
   expect(store.rows.get("products")!.expired).toBeGreaterThan(0);
 });
+
+function stallNextSnapshotRead(store: ReturnType<typeof fakeStore>): { readonly stalled: number } {
+  const read = store.readTagSnapshot.bind(store);
+  const counts = { stalled: 0 };
+  store.readTagSnapshot = () => {
+    store.readTagSnapshot = read;
+    counts.stalled++;
+    return new Promise(() => {});
+  };
+  return counts;
+}
+
+test("a snapshot read that never settles releases waiting reads at the sync deadline", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const store = fakeStore();
+    const { tagClock, handler } = await load(store);
+    stallNextSnapshotRead(store);
+
+    let released = false;
+    const waiting = handler.refreshTags().then(() => {
+      released = true;
+    });
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(released).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await waiting;
+    expect(released).toBe(true);
+    expect(tagClock.hasSynced).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the next refresh after a sync misses its deadline starts a new read", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const store = fakeStore();
+    const { tagClock, handler } = await load(store);
+    const stall = stallNextSnapshotRead(store);
+
+    const first = handler.refreshTags();
+    advance(3_000);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await first;
+
+    await handler.refreshTags();
+
+    expect(stall.stalled).toBe(1);
+    expect(store.gets).toBe(1);
+    expect(tagClock.hasSynced).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});

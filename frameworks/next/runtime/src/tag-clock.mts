@@ -27,6 +27,8 @@ interface ClockState {
 
 const syncIntervalMs = 2_000;
 
+const syncDeadlineMs = 3_000;
+
 const stateKey = Symbol.for("ocel.use-cache.tag-clock.v1");
 
 function initialState(fingerprint: string): ClockState {
@@ -98,9 +100,17 @@ async function sync(): Promise<void> {
   } catch {}
 }
 
+function syncWithinDeadline(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, syncDeadlineMs);
+  });
+  return Promise.race([sync(), deadline]).finally(() => clearTimeout(timer));
+}
+
 function startSync(): Promise<void> {
   state.lastAttemptAt = now();
-  return (state.inflight = sync().finally(() => {
+  return (state.inflight = syncWithinDeadline().finally(() => {
     state.inflight = null;
   }));
 }
