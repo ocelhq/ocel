@@ -390,7 +390,10 @@ export interface CloudflareEdgeOptions {
 }
 
 /** Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options. */
-export type CloudFrontEdgeOptions = Record<string, never>;
+export interface CloudFrontEdgeOptions {
+  /** Send the cache misses of a release with prerendered pages through CloudFront Origin Shield, so a burst of requests for an uncached page reaches the function once instead of once per edge location. On unless set to false. CloudFront bills it per request, about $0.0075 per 10,000 requests in the US. Only GET and HEAD requests to the app's function pass through it, never static files or other methods. */
+  originShield?: boolean;
+}
 
 /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
 export type AwsDNSDescriptor =

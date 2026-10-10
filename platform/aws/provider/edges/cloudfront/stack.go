@@ -32,6 +32,7 @@ type private struct {
 	HeadersPolicy       string `json:"headersPolicy,omitempty"`
 	OriginAccessControl string `json:"originAccessControl,omitempty"`
 	PreviewBase         string `json:"previewBase,omitempty"`
+	ShieldsOrigin       bool   `json:"shieldsOrigin,omitempty"`
 }
 
 type stack struct {
@@ -231,6 +232,9 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
 	if record.Static != nil {
 		published.Immutable = record.Static.ImmutablePrefixes
+	}
+	if s.own.ShieldsOrigin && record.Prerenders {
+		published.ShieldRegion = originShieldRegionFor(s.own.Region)
 	}
 	return published, nil
 }
