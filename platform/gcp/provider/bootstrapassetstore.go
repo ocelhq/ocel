@@ -61,18 +61,18 @@ func (c *clients) ensureAssetReaderKey(ctx context.Context, tier environment.Tie
 			return fmt.Errorf("read the HMAC key %s of the %s service account: %w", credentials.AssetStoreAccessKeyID, email, err)
 		}
 	}
-	if err := c.deleteAssetReaderKeys(ctx, client, email); err != nil {
-		return err
-	}
 	key, err := client.CreateHMACKey(ctx, c.project, email)
 	if err != nil {
 		return fmt.Errorf("create an HMAC key for the %s service account: %w", email, err)
 	}
 	credentials.AssetStoreAccessKeyID, credentials.AssetStoreSecretAccessKey = key.AccessID, key.Secret
-	return writeEdgeCredentials(ctx, c, tier, kind, credentials)
+	if err := writeEdgeCredentials(ctx, c, tier, kind, credentials); err != nil {
+		return err
+	}
+	return c.deleteAssetReaderKeys(ctx, client, email, key.AccessID)
 }
 
-func (c *clients) deleteAssetReaderKeys(ctx context.Context, client *storage.Client, email string) error {
+func (c *clients) deleteAssetReaderKeys(ctx context.Context, client *storage.Client, email, keep string) error {
 	keys := client.ListHMACKeys(ctx, c.project, storage.ForHMACKeyServiceAccountEmail(email))
 	for {
 		key, err := keys.Next()
@@ -85,10 +85,10 @@ func (c *clients) deleteAssetReaderKeys(ctx context.Context, client *storage.Cli
 			}
 			return fmt.Errorf("list the HMAC keys of the %s service account: %w", email, err)
 		}
-		handle := client.HMACKeyHandle(c.project, key.AccessID)
-		if key.State == storage.Deleted {
+		if key.State == storage.Deleted || key.AccessID == keep {
 			continue
 		}
+		handle := client.HMACKeyHandle(c.project, key.AccessID)
 		if key.State == storage.Active {
 			if _, err := handle.Update(ctx, storage.HMACKeyAttrsToUpdate{State: storage.Inactive}); err != nil && !absent(err) {
 				return fmt.Errorf("deactivate the HMAC key %s: %w", key.AccessID, err)
@@ -105,7 +105,7 @@ func (c *clients) takeAssetStore(ctx context.Context, tier environment.Tier) err
 	if err != nil {
 		return err
 	}
-	if err := c.deleteAssetReaderKeys(ctx, client, c.AssetReaderAccountEmail(tier)); err != nil {
+	if err := c.deleteAssetReaderKeys(ctx, client, c.AssetReaderAccountEmail(tier), ""); err != nil {
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)

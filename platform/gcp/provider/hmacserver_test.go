@@ -12,10 +12,13 @@ import (
 )
 
 type hmacServer struct {
-	mu      sync.Mutex
-	keys    map[string]*raw.HmacKeyMetadata
-	created int
-	deleted []string
+	mu            sync.Mutex
+	keys          map[string]*raw.HmacKeyMetadata
+	created       int
+	deleted       []string
+	events        []string
+	refusesCreate bool
+	refusesDelete bool
 }
 
 func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
@@ -29,6 +32,9 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 	path := strings.TrimPrefix(r.URL.Path, "/storage/v1/projects/acme-prod/hmacKeys")
 	id := strings.TrimPrefix(path, "/")
 	switch {
+	case path == "" && r.Method == http.MethodPost && s.refusesCreate:
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":403,"message":"The HMAC key quota is exhausted."}}`))
 	case path == "" && r.Method == http.MethodPost:
 		s.created++
 		key := &raw.HmacKeyMetadata{
@@ -40,6 +46,7 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 			Updated:             "2026-10-10T00:00:00Z",
 		}
 		s.keys[key.AccessId] = key
+		s.events = append(s.events, "create "+key.AccessId)
 		writeBody(w, &raw.HmacKey{Metadata: key, Secret: "secret-" + key.AccessId})
 	case path == "" && r.Method == http.MethodGet:
 		var listed []*raw.HmacKeyMetadata
@@ -61,6 +68,9 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 			key.State = update.State
 			writeBody(w, key)
 		})
+	case r.Method == http.MethodDelete && s.refusesDelete:
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":403,"message":"Permission denied."}}`))
 	case r.Method == http.MethodDelete:
 		s.withKey(w, id, func(key *raw.HmacKeyMetadata) {
 			if key.State == "ACTIVE" {
@@ -70,6 +80,7 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 			}
 			delete(s.keys, id)
 			s.deleted = append(s.deleted, id)
+			s.events = append(s.events, "delete "+id)
 			w.WriteHeader(http.StatusNoContent)
 		})
 	default:
