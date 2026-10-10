@@ -22,6 +22,7 @@ export interface Env {
   ISR_WRITER?: IsrWriterBinding;
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
+  OCEL_ASSET_STORE_ENDPOINT?: string;
   OCEL_ASSET_STORE_BUCKET?: string;
   OCEL_ASSET_STORE_PREFIX?: string;
   OCEL_ASSET_STORE_ACCESS_KEY_ID?: string;

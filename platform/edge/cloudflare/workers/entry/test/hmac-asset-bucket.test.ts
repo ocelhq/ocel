@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { newHmacAssetBucket, readHmacAssetStore } from "../src/hmac-asset-bucket";
+import { newHmacAssetBucket, readHmacAssetBucket } from "../src/hmac-asset-bucket";
 
 const credentials = { accessKeyId: "GOOG1EXAMPLEACCESSID", secretAccessKey: "examplesecret/key+" };
 
 const config = {
   ...credentials,
+  endpoint: "https://objects.example.com",
   bucket: "ocel-acme-production",
   prefix: "assets/",
 };
@@ -76,7 +77,7 @@ async function expectedSignature(request: Request, secret: string): Promise<stri
   return hex(await hmac(key, toSign));
 }
 
-describe("an asset read from Cloud Storage with an HMAC key", () => {
+describe("an asset read from a bucket with an HMAC key", () => {
   it("is a path-style GET of the object under the assets store", async () => {
     const sent = answering(() => new Response("chunk"));
 
@@ -85,7 +86,7 @@ describe("an asset read from Cloud Storage with an HMAC key", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].method).toBe("GET");
     expect(sent[0].url).toBe(
-      "https://storage.googleapis.com/ocel-acme-production/assets/prod/shop/web/r1/assets/_next/static/app.js",
+      "https://objects.example.com/ocel-acme-production/assets/prod/shop/web/r1/assets/_next/static/app.js",
     );
   });
 
@@ -131,15 +132,7 @@ describe("an asset read from Cloud Storage with an HMAC key", () => {
     expect(sent[0].url).not.toContain(credentials.secretAccessKey);
   });
 
-  it("is read from the endpoint the store is given", async () => {
-    const sent = answering(() => new Response("chunk"));
-
-    await newHmacAssetBucket({ ...config, endpoint: "http://storage.test:4443" }).get("a/b.js");
-
-    expect(sent[0].url).toBe("http://storage.test:4443/ocel-acme-production/assets/a/b.js");
-  });
-
-  it("hands the router the body and the etag Cloud Storage answers with", async () => {
+  it("hands the router the body and the etag the bucket answers with", async () => {
     answering(() => new Response("chunk", { headers: { etag: '"abc"' } }));
 
     const object = await newHmacAssetBucket(config).get("a/b.js");
@@ -154,34 +147,41 @@ describe("an asset read from Cloud Storage with an HMAC key", () => {
     expect(await newHmacAssetBucket(config).get("a/gone.js")).toBeNull();
   });
 
-  it("is refused, naming the status, where Cloud Storage refuses the key", async () => {
+  it("is refused, naming the bucket and the status, where the bucket refuses the key", async () => {
     answering(() => new Response("<Error/>", { status: 403 }));
 
-    await expect(newHmacAssetBucket(config).get("a/b.js")).rejects.toThrow(/403/);
+    await expect(newHmacAssetBucket(config).get("a/b.js")).rejects.toThrow(
+      "ocel: the asset bucket ocel-acme-production answered 403 for assets/a/b.js",
+    );
   });
 });
 
 describe("the store a worker is configured with", () => {
   const env = {
+    OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com/",
     OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
     OCEL_ASSET_STORE_PREFIX: "assets/",
     OCEL_ASSET_STORE_ACCESS_KEY_ID: credentials.accessKeyId,
     OCEL_ASSET_STORE_SECRET_KEY: credentials.secretAccessKey,
   };
 
-  it("reads assets with the key it is given", async () => {
+  it("reads assets at the endpoint and with the key it is given", async () => {
     const sent = answering(() => new Response("chunk"));
 
-    await readHmacAssetStore(env)?.get("a/b.js");
+    await readHmacAssetBucket(env)?.get("a/b.js");
 
-    expect(sent[0].url).toBe("https://storage.googleapis.com/ocel-acme-production/assets/a/b.js");
+    expect(sent[0].url).toBe("https://objects.example.com/ocel-acme-production/assets/a/b.js");
+  });
+
+  it("is absent where the worker is given no endpoint", () => {
+    expect(readHmacAssetBucket({ ...env, OCEL_ASSET_STORE_ENDPOINT: undefined })).toBeUndefined();
   });
 
   it("is absent where the worker is given no bucket", () => {
-    expect(readHmacAssetStore({ ...env, OCEL_ASSET_STORE_BUCKET: undefined })).toBeUndefined();
+    expect(readHmacAssetBucket({ ...env, OCEL_ASSET_STORE_BUCKET: undefined })).toBeUndefined();
   });
 
   it("is absent where the worker is given no secret", () => {
-    expect(readHmacAssetStore({ ...env, OCEL_ASSET_STORE_SECRET_KEY: undefined })).toBeUndefined();
+    expect(readHmacAssetBucket({ ...env, OCEL_ASSET_STORE_SECRET_KEY: undefined })).toBeUndefined();
   });
 });

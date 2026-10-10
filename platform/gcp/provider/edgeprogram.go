@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
 )
 
 func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
@@ -37,6 +38,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Origin: cloudflare.OriginBindings{
 			ClientCertificate: adopted.ClientCertificate.ID,
 			Variables: map[string]string{
+				edge.AssetStoreEndpointVar:    bucket.GoogleStorage,
 				edge.AssetStoreBucketVar:      c.Bucket(req.Tier),
 				edge.AssetStorePrefixVar:      provider.StoreAssets + "/",
 				edge.AssetStoreAccessKeyIDVar: credentials.AssetStoreAccessKeyID,

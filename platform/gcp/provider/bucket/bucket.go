@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	googleStorage = "https://storage.googleapis.com"
+	GoogleStorage = "https://storage.googleapis.com"
 	platformScope = "https://www.googleapis.com/auth/cloud-platform"
 	tagLength     = 6
 )
@@ -82,7 +82,7 @@ func Open(ctx context.Context, endpoint string) (Store, error) {
 
 func (s Store) base() string {
 	if s.Endpoint == "" {
-		return googleStorage
+		return GoogleStorage
 	}
 	return s.Endpoint
 }

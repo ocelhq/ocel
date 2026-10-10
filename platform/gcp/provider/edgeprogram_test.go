@@ -165,6 +165,7 @@ func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t
 
 	worker := program.Spec.Worker
 	for name, want := range map[string]string{
+		edge.AssetStoreEndpointVar:    "https://storage.googleapis.com",
 		edge.AssetStoreBucketVar:      h.clients.Bucket(environment.TierProduction),
 		edge.AssetStorePrefixVar:      "assets/",
 		edge.AssetStoreAccessKeyIDVar: "GOOG1EREADER",

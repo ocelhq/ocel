@@ -8,6 +8,7 @@ const (
 )
 
 const (
+	AssetStoreEndpointVar    = "OCEL_ASSET_STORE_ENDPOINT"
 	AssetStoreBucketVar      = "OCEL_ASSET_STORE_BUCKET"
 	AssetStorePrefixVar      = "OCEL_ASSET_STORE_PREFIX"
 	AssetStoreAccessKeyIDVar = "OCEL_ASSET_STORE_ACCESS_KEY_ID"
