@@ -1,0 +1,27 @@
+{
+  "name": "@ocel-fixtures/spike-sveltekit-env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port ${PORT:-5173} --strictPort",
+    "build": "vite build",
+    "sync": "svelte-kit sync"
+  },
+  "dependencies": {
+    "ocel": "workspace:^",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^6.0.0",
+    "@sveltejs/kit": "3.0.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^20",
+    "svelte": "^5.57.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.3"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@ocel-fixtures/spike-next-env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "catalog:",
+    "ocel": "workspace:^",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@framework/next-adapter": "workspace:*",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

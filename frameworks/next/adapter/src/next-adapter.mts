@@ -52,10 +52,32 @@ function readMaxFunctionBytes(): number | undefined {
   return bytes;
 }
 
+const publicPrefix = "NEXT_PUBLIC_";
+
+function withPublicEnv<
+  C extends { compiler?: { define?: Record<string, string | number | boolean> } },
+>(config: C): C {
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith(publicPrefix) && value !== undefined) values[key] = value;
+  }
+  return {
+    ...config,
+    compiler: {
+      ...config.compiler,
+      define: {
+        ...config.compiler?.define,
+        "process.env.OCEL_PUBLIC_ENV": JSON.stringify(values),
+      },
+    },
+  };
+}
+
 const adapter = {
   name: "ocel-adapter",
 
-  async modifyConfig(config, { phase }) {
+  async modifyConfig(base, { phase }) {
+    const config = withPublicEnv(base);
     if (phase === PHASE_PRODUCTION_BUILD) {
       refuseAppCacheHandlers(config);
       return {
