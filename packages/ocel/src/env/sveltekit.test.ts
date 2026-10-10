@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -48,7 +51,7 @@ describe("the variables ocel/env/sveltekit hands to SvelteKit", () => {
       PUBLIC_API_URL: { class: "plain", public: true, static: true, schema },
     });
 
-    expect(variables.STRIPE_KEY).toEqual({ description: "Stripe key" });
+    expect(variables.STRIPE_KEY).toEqual({ description: "Stripe key", schema: expect.anything() });
     expect(variables.PUBLIC_API_URL).toEqual({ public: true, static: true, schema });
   });
 
@@ -117,6 +120,49 @@ describe("the declaration ocel/env/sveltekit makes through core defineEnv", () =
     defineEnvVars({ STRIPE_KEY: { class: "sensitive" } });
 
     expect((await declared()).map((definition) => definition.key)).toEqual(["STRIPE_KEY"]);
+  });
+});
+
+describe("a sensitive value while SvelteKit builds", () => {
+  function liveDirHolding(key: string, value: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "ocel-live-"));
+    writeFileSync(join(dir, key), value);
+    return dir;
+  }
+
+  it("is read from the live dir the build is handed, where the environment holds none", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", liveDirHolding("STRIPE_KEY", "sk_build"));
+    const variables = defineEnvVars({ STRIPE_KEY: { class: "sensitive" } });
+
+    expect(variables.STRIPE_KEY.schema["~standard"].validate(undefined)).toEqual({
+      value: "sk_build",
+    });
+  });
+
+  it("is parsed through its schema after it is read from the live dir", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", liveDirHolding("API_PORT", "8443"));
+    const variables = defineEnvVars({
+      API_PORT: { class: "sensitive", schema: z.coerce.number() },
+    });
+
+    expect(variables.API_PORT.schema["~standard"].validate(undefined)).toEqual({ value: 8443 });
+  });
+
+  it("is read from the environment first", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", liveDirHolding("STRIPE_KEY", "sk_build"));
+    const variables = defineEnvVars({ STRIPE_KEY: { class: "sensitive" } });
+
+    expect(variables.STRIPE_KEY.schema["~standard"].validate("sk_runtime")).toEqual({
+      value: "sk_runtime",
+    });
+  });
+
+  it("is still missing where neither the environment nor a live dir holds it", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", "");
+    const variables = defineEnvVars({ STRIPE_KEY: { class: "sensitive" } });
+
+    const result = variables.STRIPE_KEY.schema["~standard"].validate(undefined);
+    expect(result).toMatchObject({ issues: [expect.anything()] });
   });
 });
 

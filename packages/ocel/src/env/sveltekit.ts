@@ -7,6 +7,7 @@ import {
   type VariableDefinition,
 } from "./definition.js";
 import { EnvDefinitionError } from "./errors.js";
+import { readLiveFile } from "./file.js";
 import { defineEnv } from "./index.js";
 
 export { EnvDefinitionError } from "./errors.js";
@@ -69,8 +70,14 @@ type Refusals<TVariables extends KitVariables> = {
   readonly [K in keyof TVariables & string]: Refusal<K, TVariables[K]>;
 };
 
+type LiveFileSchema<TVariable> = TVariable extends { readonly class: "sensitive" }
+  ? TVariable extends { readonly schema: unknown }
+    ? unknown
+    : { schema: StandardSchemaV1<string | undefined, string> }
+  : unknown;
+
 type KitFields<TVariables extends KitVariables> = {
-  [K in keyof TVariables]: Omit<TVariables[K], "class" | "folders">;
+  [K in keyof TVariables]: Omit<TVariables[K], "class" | "folders"> & LiveFileSchema<TVariables[K]>;
 };
 
 type DeploymentUrl = { public: true; schema: (value: string | undefined) => string | undefined };
@@ -112,9 +119,9 @@ export function defineEnvVars<const TVariables extends KitVariables>(
 
   for (const [key, variable] of Object.entries(variables as KitVariables)) {
     const entry = normalized[key];
-    if (entry?.schema && variable.class !== "plain") {
-      entry.schema = withholdIssues(key, entry.schema);
-    }
+    if (!entry || variable.class === "plain") continue;
+    const schema = entry.schema && withholdIssues(key, entry.schema);
+    entry.schema = readLiveFileWhenUnset(key, schema);
   }
   return normalized as never;
 }
@@ -142,6 +149,27 @@ function refuseUnsupportedVariables(variables: KitVariables): void {
       );
     }
   }
+}
+
+function readLiveFileWhenUnset(
+  key: string,
+  schema: StandardSchemaV1<string | undefined, unknown> | undefined,
+): StandardSchemaV1<string | undefined, unknown> {
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "ocel",
+      ...schema?.["~standard"],
+      validate(value) {
+        const delivered = (value as string | undefined) ?? readLiveFile(key);
+        if (schema) return schema["~standard"].validate(delivered);
+        if (delivered === undefined) {
+          return { issues: [{ message: `'${key}' has no value` }] };
+        }
+        return { value: delivered };
+      },
+    },
+  };
 }
 
 function withholdIssues(
