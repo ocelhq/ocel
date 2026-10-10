@@ -64,5 +64,6 @@ into your `tsconfig.json`.
   arrive. Declare it with `defineEnv` from `ocel/env`, whose accessor reads it live.
 - `static: true` on a `sensitive` variable, which would inline its value into the server bundle.
 
-`PUBLIC_OCEL_URL` holds the URL the deployment is served from. It is in the object `defineEnvVars`
-returns, so `$app/env/public` has it; declaring it yourself is refused.
+`PUBLIC_OCEL_URL` holds the URL the deployment is served from, like `OCEL_URL`: both come from the
+hostname the deploy serves the app on, so an app served on none, such as one reached only at its provider's own
+address, gets neither. It is in the object `defineEnvVars` returns, so `$app/env/public` has it; declaring it yourself is refused.

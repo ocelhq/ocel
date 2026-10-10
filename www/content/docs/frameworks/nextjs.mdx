@@ -38,4 +38,5 @@ page renders the same on the server as in the browser. Groups work like they do 
 
 Next inlines the value when it builds, so `ocel env set` on a public key needs a rebuild; under
 `ocel dev`, ocel restarts the dev server. `NEXT_PUBLIC_OCEL_URL` holds the URL the deployment is
-served from. Ocel writes nothing into your `tsconfig.json`.
+served from, like `OCEL_URL`: both come from the hostname the deploy serves the app on, so an app
+served on none, such as one reached only at its provider's own address, gets neither. Ocel writes nothing into your `tsconfig.json`.
