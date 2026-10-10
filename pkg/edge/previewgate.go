@@ -1,17 +1,17 @@
 package edge
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"mime"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	HeaderPreviewSetBypassCookie   = "x-ocel-set-bypass-cookie"
 	PreviewSessionLifetime         = 7 * 24 * time.Hour
 	PreviewLoginBodyMaxBytes       = 1024
-	previewRefusalCacheControl     = "private, no-store"
+	previewGateCacheControl        = "private, no-store"
 	previewRobotsTag               = "noindex"
 	previewFormContentType         = "application/x-www-form-urlencoded"
 	previewHTMLContentType         = "text/html; charset=utf-8"
@@ -70,16 +70,16 @@ func (g PreviewGate) Check(req PreviewRequest, now time.Time) PreviewVerdict {
 		return g.checkLogin(req, now)
 	}
 
-	hasBasic := g.hasPassword(req.Header.Get("Authorization"))
-	hasBypass := g.hasBypassSecret(req.Header.Get(HeaderPreviewBypass))
+	hasBasic := g.hasPassword(joinHeaderValues(req.Header, "Authorization"))
+	hasBypass := g.hasBypassSecret(joinHeaderValues(req.Header, HeaderPreviewBypass))
 	hasCookie := g.hasSession(req, now)
 
-	if hasBypass && req.Header.Get(HeaderPreviewSetBypassCookie) == "true" && (req.Method == http.MethodGet || req.Method == http.MethodHead) {
-		return g.redirect(safePreviewNext(req.Target), req.Host, now)
+	if hasBypass && joinHeaderValues(req.Header, HeaderPreviewSetBypassCookie) == "true" && (req.Method == http.MethodGet || req.Method == http.MethodHead) {
+		return g.redirect(sanitizePreviewNext(req.Target), req.Host, now)
 	}
 
-	if !(hasBasic || hasBypass || hasCookie || g.allowsOptions(req.Method, path)) {
-		return g.refuse(http.StatusUnauthorized, safePreviewNext(req.Target), false)
+	if !hasBasic && !hasBypass && !hasCookie && !g.allowsOptions(req.Method, path) {
+		return answerLoginForm(http.StatusUnauthorized, sanitizePreviewNext(req.Target), false)
 	}
 
 	forward := req.Header.Clone()
@@ -94,30 +94,31 @@ func (g PreviewGate) Check(req PreviewRequest, now time.Time) PreviewVerdict {
 
 func (g PreviewGate) checkLogin(req PreviewRequest, now time.Time) PreviewVerdict {
 	if len(req.Body) > PreviewLoginBodyMaxBytes {
-		return previewBare(http.StatusRequestEntityTooLarge)
+		return answerStatus(http.StatusRequestEntityTooLarge)
 	}
-	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
-	if err != nil || mediaType != previewFormContentType {
-		return previewBare(http.StatusUnsupportedMediaType)
+	mediaType, _, _ := strings.Cut(joinHeaderValues(req.Header, "Content-Type"), ";")
+	if toLowerASCII(strings.Trim(mediaType, " \t")) != previewFormContentType {
+		return answerStatus(http.StatusUnsupportedMediaType)
 	}
-	form, _ := url.ParseQuery(string(req.Body))
-	next := safePreviewNext(form.Get("next"))
-	if !g.isPassword(form.Get("password")) {
-		return g.refuse(http.StatusUnauthorized, next, true)
+	form := parsePreviewForm(req.Body)
+	next := sanitizePreviewNext(form["next"])
+	if !g.isPassword(form["password"]) {
+		return answerLoginForm(http.StatusUnauthorized, next, true)
 	}
 	return g.redirect(next, req.Host, now)
 }
 
 func (g PreviewGate) isPassword(password string) bool {
-	return g.PasswordMAC != "" && hmac.Equal([]byte(HashPreviewPassword(g.Key, password)), []byte(g.PasswordMAC))
+	return g.PasswordMAC != "" && utf8.ValidString(password) &&
+		hmac.Equal([]byte(HashPreviewPassword(g.Key, password)), []byte(g.PasswordMAC))
 }
 
 func (g PreviewGate) hasPassword(authorization string) bool {
 	scheme, credentials, found := strings.Cut(authorization, " ")
-	if !found || !strings.EqualFold(scheme, "Basic") {
+	if !found || toLowerASCII(scheme) != "basic" {
 		return false
 	}
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(credentials))
+	decoded, err := base64.StdEncoding.DecodeString(strings.Trim(credentials, " \t"))
 	if err != nil {
 		return false
 	}
@@ -126,7 +127,7 @@ func (g PreviewGate) hasPassword(authorization string) bool {
 }
 
 func (g PreviewGate) hasBypassSecret(value string) bool {
-	if value == "" {
+	if value == "" || !isASCII(value) {
 		return false
 	}
 	want := signPreview(g.Key, previewBypassPurpose, value)
@@ -149,8 +150,7 @@ func (g PreviewGate) hasSession(req PreviewRequest, now time.Time) bool {
 		if err != nil || seconds <= now.Unix() {
 			continue
 		}
-		want := signPreview(g.Key, previewCookiePurpose, strings.ToLower(req.Host)+"\n"+expiry)
-		if hmac.Equal([]byte(want), []byte(signature)) {
+		if hmac.Equal([]byte(g.signSession(req.Host, expiry)), []byte(signature)) {
 			return true
 		}
 	}
@@ -170,22 +170,25 @@ func (g PreviewGate) allowsOptions(method, path string) bool {
 	return false
 }
 
+func (g PreviewGate) signSession(host, expiry string) string {
+	return signPreview(g.Key, previewCookiePurpose, toLowerASCII(host)+"\n"+expiry)
+}
+
 func (g PreviewGate) redirect(location, host string, now time.Time) PreviewVerdict {
 	expiry := strconv.FormatInt(now.Add(PreviewSessionLifetime).Unix(), 10)
-	signature := signPreview(g.Key, previewCookiePurpose, strings.ToLower(host)+"\n"+expiry)
-	header := previewRefusalHeader()
+	header := newGateResponseHeader()
 	header.Set("Location", location)
 	header.Set("Set-Cookie", fmt.Sprintf("%s=%s.%s; Max-Age=%d; Path=/; Secure; HttpOnly; SameSite=Lax",
-		PreviewCookieName, expiry, signature, int(PreviewSessionLifetime/time.Second)))
+		PreviewCookieName, expiry, g.signSession(host, expiry), int(PreviewSessionLifetime/time.Second)))
 	return PreviewVerdict{Response: &PreviewResponse{Status: http.StatusSeeOther, Header: header}}
 }
 
-func (g PreviewGate) refuse(status int, next string, incorrect bool) PreviewVerdict {
+func answerLoginForm(status int, next string, incorrect bool) PreviewVerdict {
 	notice := ""
 	if incorrect {
 		notice = `<p role="alert">` + previewIncorrectPasswordNotice + `</p>`
 	}
-	header := previewRefusalHeader()
+	header := newGateResponseHeader()
 	header.Set("Content-Type", previewHTMLContentType)
 	body := `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
@@ -197,13 +200,13 @@ func (g PreviewGate) refuse(status int, next string, incorrect bool) PreviewVerd
 	return PreviewVerdict{Response: &PreviewResponse{Status: status, Header: header, Body: body}}
 }
 
-func previewBare(status int) PreviewVerdict {
-	return PreviewVerdict{Response: &PreviewResponse{Status: status, Header: previewRefusalHeader()}}
+func answerStatus(status int) PreviewVerdict {
+	return PreviewVerdict{Response: &PreviewResponse{Status: status, Header: newGateResponseHeader()}}
 }
 
-func previewRefusalHeader() http.Header {
+func newGateResponseHeader() http.Header {
 	return http.Header{
-		"Cache-Control": {previewRefusalCacheControl},
+		"Cache-Control": {previewGateCacheControl},
 		"X-Robots-Tag":  {previewRobotsTag},
 	}
 }
@@ -214,12 +217,16 @@ func signPreview(key, purpose, input string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func safePreviewNext(target string) string {
+func joinHeaderValues(header http.Header, name string) string {
+	return strings.Join(header.Values(name), ", ")
+}
+
+func sanitizePreviewNext(target string) string {
 	if !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.HasPrefix(target, `/\`) {
 		return "/"
 	}
 	for _, r := range target {
-		if r < 0x20 || r == 0x7f {
+		if r < 0x20 || r >= 0x7f {
 			return "/"
 		}
 	}
@@ -229,35 +236,77 @@ func safePreviewNext(target string) string {
 	return target
 }
 
+func parsePreviewForm(body []byte) map[string]string {
+	form := map[string]string{}
+	for _, pair := range bytes.Split(body, []byte("&")) {
+		if len(pair) == 0 {
+			continue
+		}
+		name, value, _ := bytes.Cut(pair, []byte("="))
+		key := decodeFormComponent(name)
+		if _, seen := form[key]; !seen {
+			form[key] = decodeFormComponent(value)
+		}
+	}
+	return form
+}
+
+func decodeFormComponent(component []byte) string {
+	decoded := make([]byte, 0, len(component))
+	for i := 0; i < len(component); i++ {
+		if component[i] == '+' {
+			decoded = append(decoded, ' ')
+			continue
+		}
+		if component[i] == '%' && i+2 < len(component) {
+			if escaped, ok := decodeHexByte(component[i+1 : i+3]); ok {
+				decoded = append(decoded, escaped)
+				i += 2
+				continue
+			}
+		}
+		decoded = append(decoded, component[i])
+	}
+	return string(decoded)
+}
+
+func decodeHexByte(digits []byte) (byte, bool) {
+	var decoded [1]byte
+	_, err := hex.Decode(decoded[:], digits)
+	return decoded[0], err == nil
+}
+
 var previewHTMLEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 
 func escapePreviewHTML(s string) string { return previewHTMLEscaper.Replace(s) }
 
-func readPreviewCookies(header http.Header) []string {
-	var values []string
+func readCookiePairs(header http.Header) []string {
+	var pairs []string
 	for _, line := range header.Values("Cookie") {
 		for _, pair := range strings.Split(line, ";") {
-			name, value, _ := strings.Cut(strings.TrimSpace(pair), "=")
-			if name == PreviewCookieName {
-				values = append(values, value)
+			if pair = strings.Trim(pair, " \t"); pair != "" {
+				pairs = append(pairs, pair)
 			}
+		}
+	}
+	return pairs
+}
+
+func readPreviewCookies(header http.Header) []string {
+	var values []string
+	for _, pair := range readCookiePairs(header) {
+		if name, value, _ := strings.Cut(pair, "="); name == PreviewCookieName {
+			values = append(values, value)
 		}
 	}
 	return values
 }
 
 func dropPreviewCookie(header http.Header) {
-	lines := header.Values("Cookie")
-	if len(lines) == 0 {
-		return
-	}
 	var kept []string
-	for _, line := range lines {
-		for _, pair := range strings.Split(line, ";") {
-			pair = strings.TrimSpace(pair)
-			if name, _, _ := strings.Cut(pair, "="); name != PreviewCookieName && pair != "" {
-				kept = append(kept, pair)
-			}
+	for _, pair := range readCookiePairs(header) {
+		if name, _, _ := strings.Cut(pair, "="); name != PreviewCookieName {
+			kept = append(kept, pair)
 		}
 	}
 	if len(kept) == 0 {
@@ -265,6 +314,25 @@ func dropPreviewCookie(header http.Header) {
 		return
 	}
 	header.Set("Cookie", strings.Join(kept, "; "))
+}
+
+func toLowerASCII(s string) string {
+	lowered := []byte(s)
+	for i, b := range lowered {
+		if 'A' <= b && b <= 'Z' {
+			lowered[i] = b + 'a' - 'A'
+		}
+	}
+	return string(lowered)
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 func isDigits(s string) bool {
@@ -281,7 +349,7 @@ func isDigits(s string) bool {
 
 func isLowerHex(s string) bool {
 	for _, r := range s {
-		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 			return false
 		}
 	}

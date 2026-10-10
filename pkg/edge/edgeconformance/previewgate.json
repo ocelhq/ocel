@@ -1,16 +1,10 @@
 {
-  "now": 1700000000,
+  "nowSeconds": 1700000000,
   "gate": {
     "key": "test-preview-key",
     "passwordMac": "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3",
-    "bypassSecrets": [
-      "bypass-secret-one",
-      "bypass-secret-two"
-    ],
-    "allowOptions": [
-      "/api",
-      "/trpc/"
-    ]
+    "bypassSecrets": ["bypass-secret-one", "bypass-secret-two"],
+    "allowOptions": ["/api", "/trpc/"]
   },
   "cases": [
     {
@@ -35,10 +29,7 @@
           "value=\"/dashboard\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -56,16 +47,9 @@
           "x-robots-tag": "noindex",
           "content-type": "text/html; charset=utf-8"
         },
-        "bodyContains": [
-          "value=\"/p?q=&quot;&gt;&lt;script&gt;&amp;x=&#39;1&#39;\""
-        ],
-        "bodyExcludes": [
-          "<script>"
-        ],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "bodyContains": ["value=\"/p?q=&quot;&gt;&lt;script&gt;&amp;x=&#39;1&#39;\""],
+        "bodyExcludes": ["<script>"],
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -90,10 +74,32 @@
           "value=\"/\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a refused request whose target has a non-ASCII character offers the root as next",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/中",
+        "headers": {}
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\"",
+          "value=\"/\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -111,7 +117,7 @@
         "forwardHeaders": {
           "cookie": "a=1; b=2"
         },
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -130,9 +136,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "cookie"
-        ],
+        "forwardHeadersAbsent": ["cookie"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -161,10 +165,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -190,10 +191,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -209,7 +207,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -238,10 +236,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -267,10 +262,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -296,10 +288,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -325,10 +314,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -354,10 +340,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -383,10 +366,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -412,10 +392,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -441,10 +418,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -470,10 +444,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -499,10 +470,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -528,10 +496,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -557,10 +522,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -586,10 +548,33 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a session cookie preceded by a non-ASCII space is not a session",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "cookie": "__Host-ocel-preview=1700003600.2c6b66013748751e730fec544d34d3da9f86445039d4bb7bdff5b9dc241c4df3"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -605,9 +590,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "cookie"
-        ],
+        "forwardHeadersAbsent": ["cookie"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -626,7 +609,31 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
+      }
+    },
+    {
+      "name": "a session cookie in a second cookie header is accepted",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "cookie": [
+            "a=1",
+            "__Host-ocel-preview=1700003600.2c6b66013748751e730fec544d34d3da9f86445039d4bb7bdff5b9dc241c4df3"
+          ]
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {
+          "cookie": "a=1"
+        },
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -645,9 +652,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "authorization"
-        ],
+        "forwardHeadersAbsent": ["authorization"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -666,9 +671,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "authorization"
-        ],
+        "forwardHeadersAbsent": ["authorization"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -687,9 +690,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "authorization"
-        ],
+        "forwardHeadersAbsent": ["authorization"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -718,10 +719,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -747,10 +745,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -776,10 +771,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -805,10 +797,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -834,10 +823,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -863,10 +849,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -885,7 +868,7 @@
         "forwardHeaders": {
           "authorization": "Bearer app-token"
         },
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -907,7 +890,7 @@
         "forwardHeaders": {
           "authorization": "Basic dTphcHAtcGFzc3dvcmQ="
         },
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -927,9 +910,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "authorization"
-        ],
+        "forwardHeadersAbsent": ["authorization"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -961,10 +942,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -993,10 +971,114 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "matching Basic credentials repeated beside a Bearer token are refused",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": ["Basic dTpKQlNXWTNEUEVIUEszUFhQMjM0NQ==", "Bearer t"]
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a Basic scheme name with a non-ASCII letter that folds to Basic is refused",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": "Baſic dTpKQlNXWTNEUEVIUEszUFhQMjM0NQ=="
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "Basic credentials followed by a non-ASCII space are refused",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": "Basic dTpKQlNXWTNEUEVIUEszUFhQMjM0NQ=="
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "Basic credentials that are not UTF-8 are refused",
+      "gate": {
+        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
+      },
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": "Basic dTr/"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1012,9 +1094,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "x-ocel-preview-bypass"
-        ],
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1033,9 +1113,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "x-ocel-preview-bypass"
-        ],
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1044,9 +1122,7 @@
     {
       "name": "a bypass secret that was rotated out is refused",
       "gate": {
-        "bypassSecrets": [
-          "bypass-secret-three"
-        ]
+        "bypassSecrets": ["bypass-secret-three"]
       },
       "request": {
         "method": "GET",
@@ -1069,10 +1145,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1098,10 +1171,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1127,10 +1197,62 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a repeated bypass header is refused even when each value is a secret",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "x-ocel-preview-bypass": ["bypass-secret-one", "bypass-secret-one"]
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a non-ASCII bypass secret is never accepted",
+      "gate": {
+        "bypassSecrets": ["bypass-é"]
+      },
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "x-ocel-preview-bypass": "bypass-é"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1159,18 +1281,13 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
       "name": "an empty bypass header is refused even when an empty secret is listed",
       "gate": {
-        "bypassSecrets": [
-          ""
-        ]
+        "bypassSecrets": [""]
       },
       "request": {
         "method": "GET",
@@ -1193,10 +1310,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1213,10 +1327,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "x-ocel-preview-bypass",
-          "cookie"
-        ],
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass", "cookie"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1243,7 +1354,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1270,10 +1381,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1299,10 +1407,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1319,11 +1424,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "x-ocel-preview-bypass",
-          "x-ocel-set-bypass-cookie",
-          "set-cookie"
-        ],
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass", "x-ocel-set-bypass-cookie", "set-cookie"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1344,10 +1445,27 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [
-          "x-ocel-preview-bypass",
-          "x-ocel-set-bypass-cookie"
-        ],
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass", "x-ocel-set-bypass-cookie"],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
+      }
+    },
+    {
+      "name": "a repeated set-bypass-cookie header forwards without a redirect",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "x-ocel-preview-bypass": "bypass-secret-one",
+          "x-ocel-set-bypass-cookie": ["true", "true"]
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {},
+        "forwardHeadersAbsent": ["x-ocel-preview-bypass", "x-ocel-set-bypass-cookie"],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1364,7 +1482,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1381,7 +1499,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1398,7 +1516,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1415,7 +1533,7 @@
       "expect": {
         "forward": true,
         "forwardHeaders": {},
-        "absent": [],
+        "forwardHeadersAbsent": [],
         "responseHeaders": {
           "x-robots-tag": "noindex"
         }
@@ -1442,10 +1560,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1469,10 +1584,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1496,10 +1608,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1523,10 +1632,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1550,10 +1656,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1577,10 +1680,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1607,10 +1707,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1634,7 +1731,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1658,7 +1755,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1682,7 +1779,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1706,7 +1803,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1730,7 +1827,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1754,7 +1851,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1778,7 +1875,238 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a login whose next has a non-ASCII character returns to the root",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%E4%B8%AD"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a login whose next is not UTF-8 returns to the root",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%FF"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a semicolon in a login field is part of the value",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345&next=/a;b"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/a;b",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a login password containing a semicolon is compared whole",
+      "gate": {
+        "passwordMac": "686e4d1dcd53df495d5f0e7f929066385356a0ad7f40d7486f780f602406234e"
+      },
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=ab;cd"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a malformed percent escape in a login field is kept literally",
+      "gate": {
+        "passwordMac": "1c72f3016fbe5ac6aa7980df693f36cf1cf0e2641b8980e0ae7ee0f8c3b172bc"
+      },
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=a%zzb&next=/x%zz"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/x%zz",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a login password that is not UTF-8 is never the password",
+      "gate": {
+        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
+      },
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=%FF"
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a login password keeps a leading byte order mark",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "password=%EF%BB%BFJBSWY3DPEHPK3PXP2345"
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<form method=\"post\" action=\"/.ocel/preview/login\">",
+          "name=\"password\"",
+          "name=\"next\""
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "empty pairs in a login body are skipped",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "&&password=JBSWY3DPEHPK3PXP2345&"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a login field name is percent-decoded",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "pass%77ord=JBSWY3DPEHPK3PXP2345"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
       }
     },
     {
@@ -1806,10 +2134,7 @@
           "value=\"/docs\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1836,10 +2161,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1866,10 +2188,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1896,7 +2215,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1926,10 +2245,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -1953,7 +2269,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
       }
     },
     {
@@ -1975,9 +2291,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie"
-        ]
+        "headersAbsent": ["set-cookie"]
       }
     },
     {
@@ -1999,9 +2313,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie"
-        ]
+        "headersAbsent": ["set-cookie"]
       }
     },
     {
@@ -2021,9 +2333,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie"
-        ]
+        "headersAbsent": ["set-cookie"]
       }
     },
     {
@@ -2047,7 +2357,75 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "absent": []
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a form content type with a parameter that has no value is accepted",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded; charset"
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345"
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": []
+      }
+    },
+    {
+      "name": "a repeated content type is refused as unsupported",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": ["application/x-www-form-urlencoded", "application/x-www-form-urlencoded"]
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345"
+      },
+      "expect": {
+        "status": 415,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie"]
+      }
+    },
+    {
+      "name": "a content type with a non-ASCII letter that lowercases to the form type is refused",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "content-type": "applİcation/x-www-form-urlencoded"
+        },
+        "body": "password=JBSWY3DPEHPK3PXP2345"
+      },
+      "expect": {
+        "status": 415,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie"]
       }
     },
     {
@@ -2074,10 +2452,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -2101,10 +2476,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -2131,10 +2503,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
@@ -2162,10 +2531,7 @@
           "name=\"next\""
         ],
         "bodyExcludes": [],
-        "absent": [
-          "set-cookie",
-          "location"
-        ]
+        "headersAbsent": ["set-cookie", "location"]
       }
     }
   ]

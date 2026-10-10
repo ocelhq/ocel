@@ -5,10 +5,20 @@ export const PREVIEW_SET_BYPASS_COOKIE_HEADER = "x-ocel-set-bypass-cookie";
 export const PREVIEW_SESSION_SECONDS = 7 * 24 * 60 * 60;
 export const PREVIEW_LOGIN_BODY_MAX_BYTES = 1024;
 
-const REFUSAL_CACHE_CONTROL = "private, no-store";
+const GATE_CACHE_CONTROL = "private, no-store";
 const ROBOTS_TAG = "noindex";
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 const SIGNATURE_HEX_LENGTH = 64;
+const COOKIE_PURPOSE = "cookie";
+const PASSWORD_PURPOSE = "password";
+const BYPASS_PURPOSE = "bypass";
+const AMPERSAND = 0x26;
+const EQUALS_SIGN = 0x3d;
+const PLUS_SIGN = 0x2b;
+const PERCENT_SIGN = 0x25;
+const SPACE = 0x20;
+
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 export interface PreviewGate {
   key: string;
@@ -36,7 +46,7 @@ export type PreviewVerdict =
   | { kind: "respond"; response: PreviewResponse };
 
 export async function hashPreviewPassword(key: string, password: string): Promise<string> {
-  return (await signer(key))("password", password);
+  return (await signer(key))(PASSWORD_PURPOSE, password);
 }
 
 export async function checkPreview(
@@ -60,11 +70,11 @@ export async function checkPreview(
     request.headers.get(PREVIEW_SET_BYPASS_COOKIE_HEADER) === "true" &&
     (request.method === "GET" || request.method === "HEAD")
   ) {
-    return redirect(sign, safeNext(request.target), request.host, nowSeconds);
+    return redirect(sign, sanitizeNext(request.target), request.host, nowSeconds);
   }
 
   if (!(hasPassword || hasBypass || hasSession || allowsOptions(gate, request.method, path))) {
-    return refuse(401, safeNext(request.target), false);
+    return answerLoginForm(401, sanitizeNext(request.target), false);
   }
 
   const headers = new Headers(request.headers);
@@ -98,6 +108,10 @@ async function signer(key: string): Promise<Sign> {
   };
 }
 
+function signSession(sign: Sign, host: string, expiry: string): Promise<string> {
+  return sign(COOKIE_PURPOSE, `${toLowerAscii(host)}\n${expiry}`);
+}
+
 function equalHex(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let difference = 0;
@@ -115,21 +129,29 @@ async function checkLogin(
     typeof request.body === "string"
       ? new TextEncoder().encode(request.body)
       : (request.body ?? new Uint8Array());
-  if (body.length > PREVIEW_LOGIN_BODY_MAX_BYTES) return bare(413);
-  const mediaType = (request.headers.get("content-type") ?? "")
-    .split(";", 1)[0]
-    ?.trim()
-    .toLowerCase();
-  if (mediaType !== FORM_CONTENT_TYPE) return bare(415);
+  if (body.length > PREVIEW_LOGIN_BODY_MAX_BYTES) return answerStatus(413);
+  const mediaType = (request.headers.get("content-type") ?? "").split(";", 1)[0] ?? "";
+  if (toLowerAscii(trimHttpWhitespace(mediaType)) !== FORM_CONTENT_TYPE) return answerStatus(415);
 
-  const form = new URLSearchParams(new TextDecoder().decode(body));
-  const next = safeNext(form.get("next") ?? "");
-  if (!(await isPassword(gate, sign, form.get("password") ?? ""))) return refuse(401, next, true);
+  const form = parseForm(body);
+  const next = sanitizeNext(form.get("next") ?? "");
+  const password = form.get("password");
+  if (!(await isPassword(gate, sign, password === undefined ? "" : password))) {
+    return answerLoginForm(401, next, true);
+  }
   return redirect(sign, next, request.host, nowSeconds);
 }
 
-async function isPassword(gate: PreviewGate, sign: Sign, password: string): Promise<boolean> {
-  return gate.passwordMac !== "" && equalHex(await sign("password", password), gate.passwordMac);
+async function isPassword(
+  gate: PreviewGate,
+  sign: Sign,
+  password: string | null,
+): Promise<boolean> {
+  return (
+    gate.passwordMac !== "" &&
+    password !== null &&
+    equalHex(await sign(PASSWORD_PURPOSE, password), gate.passwordMac)
+  );
 }
 
 async function isBasicPassword(
@@ -139,10 +161,11 @@ async function isBasicPassword(
 ): Promise<boolean> {
   if (authorization === null) return false;
   const space = authorization.indexOf(" ");
-  if (space < 0 || authorization.slice(0, space).toLowerCase() !== "basic") return false;
-  const encoded = authorization.slice(space + 1).trim();
+  if (space < 0 || toLowerAscii(authorization.slice(0, space)) !== "basic") return false;
+  const encoded = trimHttpWhitespace(authorization.slice(space + 1));
   if (encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return false;
-  const decoded = new TextDecoder().decode(Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)));
+  const decoded = decodeUtf8(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)));
+  if (decoded === null) return false;
   const colon = decoded.indexOf(":");
   return colon >= 0 && (await isPassword(gate, sign, decoded.slice(colon + 1)));
 }
@@ -152,11 +175,11 @@ async function isBypassSecret(
   sign: Sign,
   value: string | null,
 ): Promise<boolean> {
-  if (!value) return false;
-  const want = await sign("bypass", value);
+  if (!value || /[\u0080-\uffff]/.test(value)) return false;
+  const want = await sign(BYPASS_PURPOSE, value);
   let matched = false;
   for (const secret of gate.bypassSecrets) {
-    if (secret !== "" && equalHex(await sign("bypass", secret), want)) matched = true;
+    if (secret !== "" && equalHex(await sign(BYPASS_PURPOSE, secret), want)) matched = true;
   }
   return matched;
 }
@@ -179,8 +202,7 @@ async function isSession(
       continue;
     }
     if (!Number.isSafeInteger(Number(expiry)) || Number(expiry) <= nowSeconds) continue;
-    if (equalHex(await sign("cookie", `${request.host.toLowerCase()}\n${expiry}`), signature))
-      return true;
+    if (equalHex(await signSession(sign, request.host, expiry), signature)) return true;
   }
   return false;
 }
@@ -193,32 +215,87 @@ function allowsOptions(gate: PreviewGate, method: string, path: string): boolean
   });
 }
 
+function readCookiePairs(headers: Headers): string[] {
+  return (headers.get("cookie") ?? "")
+    .split(";")
+    .map(trimHttpWhitespace)
+    .filter((pair) => pair !== "");
+}
+
 function readSessionCookies(headers: Headers): string[] {
   const values: string[] = [];
-  for (const pair of (headers.get("cookie") ?? "").split(";")) {
-    const trimmed = pair.trim();
-    const equals = trimmed.indexOf("=");
-    if (equals >= 0 && trimmed.slice(0, equals) === PREVIEW_COOKIE_NAME)
-      values.push(trimmed.slice(equals + 1));
+  for (const pair of readCookiePairs(headers)) {
+    const equals = pair.indexOf("=");
+    if (equals >= 0 && pair.slice(0, equals) === PREVIEW_COOKIE_NAME)
+      values.push(pair.slice(equals + 1));
   }
   return values;
 }
 
 function dropSessionCookie(headers: Headers): void {
-  const line = headers.get("cookie");
-  if (line === null) return;
-  const kept = line
-    .split(";")
-    .map((pair) => pair.trim())
-    .filter((pair) => pair !== "" && pair.split("=", 1)[0] !== PREVIEW_COOKIE_NAME);
+  const kept = readCookiePairs(headers).filter(
+    (pair) => pair.split("=", 1)[0] !== PREVIEW_COOKIE_NAME,
+  );
   if (kept.length === 0) headers.delete("cookie");
   else headers.set("cookie", kept.join("; "));
 }
 
-function safeNext(target: string): string {
+function parseForm(body: Uint8Array): Map<string, string | null> {
+  const form = new Map<string, string | null>();
+  let start = 0;
+  for (let end = 0; end <= body.length; end++) {
+    if (end < body.length && body[end] !== AMPERSAND) continue;
+    const pair = body.subarray(start, end);
+    start = end + 1;
+    if (pair.length === 0) continue;
+    const equals = pair.indexOf(EQUALS_SIGN);
+    const name = decodeFormComponent(equals < 0 ? pair : pair.subarray(0, equals));
+    const value = equals < 0 ? "" : decodeFormComponent(pair.subarray(equals + 1));
+    if (name !== null && !form.has(name)) form.set(name, value);
+  }
+  return form;
+}
+
+function decodeFormComponent(component: Uint8Array): string | null {
+  const decoded: number[] = [];
+  for (let i = 0; i < component.length; i++) {
+    const byte = component[i]!;
+    if (byte === PLUS_SIGN) {
+      decoded.push(SPACE);
+      continue;
+    }
+    if (byte === PERCENT_SIGN && i + 2 < component.length) {
+      const digits = String.fromCharCode(...component.subarray(i + 1, i + 3));
+      if (/^[0-9A-Fa-f]{2}$/.test(digits)) {
+        decoded.push(Number.parseInt(digits, 16));
+        i += 2;
+        continue;
+      }
+    }
+    decoded.push(byte);
+  }
+  return decodeUtf8(Uint8Array.from(decoded));
+}
+
+function decodeUtf8(bytes: Uint8Array): string | null {
+  try {
+    return strictUtf8.decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function trimHttpWhitespace(text: string): string {
+  return text.replace(/^[ \t]+|[ \t]+$/g, "");
+}
+
+function toLowerAscii(text: string): string {
+  return text.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+function sanitizeNext(target: string): string {
   if (!target.startsWith("/") || target.startsWith("//") || target.startsWith("/\\")) return "/";
-  if (Array.from(target).some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f))
-    return "/";
+  if (/[^\x20-\x7e]/.test(target)) return "/";
   if (target.split("?", 1)[0] === PREVIEW_LOGIN_PATH) return "/";
   return target;
 }
@@ -232,16 +309,16 @@ function escapeHtml(text: string): string {
     .replaceAll("'", "&#39;");
 }
 
-function refusalHeaders(): Headers {
-  return new Headers({ "cache-control": REFUSAL_CACHE_CONTROL, "x-robots-tag": ROBOTS_TAG });
+function createGateResponseHeaders(): Headers {
+  return new Headers({ "cache-control": GATE_CACHE_CONTROL, "x-robots-tag": ROBOTS_TAG });
 }
 
-function bare(status: number): PreviewVerdict {
-  return { kind: "respond", response: { status, headers: refusalHeaders(), body: "" } };
+function answerStatus(status: number): PreviewVerdict {
+  return { kind: "respond", response: { status, headers: createGateResponseHeaders(), body: "" } };
 }
 
-function refuse(status: number, next: string, incorrect: boolean): PreviewVerdict {
-  const headers = refusalHeaders();
+function answerLoginForm(status: number, next: string, incorrect: boolean): PreviewVerdict {
+  const headers = createGateResponseHeaders();
   headers.set("content-type", "text/html; charset=utf-8");
   const notice = incorrect ? '<p role="alert">Incorrect password.</p>' : "";
   const body =
@@ -262,8 +339,8 @@ async function redirect(
   nowSeconds: number,
 ): Promise<PreviewVerdict> {
   const expiry = String(nowSeconds + PREVIEW_SESSION_SECONDS);
-  const signature = await sign("cookie", `${host.toLowerCase()}\n${expiry}`);
-  const headers = refusalHeaders();
+  const signature = await signSession(sign, host, expiry);
+  const headers = createGateResponseHeaders();
   headers.set("location", location);
   headers.set(
     "set-cookie",
