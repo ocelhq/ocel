@@ -44,6 +44,12 @@ func nextApp(name string, vars ...variables.Variable) App {
 	return app
 }
 
+func kitApp(name string, vars ...variables.Variable) App {
+	app := nextApp(name, vars...)
+	app.Framework = buildoutput.FrameworkSvelteKit
+	return app
+}
+
 func TestANextAppIsHandedTheKeysOfThePlainNextPublicVariablesDeclaredForIt(t *testing.T) {
 	t.Parallel()
 
@@ -173,10 +179,40 @@ func TestCheckFresh(t *testing.T) {
 		if err == nil {
 			t.Fatal("CheckFresh = nil for a key the build never inlined, want a refusal")
 		}
-		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "not a public variable when"} {
+		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "not a variable the app inlines when"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
+		}
+	})
+
+	t.Run("refuses a sveltekit bundle that predates any plain value it may have inlined", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		if err := Record(root, []App{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "eu-west-1"))}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		err := CheckFresh(root, []App{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "us-east-1"))})
+		if err == nil {
+			t.Fatal("CheckFresh = nil for a sveltekit build whose plain value changed, want a refusal: sveltekit inlines a static value, and which are static only sveltekit knows")
+		}
+		if !strings.Contains(err.Error(), "REGION") || strings.Contains(err.Error(), "PUBLIC_API_URL") {
+			t.Errorf("error = %q, want it to name REGION, the one value that changed", err)
+		}
+	})
+
+	t.Run("allows a sveltekit bundle whose sensitive value rotated", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		if err := Record(root, []App{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-live"))}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		if err := CheckFresh(root, []App{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-rotated"))}); err != nil {
+			t.Errorf("CheckFresh = %v, want it to proceed: a sensitive value is never static, so no bundle holds it", err)
 		}
 	})
 
