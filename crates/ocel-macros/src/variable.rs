@@ -12,16 +12,6 @@ pub(crate) enum Class {
     Secret,
 }
 
-impl Class {
-    fn name(self) -> &'static str {
-        match self {
-            Self::Plain => "plain",
-            Self::Sensitive => "sensitive",
-            Self::Secret => "secret",
-        }
-    }
-}
-
 pub(crate) enum Shape {
     Live,
     Optional(Type),
@@ -94,14 +84,7 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
         }
     }
 
-    check(
-        span,
-        &key,
-        class,
-        folders.as_deref(),
-        fallback.is_some(),
-        &shape,
-    )?;
+    check(span, &key, folders.as_deref(), fallback.is_some(), &shape)?;
     Ok(Variable {
         ident,
         key,
@@ -153,7 +136,6 @@ pub(crate) fn description(field: &Field) -> syn::Result<Option<String>> {
 fn check(
     span: Span,
     key: &str,
-    class: Class,
     folders: Option<&[String]>,
     has_default: bool,
     shape: &Shape,
@@ -164,8 +146,8 @@ fn check(
     if key == URL_KEY {
         return Err(refused(span, key, "is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with ocel::deployment_url()."));
     }
-    if class == Class::Plain && key.starts_with(RESERVED_PREFIX) {
-        return Err(refused(span, key, &format!("starts with the reserved prefix {RESERVED_PREFIX}. A '{}' variable is delivered under its own name, so Ocel would overwrite it.", class.name())));
+    if key.starts_with(RESERVED_PREFIX) {
+        return Err(refused(span, key, &format!("starts with the reserved prefix {RESERVED_PREFIX}. Every variable is delivered under its own name, so Ocel would overwrite it.")));
     }
     if has_default && matches!(shape, Shape::Live) {
         return Err(refused(span, key, "is a Secret with a default. A live value must fail loudly when it is missing rather than fall back."));
@@ -389,15 +371,18 @@ mod tests {
     }
 
     #[test]
-    fn the_reserved_prefix_is_refused_for_a_plain_variable_and_taken_for_the_others() {
-        assert_eq!(
-            err(r#"#[ocel(key = "OCEL_REGION")] pub region: String"#),
-            "'OCEL_REGION' starts with the reserved prefix OCEL_. A 'plain' variable is delivered under its own name, so Ocel would overwrite it."
-        );
-        assert_eq!(
-            ok(r#"#[ocel(key = "OCEL_REGION", sensitive)] pub region: String"#).key,
-            "OCEL_REGION"
-        );
+    fn the_reserved_prefix_is_refused_for_every_class() {
+        for source in [
+            r#"#[ocel(key = "OCEL_REGION")] pub region: String"#,
+            r#"#[ocel(key = "OCEL_REGION", sensitive)] pub region: String"#,
+            r#"#[ocel(key = "OCEL_REGION")] pub region: ocel::Secret"#,
+        ] {
+            assert_eq!(
+                err(source),
+                "'OCEL_REGION' starts with the reserved prefix OCEL_. Every variable is delivered under its own name, so Ocel would overwrite it.",
+                "{source}"
+            );
+        }
     }
 
     #[test]

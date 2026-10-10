@@ -100,7 +100,6 @@ describe("a browser bundle importing only ocel/env/schema", () => {
     expect(code).toContain("PUBLIC_ID");
     for (const forbidden of [
       "process.env",
-      "OCEL_VAR_",
       "OCEL_DEV_SERVER",
       "declareEnv",
       "readLive",

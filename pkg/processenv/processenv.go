@@ -25,8 +25,6 @@ const ResourceEnvVarPrefix = "OCEL_RESOURCE_"
 
 const LiveDirEnvVar = "OCEL_LIVE_DIR"
 
-const DeliveredVariablePrefix = "OCEL_VAR_"
-
 const ClientURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
 const SkipChecksEnvVar = "OCEL_SKIP_CHECKS"

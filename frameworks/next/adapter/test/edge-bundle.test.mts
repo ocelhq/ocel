@@ -793,7 +793,7 @@ test("hands the running entry key to the chunks on a global, before they evaluat
 
 test("writes no value of its own into the edge bundle's env", async () => {
   const { projectDir, args } = await synthEdgeProject();
-  vi.stubEnv("OCEL_VAR_BAKED", "ciphertext-opened");
+  vi.stubEnv("WEBHOOK_SECRET", "ciphertext-opened");
   vi.stubEnv("STRIPE_KEY", "sk-live-plaintext");
 
   await adapter.onBuildComplete!(args as never);

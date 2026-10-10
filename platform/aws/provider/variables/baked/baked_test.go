@@ -3,7 +3,6 @@ package baked
 import (
 	"bytes"
 	"crypto/rand"
-	"strings"
 	"testing"
 )
 
@@ -105,18 +104,6 @@ func TestOpen(t *testing.T) {
 
 		if _, err := Open(k, sealed[:NonceBytes-1]); err == nil {
 			t.Error("Open accepted a bundle too short to contain a nonce")
-		}
-	})
-}
-
-func TestPrefix(t *testing.T) {
-	t.Parallel()
-
-	t.Run("cannot collide with a user chosen key", func(t *testing.T) {
-		t.Parallel()
-
-		if !strings.HasPrefix(Prefix, "OCEL_") {
-			t.Errorf("Prefix = %q, want a name the SDK's reserved prefixes cover", Prefix)
 		}
 	})
 }

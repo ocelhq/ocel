@@ -117,8 +117,6 @@ export function isLive(definition: VariableDefinition): boolean {
   return LIVE_CLASSES.has(definition.class);
 }
 
-const BARE_KEY_CLASSES: ReadonlySet<VariableClass> = new Set(["plain"]);
-
 const RESERVED_PREFIXES = ["OCEL_"];
 
 export const URL_KEY = "OCEL_URL";
@@ -221,12 +219,9 @@ function validateDefinition(key: string, definition: VariableDefinition, source:
       `'${key}' is client-accessible and class '${variableClass}'. A value the browser can read cannot be an encrypted class.`,
     );
   }
-  if (
-    BARE_KEY_CLASSES.has(variableClass) &&
-    RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix))
-  ) {
+  if (RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix))) {
     throw new EnvDefinitionError(
-      `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). A '${variableClass}' variable is delivered under its own name, so Ocel would overwrite it.`,
+      `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). Every variable is delivered under its own name, so Ocel would overwrite it.`,
     );
   }
   if (definition.client && !isRequired(definition)) {

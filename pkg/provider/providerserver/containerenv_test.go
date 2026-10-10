@@ -190,7 +190,7 @@ func TestAWrappingProvidersContainerAppIsSubjectToTheSameReservedNames(t *testin
 			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "PORT", "3000")
 		},
 		"an ocel-owned name": func(req *contractv1.DeployRequest) *contractv1.DeployRequest {
-			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "OCEL_VAR_X", "1")
+			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "OCEL_THING", "1")
 		},
 	} {
 		t.Run(what, func(t *testing.T) {
@@ -323,7 +323,7 @@ func TestAContainerAppsReservedNamesAreRefusedByThePlanRatherThanByTheDeploy(t *
 			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "PORT", "3000")
 		},
 		"an ocel-owned name as a plain value": func(req *contractv1.DeployRequest) *contractv1.DeployRequest {
-			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "OCEL_VAR_X", "1")
+			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "OCEL_THING", "1")
 		},
 		"an ocel-owned name as a sensitive value": func(req *contractv1.DeployRequest) *contractv1.DeployRequest {
 			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, "OCEL_LIVE_KEYS", "1")

@@ -91,12 +91,10 @@ describe("definition errors", () => {
     expect(() => defineEnv({ RELOADED_KEY: { class: "sensitive" } })).not.toThrow();
   });
 
-  it("rejects an Ocel-owned name for a bare-key class", () => {
-    expect(() => defineEnv({ OCEL_THING: { class: "plain" } })).toThrow(/reserved/i);
-  });
-
-  it("allows an Ocel-owned name for a class that is never delivered bare", () => {
-    expect(() => defineEnv({ OCEL_ROTATION_TOKEN: { class: "secret" } })).not.toThrow();
+  it("rejects an Ocel-owned name under every class, since every class is delivered under its own name", () => {
+    for (const variableClass of ["plain", "sensitive", "secret"] as const) {
+      expect(() => defineEnv({ OCEL_THING: { class: variableClass } })).toThrow(/reserved/i);
+    }
   });
 
   it("rejects the deployment url under every class, since ocel writes both names for every node and next.js app", () => {
@@ -399,7 +397,7 @@ describe("the confidentiality of a schema's complaint", () => {
 
   it("keeps an encrypted value out of the error a read throws", () => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv("OCEL_VAR_REDACT_READ_SEALED", SECRET_VALUE);
+    vi.stubEnv("REDACT_READ_SEALED", SECRET_VALUE);
     const env = defineEnv({
       REDACT_READ_SEALED: { class: "sensitive", schema: echoingSchema() },
     });
@@ -444,18 +442,17 @@ describe("reading a variable", () => {
     expect(process.env.READ_INTEROP).toBe("pk_live_123");
   });
 
-  it("reads an encrypted-baked value the runtime injected under its namespaced name", () => {
-    vi.stubEnv("OCEL_VAR_READ_SEALED", "sk_live_123");
+  it("gives an encrypted-baked value the same answer through the object and the process environment", () => {
+    vi.stubEnv("READ_SEALED", "sk_live_123");
     const env = defineEnv({ READ_SEALED: { class: "sensitive" } });
     expect(env.READ_SEALED).toBe("sk_live_123");
-    expect(process.env.READ_SEALED).toBeUndefined();
+    expect(process.env.READ_SEALED).toBe("sk_live_123");
   });
 
-  it("prefers the namespaced value over a bare name of the same key", () => {
-    vi.stubEnv("OCEL_VAR_READ_SHADOWED", "sealed");
-    vi.stubEnv("READ_SHADOWED", "impostor");
-    const env = defineEnv({ READ_SHADOWED: { class: "sensitive" } });
-    expect(env.READ_SHADOWED).toBe("sealed");
+  it("ignores a value under the name the runtime once namespaced a sealed value with", () => {
+    vi.stubEnv("OCEL_VAR_READ_UNPREFIXED", "sealed");
+    const env = defineEnv({ READ_UNPREFIXED: { class: "sensitive" } });
+    expect(() => env.READ_UNPREFIXED).toThrow(EnvValueError);
   });
 
   it("parses through the schema, so the property is the schema's output", () => {
@@ -514,12 +511,10 @@ describe("reading a live value", () => {
 
     expect(env.LIVE_READ).toBe("sk_live_pushed");
     expect(process.env.LIVE_READ).toBeUndefined();
-    expect(process.env.OCEL_VAR_LIVE_READ).toBeUndefined();
   });
 
   it("answers the same call site whatever the class delivering it", () => {
     vi.stubEnv("RECLASSIFIED", "the value");
-    vi.stubEnv("OCEL_VAR_RECLASSIFIED", "the value");
     push(1, { RECLASSIFIED: "the value" });
 
     const read = (env: { RECLASSIFIED: string }) => env.RECLASSIFIED;
@@ -611,7 +606,7 @@ describe("reading from the live directory", () => {
       "OCEL_LIVE_DIR",
       liveDir({ FILE_SHADOWED: "from the file", FILE_BARE: "from the file" }),
     );
-    vi.stubEnv("OCEL_VAR_FILE_SHADOWED", "baked");
+    vi.stubEnv("FILE_SHADOWED", "baked");
     vi.stubEnv("FILE_BARE", "bare");
 
     const env = defineEnv({
@@ -761,7 +756,7 @@ describe("a function that declares no live value", () => {
 
   it("resolves every other class with no live values published at all", () => {
     vi.stubEnv("OUTAGE_PLAIN", "still here");
-    vi.stubEnv("OCEL_VAR_OUTAGE_SEALED", "still sealed");
+    vi.stubEnv("OUTAGE_SEALED", "still sealed");
 
     const env = defineEnv({
       OUTAGE_PLAIN: { class: "plain" },
@@ -775,13 +770,6 @@ describe("a function that declares no live value", () => {
 
   it("leaves a live key to its first read when nothing was pushed", () => {
     expect(() => defineEnv({ LIVE_NO_PUSH: { class: "secret" } })).not.toThrow();
-  });
-
-  it("falls through to the environment for a live key when nothing was pushed", () => {
-    vi.stubEnv("OCEL_VAR_LIVE_IN_DEV", "sk_dev_123");
-    const env = defineEnv({ LIVE_IN_DEV: { class: "secret" } });
-
-    expect(env.LIVE_IN_DEV).toBe("sk_dev_123");
   });
 
   it("falls through to the bare name dev delivers a live value under", () => {
@@ -935,11 +923,9 @@ describe("the app folder binding selects no value", () => {
   });
 
   function plant(key: string, folders: readonly string[]) {
-    vi.stubEnv(`OCEL_VAR_${key}`, RESOLVED);
     vi.stubEnv(key, RESOLVED);
     for (const folder of folders) {
       const chosen = `a value chosen for ${folder}`;
-      vi.stubEnv(`OCEL_VAR_${folder}#${key}`, chosen);
       vi.stubEnv(`${folder}#${key}`, chosen);
       vi.stubEnv(`${key}#${folder}`, chosen);
     }
@@ -1151,7 +1137,7 @@ describe("reading a group", () => {
 
   it("resolves every member once one of them is delivered", () => {
     vi.stubEnv("GROUP_ON_ID", "an-id");
-    vi.stubEnv("OCEL_VAR_GROUP_ON_SECRET", "a-secret");
+    vi.stubEnv("GROUP_ON_SECRET", "a-secret");
     const env = defineEnv({
       github: group(
         { GROUP_ON_ID: { class: "plain" }, GROUP_ON_SECRET: { class: "sensitive" } },

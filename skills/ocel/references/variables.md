@@ -5,7 +5,7 @@ App code declares the variables it reads, and a deploy refuses to proceed while 
 - `sensitive` (redacted in output)
 - `secret` (read live on each access, so it can rotate; printed redacted)
 
-Ocel delivers the values. Code reads them through the declaration, never through raw `process.env` or `os.Getenv`. The `OCEL_` prefix is reserved.
+Ocel delivers the values. Code reads them through the declaration, never through raw `process.env` or `os.Getenv`. A `plain` or `sensitive` value is also in the process environment under its own name, so a library that reads it there itself (an ORM reading `DATABASE_URL`) finds it. The `OCEL_` prefix is reserved for every class.
 
 ## Declare and read
 

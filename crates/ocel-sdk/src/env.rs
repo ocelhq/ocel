@@ -3,7 +3,6 @@ use crate::Error;
 use std::fmt::Display;
 use std::str::FromStr;
 
-const DELIVERED_PREFIX: &str = "OCEL_VAR_";
 const APP_FOLDER_ENV: &str = "OCEL_APP_FOLDER";
 const LIVE_DIR_ENV: &str = "OCEL_LIVE_DIR";
 const URL_KEY: &str = "OCEL_URL";
@@ -208,10 +207,7 @@ fn scoped(key: &str, folders: &[&str]) -> Result<(), Error> {
 }
 
 fn delivered(key: &str) -> Option<String> {
-    std::env::var(format!("{DELIVERED_PREFIX}{key}"))
-        .or_else(|_| std::env::var(key))
-        .ok()
-        .or_else(|| live_file(key))
+    std::env::var(key).ok().or_else(|| live_file(key))
 }
 
 pub(crate) fn live_file(key: &str) -> Option<String> {

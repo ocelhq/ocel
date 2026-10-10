@@ -20,7 +20,6 @@ import (
 
 const (
 	envTag          = "ocel"
-	deliveredPrefix = "OCEL_VAR_"
 	reservedPrefix  = "OCEL_"
 	folderSeparator = ";"
 )
@@ -419,8 +418,8 @@ func definition(field reflect.StructField, index []int) (variable, error) {
 	if v.key == appURLEnv {
 		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with DeploymentURL."}
 	}
-	if !v.confidential() && strings.HasPrefix(v.key, reservedPrefix) {
-		return variable{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("starts with the reserved prefix %s. A '%s' variable is delivered under its own name, so Ocel would overwrite it.", reservedPrefix, className(v.class))}
+	if strings.HasPrefix(v.key, reservedPrefix) {
+		return variable{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("starts with the reserved prefix %s. Every variable is delivered under its own name, so Ocel would overwrite it.", reservedPrefix)}
 	}
 	if v.fallback != nil && v.live() {
 		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "is a Secret with a default. A live value must fail loudly when it is missing rather than fall back."}
@@ -648,9 +647,6 @@ func inScope(folders []string) bool {
 }
 
 func readDelivered(key string) (string, bool) {
-	if value, ok := os.LookupEnv(deliveredPrefix + key); ok {
-		return value, true
-	}
 	if value, ok := os.LookupEnv(key); ok {
 		return value, true
 	}

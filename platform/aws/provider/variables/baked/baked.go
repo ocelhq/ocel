@@ -15,8 +15,6 @@ const (
 
 	EnvelopeVar = "OCEL_VARIABLES_ENVELOPE"
 
-	Prefix = "OCEL_VAR_"
-
 	KeyBytes   = 32
 	NonceBytes = 12
 )

@@ -176,21 +176,21 @@ describe("buildNext", () => {
 
   it("builds with none of the names the request unsets, whatever the shell holds", async () => {
     process.env.SESSION_SECRET = "stale-from-the-shell";
-    process.env.OCEL_VAR_POSTHOG_ID = "stale-from-the-shell";
+    process.env.STRIPE_API_KEY = "stale-from-the-shell";
     try {
       const env = await envOf(
         app({
           env: { POSTHOG_ID: "ph-web" },
-          unset: ["OCEL_VAR_POSTHOG_ID", "SESSION_SECRET"],
+          unset: ["STRIPE_API_KEY", "SESSION_SECRET"],
         }),
       );
       expect(env).not.toHaveProperty("SESSION_SECRET");
-      expect(env).not.toHaveProperty("OCEL_VAR_POSTHOG_ID");
+      expect(env).not.toHaveProperty("STRIPE_API_KEY");
       expect(env.POSTHOG_ID).toBe("ph-web");
       expect(env.PATH).toBe(process.env.PATH);
     } finally {
       delete process.env.SESSION_SECRET;
-      delete process.env.OCEL_VAR_POSTHOG_ID;
+      delete process.env.STRIPE_API_KEY;
     }
   });
 
