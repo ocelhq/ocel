@@ -3,12 +3,14 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 var imageOptimizationFeature = feature{
 	name:       FeatureImageOptimization,
 	summary:    "one shared image transform every front calls",
-	frameworks: []string{"next"},
+	serves:     buildoutput.Uses{ImageOptimization: true},
 	template:   imageOptimizationTemplate,
 	payloads:   imageOptimizationPayloads,
 	placements: imageOptimizationPlacements,

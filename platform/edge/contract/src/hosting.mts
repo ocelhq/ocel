@@ -20,5 +20,6 @@ export type Hosting = {
   rootFunction: string;
   routeTable?: RouteTableFormat;
   static?: Static;
+  isr?: boolean;
   needs: Partial<Record<Need, NeedDetail>>;
 };

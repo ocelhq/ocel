@@ -16,4 +16,4 @@ var PackArtifact = packArtifact
 
 var FunctionRepository = functionRepository
 
-var FrameworksOf = frameworksOf
+var UsesOf = usesOf
