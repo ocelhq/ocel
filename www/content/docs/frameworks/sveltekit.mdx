@@ -34,10 +34,11 @@ To run the app in a container, give it a `"start": "node build"` script. Outside
 ## Environment variables
 
 SvelteKit 3 reads its variables from the `variables` object `src/env.ts` exports. Declare them with
-`defineEnvVars` from `ocel/env/sveltekit`, in the file under `infra/` where ocel already looks, and
+`defineEnvVars` from `ocel/env/sveltekit`, in a file in your
+[discovery folder](/docs/configuration#discoverypaths), where ocel already looks, and
 re-export that object from `src/env.ts`:
 
-```ts title="infra/env.ts"
+```ts title="resources/env.ts"
 import { defineEnvVars } from "ocel/env/sveltekit";
 import * as v from "valibot";
 
@@ -48,7 +49,7 @@ export const variables = defineEnvVars({
 ```
 
 ```ts title="src/env.ts"
-export { variables } from "../infra/env";
+export { variables } from "../resources/env";
 ```
 
 Each variable takes `class` and `folders`, which ocel reads, beside SvelteKit's own `public`,

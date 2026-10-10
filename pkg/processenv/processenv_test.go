@@ -51,7 +51,7 @@ func TestTheDeploymentURLIsInjectedUnderTheNameEachFrameworkReadsPublicValuesBy(
 		key       string
 		want      bool
 	}{
-		{"every app gets OCEL_URL", "go", AppURLEnvVar, true},
+		{"every app gets the deployment url under its own name", "go", AppURLEnvVar, true},
 		{"a next app gets NEXT_PUBLIC_OCEL_URL", "next", NextPublicURLEnvVar, true},
 		{"a next app gets no PUBLIC_OCEL_URL", "next", SvelteKitPublicURLEnvVar, false},
 		{"a sveltekit app gets PUBLIC_OCEL_URL", "sveltekit", SvelteKitPublicURLEnvVar, true},
