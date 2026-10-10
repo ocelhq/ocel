@@ -2,10 +2,7 @@ package gcp
 
 import (
 	"context"
-	"fmt"
 	"strings"
-
-	"google.golang.org/api/cloudresourcemanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -26,8 +23,6 @@ func grantAssets(ctx context.Context, c *clients, spec provider.StackSpec, accou
 }
 
 func (c *clients) ensureAssetsGrant(ctx context.Context, tier environment.Tier, member string, keys staticKeys) error {
-	return c.bindProjectRole(ctx, member, appAssetsRole, &cloudresourcemanager.Expr{
-		Title:      "ocel assets of " + strings.TrimSuffix(strings.TrimPrefix(keys.appPrefix, "assets/"), "/"),
-		Expression: fmt.Sprintf("resource.name.startsWith(%q)", "projects/_/buckets/"+c.Bucket(tier)+"/objects/"+keys.appPrefix),
-	}, true)
+	app := strings.TrimSuffix(strings.TrimPrefix(keys.appPrefix, provider.StoreAssets+"/"), "/")
+	return c.bindProjectRole(ctx, member, appAssetsRole, c.objectPrefixCondition("ocel assets of "+app, tier, keys.appPrefix), true)
 }

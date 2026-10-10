@@ -22,10 +22,7 @@ const (
 )
 
 func (c *clients) assetReaderCondition(tier environment.Tier) *cloudresourcemanager.Expr {
-	return &cloudresourcemanager.Expr{
-		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " assets",
-		Expression: fmt.Sprintf("resource.name.startsWith(%q)", "projects/_/buckets/"+c.Bucket(tier)+"/objects/"+provider.StoreAssets+"/"),
-	}
+	return c.objectPrefixCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", tier, provider.StoreAssets+"/")
 }
 
 func (c *clients) raiseAssetStore(ctx context.Context, tier environment.Tier, kind edge.Kind) error {
