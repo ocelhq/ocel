@@ -218,7 +218,6 @@
       "test/e2e/**/*.test.{t,j}s{,x}"
     ],
     "exclude": [
-      "test/e2e/app-dir/cache-components/cache-components.server-action.test.ts",
       "test/e2e/app-dir/next-config-ts/tsconfig-extends/next-config-ts-tsconfig-extends-esm.test.ts",
       "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts"
     ]
