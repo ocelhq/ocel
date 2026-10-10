@@ -389,7 +389,7 @@ jobs:
     name: test (${{ matrix.group }})
     needs: smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -491,6 +491,7 @@ jobs:
 
       - name: Run deploy tests
         working-directory: nextjs
+        timeout-minutes: 75
         env:
           NEXT_TEST_MODE: deploy
           NEXT_E2E_TEST_TIMEOUT: 240000
