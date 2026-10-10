@@ -21,10 +21,13 @@ describe("the variables ocel/env/sveltekit hands to SvelteKit", () => {
     expectTypeOf(variables.PUBLIC_OCEL_URL.public).toEqualTypeOf<true>();
   });
 
-  it("drops the fields only ocel reads", () => {
+  it("drops the fields only ocel reads, and reads a sensitive value as a string", () => {
     const variables = defineEnvVars({ STRIPE_KEY: { class: "sensitive", folders: ["/web"] } });
 
-    expectTypeOf<keyof typeof variables.STRIPE_KEY>().toEqualTypeOf<never>();
+    expectTypeOf<keyof typeof variables.STRIPE_KEY>().toEqualTypeOf<"schema">();
+    expectTypeOf<
+      StandardSchemaV1.InferOutput<typeof variables.STRIPE_KEY.schema>
+    >().toEqualTypeOf<string>();
   });
 });
 
