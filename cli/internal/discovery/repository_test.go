@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -83,6 +84,9 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		},
 		"pkg/provider/pulumi/runtime.go": {
 			statedir.Name: true,
+		},
+		"pkg/edge/previewgate.go": {
+			edge.PreviewLoginPath: true,
 		},
 		"platform/aws/provider/deploy_awslive_test.go": {
 			DefaultRootDirName: true,
