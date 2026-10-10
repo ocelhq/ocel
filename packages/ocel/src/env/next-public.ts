@@ -50,10 +50,13 @@ export function refusePublicConfidential(definitions: EnvDefinitions): void {
   }
 }
 
+let parsed: { raw: string; values: Record<string, string> } | undefined;
+
 function findInlinedValues(): Record<string, string> | undefined {
   const raw = process.env.OCEL_PUBLIC_ENV;
   if (typeof raw !== "string") return undefined;
-  return JSON.parse(raw) as Record<string, string>;
+  if (parsed?.raw !== raw) parsed = { raw, values: JSON.parse(raw) as Record<string, string> };
+  return parsed.values;
 }
 
 function readInlinedValues(): Record<string, string> {
