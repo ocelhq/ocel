@@ -1107,6 +1107,42 @@ test("passes the app's trailing-slash config into the route table", async () => 
   expect(manifest.skipMiddlewareUrlNormalize).toBe(true);
 });
 
+test.each([
+  { assetPrefix: "/assets", basePath: "", expected: "/assets" },
+  { assetPrefix: "assets", basePath: "", expected: "/assets" },
+  { assetPrefix: "https://cdn.example.com/assets", basePath: "", expected: "/assets" },
+  { assetPrefix: "/assets", basePath: "/docs", expected: "/assets" },
+])(
+  "records the pathname of assetPrefix $assetPrefix under basePath $basePath in the route table",
+  async ({ assetPrefix, basePath, expected }) => {
+    const { projectDir, args } = await synthProject();
+    args.config = { ...args.config, assetPrefix, basePath };
+    const adapter = await loadAdapterIn(projectDir);
+
+    await adapter.onBuildComplete(args as never);
+
+    expect((await readManifest(projectDir)).assetPrefixPathname).toBe(expected);
+  },
+);
+
+test.each([
+  { assetPrefix: "", basePath: "" },
+  { assetPrefix: "/", basePath: "" },
+  { assetPrefix: "https://cdn.example.com", basePath: "" },
+  { assetPrefix: "/docs", basePath: "/docs" },
+])(
+  "leaves assetPrefix $assetPrefix under basePath $basePath out of the route table",
+  async ({ assetPrefix, basePath }) => {
+    const { projectDir, args } = await synthProject();
+    args.config = { ...args.config, assetPrefix, basePath };
+    const adapter = await loadAdapterIn(projectDir);
+
+    await adapter.onBuildComplete(args as never);
+
+    expect(await readManifest(projectDir)).not.toHaveProperty("assetPrefixPathname");
+  },
+);
+
 test("defaults the trailing-slash config to false when the app sets none of it", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);

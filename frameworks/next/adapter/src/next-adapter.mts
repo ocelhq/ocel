@@ -452,6 +452,7 @@ const adapter = {
       buildId,
       appName: output.app,
       basePath: config.basePath || "",
+      ...assetPrefixField(config.assetPrefix, basePath),
       trailingSlash: !!config.trailingSlash,
       skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
       skipMiddlewareUrlNormalize: !!config.skipMiddlewareUrlNormalize,
@@ -1263,6 +1264,20 @@ function nextDataPathnameOf(pageKey: string, buildId: string, basePath: string):
   const normalized = unprefixed === "/" ? "/index" : unprefixed;
   const dataPathname = `/_next/data/${buildId}${normalized}.json`;
   return basePath ? `${basePath}${dataPathname}` : dataPathname;
+}
+
+function assetPrefixField(
+  assetPrefix: string | undefined,
+  basePath: string,
+): Partial<Pick<NextRouteTable, "assetPrefixPathname">> {
+  if (!assetPrefix) return {};
+  const pathname =
+    /https?:\/\//.test(assetPrefix) && URL.canParse(assetPrefix)
+      ? new URL(assetPrefix).pathname
+      : assetPrefix;
+  if (!pathname || pathname === "/") return {};
+  const assetPrefixPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return assetPrefixPathname === basePath ? {} : { assetPrefixPathname };
 }
 
 const NEXT_STATIC_SEGMENT = "/_next/static/";

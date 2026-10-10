@@ -690,6 +690,14 @@ function middlewarePrefetchProbe(
   });
 }
 
+function withoutAssetPrefix(url: URL, manifest: NextRouteTable): URL {
+  const prefix = manifest.assetPrefixPathname;
+  if (!prefix || !url.pathname.startsWith(`${prefix}/_next/`)) return url;
+  const unprefixed = new URL(url);
+  unprefixed.pathname = `${manifest.basePath}${url.pathname.slice(prefix.length)}`;
+  return unprefixed;
+}
+
 async function dispatch(result: RouteResult, request: Request, deps: RouteDeps): Promise<Response> {
   const { manifest } = deps;
   const doFetch = deps.fetch ?? fetch;
@@ -725,10 +733,11 @@ async function dispatch(result: RouteResult, request: Request, deps: RouteDeps):
   if (!result.resolvedPathname) {
     const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
     if (probe) return probe;
-    const asset = await staticAsset();
+    const unprefixedAssetUrl = withoutAssetPrefix(assetUrl, manifest);
+    const asset = await staticAsset(unprefixedAssetUrl);
     if (asset.status !== 404) return asset;
     if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
-    if (isImmutablePathname(deps.assetStore, url.pathname)) return asset;
+    if (isImmutablePathname(deps.assetStore, unprefixedAssetUrl.pathname)) return asset;
     return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
   }
 

@@ -2659,6 +2659,141 @@ describe("not-found fallback for unmatched pathnames", () => {
     expect(await res.text()).toBe("Not Found");
   });
 
+  it.each([
+    { basePath: "", request: "/assets/_next/static/invalid-path" },
+    { basePath: "/base", request: "/assets/_next/static/invalid-path" },
+    { basePath: "/base", request: "/base/_next/static/invalid-path" },
+  ])(
+    "returns the plaintext 404 for a missing $request under assetPrefix /assets and basePath $basePath",
+    async ({ basePath, request }) => {
+      const deps = baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath,
+          assetPrefixPathname: "/assets",
+          pathnames: [`${basePath}/404`],
+          routes: {},
+          dispatch: {
+            [`${basePath}/404`]: {
+              kind: "function",
+              id: "page",
+              entryKey: `${basePath}/404`,
+              page: true,
+            },
+          },
+          errorRoutes: { notFound: `${basePath}/404` },
+        },
+        functionUrls: { page: "https://fn.example.com" },
+        fetch: (async () =>
+          new Response("<html>custom 404</html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          })) as unknown as typeof fetch,
+        assetStore: assetStoreServing(
+          { [`${basePath}/404.html`]: "<html>static 404</html>" },
+          basePath,
+        ),
+      });
+
+      const res = await dispatchResult({}, new Request(`https://app.example${request}`), deps);
+
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(await res.text()).toBe("Not Found");
+    },
+  );
+
+  it("renders the not-found page for a pathname outside _next under the assetPrefix", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        assetPrefixPathname: "/assets",
+        pathnames: ["/404"],
+        routes: {},
+        dispatch: {
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({}),
+    });
+
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/assets/_next-ish/static/invalid-path"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<html>custom 404</html>");
+  });
+
+  describe("through the real router with Next's assetPrefix rewrite", () => {
+    const assetPrefixDeps = () =>
+      baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          assetPrefixPathname: "/assets",
+          pathnames: ["/404", "/_next/static/t/_buildManifest.js"],
+          routes: {
+            beforeMiddleware: [],
+            beforeFiles: [
+              {
+                sourceRegex: "^/assets/_next(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))$",
+                destination: "/_next/$1",
+              },
+            ],
+            afterFiles: [],
+            dynamicRoutes: [],
+            onMatch: [],
+            fallback: [],
+          },
+          dispatch: {
+            "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
+            "/_next/static/t/_buildManifest.js": { kind: "static" },
+          },
+          errorRoutes: { notFound: "/404" },
+        },
+        functionUrls: { page: "https://fn.example.com" },
+        fetch: (async () =>
+          new Response("<html>custom 404</html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          })) as unknown as typeof fetch,
+        assetStore: assetStoreServing({
+          "/_next/static/t/_buildManifest.js": "self.__BUILD_MANIFEST = {}",
+        }),
+      });
+
+    it("serves a built asset requested under the assetPrefix", async () => {
+      const res = await serve(
+        new Request("https://app.example/assets/_next/static/t/_buildManifest.js"),
+        assetPrefixDeps(),
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("self.__BUILD_MANIFEST = {}");
+    });
+
+    it("returns the plaintext 404 for a missing asset requested under the assetPrefix", async () => {
+      const res = await serve(
+        new Request("https://app.example/assets/_next/static/invalid-path"),
+        assetPrefixDeps(),
+      );
+
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe("Not Found");
+    });
+  });
+
   it("renders the not-found page for a genuinely unmatched pathname through the real router", async () => {
     const deps = baseDeps({
       manifest: {
