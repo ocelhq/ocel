@@ -72,7 +72,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions and enqueues ISR revalidations."
+      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, reads a release's objects and enqueues ISR revalidations."
     Properties:
       UserName: %s
       Policies:
@@ -90,6 +90,12 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                     'aws:ResourceTag/ocel:component': 'function'
                     'aws:ResourceTag/%s': '%s'
               - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub '${%s}/*/assets/*'
+                  - !Sub '${%s}/*/route-table/*'
+                  - !Sub '${%s}/*/edge/*'
+              - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref %s
               - Effect: Allow
@@ -102,7 +108,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, tier, userName, ns.PolicyName("edge-cache"),
 		naming.EnvTierTagKey, tier,
-		paramRevalidateQueueARN, invoke)
+		paramAssetBucketARN, paramAssetBucketARN, paramAssetBucketARN, paramRevalidateQueueARN, invoke)
 }
 
 func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {
