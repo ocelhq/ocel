@@ -62,6 +62,22 @@ func PublicKeys(app variables.App, definitions []*resourcesv1.VariableDefinition
 	return slices.Compact(keys)
 }
 
+func inlinedKeys(app App) []string {
+	switch app.Framework {
+	case buildoutput.FrameworkNext:
+		return PublicKeys(app.App, app.Declared)
+	case buildoutput.FrameworkSvelteKit:
+		var keys []string
+		for _, definition := range app.Declared {
+			if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+				keys = append(keys, definition.GetKey())
+			}
+		}
+		return keys
+	}
+	return nil
+}
+
 type buildRecord struct {
 	Digests map[string]map[string]string `json:"digests,omitempty"`
 }
@@ -114,16 +130,16 @@ func CheckFresh(projectDir string, apps []App) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either not a public variable when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either not a variable the app inlines when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
 	if len(changed) > 0 {
-		causes = append(causes, fmt.Sprintf("the public value of %s changed since "+statedir.Name+"/output was built", strings.Join(changed, ", ")))
+		causes = append(causes, fmt.Sprintf("the build-time value of %s changed since "+statedir.Name+"/output was built", strings.Join(changed, ", ")))
 	}
 	return fmt.Errorf(
 		"--prebuilt cannot deploy this build: %s. "+
-			"A public value is inlined into the browser bundle at build time, so this deploy would serve browsers something other than what its server resolves. "+
+			"A value inlined at build time stays in the bundle, so this deploy would serve something other than what it resolved. "+
 			"Deploy without --prebuilt to build with the values this deploy resolved",
 		strings.Join(causes, ", and "),
 	)
@@ -157,7 +173,7 @@ func digests(app App) map[string]string {
 	for _, v := range app.Variables {
 		values[v.Key] = v.Value
 	}
-	for _, key := range PublicKeys(app.App, app.Declared) {
+	for _, key := range inlinedKeys(app) {
 		value, resolved := values[key]
 		if !resolved {
 			continue
