@@ -131,6 +131,67 @@ func TestBootstrappingAfterTheSecretWasLostRetiresTheKeyNobodyCanReadAndMintsAno
 	}
 }
 
+func TestBootstrappingMintsTheNewKeyBeforeItDeletesTheOneTheWorkerStillSignsWith(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	h.raise(t)
+	lost := h.hmac.active()[0]
+	credentials := h.stored(t)
+	credentials.AssetStoreSecretAccessKey = ""
+	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+		t.Fatal(err)
+	}
+
+	h.raise(t)
+
+	minted := h.stored(t).AssetStoreAccessKeyID
+	if want := []string{"create " + lost, "create " + minted, "delete " + lost}; !slices.Equal(h.hmac.events, want) {
+		t.Errorf("the HMAC key calls = %v, want %v", h.hmac.events, want)
+	}
+}
+
+func TestABootstrapThatCannotMintAKeyKeepsTheOneTheWorkerSignsWith(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	h.raise(t)
+	signing := h.hmac.active()[0]
+	credentials := h.stored(t)
+	credentials.AssetStoreSecretAccessKey = ""
+	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+		t.Fatal(err)
+	}
+	h.hmac.refusesCreate = true
+
+	if err := h.clients.raiseAssetStore(t.Context(), environment.TierProduction, cloudflareKind); err == nil {
+		t.Fatal("raiseAssetStore() = nil, want the refused key creation")
+	}
+
+	if got := h.hmac.active(); !slices.Equal(got, []string{signing}) {
+		t.Errorf("the active keys = %v, want the worker's %s kept", got, signing)
+	}
+}
+
+func TestABootstrapThatCannotDeleteTheStaleKeyHasRecordedTheNewOne(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	h.raise(t)
+	credentials := h.stored(t)
+	credentials.AssetStoreSecretAccessKey = ""
+	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+		t.Fatal(err)
+	}
+	h.hmac.refusesDelete = true
+
+	if err := h.clients.raiseAssetStore(t.Context(), environment.TierProduction, cloudflareKind); err == nil {
+		t.Fatal("raiseAssetStore() = nil, want the refused deletion")
+	}
+
+	recorded := h.stored(t)
+	if recorded.AssetStoreAccessKeyID != "GOOG1E2" || recorded.AssetStoreSecretAccessKey != "secret-GOOG1E2" {
+		t.Errorf("the recorded credential = %q/%q, want the new key GOOG1E2", recorded.AssetStoreAccessKeyID, recorded.AssetStoreSecretAccessKey)
+	}
+}
+
 func TestBootstrappingReplacesAKeyThatWasDeactivated(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
