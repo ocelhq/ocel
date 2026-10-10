@@ -91,9 +91,10 @@ func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpe
 				return fmt.Errorf("static file %s: %w", file.key, err)
 			}
 			attrs := storage.ObjectAttrs{ContentType: contenttype.Infer(file.key)}
-			if file.key != keys.imageConfig {
-				attrs.CacheControl = spec.App.Static.CacheControl("/" + strings.TrimPrefix(file.key, keys.assets+"/"))
+			if file.key == keys.imageConfig {
+				return p.replaceObject(ctx, spec.Ref.Tier, provider.StoreAssets, file.key, attrs, body)
 			}
+			attrs.CacheControl = spec.App.Static.CacheControl("/" + strings.TrimPrefix(file.key, keys.assets+"/"))
 			return p.createObject(ctx, spec.Ref.Tier, provider.StoreAssets, file.key, attrs, body)
 		})
 	}
@@ -128,12 +129,23 @@ func staticFileCount(n int) string {
 }
 
 func (p *Provider) createObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
+	return p.writeObject(ctx, tier, store, key, attrs, body, &storage.Conditions{DoesNotExist: true})
+}
+
+func (p *Provider) replaceObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
+	return p.writeObject(ctx, tier, store, key, attrs, body, nil)
+}
+
+func (p *Provider) writeObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte, conditions *storage.Conditions) error {
 	objects := artifacts{p}
 	object, err := objects.object(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: key})
 	if err != nil {
 		return err
 	}
-	writer := object.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
+	if conditions != nil {
+		object = object.If(*conditions)
+	}
+	writer := object.NewWriter(ctx)
 	writer.ContentType = attrs.ContentType
 	writer.CacheControl = attrs.CacheControl
 	if len(body) < singleRequestUploadLimit {

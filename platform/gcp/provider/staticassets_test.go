@@ -128,6 +128,21 @@ func TestARedeployOfTheSameReleaseKeepsTheStaticFilesItHas(t *testing.T) {
 	}
 }
 
+func TestARedeployOfTheSameReleaseReplacesItsImageConfig(t *testing.T) {
+	const imageConfig = "assets/prod/shop/web/r1/image-config.json"
+	server := &runServer{present: map[string]bool{imageConfig: true}}
+	p := server.open(t)
+	plantStatic(t, p, map[string]string{"image-config.json": `{"sizes":[640]}`})
+
+	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	if got := uploadNamed(t, server.stored(), imageConfig).ifGenerationMatch; got != "" {
+		t.Errorf("the image config was written with ifGenerationMatch=%q, want no condition so a redeploy replaces it", got)
+	}
+}
+
 func TestAServiceThatRoutesNothingUploadsNoStaticFiles(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
