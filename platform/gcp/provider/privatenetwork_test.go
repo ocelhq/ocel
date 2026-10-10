@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/api/compute/v1"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -43,7 +44,7 @@ func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) 
 	}
 }
 
-func TestThePrivateNetworkIsAFeatureNoEdgeOrFrameworkPullsIn(t *testing.T) {
+func TestThePrivateNetworkIsAFeatureNoEdgeOrBuildPullsIn(t *testing.T) {
 	t.Parallel()
 
 	catalogue := bootstrap{}.Catalogue()
@@ -51,8 +52,8 @@ func TestThePrivateNetworkIsAFeatureNoEdgeOrFrameworkPullsIn(t *testing.T) {
 	if at < 0 {
 		t.Fatalf("Catalogue() = %v, want the %q feature kv stores and databases are reached over", catalogue, networkFeature)
 	}
-	if feature := catalogue[at]; len(feature.Edges) != 0 || len(feature.Frameworks) != 0 || !strings.Contains(feature.Summary, networkSubnetRange) {
-		t.Errorf("the %q feature is %+v, want one no edge or framework pulls in that names its subnet's range", networkFeature, feature)
+	if feature := catalogue[at]; len(feature.Edges) != 0 || feature.Serves != (buildoutput.Uses{}) || !strings.Contains(feature.Summary, networkSubnetRange) {
+		t.Errorf("the %q feature is %+v, want one no edge or build pulls in that names its subnet's range", networkFeature, feature)
 	}
 	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
 		required, err := bootstrapplan.RequiredFeatures(catalogue, nil, kind)

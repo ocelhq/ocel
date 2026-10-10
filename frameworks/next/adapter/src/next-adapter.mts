@@ -544,6 +544,7 @@ const adapter = {
       rootFunction,
       routeTable: "next",
       static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
+      isr: true,
       needs,
     });
 

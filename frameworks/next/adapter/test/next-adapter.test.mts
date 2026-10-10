@@ -1892,6 +1892,7 @@ test("states the runtime and next's own build id in hosting.json", async () => {
     rootFunction: manifest.rootFunction,
     routeTable: "next",
     static: expect.objectContaining({ immutablePrefixes: expect.any(Array) }),
+    isr: true,
     needs: {},
   });
   expect(hosting.frameworkBuildId).toBe(manifest.buildId);

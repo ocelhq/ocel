@@ -89,7 +89,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), gate.Edge)
+	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), presumedUses(req.GetFrameworks()), gate.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

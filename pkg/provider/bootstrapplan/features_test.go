@@ -6,14 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 var testCatalogue = []provider.Feature{
-	{Name: "isr", Summary: "incremental regeneration", Frameworks: []string{"next"}},
-	{Name: "image-optimization", Summary: "image optimizer", Frameworks: []string{"next"}},
+	{Name: "isr", Summary: "incremental regeneration", Serves: buildoutput.Uses{ISR: true}},
+	{Name: "image-optimization", Summary: "image optimizer", Serves: buildoutput.Uses{ImageOptimization: true}},
 	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Edges: []edge.Kind{"cloudflare"}},
 }
 
@@ -214,16 +215,26 @@ func TestRequiredFeatures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name       string
-		frameworks []string
-		edge       edge.Kind
-		want       []string
+		name string
+		apps []buildoutput.Uses
+		edge edge.Kind
+		want []string
 	}{
 		{name: "a project needing nothing needs no feature"},
 		{
-			name:       "a framework pulls the features that name it",
-			frameworks: []string{"next"},
-			want:       []string{"isr", "image-optimization"},
+			name: "an app pulls the features that serve what it uses",
+			apps: []buildoutput.Uses{{ISR: true, ImageOptimization: true}},
+			want: []string{"isr", "image-optimization"},
+		},
+		{
+			name: "an app using ISR alone pulls no image optimizer",
+			apps: []buildoutput.Uses{{ISR: true}},
+			want: []string{"isr"},
+		},
+		{
+			name: "what the apps use together is one set",
+			apps: []buildoutput.Uses{{ImageOptimization: true}, {}, {ISR: true}},
+			want: []string{"isr", "image-optimization"},
 		},
 		{
 			name: "an edge pulls the feature that names it, and what it depends on",
@@ -231,25 +242,25 @@ func TestRequiredFeatures(t *testing.T) {
 			want: []string{"isr", "cloudflare-edge"},
 		},
 		{
-			name:       "runtimes and edge together are one set",
-			frameworks: []string{"next"},
-			edge:       "cloudflare",
-			want:       []string{"isr", "image-optimization", "cloudflare-edge"},
+			name: "apps and edge together are one set",
+			apps: []buildoutput.Uses{{ISR: true, ImageOptimization: true}},
+			edge: "cloudflare",
+			want: []string{"isr", "image-optimization", "cloudflare-edge"},
 		},
 		{
-			name:       "a framework no feature names pulls nothing",
-			frameworks: []string{"astro"},
+			name: "apps that use nothing pull nothing",
+			apps: []buildoutput.Uses{{}, {}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RequiredFeatures(testCatalogue, tc.frameworks, tc.edge)
+			got, err := RequiredFeatures(testCatalogue, tc.apps, tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures() = %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("RequiredFeatures(%v, %q) = %v, want %v", tc.frameworks, tc.edge, got, tc.want)
+				t.Errorf("RequiredFeatures(%+v, %q) = %v, want %v", tc.apps, tc.edge, got, tc.want)
 			}
 		})
 	}

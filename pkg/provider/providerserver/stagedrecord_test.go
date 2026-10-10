@@ -191,7 +191,7 @@ func TestTheStagedRecordSaysWhetherTheBuildCachesAnyRoute(t *testing.T) {
 	deployedRecord := func(t *testing.T, prerendered bool) router.ReleaseRecord {
 		builtProject(t)
 		if prerendered {
-			declaresNeed(t, "web", edge.NeedEdgeCache)
+			declaresPrerenders(t, "web")
 		}
 		client, provider := deployServed(t)
 		stager := staging(t, provider)
@@ -366,5 +366,24 @@ func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	staged := stager.records()
 	if len(staged) != 1 || staged[0].Origin != "" {
 		t.Errorf("records %+v, want one with no origin: a function origin reads as a container to the edges that reach an origin by URL", staged)
+	}
+}
+
+func declaresPrerenders(t *testing.T, app string) {
+	t.Helper()
+	dir := buildoutput.AppRoot(workingOutputRoot(t), app)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(buildoutput.Hosting{
+		Version: buildoutput.HostingVersion,
+		ISR:     true,
+		Needs:   map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Routes: []string{"/feed"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), raw, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

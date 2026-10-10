@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -333,7 +334,7 @@ func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
 func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun(t *testing.T) {
 	fixture := clitest.SetUpProject(t)
 	removeBootstrap(t, fixture, environment.TierProduction)
-	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
+	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
 	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
@@ -358,7 +359,7 @@ func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun
 func TestADeployAgainstABootstrapLackingAFeatureItNeedsAddsItAndDeploysInOneRun(t *testing.T) {
 	fixture := clitest.SetUpProject(t)
 	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
-	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every node app needs", Frameworks: []string{"node"}})
+	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
 	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
