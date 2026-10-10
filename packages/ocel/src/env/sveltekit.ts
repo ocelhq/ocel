@@ -70,14 +70,23 @@ type Refusals<TVariables extends KitVariables> = {
   readonly [K in keyof TVariables & string]: Refusal<K, TVariables[K]>;
 };
 
-type LiveFileSchema<TVariable> = TVariable extends { readonly class: "sensitive" }
-  ? TVariable extends { readonly schema: unknown }
-    ? unknown
-    : { schema: StandardSchemaV1<string | undefined, string> }
-  : unknown;
+type SchemaOutput<TSchema> = TSchema extends StandardSchemaV1
+  ? StandardSchemaV1.InferOutput<TSchema>
+  : TSchema extends (value: string | undefined) => infer TOutput
+    ? TOutput
+    : never;
+
+type LiveFileSchema<TVariable> = {
+  schema: StandardSchemaV1<
+    string | undefined,
+    TVariable extends { readonly schema: infer TSchema } ? SchemaOutput<TSchema> : string
+  >;
+};
 
 type KitFields<TVariables extends KitVariables> = {
-  [K in keyof TVariables]: Omit<TVariables[K], "class" | "folders"> & LiveFileSchema<TVariables[K]>;
+  [K in keyof TVariables]: TVariables[K] extends { readonly class: "sensitive" }
+    ? Omit<TVariables[K], "class" | "folders" | "schema"> & LiveFileSchema<TVariables[K]>
+    : Omit<TVariables[K], "class" | "folders">;
 };
 
 type DeploymentUrl = { public: true; schema: (value: string | undefined) => string | undefined };
