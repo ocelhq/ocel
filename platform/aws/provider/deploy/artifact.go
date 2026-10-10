@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -42,6 +44,16 @@ func copyFileInto(w io.Writer, path string) error {
 type objectHeaders struct {
 	contentType  string
 	cacheControl string
+	tagging      string
+}
+
+var edgeReadableTagging = url.Values{naming.EdgeReadableTagKey: {naming.EdgeReadableTagValue}}.Encode()
+
+func (h objectHeaders) taggedFor(to uploadTarget) objectHeaders {
+	if to.edgeReadable {
+		h.tagging = edgeReadableTagging
+	}
+	return h
 }
 
 func uploadArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, body func() ([]byte, error)) (transferred bool, err error) {
@@ -73,6 +85,9 @@ func putArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key strin
 	}
 	if headers.cacheControl != "" {
 		in.CacheControl = aws.String(headers.cacheControl)
+	}
+	if headers.tagging != "" {
+		in.Tagging = aws.String(headers.tagging)
 	}
 	if _, err := up.PutObject(ctx, in); err != nil {
 		return fmt.Errorf("upload artifact %s/%s: %w", bucket, key, err)

@@ -400,22 +400,23 @@ func iamResourceMatchesAny(patterns []string, arn string) bool {
 }
 
 func TestAssetBucketRevalidator(t *testing.T) {
-	t.Run("the edge user is granted no S3 action but reading a release's immutable objects", func(t *testing.T) {
+	t.Run("the edge user is granted no S3 action but listing the asset bucket and reading the objects tagged edge-readable", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				user, ok := parseRevalidatorTemplate(t, tc.edgeTemplate).Resources["EdgeUser"]
 				if !ok {
 					t.Fatal("template is missing the EdgeUser")
 				}
-				for _, st := range user.Properties.Policies[0].PolicyDocument.Statement {
+				stmts := user.Properties.Policies[0].PolicyDocument.Statement
+				for _, st := range stmts {
 					for _, action := range st.actions() {
-						if strings.HasPrefix(action, "s3:") && action != "s3:GetObject" {
+						if strings.HasPrefix(action, "s3:") && action != "s3:GetObject" && action != "s3:ListBucket" {
 							t.Errorf("the edge user is granted %s on %v: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", action, st.resources())
 						}
-						if action == "s3:GetObject" && iamResourceMatchesAny(st.resources(), "arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/origin.json") {
-							t.Errorf("the edge user can read %v, which holds a release's origin record and the app's bypass token", st.resources())
-						}
 					}
+				}
+				if edgeUserReads(stmts, "arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/origin.json", nil) {
+					t.Error("the edge user can read a release's origin record, which holds the app's bypass token")
 				}
 			})
 		}

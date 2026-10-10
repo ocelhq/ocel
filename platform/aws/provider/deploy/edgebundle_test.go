@@ -266,7 +266,7 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
-func TestAnEdgeBundleAndItsSealedOverlayAlsoLandInTheAssetBucket(t *testing.T) {
+func TestAnEdgeBundleAndItsSealedOverlayLandOnlyInTheAssetBucketTaggedEdgeReadableWhenTheEdgeHoldsCredentials(t *testing.T) {
 	t.Parallel()
 	edgeStore := &fakeArtifactStore{exists: map[string]bool{}}
 	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
@@ -278,6 +278,7 @@ func TestAnEdgeBundleAndItsSealedOverlayAlsoLandInTheAssetBucket(t *testing.T) {
 		AssetBucket: "assets", Env: "prod",
 		Objects:          assetStore,
 		CacheStoreBucket: "isr", CacheStoreObjects: edgeStore,
+		EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret",
 	}
 	manifest := edgeVariablesManifest(variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
 
@@ -287,11 +288,15 @@ func TestAnEdgeBundleAndItsSealedOverlayAlsoLandInTheAssetBucket(t *testing.T) {
 
 	want := []string{edgeBundleKeyFor("web", testBuildID), edgeSealedKeyFor("web", testBuildID)}
 	slices.Sort(want)
-	for name, store := range map[string]*fakeArtifactStore{"the adopted store": edgeStore, "the asset bucket": assetStore} {
-		got := append([]string(nil), store.puts...)
-		slices.Sort(got)
-		if !slices.Equal(got, want) {
-			t.Errorf("%s was given %v, want %v", name, got, want)
+	if got := sortedPuts(assetStore); !slices.Equal(got, want) {
+		t.Errorf("the asset bucket was given %v, want %v", got, want)
+	}
+	if len(edgeStore.puts) != 0 {
+		t.Errorf("the adopted store was given %v, want nothing: the edge reads its bundle from the asset bucket alone", edgeStore.puts)
+	}
+	for _, key := range want {
+		if got := assetStore.taggings[key]; got != wantEdgeReadableTagging {
+			t.Errorf("%s tagging = %q, want %q", key, got, wantEdgeReadableTagging)
 		}
 	}
 	for _, b := range assetStore.buckets {
