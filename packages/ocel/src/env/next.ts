@@ -1,7 +1,11 @@
 import type { Env } from "./access.js";
 import type { EnvDefinitions } from "./definition.js";
-import { defineEnv as defineServerEnv } from "./index.js";
-import { overlayInlined, type PublicPlain, refusePublicConfidential } from "./next-public.js";
+import {
+  type PublicPlain,
+  refusePublicConfidential,
+  withInlinedPublicValues,
+} from "./next-public.js";
+import { defineServerEnv, serverAccess } from "./server-env.js";
 
 export type { Env } from "./access.js";
 export type {
@@ -26,5 +30,5 @@ export function defineEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions & PublicPlain<TDefinitions>,
 ): Env<TDefinitions> {
   refusePublicConfidential(definitions);
-  return overlayInlined(definitions, defineServerEnv(definitions));
+  return defineServerEnv(definitions, withInlinedPublicValues(serverAccess));
 }

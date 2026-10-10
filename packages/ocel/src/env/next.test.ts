@@ -81,7 +81,7 @@ describe.each([
     });
   });
 
-  it("reads a group that mixes public and private variables from the runtime environment", () => {
+  it("reads the public members of a mixed group from the inlined values and the rest from the runtime environment", () => {
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_runtime");
     vi.stubEnv("POSTHOG_HOST", "https://ph");
@@ -94,8 +94,27 @@ describe.each([
     });
 
     expect(env.posthog).toEqual({
-      NEXT_PUBLIC_POSTHOG_KEY: "phc_runtime",
+      NEXT_PUBLIC_POSTHOG_KEY: "phc_built",
       POSTHOG_HOST: "https://ph",
+    });
+  });
+
+  it("reads an optional mixed group as present when only its public member was inlined", () => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv("OCEL_PUBLIC_ENV", JSON.stringify({ NEXT_PUBLIC_POSTHOG_KEY: "phc_built" }));
+    const env = defineEnv({
+      posthog: group(
+        {
+          NEXT_PUBLIC_POSTHOG_KEY: { class: "plain" },
+          POSTHOG_HOST: { class: "plain", schema: z.string().default("https://default") },
+        },
+        { optional: true },
+      ),
+    });
+
+    expect(env.posthog).toEqual({
+      NEXT_PUBLIC_POSTHOG_KEY: "phc_built",
+      POSTHOG_HOST: "https://default",
     });
   });
 
