@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Refusal } from "@framework/node-build/refusal";
 import { buildProcess } from "@framework/node-build/script";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { buildNext, type NextBuild } from "../src/build.mjs";
@@ -63,7 +64,10 @@ async function envOf(build: NextBuild): Promise<Record<string, string>> {
 describe("buildNext", () => {
   it("throws when there is no build script", async () => {
     const cwd = nextApp({ dependencies: { next: "16" } });
-    await expect(buildNext(app({ cwd }), ADAPTER)).rejects.toThrow(/no "build" script/);
+    const refused = buildNext(app({ cwd }), ADAPTER);
+
+    await expect(refused).rejects.toThrow(/no "build" script/);
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
   });
 
   it("names the next release that runs the adapter when the build wrote no hosting", async () => {
@@ -121,9 +125,10 @@ describe("buildNext", () => {
       let ran = false;
       buildProcess.spawn = async () => void (ran = true);
 
-      await expect(buildNext(app({ env: { [owned]: "hijacked" } }), ADAPTER)).rejects.toThrow(
-        owned,
-      );
+      const refused = buildNext(app({ env: { [owned]: "hijacked" } }), ADAPTER);
+
+      await expect(refused).rejects.toThrow(owned);
+      await expect(refused).rejects.toBeInstanceOf(Refusal);
       expect(ran).toBe(false);
     });
   }
@@ -214,6 +219,7 @@ describe("buildNext", () => {
 
       await expect(refused).rejects.toThrow(/Node 20\.16\+ or 22\.3\+/);
       await expect(refused).rejects.toThrow(/20\.11\.0/);
+      await expect(refused).rejects.toBeInstanceOf(Refusal);
       expect(ran).toBe(false);
       expect(asked).toEqual([{ cwd: build.cwd, path: "/app/bin" }]);
     });
@@ -333,6 +339,7 @@ describe("buildNext", () => {
         await expect(result).rejects.toThrow(
           `app "web" sets adapterPath to ${realpathSync(path.join(cwd, "my-adapter.js"))} in ${file}, and next build then runs that adapter in place of ocel's, which writes the output ocel deploys: delete adapterPath from ${file}`,
         );
+        await expect(result).rejects.toBeInstanceOf(Refusal);
         expect(ran()).toBe(false);
       });
     }

@@ -2,7 +2,19 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { Refusal } from "../src/refusal.mjs";
 import { buildProcess, runAdapterBuild } from "../src/script.mjs";
+
+describe("buildProcess.spawn", () => {
+  it("refuses a build command that exits non-zero, naming the command and its code", async () => {
+    const failed = buildProcess.spawn("node", ["-e", "process.exit(3)"], tmpdir(), {
+      PATH: process.env.PATH ?? "",
+    });
+
+    await expect(failed).rejects.toThrow(/node -e process\.exit\(3\) exited with code 3/);
+    await expect(failed).rejects.toBeInstanceOf(Refusal);
+  });
+});
 
 describe("runAdapterBuild", () => {
   const realSpawn = buildProcess.spawn;
@@ -51,9 +63,12 @@ describe("runAdapterBuild", () => {
   it("says how to set the adapter up when the build wrote no hosting", async () => {
     buildProcess.spawn = async () => {};
 
-    await expect(runAdapterBuild(app(), adapter, {})).rejects.toThrow(
+    const refused = runAdapterBuild(app(), adapter, {});
+
+    await expect(refused).rejects.toThrow(
       /nothing wrote hosting\.json.*@ocel\/sveltekit\. Add it as the adapter/,
     );
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
   });
 
   for (const body of ["null", "[]", '"sveltekit"']) {
@@ -84,8 +99,9 @@ describe("runAdapterBuild", () => {
         '{"version":2,"framework":"sveltekit"}',
       );
 
-    await expect(runAdapterBuild(built, adapter, {})).rejects.toThrow(
-      /version 2.*Install the @ocel\/sveltekit release/,
-    );
+    const refused = runAdapterBuild(built, adapter, {});
+
+    await expect(refused).rejects.toThrow(/version 2.*Install the @ocel\/sveltekit release/);
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
   });
 });

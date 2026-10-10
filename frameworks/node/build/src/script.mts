@@ -11,6 +11,7 @@ import {
   HOSTING_VERSION,
   OUTPUT_DIR_ENV,
 } from "./output.mjs";
+import { Refusal } from "./refusal.mjs";
 
 export interface ScriptBuild {
   name: string;
@@ -54,7 +55,7 @@ export async function runBuildScript(
 ): Promise<void> {
   for (const name of Object.keys(owned)) {
     if (app.env && name in app.env) {
-      throw new Error(
+      throw new Refusal(
         `ocel: app "${app.name}" declares ${name}, which the build sets itself; rename it where it is declared`,
       );
     }
@@ -62,12 +63,12 @@ export async function runBuildScript(
 
   const manifest = JSON.parse(readFileSync(path.join(app.cwd, "package.json"), "utf8"));
   if (!manifest.scripts?.build) {
-    throw new Error(`ocel: app "${app.name}" has no "build" script in package.json`);
+    throw new Refusal(`ocel: app "${app.name}" has no "build" script in package.json`);
   }
 
   const detected = await detect({ cwd: app.cwd });
   const resolved = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
-  if (!resolved) throw new Error(`ocel: could not resolve a build command for app "${app.name}"`);
+  if (!resolved) throw new Refusal(`ocel: could not resolve a build command for app "${app.name}"`);
 
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -79,7 +80,7 @@ export async function runBuildScript(
   if (app.env?.[LIVE_DIR_ENV]) {
     const node = await buildProcess.node(app.cwd, env);
     if (!node.readsLiveDir) {
-      throw new Error(
+      throw new Refusal(
         `ocel: app "${app.name}" builds with values it reads from ${LIVE_DIR_ENV}, and the SDK reads them on Node 20.16+ or 22.3+; the node its build runs in ${app.cwd} is ${node.version}`,
       );
     }
@@ -104,7 +105,7 @@ async function spawnBuild(
     child.on("exit", (code) =>
       code === 0
         ? resolve()
-        : reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`)),
+        : reject(new Refusal(`${command} ${args.join(" ")} exited with code ${code}`)),
     );
   });
 }
@@ -143,7 +144,7 @@ export async function runAdapterBuild(
 
 function readHosting(app: OutputBuild, adapter: Adapter): Hosting {
   const refuseUnadapted = (why: string) =>
-    new Error(
+    new Refusal(
       `ocel: app "${app.name}" built, but ${why}, so its build did not run through ${adapter.name}. ${adapter.setup}`,
     );
   let parsed: unknown;
@@ -165,7 +166,7 @@ function readHosting(app: OutputBuild, adapter: Adapter): Hosting {
     );
   }
   if (hosting.version !== HOSTING_VERSION) {
-    throw new Error(
+    throw new Refusal(
       `ocel: app "${app.name}" built, but ${adapter.name} wrote ${HOSTING_FILE} version ${JSON.stringify(hosting.version)}, and this CLI reads version ${HOSTING_VERSION}. ${adapter.upgrade}`,
     );
   }

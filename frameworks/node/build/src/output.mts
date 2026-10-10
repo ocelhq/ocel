@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { copyFile, cp, lstat, mkdir, readlink, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import type { Hosting } from "@platform/edge-contract/hosting";
+import { Refusal } from "./refusal.mjs";
 
 export const OUTPUT_DIR_ENV = "OCEL_OUTPUT_DIR";
 export const APP_NAME_ENV = "OCEL_APP_NAME";
@@ -75,7 +76,7 @@ export class BuildOutput {
     for (const [dest, src] of Object.entries(assets)) {
       const placed = path.join(functionDir, dest);
       if (containedIn(functionDir, placed) === undefined) {
-        throw new Error(
+        throw new Refusal(
           `ocel: the traced asset ${src} would land at ${dest}, outside the function ${id}, so the function cannot carry it`,
         );
       }

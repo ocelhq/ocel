@@ -8,6 +8,7 @@
   "exports": {
     "./function-trace": "./src/function-trace.mts",
     "./output": "./src/output.mts",
+    "./refusal": "./src/refusal.mts",
     "./script": "./src/script.mts",
     "./trace": "./src/trace.mts"
   },

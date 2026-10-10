@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Refusal } from "../src/refusal.mjs";
 import { DuplicatePackageError, placeFile, placeTrace, traceFunction } from "../src/trace.mjs";
 
 function importEntryInNode(entryMjs: string): { defaultType: string } {
@@ -225,9 +226,9 @@ describe("placeTrace", () => {
 
   it("refuses an app whose own code imports two copies of one package", () => {
     const parents: Record<string, string[]> = { [depOne]: [server], [depTwo]: [server] };
-    expect(() => placeTrace([server, depOne, depTwo], (file) => parents[file] ?? [], cwd)).toThrow(
-      DuplicatePackageError,
-    );
+    const place = () => placeTrace([server, depOne, depTwo], (file) => parents[file] ?? [], cwd);
+    expect(place).toThrow(DuplicatePackageError);
+    expect(place).toThrow(Refusal);
   });
 
   it("keeps two same-named files outside any package apart", () => {

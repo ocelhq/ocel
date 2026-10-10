@@ -4,6 +4,7 @@ import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
+import { Refusal } from "./refusal.mjs";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
@@ -95,7 +96,7 @@ export function placeFile(
   };
 }
 
-export class DuplicatePackageError extends Error {}
+export class DuplicatePackageError extends Refusal {}
 
 export function placeTrace(
   files: string[],
