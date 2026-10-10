@@ -57,7 +57,11 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		facts.RootFunction = hosting.RootFunction
 		facts.Static = hosting.Static
 	}
-	if q.Framework == buildoutput.FrameworkNext {
+	uses, err := buildUses(q.Root, q.App, q.Framework, hosting, present)
+	if err != nil {
+		return AppServing{}, err
+	}
+	if uses.ISR {
 		facts.ISR = &provider.ISRSpec{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),

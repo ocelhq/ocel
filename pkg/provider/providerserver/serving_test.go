@@ -73,20 +73,41 @@ func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T
 	}
 }
 
-func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
+func TestABuildThatDeclaresISRAsksForAnISRLedgerWhateverItsFramework(t *testing.T) {
+	root := servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkSvelteKit, ISR: true}, nil)
+	declared, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkSvelteKit))
+	if err != nil {
+		t.Fatalf("AppServingFor() = %v", err)
+	}
+	if declared.ISR == nil || declared.ISR.Prefix == "" || declared.ISR.TagNamespace == "" {
+		t.Fatalf("ISR = %+v, want the prefix and tag namespace a revalidation writes through", declared.ISR)
+	}
+	root = servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkNext}, nil)
+	undeclared, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkNext))
+	if err != nil {
+		t.Fatalf("AppServingFor() = %v", err)
+	}
+	if undeclared.ISR != nil {
+		t.Errorf("ISR = %+v for a Next build that declares none, want none", undeclared.ISR)
+	}
+}
+
+func TestAnAppWithNoBuildOutputAsksForAnISRLedgerOnlyWhenItIsNext(t *testing.T) {
 	next, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", buildoutput.FrameworkNext))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if next.ISR == nil || next.ISR.Prefix == "" || next.ISR.TagNamespace == "" {
-		t.Fatalf("ISR = %+v, want the prefix and tag namespace a revalidation writes through", next.ISR)
+	if next.ISR == nil {
+		t.Fatal("ISR = nil for an unbuilt Next app, want the ledger Next is presumed to use")
 	}
-	other, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
-	if err != nil {
-		t.Fatalf("AppServingFor() = %v", err)
-	}
-	if other.ISR != nil {
-		t.Errorf("ISR = %+v for a framework that revalidates nothing, want none", other.ISR)
+	for _, framework := range []string{"astro", buildoutput.FrameworkNode, buildoutput.FrameworkSvelteKit} {
+		other, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", framework))
+		if err != nil {
+			t.Fatalf("AppServingFor() = %v", err)
+		}
+		if other.ISR != nil {
+			t.Errorf("ISR = %+v for an unbuilt %s app, want none", other.ISR, framework)
+		}
 	}
 }
 
@@ -222,7 +243,7 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", ISR: true}, routing)
 
 	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
@@ -247,7 +268,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 		t.Errorf("Bytecode = %+v, want the prefix the runtime warms its compile cache under", app.Bytecode)
 	}
 	if app.ISR == nil || app.ISR.Prefix == "" || app.ISR.TagNamespace == "" {
-		t.Errorf("ISR = %+v, want the ledger a next app revalidates through", app.ISR)
+		t.Errorf("ISR = %+v, want the ledger a build declaring ISR revalidates through", app.ISR)
 	}
 	if app.Routing == nil || app.Routing.RootFunction != "index" || string(app.Routing.RouteTable.Table) != string(routing) {
 		t.Errorf("Routing = %+v, want the entry route and manifest the build wrote", app.Routing)

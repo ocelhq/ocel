@@ -22,8 +22,6 @@ func assetHeaders(static *edge.Static, rel string) objectHeaders {
 	return objectHeaders{contentType: contenttype.Infer(rel), cacheControl: static.CacheControl("/" + rel)}
 }
 
-const imageConfigFile = "image-config.json"
-
 func appAssetPrefix(c naming.Coordinate) string {
 	return c.AssetKey("")
 }
@@ -72,7 +70,7 @@ func staticAssetSet(cfg Config, app string, static *edge.Static, coord naming.Co
 			manifest.add(to.bucket, key, file.size)
 		}
 	}
-	imageConfig := filepath.Join(root, imageConfigFile)
+	imageConfig := filepath.Join(root, naming.ImageConfigFile)
 	switch info, err := os.Stat(imageConfig); {
 	case err == nil:
 		uploads = append(uploads, assetUpload{

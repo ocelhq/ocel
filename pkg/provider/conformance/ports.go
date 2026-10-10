@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -568,7 +569,7 @@ func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) 
 		applies[name] = true
 	}
 	for _, f := range catalogue {
-		if len(f.Frameworks) == 0 && len(f.Edges) == 0 {
+		if f.Serves == (buildoutput.Uses{}) && len(f.Edges) == 0 {
 			applies[f.Name] = true
 		}
 	}
