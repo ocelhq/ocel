@@ -10,6 +10,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background, keptUntilSettled } from "@framework/node-runtime/background";
+import { servesOnlyFresh } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
@@ -168,14 +169,14 @@ export default class OcelCacheHandler {
         return null;
       }
       const served = readServedRoute(this.requestHeaders);
+      const revalidate =
+        ctx?.kind === "FETCH"
+          ? ctx.revalidate || entry.value.revalidate
+          : (entry.cacheControl?.revalidate ?? served?.revalidate);
+      const stale = isStaleEntry(entry.lastModified, tags, revalidate);
+      if (stale && servesOnlyFresh(process.env)) return null;
       if (ctx?.kind !== "FETCH" && served) {
-        if (
-          isStaleEntry(
-            entry.lastModified,
-            tags,
-            entry.cacheControl?.revalidate ?? served.revalidate,
-          )
-        ) {
+        if (stale) {
           noteStaleEntry(this.requestHeaders, {
             key: cacheKey(key),
             lastModified: entry.lastModified,
@@ -212,7 +213,8 @@ export default class OcelCacheHandler {
         isFetch
           ? (await store).writeFetch(key, entry)
           : (await store).writeEntry(cacheKey(key), entry);
-      if (this.refreshing !== undefined && !isFetch) await write();
+      if ((this.refreshing !== undefined && !isFetch) || servesOnlyFresh(process.env))
+        await write();
       else background(write);
     } catch {}
   }

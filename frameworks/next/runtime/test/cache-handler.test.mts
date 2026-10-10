@@ -918,3 +918,180 @@ test("a stale fetch entry is served while it refreshes", async () => {
 
   expect(entry?.value.data.body).toBe("cached");
 });
+
+function behindCachingEdge() {
+  vi.stubEnv("OCEL_ORIGIN_FRESH_ONLY", "1");
+}
+
+const hour = 3_600_000;
+
+test("behind a caching edge, a time-stale page entry is a miss so Next renders it", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 120_000,
+    cacheControl: { revalidate: 60 },
+  });
+
+  expect(await new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("behind a caching edge, a fresh page entry is served without a render", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 1_000,
+    cacheControl: { revalidate: 60 },
+  });
+
+  const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.value.html).toBe("<html>hi</html>");
+});
+
+test("behind a caching edge, a page entry that never revalidates is served", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - hour,
+    cacheControl: { revalidate: false },
+  });
+
+  expect(await new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).not.toBeNull();
+});
+
+test("behind a caching edge, a time-stale page entry of a served route is a miss", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: Date.now() - 120_000 });
+  const { handler } = servedBy({ revalidate: 60 });
+
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("behind a caching edge, a tag-stale entry is a miss", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products", lastModified: Date.now() - 10_000 });
+  fakeSnapshot({ products: { stale: Date.now() - 5_000 } });
+
+  expect(await new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("behind a caching edge, a time-stale fetch entry is a miss", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: 60,
+  });
+
+  expect(entry).toBeNull();
+});
+
+test("behind a caching edge, a fresh fetch entry is served", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 1_000);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: 60,
+  });
+
+  expect(entry?.value.data.body).toBe("cached");
+});
+
+test("behind a caching edge, a render resolves only once its page entry is written", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  const release = store.holdWrites();
+  let resolved = false;
+
+  const written = new OcelCacheHandler()
+    .set("/blog", { kind: "PAGES", html: "<html>blog</html>", pageData: {} }, {})
+    .then(() => {
+      resolved = true;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  expect(resolved).toBe(false);
+  release();
+  await written;
+  expect(store.entries.get("blog")?.value.html).toBe("<html>blog</html>");
+});
+
+test("behind a caching edge, a render resolves only once its fetch entry is written", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  const release = store.holdWrites();
+  let resolved = false;
+
+  const written = new OcelCacheHandler()
+    .set("abc", { kind: "FETCH", data: { body: "x" }, revalidate: 60 }, { tags: [] })
+    .then(() => {
+      resolved = true;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  expect(resolved).toBe(false);
+  release();
+  await written;
+  expect(store.fetches.get("abc")?.value.data.body).toBe("x");
+});
+
+test("without a caching edge, a time-stale page entry is still served", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 120_000,
+    cacheControl: { revalidate: 60 },
+  });
+
+  expect(await new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).not.toBeNull();
+});
+
+test("a stale entry behind a caching edge is rendered once and then served from the store", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 120_000,
+    cacheControl: { revalidate: 60 },
+  });
+  const handler = new OcelCacheHandler();
+
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
+  await handler.set(
+    "/",
+    { kind: "PAGES", html: "<html>fresh</html>", pageData: {} },
+    { cacheControl: { revalidate: 60 } },
+  );
+  const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.value.html).toBe("<html>fresh</html>");
+});
+
+test("behind a caching edge, a fetch inside a served page is judged by its own window", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 11_000);
+  const { handler } = servedBy({ revalidate: 3600 });
+
+  const entry = await handler.get("abc", { kind: "FETCH", tags: [], revalidate: 10 });
+
+  expect(entry).toBeNull();
+});
+
+test("behind a caching edge, a fetch with no window of its own is judged by the window it was stored with", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+  const { handler } = servedBy({ revalidate: 3600 });
+
+  const entry = await handler.get("abc", { kind: "FETCH", tags: [], revalidate: 0 });
+
+  expect(entry).toBeNull();
+});

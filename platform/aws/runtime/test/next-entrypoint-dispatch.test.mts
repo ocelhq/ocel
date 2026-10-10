@@ -223,10 +223,10 @@ test("passes the origin's cache tags out through dispatch to the front", async (
   await res.text();
 });
 
-test("clamps the cache-control of a response Next marked STALE", async () => {
+test("passes Next's own cache-control through on a response Next marked STALE", async () => {
   const res = await front(`/__stale`);
 
-  expect(res.headers.get("cache-control")).toBe("s-maxage=0, must-revalidate");
+  expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=600");
   await res.text();
 });
 

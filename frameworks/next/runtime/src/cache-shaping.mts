@@ -7,9 +7,6 @@ import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
-const nextCacheHeader = "x-nextjs-cache";
-const staleCacheControl = "s-maxage=0, must-revalidate";
-
 const releasePattern = /^r[0-9a-f]{8}$/;
 const dataRoutePattern = /^\/_next\/data\/[^/]+\/(.*)\.json$/;
 
@@ -104,11 +101,6 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
 
   const declared = String(res.getHeader("cache-control") ?? "");
   if (personal(declared)) return;
-
-  if (String(res.getHeader(nextCacheHeader) ?? "") === "STALE") {
-    res.setHeader("cache-control", staleCacheControl);
-    return;
-  }
 
   if (directives(declared).includes("s-maxage") || !isHtml(res)) return;
   const window = windowFor(req.url, shaping);
