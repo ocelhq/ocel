@@ -678,7 +678,6 @@ fn build_definition(variable: &DeclaredVariable) -> VariableDefinition {
         required: variable.required,
         folders: variable.folders.iter().map(|f| f.to_string()).collect(),
         source: format_source(variable.file, variable.line),
-        has_schema: variable.check.is_some(),
         description: variable.description.unwrap_or_default().to_string(),
         group: variable.group.unwrap_or_default().to_string(),
         ..Default::default()
