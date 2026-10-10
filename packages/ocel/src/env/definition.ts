@@ -5,8 +5,6 @@ import { parse } from "./standard.js";
 
 export type VariableClass = "plain" | "sensitive" | "secret";
 
-export type ConfidentialClass = Exclude<VariableClass, "plain">;
-
 interface VariableOptions<TSchema extends StandardSchemaV1 = StandardSchemaV1> {
   schema?: TSchema;
 
@@ -16,15 +14,9 @@ interface VariableOptions<TSchema extends StandardSchemaV1 = StandardSchemaV1> {
 }
 
 export type VariableDefinition<TSchema extends StandardSchemaV1 = StandardSchemaV1> =
-  | (VariableOptions<TSchema> & {
-      class: "plain";
-
-      client?: boolean;
-    })
-  | (VariableOptions<TSchema> & {
-      class: ConfidentialClass;
-      client?: false;
-    });
+  VariableOptions<TSchema> & {
+    class: VariableClass;
+  };
 
 export interface GroupOptions {
   readonly optional?: boolean;
@@ -123,9 +115,12 @@ export const URL_KEY = "OCEL_URL";
 
 export const CLIENT_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
 
+export const SVELTEKIT_PUBLIC_URL_KEY = "PUBLIC_OCEL_URL";
+
 const RESERVED_KEYS: ReadonlyMap<string, string> = new Map([
   [URL_KEY, "every app"],
   [CLIENT_URL_KEY, "every JavaScript app"],
+  [SVELTEKIT_PUBLIC_URL_KEY, "every SvelteKit app"],
 ]);
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
@@ -213,20 +208,9 @@ function validateDefinition(key: string, definition: VariableDefinition, source:
       `'${key}' is already declared in ${claimed}. A key may be defined by exactly one definitions file.`,
     );
   }
-  const variableClass: VariableClass = definition.class;
-  if (definition.client && variableClass !== "plain") {
-    throw new EnvDefinitionError(
-      `'${key}' is client-accessible and class '${variableClass}'. A value the browser can read cannot be an encrypted class.`,
-    );
-  }
   if (RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix))) {
     throw new EnvDefinitionError(
       `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). Every variable is delivered under its own name, so Ocel would overwrite it.`,
-    );
-  }
-  if (definition.client && !isRequired(definition)) {
-    throw new EnvDefinitionError(
-      `'${key}' is client-accessible and its schema accepts a missing value. A client value is inlined into the browser bundle at build time, so a default or an optional could not be told apart from a value the bundler never inlined.`,
     );
   }
   if (definition.folders) {

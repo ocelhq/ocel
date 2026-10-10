@@ -11,7 +11,6 @@ import { assertInScope } from "./scope.js";
 import { coerce, readDelivered } from "./value.js";
 
 export type { Env } from "./access.js";
-export { EnvClientError } from "./client.js";
 export type {
   Definitions,
   EnvDefinitions,

@@ -19,11 +19,7 @@ const WIRE_CLASS: Record<VariableClass, WireClass> = {
   secret: WireClass.SECRET,
 };
 
-export async function declareEnv(
-  definitions: FlatDefinitions,
-  source: string,
-  schemaSource: string,
-): Promise<void> {
+export async function declareEnv(definitions: FlatDefinitions, source: string): Promise<void> {
   const groups = Object.values(
     Object.entries(definitions).reduce<
       Record<string, { key: string; required: boolean; description: string }>
@@ -42,12 +38,9 @@ export async function declareEnv(
     definitions: Object.entries(definitions).map(([key, definition]) => ({
       key,
       class: WIRE_CLASS[definition.class],
-      clientAccessible: definition.client === true,
       required: isRequired(definition),
       folders: [...(definition.folders ?? [])],
       source,
-      schemaSource,
-      hasSchema: definition.schema !== undefined,
       ...(definition.description === undefined ? {} : { description: definition.description }),
       ...(definition.group === undefined ? {} : { group: definition.group }),
     })),

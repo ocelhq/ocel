@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { envSchema, sourceOf } from "../src/env/schema.js";
 import { BindingType } from "../src/gen/proto/common/bindings/v1/bindings_pb.js";
 import { siteOfThisFile } from "./fixtures/callsite/postgres/index.js";
 
@@ -98,9 +97,5 @@ describe("declarationSite", () => {
     ).toThrow(
       `declared at ${here}:${line + 6} has pattern "session/current", which overlaps pattern "session/:id" of entry "session" declared at ${here}:${line + 5}`,
     );
-  });
-
-  it("names the module a schema was declared in", () => {
-    expect(sourceOf(envSchema({ SCHEMA_PORT: { class: "plain" } }))).toContain("callsite.test.ts");
   });
 });
