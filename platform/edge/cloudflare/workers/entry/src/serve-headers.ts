@@ -1,6 +1,6 @@
-const NOT_STORED = "private, no-store";
+export const NOT_STORED = "private, no-store";
 
-const BROWSER_REVALIDATES = "public, max-age=0, must-revalidate";
+export const BROWSER_REVALIDATES = "public, max-age=0, must-revalidate";
 
 const STALE_IF_ERROR_SECONDS = 86_400;
 

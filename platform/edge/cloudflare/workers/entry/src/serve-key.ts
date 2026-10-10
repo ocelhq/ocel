@@ -15,7 +15,9 @@ const SERVE_ORIGIN = "https://serve.ocel.invalid";
 
 const STORAGE_PREFIX_SEGMENTS = 4;
 
-export function releaseOfKey(key: string): { app: string; release: string } {
+const VISITOR_CREDENTIAL_HEADERS = ["cookie", "authorization"] as const;
+
+export function parseKeyRelease(key: string): { app: string; release: string } {
   const segments = key.split("/");
   if (
     segments.length <= STORAGE_PREFIX_SEGMENTS ||
@@ -26,12 +28,28 @@ export function releaseOfKey(key: string): { app: string; release: string } {
   return { app: segments[2], release: segments[3] };
 }
 
-export function objectCall(host: string, key: string): ServeCall {
-  const { app, release } = releaseOfKey(key);
-  const path = key.split("/").map(encodeURIComponent).join("/");
-  return { url: `${SERVE_ORIGIN}/${path}`, props: { kind: "object", host, app, release } };
+export function encodeKeyPath(key: string): string {
+  return key.split("/").map(encodeURIComponent).join("/");
 }
 
-export function objectKeyOf(url: string): string {
+export function buildObjectCall(host: string, key: string): ServeCall {
+  const { app, release } = parseKeyRelease(key);
+  return {
+    url: `${SERVE_ORIGIN}/${encodeKeyPath(key)}`,
+    props: { kind: "object", host, app, release },
+  };
+}
+
+export function buildOriginCall(originUrl: string, props: Omit<ServeProps, "kind">): ServeCall {
+  return { url: originUrl, props: { ...props, kind: "origin" } };
+}
+
+export function buildServeRequest(url: string, visitor?: Request): Request {
+  const headers = new Headers(visitor?.headers);
+  for (const name of VISITOR_CREDENTIAL_HEADERS) headers.delete(name);
+  return new Request(url, { method: visitor?.method ?? "GET", headers });
+}
+
+export function parseObjectKey(url: string): string {
   return new URL(url).pathname.slice(1).split("/").map(decodeURIComponent).join("/");
 }

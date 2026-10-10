@@ -1,8 +1,13 @@
 import { createExecutionContext, env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import { Serve } from "../src/serve";
-import { objectCall, type ServeProps } from "../src/serve-key";
+import {
+  buildObjectCall,
+  buildOriginCall,
+  buildServeRequest,
+  type ServeProps,
+} from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
 
 const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
@@ -26,7 +31,7 @@ function serveWith(over: Partial<Env>, forProps: ServeProps = props): Serve {
 }
 
 function get(forKey = key, host = props.host): Request {
-  return new Request(objectCall(host, forKey).url);
+  return new Request(buildObjectCall(host, forKey).url);
 }
 
 function s3Answering(answer: () => Response): { calls: Request[]; fetch: typeof fetch } {
@@ -68,13 +73,31 @@ describe("Serve reading an object from the asset bucket", () => {
     expect(response.headers.get("cache-tag")).toBe("r1a2b3c4d");
   });
 
-  it.each([403, 404])("keeps an object S3 answers %i for as a 404 for a minute", async (status) => {
-    const s3 = s3Answering(() => new Response("<Error/>", { status }));
+  it("keeps an object S3 answers 404 for as a 404 for a minute", async () => {
+    const s3 = s3Answering(() => new Response("<Error/>", { status: 404 }));
 
     const response = await withGlobalFetch(s3.fetch, () => serveWith(s3Env).fetch(get()));
 
     expect(response.status).toBe(404);
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("max-age=60");
+  });
+
+  it("never stores, and reports, an object S3 refuses the edge's key", async () => {
+    const s3 = s3Answering(() => new Response("<Error>AccessDenied</Error>", { status: 403 }));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await withGlobalFetch(s3.fetch, () => serveWith(s3Env).fetch(get()));
+
+      expect(response.status).toBe(502);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringMatching(new RegExp(`403.*${key}|${key}.*403`)),
+      );
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("never stores a failure of the bucket", async () => {
@@ -106,7 +129,7 @@ describe("Serve reading an object from the asset bucket", () => {
     ).rejects.toThrow(/app/);
   });
 
-  it("falls back to the edge's object store for a release the bucket does not hold", async () => {
+  it("takes the bucket's 404 as final, never reading the edge's object store", async () => {
     await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
     const s3 = s3Answering(() => new Response("<Error/>", { status: 404 }));
 
@@ -115,6 +138,22 @@ describe("Serve reading an object from the asset bucket", () => {
     );
 
     expect(s3.calls).toHaveLength(1);
+    expect(response.status).toBe(404);
+  });
+
+  it("reads the edge's object store when the bucket is bound without the edge's key", async () => {
+    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+    const s3 = s3Answering(() => new Response("bytes"));
+
+    const response = await withGlobalFetch(s3.fetch, () =>
+      serveWith({
+        OCEL_ASSET_BUCKET: "assets-bucket",
+        OCEL_AWS_REGION: "us-east-1",
+        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+      }).fetch(get()),
+    );
+
+    expect(s3.calls).toHaveLength(0);
     expect(await response.text()).toBe("from r2");
   });
 
@@ -130,7 +169,7 @@ describe("Serve reading an object from the asset bucket", () => {
 
   it("answers only GET and HEAD", async () => {
     const response = await serveWith(s3Env).fetch(
-      new Request(objectCall("h", key).url, { method: "POST", body: "x" }),
+      new Request(buildObjectCall("h", key).url, { method: "POST", body: "x" }),
     );
     expect(response.status).toBe(405);
   });
@@ -189,6 +228,30 @@ describe("Serve fetching from the origin", () => {
     );
     expect(response.headers.get("vary")).toBeNull();
     expect(response.headers.get("cache-tag")).toBe("r1a2b3c4d,r1a2b3c4d|path:/blog/a");
+  });
+
+  it("fetches the origin URL it was called with, as the visitor's host and without the visitor's credentials", async () => {
+    const wire = s3Answering(
+      () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),
+    );
+    const visitor = new Request("https://shop.example.com/blog/a?page=2", {
+      headers: { cookie: "session=1", authorization: "Bearer t", "if-none-match": '"e1"' },
+    });
+    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, props);
+
+    await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, call.props).fetch(buildServeRequest(call.url, visitor)),
+    );
+
+    expect(wire.calls).toHaveLength(1);
+    expect(wire.calls[0].url).toBe(`${FN_URL}blog/a?page=2`);
+    expect(wire.calls[0].headers.get("x-forwarded-host")).toBe("shop.example.com");
+    expect(wire.calls[0].headers.get("x-forwarded-proto")).toBe("https");
+    expect(wire.calls[0].headers.get("cookie")).toBeNull();
+    expect(wire.calls[0].headers.get("if-none-match")).toBe('"e1"');
+    expect(wire.calls[0].headers.get("authorization")).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\//,
+    );
   });
 
   it("makes a header-less page private", async () => {

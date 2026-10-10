@@ -615,7 +615,7 @@ func TestCloudflareCachesResponses(t *testing.T) {
 	}
 }
 
-func TestCachedEntrypoints(t *testing.T) {
+func TestAWorkerUploadCachesOnlyTheEntrypointsItNames(t *testing.T) {
 	t.Run("a worker naming a cached entrypoint turns the worker's cache off and that entrypoint's on", func(t *testing.T) {
 		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")
 
