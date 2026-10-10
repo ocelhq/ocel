@@ -110,6 +110,15 @@ describe("buildNext", () => {
     expect(env.NEXT_DEPLOYMENT_ID).toBe("fedcba9876543210fedcba9876543210");
   });
 
+  it("hands the adapter the declared public keys as OCEL_PUBLIC_KEYS", async () => {
+    const env = await envOf(app({ publicKeys: ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_RETRIES"] }));
+    expect(env.OCEL_PUBLIC_KEYS).toBe("NEXT_PUBLIC_API_URL,NEXT_PUBLIC_RETRIES");
+  });
+
+  it("hands the adapter no public keys when the app declared none", async () => {
+    expect((await envOf(app())).OCEL_PUBLIC_KEYS).toBe("");
+  });
+
   for (const owned of [
     "NEXT_ADAPTER_PATH",
     "NEXT_DEPLOYMENT_ID",
@@ -120,6 +129,7 @@ describe("buildNext", () => {
     "OCEL_EDGE_KIND",
     "OCEL_ALLOW_DEGRADED",
     "OCEL_MAX_FUNCTION_BYTES",
+    "OCEL_PUBLIC_KEYS",
   ]) {
     it(`refuses a variable declared as ${owned} before anything runs`, async () => {
       let ran = false;
