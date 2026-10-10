@@ -114,7 +114,8 @@ func CheckFresh(projectDir string, apps []App) error {
 		for key, digest := range digests(app) {
 			built, ok := recorded[key]
 			switch {
-			case !ok:
+			case !ok && digest == unsetDigest:
+			case !ok, built == unsetDigest && digest != unsetDigest:
 				missing = append(missing, key)
 			case built != digest:
 				changed = append(changed, key)
@@ -130,7 +131,7 @@ func CheckFresh(projectDir string, apps []App) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either not a variable the app inlines when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either unset or not a variable the app inlines when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
@@ -167,6 +168,8 @@ func readRecord(projectDir string) (buildRecord, error) {
 	return record, nil
 }
 
+const unsetDigest = "unset"
+
 func digests(app App) map[string]string {
 	out := map[string]string{}
 	values := make(map[string]string, len(app.Variables))
@@ -176,6 +179,7 @@ func digests(app App) map[string]string {
 	for _, key := range inlinedKeys(app) {
 		value, resolved := values[key]
 		if !resolved {
+			out[key] = unsetDigest
 			continue
 		}
 		sum := sha256.Sum256([]byte(value))

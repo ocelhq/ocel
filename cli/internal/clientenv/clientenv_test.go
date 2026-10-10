@@ -186,6 +186,76 @@ func TestCheckFresh(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a bundle that inlined a value this deploy no longer has", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		if err := Record(root, []App{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		unset := nextApp("storefront")
+		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
+		err := CheckFresh(root, []App{unset})
+		if err == nil {
+			t.Fatal("CheckFresh = nil for a bundle holding a value the deploy unset, want a refusal")
+		}
+		if !strings.Contains(err.Error(), "NEXT_PUBLIC_THEME") {
+			t.Errorf("error = %q, want it to name the unset key", err)
+		}
+	})
+
+	t.Run("allows a bundle built and deployed without a value for a declared key", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		unset := nextApp("storefront")
+		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
+		if err := Record(root, []App{unset}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		if err := CheckFresh(root, []App{unset}); err != nil {
+			t.Errorf("CheckFresh = %v, want it to proceed: nothing was inlined and nothing is resolved", err)
+		}
+	})
+
+	t.Run("refuses a bundle built without a value this deploy resolves", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		unset := nextApp("storefront")
+		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
+		if err := Record(root, []App{unset}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		err := CheckFresh(root, []App{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))})
+		if err == nil {
+			t.Fatal("CheckFresh = nil for a bundle built without the value, want a refusal")
+		}
+		for _, want := range []string{"NEXT_PUBLIC_THEME", "`ocel build`, which resolves no values"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to state %q", err, want)
+			}
+		}
+	})
+
+	t.Run("allows a key declared since the build that still has no value", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		if err := Record(root, []App{nextApp("storefront")}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+
+		declared := nextApp("storefront")
+		declared.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
+		if err := CheckFresh(root, []App{declared}); err != nil {
+			t.Errorf("CheckFresh = %v, want it to proceed: no build or deploy ever had a value to inline", err)
+		}
+	})
+
 	t.Run("refuses a sveltekit bundle that predates any plain value it may have inlined", func(t *testing.T) {
 		t.Parallel()
 
