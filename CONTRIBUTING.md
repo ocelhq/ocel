@@ -140,6 +140,11 @@ review has no open finding against the gates, or a maintainer has ruled on each 
 escalated: a finding is fixed or escalated, never waived
 ([Disposition](.greptile/rules.md#disposition)).
 
+A branch catches up with main, or resolves a conflict with it, by rebasing onto
+`origin/main` and force-pushing with `--force-with-lease`; never merge main into it.
+Main takes only rebase merges and keeps a linear history, so a pull request that carries
+a merge commit cannot be merged.
+
 ## Security
 
 Report a vulnerability as [SECURITY.md](SECURITY.md) describes, never in a public issue.
