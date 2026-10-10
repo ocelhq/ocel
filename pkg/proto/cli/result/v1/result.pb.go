@@ -2917,11 +2917,10 @@ func (x *PinnedExecutable) GetDigests() map[string]string {
 }
 
 type GenerateResult struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Files               []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
-	ClientVariableCount int32                  `protobuf:"varint,2,opt,name=client_variable_count,json=clientVariableCount,proto3" json:"client_variable_count,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GenerateResult) Reset() {
@@ -2959,13 +2958,6 @@ func (x *GenerateResult) GetFiles() []string {
 		return x.Files
 	}
 	return nil
-}
-
-func (x *GenerateResult) GetClientVariableCount() int32 {
-	if x != nil {
-		return x.ClientVariableCount
-	}
-	return 0
 }
 
 type InitResult struct {
@@ -3555,10 +3547,9 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\adigests\x18\x02 \x03(\v2,.cli.result.v1.PinnedExecutable.DigestsEntryR\adigests\x1a:\n" +
 	"\fDigestsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"&\n" +
 	"\x0eGenerateResult\x12\x14\n" +
-	"\x05files\x18\x01 \x03(\tR\x05files\x122\n" +
-	"\x15client_variable_count\x18\x02 \x01(\x05R\x13clientVariableCount\"\x8d\x02\n" +
+	"\x05files\x18\x01 \x03(\tR\x05files\"\x8d\x02\n" +
 	"\n" +
 	"InitResult\x12\x1f\n" +
 	"\vconfig_path\x18\x01 \x01(\tR\n" +

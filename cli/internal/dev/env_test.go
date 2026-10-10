@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -489,7 +490,7 @@ export default {
 		}
 	})
 
-	t.Run("it generates the client accessor and exports the value under its declared name", func(t *testing.T) {
+	t.Run("it exports a next app's value under its declared name and hands next the adapter and the declared public keys", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -498,11 +499,15 @@ export default {
 		t.Cleanup(func() { releaseLeader(root) })
 
 		deps := devDeps()
+		tsconfig := "{\n  \"compilerOptions\": {}\n}\n"
 		clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
-		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
-		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
+		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }] };
+`)
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
-			`{"key":"PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true}`,
+			`{"key":"NEXT_PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`,
 			`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`,
 		))
 
@@ -517,30 +522,31 @@ export default {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
 
-		accessor, readErr := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
-		if readErr != nil {
-			t.Fatalf("dev generated no client accessor: %v", readErr)
-		}
-		if !strings.Contains(string(accessor), `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
-			t.Errorf("accessor = %s, want it to read the key under its declared name", accessor)
-		}
-		if strings.Contains(string(accessor), "STRIPE_API_KEY") {
-			t.Errorf("accessor names a server-only value:\n%s", accessor)
-		}
-		if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./`+statedir.Name+`/env-client.ts"]`) {
-			t.Errorf("tsconfig does not point the import at the accessor:\n%s", tsconfig)
-		}
-
 		dumped, readErr := os.ReadFile(envDumpPath)
 		if readErr != nil {
 			t.Fatalf("read env dump: %v", readErr)
 		}
 		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if got, want := env["PUBLIC_SITE_URL"], "https://local.example.com"; got != want {
-			t.Errorf("PUBLIC_SITE_URL = %q, want %q — without it the accessor refuses to load", got, want)
+		if got, want := env["NEXT_PUBLIC_SITE_URL"], "https://local.example.com"; got != want {
+			t.Errorf("NEXT_PUBLIC_SITE_URL = %q, want %q", got, want)
 		}
-		if _, ok := env["NEXT_PUBLIC_PUBLIC_SITE_URL"]; ok {
+		if _, ok := env["NEXT_PUBLIC_NEXT_PUBLIC_SITE_URL"]; ok {
 			t.Error("a value was exported under a prefixed name; a key is delivered as it was declared")
+		}
+		if got, want := env[processenv.NextAdapterPathEnvVar], node.NextAdapterPath(root); got != want {
+			t.Errorf("%s = %q, want ocel's adapter %q", processenv.NextAdapterPathEnvVar, got, want)
+		}
+		if _, statErr := os.Stat(env[processenv.NextAdapterPathEnvVar]); statErr != nil {
+			t.Errorf("the adapter next is pointed at does not exist: %v", statErr)
+		}
+		if got, want := env[processenv.PublicKeysEnvVar], "NEXT_PUBLIC_SITE_URL,"+processenv.ClientURLEnvVar; got != want {
+			t.Errorf("%s = %q, want the declared public keys %q: STRIPE_API_KEY is not public", processenv.PublicKeysEnvVar, got, want)
+		}
+		if _, statErr := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); statErr == nil {
+			t.Error("dev generated a client accessor, which ocel no longer does")
+		}
+		if got := readTestFile(t, filepath.Join(root, "tsconfig.json")); got != tsconfig {
+			t.Errorf("tsconfig.json = %q, want it untouched: ocel never writes a file the user owns", got)
 		}
 	})
 }
@@ -720,6 +726,18 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		}
 	})
 
+	t.Run("the name a sveltekit app reads it by, only for a sveltekit app", func(t *testing.T) {
+		t.Setenv("PORT", "")
+		kit := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkSvelteKit, ClientBundle: true}}}
+
+		if got, want := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", kit)[processenv.SvelteKitPublicURLEnvVar], "http://localhost:3000"; got != want {
+			t.Errorf("%s = %q, want %q", processenv.SvelteKitPublicURLEnvVar, got, want)
+		}
+		if _, written := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)[processenv.SvelteKitPublicURLEnvVar]; written {
+			t.Errorf("%s written for an app that is not a sveltekit app", processenv.SvelteKitPublicURLEnvVar)
+		}
+	})
+
 	t.Run("the port the project names", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
@@ -735,6 +753,38 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
 		if want := "http://localhost:8080"; got[processenv.AppURLEnvVar] != want {
 			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", processenv.AppURLEnvVar, got[processenv.AppURLEnvVar], want)
+		}
+	})
+}
+
+func TestNextAppEnv(t *testing.T) {
+	next := variables.Scope{Apps: []variables.App{{Name: "web", Framework: buildoutput.FrameworkNext, ClientBundle: true}}}
+
+	t.Run("points next at ocel's adapter and names the declared public keys, deployment url included", func(t *testing.T) {
+		got := nextAppEnv(next, "/proj/.ocel/dist/next-adapter/next-adapter.mjs", []string{"NEXT_PUBLIC_API_URL"})
+
+		if want := "/proj/.ocel/dist/next-adapter/next-adapter.mjs"; got[processenv.NextAdapterPathEnvVar] != want {
+			t.Errorf("%s = %q, want %q", processenv.NextAdapterPathEnvVar, got[processenv.NextAdapterPathEnvVar], want)
+		}
+		if want := "NEXT_PUBLIC_API_URL," + processenv.ClientURLEnvVar; got[processenv.PublicKeysEnvVar] != want {
+			t.Errorf("%s = %q, want %q", processenv.PublicKeysEnvVar, got[processenv.PublicKeysEnvVar], want)
+		}
+	})
+
+	t.Run("names no keys but the deployment url when the app declared none", func(t *testing.T) {
+		got := nextAppEnv(next, "/adapter.mjs", nil)
+
+		if got[processenv.PublicKeysEnvVar] != processenv.ClientURLEnvVar {
+			t.Errorf("%s = %q, want only %s", processenv.PublicKeysEnvVar, got[processenv.PublicKeysEnvVar], processenv.ClientURLEnvVar)
+		}
+	})
+
+	t.Run("leaves a command that runs no next app alone", func(t *testing.T) {
+		for _, framework := range []string{buildoutput.FrameworkSvelteKit, buildoutput.FrameworkNode, buildoutput.FrameworkGo} {
+			scope := variables.Scope{Apps: []variables.App{{Name: "web", Framework: framework, ClientBundle: true}}}
+			if got := nextAppEnv(scope, "/adapter.mjs", []string{"NEXT_PUBLIC_API_URL"}); len(got) != 0 {
+				t.Errorf("%s app got %v, want nothing written", framework, got)
+			}
 		}
 	})
 }

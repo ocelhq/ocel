@@ -31,6 +31,7 @@ type nodeAppBuild struct {
 	Unset         []string          `json:"unset,omitempty"`
 	EdgeKind      string            `json:"edgeKind,omitempty"`
 	AllowDegraded []string          `json:"allowDegraded,omitempty"`
+	PublicKeys    []string          `json:"publicKeys,omitempty"`
 	Entrypoint    string            `json:"entrypoint,omitempty"`
 	FunctionDir   string            `json:"functionDir,omitempty"`
 

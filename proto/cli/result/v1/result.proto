@@ -413,8 +413,6 @@ message PinnedExecutable {
 
 message GenerateResult {
   repeated string files = 1;
-
-  int32 client_variable_count = 2;
 }
 
 enum ConfigFormat {

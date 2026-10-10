@@ -337,29 +337,32 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 	}
 }
 
-func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
+func TestADeployLeavesEachAppsTSConfigAsItFoundIt(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
 	root := setUpDeployProject(t).Root
 	addAppToFixtureConfig(t, root)
 	writeHosting(t, root, "api", "bld_api_1")
 	tsconfig := writeAppTSConfig(t, root, "api")
+	before, err := os.ReadFile(tsconfig)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err = runDeploy(context.Background(), dependencies, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(root, statedir.Name, "apps", "api", "env-client.ts")); err != nil {
-		t.Fatalf("no client accessor was generated: %v", err)
-	}
-	mapping := `"ocel/env/client": ["../../` + statedir.Name + `/apps/api/env-client.ts"]`
-	data, err := os.ReadFile(tsconfig)
+	after, err := os.ReadFile(tsconfig)
 	if err != nil {
 		t.Fatalf("read %s: %v", tsconfig, err)
 	}
-	if !strings.Contains(string(data), mapping) {
-		t.Errorf("tsconfig.json = %s, want it to state %s", data, mapping)
+	if string(after) != string(before) {
+		t.Errorf("tsconfig.json = %s, want it as it was: ocel never writes a file the user owns", after)
+	}
+	if _, err := os.Stat(filepath.Join(root, statedir.Name, "apps", "api", "env-client.ts")); err == nil {
+		t.Error("a deploy generated a client accessor, which ocel no longer does")
 	}
 }

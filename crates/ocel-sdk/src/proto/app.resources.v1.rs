@@ -189,14 +189,6 @@ pub struct VariableDefinition {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
     pub class: ::buffa::EnumValue<VariableClass>,
-    /// Field 3: `client_accessible`
-    #[serde(
-        rename = "clientAccessible",
-        alias = "client_accessible",
-        with = "::buffa::json_helpers::proto_bool",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
-    )]
-    pub client_accessible: bool,
     /// Field 4: `required`
     #[serde(
         rename = "required",
@@ -218,22 +210,6 @@ pub struct VariableDefinition {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub source: ::buffa::alloc::string::String,
-    /// Field 7: `schema_source`
-    #[serde(
-        rename = "schemaSource",
-        alias = "schema_source",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub schema_source: ::buffa::alloc::string::String,
-    /// Field 8: `has_schema`
-    #[serde(
-        rename = "hasSchema",
-        alias = "has_schema",
-        with = "::buffa::json_helpers::proto_bool",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
-    )]
-    pub has_schema: bool,
     /// Field 9: `description`
     #[serde(
         rename = "description",
@@ -257,12 +233,9 @@ impl ::core::fmt::Debug for VariableDefinition {
         f.debug_struct("VariableDefinition")
             .field("key", &self.key)
             .field("class", &self.class)
-            .field("client_accessible", &self.client_accessible)
             .field("required", &self.required)
             .field("folders", &self.folders)
             .field("source", &self.source)
-            .field("schema_source", &self.schema_source)
-            .field("has_schema", &self.has_schema)
             .field("description", &self.description)
             .field("group", &self.group)
             .finish()
@@ -304,9 +277,6 @@ impl ::buffa::Message for VariableDefinition {
                 size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
             }
         }
-        if self.client_accessible {
-            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
-        }
         if self.required {
             size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
@@ -315,13 +285,6 @@ impl ::buffa::Message for VariableDefinition {
         }
         if !self.source.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.source) as u64;
-        }
-        if !self.schema_source.is_empty() {
-            size
-                += 1u64 + ::buffa::types::string_encoded_len(&self.schema_source) as u64;
-        }
-        if self.has_schema {
-            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
         if !self.description.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.description) as u64;
@@ -348,9 +311,6 @@ impl ::buffa::Message for VariableDefinition {
                 ::buffa::types::put_int32_field(2u32, val, buf);
             }
         }
-        if self.client_accessible {
-            ::buffa::types::put_bool_field(3u32, self.client_accessible, buf);
-        }
         if self.required {
             ::buffa::types::put_bool_field(4u32, self.required, buf);
         }
@@ -359,12 +319,6 @@ impl ::buffa::Message for VariableDefinition {
         }
         if !self.source.is_empty() {
             ::buffa::types::put_string_field(6u32, &self.source, buf);
-        }
-        if !self.schema_source.is_empty() {
-            ::buffa::types::put_string_field(7u32, &self.schema_source, buf);
-        }
-        if self.has_schema {
-            ::buffa::types::put_bool_field(8u32, self.has_schema, buf);
         }
         if !self.description.is_empty() {
             ::buffa::types::put_string_field(9u32, &self.description, buf);
@@ -401,13 +355,6 @@ impl ::buffa::Message for VariableDefinition {
                     ::buffa::types::decode_int32(buf)?,
                 );
             }
-            3u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::Varint,
-                )?;
-                self.client_accessible = ::buffa::types::decode_bool(buf)?;
-            }
             4u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -433,20 +380,6 @@ impl ::buffa::Message for VariableDefinition {
                 )?;
                 ::buffa::types::merge_string(&mut self.source, buf)?;
             }
-            7u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.schema_source, buf)?;
-            }
-            8u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::Varint,
-                )?;
-                self.has_schema = ::buffa::types::decode_bool(buf)?;
-            }
             9u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -471,12 +404,9 @@ impl ::buffa::Message for VariableDefinition {
     fn clear(&mut self) {
         self.key.clear();
         self.class = ::buffa::EnumValue::from(0);
-        self.client_accessible = false;
         self.required = false;
         self.folders.clear();
         self.source.clear();
-        self.schema_source.clear();
-        self.has_schema = false;
         self.description.clear();
         self.group.clear();
         self.__buffa_unknown_fields.clear();
@@ -5969,18 +5899,12 @@ pub mod __buffa {
             pub key: &'a str,
             /// Field 2: `class`
             pub class: ::buffa::EnumValue<super::super::VariableClass>,
-            /// Field 3: `client_accessible`
-            pub client_accessible: bool,
             /// Field 4: `required`
             pub required: bool,
             /// Field 5: `folders`
             pub folders: ::buffa::RepeatedView<'a, &'a str>,
             /// Field 6: `source`
             pub source: &'a str,
-            /// Field 7: `schema_source`
-            pub schema_source: &'a str,
-            /// Field 8: `has_schema`
-            pub has_schema: bool,
             /// Field 9: `description`
             pub description: &'a str,
             /// Field 10: `group`
@@ -6039,13 +5963,6 @@ pub mod __buffa {
                             ::buffa::types::decode_int32(&mut cur)?,
                         );
                     }
-                    3u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::Varint,
-                        )?;
-                        view.client_accessible = ::buffa::types::decode_bool(&mut cur)?;
-                    }
                     4u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -6059,20 +5976,6 @@ pub mod __buffa {
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
                         view.source = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    7u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.schema_source = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    8u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::Varint,
-                        )?;
-                        view.has_schema = ::buffa::types::decode_bool(&mut cur)?;
                     }
                     9u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -6130,12 +6033,9 @@ pub mod __buffa {
                 ::core::result::Result::Ok(super::super::VariableDefinition {
                     key: self.key.to_string(),
                     class: self.class,
-                    client_accessible: self.client_accessible,
                     required: self.required,
                     folders: self.folders.iter().map(|s| s.to_string()).collect(),
                     source: self.source.to_string(),
-                    schema_source: self.schema_source.to_string(),
-                    has_schema: self.has_schema,
                     description: self.description.to_string(),
                     group: self.group.to_string(),
                     __buffa_unknown_fields: self
@@ -6161,9 +6061,6 @@ pub mod __buffa {
                         size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
                     }
                 }
-                if self.client_accessible {
-                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
-                }
                 if self.required {
                     size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
                 }
@@ -6174,15 +6071,6 @@ pub mod __buffa {
                     size
                         += 1u64
                             + ::buffa::types::string_encoded_len(&self.source) as u64;
-                }
-                if !self.schema_source.is_empty() {
-                    size
-                        += 1u64
-                            + ::buffa::types::string_encoded_len(&self.schema_source)
-                                as u64;
-                }
-                if self.has_schema {
-                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
                 }
                 if !self.description.is_empty() {
                     size
@@ -6214,9 +6102,6 @@ pub mod __buffa {
                         ::buffa::types::put_int32_field(2u32, val, buf);
                     }
                 }
-                if self.client_accessible {
-                    ::buffa::types::put_bool_field(3u32, self.client_accessible, buf);
-                }
                 if self.required {
                     ::buffa::types::put_bool_field(4u32, self.required, buf);
                 }
@@ -6225,12 +6110,6 @@ pub mod __buffa {
                 }
                 if !self.source.is_empty() {
                     ::buffa::types::put_string_field(6u32, &self.source, buf);
-                }
-                if !self.schema_source.is_empty() {
-                    ::buffa::types::put_string_field(7u32, &self.schema_source, buf);
-                }
-                if self.has_schema {
-                    ::buffa::types::put_bool_field(8u32, self.has_schema, buf);
                 }
                 if !self.description.is_empty() {
                     ::buffa::types::put_string_field(9u32, &self.description, buf);
@@ -6265,9 +6144,6 @@ pub mod __buffa {
                 if !::buffa::json_helpers::skip_if::is_default_enum_value(&self.class) {
                     __map.serialize_entry("class", &self.class)?;
                 }
-                if self.client_accessible {
-                    __map.serialize_entry("clientAccessible", &self.client_accessible)?;
-                }
                 if self.required {
                     __map.serialize_entry("required", &self.required)?;
                 }
@@ -6276,12 +6152,6 @@ pub mod __buffa {
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.source) {
                     __map.serialize_entry("source", self.source)?;
-                }
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.schema_source) {
-                    __map.serialize_entry("schemaSource", self.schema_source)?;
-                }
-                if self.has_schema {
-                    __map.serialize_entry("hasSchema", &self.has_schema)?;
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.description) {
                     __map.serialize_entry("description", self.description)?;
@@ -6394,11 +6264,6 @@ pub mod __buffa {
             pub fn class(&self) -> ::buffa::EnumValue<super::super::VariableClass> {
                 self.0.reborrow().class
             }
-            /// Field 3: `client_accessible`
-            #[must_use]
-            pub fn client_accessible(&self) -> bool {
-                self.0.reborrow().client_accessible
-            }
             /// Field 4: `required`
             #[must_use]
             pub fn required(&self) -> bool {
@@ -6413,16 +6278,6 @@ pub mod __buffa {
             #[must_use]
             pub fn source(&self) -> &'_ str {
                 self.0.reborrow().source
-            }
-            /// Field 7: `schema_source`
-            #[must_use]
-            pub fn schema_source(&self) -> &'_ str {
-                self.0.reborrow().schema_source
-            }
-            /// Field 8: `has_schema`
-            #[must_use]
-            pub fn has_schema(&self) -> bool {
-                self.0.reborrow().has_schema
             }
             /// Field 9: `description`
             #[must_use]

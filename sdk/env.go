@@ -498,7 +498,6 @@ func declareEnv(decl declaration, source string) error {
 			Required:    v.required(),
 			Folders:     v.folders,
 			Source:      source,
-			HasSchema:   v.parsed(),
 			Description: v.description,
 			Group:       v.group,
 		})

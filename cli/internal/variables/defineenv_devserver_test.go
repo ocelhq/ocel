@@ -26,10 +26,10 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 
 		srv := serveDevServer(t)
 		srv.UseValues(map[string]string{
-			"PUBLIC_SITE_URL": "https://example.com",
-			"PORT":            "80",
-			"DB_PASSWORD":     "hunter2",
-			"POSTHOG_ID":      "ph_everywhere",
+			"NEXT_PUBLIC_SITE_URL": "https://example.com",
+			"PORT":                 "80",
+			"DB_PASSWORD":          "hunter2",
+			"POSTHOG_ID":           "ph_everywhere",
 		}, variables.Scope{Apps: []variables.App{
 			{Name: "web", Folder: "/web"},
 			{Name: "admin", Folder: "/admin"},
@@ -57,17 +57,9 @@ func TestDefineEnvDeclaresThroughTheDevServer(t *testing.T) {
 			}
 		})
 
-		t.Run("a client-accessible declaration arrives as one", func(t *testing.T) {
-			keys, err := srv.ClientKeys()
-			if err != nil {
-				t.Fatalf("ClientKeys: %v", err)
-			}
-			var named []string
-			for _, key := range keys {
-				named = append(named, key.Name)
-			}
-			if want := []string{"PUBLIC_SITE_URL"}; !slices.Equal(named, want) {
-				t.Errorf("client keys = %+v, want %v — only what was declared, since the deployment url is offered per app, where ocel writes it for that app's runtime", keys, want)
+		t.Run("a NEXT_PUBLIC_ declaration arrives as a public key", func(t *testing.T) {
+			if want := []string{"NEXT_PUBLIC_SITE_URL"}; !slices.Equal(srv.PublicKeys(), want) {
+				t.Errorf("public keys = %v, want %v — only what was declared, since the deployment url is offered per app, where ocel writes it for that app's runtime", srv.PublicKeys(), want)
 			}
 		})
 

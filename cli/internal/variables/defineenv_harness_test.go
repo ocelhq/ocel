@@ -16,7 +16,7 @@ import { defineEnv } from "ocel/env";
 import { z } from "zod";
 
 export const env = defineEnv({
-  PUBLIC_SITE_URL: { class: "plain", client: true },
+  NEXT_PUBLIC_SITE_URL: { class: "plain" },
   PORT: { class: "plain", schema: z.coerce.number().min(1000) },
   LOG_LEVEL: { class: "plain", schema: z.string().default("info") },
   STRIPE_API_KEY: { class: "sensitive" },

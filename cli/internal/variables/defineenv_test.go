@@ -22,7 +22,7 @@ func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 		root := setUpFixture(t, envFixture)
 
 		values := &readTrackingValues{plaintext: map[variables.Cell]string{
-			{Key: "PUBLIC_SITE_URL"}:            "https://example.com",
+			{Key: "NEXT_PUBLIC_SITE_URL"}:       "https://example.com",
 			{Key: "PORT"}:                       "80",
 			{Key: "DB_PASSWORD"}:                "hunter2",
 			{Key: "POSTHOG_ID", Folder: "/web"}: "ph_web",
@@ -43,7 +43,7 @@ func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 				keys = append(keys, key)
 			}
 			slices.Sort(keys)
-			want := []string{"DB_PASSWORD", "LOG_LEVEL", "PORT", "POSTHOG_ID", "PUBLIC_SITE_URL", "STRIPE_API_KEY"}
+			want := []string{"DB_PASSWORD", "LOG_LEVEL", "NEXT_PUBLIC_SITE_URL", "PORT", "POSTHOG_ID", "STRIPE_API_KEY"}
 			if strings.Join(keys, ",") != strings.Join(want, ",") {
 				t.Fatalf("declared keys = %v, want %v", keys, want)
 			}
@@ -51,10 +51,10 @@ func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 
 		t.Run("class maps onto the wire enum", func(t *testing.T) {
 			for key, want := range map[string]resourcesv1.VariableClass{
-				"PUBLIC_SITE_URL": resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
-				"PORT":            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
-				"STRIPE_API_KEY":  resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE,
-				"DB_PASSWORD":     resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
+				"NEXT_PUBLIC_SITE_URL": resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+				"PORT":                 resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+				"STRIPE_API_KEY":       resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE,
+				"DB_PASSWORD":          resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 			} {
 				if got := definitions[key].GetClass(); got != want {
 					t.Errorf("%s class = %v, want %v", key, got, want)
@@ -64,25 +64,14 @@ func TestDefineEnvDeclaresThroughDeclarationCollection(t *testing.T) {
 
 		t.Run("required is derived from the schema", func(t *testing.T) {
 			for key, want := range map[string]bool{
-				"PUBLIC_SITE_URL": true,
-				"PORT":            true,
-				"STRIPE_API_KEY":  true,
-				"DB_PASSWORD":     true,
-				"LOG_LEVEL":       false,
+				"NEXT_PUBLIC_SITE_URL": true,
+				"PORT":                 true,
+				"STRIPE_API_KEY":       true,
+				"DB_PASSWORD":          true,
+				"LOG_LEVEL":            false,
 			} {
 				if got := definitions[key].GetRequired(); got != want {
 					t.Errorf("%s required = %v, want %v", key, got, want)
-				}
-			}
-		})
-
-		t.Run("clientAccessible round-trips", func(t *testing.T) {
-			if !definitions["PUBLIC_SITE_URL"].GetClientAccessible() {
-				t.Error("PUBLIC_SITE_URL clientAccessible = false, want true")
-			}
-			for _, key := range []string{"PORT", "LOG_LEVEL", "STRIPE_API_KEY", "DB_PASSWORD", "POSTHOG_ID"} {
-				if definitions[key].GetClientAccessible() {
-					t.Errorf("%s clientAccessible = true, want false", key)
 				}
 			}
 		})

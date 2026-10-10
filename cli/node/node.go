@@ -25,6 +25,10 @@ func BuildScriptPath(projectDir string) string {
 	return filepath.Join(DistDir(projectDir), "build", "main.cjs")
 }
 
+func NextAdapterPath(projectDir string) string {
+	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
+}
+
 const variableEditorDir = "variable-editor"
 
 func VariableEditor() (fs.FS, error) {

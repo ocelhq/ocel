@@ -1,7 +1,5 @@
 {
   "compilerOptions": {
-    "paths": { "ocel/env/client": ["../../.ocel/apps/github/env-client.ts"] },
-
     "target": "ESNext",
     "lib": ["ESNext"],
     "module": "esnext",

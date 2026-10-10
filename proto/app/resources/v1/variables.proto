@@ -21,8 +21,6 @@ message VariableDefinition {
   string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
   VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
-  bool client_accessible = 3;
-
   bool required = 4;
 
   repeated string folders = 5 [(buf.validate.field).repeated = {
@@ -31,10 +29,6 @@ message VariableDefinition {
   }];
 
   string source = 6;
-
-  string schema_source = 7;
-
-  bool has_schema = 8;
 
   string description = 9 [(buf.validate.field).cel = {
     id: "variables.definition.description"

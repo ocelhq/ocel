@@ -217,6 +217,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				Env:           env.set,
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
+				PublicKeys:    variables[a.Name].PublicKeys,
 
 				MaxFunctionBytes: host.MaxFunctionBytes,
 			})

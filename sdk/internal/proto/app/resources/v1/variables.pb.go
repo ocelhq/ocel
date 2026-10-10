@@ -127,19 +127,16 @@ func (VariableProblem_Kind) EnumDescriptor() ([]byte, []int) {
 }
 
 type VariableDefinition struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Key              string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Class            VariableClass          `protobuf:"varint,2,opt,name=class,proto3,enum=app.resources.v1.VariableClass" json:"class,omitempty"`
-	ClientAccessible bool                   `protobuf:"varint,3,opt,name=client_accessible,json=clientAccessible,proto3" json:"client_accessible,omitempty"`
-	Required         bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
-	Folders          []string               `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
-	Source           string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
-	SchemaSource     string                 `protobuf:"bytes,7,opt,name=schema_source,json=schemaSource,proto3" json:"schema_source,omitempty"`
-	HasSchema        bool                   `protobuf:"varint,8,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
-	Description      string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
-	Group            string                 `protobuf:"bytes,10,opt,name=group,proto3" json:"group,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Class         VariableClass          `protobuf:"varint,2,opt,name=class,proto3,enum=app.resources.v1.VariableClass" json:"class,omitempty"`
+	Required      bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	Folders       []string               `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
+	Source        string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	Description   string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
+	Group         string                 `protobuf:"bytes,10,opt,name=group,proto3" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VariableDefinition) Reset() {
@@ -186,13 +183,6 @@ func (x *VariableDefinition) GetClass() VariableClass {
 	return VariableClass_VARIABLE_CLASS_UNSPECIFIED
 }
 
-func (x *VariableDefinition) GetClientAccessible() bool {
-	if x != nil {
-		return x.ClientAccessible
-	}
-	return false
-}
-
 func (x *VariableDefinition) GetRequired() bool {
 	if x != nil {
 		return x.Required
@@ -212,20 +202,6 @@ func (x *VariableDefinition) GetSource() string {
 		return x.Source
 	}
 	return ""
-}
-
-func (x *VariableDefinition) GetSchemaSource() string {
-	if x != nil {
-		return x.SchemaSource
-	}
-	return ""
-}
-
-func (x *VariableDefinition) GetHasSchema() bool {
-	if x != nil {
-		return x.HasSchema
-	}
-	return false
 }
 
 func (x *VariableDefinition) GetDescription() string {
@@ -610,17 +586,13 @@ var File_app_resources_v1_variables_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xff\x04\n" +
+	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\x8e\x04\n" +
 	"\x12VariableDefinition\x12/\n" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
-	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12+\n" +
-	"\x11client_accessible\x18\x03 \x01(\bR\x10clientAccessible\x12\x1a\n" +
+	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x1a\n" +
 	"\brequired\x18\x04 \x01(\bR\brequired\x12A\n" +
 	"\afolders\x18\x05 \x03(\tB'\xbaH$\x92\x01!\x18\x01\"\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)+$R\afolders\x12\x16\n" +
-	"\x06source\x18\x06 \x01(\tR\x06source\x12#\n" +
-	"\rschema_source\x18\a \x01(\tR\fschemaSource\x12\x1d\n" +
-	"\n" +
-	"has_schema\x18\b \x01(\bR\thasSchema\x12\xdb\x01\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x12\xdb\x01\n" +
 	"\vdescription\x18\t \x01(\tB\xb8\x01\xbaH\xb4\x01\xba\x01\xb0\x01\n" +
 	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')R\vdescription\x121\n" +
 	"\x05group\x18\n" +

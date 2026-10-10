@@ -3,10 +3,12 @@ package dev
 import (
 	"cmp"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
@@ -41,10 +43,26 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	}
 	merged[processenv.AppFolderEnvVar] = appFolder
 	merged[processenv.AppURLEnvVar] = localURL(merged[portEnv])
-	if scope.IsWrittenByOcel(processenv.ClientURLEnvVar, nil) {
-		merged[processenv.ClientURLEnvVar] = merged[processenv.AppURLEnvVar]
+	for _, key := range []string{processenv.ClientURLEnvVar, processenv.SvelteKitPublicURLEnvVar} {
+		if scope.IsWrittenByOcel(key, nil) {
+			merged[key] = merged[processenv.AppURLEnvVar]
+		}
 	}
 	return merged
+}
+
+func nextAppEnv(scope variables.Scope, adapterPath string, declared []string) map[string]string {
+	if !slices.ContainsFunc(scope.Apps, func(app variables.App) bool { return app.Framework == buildoutput.FrameworkNext }) {
+		return nil
+	}
+	keys := slices.Clone(declared)
+	if scope.IsWrittenByOcel(processenv.ClientURLEnvVar, nil) {
+		keys = append(keys, processenv.ClientURLEnvVar)
+	}
+	return map[string]string{
+		processenv.NextAdapterPathEnvVar: adapterPath,
+		processenv.PublicKeysEnvVar:      strings.Join(keys, ","),
+	}
 }
 
 func localURL(port string) string {

@@ -1057,8 +1057,8 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		}
 	})
 
-	t.Run("a client value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
-		fixture := setUpVariablesProject(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
+	t.Run("a public value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
+		fixture := setUpVariablesProject(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"source":"/app/env.ts"}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"NEXT_PUBLIC_PORT","folder":"","kind":"KIND_INVALID","detail":"expected a number"}]`)
 		dependencies := newTestDependencies()
 		built := false
@@ -1074,7 +1074,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 			}
 		}
 		if built {
-			t.Error("the app was built with a client value its schema rejects")
+			t.Error("the app was built with a public value its schema rejects")
 		}
 	})
 

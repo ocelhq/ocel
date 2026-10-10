@@ -128,14 +128,6 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	if err != nil {
 		return build.Output{}, err
 	}
-	if err := clientenv.Generate(cfg.Dir, clients); err != nil {
-		return build.Output{}, err
-	}
-	if !a.dry {
-		if err := clientenv.MapEnvImports(cfg.Dir, clients); err != nil {
-			return build.Output{}, err
-		}
-	}
 	span.End(nil)
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
@@ -324,7 +316,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.A
 	for _, app := range build.ImageApps(cfg.Apps) {
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
-			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(true, v.Key) {
+			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(app.Framework(), true, v.Key) {
 				keys = append(keys, v.Key)
 			}
 		}
@@ -358,16 +350,13 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			continue
 		}
 		values = append(values, variables.Variable{
-			Key:              definition.GetKey(),
-			Class:            definition.GetClass(),
-			Value:            cell.Value,
-			Folder:           cell.Folder,
-			Version:          cell.Version,
-			ClientAccessible: definition.GetClientAccessible(),
-			Source:           definition.GetSource(),
-			SchemaSource:     definition.GetSchemaSource(),
-			Schema:           definition.GetHasSchema(),
-			Description:      definition.GetDescription(),
+			Key:         definition.GetKey(),
+			Class:       definition.GetClass(),
+			Value:       cell.Value,
+			Folder:      cell.Folder,
+			Version:     cell.Version,
+			Source:      definition.GetSource(),
+			Description: definition.GetDescription(),
 		})
 	}
 	return values
