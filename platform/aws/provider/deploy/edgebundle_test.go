@@ -266,6 +266,46 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
+func TestAnEdgeBundleAndItsSealedOverlayLandOnlyInTheAssetBucketTaggedEdgeReadableWhenTheEdgeHoldsCredentials(t *testing.T) {
+	t.Parallel()
+	edgeStore := &fakeArtifactStore{exists: map[string]bool{}}
+	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{
+			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
+			"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js"}`,
+		}),
+		AssetBucket: "assets", Env: "prod",
+		Objects:          assetStore,
+		CacheStoreBucket: "isr", CacheStoreObjects: edgeStore,
+		EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret",
+	}
+	manifest := edgeVariablesManifest(variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
+
+	if err := uploadEdgeBundles(context.Background(), cfg, manifest, edgeBuilds(t, cfg, manifest)); err != nil {
+		t.Fatalf("uploadEdgeBundles: %v", err)
+	}
+
+	want := []string{edgeBundleKeyFor("web", testBuildID), edgeSealedKeyFor("web", testBuildID)}
+	slices.Sort(want)
+	if got := sortedPuts(assetStore); !slices.Equal(got, want) {
+		t.Errorf("the asset bucket was given %v, want %v", got, want)
+	}
+	if len(edgeStore.puts) != 0 {
+		t.Errorf("the adopted store was given %v, want nothing: the edge reads its bundle from the asset bucket alone", edgeStore.puts)
+	}
+	for _, key := range want {
+		if got := assetStore.taggings[key]; got != wantEdgeReadableTagging {
+			t.Errorf("%s tagging = %q, want %q", key, got, wantEdgeReadableTagging)
+		}
+	}
+	for _, b := range assetStore.buckets {
+		if b != "assets" {
+			t.Errorf("the asset-bucket copy went to bucket %q, want %q", b, "assets")
+		}
+	}
+}
+
 func appValuesOf(app *contractv1.ManifestApp) provider.AppValues {
 	plain, sensitive := map[string]string{}, map[string]string{}
 	for _, v := range app.GetVariables() {

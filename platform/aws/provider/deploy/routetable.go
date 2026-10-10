@@ -11,6 +11,13 @@ import (
 
 const routeTableSetName = "route-table"
 
+func selectEdgeObjectTarget(cfg Config) uploadTarget {
+	if cfg.AssetBucket != "" && cfg.Objects != nil && cfg.EdgeAccessKeyID != "" && cfg.EdgeSecretKey != "" {
+		return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: true}
+	}
+	return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier}
+}
+
 func routeTableSet(cfg Config, app string, table *provider.EdgeRouteTable) (*assetSet, error) {
 	if table == nil {
 		return nil, nil
@@ -22,7 +29,8 @@ func routeTableSet(cfg Config, app string, table *provider.EdgeRouteTable) (*ass
 	}
 	key := table.Location.Key
 	manifest := newSetManifest()
-	manifest.add(cfg.CacheStoreBucket, key, int64(len(table.Table)))
+	to := selectEdgeObjectTarget(cfg)
+	manifest.add(to.bucket, key, int64(len(table.Table)))
 	return &assetSet{
 		name:   routeTableSetName,
 		app:    app,
@@ -31,8 +39,8 @@ func routeTableSet(cfg Config, app string, table *provider.EdgeRouteTable) (*ass
 		push: func(ctx context.Context, progress progress.Log) error {
 			phaseStart := time.Now()
 			stats := newUploadBatchStats()
-			say(progress, "Uploading "+app+"'s route table to bucket "+cfg.CacheStoreBucket)
-			err := tracedPut(ctx, cfg.CacheStoreObjects, cfg.CacheStoreBucket, key, objectHeaders{contentType: "application/json"}, table.Table, stats)
+			say(progress, "Uploading "+app+"'s route table to bucket "+to.bucket)
+			err := tracedPut(ctx, to.up, to.bucket, key, objectHeaders{contentType: "application/json"}.taggedFor(to), table.Table, stats)
 			emitUploadBatch(progress, uploadKindRouteTable, stats, err, phaseStart)
 			return err
 		},

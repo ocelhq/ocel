@@ -1825,3 +1825,16 @@ func TestABootstrapCredentialMakesAndTagsVariablesKeysOnlyAsItsOwnTiers(t *testi
 		}
 	}
 }
+
+func TestEveryCredentialTagsTheObjectsItPutsInTheAssetBucket(t *testing.T) {
+	core, err := defaultNamespace.StackNameFor(environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	object := "arn:aws:s3:::" + strings.ToLower(core) + "-assetbucket-abc123/prod/shop/web/r1a2b3c4d/assets/app.js"
+	for purpose, document := range credentialsOfTier(t, environment.TierProduction) {
+		if !reaches(t, document, "s3:PutObjectTagging", object) {
+			t.Errorf("the %s credential cannot tag %s, so a put that tags it edge-readable is refused", purpose, object)
+		}
+	}
+}

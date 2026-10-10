@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,6 +31,27 @@ func programmed(slug string, tier environment.Tier) EntryProgram {
 }
 
 const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+func TestEveryEntryWorkerCachesItsServeEntrypointAndNothingElse(t *testing.T) {
+	shared := programmed("", environment.TierPreview)
+	shared.PreviewBaseDomain = "preview.acme.com"
+	shared.PreviewKey = previewKey
+	for name, entry := range map[string]EntryProgram{
+		"the shared preview entry": shared,
+		"a project's preview":      programmed("acme", environment.TierPreview),
+		"a project's production":   programmed("acme", environment.TierProduction),
+	} {
+		t.Run(name, func(t *testing.T) {
+			built, err := entry.Build()
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if got := built.Spec.Worker.CachedEntrypoints; !slices.Equal(got, []string{"Serve"}) {
+				t.Errorf("CachedEntrypoints = %v, want only Serve", got)
+			}
+		})
+	}
+}
 
 func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *testing.T) {
 	entry := programmed("", environment.TierPreview)

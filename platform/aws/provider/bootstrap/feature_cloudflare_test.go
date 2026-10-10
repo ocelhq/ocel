@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type edgeUserTemplate struct {
@@ -19,12 +21,7 @@ type edgeUserTemplate struct {
 			Policies []struct {
 				PolicyName     string `yaml:"PolicyName"`
 				PolicyDocument struct {
-					Statement []struct {
-						Effect    string         `yaml:"Effect"`
-						Action    any            `yaml:"Action"`
-						Resource  any            `yaml:"Resource"`
-						Condition map[string]any `yaml:"Condition"`
-					} `yaml:"Statement"`
+					Statement []policyStatement `yaml:"Statement"`
 				} `yaml:"PolicyDocument"`
 			} `yaml:"Policies"`
 		} `yaml:"Properties"`
@@ -64,7 +61,7 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var sqsSend, invoke, invokeTagged, invokeTiered bool
+			var sqsSend, invoke, invokeTagged, invokeTiered, listBucket bool
 			for _, st := range stmts {
 				for _, action := range listPolicyActions(st.Action) {
 					if strings.HasPrefix(action, "dynamodb:") {
@@ -73,6 +70,9 @@ func TestEdgeUser(t *testing.T) {
 				}
 				if st.Resource == paramRevalidateQueueARN {
 					sqsSend = hasAction(st.Action, "sqs:SendMessage")
+				}
+				if hasAction(st.Action, "s3:ListBucket") {
+					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(yamlStrings(st.Resource), []string{paramAssetBucketARN})
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
@@ -89,6 +89,12 @@ func TestEdgeUser(t *testing.T) {
 			if !sqsSend {
 				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature provisioned")
 			}
+			if !readsOnlyEdgeReadableObjects(stmts) {
+				t.Error("the edge user must read every object the deploy tags edge-readable in the asset bucket, and no other object in it")
+			}
+			if !listBucket {
+				t.Error("missing s3:ListBucket, alone, on the asset bucket itself, so an absent object answers 404 rather than 403")
+			}
 			if !invoke {
 				t.Error("missing the lambda:Invoke* grant")
 			}
@@ -99,6 +105,72 @@ func TestEdgeUser(t *testing.T) {
 				t.Errorf("lambda:Invoke* grant must be gated on ocel:env-tier being %s, or the %s edge's key invokes the other tier's functions too", tc.name, tc.name)
 			}
 		})
+	}
+}
+
+var edgeReadable = map[string]string{naming.EdgeReadableTagKey: naming.EdgeReadableTagValue}
+
+func readsOnlyEdgeReadableObjects(stmts []policyStatement) bool {
+	const release = "arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/"
+	return edgeUserReads(stmts, release+"assets/_next/static/app.js", edgeReadable) &&
+		edgeUserReads(stmts, release+"route-table/"+strings.Repeat("a", 64)+".json", edgeReadable) &&
+		edgeUserReads(stmts, release+"edge/bundle.json", edgeReadable) &&
+		!edgeUserReads(stmts, release+"origin.json", nil) &&
+		!edgeUserReads(stmts, release+"image-config.json", nil) &&
+		!edgeUserReads(stmts, release+"isr/assets/page.json", nil) &&
+		!edgeUserReads(stmts, release+"origin.json", map[string]string{naming.EdgeReadableTagKey: "other"})
+}
+
+func edgeUserReads(stmts []policyStatement, object string, tags map[string]string) bool {
+	for _, st := range stmts {
+		if st.Effect != "Allow" || !slices.Contains(st.actions(), "s3:GetObject") {
+			continue
+		}
+		if !iamResourceMatchesAny(st.resources(), object) {
+			continue
+		}
+		if existingTagsSatisfy(st.Condition, tags) {
+			return true
+		}
+	}
+	return false
+}
+
+func existingTagsSatisfy(condition map[string]any, tags map[string]string) bool {
+	for operator, clauses := range condition {
+		if operator != "StringEquals" {
+			return false
+		}
+		for key, want := range clauses.(map[string]any) {
+			tag, ok := strings.CutPrefix(key, "s3:ExistingObjectTag/")
+			if !ok {
+				return false
+			}
+			value, tagged := tags[tag]
+			if !tagged || value != want {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func TestTheEdgeUserCannotReadTheOriginRecordOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
+	var tmpl edgeUserTemplate
+	if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudflareEdge, environment.TierProduction)), &tmpl); err != nil {
+		t.Fatalf("template is not valid YAML: %v", err)
+	}
+	stmts := tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement
+	for _, object := range []string{
+		"arn:aws:s3:::assets/prod/edge/web/r1a2b3c4d/origin.json",
+		"arn:aws:s3:::assets/prod/shop/assets/r1a2b3c4d/origin.json",
+		"arn:aws:s3:::assets/edge/assets/route-table/r1a2b3c4d/origin.json",
+		"arn:aws:s3:::assets/prod/shop/assets/r1a2b3c4d/image-config.json",
+		"arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/isr/blog/assets/edge/page.json",
+	} {
+		if edgeUserReads(stmts, object, nil) {
+			t.Errorf("the edge user reads %s, an object the deploy never tags edge-readable", object)
+		}
 	}
 }
 

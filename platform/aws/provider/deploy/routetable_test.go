@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -44,6 +46,61 @@ func TestARouteTableSetPutsTheTableAtItsKeyInTheAdoptedCacheStore(t *testing.T) 
 	}
 	if ct := store.contentTypes[key]; ct != "application/json" {
 		t.Errorf("content-type = %q, want application/json", ct)
+	}
+}
+
+func TestARouteTableLandsOnlyInTheAssetBucketTaggedEdgeReadableWhenTheEdgeHoldsCredentials(t *testing.T) {
+	edgeStore := &fakeArtifactStore{exists: map[string]bool{}}
+	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
+	cfg := Config{
+		CacheStoreBucket: "isr", CacheStoreObjects: edgeStore,
+		AssetBucket: "assets", Objects: assetStore,
+		EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret",
+	}
+	table := edgeRouteTable("prod/proj/web/r1a2b3c4d/route-table/ab.json")
+
+	set, err := routeTableSet(cfg, "web", table)
+	if err != nil || set == nil {
+		t.Fatalf("routeTableSet() = %v, %v, want a set to push", set, err)
+	}
+	said := &recordingProgress{}
+	if err := set.push(context.Background(), said); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	key := table.Location.Key
+	if len(assetStore.puts) != 1 || assetStore.puts[0] != key || assetStore.buckets[0] != "assets" {
+		t.Errorf("asset bucket was given %v in %v, want %q in assets", assetStore.puts, assetStore.buckets, key)
+	}
+	if body := assetStore.putBodies[key]; body != string(table.Table) {
+		t.Errorf("asset bucket body = %q, want the table verbatim", body)
+	}
+	if got := assetStore.taggings[key]; got != wantEdgeReadableTagging {
+		t.Errorf("tagging = %q, want %q: the edge user reads only objects tagged edge-readable", got, wantEdgeReadableTagging)
+	}
+	if len(edgeStore.puts) != 0 {
+		t.Errorf("adopted store was given %v, want nothing: the edge reads the route table from the asset bucket alone", edgeStore.puts)
+	}
+	if !slices.ContainsFunc(said.said, func(m string) bool { return strings.HasSuffix(m, "to bucket assets") }) {
+		t.Errorf("progress said %q, want it to name the asset bucket the table was written to", said.said)
+	}
+}
+
+func TestARouteTableLandsInTheAdoptedStoreWhenTheEdgeHoldsNoCredentials(t *testing.T) {
+	edgeStore := &fakeArtifactStore{exists: map[string]bool{}}
+	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
+	cfg := Config{CacheStoreBucket: "isr", CacheStoreObjects: edgeStore, AssetBucket: "assets", Objects: assetStore}
+	table := edgeRouteTable("prod/proj/web/r1a2b3c4d/route-table/ab.json")
+
+	set, err := routeTableSet(cfg, "web", table)
+	if err != nil || set == nil {
+		t.Fatalf("routeTableSet() = %v, %v, want a set to push", set, err)
+	}
+	if err := set.push(context.Background(), progress.Discard()); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if len(edgeStore.puts) != 1 || len(assetStore.puts) != 0 {
+		t.Errorf("adopted store was given %v and asset bucket %v, want the table in the adopted store alone", edgeStore.puts, assetStore.puts)
 	}
 }
 

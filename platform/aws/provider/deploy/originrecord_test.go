@@ -38,6 +38,9 @@ func TestTheReleasePublishesTheOriginRecordTheRevalidatorResolvesBy(t *testing.T
 	if got := up.contentTypes[key]; got != "application/json" {
 		t.Errorf("ContentType = %q, want application/json", got)
 	}
+	if got, tagged := up.taggings[key]; tagged {
+		t.Errorf("tagging = %q, want none: an edge-readable origin record hands the edge user the app's bypass token", got)
+	}
 	var record originRecord
 	if err := json.Unmarshal([]byte(up.putBodies[key]), &record); err != nil {
 		t.Fatalf("record is not JSON: %v", err)

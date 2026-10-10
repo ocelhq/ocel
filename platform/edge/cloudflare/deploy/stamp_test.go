@@ -48,7 +48,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[edge.Worker](),
-			want: []string{"AssetBinding", "Assets", "ClientCertificates", "LoaderBinding", "Main", "Modules", "ObjectStore", "Queues", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "LoaderBinding", "Main", "Modules", "ObjectStore", "Queues", "Secrets", "Services", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[edge.WorkerModule](),

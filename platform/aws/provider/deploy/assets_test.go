@@ -304,6 +304,27 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
+	t.Run("tags the asset bucket's copies edge-readable, and neither the adopted store's nor the image config", func(t *testing.T) {
+		t.Parallel()
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := mirrorConfig(imageConfigTree(t), store, asset)
+
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
+			t.Fatalf("uploadStaticAssets: %v", err)
+		}
+
+		logo := assetKeyFor("web", testBuildID, "logo.png")
+		if got := asset.taggings[logo]; got != wantEdgeReadableTagging {
+			t.Errorf("asset bucket %s tagging = %q, want %q", logo, got, wantEdgeReadableTagging)
+		}
+		if got, tagged := store.taggings[logo]; tagged {
+			t.Errorf("adopted store %s tagging = %q, want none", logo, got)
+		}
+		if got, tagged := asset.taggings[imageConfigKeyFor("web", testBuildID)]; tagged {
+			t.Errorf("image config tagging = %q, want none: the edge never reads it", got)
+		}
+	})
+
 	t.Run("a project's own image config asset does not collide", func(t *testing.T) {
 		t.Parallel()
 		root := writeTree(t, map[string]string{

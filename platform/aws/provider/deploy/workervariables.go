@@ -8,6 +8,8 @@ import (
 type WorkerValues struct {
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
+	AssetBucket        string
+	Region             string
 	EdgeAccessKeyID    string
 	EdgeSecretKey      string
 }
@@ -22,9 +24,14 @@ func (f WorkerValues) Bindings() cloudflare.OriginBindings {
 			bindings.Variables[name] = value
 		}
 	}
-	if f.EdgeAccessKeyID != "" && f.EdgeSecretKey != "" {
-		bindings.Variables[edge.EdgeAccessKeyIDVar] = f.EdgeAccessKeyID
-		bindings.Secrets = map[string]string{edge.EdgeSecretKeyVar: f.EdgeSecretKey}
+	if f.EdgeAccessKeyID == "" || f.EdgeSecretKey == "" {
+		return bindings
+	}
+	bindings.Variables[edge.EdgeAccessKeyIDVar] = f.EdgeAccessKeyID
+	bindings.Secrets = map[string]string{edge.EdgeSecretKeyVar: f.EdgeSecretKey}
+	if f.AssetBucket != "" && f.Region != "" {
+		bindings.Variables[edge.AssetBucketVar] = f.AssetBucket
+		bindings.Variables[edge.AWSRegionVar] = f.Region
 	}
 	return bindings
 }
