@@ -112,18 +112,22 @@ func TestTheStaticFilesAreUploadedBeforeTheServiceIsCreated(t *testing.T) {
 	}
 }
 
-func TestARedeployOfTheSameReleaseKeepsTheStaticFilesItHas(t *testing.T) {
+func TestARedeployOfTheSameReleaseUploadsOnlyTheStaticFilesItLacks(t *testing.T) {
 	const logo = "assets/prod/shop/web/r1/assets/logo.svg"
+	const chunk = "assets/prod/shop/web/r1/assets/_next/static/app.js"
 	server := &runServer{present: map[string]bool{logo: true}}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>"})
+	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>", "static/_next/static/app.js": "chunk"})
 
 	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := uploadNamed(t, server.stored(), logo).ifGenerationMatch; got != "0" {
-		t.Errorf("the logo was written with ifGenerationMatch=%q, want 0 so a redeploy keeps what is there", got)
+	if names := uploadNames(server.stored()); !slices.Equal(names, []string{chunk}) {
+		t.Errorf("the redeploy uploaded %v, want only the missing %s", names, chunk)
+	}
+	if got := uploadNamed(t, server.stored(), chunk).ifGenerationMatch; got != "0" {
+		t.Errorf("the chunk was written with ifGenerationMatch=%q, want 0 so a concurrent deploy keeps what it wrote", got)
 	}
 }
 
