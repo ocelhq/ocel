@@ -31,32 +31,39 @@ type KitVariables = Record<string, KitVariable>;
 
 type Refused<TKey extends string, TReason extends string> = `'${TKey}' ${TReason}`;
 
-type Refusal<TKey extends string, TVariable> = TVariable extends { readonly class: "secret" }
+type Refusal<TKey extends string, TVariable> = TKey extends typeof SVELTEKIT_PUBLIC_URL_KEY
   ? {
       readonly class: Refused<
         TKey,
-        "is class secret, and SvelteKit reads a value once at startup, so a rotated secret never arrives: declare it with defineEnv from 'ocel/env', whose accessor reads it live"
+        "is written by ocel and is already among the variables defineEnvVars returns: read it from $app/env/public, and drop this declaration"
       >;
     }
-  : TVariable extends { readonly public: true }
-    ? TVariable extends { readonly class: "plain" }
-      ? unknown
-      : {
-          readonly class: Refused<
-            TKey,
-            'is public, so SvelteKit hands it to the browser: declare it class "plain", or drop public: true'
-          >;
-        }
-    : TVariable extends { readonly static: true }
-      ? TVariable extends { readonly class: "sensitive" }
-        ? {
-            readonly static: Refused<
+  : TVariable extends { readonly class: "secret" }
+    ? {
+        readonly class: Refused<
+          TKey,
+          "is class secret, and SvelteKit reads a value once at startup, so a rotated secret never arrives: declare it with defineEnv from 'ocel/env', whose accessor reads it live"
+        >;
+      }
+    : TVariable extends { readonly public: true }
+      ? TVariable extends { readonly class: "plain" }
+        ? unknown
+        : {
+            readonly class: Refused<
               TKey,
-              "is sensitive and static, so SvelteKit would inline its value into the server bundle: drop static: true"
+              'is public, so SvelteKit hands it to the browser: declare it class "plain", or drop public: true'
             >;
           }
-        : unknown
-      : unknown;
+      : TVariable extends { readonly static: true }
+        ? TVariable extends { readonly class: "sensitive" }
+          ? {
+              readonly static: Refused<
+                TKey,
+                "is sensitive and static, so SvelteKit would inline its value into the server bundle: drop static: true"
+              >;
+            }
+          : unknown
+        : unknown;
 
 type Refusals<TVariables extends KitVariables> = {
   readonly [K in keyof TVariables & string]: Refusal<K, TVariables[K]>;
@@ -78,7 +85,7 @@ type DeploymentUrl = { public: true; schema: (value: string | undefined) => stri
 export function defineEnvVars<const TVariables extends KitVariables>(
   variables: TVariables & Refusals<TVariables>,
 ): DefinedEnvVars<KitFields<TVariables> & { PUBLIC_OCEL_URL: DeploymentUrl }> {
-  refuse(variables);
+  refuseUnsupportedVariables(variables);
 
   const forKit: Record<string, Omit<KitVariable, "class" | "folders">> = {
     PUBLIC_OCEL_URL: { public: true, schema: (value) => value },
@@ -106,15 +113,19 @@ export function defineEnvVars<const TVariables extends KitVariables>(
   for (const [key, variable] of Object.entries(variables as KitVariables)) {
     const entry = normalized[key];
     if (entry?.schema && variable.class !== "plain") {
-      entry.schema = withheld(key, entry.schema);
+      entry.schema = withholdIssues(key, entry.schema);
     }
   }
   return normalized as never;
 }
 
-function refuse(variables: KitVariables): void {
+function refuseUnsupportedVariables(variables: KitVariables): void {
   for (const [key, variable] of Object.entries(variables)) {
-    if (key === SVELTEKIT_PUBLIC_URL_KEY) continue;
+    if (key === SVELTEKIT_PUBLIC_URL_KEY) {
+      throw new EnvDefinitionError(
+        `'${key}' is written by ocel from the URL the deployment is served from, and it is already among the variables defineEnvVars returns. Read it from $app/env/public, and drop this declaration.`,
+      );
+    }
     if (variable.class === "secret") {
       throw new EnvDefinitionError(
         `'${key}' is class 'secret', and SvelteKit reads a value once at startup into a module-level constant, so a rotated secret would never arrive. Declare it with defineEnv from 'ocel/env', whose accessor reads it live, or declare it class 'sensitive'.`,
@@ -133,7 +144,7 @@ function refuse(variables: KitVariables): void {
   }
 }
 
-function withheld(
+function withholdIssues(
   key: string,
   schema: StandardSchemaV1<string | undefined, unknown>,
 ): StandardSchemaV1<string | undefined, unknown> {
