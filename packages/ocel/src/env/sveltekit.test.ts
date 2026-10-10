@@ -75,10 +75,11 @@ describe("the variables ocel/env/sveltekit hands to SvelteKit", () => {
     expect(schema["~standard"].validate(undefined)).toEqual({ value: undefined });
   });
 
-  it("refuses a declared PUBLIC_OCEL_URL, because ocel writes it", () => {
-    expect(() => defineEnvVars({ PUBLIC_OCEL_URL: { class: "plain", public: true } })).toThrow(
-      /deployment\.url/,
-    );
+  it("refuses a declared PUBLIC_OCEL_URL and says where SvelteKit already reads it", () => {
+    expect(() =>
+      // @ts-expect-error ocel writes PUBLIC_OCEL_URL, so a declared one is refused
+      defineEnvVars({ PUBLIC_OCEL_URL: { class: "plain", public: true } }),
+    ).toThrow(/PUBLIC_OCEL_URL.*written by ocel.*\$app\/env\/public/s);
   });
 });
 
