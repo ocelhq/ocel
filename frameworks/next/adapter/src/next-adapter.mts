@@ -31,7 +31,7 @@ function isProgrammableEdge(kind: string | undefined): boolean {
   return kind === programmableEdgeKind;
 }
 
-function commaSeparated(declared: string | undefined): Set<string> {
+function splitCommaSeparated(declared: string | undefined): Set<string> {
   return new Set(
     (declared ?? "")
       .split(",")
@@ -56,7 +56,7 @@ const publicEnvDefine = "process.env.OCEL_PUBLIC_ENV";
 
 function readPublicValues(): Record<string, string> {
   const values: Record<string, string> = {};
-  for (const key of commaSeparated(process.env.OCEL_PUBLIC_KEYS)) {
+  for (const key of splitCommaSeparated(process.env.OCEL_PUBLIC_KEYS)) {
     const value = process.env[key];
     if (value !== undefined) values[key] = value;
   }
@@ -111,7 +111,7 @@ const adapter = {
     const { middleware } = outputs;
     const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
     const programmableEdge = isProgrammableEdge(process.env.OCEL_EDGE_KIND);
-    const waived = commaSeparated(process.env.OCEL_ALLOW_DEGRADED);
+    const waived = splitCommaSeparated(process.env.OCEL_ALLOW_DEGRADED);
     const compileEdgeOnOrigin = (need: string) => !programmableEdge && waived.has(need);
     const edgeMiddleware = middleware?.runtime === "edge" ? middleware : undefined;
     const originEdgeMiddleware = compileEdgeOnOrigin("edge-middleware")
