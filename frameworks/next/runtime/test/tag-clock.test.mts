@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { CacheEntryFile } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { CacheStore } from "../src/cache-store.mjs";
@@ -619,6 +620,37 @@ test("the next refresh after a sync misses its deadline starts a new read", asyn
 
     expect(stall.stalled).toBe(1);
     expect(store.gets).toBe(1);
+    expect(tagClock.hasSynced).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a sync first asked for inside a render reads the snapshot outside that render", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const store = fakeStore();
+    const { tagClock, handler } = await load(store);
+    const render = new AsyncLocalStorage<"prerender-runtime">();
+    const read = store.readTagSnapshot.bind(store);
+    let issued = 0;
+    store.readTagSnapshot = (cursor) => {
+      if (render.getStore() !== undefined) return new Promise(() => {});
+      issued++;
+      return read(cursor);
+    };
+
+    let settled = false;
+    const waiting = render.run("prerender-runtime", () =>
+      handler.refreshTags().then(() => {
+        settled = true;
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+    await waiting;
+
+    expect(settled).toBe(true);
+    expect(issued).toBe(1);
     expect(tagClock.hasSynced).toBe(true);
   } finally {
     vi.useRealTimers();
