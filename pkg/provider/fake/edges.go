@@ -186,6 +186,7 @@ type edgeAccount struct {
 	routedBy        router.Kind
 	owners          map[string]string
 	wildcard        string
+	wildcardBehind  bool
 	specs           []edge.PreviewWildcardSpec
 	stacks          []edge.StackSpec
 	bindings        []edge.DomainBinding
@@ -718,9 +719,22 @@ func (e *Edge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWild
 		return "", e.refusal
 	}
 	e.wildcard = spec.BaseDomain
+	e.wildcardBehind = false
 	e.specs = append(e.specs, spec)
 	e.owners[edge.PreviewWildcard(spec.BaseDomain)] = edge.PreviewEntryOwner
 	return "preview." + string(e.kind) + ".fake.invalid", nil
+}
+
+func (e *Edge) FallsBehindOnPreviewEntry() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.wildcardBehind = true
+}
+
+func (e *Edge) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.wildcardBehind, nil
 }
 
 func (e *Edge) DestroyPreviewWildcard(_ context.Context, baseDomain string) error {

@@ -62,6 +62,10 @@ func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpe
 	return "", unbindable("a preview wildcard")
 }
 
+func (*Edge) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func unbindable(what string) error {

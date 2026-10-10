@@ -1875,6 +1875,22 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	}
 }
 
+func TestAGlobalPreviewDeployIsRefusedWhileTheSharedPreviewEntryIsBehindThisBuild(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).FallsBehindOnPreviewEntry()
+
+	result, _ := deploy(t, client, previewDeployRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "ocel domain use '*.preview.acme.com' --preview") {
+		t.Errorf("Deploy() = %v %q, want it refused with the command that brings the shared preview entry up to this build", result.GetSuccess(), result.GetError())
+	}
+}
+
 func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectHasMoreThanOne(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)

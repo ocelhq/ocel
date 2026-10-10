@@ -146,6 +146,10 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 	}, deployed, nil
 }
 
+func (*cloudFront) PreviewWildcardBehind(context.Context, edge.PreviewWildcardSpec) (bool, error) {
+	return false, nil
+}
+
 func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	if edge.PreviewWildcard(baseDomain) == "" {
 		return nil

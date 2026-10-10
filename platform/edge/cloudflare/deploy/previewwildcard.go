@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -46,6 +47,22 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", fmt.Errorf("set shared preview entry worker subdomain: %w", err)
 	}
 	return "", nil
+}
+
+func (p *cloudflare) PreviewWildcardBehind(ctx context.Context, spec edge.PreviewWildcardSpec) (bool, error) {
+	accountID, err := requireAccountID("read the shared preview entry worker")
+	if err != nil {
+		return false, err
+	}
+	if spec.Program == nil {
+		return false, errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
+	}
+	main := previewEntryWorker(spec).Main
+	deployed, present, err := p.deployedScript(ctx, accountID, previewEntryScript, main.Name)
+	if err != nil {
+		return false, err
+	}
+	return !present || !bytes.Equal(deployed, main.Content), nil
 }
 
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {

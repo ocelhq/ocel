@@ -386,6 +386,9 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.ensureSignedPreviewHosts(ctx, progress); err != nil {
 		return err
 	}
+	if err := r.refuseStalePreviewEntry(ctx); err != nil {
+		return err
+	}
 	if err := r.readInlineRecords(ctx); err != nil {
 		return err
 	}
@@ -487,6 +490,30 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
 	r.cutover.manual = failOnManualRecords(r.sender, r.spans.Hostnames)
 	return nil
+}
+
+func (r *deployRun) refuseStalePreviewEntry(ctx context.Context) error {
+	if r.hostingMode() != hostingGlobalPreview || r.wildcard.Edge != r.front.Kind() {
+		return nil
+	}
+	base := r.wildcard.BaseDomain
+	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
+		Tier:              environment.TierPreview,
+		PreviewBaseDomain: base,
+		PreviewKey:        r.previewKey,
+	})
+	if err != nil {
+		return err
+	}
+	behind, err := r.front.PreviewWildcardBehind(ctx, edge.PreviewWildcardSpec{BaseDomain: base, Program: program.Spec, Values: program.Values})
+	if err != nil || !behind {
+		return err
+	}
+	wildcard := edge.PreviewWildcard(base)
+	return refusal.Refuse(refusal.CodeNotReady,
+		"the shared preview entry on %s is behind this build, so it would misread the release this deploy records and fail its requests: "+
+			"run `ocel domain use '%s' --preview` to install this build's, then deploy again",
+		wildcard, wildcard)
 }
 
 func refuseNoPreviewDomain() error {
