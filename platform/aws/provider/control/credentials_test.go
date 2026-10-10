@@ -62,6 +62,23 @@ func TestWhoamiKeepsTheProfileAmongTheDetails(t *testing.T) {
 	}
 }
 
+func TestPermissionsNameTheVariablesKeyTheProviderWasConfiguredWith(t *testing.T) {
+	t.Parallel()
+
+	const brought = "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+	creds := Credentials{Namespace: defaultNamespace, VariablesKey: brought}
+
+	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
+		document, err := creds.Permissions(purpose, environment.TierProduction)
+		if err != nil {
+			t.Fatalf("Permissions(%v) = %v", purpose, err)
+		}
+		if !strings.Contains(document.Document, `"`+brought+`"`) {
+			t.Errorf("Permissions(%v) names no grant on the brought key %s", purpose, brought)
+		}
+	}
+}
+
 func TestPermissionsRenderTheTierTheyAreAskedForAndNameIt(t *testing.T) {
 	t.Parallel()
 

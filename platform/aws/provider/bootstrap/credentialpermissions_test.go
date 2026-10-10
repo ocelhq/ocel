@@ -143,13 +143,13 @@ func renderedCredentials(t *testing.T) (string, string) {
 
 func renderedCredentialsOf(t *testing.T, tier environment.Tier) (string, string) {
 	t.Helper()
-	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace, tier)
+	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace, tier, "")
 	if err != nil {
-		t.Fatalf("BootstrapCredentialPermissions(defaultNamespace, %s) error = %v", tier, err)
+		t.Fatalf("BootstrapCredentialPermissions(defaultNamespace, %s, \"\") error = %v", tier, err)
 	}
-	deployDoc, err := DeployCredentialPermissions(defaultNamespace, tier)
+	deployDoc, err := DeployCredentialPermissions(defaultNamespace, tier, "")
 	if err != nil {
-		t.Fatalf("DeployCredentialPermissions(defaultNamespace, %s) error = %v", tier, err)
+		t.Fatalf("DeployCredentialPermissions(defaultNamespace, %s, \"\") error = %v", tier, err)
 	}
 	return bootstrapDoc, deployDoc
 }
@@ -526,9 +526,9 @@ func conditionNames(condition map[string]any, key string) bool {
 	return false
 }
 
-func mustRender(t *testing.T, render func(Namespace, environment.Tier) (string, error)) string {
+func mustRender(t *testing.T, render func(Namespace, environment.Tier, string) (string, error)) string {
 	t.Helper()
-	document, err := render(defaultNamespace, environment.TierProduction)
+	document, err := render(defaultNamespace, environment.TierProduction, "")
 	if err != nil {
 		t.Fatalf("render policy: %v", err)
 	}
@@ -1154,6 +1154,44 @@ func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T
 	}
 }
 
+func TestBothCredentialsAdmitABroughtVariablesKeyByItsARNToWhatOcelCallsOnItAndNothingMore(t *testing.T) {
+	const brought = "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+	want := map[grant]bool{
+		{action: "kms:Decrypt", resource: brought, condition: conditionJSON(t, nil)}:     true,
+		{action: "kms:DescribeKey", resource: brought, condition: conditionJSON(t, nil)}: true,
+		{action: "kms:Encrypt", resource: brought, condition: conditionJSON(t, nil)}:     true,
+		{action: "kms:CreateGrant", resource: brought, condition: conditionJSON(t, map[string]any{
+			"Bool": map[string]any{"kms:GrantIsForAWSResource": "true"},
+		})}: true,
+	}
+	for purpose, render := range map[string]func(Namespace, environment.Tier, string) (string, error){
+		"bootstrap": BootstrapCredentialPermissions,
+		"deploy":    DeployCredentialPermissions,
+	} {
+		without := grantsOf(t, mustRender(t, render))
+		document, err := render(defaultNamespace, environment.TierProduction, brought)
+		if err != nil {
+			t.Fatalf("render the %s credential with a brought key: %v", purpose, err)
+		}
+		with := grantsOf(t, document)
+
+		for g := range without {
+			if !with[g] {
+				t.Errorf("the %s credential drops %s on %s when a key is brought", purpose, g.action, g.resource)
+			}
+		}
+		added := map[grant]bool{}
+		for g := range with {
+			if !without[g] {
+				added[g] = true
+			}
+		}
+		if !maps.Equal(added, want) {
+			t.Errorf("the %s credential adds %v for a brought key, want %v", purpose, added, want)
+		}
+	}
+}
+
 var bothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
 
 func credentialsOfTier(t *testing.T, tier environment.Tier) map[string]string {
@@ -1336,8 +1374,8 @@ func TestOnlyTheBootstrapCredentialOfATierManagesItsBoundaryPolicyAndVariablesAl
 }
 
 func TestACredentialIsRefusedForATierItDoesNotServe(t *testing.T) {
-	for _, render := range []func(Namespace, environment.Tier) (string, error){DeployCredentialPermissions, BootstrapCredentialPermissions} {
-		_, err := render(defaultNamespace, "staging")
+	for _, render := range []func(Namespace, environment.Tier, string) (string, error){DeployCredentialPermissions, BootstrapCredentialPermissions} {
+		_, err := render(defaultNamespace, "staging", "")
 		if err == nil || !strings.Contains(err.Error(), `"staging"`) {
 			t.Errorf("render for tier staging error = %v, want it to name the tier", err)
 		}
@@ -1345,7 +1383,7 @@ func TestACredentialIsRefusedForATierItDoesNotServe(t *testing.T) {
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("render for tier staging error = %#v, want a %s refusal the CLI reports as the caller's mistake", err, refusal.CodeInvalid)
 		}
-		if _, err := render(defaultNamespace, ""); err == nil {
+		if _, err := render(defaultNamespace, "", ""); err == nil {
 			t.Error("render for no tier produced a document, want a refusal: it would reach both tiers")
 		}
 	}
