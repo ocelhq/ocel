@@ -248,34 +248,6 @@ const specs = [
   },
   {
     "version": 1,
-    "slug": "aws-sqs-revalidation-consumer",
-    "description": "AWS Lambda SQS batch handler for revalidation messages.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "platform/aws/functions/revalidator/src/*.mts"
-    ],
-    "patterns": [
-      {
-        "source": "^\\s*export\\s+const\\s+handler\\s*=\\s*async\\s*\\(\\s*event\\s*:\\s*\\{\\s*Records\\?\\s*:\\s*SqsRecord\\[\\]\\s*\\}\\s*\\)",
-        "flags": "m",
-        "label": "SQS Lambda handler"
-      },
-      {
-        "source": "^\\s*const\\s+parsed\\s*=\\s*parseMessage\\s*\\(\\s*record\\.body\\s*\\)\\s*;?",
-        "flags": "m",
-        "label": "Revalidation message consumer"
-      }
-    ],
-    "examples": [
-      "export const handler = async (event: { Records?: SqsRecord[] }): Promise<BatchResponse> =>",
-      "const parsed = parseMessage(record.body);"
-    ],
-    "closesSurfaceIds": [
-      "sqs-revalidation"
-    ]
-  },
-  {
-    "version": 1,
     "slug": "aws-dynamodb-tag-stream-consumer",
     "description": "AWS Lambda DynamoDB stream batch handler for ISR tag publication.",
     "noiseTier": "precise",
@@ -456,42 +428,6 @@ const specs = [
     ],
     "closesSurfaceIds": [
       "ocel-cli"
-    ]
-  },
-  {
-    "version": 1,
-    "slug": "aws-sqs-revalidation-dispatch",
-    "description": "SQS revalidation record dispatch through message validation and signed AWS origin requests.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "platform/aws/functions/revalidator/src/*.mts"
-    ],
-    "patterns": [
-      {
-        "source": "export const handler = async \\(event: \\{ Records\\?: SqsRecord\\[\\] \\}\\)",
-        "label": "SQS revalidation Lambda handler"
-      },
-      {
-        "source": "parseMessage\\(record\\.body\\)",
-        "label": "Revalidation record validation"
-      },
-      {
-        "source": "service: \"(?:s3|lambda)\"",
-        "label": "Signed revalidation AWS request"
-      },
-      {
-        "source": "batchItemFailures\\.push\\(",
-        "label": "SQS partial-batch failure dispatch"
-      }
-    ],
-    "examples": [
-      "export const handler = async (event: { Records?: SqsRecord[] }): Promise<BatchResponse> =>",
-      "const parsed = parseMessage(record.body);",
-      "const client = new AwsClient({ ...deps.credentials, service: \"lambda\", region: target.region });",
-      "batchItemFailures.push({ itemIdentifier: record.messageId });"
-    ],
-    "closesSurfaceIds": [
-      "sqs-revalidation"
     ]
   },
   {
