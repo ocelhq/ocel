@@ -9,6 +9,7 @@ import {
   type ServeProps,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
+import { expectedSignature, sentSignature } from "./sigv4";
 
 const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
 const props: ServeProps = {
@@ -172,6 +173,124 @@ describe("Serve reading an object from the asset bucket", () => {
       new Request(buildObjectCall("h", key).url, { method: "POST", body: "x" }),
     );
     expect(response.status).toBe(405);
+  });
+});
+
+describe("Serve reading an object from a bucket an HMAC key reads", () => {
+  const hmacEnv: Partial<Env> = {
+    OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com/",
+    OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
+    OCEL_ASSET_STORE_PREFIX: "assets/",
+    OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOG1EXAMPLEACCESSID",
+    OCEL_ASSET_STORE_SECRET_KEY: "examplesecret/key+",
+  };
+  const routeTable = "prod/shop/web/r1a2b3c4d/route-table/ab.json";
+
+  it("is a path-style GET of the key under the store's prefix at the endpoint the origin names", async () => {
+    const gcs = s3Answering(() => new Response("bytes", { headers: { etag: '"e1"' } }));
+
+    const response = await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
+
+    expect(gcs.calls).toHaveLength(1);
+    expect(gcs.calls[0].method).toBe("GET");
+    expect(gcs.calls[0].url).toBe(`https://objects.example.com/ocel-acme-production/assets/${key}`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("bytes");
+    expect(response.headers.get("etag")).toBe('"e1"');
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("max-age=31536000");
+  });
+
+  it("reads a release's route table from the same store", async () => {
+    const gcs = s3Answering(() => new Response("{}"));
+
+    await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get(routeTable)));
+
+    expect(gcs.calls[0].url).toBe(
+      `https://objects.example.com/ocel-acme-production/assets/${routeTable}`,
+    );
+  });
+
+  it("signs the GET as Signature Version 4 in the region auto for the service s3", async () => {
+    const gcs = s3Answering(() => new Response("bytes"));
+
+    await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
+
+    const authorization = gcs.calls[0].headers.get("authorization") ?? "";
+    expect(authorization).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=GOOG1EXAMPLEACCESSID\/\d{8}\/auto\/s3\/aws4_request, /,
+    );
+    expect(sentSignature(gcs.calls[0])).toBe(
+      await expectedSignature(gcs.calls[0], "examplesecret/key+"),
+    );
+  });
+
+  it("encodes the characters of an object name once, in the url and in the signature", async () => {
+    const gcs = s3Answering(() => new Response("page"));
+    const odd = "prod/shop/web/r1a2b3c4d/assets/docs/[...slug] one.html";
+
+    await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get(odd)));
+
+    expect(new URL(gcs.calls[0].url).pathname).toBe(
+      "/ocel-acme-production/assets/prod/shop/web/r1a2b3c4d/assets/docs/%5B...slug%5D%20one.html",
+    );
+    expect(sentSignature(gcs.calls[0])).toBe(
+      await expectedSignature(gcs.calls[0], "examplesecret/key+"),
+    );
+  });
+
+  it("never sends the secret", async () => {
+    const gcs = s3Answering(() => new Response("bytes"));
+
+    await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
+
+    expect([...gcs.calls[0].headers.values()].join(" ")).not.toContain("examplesecret");
+    expect(gcs.calls[0].url).not.toContain("examplesecret");
+  });
+
+  it("takes the bucket's 404 as final, never reading the edge's object store", async () => {
+    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+    const gcs = s3Answering(() => new Response("<Error/>", { status: 404 }));
+
+    const response = await withGlobalFetch(gcs.fetch, () =>
+      serveWith({ ...hmacEnv, OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE }).fetch(get()),
+    );
+
+    expect(gcs.calls).toHaveLength(1);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("max-age=60");
+  });
+
+  it("never stores, and reports, an object the bucket refuses the key", async () => {
+    const gcs = s3Answering(() => new Response("<Error>AccessDenied</Error>", { status: 403 }));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
+
+      expect(response.status).toBe(502);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringMatching(/ocel-acme-production.*403|403.*ocel-acme-production/),
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("reads the edge's object store when the origin names no endpoint", async () => {
+    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+    const gcs = s3Answering(() => new Response("bytes"));
+
+    const response = await withGlobalFetch(gcs.fetch, () =>
+      serveWith({
+        ...hmacEnv,
+        OCEL_ASSET_STORE_ENDPOINT: undefined,
+        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+      }).fetch(get()),
+    );
+
+    expect(gcs.calls).toHaveLength(0);
+    expect(await response.text()).toBe("from r2");
   });
 });
 

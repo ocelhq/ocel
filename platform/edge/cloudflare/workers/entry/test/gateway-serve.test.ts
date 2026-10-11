@@ -1,8 +1,9 @@
-import { createExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env as testEnv } from "cloudflare:test";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import type { ServeProps } from "../src/serve-key";
-import { answerEveryRecordWith } from "./origin-deps";
+import { answerEveryRecordWith, capturing, withGlobalFetch } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 
 const record = {
@@ -65,6 +66,52 @@ describe("the gateway reading a release's immutable objects", () => {
       hosts.push(asked[0].props.host);
     }
     expect(hosts).toEqual(["a.example.com", "b.example.com"]);
+  });
+});
+
+describe("the gateway on an origin whose bucket an HMAC key reads", () => {
+  const hmacEnv: Env = {
+    RELEASES: env.RELEASES,
+    OCEL_SLUG: "p1",
+    OCEL_CACHE_STORE: testEnv.TAG_SNAPSHOT_STORE,
+    OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com",
+    OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
+    OCEL_ASSET_STORE_PREFIX: "assets/",
+    OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOG1EXAMPLEACCESSID",
+    OCEL_ASSET_STORE_SECRET_KEY: "examplesecret",
+  };
+  const table: NextRouteTable = {
+    rootFunction: "/",
+    buildId: "deploy-1",
+    basePath: "",
+    pathnames: [],
+    routes: {
+      beforeMiddleware: [],
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    dispatch: {},
+  };
+
+  it("reads the route table and a static file through Serve, and the bucket never itself", async () => {
+    const { asked, ctx } = ctxWithServe((key) =>
+      key === routeTableKey() ? new Response(JSON.stringify(table)) : new Response("chunk"),
+    );
+    const wire = capturing();
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      worker.fetch(new Request("https://shop.example.com/_next/static/app.js"), hmacEnv, ctx),
+    );
+
+    expect(asked.map(({ key }) => key)).toEqual([
+      routeTableKey(),
+      "prod/p1/web/deploy-1/assets/_next/static/app.js",
+    ]);
+    expect(wire.calls).toHaveLength(0);
+    expect(await response.text()).toBe("chunk");
   });
 });
 

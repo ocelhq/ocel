@@ -13,7 +13,6 @@ import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
-import { readHmacAssetBucket } from "./hmac-asset-bucket";
 import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
@@ -23,6 +22,7 @@ import { findPreviewTarget } from "./preview";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
 import { ownRouteTableKey, readRouteTable } from "./route-table";
+import { readsObjects } from "./serve";
 import { type ServeFactory, serveObjects } from "./serve-objects";
 import { invalidateSnapshot } from "./tag-clock";
 
@@ -307,7 +307,7 @@ export default {
     const host = new URL(request.url).host;
     const store = env.OCEL_CACHE_STORE;
     const serve = ctx.exports?.Serve as ServeFactory | undefined;
-    const objects = serve && (store || env.OCEL_ASSET_BUCKET) ? serveObjects(serve, host) : store;
+    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : store;
     const originFetch = originFetchFor(env);
 
     let releases: ReleaseLookup = {
@@ -336,7 +336,7 @@ export default {
       imageStore: store,
       routeTableStore: objects,
       assetStore: {
-        store: readHmacAssetBucket(env) ?? objects,
+        store: objects,
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
