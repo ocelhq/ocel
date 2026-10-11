@@ -58,7 +58,7 @@ func (r *recordedEvents) onlyDeployCompleted(t *testing.T) telemetry.Event {
 	if len(r.payloads) != 1 {
 		t.Fatalf("recorded %d events, want exactly 1: %v", len(r.payloads), r.payloads)
 	}
-	event, err := telemetry.NewEvent(telemetry.NewIdentity("an-install-id"), time.Now(), r.payloads[0])
+	event, err := telemetry.NewEvent(telemetry.NewIdentity("an-install-id", "a-project-key"), time.Now(), r.payloads[0])
 	if err != nil {
 		t.Fatal(err)
 	}

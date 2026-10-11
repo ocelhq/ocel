@@ -274,6 +274,28 @@ func TestACommandThatDoesNotPanicRecordsNoPanicFunction(t *testing.T) {
 	}
 }
 
+func TestACommandIsRecordedWhenTheProjectHashKeyCannotBeSaved(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory its owner cannot write to")
+	}
+	debugTelemetry(t)
+	dir := confighome.Isolate(t)
+	if _, err := userconfig.EnsureInstallID(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	t.Chdir(t.TempDir())
+
+	_, _, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes")
+
+	if event := theOnlyEvent(t, stderr); event.Properties["command"] != "promotions prune" {
+		t.Errorf("command = %#v, want promotions prune", event.Properties["command"])
+	}
+}
+
 func TestAUsageErrorRecordsTheUsageCodeUnderJSONToo(t *testing.T) {
 	debugTelemetry(t)
 

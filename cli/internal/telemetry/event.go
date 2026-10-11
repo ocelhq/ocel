@@ -73,7 +73,7 @@ func NewEvent(identity Identity, at time.Time, payload Payload) (Event, error) {
 }
 
 func projectID(key, slug string) string {
-	if slug == "" {
+	if key == "" || slug == "" {
 		return ""
 	}
 	mac := hmac.New(sha256.New, []byte(key))
