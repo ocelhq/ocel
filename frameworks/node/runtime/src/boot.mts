@@ -1,5 +1,6 @@
 import { type Bind, reportFatalBoot, serveInvoke, serveServer } from "./host.mjs";
 import { awaitLiveValues } from "./live-values.mjs";
+import { useOriginCache } from "./origin-cache.mjs";
 import { invokeFor, loadUserApp, resolveHandler } from "./user-app.mjs";
 
 export interface BootOptions {
@@ -19,6 +20,7 @@ function handler(env: NodeJS.ProcessEnv): string {
 
 async function serve(options: BootOptions): Promise<void> {
   options.hooks?.();
+  useOriginCache(process.env);
   const address = options.bind?.();
   const entrypoint = handler(process.env);
 
