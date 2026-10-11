@@ -498,7 +498,9 @@
       "type": "cloudflare_workers_script",
       "name": "entry",
       "properties": {
-        "durable_objects": []
+        "durable_objects": [
+          "PurgeQueue"
+        ]
       }
     },
     {
