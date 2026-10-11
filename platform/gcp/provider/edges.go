@@ -25,6 +25,7 @@ type edges struct {
 	entries   alb.Entries
 	warmURL   func(ctx context.Context, url, address string) error
 	assets    func(ctx context.Context, tier environment.Tier) (alb.AssetsBucket, error)
+	copyFiles func(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error
 	project   string
 	region    string
 
@@ -44,6 +45,7 @@ func (p *Provider) edges() edges {
 		entries:   p,
 		warmURL:   p.warmThrough,
 		assets:    p.readAssetsBucket,
+		copyFiles: p.CopyImmutableFiles,
 		project:   p.options.Project,
 		region:    p.options.Region,
 
@@ -65,8 +67,9 @@ func (e edges) openALB() *alb.Edge {
 		Project:   e.project,
 		Region:    e.region,
 
-		WaitBeforeRetry:  waitBeforeRetry,
-		ReadAssetsBucket: e.assets,
+		WaitBeforeRetry:    waitBeforeRetry,
+		ReadAssetsBucket:   e.assets,
+		CopyImmutableFiles: e.copyFiles,
 	})
 }
 

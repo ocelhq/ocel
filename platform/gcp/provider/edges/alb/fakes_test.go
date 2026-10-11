@@ -42,6 +42,8 @@ type world struct {
 	breaks       map[string]error
 	failing      map[string][]error
 	waits        int
+	copies       []immutableCopy
+	copying      error
 	pinning      error
 
 	routeFails          map[string]error
@@ -543,4 +545,42 @@ func (w *world) waited() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.waits
+}
+
+type immutableCopy struct {
+	From, To   string
+	PinsBefore int
+	Routed     string
+}
+
+func (w *world) copyImmutableFiles(_ context.Context, _ environment.Tier, from, to StaticRoutes) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.copying != nil {
+		return w.copying
+	}
+	routed := ""
+	if current := w.staticRoutes[tierRoutes]["shop.example.com"]; current != nil {
+		routed = current.Objects
+	}
+	w.copies = append(w.copies, immutableCopy{From: from.Objects, To: to.Objects, PinsBefore: len(w.pinned), Routed: routed})
+	return nil
+}
+
+func (w *world) failCopies(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.copying = err
+}
+
+func (w *world) copied() []immutableCopy {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.copies)
+}
+
+func (w *world) pinCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.pinned)
 }

@@ -109,6 +109,9 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 }
 
 func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	if err := r.s.shareImmutableFiles(ctx, move); err != nil {
+		return router.Unserved{Err: err}
+	}
 	hosts, tags := maps.Clone(r.s.recorded.Hosts), cloneDeploymentTags(r.s.recorded.DeploymentTags)
 	if err := r.s.routePreviewHosts(ctx, move, progress); err != nil {
 		return err
