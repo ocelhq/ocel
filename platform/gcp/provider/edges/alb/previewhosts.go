@@ -109,12 +109,16 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 			"release %s of %s recorded no Cloud Run service it answers on, so %s has nothing to route to: re-deploy %s so its release records one",
 			record.Release, record.App, host.Hostname, record.App)
 	}
+	routes, err := encodeStaticRoutes(record, s.recorded.LoadBalancer)
+	if err != nil {
+		return Host{}, nil, err
+	}
 	served := Host{
-		App:     record.App,
-		Service: service,
-		Backend: backendName(s.state.Slug, s.state.Tier, host.Hostname),
-		Pointer: move.Pointer,
-		Static:  staticOf(record, s.recorded.LoadBalancer),
+		App:          record.App,
+		Service:      service,
+		Backend:      backendName(s.state.Slug, s.state.Tier, host.Hostname),
+		Pointer:      move.Pointer,
+		StaticRoutes: routes,
 	}
 	if !deployment {
 		return served, nil, nil

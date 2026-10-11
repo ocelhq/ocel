@@ -9,13 +9,13 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func staticRulesOf(clients *clients, dynamic string, files *alb.StaticRoutes) []*compute.HttpRouteRule {
-	if files == nil || len(files.Immutable) == 0 {
+func routeRulesOf(clients *clients, dynamic string, routes *alb.StaticRoutes) []*compute.HttpRouteRule {
+	if routes == nil {
 		return nil
 	}
 	var rules []*compute.HttpRouteRule
-	for _, prefix := range files.Revalidate {
-		if !slices.ContainsFunc(files.Immutable, func(immutable string) bool { return strings.HasPrefix(prefix, immutable) }) {
+	for _, prefix := range routes.Revalidate {
+		if !slices.ContainsFunc(routes.Immutable, func(immutable string) bool { return strings.HasPrefix(prefix, immutable) }) {
 			continue
 		}
 		rules = append(rules, &compute.HttpRouteRule{
@@ -24,12 +24,12 @@ func staticRulesOf(clients *clients, dynamic string, files *alb.StaticRoutes) []
 			Service:    dynamic,
 		})
 	}
-	for _, prefix := range files.Immutable {
+	for _, prefix := range routes.Immutable {
 		rules = append(rules, &compute.HttpRouteRule{
 			Priority:    int64(len(rules)),
 			MatchRules:  []*compute.HttpRouteRuleMatch{{PrefixMatch: prefix}},
-			Service:     clients.bucketLink(files.Backend),
-			RouteAction: &compute.HttpRouteAction{UrlRewrite: &compute.UrlRewrite{PathPrefixRewrite: files.Objects + prefix}},
+			Service:     clients.bucketLink(routes.Backend),
+			RouteAction: &compute.HttpRouteAction{UrlRewrite: &compute.UrlRewrite{PathPrefixRewrite: routes.Objects + prefix}},
 		})
 	}
 	return rules

@@ -197,13 +197,13 @@ type RevisionTag struct {
 }
 
 type Host struct {
-	App         string `json:"app,omitempty"`
-	Certificate string `json:"certificate,omitempty"`
-	Service     string `json:"service,omitempty"`
-	Tag         string `json:"tag,omitempty"`
-	Backend     string `json:"backend,omitempty"`
-	Pointer     string `json:"pointer,omitempty"`
-	Static      string `json:"static,omitempty"`
+	App          string `json:"app,omitempty"`
+	Certificate  string `json:"certificate,omitempty"`
+	Service      string `json:"service,omitempty"`
+	Tag          string `json:"tag,omitempty"`
+	Backend      string `json:"backend,omitempty"`
+	Pointer      string `json:"pointer,omitempty"`
+	StaticRoutes string `json:"staticRoutes,omitempty"`
 }
 
 func Surface(slug string, tier environment.Tier) string {
