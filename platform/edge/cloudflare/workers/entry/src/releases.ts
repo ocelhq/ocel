@@ -1,4 +1,4 @@
-import type { Static } from "@platform/edge-contract/hosting";
+import type { CacheRule, Static } from "@platform/edge-contract/hosting";
 import type { EdgeWorkers } from "./edge";
 import { lruSet } from "./lru";
 
@@ -10,6 +10,7 @@ export interface ReleaseRecord {
   rootFunction?: string;
   routeTable?: { format: "next"; key: string } | null;
   static?: Static | null;
+  cache?: CacheRule[] | null;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;

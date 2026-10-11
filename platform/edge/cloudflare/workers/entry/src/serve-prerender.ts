@@ -85,7 +85,7 @@ export function readTier(response: Response): CacheStatus {
   }
 }
 
-function buildVisitorResponse(response: Response, segment: boolean): Response {
+export function buildVisitorResponse(response: Response, segment: boolean): Response {
   const tier = readTier(response);
   const headers = new Headers(response.headers);
   for (const name of [
