@@ -468,6 +468,7 @@ type fakeKeyValueStore struct {
 	items       map[string]map[string]string
 	conflicts   int
 	updateErr   error
+	updateErrs  []error
 	listErr     error
 	listPage    int
 	throttles   int
@@ -529,6 +530,11 @@ func (f *fakeKeyValueStore) UpdateKeys(_ context.Context, in *cloudfrontkeyvalue
 	}
 	if f.updateErr != nil {
 		return nil, f.updateErr
+	}
+	if len(f.updateErrs) > 0 {
+		err := f.updateErrs[0]
+		f.updateErrs = f.updateErrs[1:]
+		return nil, err
 	}
 	if aws.ToString(in.IfMatch) != f.etagFor(arn) {
 		return nil, &kvstypes.ConflictException{Message: aws.String("stale version of " + arn)}
