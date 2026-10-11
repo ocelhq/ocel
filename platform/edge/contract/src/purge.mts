@@ -21,6 +21,16 @@ export interface PurgeEntry {
   raisedAt: number;
 }
 
+export class PurgeRefusedError extends Error {
+  readonly status: number | undefined;
+
+  constructor(message: string, status: number | undefined) {
+    super(message);
+    this.name = "PurgeRefusedError";
+    this.status = status;
+  }
+}
+
 export interface PurgeSender {
   fetch: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -60,6 +70,7 @@ async function post(sender: PurgeSender, url: string, secret: string, body: stri
   const random = sender.random ?? Math.random;
   const signature = createHmac("sha256", secret).update(body).digest("hex");
   let last = "";
+  let status: number | undefined;
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
       await pause(random() * Math.min(backoffMs * 2 ** (attempt - 1), backoffCeilingMs));
@@ -73,13 +84,18 @@ async function post(sender: PurgeSender, url: string, secret: string, body: stri
       });
       await res.body?.cancel();
       if (res.ok) return;
+      status = res.status;
       last = String(res.status);
       if (!isRetryable(res.status)) break;
     } catch (error) {
+      status = undefined;
       last = error instanceof Error ? error.message : String(error);
     }
   }
-  throw new Error(`ocel: the purge endpoint ${url} did not take the purge: ${last}`);
+  throw new PurgeRefusedError(
+    `ocel: the purge endpoint ${url} did not take the purge: ${last}`,
+    status,
+  );
 }
 
 export async function postPurge(
