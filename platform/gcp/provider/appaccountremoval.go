@@ -20,7 +20,6 @@ import (
 type revokedGrants struct {
 	project []*cloudresourcemanager.Binding
 	tasks   bool
-	refresh bool
 	topics  []topics.Topology
 	signers []string
 	buckets []string
@@ -67,16 +66,10 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	revoked.tasks = slices.ContainsFunc(revoked.project, func(b *cloudresourcemanager.Binding) bool {
 		return b.Role == taskRecordsRole && b.Condition != nil && b.Condition.Expression == taskCondition
 	})
-	if revoked.refresh, err = c.accountRoleGranted(ctx, c.RefreshAccount(ref.Tier), runAsRole, member); err != nil {
-		return err
-	}
 	if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles, nil)); err != nil {
 		return err
 	}
 	if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, false)); err != nil {
-		return err
-	}
-	if err := ignoreAbsent(c.bindAccountRole(ctx, c.RefreshAccount(ref.Tier), runAsRole, member, false)); err != nil {
 		return err
 	}
 	if revoked.signers, err = c.unbindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), tokenCreatorRole); ignoreAbsent(err) != nil {
@@ -118,16 +111,6 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 			return err
 		}
 		if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, true)); err != nil {
-			return err
-		}
-	}
-	if revoked.refresh {
-		if !revoked.tasks {
-			if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles, queueRoles)); err != nil {
-				return err
-			}
-		}
-		if err := ignoreAbsent(c.bindAccountRole(ctx, c.RefreshAccount(ref.Tier), runAsRole, member, true)); err != nil {
 			return err
 		}
 	}

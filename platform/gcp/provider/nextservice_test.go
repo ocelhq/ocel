@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"net/url"
-	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -344,74 +343,6 @@ func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	}
 }
 
-var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar, refreshTargetEnvVar, idTokenCertsURLEnvVar}
-
-func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccountTheyAreSignedAs(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
-	derived := Names{namespace: "ocel", project: "acme-prod"}
-
-	if got, want := env["OCEL_REFRESH_QUEUE"], "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays"; got != want {
-		t.Errorf("the Next service reads OCEL_REFRESH_QUEUE=%q, want %q", got, want)
-	}
-	if got, want := env["OCEL_REFRESH_ACCOUNT"], derived.RefreshAccountEmail(environment.TierProduction); got != want {
-		t.Errorf("the Next service reads OCEL_REFRESH_ACCOUNT=%q, want %q", got, want)
-	}
-}
-
-func TestANextServiceBilledPerRequestIsToldASecretToSignItsRefreshesWith(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
-
-	if got := env[refreshSecretEnvVar]; len(got) < 26 {
-		t.Errorf("the Next service reads %s=%q, want a secret of at least 26 characters", refreshSecretEnvVar, got)
-	}
-}
-
-func TestEachReleaseOfANextServiceSignsItsRefreshesWithASecretOfItsOwn(t *testing.T) {
-	first := envOf(releasedNext(t, routedNextSpec()))[refreshSecretEnvVar]
-	second := envOf(releasedNext(t, routedNextSpec()))[refreshSecretEnvVar]
-
-	if first == "" || first == second {
-		t.Errorf("two releases read %s=%q and %q, want a secret apiece: a task one revision queued must not render on another", refreshSecretEnvVar, first, second)
-	}
-}
-
-func TestANextServiceIsToldToReceiveRefreshesAtItsRunAppAddress(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-	env := envOf(server.created[0].Template.Containers[0])
-
-	want := "https://" + path.Base(server.service.Name) + "-123456789.europe-west1.run.app/_ocel/refresh"
-	if got := env["OCEL_REFRESH_URL"]; got != want {
-		t.Errorf("the Next service reads OCEL_REFRESH_URL=%q, want %q", got, want)
-	}
-}
-
-func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	adoptBehindTheWorker(t, p, "https://writer.example.test", fake.KindRelay)
-	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := routedNextSpec()
-	spec.Edge = shieldingFront{front}
-	spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
-	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-
-	env := envOf(server.created[0].Template.Containers[0])
-	for _, name := range refreshEnvVars {
-		if got, told := env[name]; told {
-			t.Errorf("a Next service behind an edge that runs code reads %s=%q", name, got)
-		}
-	}
-}
-
 func nextContainerSpec() provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
@@ -506,98 +437,6 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 	}
 }
 
-func TestAnEmulatedNextServiceQueuesItsRefreshesThroughTheEmulator(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
-
-	endpoint, err := url.Parse(env["OCEL_TASKS_ENDPOINT"])
-	if err != nil || endpoint.Hostname() != "host.docker.internal" {
-		t.Errorf("the Next service reads OCEL_TASKS_ENDPOINT=%q, want an address on host.docker.internal", env["OCEL_TASKS_ENDPOINT"])
-	}
-}
-
-func TestTheTasksEmulatorEndpointIsReadWhenTheProviderIsMade(t *testing.T) {
-	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:4588")
-	t.Setenv("OCEL_FLOCI_TASKS_ENDPOINT", "http://127.0.0.1:7001")
-
-	p, err := NewProvider(Options{Project: "acme-prod", Region: "europe-west1"})
-	if err != nil {
-		t.Fatalf("NewProvider() = %v", err)
-	}
-
-	if p.tasksEndpoint != "http://127.0.0.1:7001" {
-		t.Errorf("the provider addresses tasks at %q, want http://127.0.0.1:7001", p.tasksEndpoint)
-	}
-}
-
-func TestANextServiceOnTheFlociLaneQueuesRefreshesAtTheTasksEmulatorAndChecksTokensWithItsKeys(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	p.tasksEndpoint = "http://127.0.0.1:7001"
-	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-	env := envOf(server.created[0].Template.Containers[0])
-
-	if got, want := env[tasksEndpointEnvVar], "http://host.docker.internal:7001"; got != want {
-		t.Errorf("the Next service reads %s=%q, want %q", tasksEndpointEnvVar, got, want)
-	}
-	if got, want := env[idTokenCertsURLEnvVar], "http://host.docker.internal:7001/oauth2/v3/certs"; got != want {
-		t.Errorf("the Next service reads %s=%q, want %q", idTokenCertsURLEnvVar, got, want)
-	}
-	if got := env[refreshURLEnvVar]; !strings.HasPrefix(got, "https://") || !strings.HasSuffix(got, "-123456789.europe-west1.run.app/_ocel/refresh") {
-		t.Errorf("the Next service reads %s=%q, want the service's run.app url, which is the audience production signs for", refreshURLEnvVar, got)
-	}
-	if len(env[refreshSecretEnvVar]) < 26 {
-		t.Errorf("the Next service reads a %d-character %s, want a per-deploy secret", len(env[refreshSecretEnvVar]), refreshSecretEnvVar)
-	}
-}
-
-func TestAnEmulatedNextServiceWithNoTasksEmulatorIsToldNoTokenKeys(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
-
-	if got, told := env[idTokenCertsURLEnvVar]; told {
-		t.Errorf("a Next service on the floci lane with no tasks emulator reads %s=%q", idTokenCertsURLEnvVar, got)
-	}
-}
-
-func TestAProviderAddressingGoogleNamesNoTokenKeysWhateverTasksEmulatorItHolds(t *testing.T) {
-	p := &Provider{tasksEndpoint: "http://127.0.0.1:7001"}
-
-	if got := p.containerTokenCertsURL(); got != "" {
-		t.Errorf("a provider addressing Google names token keys at %q", got)
-	}
-}
-
-func TestANextServiceOnGoogleCloudIsToldNoTasksEndpoint(t *testing.T) {
-	env := newNextEnv(routedNextSpec(), routedNextSpec().App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{},
-		&nextRefresh{url: "u", queue: "q", account: "a", secret: "s"})
-
-	if got, told := env[tasksEndpointEnvVar]; told {
-		t.Errorf("a Next service on Google Cloud reads %s=%q", tasksEndpointEnvVar, got)
-	}
-	if got, told := env[idTokenCertsURLEnvVar]; told {
-		t.Errorf("a Next service on Google Cloud reads %s=%q", idTokenCertsURLEnvVar, got)
-	}
-	if env[refreshQueueEnvVar] != "q" {
-		t.Errorf("the Next service reads %s=%q, want q", refreshQueueEnvVar, env[refreshQueueEnvVar])
-	}
-	if env[refreshSecretEnvVar] != "s" {
-		t.Errorf("the Next service reads %s=%q, want s", refreshSecretEnvVar, env[refreshSecretEnvVar])
-	}
-}
-
-func TestANodeFunctionIsToldNoRefreshQueue(t *testing.T) {
-	spec := nextSpec()
-	spec.App.Framework = buildoutput.FrameworkNode
-	env := envOf(releasedNext(t, spec))
-
-	for _, name := range refreshEnvVars {
-		if got, told := env[name]; told {
-			t.Errorf("a node function reads %s=%q", name, got)
-		}
-	}
-}
-
 func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.T) {
 	service, _ := releasedNextContainer(t, nextContainerSpec())
 
@@ -608,17 +447,6 @@ func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.
 	} {
 		if _, told := env[name]; told {
 			t.Errorf("a Next container is told %s, which only ocel's serverless entrypoint reads", name)
-		}
-	}
-}
-
-func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
-	spec := routedNextSpec()
-	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeContainer}, nextCache{}, nil)
-
-	for _, name := range refreshEnvVars {
-		if got, told := env[name]; told {
-			t.Errorf("a Next service on container compute reads %s=%q", name, got)
 		}
 	}
 }
@@ -635,81 +463,6 @@ func TestAContainerThatServesNoNextKeepsItsProfileAndIsToldNoCacheLocation(t *te
 	for name := range envOf(container) {
 		if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {
 			t.Errorf("a container that serves no Next is told %s", name)
-		}
-	}
-}
-
-func TestANextServiceBilledPerRequestMakesTheRefreshURLOfItsServiceProjectNumberAndRegion(t *testing.T) {
-	if got, want := refreshURLOf("ocel-shop-prod-web", 123456789, "europe-west1"), "https://ocel-shop-prod-web-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
-		t.Errorf("refreshURLOf() = %q, want %q", got, want)
-	}
-}
-
-func TestANextServiceBehindTheLoadBalancerIsToldToSendRefreshesToItsRevisionTag(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	spec := routedNextSpec()
-	spec.Ref.Name = naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken("d1", "f1"))
-	spec = behindTheLoadBalancer(t, p, spec)
-	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-	env := envOf(server.created[0].Template.Containers[0])
-
-	service := path.Base(server.service.Name)
-	want := "https://" + spec.Ref.Name.Release.String() + "---" + service + "-123456789.europe-west1.run.app/_ocel/refresh"
-	if got := env[refreshTargetEnvVar]; got != want {
-		t.Errorf("the Next service reads %s=%q, want %q", refreshTargetEnvVar, got, want)
-	}
-	if got, want := env[refreshURLEnvVar], "https://"+service+"-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
-		t.Errorf("the Next service reads %s=%q, want the untagged service url %q: the token's audience stays the service url", refreshURLEnvVar, got, want)
-	}
-}
-
-func TestANextServiceWithNoEdgeInFrontIsToldNoRefreshTarget(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
-
-	if got, told := env[refreshTargetEnvVar]; told {
-		t.Errorf("a Next service with no edge in front reads %s=%q", refreshTargetEnvVar, got)
-	}
-	if env[refreshURLEnvVar] == "" {
-		t.Errorf("the Next service reads no %s", refreshURLEnvVar)
-	}
-}
-
-func TestARefreshTagURLPutsTheTagBeforeTheServiceProjectNumberAndRegion(t *testing.T) {
-	if got, want := refreshTagURLOf("r0000000a", "ocel-shop-prod-web", 123456789, "europe-west1"), "https://r0000000a---ocel-shop-prod-web-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
-		t.Errorf("refreshTagURLOf() = %q, want %q", got, want)
-	}
-}
-
-func TestARevisionTagTooLongForTheRunAppLabelGivesNoRefreshTagURL(t *testing.T) {
-	const tag = "r0000000a"
-	fitting := strings.Repeat("s", 63-len(tag+"---"+"-123456789"))
-	if got := refreshTagURLOf(tag, fitting, 123456789, "europe-west1"); got == "" {
-		t.Errorf("refreshTagURLOf() of a 63-character label = %q, want a url", got)
-	}
-	if got := refreshTagURLOf(tag, fitting+"s", 123456789, "europe-west1"); got != "" {
-		t.Errorf("refreshTagURLOf() of a 64-character label = %q, want none", got)
-	}
-}
-
-func TestANextPreviewBehindIdentityAwareProxyRefreshesOnItsOwnRatherThanByTask(t *testing.T) {
-	if refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, true) {
-		t.Error("a Next preview behind Identity-Aware Proxy refreshes by task, but Cloud Tasks' token cannot pass the proxy")
-	}
-	if !refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, false) {
-		t.Error("a Next app that is not gated refreshes on its own, want the tier's queue")
-	}
-}
-
-func TestANextServiceGivenNoRefreshQueueIsToldNone(t *testing.T) {
-	spec := routedNextSpec()
-
-	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{}, nil)
-	for _, name := range refreshEnvVars {
-		if got, told := env[name]; told {
-			t.Errorf("a Next service given no refresh queue reads %s=%q", name, got)
 		}
 	}
 }

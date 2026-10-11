@@ -27,13 +27,12 @@ import (
 const Vendor provider.Vendor = "gcp"
 
 type Provider struct {
-	options       Options
-	tokens        TokenSource
-	endpoint      string
-	tagEndpoint   string
-	tasksEndpoint string
-	namespace     provider.Namespace
-	warmRoots     *x509.CertPool
+	options     Options
+	tokens      TokenSource
+	endpoint    string
+	tagEndpoint string
+	namespace   provider.Namespace
+	warmRoots   *x509.CertPool
 
 	projectDir string
 
@@ -77,10 +76,6 @@ func NewProvider(options Options) (*Provider, error) {
 	if err != nil {
 		return nil, err
 	}
-	tasksEndpoint, err := tasksEmulatorEndpoint(endpoint)
-	if err != nil {
-		return nil, err
-	}
 	namespace, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return nil, err
@@ -92,14 +87,13 @@ func NewProvider(options Options) (*Provider, error) {
 		}
 	}
 	return &Provider{
-		options:       options,
-		tokens:        ApplicationDefault{},
-		endpoint:      endpoint,
-		tagEndpoint:   tagEndpoint,
-		tasksEndpoint: tasksEndpoint,
-		namespace:     namespace,
-		bases:         functionBases(),
-		pull:          pullBase,
+		options:     options,
+		tokens:      ApplicationDefault{},
+		endpoint:    endpoint,
+		tagEndpoint: tagEndpoint,
+		namespace:   namespace,
+		bases:       functionBases(),
+		pull:        pullBase,
 	}, nil
 }
 

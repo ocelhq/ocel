@@ -210,49 +210,15 @@ func failingOnAnyCall(t *testing.T) *Provider {
 	return pushing(t, served.URL)
 }
 
-func TestADeployOfANextAppBilledPerRequestIsRefusedUntilTheTierHasItsTaskQueue(t *testing.T) {
-	for _, written := range []stamp{
-		{State: stateComplete},
-		{State: stateApplying, Features: []string{tasksFeature}},
-	} {
-		err := withStamp(t, written).PreflightDeploy(context.Background(), shippingNext(false))
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady ||
-			!strings.Contains(err.Error(), "ocel bootstrap production --features "+tasksFeature) ||
-			!strings.Contains(err.Error(), "Next app web") {
-			t.Errorf("PreflightDeploy() under stamp %+v = %v, want the Next app refused naming the bootstrap that installs the queue", written, err)
+func TestANextAppIsAdmittedWithoutReadingWhatTheTierHasInstalled(t *testing.T) {
+	for _, container := range []bool{false, true} {
+		for _, front := range []edge.Kind{edge.None, alb.Kind, cloudflare.Kind} {
+			pre := shippingNext(container)
+			pre.Edge = front
+			if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
+				t.Errorf("PreflightDeploy() of a Next app (container %v) behind %q = %v, want it admitted without reading the stamp: the edge refreshes a stale page", container, front, err)
+			}
 		}
-	}
-}
-
-func TestADeployOfANextAppBilledPerRequestIsAdmittedOnceTheTierHasItsTaskQueue(t *testing.T) {
-	if err := withStamp(t, stamp{State: stateComplete, Features: []string{tasksFeature}}).PreflightDeploy(context.Background(), shippingNext(false)); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a Next app admitted on a tier whose queue is installed", err)
-	}
-}
-
-func TestANextAppOnContainerComputeIsAdmittedWithoutATaskQueue(t *testing.T) {
-	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), shippingNext(true)); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a container Next app admitted without reading the stamp", err)
-	}
-}
-
-func TestANextAppBehindAnEdgeThatRunsNoCodeIsRefusedUntilTheTierHasItsTaskQueue(t *testing.T) {
-	pre := shippingNext(false)
-	pre.Edge = alb.Kind
-	err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), pre)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Errorf("PreflightDeploy() = %v, want a Next app that routes its own requests behind the load balancer refused until the queue is installed", err)
-	}
-}
-
-func TestANextAppBehindTheCodeRunningEdgeNeedsNoTasksFeature(t *testing.T) {
-	pre := shippingNext(false)
-	pre.Edge = cloudflare.Kind
-
-	if err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), pre); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a Next app admitted without the tasks feature: the worker refreshes it through its own queue", err)
 	}
 }
 

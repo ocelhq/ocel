@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"maps"
 	"slices"
@@ -114,22 +113,6 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, err
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
-	var refresh *nextRefresh
-	if refreshesByTask(app.Framework, app.Compute, factsOf(spec.Edge), gated) {
-		projectNumber, err := c.ReadProjectNumber(ctx)
-		if err != nil {
-			return nil, err
-		}
-		refresh = &nextRefresh{
-			queue:         names.DelayQueuePath(c.region, spec.Ref.Tier),
-			account:       names.RefreshAccountEmail(spec.Ref.Tier),
-			secret:        rand.Text(),
-			endpoint:      p.containerTasksEndpoint(),
-			certsURL:      p.containerTokenCertsURL(),
-			projectNumber: projectNumber,
-			region:        c.region,
-		}
-	}
 	for _, fn := range app.Functions {
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
@@ -166,11 +149,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			var addressed *nextRefresh
-			if refresh != nil {
-				addressed = refresh.addressedTo(service, served.tag)
-			}
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), edgeStore), addressed)); err != nil {
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), edgeStore))); err != nil {
 				return nil, err
 			}
 			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
