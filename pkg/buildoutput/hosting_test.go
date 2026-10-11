@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -108,5 +109,44 @@ func TestHostingOfAVersionThisCLIDoesNotReadIsRefused(t *testing.T) {
 		if _, _, err := ReadHosting(root, "web"); err == nil {
 			t.Errorf("ReadHosting read a version %d hosting.json, want it refused", version)
 		}
+	}
+}
+
+func writeHosting(t *testing.T, raw string) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := AppRoot(root, "web")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, HostingFile), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestHostingReadsTheCacheRulesABuildStates(t *testing.T) {
+	t.Parallel()
+
+	root := writeHosting(t, `{"version":1,"framework":"sveltekit","rootFunction":"/","needs":{},`+
+		`"cache":[{"path":"/blog/*","revalidate":60,"expire":600},{"path":"/","revalidate":30}]}`)
+	hosting, _, err := ReadHosting(root, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}, {Path: "/", Revalidate: 30}}
+	if !reflect.DeepEqual(hosting.Cache, want) {
+		t.Fatalf("cache = %+v, want %+v", hosting.Cache, want)
+	}
+}
+
+func TestHostingWithACacheRuleNoEdgeCanReadIsRefused(t *testing.T) {
+	t.Parallel()
+
+	root := writeHosting(t, `{"version":1,"framework":"sveltekit","rootFunction":"/","needs":{},`+
+		`"cache":[{"path":"blog","revalidate":60}]}`)
+	_, _, err := ReadHosting(root, "web")
+	if err == nil || !strings.Contains(err.Error(), "hosting.json of web") {
+		t.Fatalf("err = %v, want the hosting.json of web refused over its cache rule", err)
 	}
 }

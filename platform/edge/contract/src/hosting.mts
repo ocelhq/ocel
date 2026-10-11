@@ -13,6 +13,12 @@ export type Static = {
   mustRevalidatePrefixes?: string[];
 };
 
+export type CacheRule = {
+  path: string;
+  revalidate: number;
+  expire?: number;
+};
+
 export type Hosting = {
   version: 1;
   framework: string;
@@ -21,5 +27,6 @@ export type Hosting = {
   routeTable?: RouteTableFormat;
   static?: Static;
   isr?: boolean;
+  cache?: CacheRule[];
   needs: Partial<Record<Need, NeedDetail>>;
 };
