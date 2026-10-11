@@ -15,6 +15,7 @@ import {
   nextPprChecks,
   nextRoutingChecks,
   nextStateChecks,
+  nextStoreReadChecks,
   nodeRuntimeChecks,
   overlapRefusal,
   preBuildChecks,
@@ -42,7 +43,6 @@ import {
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
-  cloudflareReadingTheStore,
   cloudflareTunnel,
   cloudfrontShielded,
   container,
@@ -280,7 +280,12 @@ export const prerender = {
   nextPpr: fixture("prerender/next-ppr", {
     apps: ["web"],
     checks: [...healthChecks, ...nextPprChecks],
-    on: { aws: [defaults, cloudflareReadingTheStore] },
+    on: { aws: [defaults, cloudflare] },
+  }),
+  nextStore: fixture("prerender/next-store", {
+    apps: ["web"],
+    checks: [...healthChecks, ...nextStoreReadChecks],
+    on: { aws: [cloudflare] },
   }),
   nextDockerfile: fixture("prerender/next-dockerfile", {
     apps: ["web"],

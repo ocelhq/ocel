@@ -897,33 +897,36 @@ describe("the prerender-from-a-bucket cell", () => {
 });
 
 describe("the partial prerendering cells", () => {
-  const cellNames = (lane: Lane) =>
+  const cellNames = (lane: Lane, fixture: string) =>
     planOn(lane)
       .cells.map((cell) => cell.name)
-      .filter((name) => name.startsWith("prerender/next-ppr"));
+      .filter((name) => name === fixture || name.startsWith(`${fixture}-`));
 
-  it("deploys behind CloudFront and behind Cloudflare on aws", () => {
-    expect(cellNames("aws").sort()).toEqual([
+  it("deploys the PPR app behind CloudFront and behind Cloudflare on aws", () => {
+    expect(cellNames("aws", "prerender/next-ppr").sort()).toEqual([
       "prerender/next-ppr",
       "prerender/next-ppr-cloudflare",
     ]);
   });
 
-  it("reads the durable store through Cloudflare only", () => {
-    const placed = fixtures.find((one) => one.name === "prerender/next-ppr")?.on.aws ?? [];
-    const checksOf = (name: string) =>
-      placed.find((variant) => variant.name === name)?.checks?.map((one) => one.title);
-
-    expect(checksOf("cloudflare")).toEqual([
-      "a prerender nothing has read is answered from the durable store, not the function",
-    ]);
-    expect(checksOf("default")).toBeUndefined();
+  it("deploys the store-read app behind Cloudflare alone, the one edge that reads the durable store", () => {
+    expect(cellNames("aws", "prerender/next-store")).toEqual(["prerender/next-store-cloudflare"]);
   });
 
-  it("skips both on floci's aws, which serves neither CloudFront nor the Cloudflare API", () => {
+  it("gives no two variants of a fixture the same name", () => {
+    for (const fixture of fixtures) {
+      for (const [target, variants] of Object.entries(fixture.on)) {
+        const names = (variants ?? []).map((variant) => variant.name);
+        expect(new Set(names).size, `${fixture.name} on ${target}`).toBe(names.length);
+      }
+    }
+  });
+
+  it("skips them on floci's aws, which serves neither CloudFront nor the Cloudflare API", () => {
     const skipped = planOn("aws.floci").skipped;
 
     expect(skipped["prerender/next-ppr"]?.map((gap) => gap.issue)).toEqual([852]);
     expect(skipped["prerender/next-ppr-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
+    expect(skipped["prerender/next-store-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
   });
 });

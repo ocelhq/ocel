@@ -6,7 +6,6 @@ import type { Check, CheckContext } from "./context";
 const REVALIDATION_TIMEOUT_MS = 60_000;
 const STEADY_READS = 3;
 const STEADY_ATTEMPTS = 3;
-const ENTRY_SOURCE_HEADER = "x-ocel-entry-source";
 const FALLBACK_TAG = "pprid-shell";
 
 async function readMarker(ctx: CheckContext, path: string, name: string): Promise<string> {
@@ -128,20 +127,5 @@ export const nextPprChecks: Check[] = [
   {
     title: "revalidating a tag moves the fallback shell it is on, for every param",
     run: assertTagRevalidationMovesTheFallbackShell,
-  },
-];
-
-export const nextStoreReadChecks: Check[] = [
-  {
-    title: "a prerender nothing has read is answered from the durable store, not the function",
-    run: async (ctx) => {
-      const { res, html } = await page(ctx, "/cold");
-      assert.equal(
-        res.headers.get(ENTRY_SOURCE_HEADER),
-        "store",
-        "the first read of a prerendered page came from the function",
-      );
-      assert.equal(marker(html, "cold:static"), "prerendered at build");
-    },
   },
 ];
