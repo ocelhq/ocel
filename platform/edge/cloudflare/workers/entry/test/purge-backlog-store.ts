@@ -64,13 +64,16 @@ export function memoryBacklogStore(): MemoryBacklogStore {
         else row.invalidatedAt = Math.max(row.invalidatedAt ?? 0, startedAt);
         covered.set(tag, row);
         const waiting = pending.get(tag);
-        if (waiting && waiting.mode === mode && waiting.latestAt <= startedAt) pending.delete(tag);
+        if (!waiting || waiting.mode !== mode) continue;
+        if (waiting.latestAt <= startedAt) pending.delete(tag);
+        else waiting.raisedAt = Math.max(waiting.raisedAt, startedAt);
       }
     },
     settleEverything(startedAt) {
       everythingAt = startedAt;
       for (const [tag, row] of insertionOrder()) {
         if (row.latestAt <= startedAt) pending.delete(tag);
+        else row.raisedAt = Math.max(row.raisedAt, startedAt);
       }
     },
     writeBackoff(count, at) {
