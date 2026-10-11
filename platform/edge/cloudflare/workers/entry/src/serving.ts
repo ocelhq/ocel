@@ -6,7 +6,7 @@ import { ORIGIN_PURGE_SCOPE, type OriginCoordinates } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import type { Serving } from "./serve-prerender";
 
-const AWAITED_PURGE_MS = 3_000;
+export const AWAITED_PURGE_MS = 3_000;
 
 export interface ServingPorts {
   serve: ServeFactory;

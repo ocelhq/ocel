@@ -1,6 +1,23 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import type { EdgeCacheRpc, FetchCacheEntry, TagRecord } from "@framework/next-cache";
+import {
+  type EdgeCacheRpc,
+  type FetchCacheEntry,
+  storedCacheTags,
+  type TagRecord,
+} from "@framework/next-cache";
+import {
+  type PurgeGroup,
+  type PurgeMode,
+  readPurgeEntry,
+  readReleaseToken,
+} from "@platform/edge-contract/purge";
+import { settledWithin } from "./cache";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
+import { purgeInBand } from "./purge-inband";
+import { openPurgeQueue } from "./purge-request";
+import { ORIGIN_PURGE_SCOPE } from "./serve-key";
+import type { ServeFactory } from "./serve-objects";
+import { AWAITED_PURGE_MS } from "./serving";
 import { createTagClock, dropSnapshotMemo, type ObjectStoreReader, parseJson } from "./tag-clock";
 
 export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
@@ -19,6 +36,7 @@ export interface EdgeCacheDeps {
   entries: FetchEntryStore;
   snapshots: ObjectStoreReader;
   raise: SnapshotRaiser;
+  purge(groups: PurgeGroup[]): Promise<void>;
   waitUntil(promise: Promise<unknown>): void;
   now(): number;
 }
@@ -91,8 +109,27 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
       } finally {
         dropSnapshotMemo({ isrPrefix: scope }, deps.snapshots);
       }
+      const groups = buildPurgeGroups(scope, tags, record, at);
+      if (groups.length > 0) await deps.purge(groups);
     },
   };
+}
+
+function buildPurgeGroups(
+  scope: string,
+  tags: string[],
+  record: TagRecord,
+  now: number,
+): PurgeGroup[] {
+  const release = readReleaseToken(scope);
+  if (release === undefined) return [];
+  const byMode = new Map<PurgeMode, string[]>();
+  for (const tag of storedCacheTags(release, tags).tags) {
+    const entry = readPurgeEntry(tag, record, now);
+    if (!entry) continue;
+    byMode.set(entry.mode, [...(byMode.get(entry.mode) ?? []), tag]);
+  }
+  return [...byMode].map(([mode, grouped]) => ({ mode, tags: grouped }));
 }
 
 function entryTags(entry: FetchCacheEntry, tags: string[]): string[] {
@@ -135,9 +172,22 @@ export class CacheEntrypoint
       entries: OCEL_CACHE_STORE,
       snapshots: OCEL_CACHE_STORE,
       raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.purgeSecret),
+      purge: (groups) => this.purgeServed(groups),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
       now: Date.now,
     });
+  }
+
+  private async purgeServed(groups: PurgeGroup[]): Promise<void> {
+    const serve = (this.ctx.exports as { Serve?: ServeFactory }).Serve;
+    if (!serve) return;
+    const run = purgeInBand(groups, {
+      cache: serve({ props: ORIGIN_PURGE_SCOPE }),
+      queue: openPurgeQueue(this.ctx.exports),
+      now: Date.now,
+    });
+    this.ctx.waitUntil(run);
+    await settledWithin(run, AWAITED_PURGE_MS);
   }
 
   async fetchGet(scope: string, key: string, tags: string[]): Promise<FetchCacheEntry | null> {

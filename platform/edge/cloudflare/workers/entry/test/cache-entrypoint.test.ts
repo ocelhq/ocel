@@ -1,5 +1,6 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { type TagRecord, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
+import type { PurgeGroup } from "@platform/edge-contract/purge";
 import { beforeEach, expect, it } from "vitest";
 
 import {
@@ -80,12 +81,18 @@ function entryStore(over: Partial<FetchEntryStore> = {}) {
   return { puts, store };
 }
 
+function purgeRecorder() {
+  const purges: PurgeGroup[][] = [];
+  return { purges, purge: async (groups: PurgeGroup[]) => void purges.push(groups) };
+}
+
 function cacheWith(
   over: {
     scope?: string;
     entries?: FetchEntryStore;
     store?: ObjectStoreReader;
     raise?: (scope: string, records: Record<string, TagRecord>) => Promise<void>;
+    purge?: (groups: PurgeGroup[]) => Promise<void>;
     waitUntil?: (p: Promise<unknown>) => void;
     now?: () => number;
   } = {},
@@ -95,6 +102,7 @@ function cacheWith(
     entries: over.entries ?? entryStore().store,
     snapshots: over.store ?? snapshotBucket(),
     raise: over.raise ?? raiseRecorder().raise,
+    purge: over.purge ?? purgeRecorder().purge,
     waitUntil: over.waitUntil ?? (() => {}),
     now: over.now ?? (() => 5_000),
   });
@@ -343,12 +351,51 @@ it("answers like an empty cache on a bootstrap that binds no coordinates", async
   await entrypoint.revalidateTags(scope, ["posts"]);
 });
 
-it("records an invalidation only by raising it to the isr-writer", async () => {
+it("records an invalidation by raising it to the isr-writer once", async () => {
   const writer = raiseRecorder();
   await cacheWith({ raise: writer.raise }).revalidateTags(scope, ["posts"], { expire: 60 });
 
   expect(writer.raises).toEqual([{ scope, records: { posts: { stale: 5_000, expired: 65_000 } } }]);
   expect(writer.raises).toHaveLength(1);
+});
+
+it("invalidates a tag revalidated with a profile in Serve's cache, under this deployment's release token", async () => {
+  const cache = purgeRecorder();
+  await cacheWith({ purge: cache.purge }).revalidateTags(scope, ["posts", "authors"], {
+    expire: 60,
+  });
+
+  const release = scope.split("/")[3];
+  expect(cache.purges).toEqual([
+    [{ mode: "invalidate", tags: [`${release}|posts`, `${release}|authors`] }],
+  ]);
+});
+
+it("purges an expired tag from Serve's cache", async () => {
+  const cache = purgeRecorder();
+  await cacheWith({ purge: cache.purge }).revalidateTags(scope, ["posts"]);
+
+  expect(cache.purges).toEqual([[{ mode: "purge", tags: [`${scope.split("/")[3]}|posts`] }]]);
+});
+
+it("purges nothing until the raise has landed, and nothing when it is refused", async () => {
+  const cache = purgeRecorder();
+  const order: string[] = [];
+  await cacheWith({
+    raise: async () => void order.push("raised"),
+    purge: async () => void order.push("purged"),
+  }).revalidateTags(scope, ["posts"]);
+  await expect(
+    cacheWith({
+      raise: async () => {
+        throw new Error("429");
+      },
+      purge: cache.purge,
+    }).revalidateTags(scope, ["posts"]),
+  ).rejects.toThrow("429");
+
+  expect(order).toEqual(["raised", "purged"]);
+  expect(cache.purges).toEqual([]);
 });
 
 it("surfaces a refused raise", async () => {
