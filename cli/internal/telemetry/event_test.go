@@ -504,6 +504,9 @@ func TestAProjectIDIsTheSameForOneKeyAndProjectAndRevealsNeitherName(t *testing.
 	if got := projectID("key-a", ""); got != "" {
 		t.Errorf("id of no project = %q, want empty", got)
 	}
+	if got := projectID("", "shop"); got != "" {
+		t.Errorf("id with no key = %q, want empty rather than a hash anyone could recompute", got)
+	}
 }
 
 func TestAProjectIDCannotBeRecomputedFromAnythingTheEventSends(t *testing.T) {
