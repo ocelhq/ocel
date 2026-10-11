@@ -3,6 +3,8 @@ import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import {
+  edgeReadable,
+  edgeReadableTagging,
   entriesAdopted,
   isNotFound,
   type ObjectStore,
@@ -57,22 +59,30 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
     }
   }
 
-  async function write(to: ObjectStore, key: string, entry: CacheEntryFile): Promise<void> {
+  async function write(
+    to: ObjectStore,
+    key: string,
+    entry: CacheEntryFile,
+    tagging?: string,
+  ): Promise<void> {
     await to.client.send(
       new PutObjectCommand({
         Bucket: to.bucket,
         Key: key,
         Body: JSON.stringify(entry),
         ContentType: "application/json",
+        ...(tagging !== undefined && { Tagging: tagging }),
       }),
     );
   }
+
+  const pageTagging = edgeReadable() ? edgeReadableTagging : undefined;
 
   const entries: EntryStore = entriesAdopted()
     ? openAdoptedEntryStore(prefix)
     : {
         read: async (key) => read(provider, objectKey(key)),
-        write: async (key, entry) => write(provider, objectKey(key), entry),
+        write: async (key, entry) => write(provider, objectKey(key), entry, pageTagging),
       };
 
   return {

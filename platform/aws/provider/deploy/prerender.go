@@ -108,7 +108,7 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 	for _, u := range uploads {
 		g.Go(func() error {
 			defer takeUploadSlot()()
-			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}, func() ([]byte, error) {
+			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}.taggedFor(u.to), func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			}, stats)
 		})
@@ -184,7 +184,11 @@ func entryTarget(cfg Config) uploadTarget {
 	if isrEntriesAdopted(cfg.objectStores()) {
 		return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier}
 	}
-	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}
+	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: edgeReadsAssetBucket(cfg)}
+}
+
+func edgeReadsAssetBucket(cfg Config) bool {
+	return cfg.AssetBucket != "" && cfg.Objects != nil && cfg.EdgeAccessKeyID != "" && cfg.EdgeSecretKey != ""
 }
 
 func isrEntriesAdopted(stores ObjectStores) bool {

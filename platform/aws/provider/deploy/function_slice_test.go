@@ -617,6 +617,45 @@ func TestBytecodePolicy(t *testing.T) {
 	})
 }
 
+func TestISREdgeReadable(t *testing.T) {
+	t.Run("tells the cache handler to tag its page entries when the edge reads the asset bucket", func(t *testing.T) {
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+		cfg.EdgeReadable = true
+
+		if got := cfg.env()["OCEL_ISR_EDGE_READABLE"]; got != "1" {
+			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want 1", got)
+		}
+	})
+
+	t.Run("says nothing about it otherwise", func(t *testing.T) {
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+
+		if got, ok := cfg.env()["OCEL_ISR_EDGE_READABLE"]; ok {
+			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want it unset", got)
+		}
+	})
+
+	t.Run("lets the function tag an object only when the edge reads", func(t *testing.T) {
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+		without, err := isrPolicy(cfg)
+		if err != nil {
+			t.Fatalf("isrPolicy: %v", err)
+		}
+		cfg.EdgeReadable = true
+		with, err := isrPolicy(cfg)
+		if err != nil {
+			t.Fatalf("isrPolicy: %v", err)
+		}
+
+		if strings.Contains(without, "s3:PutObjectTagging") {
+			t.Errorf("policy grants tagging with no edge reading: %s", without)
+		}
+		if !strings.Contains(with, "s3:PutObjectTagging") {
+			t.Errorf("policy does not grant tagging for an edge-readable cache: %s", with)
+		}
+	})
+}
+
 func TestISRPolicy(t *testing.T) {
 	t.Run("scopes to the app's own namespace", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")

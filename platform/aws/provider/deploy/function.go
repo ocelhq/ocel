@@ -112,6 +112,8 @@ type isrConfig struct {
 
 	WriterURL   string
 	PurgeSecret string
+
+	EdgeReadable bool
 }
 
 func (c isrConfig) tagNamespace() string {
@@ -133,6 +135,9 @@ func (c isrConfig) env() map[string]string {
 	}
 	if c.CacheStoreBucket != "" {
 		env["OCEL_ISR_STORE_BUCKET"] = c.CacheStoreBucket
+	}
+	if c.EdgeReadable {
+		env["OCEL_ISR_EDGE_READABLE"] = "1"
 	}
 	if c.WriterURL != "" && c.PurgeSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
@@ -233,10 +238,14 @@ func isrPolicy(c isrConfig) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("isr cache under %q has no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
 	}
+	objectActions := []string{"s3:GetObject", "s3:PutObject"}
+	if c.EdgeReadable {
+		objectActions = append(objectActions, "s3:PutObjectTagging")
+	}
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
-			"Action":   []string{"s3:GetObject", "s3:PutObject"},
+			"Action":   objectActions,
 			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
 		},
 		map[string]any{

@@ -288,6 +288,8 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
 		cache.WriterURL = r.cfg.ISRWriterEndpoint
 		cache.PurgeSecret = cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, isr.Prefix)
+	} else {
+		cache.EdgeReadable = edgeReadsAssetBucket(r.cfg)
 	}
 	return cache
 }
