@@ -28,11 +28,19 @@ export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
 export const SERVE_REFUSED_HEADER = "x-ocel-serve-refused";
 
+export interface StoredEntryCall {
+  path: string;
+  fallbackPath?: string;
+  revalidate?: number;
+  expire?: number;
+}
+
 export interface RenderRelease {
   slug: string;
   isrPrefix: string;
   tags: string[];
   originPath?: string;
+  entry?: StoredEntryCall;
 }
 
 const RENDER_CALL_SEGMENTS = 5;

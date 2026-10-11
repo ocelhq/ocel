@@ -122,7 +122,29 @@ describe("a prerender served through Serve", () => {
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
-    ).toEqual({ slug: "p1", isrPrefix: "prod/p1/web/r0a1b2c3d/isr", tags: [] });
+    ).toMatchObject({ slug: "p1", isrPrefix: "prod/p1/web/r0a1b2c3d/isr", tags: [] });
+  });
+
+  it("names the entry the durable store may answer from, with the windows of the route", async () => {
+    const served = fakeServing();
+    const target = { fallback: { initialRevalidate: 30, initialExpiration: 300 } };
+
+    await get("/blog", deps(served, { target }));
+
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
+    ).toEqual({ path: "/blog", fallbackPath: "/blog", revalidate: 30, expire: 300 });
+  });
+
+  it("names no revalidate window for a route that never revalidates", async () => {
+    const served = fakeServing();
+    const target = { fallback: { initialRevalidate: false } };
+
+    await get("/blog", deps(served, { target }));
+
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
+    ).toEqual({ path: "/blog", fallbackPath: "/blog" });
   });
 
   it("renders at the origin, uncached, when Serve refuses the call", async () => {
@@ -441,6 +463,16 @@ describe("the document of a PPR route whose param was not prerendered", () => {
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").originPath,
     ).toBe("/blog/42");
+  });
+
+  it("names the shared shell as the entry to answer from", async () => {
+    const served = fakeServing();
+
+    await getParam("42", depsFor(served, { target: fallbackTarget }));
+
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
+    ).toEqual({ path: "/blog/[id]", fallbackPath: "/blog/[id]" });
   });
 
   it("keeps a shell per path when the route's fallback is not partial", async () => {
