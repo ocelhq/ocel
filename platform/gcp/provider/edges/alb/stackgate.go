@@ -64,7 +64,7 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 		}
 		if !attached {
 			return refusal.Refuse(refusal.CodeNotReady,
-				"%s has a preview gate recorded, and the %s load balancer of this project's preview tier runs no gate plugin yet: run `ocel bootstrap` once to attach it, then deploy again",
+				"%s has a preview gate recorded, and the %s load balancer of this project's preview tier runs no gate plugin: run `ocel bootstrap` for the preview tier to attach it, then deploy again",
 				spec.Slug, Kind)
 		}
 	}

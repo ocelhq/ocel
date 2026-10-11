@@ -35,8 +35,7 @@ func (bootstrap) Catalogue() []provider.Feature {
 			"the one bootstrap item with a recurring cost, about $18 a month plus egress, " +
 			"a custom role that may only clear Cloud CDN, which Next apps behind it are granted, " +
 			"and, on the preview tier, the preview gate as a Service Extensions plugin that runs in front of Cloud CDN, " +
-			"kept as a generic artifact in a repository in Artifact Registry. " +
-			"A tier bootstrapped before the plugin existed needs `ocel bootstrap` once more before it can gate a preview",
+			"kept as a generic artifact in a repository in Artifact Registry",
 		Edges: []edge.Kind{alb.Kind},
 	}, {
 		Name: albShieldedFeature,

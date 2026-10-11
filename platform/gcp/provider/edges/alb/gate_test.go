@@ -476,7 +476,7 @@ func TestAGateThatOutgrowsThePluginPackageIsRefusedWithWhatToTrim(t *testing.T) 
 	}
 }
 
-func TestAGatedDeployOnATierBootstrappedBeforeThePluginIsRefusedUntilItIsBootstrapped(t *testing.T) {
+func TestAGatedDeployOnATierWhoseLoadBalancerRunsNoPluginIsRefusedUntilItIsBootstrapped(t *testing.T) {
 	t.Parallel()
 
 	balancer, _ := balancing(t)

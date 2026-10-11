@@ -149,10 +149,8 @@ answers, the deploy fails and the hostname stays unrouted. A project that gates 
 already-routed preview waits the same way, and that preview is open until the wait ends.
 Changing or revoking a password or secret takes a few minutes to apply, too.
 
-A load balancer runs a plugin only once it is attached. A tier bootstrapped before the
-plugin existed refuses a gated deploy until you run `ocel bootstrap` for the preview tier once
-more; every tier bootstrapped now attaches it, with an empty gate set that admits everything,
-and a plugin that crashes refuses requests rather than passing them. The bootstrap checks
+The preview tier's bootstrap attaches the plugin with an empty gate set that admits
+everything, and a plugin that crashes refuses requests rather than passing them. The bootstrap checks
 the Service Extensions API (`networkservices.googleapis.com`) is on, and the credentials that
 run it and deploys hold `roles/networkservices.admin`. A load balancer only Cloudflare
 reaches attaches no plugin: the worker in front of it runs the gate.
