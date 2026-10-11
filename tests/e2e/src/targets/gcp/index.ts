@@ -74,7 +74,6 @@ import {
 
 const ENDPOINT_ENV = "OCEL_FLOCI_GCP_ENDPOINT";
 const FIRESTORE_ENDPOINT_ENV = "OCEL_FLOCI_FIRESTORE_ENDPOINT";
-const TASKS_ENDPOINT_ENV = "OCEL_FLOCI_TASKS_ENDPOINT";
 const PROJECT_ENV = "OCEL_GCP_PROJECT";
 const REGION_ENV = "OCEL_GCP_REGION";
 
@@ -260,14 +259,12 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
         await ocel(dir, preview, childEnv(dir));
       }
       if (emulator) {
-        const { child, tasksEndpoint } = await startDispatch(
+        this.dispatching = await startDispatch(
           emulator,
           project(),
           region(),
           laneDir(runId, "gcp"),
         );
-        this.dispatching = child;
-        process.env[TASKS_ENDPOINT_ENV] = tasksEndpoint;
       }
     } catch (error) {
       return { lane: error instanceof Error ? error.message : String(error) };
@@ -280,7 +277,6 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
   async finishLane(): Promise<void> {
     await stopDispatch(this.dispatching);
     this.dispatching = undefined;
-    delete process.env[TASKS_ENDPOINT_ENV];
   }
 
   async prepareProcess(): Promise<void> {
