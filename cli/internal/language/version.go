@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
@@ -14,11 +15,13 @@ var frameworkDependencies = map[string]string{
 	buildoutput.FrameworkSvelteKit: svelteKitDependency,
 }
 
+const npmAliasPrefix = "npm:"
+
 var runtimes = map[Language]string{JS: "node", Go: "go", Python: "python", Rust: "rust"}
 
 var (
-	majorVersion      = regexp.MustCompile(`^[^0-9]*?(\d+)`)
-	minorVersion      = regexp.MustCompile(`^[^0-9]*?(\d+\.\d+)`)
+	majorVersion      = regexp.MustCompile(`^[\s^~=<>v]*(\d+)`)
+	minorVersion      = regexp.MustCompile(`^[\s^~=<>v]*(\d+\.\d+)`)
 	goDirective       = regexp.MustCompile(`(?m)^go\s+(\S+)`)
 	requiresPython    = regexp.MustCompile(`(?m)^requires-python\s*=\s*"([^"]*)"`)
 	toolchainChannel  = regexp.MustCompile(`(?m)^channel\s*=\s*"([^"]*)"`)
@@ -40,6 +43,9 @@ func DeclaredFrameworkVersion(framework, dir string) string {
 	declared, ok := manifest.Dependencies[dependency]
 	if !ok {
 		declared = manifest.DevDependencies[dependency]
+	}
+	if aliased, ok := strings.CutPrefix(declared, npmAliasPrefix); ok {
+		declared = aliased[strings.LastIndex(aliased, "@")+1:]
 	}
 	return firstMatch(majorVersion, declared)
 }
