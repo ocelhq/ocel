@@ -28,6 +28,7 @@ export type CheckContext = {
   reach: (url: string) => Promise<string>;
   readExposed: () => Promise<string>;
   countOriginRequests: (urlFragment: string) => Promise<number>;
+  readReleaseFile: (path: string) => Promise<Uint8Array>;
   runInEnvironment: (command: string[]) => Promise<string>;
   journeyNonce: string;
   projectDir: string;

@@ -82,6 +82,7 @@ export function hasExposure<T extends object>(target: T): target is T & Exposure
 
 export interface RequestLog {
   countOriginRequests(cell: CellUnderTest, urlFragment: string): Promise<number>;
+  readReleaseFile(cell: CellUnderTest, app: string, path: string): Promise<Uint8Array>;
 }
 
 export function hasRequestLog<T extends object>(target: T): target is T & RequestLog {

@@ -5,9 +5,32 @@ import type { Check, CheckContext } from "./context";
 
 const IMMUTABLE_PREFIX = "/_next/static/";
 const STATIC_FILE = /["'(](\/_next\/static\/[^"'()\s\\?#]+\.(?:js|css))/;
-const ATTEMPTS = 4;
-const LOGGING_MS = 5 * 60_000;
-const POLL_MS = 5_000;
+
+export type BucketTiming = {
+  propagationMs: number;
+  pollMs: number;
+  loggingMs: number;
+  settleMs: number;
+  strictAttempts: number;
+};
+
+const TIMING: BucketTiming = {
+  propagationMs: 10 * 60_000,
+  pollMs: 5_000,
+  loggingMs: 5 * 60_000,
+  settleMs: 30_000,
+  strictAttempts: 3,
+};
+
+type Answer = {
+  url: string;
+  status: number;
+  body: Uint8Array;
+  cacheControl: string;
+  logged: number;
+};
+
+type Verdict = (answer: Answer) => string | undefined;
 
 export function immutableFileOf(html: string): string | undefined {
   return STATIC_FILE.exec(html)?.[1];
@@ -24,81 +47,124 @@ async function immutableFileOfApp(ctx: CheckContext): Promise<string> {
   return file;
 }
 
-async function loggedAfterAsking(
+async function ask(
   ctx: CheckContext,
-  url: string,
-  fragment: string,
-  expected: number,
-): Promise<number> {
+  timing: BucketTiming,
+  askFor: (stamp: string) => string,
+  parameter: string,
+): Promise<Answer> {
+  const stamp = randomUUID();
+  const url = askFor(stamp);
   const asked = await ctx.fetch(url);
-  assert.equal(asked.status, expected, `${url} answered ${asked.status}, want ${expected}`);
-  await asked.arrayBuffer();
+  const body = new Uint8Array(await asked.arrayBuffer());
   const marker = randomUUID();
   const reached = `${ctx.baseUrl}/?e2e-dynamic=${marker}`;
   const control = await ctx.fetch(reached);
   assert.equal(control.status, 200, `${reached} answered ${control.status}`);
   await control.arrayBuffer();
   await until(
-    LOGGING_MS,
+    timing.loggingMs,
     `Cloud Run logged no request for ${reached}, so its request log cannot yet vouch for the requests it did not log`,
     async () => ((await ctx.countOriginRequests(`e2e-dynamic=${marker}`)) > 0 ? true : undefined),
-    POLL_MS,
+    timing.pollMs,
   );
-  return ctx.countOriginRequests(fragment);
+  await new Promise((resolve) => setTimeout(resolve, timing.settleMs));
+  return {
+    url,
+    status: asked.status,
+    body,
+    cacheControl: asked.headers.get("cache-control") ?? "",
+    logged: await ctx.countOriginRequests(`${parameter}=${stamp}`),
+  };
 }
 
-async function neverLogged(
+function unlogged(answer: Answer): string | undefined {
+  return answer.logged === 0
+    ? undefined
+    : `Cloud Run logged ${answer.logged} request(s) for ${answer.url}, so the load balancer sent it to the service rather than the backend bucket`;
+}
+
+async function servedFromBucketThroughout(
   ctx: CheckContext,
+  timing: BucketTiming,
   askFor: (stamp: string) => string,
   parameter: string,
-  expected: number,
+  verdict: Verdict,
 ): Promise<void> {
-  const seen: string[] = [];
-  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-    const stamp = randomUUID();
-    const url = askFor(stamp);
-    const logged = await loggedAfterAsking(ctx, url, `${parameter}=${stamp}`, expected);
-    if (logged === 0) {
-      return;
+  const deadline = Date.now() + timing.propagationMs;
+  let established: Answer | undefined;
+  for (;;) {
+    const answer = await ask(ctx, timing, askFor, parameter);
+    const why = verdict(answer);
+    if (why === undefined) {
+      established = answer;
+      break;
     }
-    seen.push(`${url} (${logged})`);
+    assert.ok(
+      Date.now() < deadline,
+      `no request was served from the backend bucket within ${timing.propagationMs}ms: ${why}`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, timing.pollMs));
   }
-  assert.fail(
-    `Cloud Run logged a request for every url asked, so the load balancer sent them to the service rather than the backend bucket: ${seen.join(", ")}`,
-  );
+  for (let attempt = 0; attempt < timing.strictAttempts; attempt += 1) {
+    const answer = await ask(ctx, timing, askFor, parameter);
+    const why = verdict(answer);
+    assert.ok(
+      why === undefined,
+      `after ${established.url} was served from the backend bucket, ${why}`,
+    );
+  }
 }
 
-export const backendBucketChecks: Check[] = [
-  {
-    title: "an immutable file is served from the backend bucket with no Cloud Run request logged",
-    run: async (ctx) => {
-      const file = await immutableFileOfApp(ctx);
-      await neverLogged(
-        ctx,
-        (stamp) => `${ctx.baseUrl}${file}?e2e-static=${stamp}`,
-        "e2e-static",
-        200,
-      );
-      const served = await ctx.fetch(`${ctx.baseUrl}${file}`);
-      assert.equal(served.status, 200);
-      await served.arrayBuffer();
-      assert.match(
-        served.headers.get("cache-control") ?? "",
-        /immutable/,
-        `${file} was served without the immutable cache control it was uploaded with`,
-      );
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, at) => byte === b[at]);
+}
+
+export function backendBucketChecksWith(timing: BucketTiming): Check[] {
+  return [
+    {
+      title:
+        "an immutable file is the current release's upload, served from the backend bucket with no Cloud Run request logged",
+      run: async (ctx) => {
+        const file = await immutableFileOfApp(ctx);
+        const uploaded = await ctx.readReleaseFile(file);
+        await servedFromBucketThroughout(
+          ctx,
+          timing,
+          (stamp) => `${ctx.baseUrl}${file}?e2e-static=${stamp}`,
+          "e2e-static",
+          (answer) => {
+            if (answer.status !== 200) {
+              return `${answer.url} answered ${answer.status}, want 200`;
+            }
+            if (!sameBytes(answer.body, uploaded)) {
+              return `${answer.url} answered ${answer.body.length} bytes that are not the bytes the current release uploaded (${uploaded.length})`;
+            }
+            if (!/immutable/.test(answer.cacheControl)) {
+              return `${answer.url} was served with cache control "${answer.cacheControl}", not the immutable one it was uploaded with`;
+            }
+            return unlogged(answer);
+          },
+        );
+      },
     },
-  },
-  {
-    title: "a file missing under an immutable prefix is a 404 with no Cloud Run request logged",
-    run: async (ctx) => {
-      await neverLogged(
-        ctx,
-        (stamp) =>
-          `${ctx.baseUrl}${IMMUTABLE_PREFIX}chunks/missing-${stamp}.js?e2e-missing=${stamp}`,
-        "e2e-missing",
-        404,
-      );
+    {
+      title: "a file missing under an immutable prefix is a 404 with no Cloud Run request logged",
+      run: async (ctx) => {
+        await servedFromBucketThroughout(
+          ctx,
+          timing,
+          (stamp) =>
+            `${ctx.baseUrl}${IMMUTABLE_PREFIX}chunks/missing-${stamp}.js?e2e-missing=${stamp}`,
+          "e2e-missing",
+          (answer) =>
+            answer.status === 404
+              ? unlogged(answer)
+              : `${answer.url} answered ${answer.status}, want 404`,
+        );
+      },
     },
-  },
-];
+  ];
+}
+
+export const backendBucketChecks: Check[] = backendBucketChecksWith(TIMING);

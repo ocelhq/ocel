@@ -52,6 +52,7 @@ import {
   strayStores,
 } from "./memorystore";
 import { gcpSlug, namespaceOf } from "./names";
+import { assetPrefixOf, readReleaseFile, tierBucket } from "./releaseFiles";
 import { countOriginRequests } from "./requestLog";
 import {
   ALB_FEATURE,
@@ -63,6 +64,7 @@ import {
   reachable,
   readServices,
   type Service,
+  servicesIn,
   servicesOf,
   strayServices,
   switchOn,
@@ -380,6 +382,19 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
 
   async countOriginRequests(_cell: CellUnderTest, urlFragment: string): Promise<number> {
     return countOriginRequests(await this.where(), urlFragment);
+  }
+
+  async readReleaseFile(cell: CellUnderTest, app: string, path: string): Promise<Uint8Array> {
+    const where = await this.where();
+    const namespace = namespaceOf(process.env);
+    const listed = await readServices(where);
+    const service = findAppService(servicesIn(listed), namespace, gcpSlug(cell, process.env), app);
+    return readReleaseFile(
+      where,
+      tierBucket(namespace, where.project),
+      assetPrefixOf(listed, service.name),
+      path,
+    );
   }
 
   async readExposed(cell: CellUnderTest): Promise<string> {
