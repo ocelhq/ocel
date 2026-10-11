@@ -21,9 +21,9 @@ import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
 import {
   answerPurgeOnWorker,
-  controlHostResponse,
   isControlHost,
   isPurgeRequest,
+  respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
@@ -314,7 +314,7 @@ export default {
     const host = new URL(request.url).host;
     if (isControlHost(host)) {
       if (isPurgeRequest(request)) return answerPurgeOnWorker(request, env, ctx);
-      if (env.OCEL_SERVES_WORKERS_DEV !== "1") return controlHostResponse();
+      if (env.OCEL_SERVES_WORKERS_DEV !== "1") return respondOnControlHost();
     }
     const store = env.OCEL_CACHE_STORE;
     const serve = ctx.exports?.Serve as ServeFactory | undefined;

@@ -60,7 +60,7 @@ function parseBody(text: string): PurgeBody | undefined {
   return body as PurgeBody;
 }
 
-function hexBytes(hex: string): Uint8Array | undefined {
+function decodeHex(hex: string): Uint8Array | undefined {
   if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return undefined;
   return Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
 }
@@ -92,7 +92,7 @@ async function readCapped(request: Request): Promise<Uint8Array | undefined> {
 }
 
 async function isSignedBy(secret: string, bytes: Uint8Array, signature: string): Promise<boolean> {
-  const expected = hexBytes(signature);
+  const expected = decodeHex(signature);
   if (!expected) return false;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -108,7 +108,7 @@ export function isControlHost(host: string): boolean {
   return host.split(":", 1)[0].toLowerCase().endsWith(".workers.dev");
 }
 
-export function controlHostResponse(): Response {
+export function respondOnControlHost(): Response {
   return reply(404, "Not Found");
 }
 

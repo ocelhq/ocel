@@ -1,7 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import type { PurgeQueue } from "../src/purge-queue";
-import { sqliteBacklogStore } from "../src/purge-sqlite-store";
+import { newSqliteBacklogStore } from "../src/purge-sqlite-store";
 import { memoryBacklogStore } from "./purge-backlog-store";
 import { describeBacklogStore } from "./purge-backlog-store-contract";
 
@@ -20,7 +20,7 @@ describeBacklogStore("memory", async (body) => {
 
 describeBacklogStore("SQLite", async (body) => {
   await runInDurableObject(freshQueue(), async (_instance, state) => {
-    await body(sqliteBacklogStore(state.storage));
+    await body(newSqliteBacklogStore(state.storage));
   });
 });
 
@@ -38,7 +38,7 @@ describe("the PurgeQueue object", () => {
   it("arms nothing for a tag that is already covered", async () => {
     const queue = freshQueue();
     await runInDurableObject(queue, async (_instance, state) => {
-      const store = sqliteBacklogStore(state.storage);
+      const store = newSqliteBacklogStore(state.storage);
       store.settleBatch("purge", ["r1|a"], 2_000);
     });
 
@@ -79,7 +79,7 @@ describe("the PurgeQueue object", () => {
       expect(armed).toBeGreaterThan(refusedAt);
       await runInDurableObject(queue, async (_instance, state) => {
         expect(await state.storage.getAlarm()).toBeNull();
-        expect(sqliteBacklogStore(state.storage).hasAnyPending()).toBe(false);
+        expect(newSqliteBacklogStore(state.storage).hasAnyPending()).toBe(false);
       });
     } finally {
       vi.useRealTimers();
@@ -130,8 +130,8 @@ describe("the PurgeQueue object", () => {
 
     await runInDurableObject(queue, async (_instance, state) => {
       expect(await state.storage.getAlarm()).not.toBeNull();
-      expect(sqliteBacklogStore(state.storage).readBatch("purge", 10)).toEqual(["r1|a"]);
-      expect(sqliteBacklogStore(state.storage).readFailures()).toBe(1);
+      expect(newSqliteBacklogStore(state.storage).readBatch("purge", 10)).toEqual(["r1|a"]);
+      expect(newSqliteBacklogStore(state.storage).readFailures()).toBe(1);
     });
   });
 });

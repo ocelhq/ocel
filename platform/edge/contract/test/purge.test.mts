@@ -3,9 +3,9 @@ import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  derivePurgeSecret,
   postPurge,
   purgeEntryOf,
-  purgeSecret,
   purgeSignatureHeader,
   tagsPerPurgeRequest,
 } from "../src/purge.mjs";
@@ -50,21 +50,23 @@ beforeEach(() => {
   waits = [];
 });
 
-describe("purgeSecret", () => {
+describe("derivePurgeSecret", () => {
   it("is the HMAC of the release's ISR prefix under the seed, in hex", () => {
     const expected = createHmac("sha256", SEED).update(PREFIX).digest("hex");
 
-    expect(purgeSecret(SEED, PREFIX)).toBe(expected);
+    expect(derivePurgeSecret(SEED, PREFIX)).toBe(expected);
   });
 
   it("differs per prefix and per seed", () => {
-    expect(purgeSecret(SEED, PREFIX)).not.toBe(purgeSecret(SEED, "prod/acme/web/r9/isr"));
-    expect(purgeSecret(SEED, PREFIX)).not.toBe(purgeSecret("seed-2", PREFIX));
+    expect(derivePurgeSecret(SEED, PREFIX)).not.toBe(
+      derivePurgeSecret(SEED, "prod/acme/web/r9/isr"),
+    );
+    expect(derivePurgeSecret(SEED, PREFIX)).not.toBe(derivePurgeSecret("seed-2", PREFIX));
   });
 });
 
 describe("postPurge", () => {
-  const secret = purgeSecret(SEED, PREFIX);
+  const secret = derivePurgeSecret(SEED, PREFIX);
 
   it("posts the release, the mode and each tag with its raisedAt, signed over the body", async () => {
     await postPurge(sender(), URL, secret, "r0a1b2c3d", [

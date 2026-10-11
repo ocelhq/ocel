@@ -2,14 +2,14 @@ import { DurableObject } from "cloudflare:workers";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
-import { sqliteBacklogStore } from "./purge-sqlite-store";
+import { newSqliteBacklogStore } from "./purge-sqlite-store";
 
 export interface ServePurgeRpc {
   purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
   purgeEverything(): Promise<PurgeOutcome>;
 }
 
-async function reached(call: () => Promise<PurgeOutcome>): Promise<PurgeOutcome> {
+async function settlePurgeCall(call: () => Promise<PurgeOutcome>): Promise<PurgeOutcome> {
   try {
     return await call();
   } catch (error) {
@@ -21,10 +21,10 @@ async function reached(call: () => Promise<PurgeOutcome>): Promise<PurgeOutcome>
   }
 }
 
-export function servePort(serve: () => ServePurgeRpc): PurgePort {
+export function newServePort(serve: () => ServePurgeRpc): PurgePort {
   return {
-    purgeTags: (mode, tags) => reached(() => serve().purge(mode, tags)),
-    purgeEverything: () => reached(() => serve().purgeEverything()),
+    purgeTags: (mode, tags) => settlePurgeCall(() => serve().purge(mode, tags)),
+    purgeEverything: () => settlePurgeCall(() => serve().purgeEverything()),
   };
 }
 
@@ -34,9 +34,9 @@ export class PurgeQueue extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.serve = servePort(() => ctx.exports.Serve as unknown as ServePurgeRpc);
+    this.serve = newServePort(() => ctx.exports.Serve as unknown as ServePurgeRpc);
     this.backlog = new PurgeBacklog({
-      store: sqliteBacklogStore(ctx.storage),
+      store: newSqliteBacklogStore(ctx.storage),
       serve: {
         purgeTags: (mode, tags) => this.serve.purgeTags(mode, tags),
         purgeEverything: () => this.serve.purgeEverything(),
@@ -48,7 +48,7 @@ export class PurgeQueue extends DurableObject<Env> {
 
   async raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> {
     this.backlog.raise(mode, tags);
-    const next = this.backlog.nextFlushAt();
+    const next = this.backlog.readNextFlushAt();
     if (next === undefined || (await this.ctx.storage.getAlarm()) !== null) return;
     await this.ctx.storage.setAlarm(next);
   }

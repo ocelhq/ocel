@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
-import { type PurgeSender, postPurge, purgeSecret } from "@platform/edge-contract/purge";
+import { derivePurgeSecret, type PurgeSender, postPurge } from "@platform/edge-contract/purge";
 import { coordinateOf, type Raise, type Raises } from "./records.mjs";
 import { invalidationBatches } from "./tags.mjs";
 import {
-  cloudflareTargetsOf,
   type DynamoCommands,
   type DynamoLike,
+  readCloudflareTargets,
   targetsOf,
 } from "./targets.mjs";
 
@@ -179,7 +179,7 @@ async function purgeCloudflareTargets(
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
   const { release, isrPrefix } = coordinate;
-  const secret = purgeSecret(await readSeed(), isrPrefix);
+  const secret = derivePurgeSecret(await readSeed(), isrPrefix);
   await settleEvery(
     urls.map((url) => postPurge(inv.cloudflare!, url, secret, release, raise.entries)),
     "some Cloudflare targets refused this purge",
@@ -207,7 +207,7 @@ async function readTargets(inv: Invalidator, project: string): Promise<ProjectTa
     targetsOf(inv.dynamo, inv.commands, inv.table, project),
     inv.cloudflare === undefined
       ? []
-      : cloudflareTargetsOf(inv.dynamo, inv.commands, inv.table, project),
+      : readCloudflareTargets(inv.dynamo, inv.commands, inv.table, project),
   ]);
   if (cloudfront.length === 0 && cloudflare.length === 0) {
     console.warn(

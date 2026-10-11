@@ -30,11 +30,11 @@ func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
 		Environment: []pricing.Shaped{
-			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: entryScript()},
+			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: describeEntryScript()},
 		},
 	}
 	if site.Tier == environment.TierPreview {
-		shape.Shared = append(shape.Shared, pricing.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: entryScript()})
+		shape.Shared = append(shape.Shared, pricing.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: describeEntryScript()})
 	}
 	return shape, nil
 }
@@ -47,6 +47,6 @@ func durableObjectScript(worker durableObjectWorker) map[string]any {
 	return map[string]any{"durable_objects": classes}
 }
 
-func entryScript() map[string]any {
+func describeEntryScript() map[string]any {
 	return map[string]any{"durable_objects": []any{purgeQueueObject}}
 }

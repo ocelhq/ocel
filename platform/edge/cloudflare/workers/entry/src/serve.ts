@@ -4,7 +4,7 @@ import { AwsClient } from "aws4fetch";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
 import type { PurgeOutcome } from "./purge-backlog";
-import { outcomeOfPurge } from "./purge-outcome";
+import { parsePurgeOutcome } from "./purge-outcome";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import { encodeKeyPath, parseKeyRelease, parseObjectKey, type ServeProps } from "./serve-key";
 
@@ -161,9 +161,9 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     const cache = this.ctx.cache as PurgeableCache | undefined;
     if (!cache) return { ok: false, codes: [], message: "this worker has no cache to purge" };
     try {
-      return outcomeOfPurge(await run(cache));
+      return parsePurgeOutcome(await run(cache));
     } catch (error) {
-      return outcomeOfPurge(error);
+      return parsePurgeOutcome(error);
     }
   }
 }
