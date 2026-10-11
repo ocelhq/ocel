@@ -17,8 +17,8 @@ type StaticRoutes struct {
 }
 
 func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticRoutes {
-	if balancer.Shielded || balancer.AssetsBackend == "" || record.Framework != buildoutput.FrameworkNext ||
-		record.AssetPrefix == "" || record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
+	if balancer.Shielded || balancer.AssetsBackend == "" || !hasUploadedStaticFiles(record) ||
+		record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
 		return nil
 	}
 	return &StaticRoutes{
@@ -27,6 +27,10 @@ func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticR
 		Immutable:  record.Static.ImmutablePrefixes,
 		Revalidate: record.Static.MustRevalidatePrefixes,
 	}
+}
+
+func hasUploadedStaticFiles(record router.ReleaseRecord) bool {
+	return record.Framework == buildoutput.FrameworkNext && record.Physical == "" && record.AssetPrefix != ""
 }
 
 func encodeStaticRoutes(record router.ReleaseRecord, balancer LoadBalancer) (string, error) {

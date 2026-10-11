@@ -12,7 +12,7 @@ import (
 
 func staticRecord(build string) router.ReleaseRecord {
 	return router.ReleaseRecord{
-		App: "web", Framework: "next", Release: build, Physical: "ocel-shop-prod-web",
+		App: "web", Framework: "next", Release: build, RootFunctionPhysical: "ocel-shop-prod-web",
 		Revisions:   map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-" + build},
 		AssetPrefix: "production/shop/web/" + build + "/assets",
 		Static: &edge.Static{
@@ -137,6 +137,20 @@ func TestAReleaseOfAnotherFrameworkRoutesNothingToTheBackendBucket(t *testing.T)
 	bindShop(t, stack)
 
 	expectStaticRoutes(t, w, "shop.example.com", nil, "only a Next deploy uploads its static files to the tier's bucket")
+}
+
+func TestANextReleaseThatRunsAsAContainerRoutesNothingToTheBackendBucket(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	record := staticRecord("b1")
+	record.RootFunctionPhysical, record.Physical = "", "ocel-shop-prod-web"
+	record.Origin = "https://ocel-shop-prod-web-abc.a.run.app"
+	stage(t, stack, record)
+	promote(t, stack, "p1", "b1")
+	bindShop(t, stack)
+
+	expectStaticRoutes(t, w, "shop.example.com", nil, "a Next container serves the static files its image carries, and the deploy uploads none to the bucket")
 }
 
 func TestAPreviewAliasRoutesTheStaticFilesOfTheReleaseItServes(t *testing.T) {
