@@ -6,6 +6,7 @@ import type {
   RouteHas,
 } from "@framework/next-protocol/route-table";
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
+import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import { type PurgeGroup, purgeHeader, readPurge } from "@platform/edge-contract/purge";
 
@@ -72,7 +73,7 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", refreshHeader];
+export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", refreshHeader, edgeCacheHeader];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);
