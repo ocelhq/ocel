@@ -52,6 +52,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	manifest := ""
 	healthPath := ""
 	worker := ""
+	gated, gatedAtEdge := false, false
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
@@ -62,7 +63,10 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 			manifest = value
 			continue
 		case edge.PreviewGateAtEdgeVar:
+			gatedAtEdge = value == "true"
 			continue
+		case edge.PreviewGateVar:
+			gated = true
 		case originguard.HealthPathVar:
 			healthPath = value
 		case processenv.WorkerEnvVar:
@@ -110,10 +114,11 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
 	front := originguard.Handler(originguard.Options{
-		Upstream:     upstream,
-		Guard:        guard,
-		HealthPath:   healthPath,
-		PreviewLogin: login,
+		Upstream:          upstream,
+		Guard:             guard,
+		HealthPath:        healthPath,
+		PreviewLogin:      login,
+		GatesEveryRequest: gated && !gatedAtEdge,
 	})
 	if worker != "" {
 		if front, err = workerFront(pinned, worker, upstream.String()); err != nil {

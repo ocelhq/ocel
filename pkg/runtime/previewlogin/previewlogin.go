@@ -44,16 +44,25 @@ func ReadBody(body io.Reader) ([]byte, error) {
 }
 
 func (l *Login) Answer(req previewgate.Request, now time.Time) previewgate.Response {
-	switch {
-	case l != nil && l.unreadable:
-		return refuse(http.StatusServiceUnavailable, "this release could not read the keys that gate its preview")
-	case l == nil || l.gate == nil:
-		return refuse(http.StatusForbidden, "this release holds no keys to check a preview password against")
-	}
-	if verdict := l.gate.Check(req, now); verdict.Response != nil {
+	if verdict := l.Check(req, now); verdict.Response != nil {
 		return *verdict.Response
 	}
 	return refuse(http.StatusForbidden, "the preview gate answered no login")
+}
+
+func (l *Login) Check(req previewgate.Request, now time.Time) previewgate.Verdict {
+	switch {
+	case l != nil && l.unreadable:
+		return refuseVerdict(http.StatusServiceUnavailable, "this release could not read the keys that gate its preview")
+	case l == nil || l.gate == nil:
+		return refuseVerdict(http.StatusForbidden, "this release holds no keys to check a preview password against")
+	}
+	return l.gate.Check(req, now)
+}
+
+func refuseVerdict(status int, body string) previewgate.Verdict {
+	answer := refuse(status, body)
+	return previewgate.Verdict{Response: &answer}
 }
 
 func refuse(status int, body string) previewgate.Response {
