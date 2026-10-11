@@ -17,7 +17,7 @@ import {
   UNCACHED,
   variesOn,
 } from "../cacheHeaders";
-import { assetPath, marker, markerOrNone, stamp } from "../html";
+import { assetPath, form, marker, markerOrNone, stamp } from "../html";
 import type { CacheLayer } from "../matrix/types";
 import { page, state, steady, until } from "../nextApp";
 import type { Check, CheckContext } from "./context";
@@ -29,6 +29,7 @@ const STEADY_READS = 3;
 const STEADY_ATTEMPTS = 3;
 const IMAGE_TTL_SECONDS = 60;
 const RESUME_TAG = "résumé";
+const TAGGED_TAG = "cache-tagged";
 const LOCAL_IMAGE = "/ocel.png";
 const ALLOWED_WIDTH = 640;
 const ALLOWED_QUALITY = 75;
@@ -88,6 +89,15 @@ async function waitForNewCachedHalf(
   });
 }
 
+async function readWarmed(
+  ctx: CheckContext,
+  path: string,
+  init?: RequestInit,
+): Promise<{ res: Response; html: string }> {
+  await page(ctx, path, init);
+  return page(ctx, path, init);
+}
+
 async function revalidate(ctx: CheckContext, query: string): Promise<void> {
   const res = await ctx.fetch(`${ctx.baseUrl}/api/next/revalidate?${query}`, { method: "POST" });
   assert.equal(res.status, 200, `revalidating with ${query} answered ${res.status}`);
@@ -128,6 +138,34 @@ async function assertPathRevalidationMovesOnlyThatPage(ctx: CheckContext): Promi
     untouched,
     "revalidating one path moved a page it does not name",
   );
+}
+
+async function assertTagRevalidationMovesOnlyThatPage(ctx: CheckContext): Promise<void> {
+  const before = await readSteadyCachedHalf(ctx, "/cache/tagged", "tagged");
+  const untouched = await readCachedHalf(ctx, "/cache/static", "static");
+  await revalidate(ctx, `tag=${TAGGED_TAG}`);
+  await waitForNewCachedHalf(ctx, "/cache/tagged", "tagged", before);
+  assert.equal(
+    await readCachedHalf(ctx, "/cache/static", "static"),
+    untouched,
+    "revalidating one tag moved a page that does not carry it",
+  );
+}
+
+async function assertServerActionMovesThePageItRevalidates(ctx: CheckContext): Promise<void> {
+  const before = await readSteadyCachedHalf(ctx, "/cache/action", "action");
+  const posted = form((await page(ctx, "/cache/action")).html);
+  assert.equal(posted.method, "post");
+  const body = new FormData();
+  for (const [name, value] of Object.entries(posted.fields)) {
+    body.append(name, value);
+  }
+  const target = new URL(posted.action || "/cache/action", `${ctx.baseUrl}/cache/action`);
+  const acted = await ctx.fetch(target.toString(), { method: "POST", body, redirect: "manual" });
+  assert.ok(acted.status < 400, `the server action answered ${acted.status}`);
+  await acted.arrayBuffer();
+
+  await waitForNewCachedHalf(ctx, "/cache/action", "action", before);
 }
 
 async function assertDynamicPageMoves(
@@ -194,7 +232,7 @@ async function assertDraftModeBypasses(
   prerendered: (res: Response) => void,
   drafted?: (res: Response) => void,
 ): Promise<void> {
-  const withoutCookie = await page(ctx, "/draft");
+  const withoutCookie = await readWarmed(ctx, "/draft");
   prerendered(withoutCookie.res);
   assert.equal(marker(withoutCookie.html, "draft"), "disabled");
 
@@ -242,7 +280,7 @@ export const nextCacheChecks: Check[] = holdAt("edge", [
   {
     title: "a static page is prerendered, frozen, and links assets immutable for a year",
     run: async (ctx) => {
-      const { res, html } = await page(ctx, "/cache/static");
+      const { res, html } = await readWarmed(ctx, "/cache/static");
       assertTier(res, CACHED, "the static page");
       assertCacheControl(res, cacheControlFor(false), "the static page");
       await assertStaticPageFrozen(ctx, html);
@@ -251,7 +289,7 @@ export const nextCacheChecks: Check[] = holdAt("edge", [
   {
     title: "an ISR page is frozen inside its revalidate window and moves once it passes",
     run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/isr");
+      const { res } = await readWarmed(ctx, "/cache/isr");
       assertTier(res, CACHED, "the ISR page");
       assertCacheControl(res, cacheControlFor(ISR_SECONDS), "the ISR page");
       await assertIsrPageMoves(ctx);
@@ -260,10 +298,27 @@ export const nextCacheChecks: Check[] = holdAt("edge", [
   {
     title: "revalidating a path moves the page it names and nothing else",
     run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/path");
+      const { res } = await readWarmed(ctx, "/cache/path");
       assertTier(res, CACHED, "the path page");
       assertCacheControl(res, cacheControlFor(PATH_SECONDS), "the path page");
       await assertPathRevalidationMovesOnlyThatPage(ctx);
+    },
+  },
+  {
+    title: "revalidating a tag moves the page that carries it and nothing else",
+    run: async (ctx) => {
+      const { res } = await readWarmed(ctx, "/cache/tagged");
+      assertTier(res, CACHED, "the tagged page");
+      assertCacheControl(res, cacheControlFor(PATH_SECONDS), "the tagged page");
+      await assertTagRevalidationMovesOnlyThatPage(ctx);
+    },
+  },
+  {
+    title: "a server action calling updateTag moves the page it revalidates",
+    run: async (ctx) => {
+      const { res } = await readWarmed(ctx, "/cache/action");
+      assertTier(res, CACHED, "the action page");
+      await assertServerActionMovesThePageItRevalidates(ctx);
     },
   },
   {
@@ -350,6 +405,23 @@ export const nextOriginCacheChecks: Check[] = holdAt("origin", [
       assertServedFromNextCache(res, "the path page");
       assertCacheControl(res, nextServerCacheControlFor(PATH_SECONDS), "the path page");
       await assertPathRevalidationMovesOnlyThatPage(ctx);
+    },
+  },
+  {
+    title:
+      "revalidating a tag makes the Next server move the page that carries it and nothing else",
+    run: async (ctx) => {
+      const { res } = await page(ctx, "/cache/tagged");
+      assertServedFromNextCache(res, "the tagged page");
+      await assertTagRevalidationMovesOnlyThatPage(ctx);
+    },
+  },
+  {
+    title: "a server action calling updateTag makes the Next server move the page it revalidates",
+    run: async (ctx) => {
+      const { res } = await page(ctx, "/cache/action");
+      assertServedFromNextCache(res, "the action page");
+      await assertServerActionMovesThePageItRevalidates(ctx);
     },
   },
   {

@@ -14,13 +14,14 @@ if (!base) {
 }
 const target = new URL(ISR_ROUTE, base).toString();
 
-const first = await untilServed();
+let first = await untilServed();
+if (!CACHED_TIERS.has(first.tier)) first = await untilServed();
 log(`initial token ${first.token} (${first.tier})`);
 if (!CACHED_TIERS.has(first.tier)) {
   fail(
     `${target} served from tier "${first.tier}", so it is not a cached prerender at all — ` +
       `the route lost its revalidate config, the manifest no longer resolves it to a prerender, or ` +
-      `middleware answered it with a Set-Cookie, which takes a prerender off the colo cache by design`,
+      `middleware answered it with a Set-Cookie, which takes a prerender off the edge cache by design`,
   );
 }
 
@@ -52,11 +53,9 @@ if (changedOnMiss) {
 fail(
   `${target} still serves token ${first.token} after ${Math.round(CHANGE_DEADLINE_MS / 1000)}s past a ` +
     `${ISR_REVALIDATE_SECONDS}s revalidate window (tiers seen: ${[...tiersSeen].join(", ") || "none"}). ` +
-    `A frozen body does not mean the render failed: check the store before the renderer. The entry in ` +
-    `R2 may be current while the colo tier serves its original bytes — the queue leg reports "landed" ` +
-    `without rewriting the colo, so the only thing that replaces it is a promotion from below, and a ` +
-    `colo entry that never advances also freezes the lastModified the next enqueue's dedup id is ` +
-    `derived from. Read the R2 entry's lastModified against the served token first.`,
+    `A frozen body does not mean the render failed: the origin may hold a current entry while the edge ` +
+    `cache still serves the old one. Read the origin's x-nextjs-cache and the response's x-ocel-cache ` +
+    `against the served token first.`,
 );
 
 async function probe() {
