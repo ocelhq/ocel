@@ -7,6 +7,7 @@ export * from "./kv";
 export * from "./nextCache";
 export * from "./nextPpr";
 export * from "./nextRouting";
+export * from "./nextStore";
 export * from "./preBuild";
 export * from "./prerender";
 export * from "./probes";

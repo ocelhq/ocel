@@ -61,7 +61,6 @@ import {
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
-  cloudflareReadingTheStore,
   cloudflareTunnel,
   cloudfrontShielded,
   container,
@@ -395,12 +394,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        variants: [
-          cloudflare,
-          cloudflareReadingTheStore,
-          cloudflareInFrontOfContainers,
-          cloudflareInFrontOfMixedComputes,
-        ],
+        variants: [cloudflare, cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         fails: [step.deploy],
         skipsCell: true,
       },
