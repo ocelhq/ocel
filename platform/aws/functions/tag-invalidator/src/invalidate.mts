@@ -86,6 +86,18 @@ async function settledPool(
   return results;
 }
 
+function refuseIfAny(refused: readonly unknown[], message: string): void {
+  if (refused.length > 0) throw new AggregateError(refused, message);
+}
+
+async function settleEvery(work: readonly Promise<void>[], message: string): Promise<void> {
+  const results = await Promise.allSettled(work);
+  refuseIfAny(
+    results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+    message,
+  );
+}
+
 function callerReference(release: string, raise: Raise, paths: readonly string[]): string {
   const content = [release, ...[...raise.sequenceNumbers].sort(), ...paths].join("\n");
   return `ocel-${createHash("sha256").update(content).digest("hex").slice(0, 40)}`;
@@ -155,12 +167,10 @@ async function invalidateCloudFront(
       refused.push(result.reason);
     });
   }
-  if (refused.length > 0) {
-    throw new AggregateError(refused, "some fronts refused this invalidation");
-  }
+  refuseIfAny(refused, "some fronts refused this invalidation");
 }
 
-async function purgeCloudflareFronts(
+async function purgeCloudflareTargets(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   urls: readonly string[],
@@ -170,15 +180,10 @@ async function purgeCloudflareFronts(
   if (urls.length === 0 || inv.cloudflare === undefined) return;
   const { release, isrPrefix } = coordinate;
   const secret = purgeSecret(await readSeed(), isrPrefix);
-  const results = await Promise.allSettled(
+  await settleEvery(
     urls.map((url) => postPurge(inv.cloudflare!, url, secret, release, raise.entries)),
+    "some Cloudflare targets refused this purge",
   );
-  const refused = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : [],
-  );
-  if (refused.length > 0) {
-    throw new AggregateError(refused, "some Cloudflare fronts refused this purge");
-  }
 }
 
 async function invalidateOne(
@@ -188,16 +193,13 @@ async function invalidateOne(
   coordinate: { release: string; isrPrefix: string },
   raise: Raise,
 ): Promise<void> {
-  const results = await Promise.allSettled([
-    invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
-    purgeCloudflareFronts(inv, readSeed, targets.cloudflare, coordinate, raise),
-  ]);
-  const refused = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : [],
+  await settleEvery(
+    [
+      invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
+      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate, raise),
+    ],
+    "some fronts refused this invalidation",
   );
-  if (refused.length > 0) {
-    throw new AggregateError(refused, "some fronts refused this invalidation");
-  }
 }
 
 async function readTargets(inv: Invalidator, project: string): Promise<ProjectTargets> {
