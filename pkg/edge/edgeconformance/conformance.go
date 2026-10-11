@@ -55,6 +55,13 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("an edge that runs code gates previews", func(t *testing.T) {
+		e, _ := suite.New(t)
+		if facts := e.Facts(); facts.RunsCode && !facts.GatesPreviews {
+			t.Error("Facts().RunsCode = true but Facts().GatesPreviews = false; an edge that runs code is handed the preview gate in the program its origin builds, and must run it")
+		}
+	})
+
 	t.Run("an edge whose records are proxied says what its proxied records need", func(t *testing.T) {
 		e, _ := suite.New(t)
 		facts := e.Facts()

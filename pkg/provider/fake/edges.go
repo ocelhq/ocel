@@ -193,6 +193,7 @@ type edgeAccount struct {
 	serves          *[]edge.Need
 	forwards        map[string]edge.Origin
 	addressesItself bool
+	gatesPreviews   *bool
 
 	routerServes *[]edge.Need
 	refusal      error
@@ -596,6 +597,7 @@ func (e *Edge) Facts() edge.Facts {
 		ProxiesRecords:  e.proxies,
 		CredentialScope: "fake-account",
 		TunnelsToOrigin: e.options.Tunnel,
+		GatesPreviews:   e.gatesPreviews == nil || *e.gatesPreviews,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
@@ -612,6 +614,12 @@ func (e *Edge) Facts() edge.Facts {
 		}
 	}
 	return facts
+}
+
+func (e *Edge) GatesPreviews(gates bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.gatesPreviews = &gates
 }
 
 func (e *Edge) AddressesItself(addresses bool) {

@@ -181,6 +181,7 @@ type deployRun struct {
 	previewOn   string
 	previewKey  edge.PreviewKey
 	previewKeys *openedPreviewKeys
+	previewGate *edge.PreviewGate
 	builtAlias  string
 	aliasToken  string
 	aliases     []edge.PreviewHost
@@ -388,6 +389,9 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 		return err
 	}
 	if err := r.ensureSignedPreviewHosts(ctx, progress); err != nil {
+		return err
+	}
+	if err := r.readProjectPreviewGate(ctx); err != nil {
 		return err
 	}
 	if err := r.readInlineRecords(ctx); err != nil {
@@ -628,19 +632,12 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	}
 	var base string
 	var gate *edge.PreviewGate
-	var err error
-	runsCode := r.front.Facts().RunsCode
 	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 		spec.GlobalPreview = r.globalPreview()
-		if !runsCode {
-			if gate, err = readPreviewGate(ctx, r.provider, r.spec.Slug); err != nil {
-				return err
-			}
-		}
 	default:
 		if len(r.spec.Apps) == 0 {
 			spec.PruneOnly = true
@@ -648,9 +645,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		}
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
-		if gate, err = readPreviewGate(ctx, r.provider, r.spec.Slug); err != nil {
-			return err
-		}
+		gate = r.previewGate
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
 		Tier:              r.spec.Tier,
@@ -664,8 +659,8 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Program, spec.Values = program.Spec, program.Values
-	if !runsCode {
-		spec.PreviewGate = gate
+	if !r.front.Facts().RunsCode {
+		spec.PreviewGate = r.previewGate
 	}
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {

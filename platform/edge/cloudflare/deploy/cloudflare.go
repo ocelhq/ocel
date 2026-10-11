@@ -121,6 +121,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		RunsCode:              true,
 		CachesResponses:       true,
 		InvalidatesByCacheTag: true,
+		GatesPreviews:         true,
 		Entry:                 workerModule(entryBundle),
 		ServesUnbound:         true,
 		ProxiesRecords:        true,
