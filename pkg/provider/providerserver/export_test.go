@@ -17,3 +17,5 @@ var PackArtifact = packArtifact
 var FunctionRepository = functionRepository
 
 var UsesOf = usesOf
+
+var PreviewGatesAssociatedData = previewGatesAssociatedData

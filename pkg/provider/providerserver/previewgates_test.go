@@ -1,0 +1,139 @@
+package providerserver_test
+
+import (
+	"encoding/json"
+	"reflect"
+	"testing"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+)
+
+var shopGate = edge.PreviewGate{
+	Key:           "shop-gate-key",
+	PasswordMAC:   "shop-password-mac",
+	BypassSecrets: []string{"shop-bypass"},
+	AllowOptions:  []string{"/api/"},
+}
+
+var recordedGates = map[string]edge.PreviewGate{
+	"shop":  shopGate,
+	"other": {Key: "other-gate-key", PasswordMAC: "other-password-mac", BypassSecrets: []string{}, AllowOptions: []string{}},
+}
+
+func seedPreviewGates(t *testing.T, vendor *fake.Provider, gates map[string]edge.PreviewGate) {
+	t.Helper()
+	plaintext, err := json.Marshal(gates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := vendor.Cipher().Seal(t.Context(), environment.TierPreview, providerserver.PreviewGatesAssociatedData, plaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := json.Marshal(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := keyvalue.ReadOrEmpty(t.Context(), vendor.KeyValues(), stackrecords.NewPreviewGatesRecordKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.Value = value
+	if _, err := vendor.KeyValues().Write(t.Context(), entry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func gatedPreviewDeployed(t *testing.T, req *contractv1.DeployRequest) *fake.Provider {
+	t.Helper()
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedPreviewGates(t, vendor, recordedGates)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	return vendor
+}
+
+func readGateSecret(t *testing.T, worker edge.Worker, name string, into any) {
+	t.Helper()
+	encoded, carried := worker.Secrets[name]
+	if !carried {
+		t.Fatalf("Secrets has no %s, want the recorded gate keys", name)
+	}
+	if err := json.Unmarshal([]byte(encoded), into); err != nil {
+		t.Fatalf("Secrets[%s] = %q: %v", name, encoded, err)
+	}
+}
+
+func TestAPreviewDeployOnItsOwnWildcardHandsItsWorkerTheGateRecordedForItsProject(t *testing.T) {
+	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
+
+	var got edge.PreviewGate
+	readGateSecret(t, onlyStack(t, vendor).Program.Worker, edge.PreviewGateVar, &got)
+	if !reflect.DeepEqual(got, shopGate) {
+		t.Errorf("Secrets[%s] = %+v, want the gate recorded for shop, %+v", edge.PreviewGateVar, got, shopGate)
+	}
+}
+
+func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsWorkerNone(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedPreviewGates(t, vendor, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+	if result, _ := deploy(t, client, declaresPreview(previewDeployRequest(), "*.preview.shop.example")); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	if encoded, carried := onlyStack(t, vendor).Program.Worker.Secrets[edge.PreviewGateVar]; carried {
+		t.Errorf("Secrets[%s] = %q, want none: no gate is recorded for shop", edge.PreviewGateVar, encoded)
+	}
+}
+
+func TestAProductionDeployNeverHandsItsWorkerAGate(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	seedPreviewGates(t, vendor, recordedGates)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	for _, stack := range vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks() {
+		if encoded, carried := stack.Program.Worker.Secrets[edge.PreviewGateVar]; carried {
+			t.Errorf("Secrets[%s] = %q, want none: production serves no preview", edge.PreviewGateVar, encoded)
+		}
+	}
+}
+
+func TestUsePreviewWildcardHandsTheSharedEntryEveryRecordedGate(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	seedPreviewGates(t, vendor, recordedGates)
+
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+
+	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
+	if len(specs) != 1 {
+		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
+	}
+	var got map[string]edge.PreviewGate
+	readGateSecret(t, specs[0].Program.Worker, edge.PreviewGatesVar, &got)
+	if !reflect.DeepEqual(got, recordedGates) {
+		t.Errorf("Secrets[%s] = %+v, want every recorded gate, %+v", edge.PreviewGatesVar, got, recordedGates)
+	}
+}

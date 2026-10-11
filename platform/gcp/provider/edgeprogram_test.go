@@ -1,12 +1,14 @@
 package gcp
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -192,4 +194,19 @@ func TestProgrammingAnEntryWorkerWithoutAnAssetReaderKeyIsNotReady(t *testing.T)
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "asset-store") || !strings.Contains(err.Error(), "ocel bootstrap production") {
 		t.Errorf("ProgramEdge = %v, want a not-ready refusal naming the asset-store credential and the bootstrap", err)
 	}
+}
+
+func TestTheGCPEntryWorkerProgramProgramsTheEdgeAsEveryProviderMust(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+	h.keyAssets(t, environment.TierPreview)
+
+	conformance.RunEdgeProgram(t, func(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
+		req.Kind = cloudflareKind
+		req.Entry = entryRequest(req.Tier, req.Slug).Entry
+		return programming(h).ProgramEdge(ctx, req)
+	})
 }

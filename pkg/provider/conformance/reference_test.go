@@ -35,6 +35,10 @@ func TestReferenceProvider(t *testing.T) {
 	})
 }
 
+func TestTheReferenceProviderProgramsTheEdgeAsEveryProviderMust(t *testing.T) {
+	conformance.RunEdgeProgram(t, fake.NewProvider(fake.Options{Region: "nowhere"}).ProgramEdge)
+}
+
 func buildFakeProvider(t *testing.T) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "fakeprovider")
