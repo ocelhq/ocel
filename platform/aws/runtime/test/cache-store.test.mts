@@ -16,6 +16,7 @@ beforeEach(() => {
   for (const name of Object.keys(storeEnv)) delete process.env[name];
   delete process.env.OCEL_ISR_WRITER_URL;
   delete process.env.OCEL_PURGE_SECRET;
+  delete process.env.OCEL_ISR_EDGE_READABLE;
 });
 
 const adoptWriter = () =>
@@ -442,4 +443,39 @@ test("keeps fetch entries off the ISR writer", async () => {
     Bucket: "assets",
     Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
   });
+});
+
+const edgeReadableTagging = "ocel%3Aedge=readable";
+
+const putsOf = (sent: any[]) => sent.filter((input) => input.Body !== undefined);
+
+test("tags a page entry edge-readable when the edge reads the asset bucket with its own key", async () => {
+  process.env.OCEL_ISR_EDGE_READABLE = "1";
+  const { store, sent } = await entryStore();
+
+  await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
+
+  const [put] = putsOf(sent);
+  expect(put.Key).toBe("prod/proj/app/BID/cache/blog/a.cache.json");
+  expect(put.Tagging).toBe(edgeReadableTagging);
+});
+
+test("never tags a data-cache entry edge-readable, however the edge reads", async () => {
+  process.env.OCEL_ISR_EDGE_READABLE = "1";
+  const { store, sent } = await entryStore();
+
+  await store.writeFetch("hash1", { lastModified: 1, value: { kind: "FETCH", data: {} } });
+
+  const [put] = putsOf(sent);
+  expect(put.Key).toBe("prod/proj/app/BID/fetch-cache/hash1.cache.json");
+  expect(put.Tagging).toBeUndefined();
+});
+
+test("tags nothing when the edge holds no key to the asset bucket", async () => {
+  delete process.env.OCEL_ISR_EDGE_READABLE;
+  const { store, sent } = await entryStore();
+
+  await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
+
+  expect(putsOf(sent)[0].Tagging).toBeUndefined();
 });

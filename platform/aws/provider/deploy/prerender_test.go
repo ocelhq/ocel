@@ -494,6 +494,52 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
+	t.Run("tags page entries edge-readable, and never a fetch entry, when the edge reads the asset bucket with its own key", func(t *testing.T) {
+		t.Parallel()
+		hash := "a1b2c3"
+		root := writeTree(t, map[string]string{
+			"apps/web/next-route-table.json":               `{"buildId":"WEB1"}`,
+			"apps/web/cache/index.cache.json":              `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
+		})
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{
+			ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: asset,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret",
+		}
+
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
+			t.Fatalf("uploadPrerenderAssets: %v", err)
+		}
+
+		page := isrKeyFor("web", testBuildID, "cache/index.cache.json")
+		if got := asset.taggings[page]; got != wantEdgeReadableTagging {
+			t.Errorf("page entry %s tagging = %q, want %q", page, got, wantEdgeReadableTagging)
+		}
+		fetch := isrKeyFor("web", testBuildID, "fetch-cache/") + hash + ".cache.json"
+		if got, tagged := asset.taggings[fetch]; tagged {
+			t.Errorf("fetch entry %s tagging = %q, want none: the data cache is never edge-readable", fetch, got)
+		}
+	})
+
+	t.Run("tags nothing when the edge holds no key to the asset bucket", func(t *testing.T) {
+		t.Parallel()
+		root := writeTree(t, map[string]string{
+			"apps/web/next-route-table.json":  `{"buildId":"WEB1"}`,
+			"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		})
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: asset}
+
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
+			t.Fatalf("uploadPrerenderAssets: %v", err)
+		}
+
+		if len(asset.taggings) != 0 {
+			t.Errorf("taggings = %v, want none", asset.taggings)
+		}
+	})
+
 	t.Run("fetch entries stay on the asset bucket", func(t *testing.T) {
 		t.Parallel()
 		hash := "a1b2c3"
