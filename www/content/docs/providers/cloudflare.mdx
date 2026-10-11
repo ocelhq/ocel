@@ -161,20 +161,19 @@ Bootstrapping the edge on Google Cloud keeps, per tier, a client certificate for
 (renewed beside the old one, which stays trusted until it expires), the worker that stores
 each deployment's records and the worker that writes pages and tags into R2. The edge caches
 pages itself and serves a stale one while the app renders a fresh one; revalidating a tag
-purges them at the edge and purges nothing at Google Cloud. An app's static files and route table stay in the tier's Cloud Storage
-bucket rather than R2: the worker reads them from there over Cloud Storage's S3-compatible API
-and caches them at the edge, signing each read with an HMAC key of a service account that
-bootstrapping keeps for the tier and that may read the bucket's static files and route tables
-and nothing else. Removing the bootstrap deletes the key and the
-account. Container apps are not served by the worker: they are forwarded through
+purges them at the edge and purges nothing at Google Cloud. An app's static files and route
+table stay in the tier's Cloud Storage bucket rather than R2: the worker reads them from there
+over Cloud Storage's S3-compatible API and caches them at the edge, signing each read with an
+HMAC key of a service account that bootstrapping keeps for the tier and that may read the
+bucket's static files and route tables and nothing else. Removing the bootstrap deletes the
+key and the account. Container apps are not served by the worker: they are forwarded through
 the tier's load balancer as a proxied record, as a VPS is.
 
 Besides the permissions above, the token needs Account SSL and Certificates Edit on the
 account (the worker's client certificate) and DNS Edit on the zone that holds `originDomain`.
-The queue needs nothing more than Workers Scripts Edit. A project deployed before this
-existed through the proxy is refused on its next deploy until `ocel destroy` has taken its
-deployments down: its routing sat in the load balancer's own stack, and the edge now forwards
-to that router.
+A project deployed before this existed through the proxy is refused on its next deploy until
+`ocel destroy` has taken its deployments down: its routing sat in the load balancer's own
+stack, and the edge now forwards to that router.
 
 ## Container apps on AWS
 
