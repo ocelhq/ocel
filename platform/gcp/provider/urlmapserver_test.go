@@ -18,6 +18,7 @@ type urlMapServer struct {
 	urlMap    *compute.UrlMap
 	conflicts int
 	tries     int
+	fullURLs  bool
 }
 
 func routing(t *testing.T, initial *compute.UrlMap) (*Provider, *urlMapServer) {
@@ -37,6 +38,8 @@ func (s *urlMapServer) serve(t *testing.T) http.HandlerFunc {
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/global/operations/"):
 			writeBody(w, &compute.Operation{Name: "op", Status: operationDone})
+		case r.Method == http.MethodGet && s.fullURLs:
+			writeBody(w, withFullURLs(t, s.urlMap))
 		case r.Method == http.MethodGet:
 			writeBody(w, s.urlMap)
 		case r.Method == http.MethodPatch:
@@ -95,4 +98,38 @@ func (s *urlMapServer) writes() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.tries
+}
+
+func (s *urlMapServer) answersFullURLs() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fullURLs = true
+}
+
+const computeURL = "https://www.googleapis.com/compute/v1/"
+
+func withFullURLs(t *testing.T, urlMap *compute.UrlMap) *compute.UrlMap {
+	t.Helper()
+	encoded, err := json.Marshal(urlMap)
+	if err != nil {
+		t.Fatalf("encode the url map: %v", err)
+	}
+	var full compute.UrlMap
+	if err := json.Unmarshal(encoded, &full); err != nil {
+		t.Fatalf("decode the url map: %v", err)
+	}
+	expand := func(link string) string {
+		if link == "" || strings.HasPrefix(link, "https://") {
+			return link
+		}
+		return computeURL + link
+	}
+	full.DefaultService = expand(full.DefaultService)
+	for _, matcher := range full.PathMatchers {
+		matcher.DefaultService = expand(matcher.DefaultService)
+		for _, rule := range matcher.RouteRules {
+			rule.Service = expand(rule.Service)
+		}
+	}
+	return &full
 }
