@@ -222,10 +222,15 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 		if err != nil {
 			return "", err
 		}
+		gates, err := readPreviewGates(ctx, w.provider)
+		if err != nil {
+			return "", err
+		}
 		program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
 			Tier:              environment.TierPreview,
 			PreviewBaseDomain: base,
 			PreviewKey:        key,
+			PreviewGates:      gates,
 		})
 		if err != nil {
 			return "", err
