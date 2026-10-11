@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -35,6 +36,7 @@ type Machine interface {
 	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
 	PutShield(ctx context.Context, shield host.Shield) (host.Shield, error)
 	RemoveShield(ctx context.Context, hostname, owner string) error
+	PutPreviewGate(ctx context.Context, owner string, previewGate *previewgate.Gate) error
 	RefuseUnshielded(ctx context.Context, hostname string) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
@@ -53,17 +55,20 @@ type Machine interface {
 
 type Origins func(ctx context.Context, project string, tier environment.Tier) error
 
+type PreviewGateReader func(ctx context.Context, project string) (*previewgate.Gate, error)
+
 type Edge struct {
-	machine Machine
-	origins Origins
-	scope   string
-	tunnels Tunnels
+	machine         Machine
+	origins         Origins
+	scope           string
+	tunnels         Tunnels
+	readPreviewGate PreviewGateReader
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, scope string, tunnels Tunnels) *Edge {
-	return &Edge{machine: machine, origins: origins, scope: scope, tunnels: tunnels}
+func New(machine Machine, origins Origins, scope string, tunnels Tunnels, readPreviewGate PreviewGateReader) *Edge {
+	return &Edge{machine: machine, origins: origins, scope: scope, tunnels: tunnels, readPreviewGate: readPreviewGate}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }
@@ -71,6 +76,7 @@ func (e *Edge) Kind() edge.Kind { return edge.None }
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:       []edge.Need{edge.NeedStreaming},
+		GatesPreviews:   true,
 		CredentialScope: e.scope,
 	}
 }

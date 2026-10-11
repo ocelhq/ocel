@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -55,6 +56,10 @@ type machine struct {
 	tunnelRunning   string
 	tunnelsReserved int
 	tunnelEvents    tunnelEvents
+
+	recordedPreviewGates map[string]previewgate.Gate
+	previewGates         map[string]previewgate.Gate
+	previewGateReads     int
 }
 
 func aMachine() *machine {
@@ -62,6 +67,9 @@ func aMachine() *machine {
 		upstream: map[host.RouteKey]string{},
 		swept:    map[string]bool{},
 		refusals: map[string]error{},
+
+		recordedPreviewGates: map[string]previewgate.Gate{},
+		previewGates:         map[string]previewgate.Gate{},
 	}
 }
 
@@ -231,6 +239,7 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
+	delete(m.previewGates, owner)
 	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Owner == owner })
 	return nil
 }
@@ -242,6 +251,30 @@ func (m *machine) PutShield(_ context.Context, shield host.Shield) (host.Shield,
 	}
 	m.shields = host.MergeShield(m.shields, shield)
 	return m.shields[len(m.shields)-1], nil
+}
+
+func (m *machine) PutPreviewGate(_ context.Context, owner string, previewGate *previewgate.Gate) error {
+	m.calls = append(m.calls, "preview gate "+owner)
+	if err := m.refuse("PutPreviewGate"); err != nil {
+		return err
+	}
+	delete(m.previewGates, owner)
+	if previewGate != nil {
+		m.previewGates[owner] = *previewGate
+	}
+	return nil
+}
+
+func (m *machine) readPreviewGate(_ context.Context, project string) (*previewgate.Gate, error) {
+	m.previewGateReads++
+	if err := m.refuse("ReadPreviewGate"); err != nil {
+		return nil, err
+	}
+	previewGate, recorded := m.recordedPreviewGates[project]
+	if !recorded {
+		return nil, nil
+	}
+	return &previewGate, nil
 }
 
 func (m *machine) RefuseUnshielded(context.Context, string) error {
@@ -263,7 +296,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *machine, store keyvalue.Store) boxEdge {
-	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks), keyValues: store}
+	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readPreviewGate), keyValues: store}
 }
 
 type boxStack struct {

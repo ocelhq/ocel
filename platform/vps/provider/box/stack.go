@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -47,6 +48,11 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
+	if len(claims) > 0 {
+		if err := s.gatePreviews(ctx); err != nil {
+			return router.Unserved{Err: err}
+		}
+	}
 	if err := s.claim(ctx, claims); err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -73,6 +79,17 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 		DrainTimeout:  host.DrainWindow,
 		StillActive:   move.RefuseInactive,
 	}, progress)
+}
+
+func (s *stack) gatePreviews(ctx context.Context) error {
+	if s.state.Tier != environment.TierPreview {
+		return nil
+	}
+	previewGate, err := s.e.readPreviewGate(ctx, s.state.Slug)
+	if err != nil {
+		return fmt.Errorf("read the preview gate of %s: %w", s.state.Slug, err)
+	}
+	return s.e.machine.PutPreviewGate(ctx, s.surface(), previewGate)
 }
 
 func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.ReleaseRecord) (promotable, bool, error) {
