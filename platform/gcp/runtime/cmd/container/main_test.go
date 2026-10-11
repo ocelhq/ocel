@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -178,6 +179,11 @@ func (r *running) ask(t *testing.T, path, secret string) *http.Response {
 
 func (r *running) awaitFront(t *testing.T, secret string) served {
 	t.Helper()
+	return r.awaitFrontWith(t, secret, nil)
+}
+
+func (r *running) awaitFrontWith(t *testing.T, secret string, header http.Header) served {
+	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
@@ -188,6 +194,9 @@ func (r *running) awaitFront(t *testing.T, secret string) served {
 		req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/", nil)
 		if err != nil {
 			t.Fatal(err)
+		}
+		for name, values := range header {
+			req.Header[name] = values
 		}
 		if secret != "" {
 			req.Header.Set(originguard.OriginSecretHeader, secret)
@@ -259,6 +268,28 @@ func TestRun(t *testing.T) {
 		}
 		if code := r.quit(t, ""); code != 0 {
 			t.Errorf("run = %d, want 0 for an app that finished cleanly", code)
+		}
+	})
+
+	t.Run("the front gates every request when no edge in front of it gates the preview", func(t *testing.T) {
+		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
+		r := launch(t, "serve", edge.PreviewGateVar+"="+gate)
+		signedIn := http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:pw"))}}
+		body := r.awaitFrontWith(t, "", signedIn)
+
+		if body.Gate != "" {
+			t.Errorf("the app was handed %s=%q; the keys that gate its preview are not the app's", edge.PreviewGateVar, body.Gate)
+		}
+		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("a request with no credentials = %d, want 401: nothing else in front of this service gates its preview", resp.StatusCode)
+		}
+		req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/quit", nil)
+		req.Header = signedIn
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+		if code := r.await(t); code != 0 {
+			t.Errorf("run = %d, want 0", code)
 		}
 	})
 

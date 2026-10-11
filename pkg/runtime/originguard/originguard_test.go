@@ -577,3 +577,104 @@ func TestAContainerRefusesALoginWithoutTheOriginSecret(t *testing.T) {
 		t.Errorf("answer = %d setting %q, want 403", resp.StatusCode, resp.Header.Get("Set-Cookie"))
 	}
 }
+
+func serveGatingFront(t *testing.T, up *upstream) *httptest.Server {
+	t.Helper()
+	target, err := url.Parse(up.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httptest.NewServer(Handler(Options{
+		Upstream:          target,
+		HealthPath:        healthPath,
+		PreviewLogin:      gatedLogin(t),
+		GatesEveryRequest: true,
+	}))
+	t.Cleanup(front.Close)
+	return front
+}
+
+func TestAFrontThatGatesEveryRequestRefusesOneWithNoCredentialsWithoutTheApp(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveGatingFront(t, up)
+
+	resp := ask(t, front, http.MethodGet, "/page", "")
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusUnauthorized || up.seen != 0 {
+		t.Fatalf("answer = %d, reached the app %d times, want 401 and never the app", resp.StatusCode, up.seen)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != previewgate.CacheControl {
+		t.Errorf("Cache-Control = %q, want %q", got, previewgate.CacheControl)
+	}
+	if !strings.Contains(string(body), previewgate.LoginPath) {
+		t.Errorf("the refusal carries no login form: %q", body)
+	}
+}
+
+func TestAFrontThatGatesEveryRequestTakesThePasswordOffWhatItAdmits(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveGatingFront(t, up)
+	req, err := http.NewRequest(http.MethodGet, front.URL+"/page", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.SetBasicAuth("anyone", "pw")
+	req.Header.Set("Cookie", "theme=dark")
+	resp, err := front.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK || up.seen != 1 {
+		t.Fatalf("answer = %d, reached the app %d times, want 200 from the app", resp.StatusCode, up.seen)
+	}
+	if got := up.heard.Get("Authorization"); got != "" {
+		t.Errorf("the app was handed Authorization %q, the preview password", got)
+	}
+	if got := up.heard.Get("Cookie"); got != "theme=dark" {
+		t.Errorf("the app heard Cookie %q, want the app's own cookie kept", got)
+	}
+	if got := resp.Header.Get("X-Robots-Tag"); got != previewgate.RobotsTag {
+		t.Errorf("X-Robots-Tag = %q, want %q on an admitted preview", got, previewgate.RobotsTag)
+	}
+}
+
+func TestAFrontThatGatesEveryRequestRefusesAWebsocketUpgradeWithNoCredentials(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveGatingFront(t, up)
+	req, err := http.NewRequest(http.MethodGet, front.URL+"/socket", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	resp, err := front.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized || up.seen != 0 {
+		t.Errorf("answer = %d, reached the app %d times, want 401 and never the app", resp.StatusCode, up.seen)
+	}
+}
+
+func TestAFrontThatGatesEveryRequestAnswersAHealthProbeWithTheAppsStatusAlone(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveGatingFront(t, up)
+
+	resp := ask(t, front, http.MethodGet, healthPath, "")
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK || up.seen != 1 {
+		t.Fatalf("answer = %d, reached the app %d times, want the app's 200: Cloud Run's probe carries no credentials", resp.StatusCode, up.seen)
+	}
+	if len(body) != 0 {
+		t.Errorf("an unauthenticated probe read %q, and the health path may be any page of the preview", body)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != previewgate.CacheControl {
+		t.Errorf("Cache-Control = %q, want %q", got, previewgate.CacheControl)
+	}
+}

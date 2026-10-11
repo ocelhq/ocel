@@ -1,6 +1,7 @@
 package originguard
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"crypto/subtle"
 	"io"
@@ -80,11 +81,12 @@ func (g *Guard) Admits(r *http.Request) bool {
 }
 
 type Options struct {
-	Upstream     *url.URL
-	Guard        *Guard
-	HealthPath   string
-	Ready        func() bool
-	PreviewLogin *previewlogin.Login
+	Upstream          *url.URL
+	Guard             *Guard
+	HealthPath        string
+	Ready             func() bool
+	PreviewLogin      *previewlogin.Login
+	GatesEveryRequest bool
 }
 
 func Handler(opts Options) http.Handler {
@@ -120,12 +122,69 @@ func Handler(opts Options) http.Handler {
 			http.Error(w, "the app is still starting", http.StatusServiceUnavailable)
 			return
 		}
-		if probe(r, opts.HealthPath) || opts.Guard.Admits(r) {
-			proxy.ServeHTTP(w, r)
+		if !probe(r, opts.HealthPath) && !opts.Guard.Admits(r) {
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		w.WriteHeader(http.StatusForbidden)
+		if opts.GatesEveryRequest && !admitPreview(w, r, opts, proxy) {
+			return
+		}
+		proxy.ServeHTTP(w, r)
 	})
+}
+
+func admitPreview(w http.ResponseWriter, r *http.Request, opts Options, proxy http.Handler) bool {
+	verdict := opts.PreviewLogin.Check(newPreviewRequest(r, nil), time.Now())
+	switch {
+	case verdict.Response == nil:
+		r.Header = http.Header(verdict.Forward)
+		maps.Copy(w.Header(), http.Header(verdict.ResponseHeader))
+		return true
+	case probe(r, opts.HealthPath):
+		answerStatusAlone(w, r, proxy)
+	default:
+		writeAnswer(w, *verdict.Response)
+	}
+	return false
+}
+
+type statusAlone struct {
+	header http.Header
+	status int
+}
+
+func (s *statusAlone) Header() http.Header { return s.header }
+
+func (s *statusAlone) Write(body []byte) (int, error) { return len(body), nil }
+
+func (s *statusAlone) WriteHeader(status int) {
+	if s.status == 0 {
+		s.status = status
+	}
+}
+
+func answerStatusAlone(w http.ResponseWriter, r *http.Request, proxy http.Handler) {
+	answered := &statusAlone{header: http.Header{}}
+	proxy.ServeHTTP(answered, r)
+	w.Header().Set("Cache-Control", previewgate.CacheControl)
+	w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
+	w.WriteHeader(cmp.Or(answered.status, http.StatusOK))
+}
+
+func newPreviewRequest(r *http.Request, body []byte) previewgate.Request {
+	return previewgate.Request{
+		Method: r.Method,
+		Host:   r.Host,
+		Target: r.URL.RequestURI(),
+		Header: previewgate.Header(r.Header),
+		Body:   body,
+	}
+}
+
+func writeAnswer(w http.ResponseWriter, answer previewgate.Response) {
+	maps.Copy(w.Header(), http.Header(answer.Header))
+	w.WriteHeader(answer.Status)
+	_, _ = io.WriteString(w, answer.Body)
 }
 
 func answerPreviewLogin(w http.ResponseWriter, r *http.Request, opts Options) {
@@ -138,16 +197,7 @@ func answerPreviewLogin(w http.ResponseWriter, r *http.Request, opts Options) {
 		http.Error(w, "the login body could not be read", http.StatusBadRequest)
 		return
 	}
-	answer := opts.PreviewLogin.Answer(previewgate.Request{
-		Method: r.Method,
-		Host:   r.Host,
-		Target: r.URL.RequestURI(),
-		Header: previewgate.Header(r.Header),
-		Body:   body,
-	}, time.Now())
-	maps.Copy(w.Header(), http.Header(answer.Header))
-	w.WriteHeader(answer.Status)
-	_, _ = io.WriteString(w, answer.Body)
+	writeAnswer(w, opts.PreviewLogin.Answer(newPreviewRequest(r, body), time.Now()))
 }
 
 func probe(r *http.Request, healthPath string) bool {
