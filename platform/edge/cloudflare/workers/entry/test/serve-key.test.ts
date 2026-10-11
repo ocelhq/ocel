@@ -4,8 +4,11 @@ import {
   buildCanonicalUrl,
   buildObjectCall,
   buildOriginCall,
+  buildOriginUrl,
   buildServeRequest,
   buildVariantPath,
+  ORIGIN_PURGE_SCOPE,
+  readOriginCall,
 } from "../src/serve-key";
 import { hasDraftCookie } from "../src/serve-prerender";
 
@@ -71,24 +74,41 @@ describe("the cache key of a page read through Serve from the origin", () => {
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
   const origin = "https://abc123.lambda-url.eu-west-2.on.aws/blog/a?page=2";
 
-  it("is the path and query Serve fetches, with the host, app, release, origin and variant", () => {
-    const call = buildOriginCall(origin, { ...coordinates, variant: "rsc" });
+  it("puts the host, app, release, origin and variant in the path Serve is called with", () => {
+    const call = buildOriginCall(origin, { ...coordinates, variant: ".rsc" });
     expect(call).toEqual({
-      url: "https://serve.ocel.invalid/blog/a?page=2",
-      props: {
-        ...coordinates,
-        kind: "origin",
-        origin: "https://abc123.lambda-url.eu-west-2.on.aws",
-        variant: "rsc",
-      },
+      url: "https://serve.ocel.invalid/shop.example.com/web/r1a2b3c4d/https%3A%2F%2Fabc123.lambda-url.eu-west-2.on.aws/.rsc/blog/a?page=2",
+      props: { kind: "origin" },
     });
   });
 
-  it("keys two variants of one page apart", () => {
-    const html = buildOriginCall(origin, coordinates);
-    const rsc = buildOriginCall(origin, { ...coordinates, variant: "rsc" });
-    expect(html.url).toBe(rsc.url);
-    expect(html.props).not.toEqual(rsc.props);
+  it("reads back the origin URL and coordinates it was built from", () => {
+    for (const variant of [undefined, ".rsc", ".prefetch.rsc", ".segments/%2F_tree.segment.rsc"]) {
+      const call = buildOriginCall(origin, { ...coordinates, variant });
+      expect(buildOriginUrl(call.url)).toBe(origin);
+      expect(readOriginCall(call.url)).toEqual({ ...coordinates, variant: variant ?? "" });
+    }
+  });
+
+  it("keys two variants of one page apart by URL, under the props every purge is sent with", () => {
+    const urls = new Set<string>();
+    for (const variant of [undefined, ".rsc", ".prefetch.rsc"]) {
+      const call = buildOriginCall(origin, { ...coordinates, variant });
+      urls.add(call.url);
+      expect(call.props).toEqual(ORIGIN_PURGE_SCOPE);
+    }
+    expect(urls.size).toBe(3);
+  });
+
+  it("keys the same page of two hosts and two releases apart by URL", () => {
+    const urls = new Set(
+      [
+        coordinates,
+        { ...coordinates, host: "pr-1.preview.example.com" },
+        { ...coordinates, release: "r9z8y7x6w" },
+      ].map((scope) => buildOriginCall(origin, scope).url),
+    );
+    expect(urls.size).toBe(3);
   });
 });
 

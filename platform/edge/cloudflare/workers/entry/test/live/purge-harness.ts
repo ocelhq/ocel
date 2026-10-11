@@ -2,6 +2,7 @@ import type { Env } from "../../src/env";
 import { answerPurgeOnWorker } from "../../src/purge-request";
 import type { ReleaseRecord, ServedRecordResult } from "../../src/releases";
 import { Serve as ProductionServe } from "../../src/serve";
+import { ORIGIN_PURGE_SCOPE } from "../../src/serve-key";
 
 export { PurgeQueue } from "../../src/purge-queue";
 
@@ -40,24 +41,13 @@ function servedBy(harness: HarnessEnv): Pick<Env, "RELEASES" | "OCEL_SLUG"> {
   return { RELEASES: releases as unknown as Env["RELEASES"], OCEL_SLUG: "purge-harness" };
 }
 
-async function readEntry(
-  request: Request,
-  harness: HarnessEnv,
-  ctx: ExecutionContext,
-): Promise<Response> {
+async function readEntry(request: Request, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const serve = (
     ctx.exports as unknown as {
       Serve(options: { props: unknown }): { fetch(request: Request): Promise<Response> };
     }
-  ).Serve({
-    props: {
-      kind: "object",
-      host: url.host,
-      app: "harness",
-      release: harness.OCEL_HARNESS_RELEASE,
-    },
-  });
+  ).Serve({ props: ORIGIN_PURGE_SCOPE });
   const res = await serve.fetch(
     new Request(`https://serve.ocel.invalid/${url.pathname.slice(ENTRY_PATH.length)}`),
   );
@@ -74,7 +64,7 @@ export default {
     const harness = env as unknown as HarnessEnv;
     const { pathname } = new URL(request.url);
     if (request.method === "POST") return answerPurgeOnWorker(request, servedBy(harness), ctx);
-    if (pathname.startsWith(ENTRY_PATH)) return readEntry(request, harness, ctx);
+    if (pathname.startsWith(ENTRY_PATH)) return readEntry(request, ctx);
     return new Response("Not Found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

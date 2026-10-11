@@ -1,7 +1,8 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
-import type { PurgeQueue } from "../src/purge-queue";
+import { newServePort, type PurgeQueue } from "../src/purge-queue";
 import { newSqliteBacklogStore } from "../src/purge-sqlite-store";
+import { buildOriginCall, type ServeProps } from "../src/serve-key";
 import { memoryBacklogStore } from "./purge-backlog-store";
 import { describeBacklogStore } from "./purge-backlog-store-contract";
 
@@ -172,5 +173,29 @@ describe("the PurgeQueue object", () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe("the PurgeQueue's port to Serve", () => {
+  it("purges and purges everything through a Serve stub with the props every page is stored under", async () => {
+    const asked: ServeProps[] = [];
+    const port = newServePort(({ props }) => {
+      asked.push(props);
+      return {
+        purge: async () => ({ ok: true }) as const,
+        purgeEverything: async () => ({ ok: true }) as const,
+      };
+    });
+
+    await port.purgeTags("purge", ["r1|a"]);
+    await port.purgeEverything();
+
+    const stored = buildOriginCall("https://fn.example/blog", {
+      host: "shop.example.com",
+      app: "web",
+      release: "r1",
+      variant: ".rsc",
+    }).props;
+    expect(asked).toEqual([stored, stored]);
   });
 });

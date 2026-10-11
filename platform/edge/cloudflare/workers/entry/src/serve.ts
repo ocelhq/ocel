@@ -11,8 +11,10 @@ import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
   buildOriginUrl,
   encodeKeyPath,
+  type ObjectProps,
   parseKeyRelease,
   parseObjectKey,
+  readOriginCall,
   type ServeProps,
 } from "./serve-key";
 
@@ -118,17 +120,17 @@ type PurgeableCache = CacheContext & {
 export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   async fetch(request: Request): Promise<Response> {
     const props = this.ctx.props;
-    if (!props?.host || !props.app || !props.release) {
-      throw new Error("ocel: Serve was called with no host, app and release to key its cache by");
-    }
     if (request.method !== "GET" && request.method !== "HEAD") {
       return respondNotStored(405, "Method Not Allowed");
     }
-    if (props.kind === "origin") return this.fromOrigin(request, props);
+    if (props?.kind === "origin") return this.fromOrigin(request);
+    if (!props?.host || !props.app || !props.release) {
+      throw new Error("ocel: Serve was called with no host, app and release to key its cache by");
+    }
     return this.fromObjects(request, props);
   }
 
-  private async fromObjects(request: Request, props: ServeProps): Promise<Response> {
+  private async fromObjects(request: Request, props: ObjectProps): Promise<Response> {
     const key = parseObjectKey(request.url);
     const { app, release } = parseKeyRelease(key);
     if (app !== props.app) throw new Error(`ocel: ${key} is not an object of app ${props.app}`);
@@ -142,14 +144,15 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     return respondNotStored(503, "no store to read from");
   }
 
-  private async fromOrigin(request: Request, props: ServeProps): Promise<Response> {
-    if (!props.origin) throw new Error("ocel: Serve was called with no origin to fetch from");
+  private async fromOrigin(request: Request): Promise<Response> {
+    const { host, release } = readOriginCall(request.url);
+    const originUrl = buildOriginUrl(request.url);
     const originFetch = originFetchFor(this.env) ?? fetch;
     const headers = new Headers(request.headers);
-    headers.set("x-forwarded-host", props.host);
+    headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(
-      new Request(buildOriginUrl(request.url, props.origin), {
+      new Request(originUrl, {
         method: request.method,
         headers,
         redirect: "manual",
@@ -165,7 +168,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         }),
       );
     }
-    return forCache(res, { release: props.release, pathname: new URL(request.url).pathname });
+    return forCache(res, { release, pathname: new URL(originUrl).pathname });
   }
 
   async purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
