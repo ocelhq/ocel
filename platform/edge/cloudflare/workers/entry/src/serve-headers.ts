@@ -1,3 +1,4 @@
+import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 
 export const NOT_STORED = "private, no-store";
@@ -62,6 +63,7 @@ function notStored(response: Response): Response {
   headers.set("cache-control", NOT_STORED);
   for (const name of EDGE_POLICY_HEADERS) headers.delete(name);
   headers.delete("cache-tag");
+  headers.delete(edgeCacheTagHeader);
   headers.delete(purgeHeader);
   return new Response(response.body, { status: response.status, headers });
 }
@@ -81,7 +83,7 @@ export function buildPathTag(release: string, pathname: string): string {
 function releaseTags(headers: Headers, { release, pathname }: CachedResponse): string {
   const prefix = `${release}|`;
   const own = [release, buildPathTag(release, pathname)];
-  const origin = (headers.get("cache-tag") ?? "")
+  const origin = (headers.get(edgeCacheTagHeader) ?? "")
     .split(",")
     .map((tag) => tag.trim())
     .filter((tag) => tag !== "")
@@ -127,6 +129,7 @@ export function forCache(response: Response, cached: CachedResponse): Response {
     headers.set("cache-control", BROWSER_REVALIDATES);
   }
   headers.set("cache-tag", releaseTags(headers, cached));
+  headers.delete(edgeCacheTagHeader);
   headers.delete(purgeHeader);
   const vary = headers.get("vary");
   if (vary !== null) headers.set(ORIGIN_VARY, vary);

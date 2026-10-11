@@ -1,6 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { storedCacheTags } from "@framework/next-cache";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
+import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import {
   type PurgeMode,
   purgeHeader,
@@ -282,8 +283,8 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     );
     const taggedHeaders = new Headers(rendered.headers);
     const routeTags = storedCacheTags(release, edge.tags).tags;
-    if (routeTags.length > 0) taggedHeaders.set("cache-tag", routeTags.join(","));
-    else taggedHeaders.delete("cache-tag");
+    if (routeTags.length > 0) taggedHeaders.set(edgeCacheTagHeader, routeTags.join(","));
+    else taggedHeaders.delete(edgeCacheTagHeader);
     const tagged = new Response(rendered.body, { status: rendered.status, headers: taggedHeaders });
     return forCache(admitSegment(request, tagged), {
       release,
