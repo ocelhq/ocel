@@ -115,6 +115,35 @@ describe("a prerender served through Serve", () => {
     expect(sent.has("authorization")).toBe(false);
   });
 
+  it("tells Serve the release whose functions the origin must be one of", async () => {
+    const served = fakeServing();
+
+    await get("/blog", deps(served));
+
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
+    ).toEqual({ slug: "p1", isrPrefix: "prod/p1/web/r0a1b2c3d/isr", tags: [] });
+  });
+
+  it("renders at the origin, uncached, when Serve refuses the call", async () => {
+    const served = fakeServing(
+      () =>
+        new Response("refused", {
+          status: 503,
+          headers: { "cache-control": "private, no-store", "x-ocel-serve-refused": "1" },
+        }),
+    );
+    const origin = recorder(() => new Response("from-origin"));
+
+    const res = await get("/blog", deps(served, { origin }), { headers: { cookie: "session=1" } });
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("from-origin");
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.requests).toHaveLength(1);
+    expect(origin.requests[0].headers.has("x-ocel-edge-cache")).toBe(false);
+  });
+
   it("keys two requests that differ only in a query the route ignores to one URL", async () => {
     const served = fakeServing();
 

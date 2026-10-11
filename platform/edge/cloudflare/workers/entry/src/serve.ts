@@ -14,6 +14,7 @@ import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import { openPurgeQueue } from "./purge-request";
+import type { ReleaseRecord } from "./releases";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
   buildEdgeUrl,
@@ -26,6 +27,7 @@ import {
   type RenderRelease,
   readEdgeEntry,
   readRenderCall,
+  SERVE_REFUSED_HEADER,
   type ServeProps,
 } from "./serve-key";
 import { type ServeFactory, serveObjects } from "./serve-objects";
@@ -62,6 +64,40 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
 
 function respondNotStored(status: number, message: string): Response {
   return new Response(message, { status, headers: { "cache-control": NOT_STORED } });
+}
+
+function respondRefused(message: string): Response {
+  return new Response(message, {
+    status: 503,
+    headers: { "cache-control": NOT_STORED, [SERVE_REFUSED_HEADER]: "1" },
+  });
+}
+
+async function readRenderRecord(
+  env: Env,
+  request: Request,
+  release: string,
+): Promise<{ record: ReleaseRecord; render: RenderRelease } | undefined> {
+  const render = parseRenderRelease(request.headers.get(RENDER_RELEASE_HEADER));
+  if (!render) return undefined;
+  const served = await env.RELEASES.readServedRecord({
+    slug: render.slug,
+    isrPrefix: render.isrPrefix,
+  });
+  if (served.kind !== "record" || readReleaseToken(served.record.isrPrefix) !== release) {
+    return undefined;
+  }
+  return { record: served.record, render };
+}
+
+function isReleaseOrigin(record: ReleaseRecord, origin: string): boolean {
+  return Object.values(record.functionUrls).some((functionUrl) => {
+    try {
+      return new URL(functionUrl).origin === origin;
+    } catch {
+      return false;
+    }
+  });
 }
 
 function respondStored(object: ObjectBody, release: string): Response {
@@ -174,8 +210,13 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   private async fromOrigin(request: Request): Promise<Response> {
     const { host, release } = readRenderCall(request.url);
     const originUrl = buildOriginUrl(request.url);
-    const originFetch = originFetchFor(this.env) ?? fetch;
+    const found = await readRenderRecord(this.env, request, release);
+    if (!found || !isReleaseOrigin(found.record, new URL(originUrl).origin)) {
+      return respondRefused("the origin is not one of the served release's functions");
+    }
     const headers = new Headers(request.headers);
+    headers.delete(RENDER_RELEASE_HEADER);
+    const originFetch = originFetchFor(this.env) ?? fetch;
     headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(
@@ -200,19 +241,14 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {
     const { host, app, release } = readRenderCall(request.url);
-    const edge = parseRenderRelease(request.headers.get(RENDER_RELEASE_HEADER));
-    const { LOADER: loader, RELEASES: releases } = this.env;
-    if (!edge || !loader) return respondNotStored(503, "no edge runtime to render with");
-    const served = await releases.readServedRecord({ slug: edge.slug, isrPrefix: edge.isrPrefix });
-    if (served.kind !== "record") return respondNotStored(503, "the release is not served");
-    const { record } = served;
+    const { LOADER: loader } = this.env;
+    if (!loader) return respondRefused("no edge runtime to render with");
+    const found = await readRenderRecord(this.env, request, release);
+    if (!found) return respondRefused("the release is not served");
+    const { record, render: edge } = found;
     const { edgeWorkers } = record;
-    if (
-      readReleaseToken(record.isrPrefix) !== release ||
-      !edgeWorkers ||
-      !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)
-    ) {
-      return respondNotStored(503, "the release has no edge bundle of its own to render with");
+    if (!edgeWorkers || !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)) {
+      return respondRefused("the release has no edge bundle of its own to render with");
     }
     const exports = this.ctx.exports as {
       Serve?: ServeFactory;
@@ -222,7 +258,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       exports.Serve && readsObjects(this.env)
         ? serveObjects(exports.Serve, host)
         : this.env.OCEL_CACHE_STORE;
-    if (!store) return respondNotStored(503, "no store to read the edge bundle from");
+    if (!store) return respondRefused("no store to read the edge bundle from");
     const invoke = createReleaseEdgeInvoker(
       {
         loader,
