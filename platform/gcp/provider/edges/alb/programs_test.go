@@ -79,7 +79,7 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 func frontSpec() loadBalancerSpec {
 	return loadBalancerSpec{
 		Names:  loadBalancerNames(environment.TierProduction, false),
-		Assets: AssetsBucket{Name: "ocel-acme-prod-production", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"},
+		Assets: &tierAssets,
 	}
 }
 
@@ -134,11 +134,17 @@ func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFil
 	}
 }
 
-func TestTheFrontendOfAShieldedLoadBalancerNamesTheSameBackendBucketOutput(t *testing.T) {
+func TestTheFrontendOfAShieldedLoadBalancerDeclaresNoBackendBucket(t *testing.T) {
 	t.Parallel()
 
-	if got := loadBalancerNames(environment.TierProduction, true).AssetsBackend; got != "ocel-alb-shielded-production-assets" {
-		t.Errorf("the shielded load balancer names its backend bucket %q, want one beside its own url map", got)
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true)}))
+	if err != nil {
+		t.Fatalf("the frontend program = %v", err)
+	}
+	for name, resource := range seen {
+		if resource.Token == "gcp:compute/backendBucket:BackendBucket" || resource.Token == "gcp:projects/iAMMember:IAMMember" {
+			t.Errorf("the shielded frontend declares %s, a %s: a shielded host's files are served by the edge in front of it, never from a backend bucket", name, resource.Token)
+		}
 	}
 }
 

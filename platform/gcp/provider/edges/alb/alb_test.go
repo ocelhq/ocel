@@ -36,7 +36,7 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Region:    "europe-west1",
 
 		ReadAssetsBucket: func(context.Context, environment.Tier) (AssetsBucket, error) {
-			return AssetsBucket{Name: "ocel-acme-prod-production", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}, nil
+			return tierAssets, nil
 		},
 	}), w
 }

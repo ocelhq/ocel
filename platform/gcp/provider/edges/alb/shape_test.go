@@ -50,14 +50,14 @@ func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	t.Parallel()
 
 	spec := loadBalancerSpec{Region: "europe-west1", Names: loadBalancerNames(environment.TierPreview, false),
-		Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
+		Assets: &tierAssets, Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, loadBalancerProgram(spec))
 	shaped := shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com"))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the balancer program registers %v, the shape lists %v", registered, shaped)
 	}
 
-	registered = declaredCounts(t, loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	registered = declaredCounts(t, loadBalancerProgram(frontSpec()))
 	shaped = shapedCounts(ShapeLoadBalancer(environment.TierProduction, ""))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("without a preview base the balancer program registers %v, the shape lists %v", registered, shaped)

@@ -96,16 +96,18 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 }
 
 func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Log) (LoadBalancer, error) {
-	assets, err := e.deps.ReadAssetsBucket(ctx, tier)
-	if err != nil {
-		return LoadBalancer{}, err
-	}
 	spec := loadBalancerSpec{
 		Region:  e.deps.Region,
 		Names:   loadBalancerNames(tier, e.deps.Shielded),
 		Tier:    tier,
-		Assets:  assets,
 		Preview: preview,
+	}
+	if !e.deps.Shielded {
+		assets, err := e.deps.ReadAssetsBucket(ctx, tier)
+		if err != nil {
+			return LoadBalancer{}, err
+		}
+		spec.Assets = &assets
 	}
 	if e.deps.Shielded {
 		origin, err := e.readOriginWildcard(ctx, tier)
