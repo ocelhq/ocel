@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "purge-harness",
+  "main": "purge-harness.ts",
+  "compatibility_date": "2026-07-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "define": {
+    "__dirname": "\"/\"",
+    "__filename": "\"/index.js\""
+  }
+}
