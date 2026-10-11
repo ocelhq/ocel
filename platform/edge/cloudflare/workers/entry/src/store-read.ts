@@ -10,9 +10,7 @@ import { edgeCacheTagHeader, postponedLengthHeader } from "@platform/edge-contra
 import { PPR_SHELL_VARIANT } from "./ppr";
 import type { TagTime, TagTimes } from "./purge-times";
 
-export const STORE_SERVED_MAX_AGE_S = 60;
-
-export const STALE_SERVED_MAX_AGE_S = 1;
+export const STORE_REVALIDATES_FOR_S = 31_536_000;
 
 export const PURGE_SKEW_MS = 1_000;
 
@@ -148,11 +146,18 @@ function judge(
   return "fresh";
 }
 
-function lifetimeOf(entry: CacheEntryFile, now: number, window: StoreWindow | undefined): number {
-  const revalidate = entry.cacheControl?.revalidate ?? window?.revalidate;
-  if (typeof revalidate !== "number" || revalidate <= 0) return STORE_SERVED_MAX_AGE_S;
-  const remaining = Math.ceil(revalidate - (now - entry.lastModified) / 1000);
-  return Math.max(1, Math.min(STORE_SERVED_MAX_AGE_S, remaining));
+function revalidatesFor(
+  entry: CacheEntryFile,
+  now: number,
+  window: StoreWindow | undefined,
+): number {
+  const expire = entry.cacheControl?.expire ?? window?.expire;
+  if (typeof expire !== "number") return STORE_REVALIDATES_FOR_S;
+  return Math.max(1, Math.floor(expire - (now - entry.lastModified) / 1000));
+}
+
+export function storeValidator(entry: CacheEntryFile): string {
+  return `W/"ocel-store-${entry.lastModified}"`;
 }
 
 function headersFrom(map: Record<string, any> | undefined): Headers {
@@ -246,8 +251,11 @@ export async function readFromStore(
 
   const stale = verdict === "stale";
   const { body, status, headers } = built;
-  const lifetime = stale ? STALE_SERVED_MAX_AGE_S : lifetimeOf(entry, now, call.window);
-  headers.set("cache-control", `s-maxage=${lifetime}`);
+  headers.set(
+    "cache-control",
+    `s-maxage=0, stale-while-revalidate=${revalidatesFor(entry, now, call.window)}`,
+  );
+  headers.set("etag", storeValidator(entry));
   headers.set(edgeCacheTagHeader, tags.join(","));
   headers.set(ENTRY_SOURCE_HEADER, "store");
   headers.set("x-ocel-entry-modified", String(entry.lastModified));

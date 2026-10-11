@@ -2,7 +2,7 @@ import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import type { TagTimes } from "../src/purge-times";
-import { dropRefreshes, Serve } from "../src/serve";
+import { Serve } from "../src/serve";
 import { buildOriginCall, ORIGIN_PURGE_SCOPE, RENDER_RELEASE_HEADER } from "../src/serve-key";
 import { dropTimesMemo } from "../src/store-read";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -123,12 +123,11 @@ type Used = Harness & { request: (path?: string) => Request };
 
 beforeEach(async () => {
   dropTimesMemo();
-  dropRefreshes();
   await seed(null);
 });
 
 describe("Serve answering a miss from the durable store", () => {
-  it("answers the stored page and refreshes from the origin behind the response, once", async () => {
+  it("answers the stored page without calling the origin, for Workers Cache to revalidate on the next read", async () => {
     await seed(storedEntry());
     const h = harness() as Used;
 
@@ -139,21 +138,26 @@ describe("Serve answering a miss from the durable store", () => {
     });
 
     expect(await response.text()).toBe("<html>from the store</html>");
-    expect(response.headers.get("x-ocel-entry-source")).toBe("store");
     expect(response.headers.get("cache-tag")).toContain("r1a2b3c4d|posts");
-    expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(
+      /^max-age=0, stale-while-revalidate=\d+/,
+    );
+    expect(response.headers.get("etag")).not.toBeNull();
+    expect(h.originCalls).toEqual([]);
   });
 
-  it("refreshes once however many visitors miss in the same data centre at the same time", async () => {
+  it("answers Workers Cache's revalidation of a stored page from the origin, which then keeps the origin's own lifetime", async () => {
     await seed(storedEntry());
     const h = harness() as Used;
+    const stored = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+    const revalidation = h.request();
+    revalidation.headers.set("if-none-match", stored.headers.get("etag")!);
 
-    await h.fetchOrigin(async () => {
-      await Promise.all([h.serve.fetch(h.request()), h.serve.fetch(h.request())]);
-      await h.settled();
-    });
+    const response = await h.fetchOrigin(() => h.serve.fetch(revalidation));
 
-    expect(h.originCalls).toHaveLength(1);
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(/^max-age=300\b/);
+    expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
   });
 
   it("goes to the origin, and only there, once a tag of the entry was purged after it was written", async () => {
@@ -171,17 +175,17 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toHaveLength(1);
   });
 
-  it("serves a tag whose purge it never heard of, then lets the refresh correct it", async () => {
+  it("serves a tag whose purge it never heard of, and Workers Cache's next revalidation replaces it with the origin's render", async () => {
     await seed(storedEntry());
     const h = harness({ times: {} }) as Used;
 
-    const response = await h.fetchOrigin(async () => {
-      const answered = await h.serve.fetch(h.request());
-      await h.settled();
-      return answered;
-    });
+    const served = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+    const revalidation = h.request();
+    revalidation.headers.set("if-none-match", served.headers.get("etag")!);
+    const corrected = await h.fetchOrigin(() => h.serve.fetch(revalidation));
 
-    expect(response.headers.get("x-ocel-entry-source")).toBe("store");
+    expect(await served.text()).toBe("<html>from the store</html>");
+    expect(await corrected.text()).toBe("<html>from the origin</html>");
     expect(h.originCalls).toHaveLength(1);
   });
 
@@ -210,19 +214,6 @@ describe("Serve answering a miss from the durable store", () => {
     const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/a?page=2")));
 
     expect(await response.text()).toBe("<html>from the origin</html>");
-  });
-
-  it("answers the stored page even when the refresh fails", async () => {
-    await seed(storedEntry());
-    const h = harness({ originStatus: 500 }) as Used;
-
-    const response = await h.fetchOrigin(async () => {
-      const answered = await h.serve.fetch(h.request());
-      await h.settled();
-      return answered;
-    });
-
-    expect(await response.text()).toBe("<html>from the store</html>");
   });
 
   it("reads no store for a call that names no entry", async () => {
