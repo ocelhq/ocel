@@ -456,6 +456,28 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
+  it("lists every check that reads a page from the Next server's cache red under #1815 on a Next container on gcp, which nothing seeds", () => {
+    const readFromNextCache = [
+      "the Next server serves a static page from its cache, frozen, with assets immutable for a year",
+      "the Next server keeps an ISR page frozen inside its revalidate window and moves it after",
+      "revalidating a path makes the Next server move the page it names and nothing else",
+      "revalidating a tag makes the Next server move the page that carries it and nothing else",
+      "a server action calling updateTag makes the Next server move the page it revalidates",
+      "draft mode makes the Next server bypass its cache with a cookie that survives the redirect",
+    ];
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const planned = planOn(lane, {}, EVERY_CELL);
+      const listed = planned.expectedFailures["deploy/next-container/web"] ?? {};
+      for (const title of readFromNextCache) {
+        const key = Object.keys(listed).find((one) => one.endsWith(title));
+        expect({ title, issues: key ? listed[key]!.map((gap) => gap.issue) : [] }).toEqual({
+          title,
+          issues: expect.arrayContaining([1815]),
+        });
+      }
+    }
+  });
+
   it("holds a Next app behind the load balancer on gcp to the edge's cache", () => {
     const planned = planOn("gcp", ZONED, EVERY_CELL);
     const titles = titlesOf(planned, "deploy/next-alb");

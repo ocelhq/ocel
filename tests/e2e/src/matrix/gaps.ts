@@ -75,7 +75,7 @@ const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 const SERVED_FROM_NEXT_CACHE =
-  /serves a static page|keeps an ISR page|revalidating a path|draft mode makes/;
+  /serves a static page|keeps an ISR page|revalidating a (path|tag)|calling updateTag makes|draft mode makes/;
 
 export const gaps: Gap[] = [
   {
