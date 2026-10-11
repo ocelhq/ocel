@@ -4,7 +4,6 @@ import {
   type CacheEntryFile,
   cacheKey,
   deserialize as deserializeBytes,
-  refreshHeader,
   type TagRecord,
   tagsOf,
   variantHeadersFile,
@@ -15,9 +14,9 @@ import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
 import { notePurge } from "./purge-signal.mjs";
-import { noteStaleEntry, readServedRoute } from "./refresh.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
+import { readServedRoute } from "./served-route.mjs";
 import { recordTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -133,11 +132,6 @@ export default class OcelCacheHandler {
     return isRscRequest(this.requestHeaders);
   }
 
-  private get refreshing(): number | undefined {
-    const generation = Number(this.requestHeaders[refreshHeader]);
-    return Number.isFinite(generation) ? generation : undefined;
-  }
-
   private openStore(): Promise<CacheStore> {
     if (OcelCacheHandler.store) return OcelCacheHandler.store;
     const newStore = getNextHost().newCacheStore;
@@ -160,9 +154,6 @@ export default class OcelCacheHandler {
       const entry =
         ctx?.kind === "FETCH" ? await store.readFetch(key) : await store.readEntry(cacheKey(key));
       if (!entry) return null;
-      if (ctx?.kind !== "FETCH" && entry.lastModified <= (this.refreshing ?? -Infinity)) {
-        return null;
-      }
 
       const tags = tagsOf(entry.value, ctx);
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
@@ -175,15 +166,6 @@ export default class OcelCacheHandler {
           : (entry.cacheControl?.revalidate ?? served?.revalidate);
       const stale = isStaleEntry(entry.lastModified, tags, revalidate);
       if (stale && servesOnlyFresh(process.env)) return null;
-      if (ctx?.kind !== "FETCH" && served) {
-        if (stale) {
-          noteStaleEntry(this.requestHeaders, {
-            key: cacheKey(key),
-            lastModified: entry.lastModified,
-          });
-        }
-        if (served.readsNoEntry) return null;
-      }
       if (ctx?.kind !== "FETCH") this.noteOriginTags(tags);
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
@@ -213,8 +195,7 @@ export default class OcelCacheHandler {
         isFetch
           ? (await store).writeFetch(key, entry)
           : (await store).writeEntry(cacheKey(key), entry);
-      if ((this.refreshing !== undefined && !isFetch) || servesOnlyFresh(process.env))
-        await write();
+      if (servesOnlyFresh(process.env)) await write();
       else background(write);
     } catch {}
   }

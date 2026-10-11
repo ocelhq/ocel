@@ -1,7 +1,6 @@
 import { type Bind, dispatchesAtOrigin, type Invoke } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import type { InstanceCache } from "./instance-cache.mjs";
-import type { ScheduleRefresh } from "./refresh.mjs";
 import type { UseCacheStore } from "./use-cache-store.mjs";
 
 export interface NextHost {
@@ -12,7 +11,6 @@ export interface NextHost {
   cacheTagsPerObject?: number;
   functionDir?: string;
   instanceCache?: InstanceCache;
-  scheduleRefresh?: ScheduleRefresh;
   bind?: Bind;
 }
 

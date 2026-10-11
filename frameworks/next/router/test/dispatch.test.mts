@@ -676,7 +676,6 @@ describe("dispatchResult", () => {
         headers: {
           "x-ocel-entry": "/admin",
           "next-resume": "1",
-          "x-ocel-refresh": "1000",
           "x-ocel-edge-cache": "1",
           "x-ocel-probe": "probe-value",
         },
@@ -686,7 +685,6 @@ describe("dispatchResult", () => {
 
     expect(captured?.headers.get("x-ocel-entry")).toBe("/api/documents");
     expect(captured?.headers.get("next-resume")).toBeNull();
-    expect(captured?.headers.get("x-ocel-refresh")).toBeNull();
     expect(captured?.headers.get("x-ocel-edge-cache")).toBeNull();
     expect(captured?.headers.get("x-ocel-probe")).toBe("probe-value");
   });

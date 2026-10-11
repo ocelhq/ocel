@@ -11,7 +11,7 @@ const cacheTagHeader = "cache-tag";
 const releasePattern = /^r[0-9a-f]{8}$/;
 const dataRoutePattern = /^\/_next\/data\/[^/]+\/(.*)\.json$/;
 
-interface Window {
+export interface Window {
   revalidate: number;
   expire?: number;
 }
@@ -109,7 +109,7 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
   if (personal(declared)) return;
 
   if (directives(declared).includes("s-maxage") || !isHtml(res)) return;
-  const window = windowFor(req.url, shaping);
+  const window = findRouteWindow(req.url, shaping);
   if (window === undefined) return;
   res.setHeader("cache-control", cacheControlOf(window));
 }
@@ -142,7 +142,10 @@ function cacheControlOf({ revalidate, expire }: Window): string {
     : `s-maxage=${revalidate}`;
 }
 
-function windowFor(url: string | undefined, routes: RevalidatingRoutes): Window | undefined {
+export function findRouteWindow(
+  url: string | undefined,
+  routes: RevalidatingRoutes,
+): Window | undefined {
   const route = routeOf(url, routes.basePath);
   const exact = routes.routes.get(route);
   if (exact) return exact;
