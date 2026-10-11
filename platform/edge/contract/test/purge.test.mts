@@ -7,6 +7,7 @@ import {
   postPurge,
   purgeEntryOf,
   purgeSignatureHeader,
+  readReleaseToken,
   tagsPerPurgeRequest,
 } from "../src/purge.mjs";
 
@@ -65,11 +66,24 @@ describe("derivePurgeSecret", () => {
   });
 });
 
+describe("readReleaseToken", () => {
+  it("is the release token segment of a release's ISR prefix", () => {
+    expect(readReleaseToken(PREFIX)).toBe("r0a1b2c3d");
+  });
+
+  it("is nothing for a prefix that is not a release's ISR prefix", () => {
+    expect(readReleaseToken("prod/acme/web/r0a1b2c3d")).toBeUndefined();
+    expect(readReleaseToken("prod/acme/web/r0a1b2c3d/assets")).toBeUndefined();
+    expect(readReleaseToken("prod/acme//r0a1b2c3d/isr")).toBeUndefined();
+    expect(readReleaseToken("")).toBeUndefined();
+  });
+});
+
 describe("postPurge", () => {
   const secret = derivePurgeSecret(SEED, PREFIX);
 
-  it("posts the release, the mode and each tag with its raisedAt, signed over the body", async () => {
-    await postPurge(sender(), URL, secret, "r0a1b2c3d", [
+  it("posts the release's ISR prefix, the mode and each tag with its raisedAt, signed over the body", async () => {
+    await postPurge(sender(), URL, secret, PREFIX, [
       { tag: "products", mode: "purge", raisedAt: 100 },
     ]);
 
@@ -77,7 +91,7 @@ describe("postPurge", () => {
     const sent = worker.sent[0]!;
     expect(sent.url).toBe(URL);
     expect(JSON.parse(sent.body)).toEqual({
-      release: "r0a1b2c3d",
+      isrPrefix: PREFIX,
       mode: "purge",
       tags: [{ tag: "products", raisedAt: 100 }],
     });
@@ -85,7 +99,7 @@ describe("postPurge", () => {
   });
 
   it("sends purges and invalidates as two requests", async () => {
-    await postPurge(sender(), URL, secret, "r1", [
+    await postPurge(sender(), URL, secret, PREFIX, [
       { tag: "a", mode: "invalidate", raisedAt: 1 },
       { tag: "b", mode: "purge", raisedAt: 2 },
     ]);
@@ -100,7 +114,7 @@ describe("postPurge", () => {
       raisedAt: 1,
     }));
 
-    await postPurge(sender(), URL, secret, "r1", entries);
+    await postPurge(sender(), URL, secret, PREFIX, entries);
 
     expect(worker.sent.map((s) => JSON.parse(s.body).tags.length)).toEqual([
       tagsPerPurgeRequest,
@@ -109,7 +123,7 @@ describe("postPurge", () => {
   });
 
   it("sends nothing for no tags", async () => {
-    await postPurge(sender(), URL, secret, "r1", []);
+    await postPurge(sender(), URL, secret, PREFIX, []);
 
     expect(worker.sent).toEqual([]);
   });
@@ -117,7 +131,7 @@ describe("postPurge", () => {
   it("treats 204, the answer for a release no longer served, as sent", async () => {
     worker.answers.push(new Response(null, { status: 204 }));
 
-    await postPurge(sender(), URL, secret, "r1", [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(1);
   });
@@ -125,7 +139,7 @@ describe("postPurge", () => {
   it.each([429, 500, 503])("waits and sends again after a %i", async (status) => {
     worker.answers.push(new Response(null, { status }));
 
-    await postPurge(sender(), URL, secret, "r1", [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(2);
     expect(worker.sent[1]).toEqual(worker.sent[0]);
@@ -135,7 +149,7 @@ describe("postPurge", () => {
   it("waits and sends again after the network fails", async () => {
     worker.answers.push(new TypeError("fetch failed"));
 
-    await postPurge(sender(), URL, secret, "r1", [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(2);
   });
@@ -144,7 +158,7 @@ describe("postPurge", () => {
     for (let i = 0; i < 3; i++) worker.answers.push(new Response(null, { status: 503 }));
     const jittered = { ...sender(), random: () => 0.5 };
 
-    await postPurge(jittered, URL, secret, "r1", [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(jittered, URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(waits).toHaveLength(3);
     expect(waits[0]).toBeLessThan(waits[1]!);
@@ -155,7 +169,7 @@ describe("postPurge", () => {
   it("gives up on a worker that keeps refusing, naming the status and not the secret", async () => {
     for (let i = 0; i < 10; i++) worker.answers.push(new Response(null, { status: 503 }));
 
-    const failure = await postPurge(sender(), URL, secret, "r1", [
+    const failure = await postPurge(sender(), URL, secret, PREFIX, [
       { tag: "a", mode: "purge", raisedAt: 1 },
     ]).catch((error: Error) => error);
 
@@ -171,7 +185,7 @@ describe("postPurge", () => {
       worker.answers.push(new Response(null, { status }));
 
       await expect(
-        postPurge(sender(), URL, secret, "r1", [{ tag: "a", mode: "purge", raisedAt: 1 }]),
+        postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]),
       ).rejects.toThrow(String(status));
 
       expect(worker.sent).toHaveLength(1);

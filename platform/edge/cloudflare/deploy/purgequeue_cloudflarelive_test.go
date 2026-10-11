@@ -25,6 +25,8 @@ import (
 const (
 	harnessRelease = "rlive"
 
+	harnessISRPrefix = "live/purge-harness/harness/" + harnessRelease + "/isr"
+
 	harnessReadyWithin = 3 * time.Minute
 
 	purgeLandsWithin = 150 * time.Second
@@ -109,7 +111,7 @@ func newPurgeHarness(t *testing.T) *purgeHarness {
 		scriptName: "ocel-purge-live-" + randomHex(t, 4),
 		worker: edge.Worker{
 			Main:              buildPurgeHarness(t),
-			Variables:         map[string]string{"OCEL_HARNESS_RELEASE": harnessRelease, "OCEL_PURGE_SECRET": secret},
+			Variables:         map[string]string{"OCEL_HARNESS_RELEASE": harnessRelease, "OCEL_HARNESS_ISR_PREFIX": harnessISRPrefix, "OCEL_PURGE_SECRET": secret},
 			CachedEntrypoints: []string{serveEntrypoint},
 			DurableObjects:    []string{purgeQueueObject},
 		},
@@ -230,7 +232,7 @@ func (h *purgeHarness) raise(t *testing.T, mode string, tags ...string) {
 	for _, tag := range tags {
 		entries = append(entries, raisedTag{Tag: tag, RaisedAt: raisedAt})
 	}
-	body, err := json.Marshal(map[string]any{"release": harnessRelease, "mode": mode, "tags": entries})
+	body, err := json.Marshal(map[string]any{"isrPrefix": harnessISRPrefix, "mode": mode, "tags": entries})
 	if err != nil {
 		t.Fatal(err)
 	}

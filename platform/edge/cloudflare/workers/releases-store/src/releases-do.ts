@@ -56,8 +56,8 @@ export class ReleasesStore extends DurableObject<Env> {
     return store.readLabelRecord(this.ctx.storage, label, knownRelease);
   }
 
-  async readServedRecord(release: string): Promise<ServedRecordResult> {
-    return store.readServedRecord(this.ctx.storage, release);
+  async readServedRecord(isrPrefix: string): Promise<ServedRecordResult> {
+    return store.readServedRecord(this.ctx.storage, isrPrefix);
   }
 
   async readVersionStamp(): Promise<string | undefined> {

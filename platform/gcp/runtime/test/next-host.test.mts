@@ -460,9 +460,11 @@ test("the GCP host told where the worker purges clears each tag it records at th
 
     const purges = calls.filter((call) => call.url.hostname === "shop.acct.workers.dev");
     const bodies = purges.map((call) => JSON.parse(String(call.init?.body)));
-    expect(bodies.every((body) => body.release === "r1a2b3c4d" && body.mode === "purge")).toBe(
-      true,
-    );
+    expect(
+      bodies.every(
+        (body) => body.isrPrefix === "prod/shop/web/r1a2b3c4d/isr" && body.mode === "purge",
+      ),
+    ).toBe(true);
     expect(
       bodies.flatMap((body) => body.tags.map((tag: { tag: string }) => tag.tag)).sort(),
     ).toEqual(["a", "b"]);

@@ -31,7 +31,7 @@ export type PointerRecordResult =
 export type ServedRecordResult = { kind: "record"; record: ReleaseRecord } | { kind: "not-served" };
 
 export interface ReleasesBinding {
-  readServedRecord(args: { slug: string; release: string }): Promise<ServedRecordResult>;
+  readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult>;
   readPointerRecord(args: {
     slug: string;
     app?: string;

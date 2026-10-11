@@ -3,6 +3,7 @@ import {
   type PurgeMode,
   purgePath,
   purgeSignatureHeader,
+  readReleaseToken,
   tagsPerPurgeRequest,
 } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
@@ -17,14 +18,14 @@ export type ServedLookup =
   | { kind: "not-served" };
 
 export interface PurgeGatewayPorts {
-  readServed(release: string): Promise<ServedLookup>;
+  readServed(isrPrefix: string): Promise<ServedLookup>;
   queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
   now?(): number;
   warn?(message: string): void;
 }
 
 interface PurgeBody {
-  release: string;
+  isrPrefix: string;
   mode: PurgeMode;
   tags: RaisedTag[];
 }
@@ -49,7 +50,9 @@ function parseBody(text: string): PurgeBody | undefined {
   }
   const body = parsed as Partial<PurgeBody> | null;
   if (typeof body !== "object" || body === null) return undefined;
-  if (typeof body.release !== "string" || body.release === "") return undefined;
+  if (typeof body.isrPrefix !== "string" || readReleaseToken(body.isrPrefix) === undefined) {
+    return undefined;
+  }
   if (body.mode !== "purge" && body.mode !== "invalidate") return undefined;
   if (!Array.isArray(body.tags)) return undefined;
   for (const entry of body.tags) {
@@ -123,7 +126,7 @@ export function answerPurgeOnWorker(
     ctx.exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
   ).PurgeQueue;
   return answerPurge(request, {
-    readServed: (release) => env.RELEASES.readServedRecord({ slug, release }),
+    readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),
     queue: queues.getByName(PURGE_QUEUE_NAME),
   });
 }
@@ -138,9 +141,9 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
 
   let served: ServedLookup;
   try {
-    served = await ports.readServed(body.release);
+    served = await ports.readServed(body.isrPrefix);
   } catch (error) {
-    console.error(`ocel: cannot tell whether release ${body.release} is served`, error);
+    console.error(`ocel: cannot tell whether the release at ${body.isrPrefix} is served`, error);
     return reply(503, "unavailable");
   }
   if (served.kind === "not-served") return reply(204);
@@ -151,11 +154,12 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
     return reply(401, "unauthorized");
   }
 
+  const release = readReleaseToken(body.isrPrefix)!;
   const now = (ports.now ?? Date.now)();
   const unstorable: string[] = [];
   const raisedAt = new Map<string, number>();
   for (const { tag, raisedAt: at } of body.tags) {
-    const [stamped] = storedCacheTags(body.release, [tag]).tags;
+    const [stamped] = storedCacheTags(release, [tag]).tags;
     if (stamped === undefined) {
       unstorable.push(tag);
       continue;
@@ -165,7 +169,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   }
   if (unstorable.length > 0) {
     (ports.warn ?? console.warn)(
-      `ocel: ${unstorable.length} tag(s) of release ${body.release} are longer or wider than a cache tag Cloudflare stores, so nothing purges them: ${unstorable.join(", ")}`,
+      `ocel: ${unstorable.length} tag(s) of release ${release} are longer or wider than a cache tag Cloudflare stores, so nothing purges them: ${unstorable.join(", ")}`,
     );
   }
   if (raisedAt.size === 0) return reply(202);
@@ -176,7 +180,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
       [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at })),
     );
   } catch (error) {
-    console.error(`ocel: the purge queue refused the tags of release ${body.release}`, error);
+    console.error(`ocel: the purge queue refused the tags of release ${release}`, error);
     return reply(503, "unavailable");
   }
   return reply(202);

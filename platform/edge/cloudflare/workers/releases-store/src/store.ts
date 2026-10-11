@@ -233,9 +233,12 @@ export function readPointerRecord(
 
 export type ServedRecordResult = { kind: "record"; record: ReleaseRecord } | { kind: "not-served" };
 
-export function readServedRecord(store: SqlStore, release: string): ServedRecordResult {
+export function readServedRecord(store: SqlStore, isrPrefix: string): ServedRecordResult {
   const row = store.sql
-    .exec<{ data: string }>(`SELECT data FROM served WHERE release = ? LIMIT 1`, release)
+    .exec<{ data: string }>(
+      `SELECT data FROM served WHERE json_extract(data, '$.isrPrefix') = ? LIMIT 1`,
+      isrPrefix,
+    )
     .toArray()[0];
   if (!row) return { kind: "not-served" };
   return { kind: "record", record: JSON.parse(row.data) as ReleaseRecord };

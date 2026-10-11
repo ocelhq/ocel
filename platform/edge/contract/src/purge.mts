@@ -36,6 +36,12 @@ export function purgeEntryOf(tag: string, record: TagRecord): PurgeEntry | undef
   };
 }
 
+export function readReleaseToken(isrPrefix: string): string | undefined {
+  const segments = isrPrefix.split("/");
+  if (segments.length !== 5 || segments[4] !== "isr" || segments.includes("")) return undefined;
+  return segments[3];
+}
+
 export function derivePurgeSecret(seed: string, isrPrefix: string): string {
   return createHmac("sha256", seed).update(isrPrefix).digest("hex");
 }
@@ -74,7 +80,7 @@ export async function postPurge(
   sender: PurgeSender,
   url: string,
   secret: string,
-  release: string,
+  isrPrefix: string,
   entries: readonly PurgeEntry[],
 ): Promise<void> {
   for (const mode of ["purge", "invalidate"] as const) {
@@ -82,7 +88,11 @@ export async function postPurge(
       .filter((entry) => entry.mode === mode)
       .map(({ tag, raisedAt }) => ({ tag, raisedAt }));
     for (let i = 0; i < tags.length; i += tagsPerPurgeRequest) {
-      const body = JSON.stringify({ release, mode, tags: tags.slice(i, i + tagsPerPurgeRequest) });
+      const body = JSON.stringify({
+        isrPrefix,
+        mode,
+        tags: tags.slice(i, i + tagsPerPurgeRequest),
+      });
       await post(sender, url, secret, body);
     }
   }

@@ -93,12 +93,13 @@ function openPurge(
   const url = env.OCEL_PURGE_URL;
   if (!url) return undefined;
   const secret = env.OCEL_PURGE_SECRET;
-  if (release === null || !secret) {
+  const isrPrefix = env.OCEL_ISR_PREFIX;
+  if (release === null || !isrPrefix || !secret) {
     throw new Error(
       "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_PURGE_SECRET to sign the purge with",
     );
   }
-  return newCloudflarePurge({ url, release, secret });
+  return newCloudflarePurge({ url, isrPrefix, secret });
 }
 
 function openIsrWriter(
