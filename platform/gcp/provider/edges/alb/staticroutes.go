@@ -2,6 +2,7 @@ package alb
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -28,22 +29,25 @@ func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticR
 	}
 }
 
-func staticOf(record router.ReleaseRecord, balancer LoadBalancer) string {
-	files := staticRoutesOf(record, balancer)
-	if files == nil {
-		return ""
+func encodeStaticRoutes(record router.ReleaseRecord, balancer LoadBalancer) (string, error) {
+	routes := staticRoutesOf(record, balancer)
+	if routes == nil {
+		return "", nil
 	}
-	encoded, _ := json.Marshal(files)
-	return string(encoded)
+	encoded, err := json.Marshal(routes)
+	if err != nil {
+		return "", fmt.Errorf("encode the static routes of release %s of %s: %w", record.Release, record.App, err)
+	}
+	return string(encoded), nil
 }
 
-func (h Host) files() *StaticRoutes {
-	if h.Static == "" {
-		return nil
+func (h Host) decodeStaticRoutes() (*StaticRoutes, error) {
+	if h.StaticRoutes == "" {
+		return nil, nil
 	}
-	var files StaticRoutes
-	if err := json.Unmarshal([]byte(h.Static), &files); err != nil {
-		return nil
+	var routes StaticRoutes
+	if err := json.Unmarshal([]byte(h.StaticRoutes), &routes); err != nil {
+		return nil, fmt.Errorf("decode the static routes recorded for a host of %s: %w", h.App, err)
 	}
-	return &files
+	return &routes, nil
 }

@@ -29,20 +29,20 @@ var tierAssets = AssetsBucket{Name: "ocel-acme-prod-production", Agent: "service
 const backendToken = "gcp:compute/backendService:BackendService"
 
 type world struct {
-	mu       sync.Mutex
-	outputs  map[string]map[string]string
-	ups      []string
-	destroys []string
-	routed   map[string]map[string]string
-	statics  map[string]map[string]*StaticRoutes
-	pinned   []string
-	backends map[string]map[string]bool
-	entries  map[string]map[string]bool
-	declared map[string]map[string]declaration
-	breaks   map[string]error
-	failing  map[string][]error
-	waits    int
-	pinning  error
+	mu           sync.Mutex
+	outputs      map[string]map[string]string
+	ups          []string
+	destroys     []string
+	routed       map[string]map[string]string
+	staticRoutes map[string]map[string]*StaticRoutes
+	pinned       []string
+	backends     map[string]map[string]bool
+	entries      map[string]map[string]bool
+	declared     map[string]map[string]declaration
+	breaks       map[string]error
+	failing      map[string][]error
+	waits        int
+	pinning      error
 
 	routeFails          map[string]error
 	unrouteFails        map[string]error
@@ -84,7 +84,7 @@ func newWorld() *world {
 			LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
 		routed:              map[string]map[string]string{},
-		statics:             map[string]map[string]*StaticRoutes{},
+		staticRoutes:        map[string]map[string]*StaticRoutes{},
 		backends:            map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:             map[string]map[string]bool{},
 		declared:            map[string]map[string]declaration{},
@@ -178,7 +178,7 @@ func (w *world) Outputs(_ context.Context, target Target) (map[string]string, er
 	return maps.Clone(w.outputs[target.Name()]), nil
 }
 
-func (w *world) Route(_ context.Context, urlMap, hostname, backend string, files *StaticRoutes) error {
+func (w *world) Route(_ context.Context, urlMap, hostname, backend string, routes *StaticRoutes) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.hasBackend(backend) {
@@ -197,21 +197,21 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string, files
 		return fmt.Errorf("route %s onto a url map already holding %d host rules, the most Compute allows", hostname, len(hosts))
 	}
 	hosts[hostname] = backend
-	w.keepStatics(urlMap, hostname, files)
+	w.keepStaticRoutes(urlMap, hostname, routes)
 	return nil
 }
 
-func (w *world) keepStatics(urlMap, hostname string, files *StaticRoutes) {
-	if w.statics[urlMap] == nil {
-		w.statics[urlMap] = map[string]*StaticRoutes{}
+func (w *world) keepStaticRoutes(urlMap, hostname string, routes *StaticRoutes) {
+	if w.staticRoutes[urlMap] == nil {
+		w.staticRoutes[urlMap] = map[string]*StaticRoutes{}
 	}
-	w.statics[urlMap][hostname] = files
+	w.staticRoutes[urlMap][hostname] = routes
 }
 
-func (w *world) staticsOf(urlMap, hostname string) *StaticRoutes {
+func (w *world) staticRoutesRouted(urlMap, hostname string) *StaticRoutes {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.statics[urlMap][hostname]
+	return w.staticRoutes[urlMap][hostname]
 }
 
 func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error {
@@ -223,7 +223,7 @@ func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error 
 		w.routed[urlMap] = hosts
 	}
 	hosts[hostname] = notFoundBackend
-	w.keepStatics(urlMap, hostname, nil)
+	w.keepStaticRoutes(urlMap, hostname, nil)
 	return nil
 }
 
@@ -268,7 +268,7 @@ func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 		return err
 	}
 	delete(w.routed[urlMap], hostname)
-	delete(w.statics[urlMap], hostname)
+	delete(w.staticRoutes[urlMap], hostname)
 	return w.unrouteAppliedFails[hostname]
 }
 

@@ -16,13 +16,13 @@ import (
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
 
-func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string, files *alb.StaticRoutes) error {
+func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string, routes *alb.StaticRoutes) error {
 	if urlMap == "" || hostname == "" || backend == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)
 	}
 	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *clients, current *compute.UrlMap) bool {
-		return routed(current, hostname, clients.backendLink(backend), staticRulesOf(clients, clients.backendLink(backend), files))
+		return routed(current, hostname, clients.backendLink(backend), routeRulesOf(clients, clients.backendLink(backend), routes))
 	})
 }
 

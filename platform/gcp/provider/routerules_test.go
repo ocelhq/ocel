@@ -9,7 +9,7 @@ import (
 
 const shopBackend = "ocel-alb-shop-production-shop"
 
-func shopFiles() *alb.StaticRoutes {
+func shopRoutes() *alb.StaticRoutes {
 	return &alb.StaticRoutes{
 		Backend:   "ocel-alb-production-assets",
 		Objects:   "/assets/production/shop/web/r1/assets",
@@ -17,11 +17,11 @@ func shopFiles() *alb.StaticRoutes {
 	}
 }
 
-func TestRoutingAHostnameWithStaticFilesSendsItsImmutablePrefixToTheBackendBucketUnderTheReleasesStoragePrefix(t *testing.T) {
+func TestRoutingAHostnameWithStaticRoutesSendsItsImmutablePrefixToTheBackendBucketUnderTheReleasesStoragePrefix(t *testing.T) {
 	t.Parallel()
 
 	p, server := routing(t, emptyMap())
-	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", shopBackend, shopFiles()); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", shopBackend, shopRoutes()); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -48,10 +48,10 @@ func TestRoutingAHostnameWithStaticFilesSendsItsImmutablePrefixToTheBackendBucke
 func TestAMustRevalidatePrefixUnderAnImmutableOneStaysWithCloudRun(t *testing.T) {
 	t.Parallel()
 
-	files := shopFiles()
-	files.Revalidate = []string{"/_next/static/media/live/", "/elsewhere/"}
+	routes := shopRoutes()
+	routes.Revalidate = []string{"/_next/static/media/live/", "/elsewhere/"}
 	p, server := routing(t, emptyMap())
-	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", shopBackend, files); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", shopBackend, routes); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -68,15 +68,15 @@ func TestAMustRevalidatePrefixUnderAnImmutableOneStaysWithCloudRun(t *testing.T)
 	}
 }
 
-func TestRoutingAgainWithAnotherReleasesFilesRewritesTheRuleToThatRelease(t *testing.T) {
+func TestRoutingAgainWithAnotherReleasesStaticRoutesRewritesTheRuleToThatRelease(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	p, server := routing(t, emptyMap())
-	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopFiles()); err != nil {
+	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopRoutes()); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
-	next := shopFiles()
+	next := shopRoutes()
 	next.Objects = "/assets/production/shop/web/r2/assets"
 	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, next); err != nil {
 		t.Fatalf("Route = %v", err)
@@ -91,27 +91,27 @@ func TestRoutingAgainWithAnotherReleasesFilesRewritesTheRuleToThatRelease(t *tes
 	}
 }
 
-func TestRoutingTheSameFilesAgainWritesNothing(t *testing.T) {
+func TestRoutingTheSameStaticRoutesAgainWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	p, server := routing(t, emptyMap())
 	for range 2 {
-		if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopFiles()); err != nil {
+		if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopRoutes()); err != nil {
 			t.Fatalf("Route = %v", err)
 		}
 	}
 	if got := server.writes(); got != 1 {
-		t.Errorf("routing identical files twice wrote %d times, want 1", got)
+		t.Errorf("routing identical static routes twice wrote %d times, want 1", got)
 	}
 }
 
-func TestRoutingWithoutFilesDropsTheRulesAReleaseLeft(t *testing.T) {
+func TestRoutingWithoutStaticRoutesDropsTheRulesAReleaseLeft(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	p, server := routing(t, emptyMap())
-	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopFiles()); err != nil {
+	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopRoutes()); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, nil); err != nil {

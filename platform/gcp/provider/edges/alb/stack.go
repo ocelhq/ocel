@@ -41,17 +41,20 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 			continue
 		}
 		record, found := records[host.App]
-		static := staticOf(record, s.recorded.LoadBalancer)
+		routes, err := encodeStaticRoutes(record, s.recorded.LoadBalancer)
+		if err != nil {
+			return err
+		}
 		switch {
 		case host.Service == "":
 			service := pin.ResolveService(record)
 			if service == "" {
 				continue
 			}
-			host.Service, host.Static = service, static
+			host.Service, host.StaticRoutes = service, routes
 			took = append(took, hostname)
-		case found && host.Static != static:
-			host.Static = static
+		case found && host.StaticRoutes != routes:
+			host.StaticRoutes = routes
 			moved = append(moved, hostname)
 		default:
 			continue
@@ -97,7 +100,11 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
 		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.LoadBalancer.URLMap, hostname)
 	}
-	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend, host.files())
+	routes, err := host.decodeStaticRoutes()
+	if err != nil {
+		return err
+	}
+	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend, routes)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -109,12 +116,12 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
 			Kind, s.state.Tier, binding.Hostname)
 	}
-	service, static, err := s.serving(ctx, binding.App)
+	served, err := s.serving(ctx, binding.App)
 	if err != nil {
 		return err
 	}
 	if isWildcard(binding.Hostname) {
-		service, static = "", ""
+		served = Host{}
 	}
 	if !isWildcard(binding.Hostname) {
 		if err := s.refuseExhaustedLimits(ctx, []string{binding.Hostname}, nil); err != nil {
@@ -126,11 +133,11 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		hosts = map[string]Host{}
 	}
 	hosts[binding.Hostname] = Host{
-		App:         binding.App,
-		Certificate: binding.Certificate,
-		Service:     service,
-		Backend:     backendName(s.state.Slug, s.state.Tier, binding.Hostname),
-		Static:      static,
+		App:          binding.App,
+		Certificate:  binding.Certificate,
+		Service:      served.Service,
+		Backend:      backendName(s.state.Slug, s.state.Tier, binding.Hostname),
+		StaticRoutes: served.StaticRoutes,
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)
 	if err != nil {
@@ -202,23 +209,27 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	return err
 }
 
-func (s *stack) serving(ctx context.Context, app string) (string, string, error) {
+func (s *stack) serving(ctx context.Context, app string) (Host, error) {
 	if app == "" {
-		return "", "", nil
+		return Host{}, nil
 	}
 	active, found, err := s.openLedger().ReadActive(ctx, "")
 	if err != nil || !found {
-		return "", "", err
+		return Host{}, err
 	}
 	release, released := active.Releases[app]
 	if !released {
-		return "", "", nil
+		return Host{}, nil
 	}
 	record, staged, err := s.openLedger().Record(ctx, app, release)
 	if err != nil || !staged {
-		return "", "", err
+		return Host{}, err
 	}
-	return pin.ResolveService(record), staticOf(record, s.recorded.LoadBalancer), nil
+	routes, err := encodeStaticRoutes(record, s.recorded.LoadBalancer)
+	if err != nil {
+		return Host{}, err
+	}
+	return Host{Service: pin.ResolveService(record), StaticRoutes: routes}, nil
 }
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
