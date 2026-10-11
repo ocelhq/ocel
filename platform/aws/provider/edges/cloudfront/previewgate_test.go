@@ -169,6 +169,30 @@ func TestDestroyingAPreviewStackTakesItsGateWithIt(t *testing.T) {
 	}
 }
 
+func TestADestroyThatLeavesARouteBehindKeepsTheGateUntilARetryRemovesIt(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld()
+	stack := reconcilePreview(t, previewBootstrapped(t, w), gatedPreviewSpec(&shopGate))
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: boundHost}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	w.store.updateErrs = []error{errors.New("the store is closed")}
+
+	if err := stack.Destroy(ctx); err == nil {
+		t.Fatal("Destroy = nil, want the failed route removal")
+	}
+	if _, recorded := recordedGate(t, w); !recorded {
+		t.Fatalf("the gate was taken down while the route to %s could still serve, so the resolver admits anyone", boundHost)
+	}
+
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy (retry): %v", err)
+	}
+	if _, recorded := recordedGate(t, w); recorded {
+		t.Error("the gate outlived the preview stack a retried destroy took down")
+	}
+}
+
 func TestAPromotedPreviewRouteNamesTheStackTheResolverReadsItsGateUnder(t *testing.T) {
 	w := newWorld()
 	_, stack := previewing(t, w)

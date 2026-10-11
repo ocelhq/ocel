@@ -371,11 +371,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
-	if s.provisioned() {
-		if err := s.reconcilePreviewGate(ctx, c, nil); err != nil {
-			errs = append(errs, fmt.Errorf("take down the keys that gate %s before destroying it: %w", s.slug(), err))
-		}
-	}
 	if !s.onPreviewWildcard() {
 		dist, found, err := s.findDistributionFor(ctx, c, s.spec().name)
 		switch {
@@ -387,6 +382,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 			} else if err := s.forgetInvalidationTarget(ctx, c, dist.id); err != nil {
 				errs = append(errs, err)
 			}
+		}
+	}
+	if len(errs) == 0 && s.provisioned() {
+		if err := s.reconcilePreviewGate(ctx, c, nil); err != nil {
+			errs = append(errs, fmt.Errorf("take down the keys that gate %s after destroying what served it: %w", s.slug(), err))
 		}
 	}
 	s.own.Distribution, s.state.Address = "", ""
