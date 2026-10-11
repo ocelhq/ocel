@@ -21,6 +21,7 @@ require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
+	github.com/ocelhq/ocel/platform/gcp/gateplugin v0.0.0
 	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pulumi/pulumi-gcp/sdk/v9 v9.36.1
@@ -231,3 +232,5 @@ replace github.com/ocelhq/ocel/pkg => ../../../pkg
 replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 
 replace github.com/ocelhq/ocel/platform/realtime => ../../realtime
+
+replace github.com/ocelhq/ocel/platform/gcp/gateplugin => ../gateplugin

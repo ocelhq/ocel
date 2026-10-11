@@ -79,3 +79,5 @@ replace github.com/ocelhq/ocel/pkg => ../../../pkg
 replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 
 replace github.com/ocelhq/ocel/platform/realtime => ../../realtime
+
+replace github.com/ocelhq/ocel/platform/gcp/gateplugin => ../gateplugin

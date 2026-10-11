@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
 func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
@@ -97,6 +98,19 @@ func TestTheRealtimeGatewayIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns
 	}
 	if bytes.Equal(RealtimeGateway(), EnvSourceSync()) || bytes.Equal(RealtimeGateway(), containerRuntime) {
 		t.Error("RealtimeGateway() is another payload")
+	}
+}
+
+const minimumConfigRoomBytes = 1 << 20
+
+func TestThePreviewGatePluginIsAWasmModuleWithRoomLeftForItsConfig(t *testing.T) {
+	body := PreviewGatePlugin()
+	if !bytes.HasPrefix(body, []byte("\x00asm")) {
+		t.Fatal("PreviewGatePlugin() is no WebAssembly module")
+	}
+	if room := gateplugin.PackageLimitBytes - len(body); room < minimumConfigRoomBytes {
+		t.Errorf("PreviewGatePlugin() leaves %d bytes of the %d a plugin and its config may take together, want at least %d for the gates it holds",
+			room, gateplugin.PackageLimitBytes, minimumConfigRoomBytes)
 	}
 }
 
