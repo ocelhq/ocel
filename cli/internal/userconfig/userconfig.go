@@ -20,8 +20,9 @@ const (
 	installIDKey     = "install_id"
 	deployedKey      = "deployed"
 
-	liveHashKeySetting = "live_hash_key"
-	liveHashKeyBytes   = 32
+	liveHashKeySetting    = "live_hash_key"
+	projectHashKeySetting = "project_hash_key"
+	hashKeyBytes          = 32
 )
 
 type Settings map[string]json.RawMessage
@@ -94,18 +95,26 @@ func EnsureInstallID() (string, error) {
 }
 
 func EnsureLiveHashKey() ([]byte, error) {
-	if key, ok := readLiveHashKey(Read()); ok {
+	return ensureHashKey(liveHashKeySetting)
+}
+
+func EnsureProjectHashKey() ([]byte, error) {
+	return ensureHashKey(projectHashKeySetting)
+}
+
+func ensureHashKey(setting string) ([]byte, error) {
+	if key, ok := readHashKey(Read(), setting); ok {
 		return key, nil
 	}
 	var key []byte
 	err := Update(func(s Settings) {
-		if stored, ok := readLiveHashKey(s); ok {
+		if stored, ok := readHashKey(s, setting); ok {
 			key = stored
 			return
 		}
-		key = make([]byte, liveHashKeyBytes)
+		key = make([]byte, hashKeyBytes)
 		_, _ = rand.Read(key)
-		s[liveHashKeySetting], _ = json.Marshal(base64.StdEncoding.EncodeToString(key))
+		s[setting], _ = json.Marshal(base64.StdEncoding.EncodeToString(key))
 	})
 	if err != nil {
 		return nil, err
@@ -113,13 +122,13 @@ func EnsureLiveHashKey() ([]byte, error) {
 	return key, nil
 }
 
-func readLiveHashKey(s Settings) ([]byte, bool) {
+func readHashKey(s Settings, setting string) ([]byte, bool) {
 	var encoded string
-	if err := json.Unmarshal(s[liveHashKeySetting], &encoded); err != nil {
+	if err := json.Unmarshal(s[setting], &encoded); err != nil {
 		return nil, false
 	}
 	key, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil || len(key) != liveHashKeyBytes {
+	if err != nil || len(key) != hashKeyBytes {
 		return nil, false
 	}
 	return key, true

@@ -32,11 +32,12 @@ type Identity struct {
 	Agent         string
 	CI            string
 	InstallMethod string
+	ProjectKey    string
 }
 
-func NewIdentity(installID string) Identity {
+func NewIdentity(installID, projectKey string) Identity {
 	agent, ci := invocation.Detect(os.Getenv)
-	return Identity{InstallID: installID, CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: agent, CI: ci, InstallMethod: detectInstallMethod()}
+	return Identity{InstallID: installID, CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: agent, CI: ci, InstallMethod: detectInstallMethod(), ProjectKey: projectKey}
 }
 
 func detectInstallMethod() string {
@@ -66,16 +67,16 @@ type projectPayload interface {
 func NewEvent(identity Identity, at time.Time, payload Payload) (Event, error) {
 	properties := payload.properties()
 	if project, ok := payload.(projectPayload); ok {
-		properties["project_id"] = projectID(identity.InstallID, project.projectSlug())
+		properties["project_id"] = projectID(identity.ProjectKey, project.projectSlug())
 	}
 	return newEvent(payload.name(), identity, at, properties)
 }
 
-func projectID(installID, slug string) string {
+func projectID(key, slug string) string {
 	if slug == "" {
 		return ""
 	}
-	mac := hmac.New(sha256.New, []byte(installID))
+	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(slug))
 	return hex.EncodeToString(mac.Sum(nil))[:16]
 }

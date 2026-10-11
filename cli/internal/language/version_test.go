@@ -33,6 +33,12 @@ func TestDeclaredFrameworkVersionIsTheMajorOfTheRangeThePackageManifestDeclares(
 		{"sveltekit", `{"devDependencies":{"@sveltejs/kit":"2.5.0"}}`, "2"},
 		{"next", `{"dependencies":{"next":"latest"}}`, ""},
 		{"next", `{"dependencies":{"next":"workspace:*"}}`, ""},
+		{"next", `{"dependencies":{"next":"workspace:^15.0.0"}}`, ""},
+		{"next", `{"dependencies":{"next":"file:../next-15"}}`, ""},
+		{"next", `{"dependencies":{"next":"github:vercel/next.js#v15.0.0"}}`, ""},
+		{"next", `{"dependencies":{"next":"https://example.com/next-15.tgz"}}`, ""},
+		{"next", `{"dependencies":{"next":"npm:next@15.2.0"}}`, "15"},
+		{"next", `{"dependencies":{"next":"v15.0.0"}}`, "15"},
 		{"next", `{"dependencies":{"react":"19.0.0"}}`, ""},
 		{"next", `not json`, ""},
 		{"node", `{"dependencies":{"node":"22.0.0"}}`, ""},
@@ -75,6 +81,8 @@ func TestDeclaredRuntimeNamesTheRuntimeOfEachLanguageAndTheVersionItsFilesDeclar
 		{"rust-toolchain.toml", language.Rust, map[string]string{"rust-toolchain.toml": "[toolchain]\nchannel = \"1.82.0\"\n"}, "rust", "1.82"},
 		{"rust-toolchain", language.Rust, map[string]string{"rust-toolchain": "1.80\n"}, "rust", "1.80"},
 		{"rust stable", language.Rust, map[string]string{"rust-toolchain": "stable\n"}, "rust", ""},
+		{"rust dated nightly", language.Rust, map[string]string{"rust-toolchain.toml": "[toolchain]\nchannel = \"nightly-2024.01.01\"\n"}, "rust", ""},
+		{"nvmrc path", language.JS, map[string]string{".nvmrc": "../node-22\n"}, "node", ""},
 		{"nothing declared", language.Go, nil, "go", ""},
 	}
 	for _, tc := range cases {

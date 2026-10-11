@@ -24,6 +24,7 @@ var anIdentity = Identity{
 	Agent:         "claude-code",
 	CI:            "github-actions",
 	InstallMethod: "npm",
+	ProjectKey:    "a-secret-project-key",
 }
 
 var aStack = Stack{
@@ -117,7 +118,7 @@ func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T
 			"reloads":                 float64(3),
 			"resource_kinds":          []any{"bucket", "postgres"},
 			"error_codes":             map[string]any{"dev.command_failed": float64(1), "env.missing": float64(2)},
-			"project_id":              projectID(anIdentity.InstallID, "shop"),
+			"project_id":              projectID(anIdentity.ProjectKey, "shop"),
 			"provider":                "aws",
 			"frameworks":              []any{"next", "node"},
 			"languages":               []any{"js"},
@@ -203,9 +204,9 @@ func TestAnIdentityCarriesTheInstallIDTheBuildAndTheDetectedAgentAndCI(t *testin
 	t.Setenv("GITLAB_CI", "true")
 	t.Setenv(InstallMethodEnvVar, "npm")
 
-	got := NewIdentity("an-install-id")
+	got := NewIdentity("an-install-id", "a-key")
 
-	want := Identity{InstallID: "an-install-id", CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: "gemini-cli", CI: "gitlab", InstallMethod: "npm"}
+	want := Identity{InstallID: "an-install-id", CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: "gemini-cli", CI: "gitlab", InstallMethod: "npm", ProjectKey: "a-key"}
 	if got != want {
 		t.Errorf("identity = %+v, want %+v", got, want)
 	}
@@ -215,7 +216,7 @@ func TestAnIdentityNotLaunchedThroughNPMWasInstalledAsABinary(t *testing.T) {
 	for _, value := range []string{"", "brew", "../../etc/passwd"} {
 		t.Setenv(InstallMethodEnvVar, value)
 
-		if got := NewIdentity("an-install-id").InstallMethod; got != "binary" {
+		if got := NewIdentity("an-install-id", "a-key").InstallMethod; got != "binary" {
 			t.Errorf("%s=%q: install method = %q, want binary", InstallMethodEnvVar, value, got)
 		}
 	}
@@ -392,7 +393,7 @@ func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testin
 			"success":                 false,
 			"target":                  "preview",
 			"provider":                "aws",
-			"project_id":              projectID(anIdentity.InstallID, "shop"),
+			"project_id":              projectID(anIdentity.ProjectKey, "shop"),
 			"frameworks":              []any{"next", "node"},
 			"languages":               []any{"js"},
 			"framework_versions":      []any{"next@15"},
@@ -485,22 +486,40 @@ func marshal(t *testing.T, v any) []byte {
 	return b
 }
 
-func TestAProjectIDIsTheSameForOneInstallAndProjectAndRevealsNeitherName(t *testing.T) {
-	id := projectID("install-a", "shop")
+func TestAProjectIDIsTheSameForOneKeyAndProjectAndRevealsNeitherName(t *testing.T) {
+	id := projectID("key-a", "shop")
 
-	if id != projectID("install-a", "shop") {
-		t.Error("the same install and project gave two ids")
+	if id != projectID("key-a", "shop") {
+		t.Error("the same key and project gave two ids")
 	}
-	if id == projectID("install-b", "shop") {
-		t.Error("two installs gave one project the same id")
+	if id == projectID("key-b", "shop") {
+		t.Error("two keys gave one project the same id")
 	}
-	if id == projectID("install-a", "blog") {
-		t.Error("two projects of one install shared an id")
+	if id == projectID("key-a", "blog") {
+		t.Error("two projects of one key shared an id")
 	}
 	if strings.Contains(id, "shop") || len(id) != 16 {
 		t.Errorf("id = %q, want 16 hex characters that never contain the name", id)
 	}
-	if got := projectID("install-a", ""); got != "" {
+	if got := projectID("key-a", ""); got != "" {
 		t.Errorf("id of no project = %q, want empty", got)
+	}
+}
+
+func TestAProjectIDCannotBeRecomputedFromAnythingTheEventSends(t *testing.T) {
+	event, err := NewEvent(anIdentity, aTime, DeployCompletion{Stack: aStack})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := event.Properties["project_id"]
+	if got != projectID(anIdentity.ProjectKey, "shop") {
+		t.Fatalf("project_id = %v, want the slug keyed by the project key", got)
+	}
+	if got == projectID(event.DistinctID, "shop") {
+		t.Error("project_id is keyed by the distinct_id every event sends, so a guessed slug can be checked against it")
+	}
+	if line := string(marshal(t, event)); strings.Contains(line, anIdentity.ProjectKey) {
+		t.Errorf("event %s carries the project key", line)
 	}
 }

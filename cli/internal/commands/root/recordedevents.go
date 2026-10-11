@@ -16,7 +16,11 @@ func (c *command) recordEvent(payload telemetry.Payload) bool {
 	if idErr != nil {
 		return false
 	}
-	event, buildErr := telemetry.NewEvent(telemetry.NewIdentity(installID), time.Now(), payload)
+	projectKey, keyErr := userconfig.EnsureProjectHashKey()
+	if keyErr != nil {
+		return false
+	}
+	event, buildErr := telemetry.NewEvent(telemetry.NewIdentity(installID, string(projectKey)), time.Now(), payload)
 	if buildErr != nil {
 		return false
 	}

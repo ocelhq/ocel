@@ -497,3 +497,36 @@ func TestConcurrentFirstLiveHashKeyCreationConverges(t *testing.T) {
 		}
 	}
 }
+
+func TestTheProjectHashKeyIsRandomStableAndNotTheLiveHashKey(t *testing.T) {
+	confighome.Isolate(t)
+	first, err := userconfig.EnsureProjectHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 32 {
+		t.Errorf("the key is %d bytes, want 32", len(first))
+	}
+	again, err := userconfig.EnsureProjectHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(again, first) {
+		t.Error("the key changed between calls, so one project would get a new id every run")
+	}
+	live, err := userconfig.EnsureLiveHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(live, first) {
+		t.Error("the project hash key is the live hash key")
+	}
+	confighome.Isolate(t)
+	other, err := userconfig.EnsureProjectHashKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(other, first) {
+		t.Error("two config homes share a key")
+	}
+}
