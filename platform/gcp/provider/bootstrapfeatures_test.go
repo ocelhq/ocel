@@ -177,7 +177,7 @@ func TestTheLoadBalancerFeatureChecksTheServiceThatHostsTheGatePluginAndTheShiel
 	}
 }
 
-func TestTheLoadBalancerFeatureSaysItRunsTheGateAsAPluginAndThatTiersNeedABootstrapToGainIt(t *testing.T) {
+func TestTheLoadBalancerFeatureSaysItRunsTheGateAsAPlugin(t *testing.T) {
 	t.Parallel()
 
 	for _, feature := range (bootstrap{}).Catalogue() {
