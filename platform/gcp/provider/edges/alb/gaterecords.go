@@ -77,40 +77,37 @@ func (e *Edge) openRecord(ctx context.Context, bound seal.AssociatedData, stored
 }
 
 func (e *Edge) readGateRecord(ctx context.Context, slug string) (gateRecord, bool, error) {
+	_, record, found, err := e.readGateRecordEntry(ctx, slug)
+	return record, found, err
+}
+
+func (e *Edge) readGateRecordEntry(ctx context.Context, slug string) (keyvalue.Entry, gateRecord, bool, error) {
 	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, gateRecordKey(slug))
 	if err != nil {
-		return gateRecord{}, false, fmt.Errorf("read the preview gate of %s on the %s edge: %w", slug, Kind, err)
+		return keyvalue.Entry{}, gateRecord{}, false, fmt.Errorf("read the preview gate of %s on the %s edge: %w", slug, Kind, err)
 	}
 	if len(entry.Value) == 0 {
-		return gateRecord{}, false, nil
+		return entry, gateRecord{}, false, nil
 	}
 	var record gateRecord
 	if err := e.openRecord(ctx, gateRecordData(slug), entry.Value, &record); err != nil {
-		return gateRecord{}, false, err
+		return keyvalue.Entry{}, gateRecord{}, false, err
 	}
-	return record, true, nil
+	return entry, record, true, nil
 }
 
 func (e *Edge) changeGateRecord(ctx context.Context, slug string, change func(recorded gateRecord, found bool) (next gateRecord, keep bool)) (bool, error) {
-	key := gateRecordKey(slug)
 	for range gateRecordAttempts {
-		entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, key)
+		entry, recorded, found, err := e.readGateRecordEntry(ctx, slug)
 		if err != nil {
-			return false, fmt.Errorf("read the preview gate of %s on the %s edge: %w", slug, Kind, err)
-		}
-		var recorded gateRecord
-		found := len(entry.Value) > 0
-		if found {
-			if err := e.openRecord(ctx, gateRecordData(slug), entry.Value, &recorded); err != nil {
-				return false, err
-			}
+			return false, err
 		}
 		next, keep := change(recorded, found)
 		switch {
 		case !keep && !found:
 			return false, nil
 		case !keep:
-			return true, keyvalue.Forget(ctx, e.deps.KeyValues, key)
+			return true, keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key)
 		case found && sameGateRecord(recorded, next):
 			return false, nil
 		}
