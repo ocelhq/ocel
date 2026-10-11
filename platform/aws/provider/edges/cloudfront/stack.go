@@ -371,6 +371,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
+	if s.provisioned() {
+		if err := s.reconcilePreviewGate(ctx, c, nil); err != nil {
+			errs = append(errs, fmt.Errorf("take down the keys that gate %s before destroying it: %w", s.slug(), err))
+		}
+	}
 	if !s.onPreviewWildcard() {
 		dist, found, err := s.findDistributionFor(ctx, c, s.spec().name)
 		switch {

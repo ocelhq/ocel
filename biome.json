@@ -18,6 +18,7 @@
       "!**/public",
       "!cli/internal/outputschema/schemas",
       "!**/testdata",
+      "!platform/aws/provider/edges/cloudfront/resolver/minified",
       "!**/drizzle/meta",
       "!**/fixtures/**/*.json",
       "!**/schema.core.json",
