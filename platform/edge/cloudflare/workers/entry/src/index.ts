@@ -25,6 +25,13 @@ import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { findPreviewTarget } from "./preview";
 import {
+  gatePreview,
+  previewGateUnreadableResponse,
+  readPreviewGate,
+  withResponseHeaders,
+  withRobotsTag,
+} from "./preview-gate";
+import {
   answerPurgeOnWorker,
   isControlHost,
   isPurgeRequest,
@@ -288,6 +295,22 @@ function unavailableResponse(): Response {
   });
 }
 
+async function gatePreviewRequest(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response | { request: Request; responseHeaders: Headers }> {
+  const read = readPreviewGate(env, slug);
+  if (read.kind === "unreadable") return previewGateUnreadableResponse();
+  if (read.kind === "open") return { request, responseHeaders: new Headers() };
+  const outcome = await gatePreview(request, read.gate, Math.floor(Date.now() / 1000));
+  return outcome.kind === "respond" ? outcome.response : outcome;
+}
+
+function withPreviewHeaders(response: Response, headers: Headers | undefined): Response {
+  return headers ? withResponseHeaders(response, headers) : response;
+}
+
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const host = new URL(request.url).host;
@@ -300,6 +323,8 @@ export default {
     const objects = serve && readsObjects(env) ? serveObjects(serve, host) : store;
     const originFetch = originFetchFor(env);
 
+    let visitor: Request = request;
+    let previewHeaders: Headers | undefined;
     let releases: ReleaseLookup = {
       binding: env.RELEASES,
       slug: env.OCEL_SLUG,
@@ -312,10 +337,14 @@ export default {
         key: env.OCEL_PREVIEW_KEY,
         slug: env.OCEL_PREVIEW_GLOBAL === "1" ? undefined : env.OCEL_SLUG,
       });
-      if (target === null) return deploymentNotFoundResponse();
+      if (target === null) return withRobotsTag(deploymentNotFoundResponse());
       releases = { binding: env.RELEASES, host, slug: target.slug, label: target.label };
+      const gated = await gatePreviewRequest(request, env, target.slug);
+      if (gated instanceof Response) return gated;
+      previewHeaders = gated.responseHeaders;
+      visitor = gated.request;
     }
-    if (!releases.slug) return deploymentNotFoundResponse();
+    if (!releases.slug) return withPreviewHeaders(deploymentNotFoundResponse(), previewHeaders);
 
     const serveRequest = await resolveServe(releases, {
       fetch,
@@ -352,8 +381,8 @@ export default {
             }
           : undefined,
     });
-    if (serveRequest instanceof Response) return serveRequest;
+    if (serveRequest instanceof Response) return withPreviewHeaders(serveRequest, previewHeaders);
 
-    return serveRequest(withClientAddress(request));
+    return withPreviewHeaders(await serveRequest(withClientAddress(visitor)), previewHeaders);
   },
 } satisfies ExportedHandler<Env>;

@@ -15,6 +15,7 @@
     "./purge": "./src/purge.mts",
     "./hosting": "./src/hosting.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
+    "./fixtures/preview-gate": "./fixtures/preview-gate.json",
     "./static": "./src/static.mts",
     "./fixtures/static-rules": "./fixtures/static-rules.json"
   },

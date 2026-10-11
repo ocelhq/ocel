@@ -5,8 +5,8 @@ export const PREVIEW_SET_BYPASS_COOKIE_HEADER = "x-ocel-set-bypass-cookie";
 export const PREVIEW_SESSION_SECONDS = 7 * 24 * 60 * 60;
 export const PREVIEW_LOGIN_BODY_MAX_BYTES = 1024;
 
-const GATE_CACHE_CONTROL = "private, no-store";
-const ROBOTS_TAG = "noindex";
+export const PREVIEW_GATE_CACHE_CONTROL = "private, no-store";
+export const PREVIEW_ROBOTS_TAG = "noindex";
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 const SIGNATURE_HEX_LENGTH = 64;
 const COOKIE_PURPOSE = "cookie";
@@ -25,6 +25,20 @@ export interface PreviewGate {
   passwordMac: string;
   bypassSecrets: string[];
   allowOptions: string[];
+}
+
+export function parsePreviewGate(value: unknown): PreviewGate | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const { key, passwordMac, bypassSecrets, allowOptions } = value as Record<string, unknown>;
+  if (typeof key !== "string" || key === "" || typeof passwordMac !== "string") return undefined;
+  const bypass = bypassSecrets ?? [];
+  const options = allowOptions ?? [];
+  if (!isStrings(bypass) || !isStrings(options)) return undefined;
+  return { key, passwordMac, bypassSecrets: bypass, allowOptions: options };
+}
+
+function isStrings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 export interface PreviewRequest {
@@ -82,7 +96,11 @@ export async function checkPreview(
   headers.delete(PREVIEW_SET_BYPASS_COOKIE_HEADER);
   if (hasPassword) headers.delete("authorization");
   dropSessionCookie(headers);
-  return { kind: "forward", headers, responseHeaders: new Headers({ "x-robots-tag": ROBOTS_TAG }) };
+  return {
+    kind: "forward",
+    headers,
+    responseHeaders: new Headers({ "x-robots-tag": PREVIEW_ROBOTS_TAG }),
+  };
 }
 
 type Sign = (purpose: string, input: string) => Promise<string>;
@@ -310,7 +328,10 @@ function escapeHtml(text: string): string {
 }
 
 function createGateResponseHeaders(): Headers {
-  return new Headers({ "cache-control": GATE_CACHE_CONTROL, "x-robots-tag": ROBOTS_TAG });
+  return new Headers({
+    "cache-control": PREVIEW_GATE_CACHE_CONTROL,
+    "x-robots-tag": PREVIEW_ROBOTS_TAG,
+  });
 }
 
 function answerStatus(status: number): PreviewVerdict {
