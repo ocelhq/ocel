@@ -134,4 +134,24 @@ describe("the PurgeQueue object", () => {
       expect(newSqliteBacklogStore(state.storage).readFailures()).toBe(1);
     });
   });
+  it("arms the alarm again when its own storage fails mid-flush, and logs the failure", async () => {
+    const queue = freshQueue();
+    await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+    await runInDurableObject(queue, async (instance, state) => {
+      instance.serve = {
+        purgeTags: async () => ({ ok: true }),
+        purgeEverything: async () => ({ ok: true }),
+      };
+      state.storage.sql.exec("DROP TABLE purged");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await runDurableObjectAlarm(queue)).toBe(true);
+      const armed = await runInDurableObject(queue, (_instance, state) => state.storage.getAlarm());
+      expect(armed).not.toBeNull();
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
 });
