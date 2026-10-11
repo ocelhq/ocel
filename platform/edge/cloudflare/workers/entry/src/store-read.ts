@@ -8,13 +8,11 @@ import {
 } from "@framework/next-cache";
 import { edgeCacheTagHeader, postponedLengthHeader } from "@platform/edge-contract/edge-cache";
 import { PPR_SHELL_VARIANT } from "./ppr";
-import type { TagTime, TagTimes } from "./purge-times";
+import type { TagTimes } from "./purge-times";
 
 export const STORE_REVALIDATES_FOR_S = 31_536_000;
 
 export const PURGE_SKEW_MS = 1_000;
-
-export const TIMES_MEMO_MS = 1_000;
 
 export const ENTRY_SOURCE_HEADER = "x-ocel-entry-source";
 
@@ -50,35 +48,6 @@ export interface StoreAnswer {
 }
 
 type Verdict = "fresh" | "stale" | "purged" | "expired";
-
-const memo = new Map<string, { at: number; time: TagTime }>();
-
-const MEMO_MAX = 4_096;
-
-export function dropTimesMemo(): void {
-  memo.clear();
-}
-
-async function readTimesMemoized(deps: StoreReadDeps, tags: string[]): Promise<TagTimes> {
-  const now = deps.now();
-  const known: TagTimes = {};
-  const unknown: string[] = [];
-  for (const tag of tags) {
-    const hit = memo.get(tag);
-    if (hit && now - hit.at < TIMES_MEMO_MS) known[tag] = hit.time;
-    else unknown.push(tag);
-  }
-  if (unknown.length > 0) {
-    const read = await deps.readTimes(unknown);
-    if (memo.size + unknown.length > MEMO_MAX) memo.clear();
-    for (const tag of unknown) {
-      const time = read[tag] ?? {};
-      memo.set(tag, { at: now, time });
-      known[tag] = time;
-    }
-  }
-  return known;
-}
 
 function isServable(value: Record<string, any> | undefined): boolean {
   return value?.kind === "APP_PAGE" || value?.kind === "PAGES" || value?.kind === "APP_ROUTE";
@@ -250,7 +219,7 @@ export async function readFromStore(
   const { tags, unstorable } = storedCacheTags(call.release, rawTags);
   if (unstorable.length > 0) return null;
 
-  const times = await readTimesMemoized(deps, [call.release, ...tags]);
+  const times = await deps.readTimes([call.release, ...tags]);
   const now = deps.now();
   const verdict = judge(entry, times, [call.release, ...tags], now, call.window);
   if (verdict === "purged" || verdict === "expired") return null;

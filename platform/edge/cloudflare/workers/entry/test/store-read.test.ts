@@ -1,11 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { TagTimes } from "../src/purge-times";
-import {
-  dropTimesMemo,
-  readFromStore,
-  type StoreCall,
-  type StoreReadDeps,
-} from "../src/store-read";
+import { readFromStore, type StoreCall, type StoreReadDeps } from "../src/store-read";
 
 const PREFIX = "prod/p1/web/r1a2b3c4d/isr";
 const NOW = 1_800_000_000_000;
@@ -67,8 +62,6 @@ function call(over: Partial<StoreCall> = {}): StoreCall {
     ...over,
   };
 }
-
-beforeEach(() => dropTimesMemo());
 
 describe("reading a page from the durable store on a Serve miss", () => {
   it("answers the page's HTML with the tags the origin checks it by, stamped with the release", async () => {
@@ -277,22 +270,14 @@ describe("whether an entry in the store may still be served", () => {
     expect(await readFromStore(call(), deps)).toBeNull();
   });
 
-  it("asks the purge queue once for the same tags within a second", async () => {
-    const { deps, timeReads } = harness({ [key("blog/a")]: entry() });
+  it("sees a purge the purge queue recorded right after an earlier read, however soon", async () => {
+    let times: TagTimes = {};
+    const { deps } = harness({ [key("blog/a")]: entry() });
+    const reading = { ...deps, readTimes: async () => times };
 
-    await readFromStore(call(), deps);
-    await readFromStore(call(), deps);
+    expect((await readFromStore(call(), reading))?.stale).toBe(false);
+    times = { "r1a2b3c4d|posts": { purgedAt: NOW - 1 } };
 
-    expect(timeReads).toHaveLength(1);
-  });
-
-  it("asks again after the memo's second", async () => {
-    const first = harness({ [key("blog/a")]: entry() });
-    const later = harness({ [key("blog/a")]: entry() }, {}, NOW + 1_500);
-
-    await readFromStore(call(), first.deps);
-    await readFromStore(call(), later.deps);
-
-    expect(later.timeReads).toHaveLength(1);
+    expect(await readFromStore(call(), reading)).toBeNull();
   });
 });
