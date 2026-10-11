@@ -275,6 +275,7 @@ func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 	}
 	delete(w.routed[urlMap], hostname)
 	delete(w.staticRoutes[urlMap], hostname)
+	w.noteEvent("unroute " + hostname)
 	return w.unrouteAppliedFails[hostname]
 }
 

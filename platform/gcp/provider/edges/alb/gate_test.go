@@ -376,6 +376,48 @@ func TestDestroyingAGatedProjectRemovesItsGateFromThePlugin(t *testing.T) {
 	}
 }
 
+func TestDestroyingAGatedProjectUnroutesItsHostsBeforeTheGateLetsThemThrough(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	router := routerStack{s: reconcileGated(t, balancer, "shop", &shopGate)}
+	if err := router.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(w.happened())
+
+	if err := router.s.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy = %v", err)
+	}
+
+	events := w.happened()[before:]
+	unroutedAt, ungatedAt := indexOf(events, "unroute "+aliasHost), indexOf(events, "up "+GateStack(environment.TierPreview))
+	if unroutedAt < 0 || ungatedAt < 0 || ungatedAt < unroutedAt {
+		t.Errorf("events %v, want %s unrouted before the gate is published without it: in between it serves the preview to anyone", events, aliasHost)
+	}
+}
+
+func TestADestroyThatCannotUnrouteAGatedHostKeepsItsGate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	router := routerStack{s: reconcileGated(t, balancer, "shop", &shopGate)}
+	if err := router.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatal(err)
+	}
+	w.unrouteFails[aliasHost] = errors.New("the url map is being updated")
+
+	if err := router.s.Destroy(ctx); err == nil {
+		t.Fatal("Destroy succeeded with a host still routed")
+	}
+
+	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); !slices.Equal(hosts, []string{aliasHost}) {
+		t.Errorf("the plugin gates %v, want %s still gated: it is still routed", hosts, aliasHost)
+	}
+}
+
 func TestThePluginConfigIsNeverHeldInThePlainByTheKeyValueStore(t *testing.T) {
 	t.Parallel()
 
