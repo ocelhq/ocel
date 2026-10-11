@@ -3,6 +3,12 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
+import {
+  newSqliteTagTimes,
+  TAG_TIMES_RETENTION_MS,
+  type TagTimes,
+  type TagTimesStore,
+} from "./purge-times";
 import { ORIGIN_PURGE_SCOPE, type ServeProps } from "./serve-key";
 
 const flushRetryMs = 1_000;
@@ -36,11 +42,13 @@ export function newServePort(serve: ServePurgeFactory): PurgePort {
 export class PurgeQueue extends DurableObject<Env> {
   serve: PurgePort;
   private readonly backlog: PurgeBacklog;
+  private readonly times: TagTimesStore;
   private failedFlushes = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.serve = newServePort(ctx.exports.Serve as unknown as ServePurgeFactory);
+    this.times = newSqliteTagTimes(ctx.storage);
     this.backlog = new PurgeBacklog({
       store: newSqliteBacklogStore(ctx.storage),
       serve: {
@@ -48,7 +56,21 @@ export class PurgeQueue extends DurableObject<Env> {
       },
       now: () => Date.now(),
       random: Math.random,
+      onReleasesPurged: (releases, at) =>
+        this.times.record(
+          "purge",
+          releases.map((tag) => ({ tag, raisedAt: at })),
+        ),
     });
+  }
+
+  async record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> {
+    this.times.forgetBefore(Date.now() - TAG_TIMES_RETENTION_MS);
+    this.times.record(mode, tags);
+  }
+
+  async readTimes(tags: string[]): Promise<TagTimes> {
+    return this.times.read(tags);
   }
 
   async raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> {

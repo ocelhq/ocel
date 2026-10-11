@@ -11,6 +11,7 @@ export const AWAITED_PURGE_MS = 3_000;
 export interface ServingPorts {
   serve: ServeFactory;
   queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
   waitUntil(promise: Promise<unknown>): void;
   now?(): number;
   awaitedPurgeMs?: number;
@@ -30,6 +31,7 @@ export function newServing(
       const run = purgeInBand(groups, {
         cache: ports.serve({ props: ORIGIN_PURGE_SCOPE }),
         queue: ports.queue,
+        times: ports.times,
         now: ports.now ?? Date.now,
       });
       ports.waitUntil(run);

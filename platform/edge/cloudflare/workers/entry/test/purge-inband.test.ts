@@ -8,9 +8,11 @@ function ports(
 ) {
   const purged: { mode: PurgeMode; tags: string[] }[] = [];
   const raised: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
+  const recorded: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
   return {
     purged,
     raised,
+    recorded,
     port: {
       cache: {
         purge: async (mode: PurgeMode, tags: string[]) => {
@@ -23,6 +25,11 @@ function ports(
       queue: {
         raise: async (mode: PurgeMode, tags: RaisedTag[]) => {
           raised.push({ mode, tags });
+        },
+      },
+      times: {
+        record: async (mode: PurgeMode, tags: RaisedTag[]) => {
+          recorded.push({ mode, tags });
         },
       },
       now: () => 5_000,
@@ -49,6 +56,29 @@ describe("a purge the origin announced in-band", () => {
       { mode: "purge", tags: ["r1|b", "r1|c"] },
     ]);
     expect(raised).toEqual([]);
+  });
+
+  it("records the time of every tag it purges, whether or not the purge lands", async () => {
+    const { port, recorded } = ports();
+
+    await purgeInBand([{ mode: "invalidate", tags: ["r1|a"] }], port);
+
+    expect(recorded).toEqual([{ mode: "invalidate", tags: [{ tag: "r1|a", raisedAt: 5_000 }] }]);
+  });
+
+  it("purges even when the times cannot be recorded", async () => {
+    const { port, purged } = ports();
+    port.times.record = async () => {
+      throw new Error("times down");
+    };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await purgeInBand([{ mode: "purge", tags: ["r1|a"] }], port);
+      expect(purged).toHaveLength(1);
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("hands the tags to the purge queue when the account's purge budget refuses them", async () => {
