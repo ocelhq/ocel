@@ -15,7 +15,7 @@ import {
   servesOnlyFresh,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
-import { purgeHeader } from "@platform/edge-contract/purge";
+import { purgeHeader, purgeHeaderFor } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import {
   findRouteWindow,
@@ -27,7 +27,7 @@ import {
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
-import { purgedSince, purgeHeaderFor, purgeMark } from "./purge-signal.mjs";
+import { purgedSince, purgeMark } from "./purge-signal.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
 import { noteServedRoute } from "./served-route.mjs";

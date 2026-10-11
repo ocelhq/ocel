@@ -1,15 +1,7 @@
-import { storedCacheTags, type TagRecord } from "@framework/next-cache";
-import {
-  formatPurge,
-  type PurgeEntry,
-  type PurgeGroup,
-  type PurgeMode,
-  readPurgeEntry,
-} from "@platform/edge-contract/purge";
+import type { TagRecord } from "@framework/next-cache";
+import { type PurgeEntry, readPurgeEntry } from "@platform/edge-contract/purge";
 
 const rememberedPurges = 2_000;
-
-export const purgeHeaderBytes = 4_096;
 
 interface Signal {
   total: number;
@@ -41,27 +33,4 @@ export function purgeMark(): number {
 export function purgedSince(mark: number): PurgeEntry[] {
   const { total, recent } = signal();
   return recent.slice(Math.max(0, recent.length - (total - mark)));
-}
-
-export function purgeHeaderFor(
-  release: string,
-  entries: readonly PurgeEntry[],
-): string | undefined {
-  const groups: PurgeGroup[] = [];
-  for (const mode of ["purge", "invalidate"] as PurgeMode[]) {
-    const { tags } = storedCacheTags(
-      release,
-      entries.filter((entry) => entry.mode === mode).map(({ tag }) => tag),
-    );
-    const kept: PurgeGroup = { mode, tags: [] };
-    groups.push(kept);
-    for (const tag of tags) {
-      kept.tags.push(tag);
-      if (formatPurge(groups)!.length > purgeHeaderBytes) {
-        kept.tags.pop();
-        return formatPurge(groups);
-      }
-    }
-  }
-  return formatPurge(groups);
 }

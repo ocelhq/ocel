@@ -1,4 +1,5 @@
-import { type PublishTag, storedCacheTags, type TagRecord } from "@framework/next-cache";
+import type { PublishTag, TagRecord } from "@framework/next-cache";
+import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { cloudCdnTagLimits } from "./cloud-cdn.mjs";
 import { newMetadataToken } from "./metadata-token.mjs";
 

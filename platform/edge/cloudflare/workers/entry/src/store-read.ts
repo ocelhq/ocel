@@ -3,9 +3,9 @@ import {
   cacheKey,
   deserialize,
   entryObjectKey,
-  storedCacheTags,
   tagsOf,
 } from "@framework/next-cache";
+import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { POSTPONED_LENGTH_HEADER, PPR_SHELL_VARIANT } from "./ppr";
 import type { TagTimes } from "./purge-times";
