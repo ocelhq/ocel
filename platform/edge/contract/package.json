@@ -6,6 +6,7 @@
   "description": "what an edge and an origin cloud agree on, so neither has to import the other",
   "license": "Apache-2.0",
   "exports": {
+    "./cache-rules": "./src/cache-rules.mts",
     "./client-address": "./src/client-address.mts",
     "./client-authorization": "./src/client-authorization.mts",
     "./edge-cache": "./src/edge-cache.mts",
@@ -14,6 +15,7 @@
     "./purge": "./src/purge.mts",
     "./hosting": "./src/hosting.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
+    "./fixtures/cache-rules": "./fixtures/cache-rules.json",
     "./fixtures/preview-gate": "./fixtures/preview-gate.json",
     "./static": "./src/static.mts",
     "./fixtures/static-rules": "./fixtures/static-rules.json"
