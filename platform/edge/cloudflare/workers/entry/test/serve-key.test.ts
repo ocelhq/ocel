@@ -132,6 +132,27 @@ describe("the request the gateway hands Serve", () => {
     expect(request.url).toBe("https://abc123.lambda-url.eu-west-2.on.aws/blog/a");
   });
 
+  it("carries none of the forwarding headers Workers Cache keys on, so a purge over RPC reaches what it stores", () => {
+    const visitor = new Request("https://shop.example.com/blog/a", {
+      headers: {
+        "x-forwarded-host": "shop.example.com",
+        "x-forwarded-proto": "https",
+        "x-host": "shop.example.com",
+        "x-forwarded-scheme": "https",
+        "x-original-url": "/blog/a",
+        "x-rewrite-url": "/blog/a",
+        forwarded: "host=shop.example.com",
+        "x-http-method-override": "GET",
+        "x-http-method": "GET",
+        "x-method-override": "GET",
+      },
+    });
+
+    const request = buildServeRequest("https://serve.ocel.invalid/blog/a", visitor);
+
+    expect([...request.headers.keys()]).toEqual(["x-forwarded-proto"]);
+  });
+
   it("keeps the visitor's method", () => {
     const visitor = new Request("https://shop.example.com/", { method: "HEAD" });
     expect(buildServeRequest("https://serve.example/", visitor).method).toBe("HEAD");

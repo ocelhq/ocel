@@ -47,6 +47,18 @@ const STORAGE_PREFIX_SEGMENTS = 4;
 
 const VISITOR_CREDENTIAL_HEADERS = ["cookie", "authorization"] as const;
 
+const CACHE_KEYED_HEADERS = [
+  "x-forwarded-host",
+  "x-host",
+  "x-forwarded-scheme",
+  "x-original-url",
+  "x-rewrite-url",
+  "forwarded",
+  "x-http-method-override",
+  "x-http-method",
+  "x-method-override",
+] as const;
+
 export function parseKeyRelease(key: string): { app: string; release: string } {
   const segments = key.split("/");
   if (
@@ -129,7 +141,7 @@ export function buildEdgeUrl(requestUrl: string): string {
 
 export function buildServeRequest(url: string, visitor?: Request): Request {
   const headers = new Headers(visitor?.headers);
-  for (const name of VISITOR_CREDENTIAL_HEADERS) headers.delete(name);
+  for (const name of [...VISITOR_CREDENTIAL_HEADERS, ...CACHE_KEYED_HEADERS]) headers.delete(name);
   return new Request(url, { method: visitor?.method ?? "GET", headers });
 }
 
