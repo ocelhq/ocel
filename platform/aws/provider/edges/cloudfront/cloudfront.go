@@ -306,6 +306,9 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	s := &stack{p: p, state: next, own: own}
+	if err := s.reconcilePreviewGate(ctx, c, spec.PreviewGate); err != nil {
+		return nil, err
+	}
 	if spec.PruneOnly {
 		return s, nil
 	}

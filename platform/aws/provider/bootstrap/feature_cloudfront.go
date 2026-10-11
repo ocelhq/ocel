@@ -26,6 +26,9 @@ const (
 
 	edgeCacheKeyHeader = "x-ocel-cache-key"
 
+	previewRobotsHeader = "x-robots-tag"
+	previewRobotsValue  = "noindex"
+
 	edgeRSCQueryParameter = "_rsc"
 
 	edgeCacheMaxTTL = int64(365 * 24 * time.Hour / time.Second)
@@ -83,7 +86,14 @@ func resolverResource(ns Namespace, tier environment.Tier) string {
         KeyValueStoreAssociations:
           - KeyValueStoreARN: !GetAtt EdgeRoutes.Arn
       FunctionCode: |
-%s`, ns.EdgeResolverName(tier), indent(string(resolver.Code()), 8))
+%s`, ns.EdgeResolverName(tier), indent(string(resolverCodeFor(tier)), 8))
+}
+
+func resolverCodeFor(tier environment.Tier) []byte {
+	if tier == environment.TierPreview {
+		return resolver.PreviewCode()
+	}
+	return resolver.Code()
 }
 
 func emptyBodyResource(ns Namespace, tier environment.Tier) string {
@@ -144,13 +154,23 @@ func headersPolicyResource(ns Namespace, tier environment.Tier) string {
             - Header: %q
               Value: %q
               Override: true
-        RemoveHeadersConfig:
+%s        RemoveHeadersConfig:
           Items:
             - Header: %q
             - Header: %q
 `, ns.edgeHeadersPolicyName(tier),
 		fmt.Sprintf("Ocel: names the %q router on each response it served, so a probe knows which router answered, and drops cache tags.", KindCloudFront),
-		router.HeaderRouter, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
+		router.HeaderRouter, KindCloudFront, noindexHeader(tier), EdgeCacheTagHeader, edge.HeaderEmptyBody)
+}
+
+func noindexHeader(tier environment.Tier) string {
+	if tier != environment.TierPreview {
+		return ""
+	}
+	return fmt.Sprintf(`            - Header: %q
+              Value: %q
+              Override: true
+`, previewRobotsHeader, previewRobotsValue)
 }
 
 func assetAccessResource(ns Namespace, tier environment.Tier) string {

@@ -109,17 +109,17 @@ function unreadableRoutes() {
   );
 }
 
-async function routeFor(host) {
+async function readKey(key) {
   try {
-    return { route: await kvs.get(host, { format: 'json' }) };
+    return { value: await kvs.get(key, { format: 'json' }) };
   } catch (_err) {
     let claimed;
     try {
-      claimed = await kvs.exists(host);
+      claimed = await kvs.exists(key);
     } catch (_probe) {
       return { unreadable: true };
     }
-    return claimed ? { unreadable: true } : { route: null };
+    return claimed ? { unreadable: true } : { value: null };
   }
 }
 
@@ -130,12 +130,14 @@ async function handler(event) {
   if (host === null) return unknownHost();
   host = host.toLowerCase();
 
-  var found = await routeFor(host);
+  var found = await readKey(host);
   if (found.unreadable) return unreadableRoutes();
-  var route = found.route;
+  var route = found.value;
   if (!route || !route.origin || !route.release) return unknownHost();
 
   stripClientControl(request.headers);
+  var refused = await gatePreview(request, route, host);
+  if (refused) return refused;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
   request.headers[CACHE_KEY_HEADER] = {
     value: cacheKey(route.release, request.uri, request.headers, request.cookies),

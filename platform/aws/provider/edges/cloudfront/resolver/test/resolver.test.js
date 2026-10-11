@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import fixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("../src/resolver.js", import.meta.url), "utf8");
+const read = (name) => readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
+
+const source = `${read("resolver.js")}\n${read("ungated.js")}`;
 
 function load(cf) {
   const body = source.replace(/^import cf from 'cloudfront';\n/m, "");

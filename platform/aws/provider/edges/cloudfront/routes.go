@@ -68,13 +68,6 @@ func (w routeStore) chance() float64 {
 }
 
 func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []string) error {
-	if w.arn == "" {
-		return fmt.Errorf("the %q edge names no key value store to publish routes into; bootstrap the account first", Kind)
-	}
-	if len(puts) == 0 && len(deletes) == 0 {
-		return nil
-	}
-
 	written := make([]kvstypes.PutKeyRequestListItem, 0, len(puts))
 	for _, hostname := range slices.Sorted(maps.Keys(puts)) {
 		encoded, err := json.Marshal(puts[hostname])
@@ -93,6 +86,16 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 	dropped := make([]kvstypes.DeleteKeyRequestListItem, 0, len(lowered))
 	for _, hostname := range slices.Compact(slices.Sorted(slices.Values(lowered))) {
 		dropped = append(dropped, kvstypes.DeleteKeyRequestListItem{Key: aws.String(hostname)})
+	}
+	return w.write(ctx, written, dropped)
+}
+
+func (w routeStore) write(ctx context.Context, written []kvstypes.PutKeyRequestListItem, dropped []kvstypes.DeleteKeyRequestListItem) error {
+	if w.arn == "" {
+		return fmt.Errorf("the %q edge names no key value store to write routes and preview gates into; bootstrap the account first", Kind)
+	}
+	if len(written) == 0 && len(dropped) == 0 {
+		return nil
 	}
 
 	var last error

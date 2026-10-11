@@ -29,6 +29,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.72.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/aws/smithy-go v1.28.1
+	github.com/evanw/esbuild v0.28.1
 	github.com/mmmorris1975/ssm-session-client v0.500.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
@@ -96,7 +97,6 @@ require (
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/evanw/esbuild v0.28.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect

@@ -30,6 +30,13 @@ type cloudFrontEdgeShape struct {
 			} `yaml:"CachePolicyConfig"`
 			ResponseHeadersPolicyConfig struct {
 				Name                string `yaml:"Name"`
+				CustomHeadersConfig struct {
+					Items []struct {
+						Header   string `yaml:"Header"`
+						Value    string `yaml:"Value"`
+						Override bool   `yaml:"Override"`
+					} `yaml:"Items"`
+				} `yaml:"CustomHeadersConfig"`
 				RemoveHeadersConfig struct {
 					Items []struct {
 						Header string `yaml:"Header"`
@@ -80,8 +87,8 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if !fn.Properties.AutoPublish {
 				t.Error("AutoPublish = false; an unpublished resolver runs on no distribution")
 			}
-			if got, want := strings.TrimRight(fn.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolver.Code()), "\n"); got != want {
-				t.Error("the function contains something other than the resolver this build embeds")
+			if got, want := strings.TrimRight(fn.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolverFor(tier)), "\n"); got != want {
+				t.Error("the function contains something other than the resolver this build embeds for the tier")
 			}
 			if got := fn.Properties.FunctionConfig.Runtime; got != "cloudfront-js-2.0" {
 				t.Errorf("resolver runtime = %q, want cloudfront-js-2.0: no earlier runtime reads a key value store", got)
@@ -120,6 +127,16 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 				if !slices.Contains(removed, header) {
 					t.Errorf("removed headers = %v, want %s among them: nothing of ocel's own reaches a browser", removed, header)
 				}
+			}
+
+			noindex := false
+			for _, item := range headers.Properties.ResponseHeadersPolicyConfig.CustomHeadersConfig.Items {
+				if strings.EqualFold(item.Header, "x-robots-tag") && item.Value == "noindex" && item.Override {
+					noindex = true
+				}
+			}
+			if want := tier == environment.TierPreview; noindex != want {
+				t.Errorf("the response headers policy marks answers noindex = %t, want %t: only previews are kept out of search engines", noindex, want)
 			}
 
 			dropper, ok := tmpl.Resources["EdgeEmptyBody"]
@@ -241,4 +258,11 @@ func yamlValuesAt(node *yaml.Node, key string) []string {
 		values = append(values, yamlValuesAt(child, key)...)
 	}
 	return values
+}
+
+func resolverFor(tier environment.Tier) []byte {
+	if tier == environment.TierPreview {
+		return resolver.PreviewCode()
+	}
+	return resolver.Code()
 }
