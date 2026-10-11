@@ -112,10 +112,9 @@ func readsOnlyEdgeReadableObjects(stmts []policyStatement) bool {
 	return edgeUserReads(stmts, release+"assets/_next/static/app.js", edgeReadable) &&
 		edgeUserReads(stmts, release+"route-table/"+strings.Repeat("a", 64)+".json", edgeReadable) &&
 		edgeUserReads(stmts, release+"edge/bundle.json", edgeReadable) &&
-		!edgeUserReads(stmts, release+"origin.json", nil) &&
 		!edgeUserReads(stmts, release+"image-config.json", nil) &&
 		!edgeUserReads(stmts, release+"isr/assets/page.json", nil) &&
-		!edgeUserReads(stmts, release+"origin.json", map[string]string{naming.EdgeReadableTagKey: "other"})
+		!edgeUserReads(stmts, release+"image-config.json", map[string]string{naming.EdgeReadableTagKey: "other"})
 }
 
 func edgeUserReads(stmts []policyStatement, object string, tags map[string]string) bool {
@@ -152,16 +151,15 @@ func existingTagsSatisfy(condition map[string]any, tags map[string]string) bool 
 	return true
 }
 
-func TestTheEdgeUserCannotReadTheOriginRecordOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
+func TestTheEdgeUserCannotReadAnUntaggedObjectOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
 	var tmpl edgeUserTemplate
 	if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudflareEdge, environment.TierProduction)), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	stmts := tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement
 	for _, object := range []string{
-		"arn:aws:s3:::assets/prod/edge/web/r1a2b3c4d/origin.json",
-		"arn:aws:s3:::assets/prod/shop/assets/r1a2b3c4d/origin.json",
-		"arn:aws:s3:::assets/edge/assets/route-table/r1a2b3c4d/origin.json",
+		"arn:aws:s3:::assets/prod/edge/web/r1a2b3c4d/image-config.json",
+		"arn:aws:s3:::assets/edge/assets/route-table/r1a2b3c4d/image-config.json",
 		"arn:aws:s3:::assets/prod/shop/assets/r1a2b3c4d/image-config.json",
 		"arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/isr/blog/assets/edge/page.json",
 	} {
