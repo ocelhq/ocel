@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { notePurge, purgedSince, purgeHeaderFor, purgeMark } from "../src/purge-signal.mjs";
+import {
+  notePurge,
+  purgedSince,
+  purgeHeaderBytes,
+  purgeHeaderFor,
+  purgeMark,
+} from "../src/purge-signal.mjs";
 
 test("reports an expired tag raised after the mark as a purge", () => {
   const mark = purgeMark();
@@ -59,7 +65,7 @@ test("writes the header with each tag stamped by the release token", () => {
   ];
 
   expect(purgeHeaderFor("r0a1b2c3d", entries)).toBe(
-    "invalidate r0a1b2c3d|products purge r0a1b2c3d|_N_T_/blog/a",
+    "purge r0a1b2c3d|_N_T_/blog/a invalidate r0a1b2c3d|products",
   );
 });
 
@@ -74,4 +80,26 @@ test("leaves out a tag the edge cannot store, and writes the rest", () => {
   ];
 
   expect(purgeHeaderFor("r0a1b2c3d", entries)).toBe("purge r0a1b2c3d|cart");
+});
+
+test("writes no more of the header than fits its byte budget, purges before invalidates", () => {
+  const entries = [
+    ...Array.from({ length: 400 }, (_, i) => ({
+      tag: `stale-${i}`,
+      mode: "invalidate" as const,
+      raisedAt: 1,
+    })),
+    ...Array.from({ length: 400 }, (_, i) => ({
+      tag: `gone-${i}`,
+      mode: "purge" as const,
+      raisedAt: 1,
+    })),
+  ];
+
+  const header = purgeHeaderFor("r0a1b2c3d", entries)!;
+
+  expect(header.length).toBeLessThanOrEqual(purgeHeaderBytes);
+  expect(header.startsWith("purge r0a1b2c3d|gone-0,")).toBe(true);
+  expect(header).not.toContain("invalidate");
+  expect(purgeHeaderFor("r0a1b2c3d", entries)).toBe(header);
 });
