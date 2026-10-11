@@ -1,12 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
+import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
-import {
-  PurgeBacklog,
-  type PurgeMode,
-  type PurgeOutcome,
-  type PurgePort,
-  type RaisedTag,
-} from "./purge-backlog";
+import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
 import { sqliteBacklogStore } from "./purge-sqlite-store";
 
 export interface ServePurgeRpc {

@@ -1,4 +1,5 @@
-import type { BacklogStore, PurgeMode } from "../src/purge-backlog";
+import type { PurgeMode } from "@platform/edge-contract/purge";
+import type { BacklogStore } from "../src/purge-backlog";
 
 interface Pending {
   mode: PurgeMode;

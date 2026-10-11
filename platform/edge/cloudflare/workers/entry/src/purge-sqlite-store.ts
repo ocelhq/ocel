@@ -1,4 +1,5 @@
-import type { BacklogStore, PurgeMode } from "./purge-backlog";
+import type { PurgeMode } from "@platform/edge-contract/purge";
+import type { BacklogStore } from "./purge-backlog";
 
 const EVERYTHING_AT = "purgedEverythingAt";
 const RETRY_AT = "retryAt";

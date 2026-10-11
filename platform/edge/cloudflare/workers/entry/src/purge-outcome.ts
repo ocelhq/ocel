@@ -1,10 +1,5 @@
 import { type PurgeOutcome, RATE_LIMITED } from "./purge-backlog";
 
-export interface PurgeResult {
-  success: boolean;
-  errors: { code: number; message: string }[];
-}
-
 const RATE_LIMITED_IN_MESSAGE = new RegExp(`\\b${RATE_LIMITED}\\b`);
 
 export function outcomeOfPurge(answer: unknown): PurgeOutcome {
@@ -15,7 +10,7 @@ export function outcomeOfPurge(answer: unknown): PurgeOutcome {
       message: answer.message,
     };
   }
-  const result = answer as PurgeResult;
+  const result = answer as CachePurgeResult;
   if (result.success) return { ok: true };
   return {
     ok: false,
