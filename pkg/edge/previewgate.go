@@ -27,8 +27,8 @@ const (
 	HeaderPreviewSetBypassCookie   = "x-ocel-set-bypass-cookie"
 	PreviewSessionLifetime         = 7 * 24 * time.Hour
 	PreviewLoginBodyMaxBytes       = 1024
-	previewGateCacheControl        = "private, no-store"
-	previewRobotsTag               = "noindex"
+	PreviewGateCacheControl        = "private, no-store"
+	PreviewRobotsTag               = "noindex"
 	previewFormContentType         = "application/x-www-form-urlencoded"
 	previewHTMLContentType         = "text/html; charset=utf-8"
 	previewSignatureHexLen         = 2 * sha256.Size
@@ -107,7 +107,7 @@ func (g PreviewGate) Check(req PreviewRequest, now time.Time) PreviewVerdict {
 		forward.Del("Authorization")
 	}
 	dropPreviewCookie(forward)
-	return PreviewVerdict{Forward: forward, ResponseHeader: http.Header{"X-Robots-Tag": {previewRobotsTag}}}
+	return PreviewVerdict{Forward: forward, ResponseHeader: http.Header{"X-Robots-Tag": {PreviewRobotsTag}}}
 }
 
 func (g PreviewGate) checkLogin(req PreviewRequest, now time.Time) PreviewVerdict {
@@ -224,8 +224,8 @@ func answerStatus(status int) PreviewVerdict {
 
 func newGateResponseHeader() http.Header {
 	return http.Header{
-		"Cache-Control": {previewGateCacheControl},
-		"X-Robots-Tag":  {previewRobotsTag},
+		"Cache-Control": {PreviewGateCacheControl},
+		"X-Robots-Tag":  {PreviewRobotsTag},
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -82,6 +83,48 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 	if slices.ContainsFunc(shielded.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
 		t.Errorf("a preview behind the load balancer said %q, and its service takes traffic from the load balancer alone", shielded.Lines())
+	}
+}
+
+func TestAPreviewWhoseServiceRunsThePreviewGateIsNotSaidToBeOpenAndIsHandedTheKeys(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	progress := &fake.Log{}
+	spec := previewSpec()
+	gate := edge.PreviewGate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
+	spec.App.PreviewGate = &gate
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, progress); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	if slices.ContainsFunc(progress.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
+		t.Errorf("the release said %q, and a service that runs the preview gate does not answer anyone with its url", progress.Lines())
+	}
+	var delivered string
+	for _, variable := range server.service.Template.Containers[0].Env {
+		if variable.Name == edge.PreviewGateVar {
+			delivered = variable.Value
+		}
+	}
+	const want = `{"key":"k","passwordMac":"m","bypassSecrets":[],"allowOptions":[]}`
+	if delivered != want {
+		t.Errorf("the service's %s = %q, want the keys the deploy recorded, %s", edge.PreviewGateVar, delivered, want)
+	}
+}
+
+func TestAPreviewWithNoGateIsHandedNoPreviewGateVariable(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+
+	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), &fake.Log{}); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	for _, variable := range server.service.Template.Containers[0].Env {
+		if variable.Name == edge.PreviewGateVar {
+			t.Errorf("the service sets %s, want none: no gate is recorded", edge.PreviewGateVar)
+		}
 	}
 }
 
