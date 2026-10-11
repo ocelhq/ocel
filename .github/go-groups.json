@@ -14,7 +14,7 @@
   {
     "name": "gcp",
     "scope": "gcp",
-    "dirs": "platform/gcp/provider platform/gcp/runtime platform/gcp/connector scripts/flocidispatch",
+    "dirs": "platform/gcp/provider platform/gcp/gateplugin platform/gcp/runtime platform/gcp/connector scripts/flocidispatch",
     "generate": "platform/gcp/provider"
   },
   {

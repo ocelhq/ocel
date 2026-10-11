@@ -54,7 +54,15 @@ func (v *headerValues) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, (*[]string)(v))
 }
 
+type PreviewGateCheck func(gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict
+
 func RunPreviewGate(t *testing.T) {
+	t.Helper()
+
+	RunPreviewGateWith(t, previewgate.Gate.Check, false)
+}
+
+func RunPreviewGateWith(t *testing.T, check PreviewGateCheck, withoutLogins bool) {
 	t.Helper()
 
 	var vectors previewGateVector
@@ -64,6 +72,9 @@ func RunPreviewGate(t *testing.T) {
 	now := time.Unix(vectors.NowSeconds, 0)
 
 	for _, example := range vectors.Cases {
+		if withoutLogins && example.Request.Method == "POST" && strings.HasPrefix(example.Request.Target, previewgate.LoginPath) {
+			continue
+		}
 		t.Run(example.Name, func(t *testing.T) {
 			gate := vectors.Gate
 			gate.BypassSecrets = slices.Clone(gate.BypassSecrets)
@@ -79,7 +90,7 @@ func RunPreviewGate(t *testing.T) {
 					header.Add(name, value)
 				}
 			}
-			verdict := gate.Check(previewgate.Request{
+			verdict := check(gate, previewgate.Request{
 				Method: example.Request.Method,
 				Host:   example.Request.Host,
 				Target: example.Request.Target,

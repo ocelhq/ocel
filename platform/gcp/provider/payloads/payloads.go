@@ -22,6 +22,7 @@ var (
 	envSourceSync     = load("dist/envsourcesync-" + ContainerArch)
 	realtimeGateway   = load("dist/realtime-gateway-" + ContainerArch)
 	bastion           = load("dist/bastion-" + ContainerArch)
+	previewGatePlugin = load("dist/previewgate.wasm")
 	nextServerRuntime = loadNextServerRuntime()
 	nextRuntime       = loadNextRuntime()
 )
@@ -46,6 +47,8 @@ func EnvSourceSync() []byte { return envSourceSync }
 func RealtimeGateway() []byte { return realtimeGateway }
 
 func Bastion() []byte { return bastion }
+
+func PreviewGatePlugin() []byte { return previewGatePlugin }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)
