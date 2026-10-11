@@ -513,14 +513,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "cloudflare-on-gcp-runs-no-worker",
-    reason:
-      "Cloudflare in front of a Google Cloud origin is a proxy that runs no worker, so the routing and cache a worker serves are absent, and the lane bootstraps no shielded load balancer for it to forward to",
-    where: [
-      { on: ["gcp"], variants: [cloudflareOnGoogleCloud], fails: [step.deploy], skipsCell: true },
-    ],
-  },
-  {
     id: "floci-serves-no-memorystore",
     reason:
       "floci serves no Memorystore, and the floci lane's bootstrap installs no private network, so the gcp provider refuses a deploy that declares a store at preflight",
