@@ -146,7 +146,7 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 		f.blockedNames[name]--
 		f.statuses[name] = cfntypes.StackStatusRollbackComplete
 		if _, ok := f.reasons[name]; !ok {
-			f.reasons[name] = "The following resource(s) failed to create: [RevalidateQueue]. " + cfn.QueueDeletedRecently
+			f.reasons[name] = "The following resource(s) failed to create: [TagInvalidatorDeadLetterQueue]. " + cfn.QueueDeletedRecently
 		}
 		f.outputs[name] = map[string]string{}
 		return &cloudformation.CreateStackOutput{}, nil
@@ -779,9 +779,6 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		front := edgeStack(environment.TierProduction)
-		if got := stacks.parameter(front, paramRevalidateQueueARN); got != stacks.output(isrStack(environment.TierProduction), outputRevalidateQueueARN) {
-			t.Errorf("%s was handed queue ARN %q, want the one the isr stack output", front, got)
-		}
 		if got := stacks.parameter(front, paramImageOptimizerARN); got != stacks.output(optStack(environment.TierProduction), outputImageOptimizerARN) {
 			t.Errorf("%s was handed optimizer ARN %q, want the one the image-optimization stack output", front, got)
 		}

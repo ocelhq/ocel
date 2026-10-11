@@ -67,11 +67,11 @@ func TestAWriteThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
 	stack := isrStack(environment.TierProduction)
 
 	if err := AdmitReplacements(defaultNamespace, true, &progress)(stack, []cfntypes.ResourceChange{
-		change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
+		change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
 	}); err != nil {
 		t.Fatalf("an accepted replacement was refused: %v", err)
 	}
-	want := []string{"WARN Stack " + stack + " would replace RevalidateQueue (AWS::SQS::Queue) rather than update it in place"}
+	want := []string{"WARN Stack " + stack + " would replace TagInvalidatorDeadLetterQueue (AWS::SQS::Queue) rather than update it in place"}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the review said %v, want %v", got, want)
 	}

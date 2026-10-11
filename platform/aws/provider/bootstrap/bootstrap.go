@@ -46,22 +46,21 @@ const (
 )
 
 type Deployed struct {
-	Present            bool
-	Stacks             []StackStamp
-	Features           FeatureSet
-	StateBucket        string
-	StateTable         string
-	ArtifactBucket     string
-	AssetBucket        string
-	VariablesTable     string
-	VariablesKeyARN    string
-	ImageOptimizerURL  string
-	RevalidateQueueURL string
-	AppBoundaryARN     string
-	Tier               environment.Tier
-	RuntimeLayers      map[string]string
-	RuntimeStack       StackStamp
-	Outputs            map[string]string
+	Present           bool
+	Stacks            []StackStamp
+	Features          FeatureSet
+	StateBucket       string
+	StateTable        string
+	ArtifactBucket    string
+	AssetBucket       string
+	VariablesTable    string
+	VariablesKeyARN   string
+	ImageOptimizerURL string
+	AppBoundaryARN    string
+	Tier              environment.Tier
+	RuntimeLayers     map[string]string
+	RuntimeStack      StackStamp
+	Outputs           map[string]string
 }
 
 type SSMAPI interface {
@@ -277,10 +276,6 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.ImageOptimizerURL = value
 		case outputImageOptimizerARN:
 			refs.imageOptimizerARN = value
-		case outputRevalidateQueueURL:
-			d.RevalidateQueueURL = value
-		case outputRevalidateQueueARN:
-			refs.revalidateQueueARN = value
 		case outputAppBoundaryARN:
 			d.AppBoundaryARN = value
 		case outputInfraTier:
@@ -301,7 +296,6 @@ type stackPayloads struct {
 	optimizer     payloads.Placement
 	publisher     payloads.Placement
 	invalidator   payloads.Placement
-	revalidator   payloads.Placement
 	envSourceSync payloads.Placement
 }
 
@@ -813,7 +807,7 @@ func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer, the publisher and the revalidator."
+      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer and the publisher."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:

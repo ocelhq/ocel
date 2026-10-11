@@ -202,102 +202,6 @@
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_sqs_queue:RevalidateDeadLetterQueue",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0.0000005",
-          "monthlyCost": "0.01",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 requests",
-          "rateRef": "aws/sqs/requests-fifo"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.01"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_sqs_queue:RevalidateQueue",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0.0000005",
-          "monthlyCost": "0.01",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 requests",
-          "rateRef": "aws/sqs/requests-fifo"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.01"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_function:Revalidator",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0.0000002",
-          "monthlyCost": "0.20",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 requests",
-          "rateRef": "aws/lambda/requests-arm"
-        },
-        {
-          "name": "Duration",
-          "unit": "GB-seconds",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0.0000133334",
-          "monthlyCost": "1.33",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 GB-seconds",
-          "rateRef": "aws/lambda/duration-arm"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "1.53"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:RevalidatorQueueConsumer",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:RevalidatorLogGroup",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Ingested",
-          "unit": "GB",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.5",
-          "monthlyCost": "0.50",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GB",
-          "rateRef": "aws/logs/ingest"
-        },
-        {
-          "name": "Stored",
-          "unit": "GB-month",
-          "monthlyQuantity": "0.5",
-          "unitPrice": "0.03",
-          "monthlyCost": "0.02",
-          "usageBased": true,
-          "assumption": "moderate profile: 0.5 GB-month",
-          "rateRef": "aws/logs/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.52"
-    },
-    {
       "resource": "project:shop/shared:production/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
       "status": "STATUS_PRICED",
       "components": [
@@ -1132,12 +1036,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "6.40",
-      "monthlyUsage": "112.12"
+      "monthlyUsage": "110.05"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "6.00",
-      "monthlyUsage": "13.68"
+      "monthlyUsage": "11.61"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -1151,8 +1055,8 @@
     }
   ],
   "coverage": {
-    "supported": 34,
-    "free": 7,
+    "supported": 30,
+    "free": 6,
     "supportedTypes": [
       "aws_cloudwatch_log_group",
       "aws_data_transfer",
@@ -1179,5 +1083,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution uses"
   ],
   "monthlyFixed": "6.40",
-  "monthlyUsage": "112.12"
+  "monthlyUsage": "110.05"
 }

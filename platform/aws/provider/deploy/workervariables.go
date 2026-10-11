@@ -6,19 +6,17 @@ import (
 )
 
 type WorkerValues struct {
-	ImageOptimizerURL  string
-	RevalidateQueueURL string
-	AssetBucket        string
-	Region             string
-	EdgeAccessKeyID    string
-	EdgeSecretKey      string
+	ImageOptimizerURL string
+	AssetBucket       string
+	Region            string
+	EdgeAccessKeyID   string
+	EdgeSecretKey     string
 }
 
 func (f WorkerValues) Bindings() cloudflare.OriginBindings {
 	bindings := cloudflare.OriginBindings{Variables: map[string]string{}}
 	for name, value := range map[string]string{
-		edge.ImageOptimizerURLVar:  f.ImageOptimizerURL,
-		edge.RevalidateQueueURLVar: f.RevalidateQueueURL,
+		edge.ImageOptimizerURLVar: f.ImageOptimizerURL,
 	} {
 		if value != "" {
 			bindings.Variables[name] = value

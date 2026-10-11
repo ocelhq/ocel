@@ -486,9 +486,6 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := deleteSigningKeys(ctx, r.cfg.SigningKeys, r.findUndeclaredSigningKeys(listedKeys, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
-		return provider.StackResult{}, err
-	}
 	workers, err := r.provisionWorkers(ctx, prepared, work, progress)
 	if err != nil {
 		return provider.StackResult{}, err

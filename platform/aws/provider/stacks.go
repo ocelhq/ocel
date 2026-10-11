@@ -86,11 +86,10 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		RuntimeLayers: deployed.RuntimeLayers,
 
-		ArtifactRoot:       artifactRoot,
-		ArtifactBucket:     deployed.ArtifactBucket,
-		AssetBucket:        deployed.AssetBucket,
-		ImageOptimizerURL:  deployed.ImageOptimizerURL,
-		RevalidateQueueURL: deployed.RevalidateQueueURL,
+		ArtifactRoot:      artifactRoot,
+		ArtifactBucket:    deployed.ArtifactBucket,
+		AssetBucket:       deployed.AssetBucket,
+		ImageOptimizerURL: deployed.ImageOptimizerURL,
 
 		CacheStoreBucket:  params.CacheStore.Bucket,
 		CacheStoreObjects: cacheStoreObjects(params.CacheStore),

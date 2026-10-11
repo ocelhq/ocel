@@ -138,11 +138,6 @@ func (n Namespace) edgeSetName(what string, tier environment.Tier) string {
 	return suffixed(tier, string(n)+"-"+what)
 }
 
-func (n Namespace) revalidateQueueNames(tier environment.Tier) (queue, dlq string) {
-	base := suffixed(tier, string(n)+"-revalidate")
-	return base + ".fifo", base + "-dlq.fifo"
-}
-
 func (n Namespace) envSourceSyncScheduleGroupName(tier environment.Tier) string {
 	return suffixed(tier, n.CoreStackName())
 }

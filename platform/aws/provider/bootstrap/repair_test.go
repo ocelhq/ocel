@@ -38,13 +38,13 @@ func TestRepairable(t *testing.T) {
 		{
 			name:    "the production core never repairs",
 			stack:   coreStackName,
-			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
+			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
 			names:   coreStackName,
 		},
 		{
 			name:    "the preview core never repairs",
 			stack:   previewStackName,
-			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
+			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse)},
 			names:   previewStackName,
 		},
 		{
@@ -127,14 +127,14 @@ func TestRepairable(t *testing.T) {
 		{
 			name:    "a replacement",
 			stack:   "ocel-bootstrap-isr",
-			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)},
-			names:   "RevalidateQueue",
+			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)},
+			names:   "TagInvalidatorDeadLetterQueue",
 		},
 		{
 			name:    "a conditional replacement",
 			stack:   "ocel-bootstrap-isr",
-			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementConditional)},
-			names:   "RevalidateQueue",
+			changes: []cfntypes.ResourceChange{change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementConditional)},
+			names:   "TagInvalidatorDeadLetterQueue",
 		},
 		{
 			name:    "a removal",
@@ -158,7 +158,7 @@ func TestRepairable(t *testing.T) {
 			name:  "the offender is named even when it follows allowed changes",
 			stack: "ocel-bootstrap-isr",
 			changes: []cfntypes.ResourceChange{
-				change(cfntypes.ChangeActionModify, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionModify, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
 				change(cfntypes.ChangeActionModify, "StateTable", "AWS::DynamoDB::Table", cfntypes.ReplacementFalse),
 			},
 			names: "StateTable",
@@ -167,17 +167,17 @@ func TestRepairable(t *testing.T) {
 			name:  "the whole allowed set",
 			stack: "ocel-bootstrap-isr",
 			changes: []cfntypes.ResourceChange{
-				change(cfntypes.ChangeActionAdd, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionAdd, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
 				change(cfntypes.ChangeActionModify, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
 				change(cfntypes.ChangeActionAdd, "OptimizerUrl", "AWS::Lambda::Url", cfntypes.ReplacementFalse),
 				change(cfntypes.ChangeActionModify, "OptimizerPermission", "AWS::Lambda::Permission", cfntypes.ReplacementFalse),
 				change(cfntypes.ChangeActionAdd, "InvalidatorSource", "AWS::Lambda::EventSourceMapping", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionModify, "RevalidatorRole", "AWS::IAM::Role", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionAdd, "RevalidatorPolicy", "AWS::IAM::Policy", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionModify, "RevalidatorRolePolicy", "AWS::IAM::RolePolicy", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionAdd, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionModify, "RevalidateQueuePolicy", "AWS::SQS::QueuePolicy", cfntypes.ReplacementFalse),
-				change(cfntypes.ChangeActionAdd, "RevalidatorLogs", "AWS::Logs::LogGroup", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionModify, "TagInvalidatorRole", "AWS::IAM::Role", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionAdd, "TagInvalidatorPolicy", "AWS::IAM::Policy", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionModify, "TagInvalidatorRolePolicy", "AWS::IAM::RolePolicy", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionAdd, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueuePolicy", "AWS::SQS::QueuePolicy", cfntypes.ReplacementFalse),
+				change(cfntypes.ChangeActionAdd, "TagInvalidatorLogs", "AWS::Logs::LogGroup", cfntypes.ReplacementFalse),
 			},
 		},
 	}
@@ -238,14 +238,14 @@ func TestChangeSets(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
 		err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil)
 		if err == nil {
 			t.Fatal("a bootstrap that would replace a live queue was allowed through")
 		}
-		if !strings.Contains(err.Error(), "RevalidateQueue") {
-			t.Errorf("refusal = %q, want it to name RevalidateQueue", err)
+		if !strings.Contains(err.Error(), "TagInvalidatorDeadLetterQueue") {
+			t.Errorf("refusal = %q, want it to name TagInvalidatorDeadLetterQueue", err)
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -256,7 +256,7 @@ func TestChangeSets(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
 		req := everything()
 		req.AcceptReplacements = true
@@ -326,7 +326,7 @@ func TestRepair(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
+		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
 		var log repairLog
 
 		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
@@ -336,7 +336,7 @@ func TestRepair(t *testing.T) {
 		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a refused change was applied anyway")
 		}
-		if !log.says("WARN Could not refresh stack "+stack) || !log.says("RevalidateQueue") {
+		if !log.says("WARN Could not refresh stack "+stack) || !log.says("TagInvalidatorDeadLetterQueue") {
 			t.Errorf("repair said %v, want it to name what stopped it", log.Lines())
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {

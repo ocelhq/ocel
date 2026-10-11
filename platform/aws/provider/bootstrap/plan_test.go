@@ -104,23 +104,23 @@ func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 	stack := isrStack(environment.TierProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
-		change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
-		change(cfntypes.ChangeActionAdd, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse))
+		change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
+		change(cfntypes.ChangeActionAdd, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse))
 	before := stacks.updates
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, everything()), stack)
 	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it updated where its content is behind", stack, group.Action)
 	}
-	queue := changeNamed(t, group, "RevalidateQueue")
+	queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue")
 	if queue.Action != provider.ActionReplace {
-		t.Errorf("RevalidateQueue = %q, want a replacement where CloudFormation cannot change it in place", queue.Action)
+		t.Errorf("TagInvalidatorDeadLetterQueue = %q, want a replacement where CloudFormation cannot change it in place", queue.Action)
 	}
 	if queue.Reason == "" {
 		t.Error("the replacement says nothing about why the queue cannot be changed in place")
 	}
-	if added := changeNamed(t, group, "Revalidator"); added.Action != provider.ActionCreate {
-		t.Errorf("Revalidator = %q, want it created", added.Action)
+	if added := changeNamed(t, group, "TagInvalidator"); added.Action != provider.ActionCreate {
+		t.Errorf("TagInvalidator = %q, want it created", added.Action)
 	}
 	if stacks.updates != before {
 		t.Errorf("planning executed %d change sets; a plan writes nothing", stacks.updates-before)
@@ -134,7 +134,7 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
 	stack := isrStack(environment.TierProduction)
 	stacks.fallBehind(stack)
-	replacing := change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)
+	replacing := change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)
 	replacing.Details = []cfntypes.ResourceChangeDetail{{
 		Target: &cfntypes.ResourceTargetDefinition{
 			Attribute:          cfntypes.ResourceAttributeProperties,
@@ -145,7 +145,7 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	stacks.plan(stack, replacing)
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, everything()), stack)
-	if reason := changeNamed(t, group, "RevalidateQueue").Reason; !strings.Contains(reason, "FifoQueue") {
+	if reason := changeNamed(t, group, "TagInvalidatorDeadLetterQueue").Reason; !strings.Contains(reason, "FifoQueue") {
 		t.Errorf("the replacement reads %q, want it to name the property that forces it", reason)
 	}
 }
@@ -292,9 +292,9 @@ func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 	if group.Action != provider.ActionDelete || group.Feature != FeatureISR {
 		t.Fatalf("%s = %+v, want the dropped feature deleted", stack, group)
 	}
-	queue := changeNamed(t, group, "RevalidateQueue")
+	queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue")
 	if queue.Action != provider.ActionDelete || queue.Kind == "" {
-		t.Errorf("RevalidateQueue = %+v, want the queue the stack contains deleted", queue)
+		t.Errorf("TagInvalidatorDeadLetterQueue = %+v, want the queue the stack contains deleted", queue)
 	}
 }
 
@@ -320,8 +320,8 @@ func TestPlanListsTheResourcesTheProvisionedStackContainsNotTheOnesThisBuildWoul
 		t.Errorf("LeftoverQueue = %+v, want what the account contains, deleted", leftover)
 	}
 	for _, change := range group.Changes {
-		if change.Name == "RevalidateQueue" {
-			t.Error("the plan lists RevalidateQueue, which this build's template declares and the provisioned stack does not contain")
+		if change.Name == "TagInvalidatorDeadLetterQueue" {
+			t.Error("the plan lists TagInvalidatorDeadLetterQueue, which this build's template declares and the provisioned stack does not contain")
 		}
 	}
 }
@@ -340,8 +340,8 @@ func TestPlanFallsBackToTheTemplateWhenItCannotReadTheProvisionedStack(t *testin
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
 		Remove:   []string{FeatureISR},
 	}), stack)
-	if queue := changeNamed(t, group, "RevalidateQueue"); queue.Action != provider.ActionDelete {
-		t.Errorf("RevalidateQueue = %+v, want the template's best guess at what goes", queue)
+	if queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue"); queue.Action != provider.ActionDelete {
+		t.Errorf("TagInvalidatorDeadLetterQueue = %+v, want the template's best guess at what goes", queue)
 	}
 	if !strings.Contains(group.Reason, provider.DetailUnavailable) {
 		t.Errorf("%s reads %q, want it to own up to reading the listing off a template rather than the account", stack, group.Reason)

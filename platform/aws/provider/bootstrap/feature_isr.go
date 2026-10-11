@@ -9,7 +9,7 @@ import (
 
 var isrFeature = feature{
 	name:       FeatureISR,
-	summary:    "incremental static regeneration — queue, revalidator, invalidator",
+	summary:    "incremental static regeneration — the invalidator that clears stale copies from the fronts",
 	serves:     buildoutput.Uses{ISR: true},
 	template:   isrTemplate,
 	payloads:   isrPayloads,
@@ -19,24 +19,18 @@ var isrFeature = feature{
 func isrPayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
 	var code stackPayloads
 	var err error
-	if code.revalidator, err = ensureRevalidatorPayload(ctx, store, bucket); err != nil {
-		return code, err
-	}
 	code.invalidator, err = ensureTagInvalidatorPayload(ctx, store, bucket)
 	return code, err
 }
 
 func isrPlacements(bucket string) stackPayloads {
 	return stackPayloads{
-		revalidator: revalidatorPlacement(bucket),
 		invalidator: tagInvalidatorPlacement(bucket),
 	}
 }
 
 func isrTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
-		{paramAssetBucketName, "The core bootstrap's asset bucket, where the revalidator reads each build's origin descriptor and the fronts read their static assets.", in.refs.assetBucket},
-		{paramAssetBucketARN, "ARN of that bucket, so the revalidator's role can be scoped to the origin descriptors inside it and nothing else.", in.refs.assetBucketARN},
 		{paramStateTableName, "The core bootstrap's state table, which stores the tag clock the invalidator turns into cache invalidations.", in.refs.stateTable},
 		{paramStateTableARN, "ARN of that table, so the invalidator's role can read the ledger items naming which distributions to reach.", in.refs.stateTableARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the invalidator has.", in.refs.stateTableStreamARN},
@@ -44,14 +38,10 @@ func isrTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this bootstrap: the queue a front sends an admitted refresh to, the revalidator that renders it at the app's own origin, and the invalidator that clears the stale copy from the fronts that cached it."
+Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this bootstrap: the invalidator that clears the stale copy from the fronts that cached it."
 %sResources:
-%s%s%sOutputs:
 %s`,
 			FeatureISR, in.tier, params,
-			revalidateQueueResources(in.ns, in.tier),
-			revalidatorResources(in.ns, in.tier, in.code.revalidator),
-			tagInvalidatorResources(in.ns, in.code.invalidator, in.tier),
-			revalidateQueueOutputs()),
+			tagInvalidatorResources(in.ns, in.code.invalidator, in.tier)),
 	}
 }

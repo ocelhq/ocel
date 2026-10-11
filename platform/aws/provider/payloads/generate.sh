@@ -12,7 +12,7 @@ root=$(CDPATH= cd -- "$provider_dir/../../.." && pwd)
 runtime_dir=$(CDPATH= cd -- "$provider_dir/../runtime" && pwd)
 dist="$payloads_dir/dist"
 
-functions="image-optimizer revalidator tag-publisher tag-invalidator"
+functions="image-optimizer tag-publisher tag-invalidator"
 
 work=$(mktemp -d)
 stage="$work/stage"

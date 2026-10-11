@@ -15,12 +15,11 @@ const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a
 
 func awsWorkerValues() WorkerValues {
 	return WorkerValues{
-		ImageOptimizerURL:  "https://optimizer.example",
-		RevalidateQueueURL: "https://queue.example",
-		AssetBucket:        "assets-bucket",
-		Region:             "eu-west-2",
-		EdgeAccessKeyID:    "AKIA",
-		EdgeSecretKey:      "secret",
+		ImageOptimizerURL: "https://optimizer.example",
+		AssetBucket:       "assets-bucket",
+		Region:            "eu-west-2",
+		EdgeAccessKeyID:   "AKIA",
+		EdgeSecretKey:     "secret",
 	}
 }
 
@@ -43,11 +42,10 @@ func programmed(slug string, tier environment.Tier) cloudflare.EntryProgram {
 func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T) {
 	entry := edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}
 	awsVariables := map[string]string{
-		"OCEL_IMAGE_OPTIMIZER_URL":  "https://optimizer.example",
-		"OCEL_REVALIDATE_QUEUE_URL": "https://queue.example",
-		"OCEL_ASSET_BUCKET":         "assets-bucket",
-		"OCEL_AWS_REGION":           "eu-west-2",
-		"OCEL_EDGE_ACCESS_KEY_ID":   "AKIA",
+		"OCEL_IMAGE_OPTIMIZER_URL": "https://optimizer.example",
+		"OCEL_ASSET_BUCKET":        "assets-bucket",
+		"OCEL_AWS_REGION":          "eu-west-2",
+		"OCEL_EDGE_ACCESS_KEY_ID":  "AKIA",
 	}
 	with := func(extra map[string]string) map[string]string {
 		out := map[string]string{}
@@ -118,11 +116,10 @@ func TestWorkerValuesBindEveryValueTheEntryWorkerReads(t *testing.T) {
 	got := awsWorkerValues().Bindings()
 
 	wantVariables := map[string]string{
-		edge.ImageOptimizerURLVar:  "https://optimizer.example",
-		edge.RevalidateQueueURLVar: "https://queue.example",
-		edge.AssetBucketVar:        "assets-bucket",
-		edge.AWSRegionVar:          "eu-west-2",
-		edge.EdgeAccessKeyIDVar:    "AKIA",
+		edge.ImageOptimizerURLVar: "https://optimizer.example",
+		edge.AssetBucketVar:       "assets-bucket",
+		edge.AWSRegionVar:         "eu-west-2",
+		edge.EdgeAccessKeyIDVar:   "AKIA",
 	}
 	if !maps.Equal(got.Variables, wantVariables) {
 		t.Errorf("Variables = %v, want %v", got.Variables, wantVariables)

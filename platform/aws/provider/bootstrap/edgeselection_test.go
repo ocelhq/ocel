@@ -45,9 +45,7 @@ func TestReadingABootstrapSeesEveryInstalledEdge(t *testing.T) {
 			outputInfraTier:   string(environment.TierProduction),
 			outputAssetBucket: "assets-1",
 		}).stamped(stamp),
-		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction): outputs(map[string]string{
-			outputRevalidateQueueURL: "https://sqs.test/revalidate",
-		}).stamped(stamp),
+		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction):            outputs(nil).stamped(stamp),
 		defaultNamespace.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction): outputs(nil).stamped(stamp),
 		defaultNamespace.FeatureStackName(FeatureCloudFrontEdge, environment.TierProduction): outputs(map[string]string{
 			OutputEdgeResolverARN: "arn:aws:cloudfront::111122223333:function/ocel-resolver",
@@ -64,10 +62,9 @@ func TestReadingABootstrapSeesEveryInstalledEdge(t *testing.T) {
 		t.Errorf("Features = %v, want %v: an account may have a stack for more than one edge at a time", got.Features.Names(), want)
 	}
 	for key, value := range map[string]string{
-		outputAssetBucket:        "assets-1",
-		outputRevalidateQueueURL: "https://sqs.test/revalidate",
-		OutputEdgeResolverARN:    "arn:aws:cloudfront::111122223333:function/ocel-resolver",
-		OutputEdgeCachePolicy:    "cache-1",
+		outputAssetBucket:     "assets-1",
+		OutputEdgeResolverARN: "arn:aws:cloudfront::111122223333:function/ocel-resolver",
+		OutputEdgeCachePolicy: "cache-1",
 	} {
 		if got.Outputs[key] != value {
 			t.Errorf("Outputs[%s] = %q, want %q: a deploy reads the core and every installed feature stack as one", key, got.Outputs[key], value)

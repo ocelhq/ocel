@@ -96,64 +96,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_sqs_queue:RevalidateDeadLetterQueue",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_sqs_queue",
-      "name": "RevalidateDeadLetterQueue",
-      "region": "us-east-1",
-      "properties": {
-        "fifo_queue": true
-      }
-    },
-    {
-      "id": "project:shop/shared:production/aws_sqs_queue:RevalidateQueue",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_sqs_queue",
-      "name": "RevalidateQueue",
-      "region": "us-east-1",
-      "properties": {
-        "fifo_queue": true
-      }
-    },
-    {
-      "id": "project:shop/shared:production/aws_lambda_function:Revalidator",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_lambda_function",
-      "name": "Revalidator",
-      "region": "us-east-1",
-      "properties": {
-        "architectures": [
-          "arm64"
-        ],
-        "memory_size": 512,
-        "runtime": "nodejs24.x",
-        "timeout": 150
-      }
-    },
-    {
-      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:RevalidatorQueueConsumer",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_lambda_event_source_mapping",
-      "name": "RevalidatorQueueConsumer",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:RevalidatorLogGroup",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_cloudwatch_log_group",
-      "name": "RevalidatorLogGroup",
-      "region": "us-east-1",
-      "properties": {
-        "retention_in_days": 14
-      }
-    },
-    {
       "id": "project:shop/shared:production/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
       "scope": "project:shop/shared:production",
       "vendor": "aws",

@@ -43,7 +43,6 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 		{paramAssetBucketName, "The core bootstrap's asset bucket, where the tag publisher seeds each build's tag snapshot.", in.refs.assetBucket},
 		{paramAssetBucketARN, "ARN of that bucket, so the tag publisher's role is scoped to it.", in.refs.assetBucketARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the tag publisher has.", in.refs.stateTableStreamARN},
-		{paramRevalidateQueueARN, "ARN of the revalidation queue the ISR feature provisioned, the one queue the edge reader may enqueue a refresh on.", in.refs.revalidateQueueARN},
 	}
 	optimizer := in.alongside.Has(FeatureImageOptimization)
 	if optimizer {
@@ -72,7 +71,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, lists the asset bucket and reads the objects in it the deploy tagged edge-readable, and enqueues ISR revalidations."
+      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, lists the asset bucket and reads the objects in it the deploy tagged edge-readable."
     Properties:
       UserName: %s
       Policies:
@@ -98,21 +97,10 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
               - Effect: Allow
                 Action: s3:ListBucket
                 Resource: !Ref %s
-              - Effect: Allow
-                Action: sqs:SendMessage
-                Resource: !Ref %s
-              - Effect: Allow
-                Action:
-                  - kms:GenerateDataKey
-                  - kms:Decrypt
-                Resource: '*'
-                Condition:
-                  StringEquals:
-                    kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, tier, userName, ns.PolicyName("edge-cache"),
 		naming.EnvTierTagKey, tier,
 		paramAssetBucketARN, naming.EdgeReadableTagKey, naming.EdgeReadableTagValue, paramAssetBucketARN,
-		paramRevalidateQueueARN, invoke)
+		invoke)
 }
 
 func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {

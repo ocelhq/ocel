@@ -10,7 +10,6 @@
   },
   "devDependencies": {
     "@platform/aws-image-optimizer": "workspace:*",
-    "@platform/aws-revalidator": "workspace:*",
     "@platform/aws-runtime": "workspace:*",
     "@platform/aws-tag-invalidator": "workspace:*",
     "@platform/aws-tag-publisher": "workspace:*"
