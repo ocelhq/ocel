@@ -115,6 +115,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if values, err = mergedValues(fn.Name, values, own); err != nil {
 			return nil, err
 		}
+		if values, err = mergedValues(fn.Name, values, newCachingEdgeEnv(spec)); err != nil {
+			return nil, err
+		}
 		served := serving{
 			service:          service,
 			image:            fn.Image,

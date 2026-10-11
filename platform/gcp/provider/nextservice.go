@@ -83,7 +83,6 @@ func signsEdgePurges(spec provider.StackSpec) bool {
 func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
-	maps.Copy(env, newCachingEdgeEnv(spec.Edge))
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}

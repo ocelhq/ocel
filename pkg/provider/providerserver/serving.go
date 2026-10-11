@@ -42,6 +42,7 @@ type AppServing struct {
 	Bytecode       *provider.BytecodeSpec
 	AssetPrefix    string
 	Static         *edge.Static
+	Cache          []edge.CacheRule
 	Prerenders     bool
 }
 
@@ -57,6 +58,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if present {
 		facts.RootFunction = hosting.RootFunction
 		facts.Static = hosting.Static
+		facts.Cache = hosting.Cache
 	}
 	uses, err := buildUses(q.Root, q.App, q.Framework, hosting, present)
 	if err != nil {

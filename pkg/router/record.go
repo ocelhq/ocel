@@ -21,6 +21,7 @@ type ReleaseRecord struct {
 	HealthPathDiscovered bool                `json:"healthPathDiscovered,omitempty"`
 	RouteTable           *RouteTableLocation `json:"routeTable,omitempty"`
 	Static               *edge.Static        `json:"static,omitempty"`
+	Cache                []edge.CacheRule    `json:"cache,omitempty"`
 	FunctionURLs         map[string]string   `json:"functionUrls"`
 	AssetPrefix          string              `json:"assetPrefix"`
 	IsrPrefix            string              `json:"isrPrefix"`
