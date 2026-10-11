@@ -3,6 +3,8 @@ package payloads
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
+	"errors"
 	"strings"
 	"testing"
 
@@ -112,6 +114,65 @@ func TestThePreviewGatePluginIsAWasmModuleWithRoomLeftForItsConfig(t *testing.T)
 		t.Errorf("PreviewGatePlugin() leaves %d bytes of the %d a plugin and its config may take together, want at least %d for the gates it holds",
 			room, gateplugin.PackageLimitBytes, minimumConfigRoomBytes)
 	}
+}
+
+func TestThePreviewGatePluginIsAReactorExportingTheProxyWasmABI(t *testing.T) {
+	exports, err := readWasmExports(PreviewGatePlugin())
+	if err != nil {
+		t.Fatalf("PreviewGatePlugin() exports cannot be read: %v", err)
+	}
+	if exports["_start"] {
+		t.Error("PreviewGatePlugin() exports _start: a command module runs main and exits, and the load balancer refuses to load it")
+	}
+	for _, name := range []string{"_initialize", "proxy_abi_version_0_2_0", "proxy_on_context_create", "proxy_on_vm_start", "proxy_on_configure", "proxy_on_request_headers"} {
+		if !exports[name] {
+			t.Errorf("PreviewGatePlugin() does not export %s, which the load balancer calls to run a proxy-wasm plugin", name)
+		}
+	}
+}
+
+const wasmExportSection = 7
+
+func readWasmExports(module []byte) (map[string]bool, error) {
+	if !bytes.HasPrefix(module, []byte("\x00asm")) || len(module) < 8 {
+		return nil, errors.New("no WebAssembly module header")
+	}
+	rest := module[8:]
+	for len(rest) > 0 {
+		id := rest[0]
+		size, n := binary.Uvarint(rest[1:])
+		if n <= 0 || uint64(len(rest)-1-n) < size {
+			return nil, errors.New("a section runs past the end of the module")
+		}
+		body := rest[1+n : 1+n+int(size)]
+		rest = rest[1+n+int(size):]
+		if id == wasmExportSection {
+			return readExportNames(body)
+		}
+	}
+	return nil, errors.New("the module has no export section")
+}
+
+func readExportNames(body []byte) (map[string]bool, error) {
+	count, n := binary.Uvarint(body)
+	if n <= 0 {
+		return nil, errors.New("the export section has no count")
+	}
+	body = body[n:]
+	names := map[string]bool{}
+	for range count {
+		length, n := binary.Uvarint(body)
+		if n <= 0 || uint64(len(body)-n) < length+1 {
+			return nil, errors.New("an export name runs past the section")
+		}
+		names[string(body[n:n+int(length)])] = true
+		body = body[n+int(length)+1:]
+		if _, n = binary.Uvarint(body); n <= 0 {
+			return nil, errors.New("an export has no index")
+		}
+		body = body[n:]
+	}
+	return names, nil
 }
 
 func TestTheBastionIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t *testing.T) {
