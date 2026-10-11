@@ -1054,6 +1054,56 @@
           "usageBased": true,
           "assumption": "moderate profile: 5000000 CPU-milliseconds",
           "rateRef": "cloudflare/workers/cpu-time"
+        },
+        {
+          "name": "Durable Object requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "cloudflare/durable-objects/requests"
+        },
+        {
+          "name": "Durable Object duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "640",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 640 GB-seconds",
+          "rateRef": "cloudflare/durable-objects/duration"
+        },
+        {
+          "name": "Rows read",
+          "unit": "rows",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 rows",
+          "rateRef": "cloudflare/durable-objects/rows-read"
+        },
+        {
+          "name": "Rows written",
+          "unit": "rows",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 rows",
+          "rateRef": "cloudflare/durable-objects/rows-written"
+        },
+        {
+          "name": "Stored data",
+          "unit": "GB-month",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB-month",
+          "rateRef": "cloudflare/durable-objects/storage"
         }
       ],
       "monthlyFixed": "0.00",
