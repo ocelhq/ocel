@@ -43,7 +43,7 @@ func newGateVersion(image, config string) gateVersion {
 type gateSpec struct {
 	Names  names
 	Main   gateVersion
-	Before *gateVersion
+	Before []gateVersion
 }
 
 func GateStack(tier environment.Tier) string {
@@ -57,8 +57,8 @@ func isGated(tier environment.Tier, shielded bool) bool {
 func gateProgram(spec gateSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		versions := networkservices.WasmPluginVersionArray{declareGateVersion(spec.Main)}
-		if spec.Before != nil {
-			versions = append(versions, declareGateVersion(*spec.Before))
+		for _, before := range spec.Before {
+			versions = append(versions, declareGateVersion(before))
 		}
 		plugin, err := networkservices.NewWasmPlugin(ctx, spec.Names.GatePlugin, &networkservices.WasmPluginArgs{
 			Name:          pulumi.String(spec.Names.GatePlugin),

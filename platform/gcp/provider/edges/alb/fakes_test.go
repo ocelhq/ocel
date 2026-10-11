@@ -56,6 +56,7 @@ type world struct {
 	untags           []string
 	closed           map[string]bool
 	onUp             func()
+	afterUp          func()
 	through          []string
 	warmFails        error
 	untagFails       error
@@ -118,13 +119,25 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 	overlapping := w.onUp
 	w.onUp = nil
 	w.mu.Unlock()
+	if overlapping != nil {
+		overlapping()
+	}
 	seen, err := declared(program)
 	if err != nil {
 		return nil, err
 	}
-	if overlapping != nil {
-		overlapping()
+	outputs, err := w.commitUp(stack, seen)
+	w.mu.Lock()
+	finished := w.afterUp
+	w.afterUp = nil
+	w.mu.Unlock()
+	if err == nil && finished != nil {
+		finished()
 	}
+	return outputs, err
+}
+
+func (w *world) commitUp(stack string, seen map[string]declaration) (map[string]string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if broken := w.breaks[stack]; broken != nil {
@@ -405,6 +418,12 @@ func (w *world) beforeNextUp(fn func()) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.onUp = fn
+}
+
+func (w *world) afterNextUp(fn func()) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.afterUp = fn
 }
 
 func (w *world) refusePins(err error) {
