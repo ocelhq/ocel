@@ -238,14 +238,10 @@ func isrPolicy(c isrConfig) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("isr cache under %q has no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
 	}
-	objectActions := []string{"s3:GetObject", "s3:PutObject"}
-	if c.EdgeReadable {
-		objectActions = append(objectActions, "s3:PutObjectTagging")
-	}
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
-			"Action":   objectActions,
+			"Action":   []string{"s3:GetObject", "s3:PutObject"},
 			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
 		},
 		map[string]any{
@@ -258,6 +254,14 @@ func isrPolicy(c isrConfig) (string, error) {
 				},
 			},
 		},
+	}
+
+	if c.EdgeReadable {
+		statements = append(statements, map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"s3:PutObjectTagging"},
+			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/cache/*", c.Bucket, c.Prefix),
+		})
 	}
 
 	doc := map[string]any{"Version": "2012-10-17", "Statement": statements}
