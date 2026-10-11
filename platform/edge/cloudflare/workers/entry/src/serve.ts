@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { storedCacheTags } from "@framework/next-cache";
+import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
 import {
   type PurgeMode,
   purgeHeader,
@@ -60,6 +61,10 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
   } catch {
     return undefined;
   }
+}
+
+function admitSegment(request: Request, response: Response): Response {
+  return isSegmentPrefetch(request.headers) ? asSegmentPayload(response) : response;
 }
 
 function respondNotStored(status: number, message: string): Response {
@@ -236,7 +241,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         }),
       );
     }
-    return forCache(res, { release, pathname: new URL(originUrl).pathname });
+    return forCache(admitSegment(request, res), { release, pathname: new URL(originUrl).pathname });
   }
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {
@@ -275,11 +280,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       entryKey,
       new Request(publicUrl, { method: request.method, headers, redirect: "manual" }),
     );
-    const tagged = new Headers(rendered.headers);
+    const taggedHeaders = new Headers(rendered.headers);
     const routeTags = storedCacheTags(release, edge.tags).tags;
-    if (routeTags.length > 0) tagged.set("cache-tag", routeTags.join(","));
-    else tagged.delete("cache-tag");
-    return forCache(new Response(rendered.body, { status: rendered.status, headers: tagged }), {
+    if (routeTags.length > 0) taggedHeaders.set("cache-tag", routeTags.join(","));
+    else taggedHeaders.delete("cache-tag");
+    const tagged = new Response(rendered.body, { status: rendered.status, headers: taggedHeaders });
+    return forCache(admitSegment(request, tagged), {
       release,
       pathname: new URL(publicUrl).pathname,
     });
