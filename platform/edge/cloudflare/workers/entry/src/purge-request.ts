@@ -1,10 +1,9 @@
 import { storedCacheTags } from "@framework/next-cache";
+import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import type { PurgeMode, RaisedTag } from "./purge-backlog";
 
-export const PURGE_PATH = "/.ocel/purge";
 const PURGE_QUEUE_NAME = "purge";
-export const PURGE_SIGNATURE_HEADER = "x-ocel-signature";
 
 export const MAX_TAGS_PER_REQUEST = 1000;
 const MAX_BODY_BYTES = 512 * 1024;
@@ -26,7 +25,7 @@ interface PurgeBody {
 }
 
 export function isPurgeRequest(request: Request): boolean {
-  return request.method === "POST" && new URL(request.url).pathname === PURGE_PATH;
+  return request.method === "POST" && new URL(request.url).pathname === purgePath;
 }
 
 function reply(status: number, message?: string): Response {
@@ -115,7 +114,7 @@ export async function answerPurge(request: Request, deps: PurgeDeps): Promise<Re
   if (served.kind === "not-served") return reply(204);
 
   const { purgeSecret } = served.record;
-  const signature = request.headers.get(PURGE_SIGNATURE_HEADER);
+  const signature = request.headers.get(purgeSignatureHeader);
   if (!purgeSecret || !signature || !(await isSignedBy(purgeSecret, text, signature))) {
     return reply(401, "unauthorized");
   }

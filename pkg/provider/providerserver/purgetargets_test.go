@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -112,5 +114,26 @@ func TestRemovingAProjectForgetsItsPurgeTarget(t *testing.T) {
 
 	if got := purgeTargetsOf(t, vendor, string(fake.KindRelay)); got != nil {
 		t.Errorf("purge targets = %v, want none once the project is gone", got)
+	}
+}
+
+func TestAnISRAppIsToldWhereItsEdgePurges(t *testing.T) {
+	builtProject(t)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", ISR: true}, []byte(`{"routes":[{"id":"index"}]}`))
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/.ocel/purge")
+
+	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	var told []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App != nil && spec.App.ISR != nil {
+			told = append(told, spec.App.ISR.PurgeURL)
+		}
+	}
+	if !slices.Equal(told, []string{"https://shop.acct.workers.dev/.ocel/purge"}) {
+		t.Errorf("the ISR specs name purge URLs %v, want the edge's for the one ISR app", told)
 	}
 }

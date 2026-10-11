@@ -4,9 +4,10 @@ import type { ScheduleRefresh } from "@framework/next-runtime/refresh";
 import { readPortBind } from "@framework/node-runtime/host";
 import { type IsrWriterClient, newIsrWriterClient } from "@platform/edge-contract/isr-writer";
 import { newGcpCacheStore } from "./cache-store.mjs";
-import { newCdnPurge, withCdnPurge } from "./cdn-purge.mjs";
+import { newCdnPurge, type PurgeTags, withCdnPurge } from "./cdn-purge.mjs";
 import { cloudCdnRelease, cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
 import { newCloudStorage } from "./cloud-storage.mjs";
+import { newCloudflarePurge } from "./cloudflare-purge.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newImageEndpointInvoke } from "./image-endpoint.mjs";
@@ -40,6 +41,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
     );
   }
   const writer = openIsrWriter(env, isrPrefix, tagDatabase);
+  const purge = openPurge(env, urlMap, release);
   const records = writer
     ? newIsrWriterTagRecords(writer)
     : bucket && objectPrefix && isrPrefix && tagDatabase
@@ -53,13 +55,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       ? {
           objectPrefix,
           storage: newCloudStorage({ bucket, endpoint: env.OCEL_STORAGE_ENDPOINT }),
-          tags:
-            urlMap && release !== null
-              ? {
-                  ...records,
-                  publish: withCdnPurge(records.publish, newCdnPurge({ urlMap, release })),
-                }
-              : records,
+          tags: purge ? { ...records, publish: withCdnPurge(records.publish, purge) } : records,
         }
       : undefined;
   const newCacheStore = async () =>
@@ -86,6 +82,23 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       ),
     scheduleRefresh: readRefreshQueue(env, refresh),
   };
+}
+
+function openPurge(
+  env: NodeJS.ProcessEnv,
+  urlMap: string | undefined,
+  release: string | null,
+): PurgeTags | undefined {
+  if (urlMap && release !== null) return newCdnPurge({ urlMap, release });
+  const url = env.OCEL_PURGE_URL;
+  if (!url) return undefined;
+  const secret = env.OCEL_ISR_WRITER_SECRET;
+  if (release === null || !secret) {
+    throw new Error(
+      "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_ISR_WRITER_SECRET to sign the purge with",
+    );
+  }
+  return newCloudflarePurge({ url, release, secret });
 }
 
 function openIsrWriter(

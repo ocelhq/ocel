@@ -1,8 +1,8 @@
 import { createExecutionContext } from "cloudflare:test";
+import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import type { PurgeMode, RaisedTag } from "../src/purge-backlog";
-import { PURGE_PATH, PURGE_SIGNATURE_HEADER } from "../src/purge-request";
 import type { PointerRecordResult, ReleasesBinding } from "../src/releases";
 import { makeRecord } from "./origin-deps";
 
@@ -23,9 +23,9 @@ async function sign(body: string): Promise<string> {
 
 async function purgeRequest(base: string, body: unknown = raise): Promise<Request> {
   const text = JSON.stringify(body);
-  return new Request(`${base}${PURGE_PATH}`, {
+  return new Request(`${base}${purgePath}`, {
     method: "POST",
-    headers: { [PURGE_SIGNATURE_HEADER]: await sign(text) },
+    headers: { [purgeSignatureHeader]: await sign(text) },
     body: text,
   });
 }
@@ -112,7 +112,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     const request = await purgeRequest(WORKERS_DEV);
     const forged = new Request(request.url, {
       method: "POST",
-      headers: { [PURGE_SIGNATURE_HEADER]: "00".repeat(32) },
+      headers: { [purgeSignatureHeader]: "00".repeat(32) },
       body: JSON.stringify(raise),
     });
 

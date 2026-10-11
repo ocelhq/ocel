@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
 
+import { type PurgeSender, postPurge, purgeSecret } from "@platform/edge-contract/purge";
 import { coordinateOf, type Raise, type Raises } from "./records.mjs";
 import { invalidationBatches } from "./tags.mjs";
-import { type DynamoCommands, type DynamoLike, targetsOf } from "./targets.mjs";
+import {
+  cloudflareTargetsOf,
+  type DynamoCommands,
+  type DynamoLike,
+  targetsOf,
+} from "./targets.mjs";
 
 export interface CloudFrontLike {
   send(command: any): Promise<any>;
@@ -19,6 +25,12 @@ export interface Invalidator {
   table: string;
   bootstrapTier: string;
   sleep?: (ms: number) => Promise<void>;
+  cloudflare?: PurgeSender & { readSeed(): Promise<string> };
+}
+
+interface ProjectTargets {
+  cloudfront: string[];
+  cloudflare: string[];
 }
 
 const alreadySent = "InvalidationBatchAlreadyExists";
@@ -107,12 +119,13 @@ async function reach(
   }
 }
 
-async function invalidateOne(
+async function invalidateCloudFront(
   inv: Invalidator,
   targets: readonly string[],
   release: string,
   raise: Raise,
 ): Promise<void> {
+  if (targets.length === 0) return;
   const { batches, dropped } = invalidationBatches(release, raise.tags);
   if (dropped.length > 0) {
     console.warn(
@@ -147,9 +160,66 @@ async function invalidateOne(
   }
 }
 
+async function purgeCloudflareFronts(
+  inv: Invalidator,
+  readSeed: () => Promise<string>,
+  urls: readonly string[],
+  coordinate: { release: string; isrPrefix: string },
+  raise: Raise,
+): Promise<void> {
+  if (urls.length === 0 || inv.cloudflare === undefined) return;
+  const { release, isrPrefix } = coordinate;
+  const secret = purgeSecret(await readSeed(), isrPrefix);
+  const results = await Promise.allSettled(
+    urls.map((url) => postPurge(inv.cloudflare!, url, secret, release, raise.entries)),
+  );
+  const refused = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (refused.length > 0) {
+    throw new AggregateError(refused, "some Cloudflare fronts refused this purge");
+  }
+}
+
+async function invalidateOne(
+  inv: Invalidator,
+  readSeed: () => Promise<string>,
+  targets: ProjectTargets,
+  coordinate: { release: string; isrPrefix: string },
+  raise: Raise,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
+    purgeCloudflareFronts(inv, readSeed, targets.cloudflare, coordinate, raise),
+  ]);
+  const refused = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (refused.length > 0) {
+    throw new AggregateError(refused, "some fronts refused this invalidation");
+  }
+}
+
+async function readTargets(inv: Invalidator, project: string): Promise<ProjectTargets> {
+  const [cloudfront, cloudflare] = await Promise.all([
+    targetsOf(inv.dynamo, inv.commands, inv.table, project),
+    inv.cloudflare === undefined
+      ? []
+      : cloudflareTargetsOf(inv.dynamo, inv.commands, inv.table, project),
+  ]);
+  if (cloudfront.length === 0 && cloudflare.length === 0) {
+    console.warn(
+      `ocel: the ${inv.bootstrapTier} bootstrap names no CloudFront or Cloudflare front to invalidate for ${project}, so its raised tags reach nothing`,
+    );
+  }
+  return { cloudfront, cloudflare };
+}
+
 export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<string[]> {
-  const targets = new Map<string, Promise<string[]>>();
+  const targets = new Map<string, Promise<ProjectTargets>>();
   const builds = [...raises];
+  let seed: Promise<string> | undefined;
+  const readSeed = () => (seed ??= inv.cloudflare!.readSeed());
 
   const results = await settledPool(builds.length, buildsAtOnce, async (i) => {
     const [isrPrefix, raise] = builds[i]!;
@@ -164,10 +234,10 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
 
     let projectTargets = targets.get(project);
     if (projectTargets === undefined) {
-      projectTargets = targetsOf(inv.dynamo, inv.commands, inv.table, inv.bootstrapTier, project);
+      projectTargets = readTargets(inv, project);
       targets.set(project, projectTargets);
     }
-    await invalidateOne(inv, await projectTargets, release, raise);
+    await invalidateOne(inv, readSeed, await projectTargets, { release, isrPrefix }, raise);
   });
 
   return builds.flatMap(([isrPrefix, raise], i) => {

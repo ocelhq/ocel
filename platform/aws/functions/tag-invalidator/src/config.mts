@@ -1,6 +1,7 @@
 export interface Config {
   table: string;
   bootstrapTier: string;
+  seedParam?: string;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -15,5 +16,6 @@ export function config(env: NodeJS.ProcessEnv): Config {
   return {
     table: required(env, "OCEL_STATE_TABLE"),
     bootstrapTier: required(env, "OCEL_INFRA_TIER"),
+    seedParam: env.OCEL_ISR_WRITER_SEED_PARAM || undefined,
   };
 }

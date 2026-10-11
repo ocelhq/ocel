@@ -1,12 +1,7 @@
+import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PurgeMode, RaisedTag } from "../src/purge-backlog";
-import {
-  answerPurge,
-  isPurgeRequest,
-  PURGE_PATH,
-  PURGE_SIGNATURE_HEADER,
-  type PurgeDeps,
-} from "../src/purge-request";
+import { answerPurge, isPurgeRequest, type PurgeDeps } from "../src/purge-request";
 
 const SECRET = "ab12cd34".repeat(8);
 
@@ -27,9 +22,9 @@ async function signed(
   { secret = SECRET, headers = {} as Record<string, string> } = {},
 ): Promise<Request> {
   const text = typeof body === "string" ? body : JSON.stringify(body);
-  return new Request(`https://p.acct.workers.dev${PURGE_PATH}`, {
+  return new Request(`https://p.acct.workers.dev${purgePath}`, {
     method: "POST",
-    headers: { [PURGE_SIGNATURE_HEADER]: await sign(secret, text), ...headers },
+    headers: { [purgeSignatureHeader]: await sign(secret, text), ...headers },
     body: text,
   });
 }
@@ -67,12 +62,12 @@ beforeEach(() => {
 describe("recognising a purge request", () => {
   it("is a POST to the purge path", () => {
     expect(
-      isPurgeRequest(new Request(`https://x.workers.dev${PURGE_PATH}`, { method: "POST" })),
+      isPurgeRequest(new Request(`https://x.workers.dev${purgePath}`, { method: "POST" })),
     ).toBe(true);
   });
 
   it("is not a GET of the purge path, which the app may serve", () => {
-    expect(isPurgeRequest(new Request(`https://x.workers.dev${PURGE_PATH}`))).toBe(false);
+    expect(isPurgeRequest(new Request(`https://x.workers.dev${purgePath}`))).toBe(false);
   });
 
   it("is not a POST to any other path", () => {
@@ -114,13 +109,13 @@ describe("answering a signed purge request", () => {
 
   it("accepts an upper-case signature", async () => {
     const request = await signed(raise);
-    const upper = request.headers.get(PURGE_SIGNATURE_HEADER)!.toUpperCase();
+    const upper = request.headers.get(purgeSignatureHeader)!.toUpperCase();
     const text = JSON.stringify(raise);
 
     const response = await answerPurge(
       new Request(request.url, {
         method: "POST",
-        headers: { [PURGE_SIGNATURE_HEADER]: upper },
+        headers: { [purgeSignatureHeader]: upper },
         body: text,
       }),
       deps(),
@@ -161,7 +156,7 @@ describe("refusing a purge request", () => {
 
   it("answers 401 for a request with no signature", async () => {
     const response = await answerPurge(
-      new Request("https://x.workers.dev" + PURGE_PATH, {
+      new Request("https://x.workers.dev" + purgePath, {
         method: "POST",
         body: JSON.stringify(raise),
       }),
@@ -194,7 +189,7 @@ describe("refusing a purge request", () => {
 
   it("answers 401 for a signature that is not hex", async () => {
     const response = await answerPurge(
-      await signed(raise, { headers: { [PURGE_SIGNATURE_HEADER]: "not-hex!" } }),
+      await signed(raise, { headers: { [purgeSignatureHeader]: "not-hex!" } }),
       deps(),
     );
 

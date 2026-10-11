@@ -192,6 +192,9 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	if store := cache.edgeStore; store != nil {
 		env[isrWriterURLEnvVar] = store.writer.Endpoint
 		env[isrWriterSecretEnvVar] = store.secret
+		if isr.PurgeURL != "" {
+			env[edge.PurgeURLVar] = isr.PurgeURL
+		}
 	} else {
 		env[tagDatabaseEnvVar] = cache.tagDatabase
 	}

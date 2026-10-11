@@ -819,12 +819,18 @@ importers:
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1083.0
         version: 3.1086.0
+      '@aws-sdk/client-ssm':
+        specifier: ^3.1083.0
+        version: 3.1101.0
       '@framework/next-cache':
         specifier: workspace:*
         version: link:../../../../frameworks/next/cache
       '@platform/aws-runtime':
         specifier: workspace:*
         version: link:../../runtime
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../edge/contract
     devDependencies:
       '@types/node':
         specifier: ^24
