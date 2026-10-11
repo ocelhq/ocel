@@ -10,6 +10,8 @@
     "realtime",
     "database",
     "secret",
+    "---Caching---",
+    "cache",
     "---Internals---",
     "dev-server",
     "wire-format"
