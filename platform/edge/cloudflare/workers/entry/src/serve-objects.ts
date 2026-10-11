@@ -1,9 +1,12 @@
 import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
+import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { EdgeObjectStore, EdgeStoredObject } from "./edge";
+import type { PurgeOutcome } from "./purge-backlog";
 import { buildObjectCall, buildServeRequest, type ServeProps } from "./serve-key";
 
 export type ServeFactory = (options: { props: ServeProps }) => {
   fetch(request: Request): Promise<Response>;
+  purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
 };
 
 export type ServedObject = EdgeStoredObject & AssetObject;

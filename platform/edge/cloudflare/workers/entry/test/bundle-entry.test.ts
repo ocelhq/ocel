@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
-import { coloDeps } from "./cache-deps";
+import { type FakeServing, fakeServing } from "./serving-deps";
 
 const ENTRY_HEADER = "x-ocel-entry";
 
@@ -10,28 +10,6 @@ function noAssets(): RouteDeps["assetStore"] {
     assetPrefix: "",
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
-  };
-}
-
-function missingCache(waitUntil: (p: Promise<unknown>) => void = () => {}) {
-  return coloDeps({
-    cache: {
-      match: async () => undefined,
-      put: async () => {},
-    } as unknown as Cache,
-    waitUntil,
-  });
-}
-
-const isrPrefix = "prod/p/app/build";
-const cacheObject = (routePath: string) => `${isrPrefix}/cache/${routePath}.cache.json`;
-
-function storeOf(entries: Record<string, unknown>) {
-  return {
-    async get(key: string) {
-      const entry = entries[key];
-      return entry === undefined ? null : { text: async () => JSON.stringify(entry) };
-    },
   };
 }
 
@@ -220,11 +198,7 @@ describe("a prerender whose parent is a node bundle", () => {
     fallback: { initialRevalidate: 60 },
   };
 
-  function blogDeps(
-    origin: ReturnType<typeof recorder>,
-    entry: unknown | null,
-    over: { now?: number; waitUntil?: (p: Promise<unknown>) => void } = {},
-  ): RouteDeps {
+  function blogDeps(origin: ReturnType<typeof recorder>, serving: FakeServing) {
     return deps({
       manifest: {
         buildId: "t",
@@ -235,30 +209,15 @@ describe("a prerender whose parent is a node bundle", () => {
       },
       functionUrls: { "bundle-0": "https://fn.example.com" },
       fetch: origin.fetch,
-      cache: missingCache(over.waitUntil),
-      interception: {
-        config: { isrPrefix },
-        now: () => over.now ?? 2_000,
-        store: storeOf(entry ? { [cacheObject("blog")]: entry } : {}),
-      },
+      serving: serving.serving,
     });
   }
-
-  const storedEntry = (lastModified: number) => ({
-    lastModified,
-    value: {
-      kind: "APP_PAGE",
-      html: "<html>from-store</html>",
-      status: 200,
-      headers: {},
-    },
-  });
 
   it("sends the entry on the bypass path, which forwards the raw headers", async () => {
     const origin = recorder();
     const res = await dispatchTo(
       "/blog",
-      blogDeps(origin, null),
+      blogDeps(origin, fakeServing()),
       new Request("https://app.example/blog", {
         headers: { cookie: "preview=1" },
       }),
@@ -269,128 +228,63 @@ describe("a prerender whose parent is a node bundle", () => {
     expect(origin.entries()).toEqual(["app/blog/page"]);
   });
 
-  it("sends the entry on the cached-miss path, past allowHeader's filter", async () => {
+  it("sends the entry on the request Serve fetches the origin with, past allowHeader's filter", async () => {
     const origin = recorder();
-    const res = await dispatchTo("/blog", blogDeps(origin, null));
+    const serving = fakeServing();
 
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(origin.entries()).toEqual(["app/blog/page"]);
+    await dispatchTo("/blog", blogDeps(origin, serving));
+
+    expect(serving.calls).toHaveLength(1);
+    expect(serving.calls[0].request.headers.get(ENTRY_HEADER)).toBe("app/blog/page");
+    expect(origin.requests).toHaveLength(0);
   });
 
-  it("revalidates a stale entry, sending the entry on the blocking forward", async () => {
-    const pending: Promise<unknown>[] = [];
+  it("sends the entry on the on-demand revalidation render", async () => {
     const origin = recorder();
-    const res = await dispatchTo(
+    const serving = fakeServing();
+
+    await dispatchTo(
       "/blog",
-      blogDeps(origin, storedEntry(1_000), {
-        now: 1_000 + 61_000,
-        waitUntil: (p) => pending.push(p),
-      }),
+      blogDeps(origin, serving),
+      new Request("https://app.example/blog", { headers: { "x-prerender-revalidate": "TOKEN" } }),
     );
 
-    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
-    expect(await res.text()).toBe("<html>from-store</html>");
-
-    await Promise.all(pending);
-
-    expect(origin.requests).toHaveLength(1);
-    expect(origin.requests[0].headers.has("x-prerender-revalidate")).toBe(false);
     expect(origin.entries()).toEqual(["app/blog/page"]);
+    expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
   });
 });
 
 describe("a PPR prerender whose parent is a node bundle", () => {
-  const pprTarget = {
+  const target = {
     kind: "prerender" as const,
     id: "bundle-0",
     entryKey: "app/ppr/page",
-    config: {
-      allowHeader: ["host"],
-      renderingMode: "PARTIALLY_STATIC" as const,
-      bypassToken: "TOKEN",
-    },
+    config: { renderingMode: "PARTIALLY_STATIC" as const },
     fallback: { initialRevalidate: 60 },
   };
 
-  const shellEntry = (lastModified: number) => ({
-    lastModified,
-    value: {
-      kind: "APP_PAGE",
-      html: "<html>shell</html>",
-      status: 200,
-      headers: {},
-      postponed: "STATE",
-    },
-  });
-
-  function pprDeps(
-    origin: ReturnType<typeof recorder>,
-    lastModified: number,
-    over: { now?: number; waitUntil?: (p: Promise<unknown>) => void } = {},
-    target: typeof pprTarget | Omit<typeof pprTarget, "entryKey"> = pprTarget,
-  ): RouteDeps {
-    return deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: { "/ppr": target },
-      },
-      functionUrls: { "bundle-0": "https://fn.example.com" },
-      fetch: origin.fetch,
-      cache: missingCache(over.waitUntil),
-      interception: {
-        config: { isrPrefix },
-        now: () => over.now ?? 2_000,
-        store: storeOf({ [cacheObject("ppr")]: shellEntry(lastModified) }),
-      },
-    });
-  }
-
-  it("sends the entry on the resume forward that renders the dynamic half", async () => {
+  it("renders its document through the origin with the entry, never through Serve", async () => {
     const origin = recorder();
-    const res = await dispatchTo("/ppr", pprDeps(origin, 1_000));
+    const serving = fakeServing();
 
-    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
-    expect(await res.text()).toBe("<html>shell</html>from-lambda");
-    expect(origin.entries()).toEqual(["app/ppr/page"]);
-  });
-
-  it("sends the entry on the stale shell's blocking revalidate", async () => {
-    const pending: Promise<unknown>[] = [];
-    const origin = recorder();
-    const res = await dispatchTo(
-      "/ppr",
-      pprDeps(origin, 1_000, {
-        now: 1_000 + 61_000,
-        waitUntil: (p) => pending.push(p),
-      }),
-    );
-
-    expect(await res.text()).toBe("<html>shell</html>from-lambda");
-    await Promise.all(pending);
-
-    expect(origin.requests.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(origin.entries())).toEqual(new Set(["app/ppr/page"]));
-    expect(
-      origin.requests.some((r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch"),
-    ).toBe(true);
-    expect(origin.requests.some((r) => r.headers.has("x-prerender-revalidate"))).toBe(false);
-  });
-
-  it("drops a client's entry header on the resume of an entryless prerender", async () => {
-    const origin = recorder();
-    const { entryKey: _omitted, ...entryless } = pprTarget;
     await dispatchTo(
       "/ppr",
-      pprDeps(origin, 1_000, {}, entryless),
-      new Request("https://app.example/ppr", {
-        headers: { [ENTRY_HEADER]: "attacker/admin/page" },
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: { "/ppr": target },
+        },
+        functionUrls: { "bundle-0": "https://fn.example.com" },
+        fetch: origin.fetch,
+        serving: serving.serving,
       }),
     );
 
-    expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
+    expect(serving.calls).toHaveLength(0);
+    expect(origin.entries()).toEqual(["app/ppr/page"]);
   });
 });
 
@@ -471,21 +365,21 @@ describe("a prerender whose parent renders on the edge", () => {
   const unnamedTarget = (({ id: _unused, ...rest }) => rest)(edgeTarget);
 
   function edgeDeps(
-    entry: unknown | null,
-    now: number,
-    pending: Promise<unknown>[],
     over: {
       target?: typeof edgeTarget | typeof unnamedTarget;
       functionUrls?: Record<string, string>;
     } = {},
   ): {
+    serving: FakeServing;
     deps: RouteDeps;
     invocations: () => string[];
     urls: () => string[];
   } {
     const invocations: string[] = [];
     const urls: string[] = [];
+    const serving = fakeServing();
     return {
+      serving,
       invocations: () => invocations,
       urls: () => urls,
       deps: deps({
@@ -508,56 +402,22 @@ describe("a prerender whose parent renders on the edge", () => {
         fetch: (async () => {
           throw new Error("an edge-parented prerender must not reach a Function URL");
         }) as unknown as typeof fetch,
-        cache: missingCache((p) => pending.push(p)),
-        interception: {
-          config: { isrPrefix },
-          now: () => now,
-          store: storeOf(entry ? { [cacheObject("edge-blog")]: entry } : {}),
-        },
+        serving: serving.serving,
       }),
     };
   }
 
   it("renders through the edge entry when no cache tier can answer", async () => {
-    const pending: Promise<unknown>[] = [];
-    const { deps, invocations } = edgeDeps(null, 2_000, pending);
+    const { deps, invocations } = edgeDeps();
 
     const res = await dispatchTo("/edge-blog", deps);
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
-  });
-
-  it("never revalidates: an edge render cannot rewrite the entry it refreshes", async () => {
-    const pending: Promise<unknown>[] = [];
-    const { deps, invocations } = edgeDeps(
-      {
-        lastModified: 1_000,
-        value: {
-          kind: "APP_PAGE",
-          html: "<html>from-store</html>",
-          status: 200,
-          headers: {},
-        },
-      },
-      1_000 + 61_000,
-      pending,
-    );
-
-    const res = await dispatchTo("/edge-blog", deps);
-
-    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
-    expect(await res.text()).toBe("<html>from-store</html>");
-
-    await Promise.all(pending);
-    expect(invocations()).toEqual([]);
   });
 
   it("renders through the edge entry with no id to name a parent at all", async () => {
-    const pending: Promise<unknown>[] = [];
-    const { deps, invocations } = edgeDeps(null, 2_000, pending, {
-      target: unnamedTarget,
-    });
+    const { deps, invocations } = edgeDeps({ target: unnamedTarget });
 
     const res = await dispatchTo("/edge-blog", deps);
 
@@ -565,46 +425,16 @@ describe("a prerender whose parent renders on the edge", () => {
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
   });
 
-  it("never revalidates an unnamed edge parent either", async () => {
-    const pending: Promise<unknown>[] = [];
-    const { deps, invocations } = edgeDeps(
-      {
-        lastModified: 1_000,
-        value: {
-          kind: "APP_PAGE",
-          html: "<html>from-store</html>",
-          status: 200,
-          headers: {},
-        },
-      },
-      1_000 + 61_000,
-      pending,
-      { target: unnamedTarget },
-    );
-
-    const res = await dispatchTo("/edge-blog", deps);
-
-    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
-    expect(await res.text()).toBe("<html>from-store</html>");
-
-    await Promise.all(pending);
-    expect(invocations()).toEqual([]);
-  });
-
   it("502s when neither a Function URL nor an edge entry resolves", async () => {
-    const pending: Promise<unknown>[] = [];
     const { edgeEntryKey: _none, ...orphan } = unnamedTarget;
-    const { deps, invocations } = edgeDeps(null, 2_000, pending, {
-      target: orphan as typeof unnamedTarget,
-    });
+    const { deps, invocations } = edgeDeps({ target: orphan as typeof unnamedTarget });
 
     expect((await dispatchTo("/edge-blog", deps)).status).toBe(502);
     expect(invocations()).toEqual([]);
   });
 
   it("ignores a Function URL that its id happens to name", async () => {
-    const pending: Promise<unknown>[] = [];
-    const { deps, invocations, urls } = edgeDeps(null, 2_000, pending, {
+    const { deps, invocations, urls } = edgeDeps({
       functionUrls: { "/edge-blog": "https://fn.example.com" },
     });
 
@@ -613,5 +443,13 @@ describe("a prerender whose parent renders on the edge", () => {
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
     expect(urls()).toEqual(["https://app.example/edge-blog"]);
+  });
+
+  it("never reaches Serve, since an edge render cannot be fetched from a Function URL", async () => {
+    const { deps, serving } = edgeDeps();
+
+    await dispatchTo("/edge-blog", deps);
+
+    expect(serving.calls).toHaveLength(0);
   });
 });

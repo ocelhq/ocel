@@ -9,8 +9,10 @@ import {
   type ServeFetch,
 } from "../src/index";
 import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
+import type { ServingBase } from "../src/serving";
 import { answerEveryRecordWith } from "./origin-deps";
 import { type CountingObjectStore, objectStoreHolding, routeTableKey } from "./route-table-store";
+import { fakeServing } from "./serving-deps";
 
 const TABLE: NextRouteTable = {
   rootFunction: "/",
@@ -68,7 +70,20 @@ function baseWith(over: Partial<ResolveBase> = {}): ResolveBase {
 }
 
 function lookup(record: ReleaseRecord, slug = "p1") {
-  return { binding: bindingReturning("deploy-1", record), slug, app: "web" };
+  return {
+    binding: bindingReturning("deploy-1", record),
+    slug,
+    host: "shop.example.com",
+    app: "web",
+  };
+}
+
+function servingBase(): ServingBase {
+  return {
+    serve: fakeServing().serving.serve,
+    queue: { raise: async () => {} },
+    waitUntil: () => {},
+  };
 }
 
 describe("resolveRouteDeps", () => {
@@ -118,21 +133,32 @@ describe("resolveRouteDeps", () => {
     expect((deps as RouteDeps).assetStore.assetPrefix).toBe("assets/p1/web/build-1");
   });
 
-  it("fills the interception config's ISR prefix from the record's ISR prefix", async () => {
-    const record = makeRecord({ isrPrefix: "prod/p1/web/build-1" });
-    const store = { get: async () => null };
-    const deps = await resolveRouteDeps(lookup(record), baseWith({ interception: { store } }));
+  it("serves prerenders through Serve under the release token its ISR prefix names", async () => {
+    const record = makeRecord({ isrPrefix: "prod/p1/web/r0a1b2c3d/isr" });
+    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
 
     expect(deps).not.toBeInstanceOf(Response);
-    expect((deps as RouteDeps).interception?.config).toEqual({
-      isrPrefix: "prod/p1/web/build-1",
-    });
+    expect((deps as RouteDeps).serving?.release).toBe("r0a1b2c3d");
   });
 
-  it("leaves interception undefined when no cache store is bound", async () => {
+  it("serves prerenders through Serve under the token, not the build's own name", async () => {
+    const record = makeRecord({ isrPrefix: "prod/p1/web/r0a1b2c3d/isr", release: "build-1~abc" });
+    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
+
+    expect((deps as RouteDeps).serving?.release).not.toBe("build-1~abc");
+  });
+
+  it("leaves prerenders to the origin when the ISR prefix names no release token", async () => {
+    const record = makeRecord({ isrPrefix: "prod/p1/web/build-1" });
+    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
+
+    expect((deps as RouteDeps).serving).toBeUndefined();
+  });
+
+  it("leaves prerenders to the origin when no Serve is bound", async () => {
     const deps = await resolveRouteDeps(lookup(makeRecord()), baseWith());
 
-    expect((deps as RouteDeps).interception).toBeUndefined();
+    expect((deps as RouteDeps).serving).toBeUndefined();
   });
 
   it("returns the baked-in 404 when the app has no active pointer", async () => {

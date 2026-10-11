@@ -364,6 +364,84 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-next-cache-tags")).toBeNull();
   });
 
+  describe("a function response announcing a purge", () => {
+    const manifest = {
+      buildId: "t",
+      basePath: "",
+      pathnames: [],
+      routes: {},
+      dispatch: { "/act": { kind: "function" as const, id: "/act" } },
+    };
+
+    function announcing(headers: Record<string, string>, purges: unknown[]) {
+      return baseDeps({
+        manifest,
+        functionUrls: { "/act": "https://fn.example.com" },
+        onPurge: async (groups, awaited) => {
+          purges.push({ groups, awaited });
+        },
+        fetch: (async () =>
+          new Response("done", {
+            status: 200,
+            headers: { "x-ocel-purge": "invalidate r0a1b2c3d|a,r0a1b2c3d|b", ...headers },
+          })) as unknown as typeof fetch,
+      });
+    }
+
+    const act = (deps: RouteDeps) =>
+      dispatchResult(
+        { resolvedPathname: "/act", invocationTarget: { pathname: "/act" } },
+        new Request("https://app.example/act", { method: "POST", body: "x" }),
+        deps,
+      );
+
+    it("hands the host the purge it announced and strips the header", async () => {
+      const purges: unknown[] = [];
+
+      const res = await act(announcing({}, purges));
+
+      expect(purges).toEqual([
+        {
+          groups: [{ mode: "invalidate", tags: ["r0a1b2c3d|a", "r0a1b2c3d|b"] }],
+          awaited: false,
+        },
+      ]);
+      expect(res.headers.has("x-ocel-purge")).toBe(false);
+    });
+
+    it("tells the host to wait when the response is a Server Action that revalidated", async () => {
+      const purges: { awaited: boolean }[] = [];
+
+      await act(announcing({ "x-action-revalidated": "[[],0,0]" }, purges));
+
+      expect(purges.map(({ awaited }) => awaited)).toEqual([true]);
+    });
+
+    it("waits for the host's purge before it returns an action's response", async () => {
+      const order: string[] = [];
+      const deps = announcing({ "x-action-revalidated": "[[],0,0]" }, []);
+      deps.onPurge = async () => {
+        await new Promise((done) => setTimeout(done, 5));
+        order.push("purged");
+      };
+
+      await act(deps);
+      order.push("returned");
+
+      expect(order).toEqual(["purged", "returned"]);
+    });
+
+    it("strips the header when the host takes no purges", async () => {
+      const deps = announcing({}, []);
+      deps.onPurge = undefined;
+
+      const res = await act(deps);
+
+      expect(res.headers.has("x-ocel-purge")).toBe(false);
+      expect(await res.text()).toBe("done");
+    });
+  });
+
   it("leaves a body that is genuinely one byte alone", async () => {
     const deps = baseDeps({
       manifest: {

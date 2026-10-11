@@ -1,13 +1,7 @@
 import { type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import {
-  createTagClock,
-  dropSnapshotMemo,
-  invalidateSnapshot,
-  snapshotMaxAgeSeconds,
-  snapshotTtlSeconds,
-} from "../src/tag-clock";
+import { createTagClock, dropSnapshotMemo } from "../src/tag-clock";
 
 const cfg = { isrPrefix: "prod/proj/app/build" };
 const snapshotKey = tagSnapshotKey(cfg.isrPrefix);
@@ -89,7 +83,7 @@ it("returns 'untrusted' on a store error", async () => {
 it("memoizes an absent snapshot, so one request pays one read", async () => {
   const store = storeWith(null);
   const clock = createTagClock(cfg, { store });
-  await clock.prime(3_000);
+  await clock.freshness(["posts"], 1_000, 3_000);
   expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
   expect(store.gets).toHaveLength(1);
 });
@@ -97,7 +91,7 @@ it("memoizes an absent snapshot, so one request pays one read", async () => {
 it("re-reads an absent snapshot once the memo window has passed", async () => {
   const store = storeWith(null);
   const clock = createTagClock(cfg, { store });
-  await clock.prime(3_000);
+  await clock.freshness(["posts"], 1_000, 3_000);
   await clock.freshness(["posts"], 1_000, 5_000);
   expect(store.gets).toHaveLength(2);
 });
@@ -126,94 +120,6 @@ it("re-reads inside the memo window once the memo is dropped", async () => {
   dropSnapshotMemo(cfg, store);
   expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
   expect(gets).toHaveLength(2);
-});
-
-describe("the PoP copy fronting the replica", () => {
-  function popCache() {
-    const entries = new Map<string, string>();
-    return {
-      entries,
-      async match(request: Request) {
-        const body = entries.get(request.url);
-        return body === undefined ? undefined : new Response(body);
-      },
-      async put(request: Request, response: Response) {
-        entries.set(request.url, await response.text());
-      },
-      async delete(request: Request) {
-        return entries.delete(request.url);
-      },
-    };
-  }
-
-  it("answers a later read without going back to the store", async () => {
-    const store = storeWith(JSON.stringify(snapshot()));
-    const snapshotCache = popCache();
-    const clock = createTagClock(cfg, { store, snapshotCache });
-
-    await clock.freshness(["posts"], 1_000, 3_000);
-    await clock.freshness(["posts"], 1_000, 9_000);
-
-    expect(store.gets).toHaveLength(1);
-  });
-
-  it("re-reads the replica once the copy is purged", async () => {
-    let body = JSON.stringify(snapshot());
-    const gets: string[] = [];
-    const store = {
-      async get(key: string) {
-        gets.push(key);
-        return { etag: `"${key}"`, text: async () => body };
-      },
-    };
-    const snapshotCache = popCache();
-    const clock = createTagClock(cfg, { store, snapshotCache });
-
-    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
-
-    body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
-    await invalidateSnapshot(cfg, { store, snapshotCache });
-
-    expect(await clock.freshness(["posts"], 1_000, 9_000)).toBe("expired");
-    expect(gets).toHaveLength(2);
-  });
-
-  it("purges the copy under the key the read path stored it at", async () => {
-    const store = storeWith(JSON.stringify(snapshot()));
-    const snapshotCache = popCache();
-    const clock = createTagClock(cfg, { store, snapshotCache });
-
-    await clock.freshness(["posts"], 1_000, 3_000);
-    expect(snapshotCache.entries.size).toBe(1);
-
-    await invalidateSnapshot(cfg, { store, snapshotCache });
-    expect(snapshotCache.entries.size).toBe(0);
-  });
-
-  it("still drops the memo when the cache cannot purge", async () => {
-    let body = JSON.stringify(snapshot());
-    const gets: string[] = [];
-    const store = {
-      async get(key: string) {
-        gets.push(key);
-        return { etag: `"${key}"`, text: async () => body };
-      },
-    };
-    const inert = {
-      async match() {
-        return undefined;
-      },
-      async put() {},
-    };
-    const clock = createTagClock(cfg, { store, snapshotCache: inert });
-
-    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
-    body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
-    await invalidateSnapshot(cfg, { store, snapshotCache: inert });
-
-    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
-    expect(gets).toHaveLength(2);
-  });
 });
 
 describe("readers arriving together on a cold memo", () => {
@@ -288,7 +194,7 @@ describe("readers arriving together on a cold memo", () => {
     const clock = createTagClock(cfg, { store });
 
     const before = clock.freshness(["posts"], 1_000, 3_000);
-    await invalidateSnapshot(cfg, { store });
+    dropSnapshotMemo(cfg, store);
     const after = clock.freshness(["posts"], 1_000, 3_000);
     release();
 
@@ -314,7 +220,7 @@ describe("readers arriving together on a cold memo", () => {
     const clock = createTagClock(cfg, { store });
 
     const abandoned = clock.freshness(["posts"], 1_000, 3_000);
-    await invalidateSnapshot(cfg, { store });
+    dropSnapshotMemo(cfg, store);
     const successor = clock.freshness(["posts"], 1_000, 3_000);
 
     releases[0]!();
@@ -328,56 +234,6 @@ describe("readers arriving together on a cold memo", () => {
     expect(await successor).toBe("fresh");
     expect(await joiner).toBe("fresh");
     expect(gets).toHaveLength(2);
-  });
-
-  it("do not have an abandoned read fill the memo or re-put the purged copy behind them", async () => {
-    const stale = JSON.stringify(snapshot());
-    const fresh = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
-    const bodies = [stale, fresh];
-    const gets: string[] = [];
-    const releases: Array<() => void> = [];
-    const store = {
-      async get(key: string) {
-        const body = bodies[Math.min(gets.length, bodies.length - 1)]!;
-        gets.push(key);
-        await new Promise<void>((done) => releases.push(done));
-        return { etag: `"${key}"`, text: async () => body };
-      },
-    };
-    const puts: string[] = [];
-    let purged = 0;
-    const snapshotCache = {
-      async match() {
-        return undefined;
-      },
-      async put(_request: Request, response: Response) {
-        puts.push(await response.text());
-      },
-      async delete() {
-        purged++;
-        return true;
-      },
-    };
-    const clock = createTagClock(cfg, { store, snapshotCache });
-
-    const abandoned = clock.freshness(["posts"], 1_000, 3_000);
-    await invalidateSnapshot(cfg, { store, snapshotCache });
-    expect(purged).toBe(1);
-    const successor = clock.freshness(["posts"], 1_000, 3_000);
-
-    for (let i = 0; releases.length < 2 && i < 20; i++) {
-      await new Promise((done) => setTimeout(done, 0));
-    }
-    expect(releases).toHaveLength(2);
-
-    releases[1]!();
-    expect(await successor).toBe("expired");
-    releases[0]!();
-    expect(await abandoned).toBe("fresh");
-
-    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
-    expect(gets).toHaveLength(2);
-    expect(puts).toEqual([fresh]);
   });
 });
 
@@ -450,12 +306,6 @@ describe("a store read that never finishes", () => {
     expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
   });
 
-  it("does not hang prime() either", async () => {
-    const store = neverFinishingStore();
-    const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
-    expect(await clock.prime(3_000)).toBeNull();
-  });
-
   it("clears the poisoned cell so the next request starts its own read", async () => {
     let calls = 0;
     const store = {
@@ -470,50 +320,5 @@ describe("a store read that never finishes", () => {
     expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
     expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
     expect(calls).toBe(2);
-  });
-});
-
-describe("the PoP copy's drawn lifetime", () => {
-  function recordingCache() {
-    const maxAges: number[] = [];
-    return {
-      maxAges,
-      async match() {
-        return undefined;
-      },
-      async put(_request: Request, response: Response) {
-        const directive = response.headers.get("cache-control") ?? "";
-        maxAges.push(Number(/max-age=(\d+)/.exec(directive)?.[1]));
-      },
-    };
-  }
-
-  it("is drawn over 7..10 seconds: never above the ceiling, never to nothing", () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    try {
-      expect(snapshotTtlSeconds).toBe(10);
-      expect(snapshotMaxAgeSeconds()).toBe(10);
-      random.mockReturnValue(0.999);
-      expect(snapshotMaxAgeSeconds()).toBe(7);
-    } finally {
-      random.mockRestore();
-    }
-  });
-
-  it("is drawn by the production path itself, not only by an injected one", async () => {
-    const snapshotCache = recordingCache();
-    for (let i = 0; i < 40; i++) {
-      const clock = createTagClock(cfg, {
-        store: storeWith(JSON.stringify(snapshot())),
-        snapshotCache,
-      });
-      await clock.prime(3_000);
-    }
-
-    expect(snapshotCache.maxAges).toHaveLength(40);
-    for (const maxAge of snapshotCache.maxAges) {
-      expect([7, 8, 9, 10]).toContain(maxAge);
-    }
-    expect(new Set(snapshotCache.maxAges).size).toBeGreaterThanOrEqual(3);
   });
 });

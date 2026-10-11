@@ -7,20 +7,19 @@ import {
 import { describe, expect, it } from "vitest";
 import type { CacheDeps } from "../src/cache";
 import { type ImageDeps, serveImage } from "../src/image";
-import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
 function testDeps(clock: { ms: number }): CacheDeps & { flush: () => Promise<void> } {
   const pending: Promise<unknown>[] = [];
   return {
-    ...coloDeps({
+    ...{
       cache: caches.default,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    }),
+    },
     flush: async () => {
       await Promise.all(pending.splice(0));
     },
@@ -254,13 +253,13 @@ describe("the image colo tier", () => {
     const clock = { ms: 0 };
     const recording = recordingCache();
     const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = coloDeps({
+    const cache: CacheDeps = {
       cache: recording,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    });
+    };
     const d = deps({
       slug: "version",
       cache,

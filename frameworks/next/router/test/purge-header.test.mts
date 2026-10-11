@@ -1,10 +1,9 @@
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
+import { purgeHeader } from "@platform/edge-contract/purge";
 import { describe, expect, it } from "vitest";
 
-import { OCEL_REVALIDATED } from "../src/index.mjs";
-
-describe("the origin's revalidation announcement", () => {
+describe("the origin's purge announcement", () => {
   it("is read under the header name the origin writes", () => {
-    expect(OCEL_REVALIDATED).toBe(contract.revalidatedHeader);
+    expect(purgeHeader).toBe(contract.purgeHeader);
   });
 });

@@ -1,10 +1,12 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import type { PurgeMode } from "@platform/edge-contract/purge";
+import { type PurgeMode, purgeHeader, readPurge } from "@platform/edge-contract/purge";
 import { AwsClient } from "aws4fetch";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
 import type { PurgeOutcome } from "./purge-backlog";
+import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
+import { openPurgeQueue } from "./purge-request";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import { encodeKeyPath, parseKeyRelease, parseObjectKey, type ServeProps } from "./serve-key";
 
@@ -142,6 +144,16 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     const res = await originFetch(
       new Request(request.url, { method: request.method, headers, redirect: "manual" }),
     );
+    const announced = res.headers.get(purgeHeader);
+    if (announced !== null) {
+      this.ctx.waitUntil(
+        purgeInBand(readPurge(announced), {
+          purge: (mode, tags) => this.purge(mode, tags),
+          raise: (mode, tags) => openPurgeQueue(this.ctx.exports).raise(mode, tags),
+          now: Date.now,
+        }),
+      );
+    }
     return forCache(res, { release: props.release, pathname: new URL(request.url).pathname });
   }
 

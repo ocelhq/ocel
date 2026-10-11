@@ -4,7 +4,6 @@ import type { ImageConfig } from "@framework/next-router/image";
 import { describe, expect, it } from "vitest";
 import type { CacheDeps } from "../src/cache";
 import { type RouteDeps, serve } from "../src/index";
-import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
@@ -123,13 +122,13 @@ describe("the /_next/image route", () => {
   it("serves a repeat request from the colo cache, across a redeploy", async () => {
     const clock = { ms: 0 };
     const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = coloDeps({
+    const cache: CacheDeps = {
       cache: caches.default,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    });
+    };
     let calls = 0;
     const deps = imageDeps({
       cache,
@@ -161,13 +160,13 @@ describe("the /_next/image route", () => {
   it("never shares an unhashed variant between two deployments of one build", async () => {
     const clock = { ms: 0 };
     const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = coloDeps({
+    const cache: CacheDeps = {
       cache: caches.default,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    });
+    };
     let calls = 0;
     const imageOrigin = async () => {
       calls++;

@@ -163,12 +163,26 @@ describe("the headers a cached response leaves Serve with", () => {
     expect(response.headers.get("cache-tag")).toBeNull();
   });
 
-  it("drops Vary, because the variant is in the cache key already", () => {
+  it("drops Vary, because the variant is in the cache key already, and hands it on as x-ocel-vary", () => {
     const response = shaped({
       status: 200,
       headers: { ...stored, vary: "rsc, next-router-state-tree" },
     });
     expect(response.headers.get("vary")).toBeNull();
+    expect(response.headers.get("x-ocel-vary")).toBe("rsc, next-router-state-tree");
+  });
+
+  it("adds no x-ocel-vary to a response that had no Vary", () => {
+    expect(shaped({ status: 200, headers: stored }).headers.has("x-ocel-vary")).toBe(false);
+  });
+
+  it("never stores the origin's x-ocel-purge, stored or not", () => {
+    const announced = { "x-ocel-purge": "purge r1a2b3c4d|a" };
+
+    expect(
+      shaped({ status: 200, headers: { ...stored, ...announced } }).headers.has("x-ocel-purge"),
+    ).toBe(false);
+    expect(shaped({ status: 200, headers: announced }).headers.has("x-ocel-purge")).toBe(false);
   });
 
   it("keeps the ETag so a refresh can end in a 304", () => {

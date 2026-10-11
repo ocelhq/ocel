@@ -12,8 +12,7 @@ import {
   ownBundleKey,
 } from "../src/edge";
 import { dispatchResult, type RouteDeps, serve } from "../src/index";
-import type { ObjectStoreReader } from "../src/tag-clock";
-import { coloDeps } from "./cache-deps";
+import { fakeServing } from "./serving-deps";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -1007,18 +1006,7 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 });
 
 describe("edge-parented prerenders", () => {
-  const isrPrefix = "prod/p/app/build";
-
-  function storeOf(entries: Record<string, unknown>): ObjectStoreReader {
-    return {
-      async get(key) {
-        const entry = entries[key];
-        return entry === undefined ? null : storedJson(JSON.stringify(entry));
-      },
-    };
-  }
-
-  function prerenderDeps(entry: unknown | null, edge: EdgeInvoker): RouteDeps {
+  function prerenderDeps(edge: EdgeInvoker): RouteDeps {
     return deps({
       manifest: {
         buildId: "t",
@@ -1037,18 +1025,7 @@ describe("edge-parented prerenders", () => {
       },
       functionUrls: {},
       edge,
-      cache: coloDeps({
-        cache: {
-          match: async () => undefined,
-          put: async () => {},
-        } as unknown as Cache,
-        waitUntil: () => {},
-      }),
-      interception: {
-        config: { isrPrefix },
-        now: () => 2_000,
-        store: storeOf(entry ? { [`${isrPrefix}/cache/edge-blog.cache.json`]: entry } : {}),
-      },
+      serving: fakeServing().serving,
     } as Partial<RouteDeps>);
   }
 
@@ -1071,31 +1048,13 @@ describe("edge-parented prerenders", () => {
          })`,
     });
 
-  it("serves an edge-parented prerender from the R2 entry without invoking the entry", async () => {
-    const { edge, calls } = counted(renderer());
-    const res = await dispatchBlog(
-      prerenderDeps(
-        {
-          lastModified: 1_000,
-          value: {
-            kind: "APP_PAGE",
-            html: "<html>from-store</html>",
-            status: 200,
-            headers: {},
-          },
-        },
-        edge,
-      ),
-    );
+  it("invokes the edge entry on every request, with no Function URL bound and Serve never asked", async () => {
+    const serving = fakeServing();
+    const deps = { ...prerenderDeps(renderer()), serving: serving.serving };
 
-    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
-    expect(await res.text()).toBe("<html>from-store</html>");
-    expect(calls()).toBe(0);
-  });
+    const res = await dispatchBlog(deps);
 
-  it("invokes the edge entry when the R2 entry misses, with no Function URL bound", async () => {
-    const res = await dispatchBlog(prerenderDeps(null, renderer()));
-
+    expect(serving.calls).toHaveLength(0);
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
   });

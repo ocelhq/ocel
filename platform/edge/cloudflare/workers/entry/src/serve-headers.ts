@@ -1,6 +1,10 @@
+import { purgeHeader } from "@platform/edge-contract/purge";
+
 export const NOT_STORED = "private, no-store";
 
 export const BROWSER_REVALIDATES = "public, max-age=0, must-revalidate";
+
+export const ORIGIN_VARY = "x-ocel-vary";
 
 const STALE_IF_ERROR_SECONDS = 86_400;
 
@@ -42,6 +46,7 @@ function notStored(response: Response): Response {
   headers.set("cache-control", NOT_STORED);
   for (const name of EDGE_POLICY_HEADERS) headers.delete(name);
   headers.delete("cache-tag");
+  headers.delete(purgeHeader);
   return new Response(response.body, { status: response.status, headers });
 }
 
@@ -96,6 +101,9 @@ export function forCache(response: Response, cached: CachedResponse): Response {
     headers.set("cache-control", BROWSER_REVALIDATES);
   }
   headers.set("cache-tag", releaseTags(headers, cached));
+  headers.delete(purgeHeader);
+  const vary = headers.get("vary");
+  if (vary !== null) headers.set(ORIGIN_VARY, vary);
   headers.delete("vary");
   return new Response(response.body, { status: response.status, headers });
 }

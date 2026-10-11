@@ -134,3 +134,96 @@ describe("the gateway calling Serve", () => {
     }
   });
 });
+
+describe("the gateway serving a prerender", () => {
+  const prerenderRecord = {
+    ...record,
+    release: "deploy-1~f1",
+    isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+  };
+  const table: NextRouteTable = {
+    rootFunction: "/",
+    buildId: "deploy-1",
+    basePath: "",
+    pathnames: ["/blog"],
+    routes: {
+      beforeMiddleware: [],
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    dispatch: { "/blog": { kind: "prerender", id: "/", config: {} } },
+  };
+  const prerenderEnv: Env = {
+    ...env,
+    RELEASES: answerEveryRecordWith(async () => ({
+      kind: "record",
+      release: prerenderRecord.release,
+      record: prerenderRecord,
+    })),
+  };
+
+  function ctxServing() {
+    const origin: ServeProps[] = [];
+    const serve = ({ props }: { props: ServeProps }) => ({
+      fetch: async (request: Request) => {
+        if (props.kind === "origin") {
+          origin.push(props);
+          return new Response("cached page", {
+            headers: { "cf-cache-status": "HIT", "cache-tag": "r0a1b2c3d" },
+          });
+        }
+        const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
+        return key === routeTableKey()
+          ? new Response(JSON.stringify(table))
+          : new Response("", { status: 404 });
+      },
+      purge: async () => ({ ok: true }),
+    });
+    const ctx = createExecutionContext();
+    Object.defineProperty(ctx, "exports", { value: { Serve: serve, CacheEntrypoint: () => ({}) } });
+    return { origin, ctx };
+  }
+
+  it("serves the prerender through Serve, keyed by the release token of its ISR prefix", async () => {
+    const { origin, ctx } = ctxServing();
+
+    const response = await worker.fetch(
+      new Request("https://shop.example.com/blog"),
+      prerenderEnv,
+      ctx,
+    );
+
+    expect(origin).toEqual([
+      { kind: "origin", host: "shop.example.com", app: "web", release: "r0a1b2c3d" },
+    ]);
+    expect(response.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await response.text()).toBe("cached page");
+  });
+
+  it("never stores a prerender on the shared preview entry, which has no purge channel", async () => {
+    const { origin, ctx } = ctxServing();
+    const wire = capturing();
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      worker.fetch(
+        new Request("https://pr-12-web-abcdefghijklmnopp3347l26.myapp.com/blog"),
+        {
+          ...prerenderEnv,
+          OCEL_PREVIEW: "1",
+          OCEL_PREVIEW_BASE_DOMAIN: "myapp.com",
+          OCEL_PREVIEW_KEY: "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        },
+        ctx,
+      ),
+    );
+
+    expect(origin).toEqual([]);
+    expect(wire.calls.map((call) => new URL(call.url).host)).toEqual([
+      "abc.lambda-url.eu-west-2.on.aws",
+    ]);
+    expect(await response.text()).toBe("origin");
+  });
+});
