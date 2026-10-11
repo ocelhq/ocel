@@ -1,4 +1,4 @@
-import { type PublishTag, storedCacheTags } from "@framework/next-cache";
+import { type PublishTag, storedCacheTags, type TagRecord } from "@framework/next-cache";
 import { cloudCdnTagLimits } from "./cloud-cdn.mjs";
 import { newMetadataToken } from "./metadata-token.mjs";
 
@@ -16,13 +16,13 @@ export interface CdnPurgeOptions {
   warn?: (message: string) => void;
 }
 
-export type PurgeTags = (tags: readonly string[]) => Promise<void>;
+export type PurgeTags = (tags: ReadonlyMap<string, TagRecord>) => Promise<void>;
 
 const attempts = 4;
 const tagsPerRequest = 10;
 
 export function withCdnPurge(publish: PublishTag, purge: PurgeTags): PublishTag {
-  return (tag, record) => publish(tag, record).then(() => purge([tag]));
+  return (tag, record) => publish(tag, record).then(() => purge(new Map([[tag, record]])));
 }
 
 export function newCdnPurge(options: CdnPurgeOptions): PurgeTags {
@@ -109,7 +109,8 @@ export function newCdnPurge(options: CdnPurgeOptions): PurgeTags {
     }
   }
 
-  return (tags) => {
+  return (raised) => {
+    const tags = [...raised.keys()];
     const { tags: stamped, unstorable, overflowed } = storedCacheTags(release, tags);
     const sendable = stamped.filter(
       (tag) => Buffer.byteLength(tag, "utf8") <= cloudCdnTagLimits.bytesPerTag,

@@ -1,3 +1,4 @@
+import type { TagRecord } from "@framework/next-cache";
 import { expect, test } from "vitest";
 import { newCdnPurge, withCdnPurge } from "../src/next/cdn-purge.mjs";
 
@@ -32,6 +33,10 @@ function purger(s: ReturnType<typeof stub>, warn: (message: string) => void = ()
   return newCdnPurge({ urlMap, release, fetch: s.fetch, sleep: noSleep, random: () => 1, warn });
 }
 
+function expired(...tags: string[]): Map<string, TagRecord> {
+  return new Map(tags.map((tag) => [tag, { expired: 1 }]));
+}
+
 function bodyOf(call: Call): { cacheTags: string[] } {
   return JSON.parse(call.init.body as string);
 }
@@ -39,7 +44,7 @@ function bodyOf(call: Call): { cacheTags: string[] } {
 test("a revalidated tag is cleared from Cloud CDN under its release", async () => {
   const s = stub([]);
 
-  await purger(s)(["posts"]);
+  await purger(s)(expired("posts"));
 
   expect(s.purges).toHaveLength(1);
   const call = s.purges[0] as Call;
@@ -55,7 +60,7 @@ test("tags revalidated together are cleared in one request", async () => {
   const s = stub([]);
   const purge = purger(s);
 
-  await Promise.all([purge(["a", "b"]), purge(["b", "c"])]);
+  await Promise.all([purge(expired("a", "b")), purge(expired("b", "c"))]);
 
   expect(s.purges).toHaveLength(1);
   expect(bodyOf(s.purges[0] as Call)).toEqual({
@@ -67,7 +72,7 @@ test("eleven tags are cleared in two requests of at most ten", async () => {
   const s = stub([]);
   const tags = Array.from({ length: 11 }, (_, i) => `t${i}`);
 
-  await purger(s)(tags);
+  await purger(s)(expired(...tags));
 
   expect(s.purges.map((call) => bodyOf(call).cacheTags.length)).toEqual([10, 1]);
 });
@@ -75,7 +80,7 @@ test("eleven tags are cleared in two requests of at most ten", async () => {
 test("a throttled purge is retried until Cloud CDN takes it", async () => {
   const s = stub([429, 503, 200]);
 
-  await purger(s)(["posts"]);
+  await purger(s)(expired("posts"));
 
   expect(s.purges).toHaveLength(3);
 });
@@ -83,7 +88,7 @@ test("a throttled purge is retried until Cloud CDN takes it", async () => {
 test("a purge Cloud CDN keeps refusing rejects after four attempts naming the release, not the token", async () => {
   const s = stub([503, 503, 503, 503]);
 
-  const error = await purger(s)(["posts"]).then(
+  const error = await purger(s)(expired("posts")).then(
     () => undefined,
     (e: Error) => e,
   );
@@ -96,7 +101,7 @@ test("a purge Cloud CDN keeps refusing rejects after four attempts naming the re
 test("a purge refused for lack of permission rejects at once and names the role", async () => {
   const s = stub([403]);
 
-  const error = await purger(s)(["posts"]).then(
+  const error = await purger(s)(expired("posts")).then(
     () => undefined,
     (e: Error) => e,
   );
@@ -109,7 +114,7 @@ test("a purge refused for lack of permission rejects at once and names the role"
 test("an expired token is replaced once", async () => {
   const s = stub([401, 200]);
 
-  await purger(s)(["posts"]);
+  await purger(s)(expired("posts"));
 
   expect(s.metadataFetches()).toBe(2);
   expect(s.purges).toHaveLength(2);
@@ -120,7 +125,7 @@ test("a tag too long to stamp is never sent, and says so", async () => {
   const warnings: string[] = [];
   const long = "x".repeat(115);
 
-  await purger(s, (message) => warnings.push(message))([long]);
+  await purger(s, (message) => warnings.push(message))(expired(long));
 
   expect(s.purges).toHaveLength(0);
   expect(warnings).toHaveLength(1);

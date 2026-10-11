@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 
+import type { TagRecord } from "@framework/next-cache";
 import { purgeSignatureHeader } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
@@ -9,6 +10,7 @@ import { newCloudflarePurge } from "../src/next/cloudflare-purge.mjs";
 const url = "https://shop-prod.acct.workers.dev/.ocel/purge";
 const release = "r1a2b3c4d";
 const secret = "write-secret";
+const raisedAt = 1_700_000_000_000;
 
 type Call = { url: string; init: RequestInit };
 
@@ -21,6 +23,10 @@ function stub(statuses: number[] = []) {
   return { fetch: fetchStub, calls };
 }
 
+function expired(...tags: string[]): Map<string, TagRecord> {
+  return new Map(tags.map((tag) => [tag, { expired: raisedAt }]));
+}
+
 function purger(s: ReturnType<typeof stub>) {
   return newCloudflarePurge({
     url,
@@ -29,14 +35,17 @@ function purger(s: ReturnType<typeof stub>) {
     fetch: s.fetch,
     sleep: async () => {},
     random: () => 1,
-    now: () => 1_700_000_000_000,
   });
 }
 
-test("a revalidated tag is purged at the worker under its release, signed with the deploy's secret", async () => {
+function bodiesOf(s: ReturnType<typeof stub>): unknown[] {
+  return s.calls.map((call) => JSON.parse(String(call.init.body)));
+}
+
+test("an expired tag is purged at the worker under its release, signed with the deploy's secret", async () => {
   const s = stub();
 
-  await purger(s)(["posts", "_N_T_/blog/a"]);
+  await purger(s)(expired("posts", "_N_T_/blog/a"));
 
   expect(s.calls).toHaveLength(1);
   const call = s.calls[0] as Call;
@@ -47,8 +56,8 @@ test("a revalidated tag is purged at the worker under its release, signed with t
     release,
     mode: "purge",
     tags: [
-      { tag: "posts", raisedAt: 1_700_000_000_000 },
-      { tag: "_N_T_/blog/a", raisedAt: 1_700_000_000_000 },
+      { tag: "posts", raisedAt },
+      { tag: "_N_T_/blog/a", raisedAt },
     ],
   });
   expect(new Headers(call.init.headers).get(purgeSignatureHeader)).toBe(
@@ -56,10 +65,36 @@ test("a revalidated tag is purged at the worker under its release, signed with t
   );
 });
 
+test("a tag revalidated stale-while-revalidate is invalidated, raised when it went stale", async () => {
+  const s = stub();
+
+  await purger(s)(new Map([["posts", { stale: raisedAt, expired: raisedAt + 31_536_000_000 }]]));
+
+  expect(bodiesOf(s)).toEqual([
+    { release, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+  ]);
+});
+
+test("expired and stale tags revalidated together go as a purge and an invalidate", async () => {
+  const s = stub();
+
+  await purger(s)(
+    new Map<string, TagRecord>([
+      ["cart", { expired: raisedAt }],
+      ["posts", { stale: raisedAt + 5, expired: raisedAt + 60_000 }],
+    ]),
+  );
+
+  expect(bodiesOf(s)).toEqual([
+    { release, mode: "purge", tags: [{ tag: "cart", raisedAt }] },
+    { release, mode: "invalidate", tags: [{ tag: "posts", raisedAt: raisedAt + 5 }] },
+  ]);
+});
+
 test("a throttled worker is asked again until it takes the purge", async () => {
   const s = stub([429, 503]);
 
-  await purger(s)(["posts"]);
+  await purger(s)(expired("posts"));
 
   expect(s.calls).toHaveLength(3);
 });
@@ -67,13 +102,13 @@ test("a throttled worker is asked again until it takes the purge", async () => {
 test("a worker that refuses the purge fails the revalidation that asked for it", async () => {
   const s = stub([401]);
 
-  await expect(purger(s)(["posts"])).rejects.toThrow("401");
+  await expect(purger(s)(expired("posts"))).rejects.toThrow("401");
 });
 
 test("a purge for no tags sends nothing", async () => {
   const s = stub();
 
-  await purger(s)([]);
+  await purger(s)(expired());
 
   expect(s.calls).toEqual([]);
 });
@@ -82,8 +117,8 @@ test("a published tag is purged once it has been published, and not before", asy
   const s = stub();
   const order: string[] = [];
   const publish = async () => void order.push("published");
-  const purge = async (tags: readonly string[]) => {
-    order.push(`purged ${tags.join(",")}`);
+  const purge = async (tags: ReadonlyMap<string, TagRecord>) => {
+    order.push(`purged ${[...tags.keys()].join(",")}`);
     await purger(s)(tags);
   };
 
@@ -91,4 +126,15 @@ test("a published tag is purged once it has been published, and not before", asy
 
   expect(order).toEqual(["published", "purged posts"]);
   expect(s.calls).toHaveLength(1);
+});
+
+test("revalidateTag with the max profile reaches the worker as an invalidate", async () => {
+  const s = stub();
+  const publish = async () => {};
+
+  await withCdnPurge(publish, purger(s))("posts", { stale: raisedAt, expired: raisedAt + 1_000 });
+
+  expect(bodiesOf(s)).toEqual([
+    { release, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+  ]);
 });
