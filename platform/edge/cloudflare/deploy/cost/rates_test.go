@@ -1,6 +1,8 @@
 package cost_test
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -76,6 +78,37 @@ func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
 	preview := shapedSet(t, environment.TierPreview)
 	if n := len(preview.GetResources()); n != len(set.GetResources())+1 {
 		t.Errorf("a preview tier shapes %d resources, want the production set plus the shared preview entry worker", n)
+	}
+}
+
+func TestEveryEntryWorkerIsPricedForItsPurgeQueue(t *testing.T) {
+	t.Parallel()
+
+	set := shapedSet(t, environment.TierPreview)
+	est := priced(t, set, costv1.Profile_PROFILE_MODERATE)
+
+	for _, scope := range []string{"environment:prod", "shared:preview"} {
+		var entry *costv1.Resource
+		for _, resource := range set.GetResources() {
+			if resource.GetType() == cost.TypeWorkersScript && resource.GetScope() == scope && strings.Contains(resource.GetName(), "entry") {
+				entry = resource
+			}
+		}
+		if entry == nil {
+			t.Fatalf("no entry worker under %s", scope)
+		}
+		var components []string
+		for _, r := range est.GetResources() {
+			if r.GetResource() != entry.GetId() {
+				continue
+			}
+			for _, c := range r.GetComponents() {
+				components = append(components, c.GetName())
+			}
+		}
+		if !slices.Contains(components, "Durable Object requests") {
+			t.Errorf("%s prices %v, want the Durable Object requests of its PurgeQueue", entry.GetName(), components)
+		}
 	}
 }
 
