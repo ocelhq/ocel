@@ -32,6 +32,7 @@ function purger(s: ReturnType<typeof stub>) {
     url,
     isrPrefix,
     secret,
+    now: () => raisedAt + 10,
     fetch: s.fetch,
     sleep: async () => {},
     random: () => 1,
@@ -111,6 +112,14 @@ test("a purge for no tags sends nothing", async () => {
   await purger(s)(expired());
 
   expect(s.calls).toEqual([]);
+});
+
+test("a tag gone stale and later expired is purged, raised when it expired", async () => {
+  const s = stub();
+
+  await purger(s)(new Map([["posts", { stale: raisedAt - 5_000, expired: raisedAt }]]));
+
+  expect(bodiesOf(s)).toEqual([{ isrPrefix, mode: "purge", tags: [{ tag: "posts", raisedAt }] }]);
 });
 
 test("a published tag is purged once it has been published, and not before", async () => {
