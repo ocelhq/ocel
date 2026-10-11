@@ -28,7 +28,7 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"DomainApps", "Domains", "GlobalPreview", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Values", "Version", "Warn",
+				"DomainApps", "Domains", "GlobalPreview", "PreviewGate", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Values", "Version", "Warn",
 			},
 		},
 		{
@@ -42,7 +42,7 @@ func TestSpecStampShape(t *testing.T) {
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
 				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
-				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
+				"Observability", "PreviewGate", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
 				"StoreEndpoint", "StoreScriptName", "Values",
 			},
 		},
@@ -137,6 +137,31 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 			if _, set := worker.Variables[genericServesWorkersDevBinding]; set {
 				t.Errorf("%s: variables = %v, want no %s: the worker answers workers.dev only for purges", name, worker.Variables, genericServesWorkersDevBinding)
 			}
+		}
+	})
+
+	t.Run("a changed preview gate restamps the spec", func(t *testing.T) {
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
+		generic, err := genericWorker(spec, spec.Slug, "")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
+		stampOf := func(gate *edge.PreviewGate) string {
+			spec.PreviewGate = gate
+			stamp, err := specStamp(spec, generic)
+			if err != nil {
+				t.Fatalf("specStamp: %v", err)
+			}
+			return stamp
+		}
+
+		ungated := stampOf(nil)
+		gated := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m1", BypassSecrets: []string{"b1"}})
+		rotated := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m2", BypassSecrets: []string{"b1"}})
+		revoked := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m2"})
+
+		if len(slices.Compact(slices.Sorted(slices.Values([]string{ungated, gated, rotated, revoked})))) != 4 {
+			t.Errorf("stamps = %q, %q, %q, %q, want each gate to stamp differently: a rotated password or a revoked bypass secret must never deploy as up to date", ungated, gated, rotated, revoked)
 		}
 	})
 
