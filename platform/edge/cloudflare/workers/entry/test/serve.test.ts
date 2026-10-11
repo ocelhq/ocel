@@ -420,6 +420,30 @@ describe("Serve fetching from the origin", () => {
     expect(response.headers.get("cache-tag")).toBe("r1a2b3c4d,r1a2b3c4d|path:/blog/a");
   });
 
+  it("stores what the origin answers under the tags it named in x-ocel-cache-tag, which a fetch through Cloudflare does not strip", async () => {
+    const wire = s3Answering(
+      () =>
+        new Response("page", {
+          headers: {
+            "cache-control": "s-maxage=3600",
+            "x-ocel-cache-tag": "r1a2b3c4d|_N_T_/blog/a,r1a2b3c4d|posts",
+          },
+        }),
+    );
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
+    );
+
+    expect(response.headers.get("cache-tag")?.split(",")).toEqual([
+      "r1a2b3c4d",
+      "r1a2b3c4d|path:/blog/a",
+      "r1a2b3c4d|_N_T_/blog/a",
+      "r1a2b3c4d|posts",
+    ]);
+    expect(response.headers.has("x-ocel-cache-tag")).toBe(false);
+  });
+
   it("fetches the origin URL it was called with, as the visitor's host and without the visitor's credentials", async () => {
     const wire = s3Answering(
       () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),

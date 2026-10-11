@@ -129,7 +129,7 @@ describe("the headers a cached response leaves Serve with", () => {
   it("tags a stored response with its release and its path, and prefixes the origin's tags", () => {
     const response = shaped({
       status: 200,
-      headers: { ...stored, "cache-tag": `${release}|posts,other` },
+      headers: { ...stored, "x-ocel-cache-tag": `${release}|posts,other` },
     });
     expect(response.headers.get("cache-tag")?.split(",")).toEqual([
       release,
@@ -146,7 +146,7 @@ describe("the headers a cached response leaves Serve with", () => {
 
   it("keeps at most 1000 tags, the release's two first", () => {
     const many = Array.from({ length: 1500 }, (_, i) => `t${i}`).join(",");
-    const tags = shaped({ status: 200, headers: { ...stored, "cache-tag": many } })
+    const tags = shaped({ status: 200, headers: { ...stored, "x-ocel-cache-tag": many } })
       .headers.get("cache-tag")
       ?.split(",");
     expect(tags).toHaveLength(1000);

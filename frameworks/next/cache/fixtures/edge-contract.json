@@ -15,6 +15,7 @@
   },
   "purgeHeader": "x-ocel-purge",
   "edgeCacheHeader": "x-ocel-edge-cache",
+  "edgeCacheTagHeader": "x-ocel-cache-tag",
   "pprShellHeader": "x-ocel-ppr-shell",
   "postponedLengthHeader": "x-ocel-postponed-length"
 }

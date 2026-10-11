@@ -1,7 +1,7 @@
 import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
 import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
-import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
+import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import { type ProjectManifest, walkPrerender } from "./project-manifest.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
@@ -85,7 +85,8 @@ export function shapeOriginCache(
 }
 
 function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {
-  if (shaping.shapesOnlyWhenAsked && req.headers[edgeCacheHeader] !== "1") return;
+  const asked = req.headers[edgeCacheHeader] === "1";
+  if (shaping.shapesOnlyWhenAsked && !asked) return;
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {
@@ -95,7 +96,7 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
       noted,
       shaping.tagsPerObject,
     );
-    if (tags.length > 0) res.setHeader(cacheTagHeader, tags.join(","));
+    if (tags.length > 0) res.setHeader(asked ? edgeCacheTagHeader : cacheTagHeader, tags.join(","));
     const lost = [...unstorable, ...overflowed];
     if (lost.length > 0) {
       console.warn(

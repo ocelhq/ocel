@@ -106,8 +106,20 @@ test("behind an edge that does not dispatch, shapes only a request that asked fo
 
   expect(plain["cache-control"]).toBeUndefined();
   expect(plain["cache-tag"]).toBeUndefined();
+  expect(plain["x-ocel-cache-tag"]).toBeUndefined();
   expect(asked["cache-control"]).toBe("s-maxage=60, stale-while-revalidate=600");
-  expect(asked["cache-tag"]).toBe("r0a1b2c3d|products");
+});
+
+test("names the tags of a request that asked for the edge cache in x-ocel-cache-tag, since Cloudflare strips cache-tag from what a worker fetches", () => {
+  const html = { "content-type": "text/html; charset=utf-8" };
+
+  const asked = serve(shaping({ OCEL_ORIGIN_DISPATCH: "" }), "/isr", fakeRes(html), {
+    tags: ["products"],
+    headers: { "x-ocel-edge-cache": "1" },
+  });
+
+  expect(asked["x-ocel-cache-tag"]).toBe("r0a1b2c3d|products");
+  expect(asked["cache-tag"]).toBeUndefined();
 });
 
 test("the gate opens when the deploy declared the origin hosts dispatch", () => {

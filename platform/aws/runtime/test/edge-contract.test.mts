@@ -2,6 +2,7 @@ import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
 import {
   edgeCacheHeader,
+  edgeCacheTagHeader,
   postponedLengthHeader,
   pprShellHeader,
 } from "@platform/edge-contract/edge-cache";
@@ -60,6 +61,10 @@ test("a purge is announced under the header name the edge reads", () => {
 
 test("the origin shapes for an edge cache under the header name the edge sends", () => {
   expect(edgeCacheHeader).toBe(contract.edgeCacheHeader);
+});
+
+test("the origin names an edge-cached page's tags under the header name the edge reads", () => {
+  expect(edgeCacheTagHeader).toBe(contract.edgeCacheTagHeader);
 });
 
 test("the origin frames a PPR shell under the header names the edge sends and reads", () => {
