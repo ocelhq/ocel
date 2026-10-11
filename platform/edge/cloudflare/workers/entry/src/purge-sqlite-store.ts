@@ -5,7 +5,7 @@ const EVERYTHING_AT = "purgedEverythingAt";
 const RETRY_AT = "retryAt";
 const FAILURES = "failures";
 
-export function sqliteBacklogStore(storage: DurableObjectStorage): BacklogStore {
+export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogStore {
   const { sql } = storage;
   sql.exec(
     `CREATE TABLE IF NOT EXISTS pending (

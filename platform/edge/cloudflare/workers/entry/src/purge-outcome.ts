@@ -2,7 +2,7 @@ import { type PurgeOutcome, RATE_LIMITED } from "./purge-backlog";
 
 const RATE_LIMITED_IN_MESSAGE = new RegExp(`\\b${RATE_LIMITED}\\b`);
 
-export function outcomeOfPurge(answer: unknown): PurgeOutcome {
+export function parsePurgeOutcome(answer: unknown): PurgeOutcome {
   if (answer instanceof Error) {
     return {
       ok: false,

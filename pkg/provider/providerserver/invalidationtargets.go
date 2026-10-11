@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-func invalidationTargetsKey(tier environment.Tier, kind edge.Kind, slug string) keyvalue.Key {
+func buildInvalidationTargetsKey(tier environment.Tier, kind edge.Kind, slug string) keyvalue.Key {
 	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootRouters, Path: []string{string(kind), naming.Sanitize(slug)}}
 	return partition.Key("invalidation")
 }
@@ -28,7 +28,7 @@ func decodeInvalidationTargets(entry keyvalue.Entry) ([]string, error) {
 	return targets, nil
 }
 
-func withoutInvalidationTarget(targets []string, url string) []string {
+func removeInvalidationTarget(targets []string, url string) []string {
 	return slices.DeleteFunc(slices.Clone(targets), func(target string) bool { return target == url })
 }
 
@@ -41,7 +41,7 @@ func recordInvalidationTarget(ctx context.Context, store keyvalue.Store, tier en
 	if current == "" {
 		return nil
 	}
-	return keyvalue.Change(ctx, store, invalidationTargetsKey(tier, kind, slug), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	return keyvalue.Change(ctx, store, buildInvalidationTargetsKey(tier, kind, slug), func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
 		if err != nil || slices.Contains(targets, current) {
 			return nil, false, err
@@ -57,13 +57,13 @@ func forgetInvalidationTarget(ctx context.Context, store keyvalue.Store, tier en
 	if url == "" {
 		return nil
 	}
-	key := invalidationTargetsKey(tier, kind, slug)
+	key := buildInvalidationTargetsKey(tier, kind, slug)
 	err := keyvalue.Change(ctx, store, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
 		if err != nil {
 			return nil, false, err
 		}
-		remaining := withoutInvalidationTarget(targets, url)
+		remaining := removeInvalidationTarget(targets, url)
 		if len(remaining) == 0 || len(remaining) == len(targets) {
 			return nil, false, nil
 		}
@@ -75,6 +75,6 @@ func forgetInvalidationTarget(ctx context.Context, store keyvalue.Store, tier en
 	}
 	return keyvalue.ForgetMatching(ctx, store, key, func(recorded keyvalue.Entry) (bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
-		return len(withoutInvalidationTarget(targets, url)) == 0, err
+		return len(removeInvalidationTarget(targets, url)) == 0, err
 	})
 }

@@ -527,7 +527,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	if len(worker.CachedEntrypoints) > 0 {
 		metadata["cache_options"] = map[string]any{"enabled": false, "cross_version_cache": true}
 	}
-	if exports := workerExports(worker); len(exports) > 0 {
+	if exports := buildWorkerExports(worker); len(exports) > 0 {
 		metadata["exports"] = exports
 	}
 	if includeAssets {
@@ -558,7 +558,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-func workerExports(worker edge.Worker) map[string]any {
+func buildWorkerExports(worker edge.Worker) map[string]any {
 	exports := make(map[string]any, len(worker.CachedEntrypoints)+len(worker.DurableObjects))
 	for _, name := range worker.CachedEntrypoints {
 		exports[name] = map[string]any{"type": "worker", "cache": map[string]any{"enabled": true}}

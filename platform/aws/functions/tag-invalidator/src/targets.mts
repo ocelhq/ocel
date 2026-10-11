@@ -14,16 +14,16 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-function escaped(project: string): string {
+function escapeProject(project: string): string {
   return project.replaceAll("%", "%25").replaceAll("#", "%23");
 }
 
 export function projectPartition(project: string): string {
-  return `${routerPartition}#${escaped(project)}`;
+  return `${routerPartition}#${escapeProject(project)}`;
 }
 
-export function cloudflareProjectPartition(project: string): string {
-  return `${cloudflarePartition}#${escaped(project)}`;
+export function buildCloudflareProjectPartition(project: string): string {
+  return `${cloudflarePartition}#${escapeProject(project)}`;
 }
 
 async function notedAt(
@@ -61,13 +61,13 @@ export async function targetsOf(
   return [...new Set([...wildcard, ...owned])].sort();
 }
 
-export function cloudflareTargetsOf(
+export function readCloudflareTargets(
   dynamo: DynamoLike,
   commands: DynamoCommands,
   table: string,
   project: string,
 ): Promise<string[]> {
-  return notedAt(dynamo, commands, table, cloudflareProjectPartition(project)).then((urls) =>
+  return notedAt(dynamo, commands, table, buildCloudflareProjectPartition(project)).then((urls) =>
     [...new Set(urls)].sort(),
   );
 }

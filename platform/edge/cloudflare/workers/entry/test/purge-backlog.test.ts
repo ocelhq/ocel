@@ -404,11 +404,11 @@ describe("the purge backlog scheduling its next flush", () => {
   it("asks for a flush a second after a raise, so raises that follow coalesce", () => {
     backlog.raise("purge", [raised("r1|a")]);
 
-    expect(backlog.nextFlushAt()).toBe(now + 1_000);
+    expect(backlog.readNextFlushAt()).toBe(now + 1_000);
   });
 
   it("asks for nothing while nothing is pending", () => {
-    expect(backlog.nextFlushAt()).toBeUndefined();
+    expect(backlog.readNextFlushAt()).toBeUndefined();
   });
 
   it("asks for nothing when every raise was already covered", async () => {
@@ -417,7 +417,7 @@ describe("the purge backlog scheduling its next flush", () => {
 
     backlog.raise("purge", [raised("r1|a", START)]);
 
-    expect(backlog.nextFlushAt()).toBeUndefined();
+    expect(backlog.readNextFlushAt()).toBeUndefined();
   });
 
   it("asks for another flush a second later when a call left tags behind", async () => {

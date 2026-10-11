@@ -36,11 +36,11 @@ export function purgeEntryOf(tag: string, record: TagRecord): PurgeEntry | undef
   };
 }
 
-export function purgeSecret(seed: string, isrPrefix: string): string {
+export function derivePurgeSecret(seed: string, isrPrefix: string): string {
   return createHmac("sha256", seed).update(isrPrefix).digest("hex");
 }
 
-function retryable(status: number): boolean {
+function isRetryable(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
@@ -62,7 +62,7 @@ async function post(sender: PurgeSender, url: string, secret: string, body: stri
       await res.body?.cancel();
       if (res.ok) return;
       last = String(res.status);
-      if (!retryable(res.status)) break;
+      if (!isRetryable(res.status)) break;
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
     }

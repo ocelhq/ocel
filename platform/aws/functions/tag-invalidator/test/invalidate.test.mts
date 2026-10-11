@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { purgeSecret, purgeSignatureHeader } from "@platform/edge-contract/purge";
+import { derivePurgeSecret, purgeSignatureHeader } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { invalidateAll } from "../src/invalidate.mjs";
@@ -373,7 +373,7 @@ describe("the Cloudflare target", () => {
       mode: "purge",
       tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
     });
-    const secret = purgeSecret(SEED, PREFIX);
+    const secret = derivePurgeSecret(SEED, PREFIX);
     expect(sent.signature).toBe(
       createHmac("sha256", secret).update(JSON.stringify(sent.body)).digest("hex"),
     );

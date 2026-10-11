@@ -64,7 +64,7 @@ export class PurgeBacklog {
     }
   }
 
-  nextFlushAt(): number | undefined {
+  readNextFlushAt(): number | undefined {
     const { store, now } = this.options;
     if (!store.hasAnyPending()) return undefined;
     return Math.max(store.readRetryAt() ?? 0, now() + FLUSH_EVERY_MS);
@@ -83,7 +83,7 @@ export class PurgeBacklog {
     store.forgetCoveredBefore(startedAt - FORGET_AFTER_MS);
 
     const retryAt = store.readRetryAt();
-    if (retryAt !== undefined && startedAt < retryAt) return this.nextFlushAt();
+    if (retryAt !== undefined && startedAt < retryAt) return this.readNextFlushAt();
 
     const oldest = store.readOldestRaisedAt();
     if (oldest === undefined) return undefined;
@@ -96,7 +96,7 @@ export class PurgeBacklog {
       } else {
         this.backOff("purge everything", outcome);
       }
-      return this.nextFlushAt();
+      return this.readNextFlushAt();
     }
 
     const mode: PurgeMode = store.hasPending("purge") ? "purge" : "invalidate";
@@ -108,7 +108,7 @@ export class PurgeBacklog {
     } else {
       this.backOff(`${mode} ${tags.length} tag(s)`, outcome);
     }
-    return this.nextFlushAt();
+    return this.readNextFlushAt();
   }
 
   private backOff(what: string, refusal: Extract<PurgeOutcome, { ok: false }>): void {
