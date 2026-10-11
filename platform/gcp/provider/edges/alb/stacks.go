@@ -56,7 +56,7 @@ type Stacks interface {
 }
 
 type Routes interface {
-	Route(ctx context.Context, urlMap, hostname, backend string) error
+	Route(ctx context.Context, urlMap, hostname, backend string, files *StaticRoutes) error
 
 	ServeNotFound(ctx context.Context, urlMap, hostname string) error
 

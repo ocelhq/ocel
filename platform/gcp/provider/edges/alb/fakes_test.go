@@ -165,7 +165,7 @@ func (w *world) Outputs(_ context.Context, target Target) (map[string]string, er
 	return maps.Clone(w.outputs[target.Name()]), nil
 }
 
-func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error {
+func (w *world) Route(_ context.Context, urlMap, hostname, backend string, _ *StaticRoutes) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.hasBackend(backend) {
