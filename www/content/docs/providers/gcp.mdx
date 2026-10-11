@@ -181,6 +181,18 @@ Cloud CDN passes the `Cache-Tag` response header through to clients, so the tag 
 stamps on its pages, including the release, are visible to visitors: never put a user or tenant id
 in a tag.
 
+A Next page with a `revalidate` time is refreshed by Cloud CDN, not by the app. The app answers
+with `s-maxage` and `stale-while-revalidate` taken from the route's revalidate and expire times,
+and treats a stale entry in its own cache as a miss. Cloud CDN keeps the page for `s-maxage`
+seconds, then asks the app for a fresh one, sending one request to the app however many visitors
+ask for that page at once. Google's documentation disagrees on what visitors get during that
+request: [Serving stale content](https://cloud.google.com/cdn/docs/serving-stale-content) serves
+the old page for up to the `stale-while-revalidate` time while the refresh runs in the background,
+and [Caching overview](https://cloud.google.com/cdn/docs/caching) says a response with `s-maxage` is
+never served stale. In the second case the refresh is synchronous: the first visitor after
+`s-maxage` waits for the app to render the page. Either way, no visitor gets a page older than the
+route's expire time. A response without `stale-while-revalidate` is never served stale.
+
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
 import gcpProvider from "ocel/providers/gcp";
@@ -367,12 +379,6 @@ a dead-letter topic of its own. A task with a `cron` is a Cloud Scheduler job pu
 topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
 waits in the tier's Cloud Tasks queue until it is due.
 
-A serverless Next app refreshes a stale page through the same queue: it queues the
-refresh, and Cloud Tasks calls the app's Cloud Run url with a token signed as the tier's refresh
-account. A Next app on container compute, or behind an edge that runs code, refreshes on its own.
-A Next app in a preview served behind Identity-Aware Proxy refreshes on its own too: the proxy lets
-in only the people `previewViewers` names, so Cloud Tasks could not reach it.
-
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
 gets at most 600 seconds, the longest a push subscription waits for an answer.
@@ -384,14 +390,11 @@ gcloud services enable pubsub.googleapis.com cloudtasks.googleapis.com --project
 ocel bootstrap production --features tasks
 ```
 
-That is the tier's task database, its delay queue, its push account, and the account Cloud Tasks
-signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also
-needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a serverless Next
-app behind an edge that runs no code, on a tier without it is refused, naming that
-command, and an ephemeral preview declaring one is refused. A Next app on container compute, or
-behind an edge that runs code, needs no queue. Dropping `tasks` from a bootstrap is refused while
-any project on the tier still declares a topic or task, or still holds the refresh grant of a Next
-app; that grant is released when the app's last environment is destroyed.
+That is the tier's task database, its delay queue and its push account. None of it bills while
+idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
+task on a tier without it is refused, naming that command, and an ephemeral preview declaring one
+is refused. A Next app that declares neither needs no queue. Dropping `tasks` from a bootstrap is
+refused while any project on the tier still declares a topic or task.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
 batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger
@@ -460,9 +463,7 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
-because a delayed message is published as the app that sent it. A serverless Next app may
-act as the tier's refresh account, which holds no grant of its own, so Cloud Tasks signs its
-refreshes as that account; a deploy sets that with the custom role too.
+because a delayed message is published as the app that sent it.
 
 A bootstrap never deletes the role, because Google holds a deleted custom role's id for up to 44
 days and nothing could make it again in that time. A role deleted by hand is undeleted within
