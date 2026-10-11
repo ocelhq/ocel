@@ -8,6 +8,7 @@ import {
 } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 import { afterEach, expect, test } from "vitest";
+import { edgeReadableTagging } from "../src/next/object-store.mjs";
 import { isrPrefixOf, tagNamespace } from "../src/next/tag-index.mjs";
 
 afterEach(() => {
@@ -70,4 +71,8 @@ test("the origin names an edge-cached page's tags under the header name the edge
 test("the origin frames a PPR shell under the header names the edge sends and reads", () => {
   expect(pprShellHeader).toBe(contract.pprShellHeader);
   expect(postponedLengthHeader).toBe(contract.postponedLengthHeader);
+});
+
+test("page entries are tagged edge-readable exactly as the deploy tags what the edge may read", () => {
+  expect(edgeReadableTagging).toBe(contract.edgeReadableTagging);
 });
