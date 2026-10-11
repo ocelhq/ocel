@@ -14,7 +14,7 @@ import {
 import { settledWithin } from "./cache";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
 import { purgeInBand } from "./purge-inband";
-import { openPurgeQueue } from "./purge-request";
+import { openInBandQueue } from "./purge-request";
 import { ORIGIN_PURGE_SCOPE } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import { AWAITED_PURGE_MS } from "./serving";
@@ -183,7 +183,7 @@ export class CacheEntrypoint
     if (!serve) return;
     const run = purgeInBand(groups, {
       cache: serve({ props: ORIGIN_PURGE_SCOPE }),
-      queue: openPurgeQueue(this.ctx.exports),
+      queue: openInBandQueue(this.ctx.exports),
       now: Date.now,
     });
     this.ctx.waitUntil(run);

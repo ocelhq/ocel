@@ -13,7 +13,7 @@ import { originFetchFor } from "./origin-fetch";
 import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
-import { openPurgeQueue } from "./purge-request";
+import { openInBandQueue } from "./purge-request";
 import type { ReleaseRecord } from "./releases";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
@@ -231,7 +231,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       this.ctx.waitUntil(
         purgeInBand(readPurge(announced), {
           cache: this,
-          queue: openPurgeQueue(this.ctx.exports),
+          queue: openInBandQueue(this.ctx.exports),
           now: Date.now,
         }),
       );

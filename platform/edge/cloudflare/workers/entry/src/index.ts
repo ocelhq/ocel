@@ -28,7 +28,7 @@ import {
   answerPurgeOnWorker,
   isControlHost,
   isPurgeRequest,
-  openPurgeQueue,
+  openInBandQueue,
   respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
@@ -336,7 +336,7 @@ export default {
       serving: serve
         ? {
             serve,
-            queue: { raise: (mode, tags) => openPurgeQueue(ctx.exports).raise(mode, tags) },
+            queue: { raise: (mode, tags) => openInBandQueue(ctx.exports).raise(mode, tags) },
             waitUntil: (promise) => ctx.waitUntil(promise),
           }
         : undefined,
