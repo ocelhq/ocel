@@ -172,12 +172,17 @@ describe("the alb variant", () => {
 });
 
 describe("Cloudflare in front of gcp", () => {
-  it("skips every Cloudflare cell on gcp, where Cloudflare is a proxy that runs no worker, whatever zone the run names", () => {
-    for (const env of [{}, ZONED_RUN]) {
-      expect(skippedBy(planOn("gcp", env), "deploy/node-cloudflare")).toContain(
-        "cloudflare-on-gcp-runs-no-worker",
-      );
-    }
+  it("skips every Cloudflare cell on gcp until the run names a zone", () => {
+    expect(skippedBy(planOn("gcp"), "deploy/node-cloudflare")).toEqual(["no-cloudflare-zone"]);
+  });
+
+  it("deploys every Cloudflare cell on gcp when the run names a zone", () => {
+    const planned = planOn("gcp", ZONED_RUN);
+
+    expect(planned.cells.map((cell) => cell.name)).toEqual(
+      expect.arrayContaining(["deploy/node-cloudflare", "deploy/next-cloudflare"]),
+    );
+    expect(skippedBy(planned, "deploy/node-cloudflare")).toEqual([]);
   });
 });
 
@@ -357,22 +362,6 @@ describe("Next on gcp", () => {
     for (const cell of POSTGRES_NEXT) {
       expect((planned.skipped[cell] ?? []).map((gap) => gap.issue)).toEqual([849]);
     }
-  });
-
-  it("skips deploy/next behind Cloudflare on gcp, whose cloudflare edge runs no worker, whether or not the run names a zone", () => {
-    const zoned = {
-      OCEL_E2E_ZONE: "journeys.example.com",
-      CLOUDFLARE_API_TOKEN: "token",
-      CLOUDFLARE_ACCOUNT_ID: "account",
-    };
-    for (const env of [{}, zoned]) {
-      expect(ids(planOn("gcp", env), "deploy/next-cloudflare")).toContain(
-        "cloudflare-on-gcp-runs-no-worker",
-      );
-    }
-    expect(ids(planOn("gcp", zoned), "deploy/next-cloudflare")).toEqual([
-      "cloudflare-on-gcp-runs-no-worker",
-    ]);
   });
 
   it("deploys deploy/next behind the load balancer on gcp when the run names a zone", () => {
