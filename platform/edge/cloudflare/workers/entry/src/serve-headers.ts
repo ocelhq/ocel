@@ -85,7 +85,9 @@ export function forCache(response: Response, cached: CachedResponse): Response {
   const { directives } = policy;
   if (refusesStoring(directives)) return notStored(response);
 
-  const lifetime = seconds(directives, "s-maxage") ?? seconds(directives, "max-age");
+  const lifetime =
+    seconds(directives, "s-maxage") ??
+    (policy.source === "cache-control" ? undefined : seconds(directives, "max-age"));
   const staleWhileRevalidate = seconds(directives, "stale-while-revalidate");
   if (lifetime === undefined || (lifetime === 0 && !staleWhileRevalidate)) {
     return notStored(response);
