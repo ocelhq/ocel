@@ -58,6 +58,7 @@ type world struct {
 	onUp             func()
 	afterUp          func()
 	through          []string
+	warmCookies      []string
 	warmFails        error
 	untagFails       error
 
@@ -66,13 +67,14 @@ type world struct {
 	gate gateWorld
 }
 
-func (w *world) warmThrough(_ context.Context, url, address string) error {
+func (w *world) warmThrough(_ context.Context, url, address, cookie string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if address == "" {
 		address = "the hostname's own address"
 	}
 	w.through = append(w.through, url+" via "+address)
+	w.warmCookies = append(w.warmCookies, cookie)
 	return w.warmFails
 }
 

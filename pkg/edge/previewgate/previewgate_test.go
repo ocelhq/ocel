@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
@@ -72,5 +73,23 @@ func TestAPreviewGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T)
 	}
 	if string(encoded) != fixture.SharedEntry.Encoded {
 		t.Errorf("json.Marshal of the shared entry's gates = %s, want %s", encoded, fixture.SharedEntry.Encoded)
+	}
+}
+
+func TestASignedSessionIsAdmittedOnTheHostItWasSignedForAndNoOther(t *testing.T) {
+	t.Parallel()
+
+	gate := previewgate.Gate{Key: "k", PasswordMAC: previewgate.HashPassword("k", "pw")}
+	now := time.Unix(1_800_000_000, 0)
+	cookie := previewgate.CookieName + "=" + gate.SignSession("App.example.com", now)
+	ask := func(host string) previewgate.Verdict {
+		return gate.Check(previewgate.Request{Method: "GET", Host: host, Target: "/", Header: previewgate.Header{"Cookie": {cookie}}}, now)
+	}
+
+	if verdict := ask("app.example.com"); verdict.Response != nil {
+		t.Errorf("the signed session was refused with %d on the host it was signed for", verdict.Response.Status)
+	}
+	if verdict := ask("other.example.com"); verdict.Response == nil {
+		t.Error("the signed session was admitted on another host")
 	}
 }

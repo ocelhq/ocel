@@ -25,7 +25,7 @@ type edges struct {
 	stacks    alb.Stacks
 	routes    alb.Routes
 	entries   alb.Entries
-	warmURL   func(ctx context.Context, url, address string) error
+	warmURL   func(ctx context.Context, url, address, cookie string) error
 	assets    func(ctx context.Context, tier environment.Tier) (alb.AssetsBucket, error)
 	copyFiles func(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error
 	probeGate func(ctx context.Context, hostname, address string) (bool, error)

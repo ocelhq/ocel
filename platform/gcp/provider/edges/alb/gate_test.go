@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
@@ -206,6 +207,34 @@ func TestAHostBoundToAGatedPreviewThatIsAlreadyReleasedIsProvenGatedBeforeItIsRo
 	probedAt, routedAt := indexOf(events, "probe "+bound), indexOf(events, "route "+bound)
 	if routedAt < 0 || probedAt < 0 || probedAt > routedAt {
 		t.Errorf("events %v, want %s proven gated before it was routed", events, bound)
+	}
+}
+
+func TestAGatedPreviewIsWarmedWithASessionTheGateAdmits(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	shared := reconcileGated(t, balancer, "shop", &shopGate)
+	stage(t, shared, previewRecord("b1"))
+	promote(t, shared, "p1", "b1")
+	const bound = "pr-7-web.preview.example.com"
+	if err := shared.BindDomain(ctx, edge.DomainBinding{Hostname: bound, App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+
+	stage(t, shared, previewRecord("b2"))
+	promote(t, shared, "p2", "b2")
+
+	w.mu.Lock()
+	cookies := slices.Clone(w.warmCookies)
+	w.mu.Unlock()
+	if len(cookies) == 0 {
+		t.Fatal("the promotion warmed nothing")
+	}
+	verdict := shopGate.Check(previewgate.Request{Method: "HEAD", Host: bound, Target: "/", Header: previewgate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
+	if verdict.Response != nil {
+		t.Errorf("the warm carried %q, which the gate refuses with %d, so it warms nothing", cookies[len(cookies)-1], verdict.Response.Status)
 	}
 }
 

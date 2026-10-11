@@ -28,7 +28,7 @@ type Deps struct {
 	Routes    Routes
 	Entries   Entries
 	Pins      pin.Pins
-	WarmURL   func(ctx context.Context, url, address string) error
+	WarmURL   func(ctx context.Context, url, address, cookie string) error
 	Project   string
 	Region    string
 	Shielded  bool

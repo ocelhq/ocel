@@ -10,10 +10,13 @@ import (
 
 const httpsPort = "443"
 
-func (p *Provider) warmThrough(ctx context.Context, url, address string) error {
+func (p *Provider) warmThrough(ctx context.Context, url, address, cookie string) error {
 	asked, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return err
+	}
+	if cookie != "" {
+		asked.Header.Set("Cookie", cookie)
 	}
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: p.warmRoots}}
 	if address != "" {

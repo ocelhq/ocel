@@ -197,11 +197,15 @@ func (g Gate) signSession(host, expiry string) string {
 	return signPreview(g.Key, previewCookiePurpose, toLowerASCII(host)+"\n"+expiry)
 }
 
-func (g Gate) redirect(location, host string, now time.Time) Verdict {
+func (g Gate) SignSession(host string, now time.Time) string {
 	expiry := strconv.FormatInt(now.Add(SessionLifetime).Unix(), 10)
+	return expiry + "." + g.signSession(host, expiry)
+}
+
+func (g Gate) redirect(location, host string, now time.Time) Verdict {
 	header := newGateResponseHeader()
 	header.Set("Location", location)
-	header.Set("Set-Cookie", CookieName+"="+expiry+"."+g.signSession(host, expiry)+
+	header.Set("Set-Cookie", CookieName+"="+g.SignSession(host, now)+
 		"; Max-Age="+strconv.Itoa(int(SessionLifetime/time.Second))+"; Path=/; Secure; HttpOnly; SameSite=Lax")
 	return Verdict{Response: &Response{Status: statusSeeOther, Header: header}}
 }
