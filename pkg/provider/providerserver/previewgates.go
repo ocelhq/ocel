@@ -63,6 +63,10 @@ func (r *deployRun) readProjectPreviewGate(ctx context.Context) error {
 		return nil
 	}
 	if !r.front.Facts().GatesPreviews {
+		if r.provider.Facts().GatesPreviewsAtOrigin && !cachesInFrontOfOrigin(r.front.Facts()) {
+			r.previewGate = gate
+			return nil
+		}
 		return refusal.Refuse(refusal.CodeUnsupported,
 			"%s has a preview gate recorded, and the %s edge does not run the preview gate yet, so it would serve this preview to anyone: deploy the preview through an edge that gates previews",
 			r.spec.Slug, r.front.Kind())
@@ -81,4 +85,8 @@ func (r *deployRun) appPreviewGate() *edge.PreviewGate {
 		return nil
 	}
 	return r.previewGate
+}
+
+func cachesInFrontOfOrigin(facts edge.Facts) bool {
+	return facts.CachesResponses || facts.ProxiesRecords || facts.RunsCode
 }
