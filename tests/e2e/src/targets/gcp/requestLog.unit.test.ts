@@ -38,7 +38,7 @@ describe("counting the requests Cloud Run logged", () => {
   });
 
   it("counts none when Cloud Logging lists no entries", async () => {
-    globalThis.fetch = (async () => new Response("{}", { status: 200 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
 
     const counted = await countOriginRequests(
       { endpoint: undefined, project: "acme", region: "europe-west1", token: "t" },
