@@ -1,4 +1,4 @@
-export type PurgeMode = "purge" | "invalidate";
+import type { PurgeMode } from "@platform/edge-contract/purge";
 
 export interface RaisedTag {
   tag: string;

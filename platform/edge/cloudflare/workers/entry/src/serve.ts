@@ -1,9 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import type { PurgeMode } from "@platform/edge-contract/purge";
 import { AwsClient } from "aws4fetch";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
-import type { PurgeMode, PurgeOutcome } from "./purge-backlog";
-import { outcomeOfPurge, type PurgeResult } from "./purge-outcome";
+import type { PurgeOutcome } from "./purge-backlog";
+import { outcomeOfPurge } from "./purge-outcome";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import { encodeKeyPath, parseKeyRelease, parseObjectKey, type ServeProps } from "./serve-key";
 
@@ -102,10 +103,9 @@ async function readStore(store: R2Bucket, key: string, release: string): Promise
   return respondStored({ body: object.body, etag: object.httpEtag }, release);
 }
 
-interface PurgeableCache {
-  purge(options: { tags?: string[]; purgeEverything?: boolean }): Promise<PurgeResult>;
-  invalidate(options: { tags: string[] }): Promise<PurgeResult>;
-}
+type PurgeableCache = CacheContext & {
+  invalidate(options: { tags: string[] }): Promise<CachePurgeResult>;
+};
 
 export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   async fetch(request: Request): Promise<Response> {
@@ -155,7 +155,9 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     return this.clear((cache) => cache.purge({ purgeEverything: true }));
   }
 
-  private async clear(run: (cache: PurgeableCache) => Promise<PurgeResult>): Promise<PurgeOutcome> {
+  private async clear(
+    run: (cache: PurgeableCache) => Promise<CachePurgeResult>,
+  ): Promise<PurgeOutcome> {
     const cache = this.ctx.cache as PurgeableCache | undefined;
     if (!cache) return { ok: false, codes: [], message: "this worker has no cache to purge" };
     try {

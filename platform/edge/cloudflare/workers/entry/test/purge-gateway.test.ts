@@ -1,8 +1,9 @@
 import { createExecutionContext } from "cloudflare:test";
+import type { PurgeMode } from "@platform/edge-contract/purge";
 import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
-import type { PurgeMode, RaisedTag } from "../src/purge-backlog";
+import type { RaisedTag } from "../src/purge-backlog";
 import type { PointerRecordResult, ReleasesBinding } from "../src/releases";
 import { makeRecord } from "./origin-deps";
 

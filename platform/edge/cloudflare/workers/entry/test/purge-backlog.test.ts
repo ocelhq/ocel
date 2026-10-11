@@ -1,7 +1,7 @@
+import type { PurgeMode } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   PurgeBacklog,
-  type PurgeMode,
   type PurgeOutcome,
   type PurgePort,
   type RaisedTag,
