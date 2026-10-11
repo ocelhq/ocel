@@ -345,14 +345,13 @@ export default {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
-      serving:
-        serve && env.OCEL_PREVIEW !== "1"
-          ? {
-              serve,
-              queue: { raise: (mode, tags) => openPurgeQueue(ctx.exports).raise(mode, tags) },
-              waitUntil: (promise) => ctx.waitUntil(promise),
-            }
-          : undefined,
+      serving: serve
+        ? {
+            serve,
+            queue: { raise: (mode, tags) => openPurgeQueue(ctx.exports).raise(mode, tags) },
+            waitUntil: (promise) => ctx.waitUntil(promise),
+          }
+        : undefined,
       edgeRuntime:
         env.LOADER && objects
           ? {

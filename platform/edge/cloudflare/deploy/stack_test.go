@@ -400,6 +400,48 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("a project served on the shared preview entry names that entry's purge URL, scoped to the project", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		spec := pruneOnlySpec(store.URL, "v2")
+		spec.GlobalPreview = "preview.ocel.app"
+
+		state, err := reconcileState(t, m.provider(t), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		if want := "https://" + previewEntryScript + ".acct-sub.workers.dev" + purgePath + "?project=acme-web"; state.PurgeURL != want {
+			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
+		}
+		if len(m.subdomainCalls) != 0 {
+			t.Errorf("subdomain calls = %v, want none: the shared entry's own reconcile turns workers.dev on", m.subdomainCalls)
+		}
+	})
+
+	t.Run("a project served on the shared preview entry keeps naming its purge URL at the spec stamp", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := pruneOnlySpec(store.URL, "v2")
+		spec.GlobalPreview = "preview.ocel.app"
+		first, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		unrecorded := first
+		unrecorded.PurgeURL = ""
+
+		second, err := reconcileState(t, p, spec, unrecorded)
+		if err != nil {
+			t.Fatalf("second Reconcile: %v", err)
+		}
+
+		if second.PurgeURL != first.PurgeURL || second.PurgeURL == "" {
+			t.Errorf("PurgeURL = %q, want the %q the first reconcile named", second.PurgeURL, first.PurgeURL)
+		}
+	})
+
 	t.Run("a reconcile at the spec stamp keeps the purge URL the stack already had", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()

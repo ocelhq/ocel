@@ -262,6 +262,9 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 	if len(spec.Domains) != 0 {
 		t.Errorf("Domains = %v, want none: the shared entry owns the route", spec.Domains)
 	}
+	if spec.GlobalPreview != "preview.acme.com" {
+		t.Errorf("GlobalPreview = %q, want the wildcard's base the shared entry answers purges for", spec.GlobalPreview)
+	}
 	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "" {
 		t.Errorf("Variables[%s] = %q, want empty: the shared entry has the base domain, not the project's worker",
 			fake.ProgramPreviewVar, got)
@@ -281,6 +284,9 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 	spec := onlyStack(t, vendor)
 	if spec.PruneOnly {
 		t.Error("the stack is prune-only, though its own worker is what answers on the project's wildcard")
+	}
+	if spec.GlobalPreview != "" {
+		t.Errorf("GlobalPreview = %q, want none: the project's own worker answers its purges", spec.GlobalPreview)
 	}
 	if !slices.Equal(spec.Domains, []string{"*.preview.shop.example"}) {
 		t.Errorf("Domains = %v, want the project's preview wildcard", spec.Domains)

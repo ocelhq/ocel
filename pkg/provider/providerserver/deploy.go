@@ -632,6 +632,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
+		spec.GlobalPreview = r.globalPreview()
 	default:
 		if len(r.spec.Apps) == 0 {
 			spec.PruneOnly = true

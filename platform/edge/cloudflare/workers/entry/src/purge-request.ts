@@ -11,6 +11,8 @@ import type { RaisedTag } from "./purge-backlog";
 
 const PURGE_QUEUE_NAME = "purge";
 
+const PURGE_PROJECT_PARAM = "project";
+
 export const maxPurgeBodyBytes = 512 * 1024;
 
 export type ServedLookup =
@@ -122,12 +124,20 @@ export function openPurgeQueue(exports: unknown): PurgeGatewayPorts["queue"] {
   return queues.getByName(PURGE_QUEUE_NAME);
 }
 
+function findPurgedProject(
+  request: Request,
+  env: Pick<Env, "OCEL_SLUG" | "OCEL_PREVIEW_GLOBAL">,
+): string | undefined {
+  if (env.OCEL_PREVIEW_GLOBAL !== "1") return env.OCEL_SLUG;
+  return new URL(request.url).searchParams.get(PURGE_PROJECT_PARAM) ?? undefined;
+}
+
 export function answerPurgeOnWorker(
   request: Request,
-  env: Pick<Env, "RELEASES" | "OCEL_SLUG">,
+  env: Pick<Env, "RELEASES" | "OCEL_SLUG" | "OCEL_PREVIEW_GLOBAL">,
   ctx: { exports: unknown },
 ): Promise<Response> | Response {
-  const slug = env.OCEL_SLUG;
+  const slug = findPurgedProject(request, env);
   if (!slug) return reply(404, "Not Found");
   return answerPurge(request, {
     readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),

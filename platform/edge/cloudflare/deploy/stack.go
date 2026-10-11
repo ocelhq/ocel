@@ -185,9 +185,16 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return &stack{p: p, state: state, own: own}, nil
 	}
 	openedAsDeployed := func(state edge.StackState) (edge.EdgeStack, error) {
-		if spec.PruneOnly {
+		switch {
+		case spec.GlobalPreview != "":
+			purgeURL, err := p.readSharedPreviewPurgeURL(ctx, accountID, slug)
+			if err != nil {
+				return nil, err
+			}
+			state.PurgeURL = purgeURL
+		case spec.PruneOnly:
 			state.PurgeURL = ""
-		} else if state.PurgeURL == "" {
+		case state.PurgeURL == "":
 			workersDev, err := p.subdomainURL(ctx, accountID, program.Name)
 			if err != nil {
 				return nil, fmt.Errorf("read generic worker subdomain: %w", err)
@@ -232,6 +239,11 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if spec.PruneOnly {
 		if err := p.deleteScript(ctx, accountID, program.Name); err != nil {
 			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.Name, err)
+		}
+		if spec.GlobalPreview != "" {
+			if purgeURL, err = p.readSharedPreviewPurgeURL(ctx, accountID, slug); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		workersDev, err := p.setSubdomain(ctx, genericUp, true)
