@@ -190,7 +190,8 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   const visitor = buildVisitorResponse(response, isSegmentPrefetch(request.headers));
   if (!pprDocument) return visitor;
   const postponed = await readPostponedShell(visitor);
-  if (!postponed) return visitor;
+  if (postponed === "unframed") return visitor;
+  if (postponed === "malformed") return withStatus(await answer(forwardUncached(headers)), "MISS");
   return composePpr(
     postponed.shell,
     render(

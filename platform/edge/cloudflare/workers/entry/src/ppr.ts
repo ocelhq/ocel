@@ -20,19 +20,17 @@ export interface PostponedShell {
   postponed: string;
 }
 
-export async function readPostponedShell(response: Response): Promise<PostponedShell | undefined> {
+export async function readPostponedShell(
+  response: Response,
+): Promise<PostponedShell | "unframed" | "malformed"> {
   const declared = response.headers.get(postponedLengthHeader);
-  if (declared === null) return undefined;
+  if (declared === null) return "unframed";
   const length = Number(declared);
   const bytes = new Uint8Array(await response.arrayBuffer());
   const headers = new Headers(response.headers);
   headers.delete(postponedLengthHeader);
   headers.delete("content-length");
-  if (!Number.isInteger(length) || length < 0 || length > bytes.byteLength) {
-    throw new Error(
-      `ocel: a PPR shell declared ${declared} bytes of postponed state it does not carry`,
-    );
-  }
+  if (!Number.isInteger(length) || length < 0 || length > bytes.byteLength) return "malformed";
   return {
     shell: new Response(bytes.slice(length), { status: response.status, headers }),
     postponed: new TextDecoder().decode(bytes.slice(0, length)),
