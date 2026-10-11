@@ -8,9 +8,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -26,6 +28,9 @@ type edges struct {
 	warmURL   func(ctx context.Context, url, address string) error
 	assets    func(ctx context.Context, tier environment.Tier) (alb.AssetsBucket, error)
 	copyFiles func(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error
+	probeGate func(ctx context.Context, hostname, address string) (bool, error)
+	cipher    seal.Cipher
+	images    alb.PluginImages
 	project   string
 	region    string
 
@@ -46,6 +51,9 @@ func (p *Provider) edges() edges {
 		warmURL:   p.warmThrough,
 		assets:    p.readAssetsBucket,
 		copyFiles: p.CopyImmutableFiles,
+		probeGate: p.probeGate,
+		cipher:    p.Cipher(),
+		images:    pluginImages{p: p},
 		project:   p.options.Project,
 		region:    p.options.Region,
 
@@ -66,6 +74,11 @@ func (e edges) openALB() *alb.Edge {
 		WarmURL:   e.warmURL,
 		Project:   e.project,
 		Region:    e.region,
+
+		Cipher:     e.cipher,
+		GatePlugin: payloads.PreviewGatePlugin(),
+		Images:     e.images,
+		ProbeGate:  e.probeGate,
 
 		WaitBeforeRetry:    waitBeforeRetry,
 		ReadAssetsBucket:   e.assets,

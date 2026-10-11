@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -31,6 +32,11 @@ type Deps struct {
 	Project   string
 	Region    string
 	Shielded  bool
+
+	Cipher     seal.Cipher
+	GatePlugin []byte
+	Images     PluginImages
+	ProbeGate  func(ctx context.Context, hostname, address string) (bool, error)
 
 	WaitBeforeRetry    func(ctx context.Context, attempt int) bool
 	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
@@ -52,6 +58,7 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
+		GatesPreviews:         true,
 		ShieldsOrigin:         true,
 		CredentialScope:       e.deps.Project,
 	}
@@ -72,6 +79,11 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 	}
 	if _, err := e.raise(ctx, tier, progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
+	}
+	if isGated(tier, e.deps.Shielded) {
+		if err := e.publishGates(ctx, gateProof{}, progress.Discard()); err != nil {
+			return edge.BootstrapOutput{}, err
+		}
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
@@ -166,6 +178,11 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
+	if isGated(tier, e.deps.Shielded) {
+		if err := e.removeGate(ctx); err != nil {
+			return err
+		}
+	}
 	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard()); err != nil {
 		return err
 	}
@@ -224,6 +241,9 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Tier = spec.Tier
 	s := &stack{e: e, state: next}
 	if err := s.adopt(balancer); err != nil {
+		return nil, err
+	}
+	if err := s.syncGate(ctx, spec); err != nil {
 		return nil, err
 	}
 	return s, nil

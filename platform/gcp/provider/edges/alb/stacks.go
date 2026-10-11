@@ -17,6 +17,7 @@ type Target struct {
 	Slug     string
 	Shielded bool
 	Origin   string
+	Gate     bool
 }
 
 func OriginHostStack(hostname string, tier environment.Tier) string {
@@ -32,6 +33,8 @@ func (t Target) Name() string {
 	switch {
 	case t.Origin != "":
 		return OriginHostStack(t.Origin, t.Tier)
+	case t.Gate:
+		return GateStack(t.Tier)
 	case t.Slug != "":
 		return BindingStack(t.Slug, t.Tier)
 	case t.Shielded:

@@ -122,10 +122,43 @@ prints. No edge runs the preview gate for it, so the service runs the gate itsel
 the app, whenever the project has preview gate keys recorded; without them the URL answers
 anyone who knows it, and the deploy says so.
 
-A preview answered by the load balancer is cached like production, so a project with preview
-gate keys recorded is refused there: the load balancer runs no gate, and the service does not
-either, because a cached response the gate admitted would be served to anyone. Gate previews
-through an edge that runs the gate, or serve them from the service's own URL.
+A preview answered by the load balancer is cached like production, and gated there without
+changing that. The preview tier's load balancer runs the gate as a Service Extensions plugin
+on its forwarding rule, ahead of the URL map and Cloud CDN, so it sees every request,
+including one a cache would answer, and a response the gate admitted is cached exactly as an
+ungated one would be. The deploy never rewrites an app's `Cache-Control` for a gate. The plugin
+admits a request carrying the preview password, a bypass secret or a session, takes those
+credentials off before the request goes on, and answers everyone else with the login form.
+The login itself is posted to the service, which holds the keys and answers it, because a
+plugin reads no request body. Every preview response carries `X-Robots-Tag: noindex`, set on the
+preview backends and on the assets bucket.
+
+The plugin and its config share the 5 MiB Google allows a plugin, and the config holds each
+gated project's keys and preview hostnames, so it grows with the previews a gated project
+has live. A deploy that would pass the limit is refused, naming it. The plugin is kept as a
+generic artifact in an Artifact Registry repository of its own in your project, and the
+config is readable by anyone who may read the load balancer's plugin and is kept sealed in
+ocel's state.
+
+A new gate, and a new preview hostname of a gated project, take a few minutes to reach
+every location that serves requests, and during them a request may still pass ungated. A
+deploy that adds one therefore leaves the hostname unrouted, publishes the gate, and
+asks the hostname through the load balancer until the gate's own refusal answers five times
+in a row, for up to about five minutes, before it routes the hostname. If the gate never
+answers, the deploy fails and the hostname stays unrouted. A project that gates an
+already-routed preview waits the same way, and that preview is open until the wait ends.
+Changing or revoking a password or secret takes a few minutes to apply, too.
+
+A load balancer runs a plugin only once it is attached. A tier bootstrapped before the
+plugin existed refuses a gated deploy until you run `ocel bootstrap` for the preview tier once
+more; every tier bootstrapped now attaches it, with an empty gate set that admits everything,
+and a plugin that crashes refuses requests rather than passing them. The bootstrap checks
+the Service Extensions API (`networkservices.googleapis.com`) is on, and the credentials that
+run it and deploys hold `roles/networkservices.admin`. A load balancer only Cloudflare
+reaches attaches no plugin: the worker in front of it runs the gate.
+
+A service behind the load balancer takes traffic from the load balancer alone, so its
+`run.app` URL does not answer: there is no way round the gate to it.
 
 A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
 provisions one global external Application Load Balancer per tier — one address, one

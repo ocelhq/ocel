@@ -35,6 +35,11 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Project:   "acme-prod",
 		Region:    "europe-west1",
 
+		Cipher:     fake.NewCipher(),
+		GatePlugin: gatePluginBytes,
+		Images:     w,
+		ProbeGate:  w.probeGate,
+
 		WaitBeforeRetry:    w.waitBeforeRetry,
 		CopyImmutableFiles: w.copyImmutableFiles,
 		ReadAssetsBucket: func(context.Context, environment.Tier) (AssetsBucket, error) {

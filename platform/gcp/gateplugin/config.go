@@ -78,6 +78,8 @@ func ParseConfig(text string) (Config, error) {
 	return config, nil
 }
 
+func (c Config) ListHosts() []string { return slices.Sorted(maps.Keys(c.hosts)) }
+
 func (c Config) FindGate(host string) (previewgate.Gate, bool) {
 	host = strings.ToLower(host)
 	if name, _, found := strings.Cut(host, ":"); found {

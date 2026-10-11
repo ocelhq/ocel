@@ -165,3 +165,31 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatNeedsIt(t *testing.T)
 		t.Errorf("a plan that asked for no edge has %v, and a load balancer nothing named would be provisioned and bill", plain)
 	}
 }
+
+func TestTheLoadBalancerFeatureChecksTheServiceThatHostsTheGatePluginAndTheShieldedOneDoesNot(t *testing.T) {
+	t.Parallel()
+
+	if !slices.Contains(apisFor(environment.TierPreview, []string{albFeature}), "networkservices.googleapis.com") {
+		t.Errorf("an %q bootstrap checks %v, want networkservices.googleapis.com: the preview gate is a Service Extensions plugin", alb.Kind, apisFor(environment.TierPreview, []string{albFeature}))
+	}
+	if slices.Contains(apisFor(environment.TierPreview, []string{albShieldedFeature}), "networkservices.googleapis.com") {
+		t.Error("a bootstrap for the load balancer only Cloudflare reaches demands the Service Extensions API, and the worker in front of it gates previews")
+	}
+}
+
+func TestTheLoadBalancerFeatureSaysItRunsTheGateAsAPluginAndThatTiersNeedABootstrapToGainIt(t *testing.T) {
+	t.Parallel()
+
+	for _, feature := range (bootstrap{}).Catalogue() {
+		if feature.Name != albFeature {
+			continue
+		}
+		for _, want := range []string{"preview gate", "plugin", "Artifact Registry"} {
+			if !strings.Contains(feature.Summary, want) {
+				t.Errorf("the %q feature reads %q, want it to mention the %s it provisions", albFeature, feature.Summary, want)
+			}
+		}
+		return
+	}
+	t.Fatalf("no %q feature in the catalogue", albFeature)
+}

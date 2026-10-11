@@ -51,3 +51,20 @@ func TestABootstrapOfTheShieldedLoadBalancerChecksItMayCreateThePlainHTTPRedirec
 		}
 	}
 }
+
+func TestABootstrapOfTheLoadBalancerChecksItMayAttachTheGatePlugin(t *testing.T) {
+	t.Parallel()
+
+	for _, permission := range []string{
+		"networkservices.wasmPlugins.create", "networkservices.wasmPlugins.update", "networkservices.wasmPlugins.delete", "networkservices.wasmPlugins.get",
+		"networkservices.lbEdgeExtensions.create", "networkservices.lbEdgeExtensions.update", "networkservices.lbEdgeExtensions.delete", "networkservices.lbEdgeExtensions.get",
+		"networkservices.operations.get",
+	} {
+		if !slices.Contains(Permissions, permission) {
+			t.Errorf("the load balancer's preflight checks %v, want %s: the preview tier runs its gate as a plugin on a load balancer edge extension", Permissions, permission)
+		}
+	}
+	if !slices.Contains(Roles(), "roles/networkservices.admin") {
+		t.Errorf("Roles() = %v, want roles/networkservices.admin: Google names it for Service Extensions", Roles())
+	}
+}

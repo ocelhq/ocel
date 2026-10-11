@@ -42,7 +42,7 @@ func bindingProgram(spec bindingSpec) Program {
 				continue
 			}
 			neg := negName(spec.Slug, spec.Tier, hostname)
-			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded)); err != nil {
+			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded), responseHeadersOf(spec.Tier)); err != nil {
 				return err
 			}
 		}
@@ -50,7 +50,7 @@ func bindingProgram(spec bindingSpec) Program {
 	}
 }
 
-func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host Host, cdn *compute.BackendServiceCdnPolicyArgs) error {
+func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host Host, cdn *compute.BackendServiceCdnPolicyArgs, headers pulumi.StringArray) error {
 	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
 		Name:                pulumi.String(neg),
 		Project:             project,
@@ -77,6 +77,9 @@ func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg stri
 	if cdn != nil {
 		args.CdnPolicy = cdn
 	}
+	if len(headers) > 0 {
+		args.CustomResponseHeaders = headers
+	}
 	_, err = compute.NewBackendService(ctx, host.Backend, args)
 	return err
 }
@@ -86,4 +89,11 @@ func omitEmpty(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func responseHeadersOf(tier environment.Tier) pulumi.StringArray {
+	if tier != environment.TierPreview {
+		return nil
+	}
+	return pulumi.StringArray{pulumi.String(noindexHeader)}
 }

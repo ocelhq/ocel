@@ -280,6 +280,26 @@
       }
     },
     {
+      "id": "project:shop/shared:preview/google_network_services_wasm_plugin:ocel-alb-preview-gate",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_network_services_wasm_plugin",
+      "name": "ocel-alb-preview-gate",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_network_services_lb_edge_extension:ocel-alb-preview-gate-edge",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_network_services_lb_edge_extension",
+      "name": "ocel-alb-preview-gate-edge",
+      "region": "europe-west1",
+      "properties": {
+        "load_balancing_scheme": "EXTERNAL_MANAGED"
+      }
+    },
+    {
       "id": "project:shop/shared:preview/google_certificate_manager_certificate_map_entry:ocel-alb-preview-preview-cert",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

@@ -44,6 +44,8 @@ type names struct {
 	RedirectURLMap string
 	HTTPProxy      string
 	HTTPRule       string
+	GatePlugin     string
+	GateExtension  string
 }
 
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
@@ -67,6 +69,8 @@ func loadBalancerNames(tier environment.Tier, shielded bool) names {
 		RedirectURLMap: stem + "-redirect",
 		HTTPProxy:      stem + "-http",
 		HTTPRule:       stem + "-forward-http",
+		GatePlugin:     stem + "-gate",
+		GateExtension:  stem + "-gate-edge",
 	}
 }
 
@@ -248,7 +252,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			return err
 		}
 		if spec.Assets != nil {
-			assets, err := declareAssetsBackend(ctx, spec.Names, *spec.Assets, projectID)
+			assets, err := declareAssetsBackend(ctx, spec.Names, spec.Tier, *spec.Assets, projectID)
 			if err != nil {
 				return err
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/projects"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -23,8 +24,8 @@ type AssetsBucket struct {
 	Agent string
 }
 
-func declareAssetsBackend(ctx *pulumi.Context, names names, assets AssetsBucket, project pulumi.String) (*compute.BackendBucket, error) {
-	bucket, err := compute.NewBackendBucket(ctx, names.AssetsBackend, &compute.BackendBucketArgs{
+func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tier, assets AssetsBucket, project pulumi.String) (*compute.BackendBucket, error) {
+	args := &compute.BackendBucketArgs{
 		Name:       pulumi.String(names.AssetsBackend),
 		Project:    project,
 		BucketName: pulumi.String(assets.Name),
@@ -33,7 +34,11 @@ func declareAssetsBackend(ctx *pulumi.Context, names names, assets AssetsBucket,
 			CacheMode:       pulumi.String(cacheOnOrigin),
 			NegativeCaching: pulumi.Bool(false),
 		},
-	})
+	}
+	if headers := responseHeadersOf(tier); len(headers) > 0 {
+		args.CustomResponseHeaders = headers
+	}
+	bucket, err := compute.NewBackendBucket(ctx, names.AssetsBackend, args)
 	if err != nil {
 		return nil, err
 	}

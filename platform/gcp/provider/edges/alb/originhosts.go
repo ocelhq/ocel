@@ -216,6 +216,6 @@ func originHostProgram(region string, host OriginHost, record originHostRecord) 
 	return func(ctx *pulumi.Context, project string) error {
 		return servingBackend(ctx, pulumi.String(project), region,
 			negName(host.Slug, host.Tier, host.Hostname),
-			Host{Service: host.Service, Tag: host.Tag, Backend: record.Backend}, nil)
+			Host{Service: host.Service, Tag: host.Tag, Backend: record.Backend}, nil, nil)
 	}
 }

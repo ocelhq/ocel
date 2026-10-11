@@ -301,6 +301,9 @@ func (s *stack) disown(ctx context.Context, hostname string) error {
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
+	if err := s.releaseGate(ctx); err != nil {
+		return err
+	}
 	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
 		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
 			return err
