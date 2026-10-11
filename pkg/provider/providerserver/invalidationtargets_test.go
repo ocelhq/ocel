@@ -39,13 +39,13 @@ func relayDeployRequest() *contractv1.DeployRequest {
 func TestADeployThroughAnEdgeThatPurgesRecordsWhereTheOriginReachesIt(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
-	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/.ocel/purge")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/purge")
 
 	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	if got := readInvalidationTargets(t, vendor, string(fake.KindRelay)); !slices.Equal(got, []string{"https://shop.acct.workers.dev/.ocel/purge"}) {
+	if got := readInvalidationTargets(t, vendor, string(fake.KindRelay)); !slices.Equal(got, []string{"https://shop.acct.workers.dev/purge"}) {
 		t.Errorf("invalidation targets = %v, want the edge's purge URL where the origin's invalidator reads them", got)
 	}
 }
@@ -66,7 +66,7 @@ func TestADeployThroughAnEdgeThatNamesNoPurgeURLRecordsNoTarget(t *testing.T) {
 func TestARedeployRecordsTheSameTargetOnce(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
-	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/.ocel/purge")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/purge")
 
 	for range 2 {
 		if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
@@ -83,17 +83,17 @@ func TestARedeployThatMovesTheEdgeReplacesTheTargetItRecordedBefore(t *testing.T
 	builtProject(t)
 	client, vendor := deployServed(t)
 	front := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
-	front.PurgesAt("https://shop.old.workers.dev/.ocel/purge")
+	front.PurgesAt("https://shop.old.workers.dev/purge")
 	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	front.PurgesAt("https://shop.new.workers.dev/.ocel/purge")
+	front.PurgesAt("https://shop.new.workers.dev/purge")
 	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
 		t.Fatalf("second Deploy() = %q", result.GetError())
 	}
 
-	if got := readInvalidationTargets(t, vendor, string(fake.KindRelay)); !slices.Equal(got, []string{"https://shop.new.workers.dev/.ocel/purge"}) {
+	if got := readInvalidationTargets(t, vendor, string(fake.KindRelay)); !slices.Equal(got, []string{"https://shop.new.workers.dev/purge"}) {
 		t.Errorf("invalidation targets = %v, want only the new URL", got)
 	}
 }
@@ -101,7 +101,7 @@ func TestARedeployThatMovesTheEdgeReplacesTheTargetItRecordedBefore(t *testing.T
 func TestRemovingAProjectForgetsItsInvalidationTarget(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
-	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/.ocel/purge")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/purge")
 	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
@@ -121,7 +121,7 @@ func TestAnISRAppIsToldWhereItsEdgePurges(t *testing.T) {
 	builtProject(t)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", ISR: true}, []byte(`{"routes":[{"id":"index"}]}`))
 	client, vendor := deployServed(t)
-	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/.ocel/purge")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/purge")
 
 	if result, _ := deploy(t, client, relayDeployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -133,7 +133,7 @@ func TestAnISRAppIsToldWhereItsEdgePurges(t *testing.T) {
 			told = append(told, spec.App.ISR.PurgeURL)
 		}
 	}
-	if !slices.Equal(told, []string{"https://shop.acct.workers.dev/.ocel/purge"}) {
+	if !slices.Equal(told, []string{"https://shop.acct.workers.dev/purge"}) {
 		t.Errorf("the ISR specs name purge URLs %v, want the edge's for the one ISR app", told)
 	}
 }

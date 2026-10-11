@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
@@ -101,7 +102,7 @@ const genericDomainAppsBinding = "OCEL_DOMAIN_APPS"
 
 const genericServesWorkersDevBinding = "OCEL_SERVES_WORKERS_DEV"
 
-const purgePath = "/.ocel/purge"
+const purgePath = "/" + statedir.Name + "/purge"
 
 type private struct {
 	EntryWorkers []string `json:"entryWorkers,omitempty"`

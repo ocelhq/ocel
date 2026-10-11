@@ -380,7 +380,7 @@ func TestReconcile(t *testing.T) {
 		if !m.subdomainOn[spec.Program.Name] {
 			t.Errorf("workers.dev subdomain of %s = off, want on: the origin purges through it", spec.Program.Name)
 		}
-		if want := "https://ocel-preview.acct-sub.workers.dev/.ocel/purge"; state.PurgeURL != want {
+		if want := "https://ocel-preview.acct-sub.workers.dev" + purgePath; state.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
 		}
 	})
