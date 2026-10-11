@@ -13,6 +13,14 @@ const originSecret = "3c2b1a09f8e7d6c5b4a39281706f5e4d";
 const launcherModule = `module.exports = {
   async handler(req, res) {
     const path = req.url.split("?")[0];
+    if (path === "/__purged") {
+      const signal = (globalThis[Symbol.for("ocel.next.purge-signal.v1")] ??= { total: 0, recent: [] });
+      signal.recent.push({ tag: "products", mode: "purge", raisedAt: 0 });
+      signal.total++;
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end("<html>purged</html>");
+      return;
+    }
     if (path === "/__stale" || path === "/__private") {
       req.headers[Symbol.for("ocel.next.origin-cache-tags.v1")].push("products", "_N_T_/products");
       if (path === "/__stale") {
@@ -43,7 +51,15 @@ const launcherModule = `module.exports = {
 };
 `;
 
-const dispatchedPaths = ["/page", "/isr", "/static", "/blog/hello", "/__stale", "/__private"];
+const dispatchedPaths = [
+  "/page",
+  "/__purged",
+  "/isr",
+  "/static",
+  "/blog/hello",
+  "/__stale",
+  "/__private",
+];
 
 const routeTable = {
   rootFunction: ENTRY_BUNDLE,
@@ -221,6 +237,15 @@ test("passes the origin's cache tags out through dispatch to the front", async (
 
   expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|_N_T_/products,r0a1b2c3d|products");
   await res.text();
+});
+
+test("a purge the app raises behind a front that dispatches at the origin is announced to no one", async () => {
+  const local = await fetch(`${process.env.__NEXT_PRIVATE_ORIGIN}/__purged`);
+  const visitor = await front(`/__purged`);
+
+  expect(local.headers.has("x-ocel-purge")).toBe(false);
+  expect(visitor.headers.has("x-ocel-purge")).toBe(false);
+  await Promise.all([local.text(), visitor.text()]);
 });
 
 test("passes Next's own cache-control through on a response Next marked STALE", async () => {

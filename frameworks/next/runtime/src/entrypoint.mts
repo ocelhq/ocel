@@ -75,9 +75,10 @@ async function boot(): Promise<void> {
   const routes = revalidatingRoutes(manifest);
   const prerendered = prerenderedRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
-  const purgeRelease = invalidatesByCacheTag(process.env)
-    ? releaseOf(process.env.OCEL_ISR_PREFIX)
-    : null;
+  const purgeRelease =
+    invalidatesByCacheTag(process.env) && !dispatchesAtOrigin(process.env)
+      ? releaseOf(process.env.OCEL_ISR_PREFIX)
+      : null;
 
   const invoke: Invoke = (req, res, ocel) => {
     noteRscRequest(req.headers);
