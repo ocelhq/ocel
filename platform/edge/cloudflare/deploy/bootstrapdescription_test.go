@@ -138,35 +138,6 @@ func TestDescribingACloudflareBootstrapWithoutCredentialsIsAnError(t *testing.T)
 	}
 }
 
-func TestTheBootstrapStatusListsTheRefreshQueueAndItsRefresher(t *testing.T) {
-	m := bootstrapMock(t, false)
-	p := mutualTLSEdge(t, m)
-
-	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
-	if err != nil {
-		t.Fatalf("DescribeBootstrap: %v", err)
-	}
-	names := []string{refreshQueueName, refresherScript, refreshQueueName + "/" + refresherScript}
-	for _, name := range names {
-		if !slices.ContainsFunc(parts, func(part edge.BootstrapPart) bool { return part.Name == name && !part.Current }) {
-			t.Errorf("parts = %+v, want %q listed and not current on a fresh account", parts, name)
-		}
-	}
-
-	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
-		t.Fatal(err)
-	}
-	parts, err = p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range names {
-		if !slices.ContainsFunc(parts, func(part edge.BootstrapPart) bool { return part.Name == name && part.Current }) {
-			t.Errorf("parts = %+v, want %q current once bootstrapped", parts, name)
-		}
-	}
-}
-
 func partNamed(parts []edge.BootstrapPart, name string) (edge.BootstrapPart, bool) {
 	for _, part := range parts {
 		if part.Name == name {
@@ -176,10 +147,10 @@ func partNamed(parts []edge.BootstrapPart, name string) (edge.BootstrapPart, boo
 	return edge.BootstrapPart{}, false
 }
 
-func TestTheCloudflareEdgeDescribesItsWorkerClientCertificateRefreshQueueAndRefresher(t *testing.T) {
+func TestTheCloudflareEdgeDescribesItsWorkerClientCertificate(t *testing.T) {
 	m := bootstrapMock(t, false)
 	p := mutualTLSEdge(t, m)
-	names := []string{productionCertificateBase, refreshQueueName, refresherScript, refreshQueueName + "/" + refresherScript}
+	names := []string{productionCertificateBase}
 
 	fresh, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
 	if err != nil {
@@ -205,7 +176,7 @@ func TestTheCloudflareEdgeDescribesItsWorkerClientCertificateRefreshQueueAndRefr
 	}
 }
 
-func TestACertificateDueForRenewalShowsTheCertificateAndTheRefresherNotCurrent(t *testing.T) {
+func TestACertificateDueForRenewalShowsTheCertificateNotCurrent(t *testing.T) {
 	m := bootstrapMock(t, false)
 	p := mutualTLSEdge(t, m)
 	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
@@ -218,12 +189,10 @@ func TestACertificateDueForRenewalShowsTheCertificateAndTheRefresherNotCurrent(t
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{productionCertificateBase, refresherScript} {
-		if part, _ := partNamed(parts, name); part.Current {
-			t.Errorf("part %q is current, want it stale: the renewal uploads a new certificate and rebinds the refresher", name)
-		}
+	if part, _ := partNamed(parts, productionCertificateBase); part.Current {
+		t.Errorf("part %q is current, want it stale: the renewal uploads a new certificate", productionCertificateBase)
 	}
-	for _, name := range []string{refreshQueueName, sharedStoreScriptName} {
+	for _, name := range []string{sharedStoreScriptName} {
 		if part, _ := partNamed(parts, name); !part.Current {
 			t.Errorf("part %q is stale, want it unaffected by the renewal", name)
 		}
@@ -260,23 +229,5 @@ func TestACertificatesBootstrapPartKeepsItsNameAcrossARenewal(t *testing.T) {
 	}
 	if got, want := certificates(after), certificates(before); !reflect.DeepEqual(got, want) || len(want) != 1 || want[0] != productionCertificateBase {
 		t.Errorf("certificate parts = %v after a renewal and %v before, want the one stable name %q: a status entry must not churn with the dated upload", got, want, productionCertificateBase)
-	}
-}
-
-func TestAQueueDrainedByAnotherConsumerShowsItsConsumerNotCurrent(t *testing.T) {
-	m := bootstrapMock(t, false)
-	p := mutualTLSEdge(t, m)
-	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
-		t.Fatal(err)
-	}
-	consumers := m.queues[0]["consumers"].([]any)
-	m.queues[0]["consumers"] = append(consumers, map[string]any{"consumer_id": "foreign", "script": "someone-elses", "type": "worker", "settings": map[string]any{}})
-
-	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if part, _ := partNamed(parts, refreshQueueName+"/"+refresherScript); part.Current {
-		t.Error("the consumer part is current while another consumer drains the queue")
 	}
 }

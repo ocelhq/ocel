@@ -124,7 +124,7 @@ func TestTheProviderHandsTheEntryWorkerProgramToItsHooks(t *testing.T) {
 	}
 }
 
-func TestAGCPEntryWorkerSendsRefreshesToItsTiersQueue(t *testing.T) {
+func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
@@ -136,13 +136,10 @@ func TestAGCPEntryWorkerSendsRefreshesToItsTiersQueue(t *testing.T) {
 	h.keyAssets(t, environment.TierProduction)
 	h.keyAssets(t, environment.TierPreview)
 
-	for tier, want := range map[environment.Tier]string{environment.TierProduction: "ocel-refresh", environment.TierPreview: "ocel-refresh-preview"} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier, "shop"))
 		if err != nil {
 			t.Fatalf("ProgramEdge(%s) = %v", tier, err)
-		}
-		if got := program.Spec.Worker.Queues["OCEL_REFRESH_QUEUE"]; got != want {
-			t.Errorf("%s queue binding = %q, want %q", tier, got, want)
 		}
 		if program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding] == "" {
 			t.Errorf("%s worker binds no client certificate", tier)

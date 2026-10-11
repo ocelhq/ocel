@@ -89,7 +89,6 @@ func (s bootstrapState) removals() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.removals()...)
 	}
-	changes = append(changes, s.refresh.removals()...)
 	changes = append(changes, s.certificates.removals()...)
 	if s.store.bucketPresent {
 		changes = append(changes, edge.PlanChange{
@@ -140,7 +139,6 @@ type bootstrapState struct {
 	store        cacheStoreState
 	workers      []workerState
 	certificates workerClientCertificateState
-	refresh      refreshQueueState
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
@@ -173,9 +171,6 @@ func (p *cloudflare) readVisibleState(ctx context.Context, accountID string, tie
 		if err != nil {
 			return bootstrapState{}, err
 		}
-		if state.refresh, err = p.readRefreshQueue(ctx, accountID, tier, state.certificates.keptID()); err != nil {
-			return bootstrapState{}, err
-		}
 	}
 	return state, nil
 }
@@ -188,8 +183,7 @@ func (s bootstrapState) changes() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)
 	}
-	changes = append(changes, s.certificates.changes()...)
-	return append(changes, s.refresh.changes()...)
+	return append(changes, s.certificates.changes()...)
 }
 
 func presence(present bool) edge.PlanAction {
@@ -359,8 +353,6 @@ func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 		ref.value = fmt.Sprint(declared["text"])
 	case "mtls_certificate":
 		ref.value = fmt.Sprint(declared["certificate_id"])
-	case "queue":
-		ref.value = fmt.Sprint(declared["queue_name"])
 	case "worker_loader":
 	default:
 		return binding{}, false
@@ -381,8 +373,6 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 			ref.value = deployed.Text
 		case "mtls_certificate":
 			ref.value = deployed.CertificateID
-		case "queue":
-			ref.value = deployed.QueueName
 		case durableObjectBindingType:
 			ref.value = deployed.ClassName
 		case "worker_loader":

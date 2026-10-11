@@ -188,8 +188,6 @@ type Worker struct {
 
 	ClientCertificates map[string]string
 
-	Queues map[string]string
-
 	CachedEntrypoints []string
 
 	DurableObjects []string

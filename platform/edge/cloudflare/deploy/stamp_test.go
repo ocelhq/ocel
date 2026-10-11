@@ -48,7 +48,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[edge.Worker](),
-			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "ObjectStore", "Queues", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "ObjectStore", "Secrets", "Services", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[edge.WorkerModule](),
@@ -137,32 +137,6 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 			if _, set := worker.Variables[genericServesWorkersDevBinding]; set {
 				t.Errorf("%s: variables = %v, want no %s: the worker answers workers.dev only for purges", name, worker.Variables, genericServesWorkersDevBinding)
 			}
-		}
-	})
-
-	t.Run("binding a queue restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
-		plain, err := genericWorker(spec, spec.Slug, "")
-		if err != nil {
-			t.Fatalf("genericWorker: %v", err)
-		}
-		before, err := specStamp(spec, plain)
-		if err != nil {
-			t.Fatalf("specStamp: %v", err)
-		}
-
-		spec.Program.Worker.Queues = map[string]string{refreshQueueBinding: "ocel-refresh"}
-		bound, err := genericWorker(spec, spec.Slug, "")
-		if err != nil {
-			t.Fatalf("genericWorker with a queue: %v", err)
-		}
-		after, err := specStamp(spec, bound)
-		if err != nil {
-			t.Fatalf("specStamp with a queue: %v", err)
-		}
-
-		if before == after {
-			t.Errorf("stamp = %q either way, want a bound queue to move it", before)
 		}
 	})
 

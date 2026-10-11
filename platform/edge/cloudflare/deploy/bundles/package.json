@@ -9,7 +9,6 @@
   "devDependencies": {
     "@platform/cf-releases-store": "workspace:*",
     "@platform/cf-entry": "workspace:*",
-    "@platform/cf-isr-writer": "workspace:*",
-    "@platform/cf-refresher": "workspace:*"
+    "@platform/cf-isr-writer": "workspace:*"
   }
 }
