@@ -18,7 +18,7 @@
     "./project-manifest": "./src/project-manifest.mts",
     "./refresh": "./src/refresh.mts",
     "./server-preload": "./src/server-preload.mts",
-    "./revalidation-signal": "./src/revalidation-signal.mts",
+    "./purge-signal": "./src/purge-signal.mts",
     "./tag-clock": "./src/tag-clock.mts",
     "./tags-manifest": "./src/tags-manifest.mts",
     "./test-support/*": "./test-support/*.mts",
@@ -36,7 +36,8 @@
     "@framework/next-cache": "workspace:*",
     "@framework/next-protocol": "workspace:*",
     "@framework/next-router": "workspace:*",
-    "@framework/node-runtime": "workspace:*"
+    "@framework/node-runtime": "workspace:*",
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

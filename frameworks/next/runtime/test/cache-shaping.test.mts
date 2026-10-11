@@ -44,9 +44,9 @@ function serve(
   shaping: OriginShaping,
   url: string,
   res: ReturnType<typeof fakeRes>,
-  opts: { tags?: string[]; method?: string } = {},
+  opts: { tags?: string[]; method?: string; headers?: Record<string, string> } = {},
 ): Record<string, string> {
-  const req: any = { url, method: opts.method ?? "GET", headers: {} };
+  const req: any = { url, method: opts.method ?? "GET", headers: { ...opts.headers } };
   shapeOriginCache(req, res as any, shaping);
   if (opts.tags) noteTags(req.headers, opts.tags);
   res.writeHead();
@@ -86,6 +86,28 @@ test("the gate stays shut when the deploy declared no origin dispatch", () => {
   expect(dispatchesAtOrigin({} as NodeJS.ProcessEnv)).toBe(false);
   expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "" } as NodeJS.ProcessEnv)).toBe(false);
   expect(originShaping(revalidatingRoutes(manifest(isrRoutes)), {} as any)).toBeNull();
+});
+
+test("the gate opens for a deploy whose front caches and purges by tag but does not dispatch", () => {
+  expect(
+    originShaping(revalidatingRoutes(manifest(isrRoutes)), { OCEL_CACHE_TAG_PURGE: "1" } as any),
+  ).not.toBeNull();
+});
+
+test("behind an edge that does not dispatch, shapes only a request that asked for the edge cache", () => {
+  const edgeShaping = shaping({ OCEL_ORIGIN_DISPATCH: "" });
+  const html = { "content-type": "text/html; charset=utf-8" };
+
+  const plain = serve(edgeShaping, "/isr", fakeRes(html), { tags: ["products"] });
+  const asked = serve(edgeShaping, "/isr", fakeRes(html), {
+    tags: ["products"],
+    headers: { "x-ocel-edge-cache": "1" },
+  });
+
+  expect(plain["cache-control"]).toBeUndefined();
+  expect(plain["cache-tag"]).toBeUndefined();
+  expect(asked["cache-control"]).toBe("s-maxage=60, stale-while-revalidate=600");
+  expect(asked["cache-tag"]).toBe("r0a1b2c3d|products");
 });
 
 test("the gate opens when the deploy declared the origin hosts dispatch", () => {

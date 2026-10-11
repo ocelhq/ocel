@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
 import { getNextHost } from "./host.mjs";
-import { noteRevalidation } from "./revalidation-signal.mjs";
+import { notePurge } from "./purge-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
 import { now } from "./use-cache-entry.mjs";
 import type { UseCacheStore } from "./use-cache-store.mjs";
@@ -147,8 +147,8 @@ export const tagClock: TagClock = {
         : { ...existing, expired: at };
       state.records.set(tag, updated);
       mirrorTag(tag, updated);
+      notePurge(tag, updated, at);
     }
-    if (tags.length > 0) noteRevalidation();
 
     await keptUntilSettled(writeTags(tags, at));
   },

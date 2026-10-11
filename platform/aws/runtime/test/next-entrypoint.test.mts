@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { noteRevalidation } from "@framework/next-runtime/revalidation-signal";
+import { notePurge } from "@framework/next-runtime/purge-signal";
 import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
@@ -25,7 +25,7 @@ vi.mock("../src/next/cache-store.mjs", () => {
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {
     if (req.url === "/__revalidate") {
-      globalThis.__ocelTestRevalidate();
+      globalThis.__ocelTestRevalidate("products", { expired: Date.now() }, Date.now());
       res.end("ok");
       return;
     }
@@ -154,7 +154,8 @@ beforeAll(async () => {
   const launcherPath = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcherPath, launcherModule);
 
-  (globalThis as any).__ocelTestRevalidate = noteRevalidation;
+  (globalThis as any).__ocelTestRevalidate = notePurge;
+  process.env.OCEL_CACHE_TAG_PURGE = "1";
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
@@ -217,14 +218,14 @@ test.each([
   expect(meta.relativeProjectDir).toBeTruthy();
 });
 
-test("announces a revalidation the request performed", async () => {
+test("announces the purge a request performed, its tags stamped by the release", async () => {
   const res = await fetch(`http://127.0.0.1:${port}/__revalidate`);
 
-  expect(res.headers.get("x-ocel-revalidated")).toBe("1");
+  expect(res.headers.get("x-ocel-purge")).toBe("purge r0a1b2c3d|products");
   await res.text();
 });
 
-test("behind the worker the origin shapes nothing, since the worker tiers its own", async () => {
+test("behind the worker the origin shapes nothing for a request the worker does not cache", async () => {
   for (const path of ["/isr", "/blog/hello", "/static"]) {
     const res = await fetch(`http://127.0.0.1:${port}${path}`);
 
@@ -234,9 +235,18 @@ test("behind the worker the origin shapes nothing, since the worker tiers its ow
   }
 });
 
+test("behind the worker the origin shapes the pages the worker asks to cache", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/isr`, {
+    headers: { "x-ocel-edge-cache": "1" },
+  });
+
+  expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=600");
+  await res.text();
+});
+
 test("announces nothing on a request that revalidated nothing", async () => {
   const res = await fetch(`http://127.0.0.1:${port}/__request-meta`);
 
-  expect(res.headers.has("x-ocel-revalidated")).toBe(false);
+  expect(res.headers.has("x-ocel-purge")).toBe(false);
   await res.text();
 });

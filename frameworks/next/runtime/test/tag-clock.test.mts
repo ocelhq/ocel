@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { CacheEntryFile } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { CacheStore } from "../src/cache-store.mjs";
+import { purgedSince, purgeMark } from "../src/purge-signal.mjs";
 import type { TagRecordUpdate, TagSnapshotRead, UseCacheStore } from "../src/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
@@ -187,6 +188,19 @@ test("records an invalidation durably for other instances to find", async () => 
   expect(row.tag).toBe("products");
   expect(row.expired).toBeGreaterThan(0);
   expect(row.writtenAt).toBeGreaterThan(0);
+});
+
+test("announces an updateTag as a purge and a profiled update as an invalidate", async () => {
+  const { handler } = await load(fakeStore());
+  const mark = purgeMark();
+
+  await handler.updateTags(["products"]);
+  await handler.updateTags(["reviews"], { expire: 600 });
+
+  expect(purgedSince(mark)).toMatchObject([
+    { tag: "products", mode: "purge" },
+    { tag: "reviews", mode: "invalidate" },
+  ]);
 });
 
 test("an invalidation is visible to the raising instance with no sync in between", async () => {
