@@ -11,6 +11,7 @@ type CommandCompletion struct {
 	JSON           bool
 	TTY            bool
 	SkillInstalled bool
+	PanicFunction  string
 }
 
 func (CommandCompletion) name() string { return "command_completed" }
@@ -29,5 +30,6 @@ func (completion CommandCompletion) properties() map[string]any {
 		"json":            completion.JSON,
 		"tty":             completion.TTY,
 		"skill_installed": completion.SkillInstalled,
+		"panic_function":  completion.PanicFunction,
 	}
 }

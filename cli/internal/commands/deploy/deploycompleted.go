@@ -1,12 +1,10 @@
 package deploy
 
 import (
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
@@ -111,6 +109,7 @@ func (d *deployMetrics) buildCompletion(err error) telemetry.DeployCompletion {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	completion := telemetry.DeployCompletion{
+		Stack:          telemetry.NewStack(d.cfg),
 		Success:        err == nil,
 		Target:         d.target,
 		AppCount:       len(d.cfg.Apps),
@@ -118,15 +117,6 @@ func (d *deployMetrics) buildCompletion(err error) telemetry.DeployCompletion {
 		PlanActions:    d.actions,
 		PhaseDurations: map[string]time.Duration{},
 		ErrorCode:      clierror.NewRunError(err).GetCode(),
-	}
-	if d.cfg.Provider != nil {
-		completion.Provider = d.cfg.Provider.ID
-	}
-	for _, app := range d.cfg.Apps {
-		if framework := app.Framework(); framework != "" {
-			completion.Frameworks = append(completion.Frameworks, framework)
-		}
-		completion.Languages = append(completion.Languages, string(language.OfApp(app.Framework(), filepath.Join(d.cfg.Dir, app.Path))))
 	}
 	for phase, extent := range d.phases {
 		if described, ok := run.DescribePhase(phase); ok {

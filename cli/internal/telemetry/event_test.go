@@ -17,12 +17,22 @@ import (
 )
 
 var anIdentity = Identity{
-	InstallID:  "5f0c7c5e-6a7c-4a43-9d7e-0d1e5d0f6c11",
-	CLIVersion: "1.2.3",
-	OS:         "linux",
-	Arch:       "amd64",
-	Agent:      "claude-code",
-	CI:         "github-actions",
+	InstallID:     "5f0c7c5e-6a7c-4a43-9d7e-0d1e5d0f6c11",
+	CLIVersion:    "1.2.3",
+	OS:            "linux",
+	Arch:          "amd64",
+	Agent:         "claude-code",
+	CI:            "github-actions",
+	InstallMethod: "npm",
+}
+
+var aStack = Stack{
+	Project:           "shop",
+	Provider:          "aws",
+	Frameworks:        []string{"node", "next"},
+	Languages:         []string{"js"},
+	FrameworkVersions: []string{"next@15"},
+	RuntimeVersions:   []string{"node@22"},
 }
 
 var aTime = time.Date(2026, 10, 5, 12, 30, 45, 123000000, time.UTC)
@@ -84,6 +94,7 @@ func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T
 		Reloads:       3,
 		ResourceKinds: []string{"bucket", "postgres"},
 		ErrorCodes:    map[string]int{"dev.command_failed": 1, "env.missing": 2},
+		Stack:         aStack,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -106,11 +117,18 @@ func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T
 			"reloads":                 float64(3),
 			"resource_kinds":          []any{"bucket", "postgres"},
 			"error_codes":             map[string]any{"dev.command_failed": float64(1), "env.missing": float64(2)},
+			"project_id":              projectID(anIdentity.InstallID, "shop"),
+			"provider":                "aws",
+			"frameworks":              []any{"next", "node"},
+			"languages":               []any{"js"},
+			"framework_versions":      []any{"next@15"},
+			"runtime_versions":        []any{"node@22"},
 			"cli_version":             "1.2.3",
 			"os":                      "linux",
 			"arch":                    "amd64",
 			"agent":                   "claude-code",
 			"ci":                      "github-actions",
+			"install_method":          "npm",
 			"$process_person_profile": false,
 		},
 	}
@@ -168,6 +186,7 @@ func TestAnInitCompletedEventCarriesTheLanguagePackageManagerProviderAndConfigFo
 			"arch":                    "amd64",
 			"agent":                   "claude-code",
 			"ci":                      "github-actions",
+			"install_method":          "npm",
 			"$process_person_profile": false,
 		},
 	}
@@ -182,12 +201,23 @@ func TestAnIdentityCarriesTheInstallIDTheBuildAndTheDetectedAgentAndCI(t *testin
 	}
 	t.Setenv("GEMINI_CLI", "1")
 	t.Setenv("GITLAB_CI", "true")
+	t.Setenv(InstallMethodEnvVar, "npm")
 
 	got := NewIdentity("an-install-id")
 
-	want := Identity{InstallID: "an-install-id", CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: "gemini-cli", CI: "gitlab"}
+	want := Identity{InstallID: "an-install-id", CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: "gemini-cli", CI: "gitlab", InstallMethod: "npm"}
 	if got != want {
 		t.Errorf("identity = %+v, want %+v", got, want)
+	}
+}
+
+func TestAnIdentityNotLaunchedThroughNPMWasInstalledAsABinary(t *testing.T) {
+	for _, value := range []string{"", "brew", "../../etc/passwd"} {
+		t.Setenv(InstallMethodEnvVar, value)
+
+		if got := NewIdentity("an-install-id").InstallMethod; got != "binary" {
+			t.Errorf("%s=%q: install method = %q, want binary", InstallMethodEnvVar, value, got)
+		}
 	}
 }
 
@@ -201,6 +231,7 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 		JSON:           true,
 		TTY:            false,
 		SkillInstalled: true,
+		PanicFunction:  "cli/internal/deploy.(*runner).apply",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -227,11 +258,13 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 			"json":                    true,
 			"tty":                     false,
 			"skill_installed":         true,
+			"panic_function":          "cli/internal/deploy.(*runner).apply",
 			"cli_version":             "1.2.3",
 			"os":                      "linux",
 			"arch":                    "amd64",
 			"agent":                   "claude-code",
 			"ci":                      "github-actions",
+			"install_method":          "npm",
 			"$process_person_profile": false,
 		},
 	}
@@ -330,9 +363,7 @@ func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testin
 	event, err := NewEvent(anIdentity, aTime, DeployCompletion{
 		Success:        false,
 		Target:         DeployTargetPreview,
-		Provider:       "aws",
-		Frameworks:     []string{"node", "next"},
-		Languages:      []string{"js"},
+		Stack:          aStack,
 		AppCount:       2,
 		ResourceCounts: map[string]int{"bucket": 1, "topic": 3},
 		PlanActions:    PlanActions{Create: 4, Update: 2, Delete: 1},
@@ -361,8 +392,11 @@ func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testin
 			"success":                 false,
 			"target":                  "preview",
 			"provider":                "aws",
+			"project_id":              projectID(anIdentity.InstallID, "shop"),
 			"frameworks":              []any{"next", "node"},
 			"languages":               []any{"js"},
+			"framework_versions":      []any{"next@15"},
+			"runtime_versions":        []any{"node@22"},
 			"app_count":               float64(2),
 			"resource_counts":         map[string]any{"bucket": float64(1), "topic": float64(3)},
 			"plan_actions":            map[string]any{"create": float64(4), "update": float64(2), "delete": float64(1)},
@@ -375,6 +409,7 @@ func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testin
 			"arch":                    "amd64",
 			"agent":                   "claude-code",
 			"ci":                      "github-actions",
+			"install_method":          "npm",
 			"$process_person_profile": false,
 		},
 	}
@@ -385,18 +420,24 @@ func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testin
 
 func TestADeployCompletedEventSortsAndDeduplicatesItsLists(t *testing.T) {
 	event, err := NewEvent(anIdentity, aTime, DeployCompletion{
-		Frameworks: []string{"python", "node", "python", "go", "node"},
-		Languages:  []string{"rust", "js", "rust"},
-		Assumed:    []string{"new_project", "domains", "new_project"},
+		Stack: Stack{
+			Frameworks:        []string{"python", "node", "python", "go", "node"},
+			Languages:         []string{"rust", "js", "rust"},
+			FrameworkVersions: []string{"next@15", "next@14", "next@15"},
+			RuntimeVersions:   []string{"python@3.12", "go@1.23", "go@1.23"},
+		},
+		Assumed: []string{"new_project", "domains", "new_project"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for property, want := range map[string][]string{
-		"frameworks": {"go", "node", "python"},
-		"languages":  {"js", "rust"},
-		"assumed":    {"domains", "new_project"},
+		"frameworks":         {"go", "node", "python"},
+		"languages":          {"js", "rust"},
+		"framework_versions": {"next@14", "next@15"},
+		"runtime_versions":   {"go@1.23", "python@3.12"},
+		"assumed":            {"domains", "new_project"},
 	} {
 		if got := event.Properties[property]; !slices.Equal(got.([]string), want) {
 			t.Errorf("%s = %v, want %v", property, got, want)
@@ -412,7 +453,7 @@ func TestADeployCompletedEventWithNothingRecordedKeepsItsShape(t *testing.T) {
 
 	line := string(marshal(t, event))
 	for _, want := range []string{
-		`"frameworks":[]`, `"languages":[]`, `"assumed":[]`, `"resource_counts":{}`, `"phase_ms":{}`,
+		`"frameworks":[]`, `"languages":[]`, `"framework_versions":[]`, `"runtime_versions":[]`, `"project_id":""`, `"assumed":[]`, `"resource_counts":{}`, `"phase_ms":{}`,
 		`"plan_actions":{"create":0,"delete":0,"update":0}`, `"error_code":""`, `"first_deploy":false`, `"success":false`,
 	} {
 		if !strings.Contains(line, want) {
@@ -442,4 +483,24 @@ func marshal(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+func TestAProjectIDIsTheSameForOneInstallAndProjectAndRevealsNeitherName(t *testing.T) {
+	id := projectID("install-a", "shop")
+
+	if id != projectID("install-a", "shop") {
+		t.Error("the same install and project gave two ids")
+	}
+	if id == projectID("install-b", "shop") {
+		t.Error("two installs gave one project the same id")
+	}
+	if id == projectID("install-a", "blog") {
+		t.Error("two projects of one install shared an id")
+	}
+	if strings.Contains(id, "shop") || len(id) != 16 {
+		t.Errorf("id = %q, want 16 hex characters that never contain the name", id)
+	}
+	if got := projectID("install-a", ""); got != "" {
+		t.Errorf("id of no project = %q, want empty", got)
+	}
 }

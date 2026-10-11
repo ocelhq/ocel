@@ -12,6 +12,7 @@ import (
 
 type tally struct {
 	record  func(telemetry.Payload) bool
+	stack   telemetry.Stack
 	started time.Time
 
 	mu      sync.Mutex
@@ -20,8 +21,8 @@ type tally struct {
 	codes   map[string]int
 }
 
-func newTally(record func(telemetry.Payload) bool) *tally {
-	return &tally{record: record, started: time.Now(), codes: map[string]int{}}
+func newTally(record func(telemetry.Payload) bool, stack telemetry.Stack) *tally {
+	return &tally{record: record, stack: stack, started: time.Now(), codes: map[string]int{}}
 }
 
 func (t *tally) noteReload() {
@@ -52,7 +53,7 @@ func (t *tally) noteError(err error) {
 func (t *tally) end(final error) {
 	t.noteError(final)
 	t.mu.Lock()
-	session := telemetry.DevSession{Duration: time.Since(t.started), Reloads: t.reloads, ResourceKinds: slices.Clone(t.kinds), ErrorCodes: maps.Clone(t.codes)}
+	session := telemetry.DevSession{Stack: t.stack, Duration: time.Since(t.started), Reloads: t.reloads, ResourceKinds: slices.Clone(t.kinds), ErrorCodes: maps.Clone(t.codes)}
 	t.mu.Unlock()
 	t.record(session)
 }

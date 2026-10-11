@@ -19,7 +19,10 @@ try {
   process.exit(1);
 }
 
-const child = spawn(binary, process.argv.slice(2), { stdio: "inherit" });
+const child = spawn(binary, process.argv.slice(2), {
+  stdio: "inherit",
+  env: { ...process.env, OCEL_INSTALL_METHOD: "npm" },
+});
 
 process.on("SIGINT", () => {
   if (process.platform !== "win32") child.kill("SIGTERM");
