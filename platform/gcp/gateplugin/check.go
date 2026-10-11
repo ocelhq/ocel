@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	methodPost = "POST"
-	cookieName = "cookie"
+	methodPost   = "POST"
+	cookieHeader = "cookie"
 )
 
 func ReadRequest(pairs [][2]string) previewgate.Request {
@@ -26,7 +26,7 @@ func ReadRequest(pairs [][2]string) previewgate.Request {
 		case name == ":authority":
 			req.Host = value
 		case strings.HasPrefix(name, ":"):
-		case strings.EqualFold(name, cookieName):
+		case strings.EqualFold(name, cookieHeader):
 			for _, line := range splitJoinedCookies(value) {
 				req.Header.Add(name, line)
 			}
@@ -77,7 +77,7 @@ func (c Config) Check(req previewgate.Request, now time.Time) previewgate.Verdic
 	return gate.Check(req, now)
 }
 
-func Edits(original, forward previewgate.Header) (remove []string, replace map[string]string) {
+func ListHeaderEdits(original, forward previewgate.Header) (remove []string, replace map[string]string) {
 	replace = map[string]string{}
 	for _, name := range slices.Sorted(maps.Keys(original)) {
 		values := forward.Values(name)
@@ -86,7 +86,7 @@ func Edits(original, forward previewgate.Header) (remove []string, replace map[s
 			remove = append(remove, strings.ToLower(name))
 		case !slices.Equal(values, original[name]) && changesCookie(name, original[name]):
 			replace[strings.ToLower(name)] = strings.Join(values, "; ")
-		case !slices.Equal(values, original[name]) && !strings.EqualFold(name, cookieName):
+		case !slices.Equal(values, original[name]) && !strings.EqualFold(name, cookieHeader):
 			replace[strings.ToLower(name)] = strings.Join(values, ", ")
 		}
 	}
@@ -94,5 +94,5 @@ func Edits(original, forward previewgate.Header) (remove []string, replace map[s
 }
 
 func changesCookie(name string, values []string) bool {
-	return strings.EqualFold(name, cookieName) && strings.Contains(strings.Join(values, ";"), previewgate.CookieName+"=")
+	return strings.EqualFold(name, cookieHeader) && strings.Contains(strings.Join(values, ";"), previewgate.CookieName+"=")
 }

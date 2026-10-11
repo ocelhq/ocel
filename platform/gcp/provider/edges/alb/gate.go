@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	noindexHeader = "X-Robots-Tag: noindex"
-
 	gateChain       = "gate"
 	gateLocation    = "global"
 	gateEvent       = "REQUEST_HEADERS"
@@ -26,7 +24,7 @@ const (
 )
 
 type PluginImages interface {
-	EnsureImage(ctx context.Context, plugin []byte) (string, error)
+	Ensure(ctx context.Context, plugin []byte) (string, error)
 }
 
 type gateVersion struct {

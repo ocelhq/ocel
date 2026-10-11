@@ -323,7 +323,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := s.releaseGate(ctx); err != nil {
+	if err := s.withdrawGate(ctx); err != nil {
 		return err
 	}
 	s.recorded.Hosts = nil

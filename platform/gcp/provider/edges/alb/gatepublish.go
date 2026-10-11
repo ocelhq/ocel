@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	maxGateBusyRetries   = 12
-	maxGateRecordReads   = 5
-	maxOlderGateVersions = 2
-	maxGateProbes        = 90
-	enforcedProbes       = 5
-	probeReminderEvery   = 15
+	maxGateBusyRetries         = 12
+	maxGateRecordReads         = 5
+	maxOlderGateVersions       = 2
+	maxGateProbes              = 90
+	enforcedProbes             = 5
+	probeReminderEveryAttempts = 15
 )
 
 type gateProof struct {
@@ -41,7 +41,7 @@ func (e *Edge) gateTarget() Target {
 }
 
 func (e *Edge) publishGates(ctx context.Context, proof gateProof, log progress.Log) error {
-	image, err := e.deps.Images.EnsureImage(ctx, e.deps.GatePlugin)
+	image, err := e.deps.Images.Ensure(ctx, e.deps.GatePlugin)
 	if err != nil {
 		return err
 	}
@@ -188,9 +188,9 @@ func (e *Edge) proveGated(ctx context.Context, proof gateProof, log progress.Log
 			return nil
 		}
 		if attempt == maxGateProbes {
-			return unenforced(slices.Sorted(maps.Keys(pending)), last)
+			return refuseUnenforced(slices.Sorted(maps.Keys(pending)), last)
 		}
-		if attempt%probeReminderEvery == 0 {
+		if attempt%probeReminderEveryAttempts == 0 {
 			log.Say("Still waiting for the preview gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", "))
 		}
 		if !e.deps.WaitBeforeRetry(ctx, attempt) {
@@ -199,7 +199,7 @@ func (e *Edge) proveGated(ctx context.Context, proof gateProof, log progress.Log
 	}
 }
 
-func unenforced(hosts []string, last error) error {
+func refuseUnenforced(hosts []string, last error) error {
 	reason := "answered without the gate's refusal"
 	if last != nil {
 		reason = "could not be reached: " + last.Error()

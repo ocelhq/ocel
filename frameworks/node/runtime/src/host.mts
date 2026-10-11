@@ -416,16 +416,16 @@ export function serveServer(
   const realPrependOnceListener = server.prependOnceListener.bind(server);
   const realRemoveListener = server.removeListener.bind(server);
 
-  const upgradeDoor = wrapUpgrade(server, lifted.upgrade!, trust);
-  let upgradeDoorOpen = false;
-  const matchUpgradeDoor = (): void => {
+  const upgradeListener = wrapUpgrade(server, lifted.upgrade!, trust);
+  let upgradeListening = false;
+  const syncUpgradeListener = (): void => {
     const wanted = lifted.upgrade!.length > 0;
-    if (wanted === upgradeDoorOpen) return;
-    upgradeDoorOpen = wanted;
-    if (wanted) realOn("upgrade", upgradeDoor);
-    else realRemoveListener("upgrade", upgradeDoor);
+    if (wanted === upgradeListening) return;
+    upgradeListening = wanted;
+    if (wanted) realOn("upgrade", upgradeListener);
+    else realRemoveListener("upgrade", upgradeListener);
   };
-  matchUpgradeDoor();
+  syncUpgradeListener();
 
   const drop = (event: "request" | "upgrade", listener: Listener): void => {
     const listeners = lifted[event]!;
@@ -436,7 +436,7 @@ export function serveServer(
         break;
       }
     }
-    matchUpgradeDoor();
+    syncUpgradeListener();
   };
 
   const onceWrapper = (event: "request" | "upgrade", listener: Listener): Lifted => {
@@ -456,7 +456,7 @@ export function serveServer(
     const entry = opts.once ? onceWrapper(event, listener) : listener;
     if (opts.prepend) lifted[event]!.unshift(entry);
     else lifted[event]!.push(entry);
-    matchUpgradeDoor();
+    syncUpgradeListener();
     return server;
   };
 

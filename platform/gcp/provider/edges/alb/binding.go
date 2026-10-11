@@ -91,6 +91,8 @@ func omitEmpty(value string) *string {
 	return &value
 }
 
+const noindexHeader = "X-Robots-Tag: noindex"
+
 func responseHeadersOf(tier environment.Tier) pulumi.StringArray {
 	if tier != environment.TierPreview {
 		return nil

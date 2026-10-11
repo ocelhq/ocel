@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	title      = "ocel-preview-gate 1"
-	hostLine   = "h"
-	gateLine   = "g"
-	emptyField = "-"
-	hexDigits  = "0123456789ABCDEF"
+	configFormat = "ocel-preview-gate 1"
+	hostLine     = "h"
+	gateLine     = "g"
+	emptyField   = "-"
+	hexDigits    = "0123456789ABCDEF"
 )
 
 type Config struct {
@@ -25,7 +25,7 @@ type Config struct {
 
 func EncodeConfig(hosts map[string]string, gates map[string]previewgate.Gate) string {
 	var text strings.Builder
-	text.WriteString(title + "\n")
+	text.WriteString(configFormat + "\n")
 	for _, slug := range slices.Sorted(maps.Keys(gates)) {
 		gate := gates[slug]
 		text.WriteString(strings.Join([]string{
@@ -41,8 +41,8 @@ func EncodeConfig(hosts map[string]string, gates map[string]previewgate.Gate) st
 
 func ParseConfig(text string) (Config, error) {
 	lines := strings.Split(text, "\n")
-	if lines[0] != title {
-		return Config{}, errors.New("the plugin config does not start with " + title)
+	if lines[0] != configFormat {
+		return Config{}, errors.New("the plugin config does not start with " + configFormat)
 	}
 	config := Config{hosts: map[string]string{}, gates: map[string]previewgate.Gate{}}
 	for i, line := range lines[1:] {

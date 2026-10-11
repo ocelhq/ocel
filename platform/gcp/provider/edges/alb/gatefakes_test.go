@@ -27,7 +27,7 @@ type gateWorld struct {
 	probeErr  error
 }
 
-func (w *world) EnsureImage(_ context.Context, plugin []byte) (string, error) {
+func (w *world) Ensure(_ context.Context, plugin []byte) (string, error) {
 	w.gate.mu.Lock()
 	defer w.gate.mu.Unlock()
 	w.gate.uploads++
