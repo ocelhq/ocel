@@ -82,7 +82,7 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
 		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.LoadBalancer.URLMap, hostname)
 	}
-	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend)
+	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend, nil)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

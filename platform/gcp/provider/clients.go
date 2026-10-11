@@ -275,6 +275,10 @@ func (c *clients) backendLink(backend string) string {
 	return "projects/" + c.project + "/global/backendServices/" + backend
 }
 
+func (c *clients) bucketLink(backend string) string {
+	return "projects/" + c.project + "/global/backendBuckets/" + backend
+}
+
 func (c *clients) Workload() *ports.Clients {
 	workload, _ := c.workload.get(func() (*ports.Clients, error) {
 		return &ports.Clients{

@@ -16,13 +16,13 @@ import (
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
 
-func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string) error {
+func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string, files *alb.StaticRoutes) error {
 	if urlMap == "" || hostname == "" || backend == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)
 	}
 	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *clients, current *compute.UrlMap) bool {
-		return routed(current, hostname, clients.backendLink(backend))
+		return routed(current, hostname, clients.backendLink(backend), staticRulesOf(clients, clients.backendLink(backend), files))
 	})
 }
 
@@ -105,8 +105,8 @@ func refreshed(current *compute.UrlMap) bool {
 	return changed
 }
 
-func routed(current *compute.UrlMap, hostname, backend string) bool {
-	return matched(current, hostname, &compute.PathMatcher{Name: matcherFor(hostname), DefaultService: backend})
+func routed(current *compute.UrlMap, hostname, backend string, rules []*compute.HttpRouteRule) bool {
+	return matched(current, hostname, &compute.PathMatcher{Name: matcherFor(hostname), DefaultService: backend, RouteRules: rules})
 }
 
 func unclaimed(current *compute.UrlMap, hostname string) bool {
@@ -149,7 +149,9 @@ func matched(current *compute.UrlMap, hostname string, want *compute.PathMatcher
 }
 
 func answers(current, want *compute.PathMatcher) bool {
-	return current.DefaultService == want.DefaultService && aborting(current.DefaultRouteAction) == aborting(want.DefaultRouteAction)
+	return current.DefaultService == want.DefaultService &&
+		aborting(current.DefaultRouteAction) == aborting(want.DefaultRouteAction) &&
+		sameRouteRules(current.RouteRules, want.RouteRules)
 }
 
 func aborting(action *compute.HttpRouteAction) int64 {

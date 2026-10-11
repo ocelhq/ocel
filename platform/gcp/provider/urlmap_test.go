@@ -24,7 +24,7 @@ func TestRoutingAHostnameWritesTheHostRuleAndThePathMatcherThatServesIt(t *testi
 	t.Parallel()
 
 	p, server := routing(t, emptyMap())
-	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop", nil); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestUnroutingTheLastHostnameClearsTheRuleRatherThanLeavingItPointingAtADele
 
 	ctx := context.Background()
 	p, server := routing(t, emptyMap())
-	if err := p.Route(ctx, tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(ctx, tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop", nil); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 	if err := p.Unroute(ctx, tierRoutes, "shop.example.com"); err != nil {
@@ -65,7 +65,7 @@ func TestRoutingRetriesTheWriteTheUrlMapChangedUnder(t *testing.T) {
 
 	p, server := routing(t, emptyMap())
 	server.conflicts = 1
-	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop", nil); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -110,7 +110,7 @@ func TestANotFoundHostnameFollowsTheMapsDefaultWhenTheFrontIsRaisedAgain(t *test
 		PathMatchers: []*compute.PathMatcher{{Name: matcherFor("unreleased.example.com"), DefaultService: "notfound-v1", DefaultRouteAction: refusing()}},
 	}
 	p, server := routing(t, stale)
-	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop", nil); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestRoutingRefusesAHostRuleThatNamesNoBackend(t *testing.T) {
 	t.Parallel()
 
 	p, _ := routing(t, emptyMap())
-	err := p.Route(context.Background(), tierRoutes, "shop.example.com", "")
+	err := p.Route(context.Background(), tierRoutes, "shop.example.com", "", nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Route with no backend = %v, want an %s refusal", err, refusal.CodeInvalid)

@@ -82,7 +82,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 		if routed := held; routed.Routed {
 			routed.Routed = false
 			if routed == record {
-				return e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend)
+				return e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend, nil)
 			}
 		}
 	} else if err := e.refuseFullURLMap(ctx, balancer.URLMap, []string{host.Hostname}, 0, originLimitAdvice); err != nil {
@@ -100,7 +100,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 	if _, err := e.deps.Stacks.Up(ctx, target, originHostProgram(e.deps.Region, host, record), progress.Discard()); err != nil {
 		return err
 	}
-	if err := e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend); err != nil {
+	if err := e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend, nil); err != nil {
 		return err
 	}
 	record.Routed = true
