@@ -53,7 +53,7 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsReleaseAndItsCacheR
 	if env[edge.ReleaseTokenVar] != token.String() {
 		t.Errorf("the service reads %s=%q, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], token)
 	}
-	if want := edge.CacheRulesVariable(rules); env[edge.CacheRulesVar] != want {
+	if want := edge.EncodeCacheRules(rules); env[edge.CacheRulesVar] != want {
 		t.Errorf("the service reads %s=%q, want %q", edge.CacheRulesVar, env[edge.CacheRulesVar], want)
 	}
 	if env[edge.OriginFreshOnlyVar] != "1" {

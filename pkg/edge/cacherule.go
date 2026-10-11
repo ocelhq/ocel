@@ -13,30 +13,6 @@ type CacheRule struct {
 	Expire     int    `json:"expire,omitempty"`
 }
 
-func FindCacheRule(rules []CacheRule, path string) (CacheRule, bool) {
-	for _, rule := range rules {
-		if rule.matches(path) {
-			return rule, true
-		}
-	}
-	return CacheRule{}, false
-}
-
-func (r CacheRule) matches(path string) bool {
-	below, wildcard := strings.CutSuffix(r.Path, "*")
-	if !wildcard {
-		return path == r.Path
-	}
-	return strings.HasPrefix(path, below)
-}
-
-func (r CacheRule) CacheControl() string {
-	if r.Expire > r.Revalidate {
-		return fmt.Sprintf("s-maxage=%d, stale-while-revalidate=%d", r.Revalidate, r.Expire-r.Revalidate)
-	}
-	return fmt.Sprintf("s-maxage=%d", r.Revalidate)
-}
-
 func RefuseCacheRules(rules []CacheRule) error {
 	for i, rule := range rules {
 		if err := rule.refuse(); err != nil {
@@ -63,7 +39,7 @@ func (r CacheRule) refuse() error {
 	return nil
 }
 
-func CacheRulesVariable(rules []CacheRule) string {
+func EncodeCacheRules(rules []CacheRule) string {
 	if len(rules) == 0 {
 		return ""
 	}
