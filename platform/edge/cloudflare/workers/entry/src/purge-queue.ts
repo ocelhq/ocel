@@ -4,6 +4,9 @@ import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
 
+const flushRetryMs = 1_000;
+const flushRetryCeilingMs = 60_000;
+
 export interface ServePurgeRpc {
   purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
   purgeEverything(): Promise<PurgeOutcome>;
@@ -31,6 +34,7 @@ export function newServePort(serve: () => ServePurgeRpc): PurgePort {
 export class PurgeQueue extends DurableObject<Env> {
   serve: PurgePort;
   private readonly backlog: PurgeBacklog;
+  private failedFlushes = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -54,7 +58,14 @@ export class PurgeQueue extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    const next = await this.backlog.flush();
+    let next: number | undefined;
+    try {
+      next = await this.backlog.flush();
+      this.failedFlushes = 0;
+    } catch (error) {
+      console.error("ocel: the purge queue failed to flush its backlog; trying again", error);
+      next = Date.now() + Math.min(flushRetryMs * 2 ** this.failedFlushes++, flushRetryCeilingMs);
+    }
     if (next !== undefined) await this.ctx.storage.setAlarm(next);
   }
 }
