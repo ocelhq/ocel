@@ -56,9 +56,7 @@ type dispatcher struct {
 	lock sync.Mutex
 	held map[string]*heldMessages
 
-	refused  map[string]*refusedTask
-	services map[string]string
-	api      *tasksAPI
+	refused map[string]*refusedTask
 }
 
 type refusedTask struct {
@@ -105,7 +103,6 @@ func newDispatcher(ctx context.Context, endpoint, project, region string) (*disp
 		subscriptions: subscriptions,
 		held:          map[string]*heldMessages{},
 		refused:       map[string]*refusedTask{},
-		services:      map[string]string{},
 	}, nil
 }
 
@@ -380,12 +377,7 @@ func taskBackoff(config *cloudtaskspb.RetryConfig, attempt int) time.Duration {
 
 func (d *dispatcher) dispatchTask(ctx context.Context, queue *cloudtaskspb.Queue, task *cloudtaskspb.Task) error {
 	sent := task.GetHttpRequest()
-	target, err := d.resolveDeliveryURL(ctx, sent.GetUrl())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "flocidispatch:", err)
-		d.refuse(queue, task)
-		return nil
-	}
+	target := sent.GetUrl()
 	req, err := http.NewRequestWithContext(ctx, sent.GetHttpMethod().String(), target, bytes.NewReader(sent.GetBody()))
 	if err != nil {
 		return err
@@ -393,19 +385,14 @@ func (d *dispatcher) dispatchTask(ctx context.Context, queue *cloudtaskspb.Queue
 	for name, value := range sent.GetHeaders() {
 		req.Header.Set(name, value)
 	}
-	if err := d.attachIDToken(req, task); err != nil {
-		return err
-	}
 	resp, err := d.http.Do(req)
 	if err != nil {
-		d.forgetService(sent.GetUrl())
 		d.refuse(queue, task)
 		return nil
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		d.forgetService(sent.GetUrl())
 		d.refuse(queue, task)
 		return nil
 	}
@@ -413,30 +400,6 @@ func (d *dispatcher) dispatchTask(ctx context.Context, queue *cloudtaskspb.Queue
 		return err
 	}
 	delete(d.refused, task.GetName())
-	return nil
-}
-
-func (d *dispatcher) attachIDToken(req *http.Request, task *cloudtaskspb.Task) error {
-	if d.api == nil {
-		return nil
-	}
-	sent := task.GetHttpRequest()
-	token := sent.GetOidcToken()
-	if token == nil {
-		token, _ = d.api.recordedToken(task.GetName())
-	}
-	if token == nil {
-		return nil
-	}
-	audience := token.GetAudience()
-	if audience == "" {
-		audience = sent.GetUrl()
-	}
-	signed, err := d.api.key.signIDToken(token.GetServiceAccountEmail(), audience, d.api.now())
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+signed)
 	return nil
 }
 
@@ -505,51 +468,6 @@ func (d *dispatcher) pushLoop(ctx context.Context, name string) {
 	}
 }
 
-func tasksAddresses(listen string) ([]string, error) {
-	var addresses []string
-	port := ""
-	for _, each := range strings.Split(listen, ",") {
-		each = strings.TrimSpace(each)
-		host, at, err := net.SplitHostPort(each)
-		if err != nil {
-			return nil, fmt.Errorf("tasks address %q: %w", each, err)
-		}
-		if address := net.ParseIP(host); host == "" || (address != nil && address.IsUnspecified()) {
-			return nil, fmt.Errorf("tasks address %q listens on every interface, and a signing key is only for the host and the docker gateway", each)
-		}
-		if port != "" && at != port {
-			return nil, fmt.Errorf("tasks address %q is on port %s, and every address must share port %s", each, at, port)
-		}
-		port = at
-		addresses = append(addresses, each)
-	}
-	return addresses, nil
-}
-
-func (d *dispatcher) serveTasks(ctx context.Context, addresses []string, api *tasksAPI) error {
-	d.api = api
-	servers := make([]*http.Server, 0, len(addresses))
-	for _, address := range addresses {
-		listener, err := net.Listen("tcp", address)
-		if err != nil {
-			for _, started := range servers {
-				_ = started.Close()
-			}
-			return err
-		}
-		server := &http.Server{Handler: api, ReadHeaderTimeout: lookupTimeout}
-		servers = append(servers, server)
-		go func() { _ = server.Serve(listener) }()
-	}
-	go func() {
-		<-ctx.Done()
-		for _, server := range servers {
-			_ = server.Close()
-		}
-	}()
-	return nil
-}
-
 func main() {
 	os.Exit(serve())
 }
@@ -558,7 +476,6 @@ func serve() int {
 	endpoint := flag.String("endpoint", os.Getenv(endpointVariable), "the floci-gcp emulator to dispatch for")
 	project := flag.String("project", "floci-local", "the project whose subscriptions and queues are dispatched")
 	region := flag.String("region", "europe-west1", "the region whose queues are dispatched")
-	tasksListen := flag.String("tasks-listen", "", "comma-separated host:port addresses to serve Cloud Tasks REST and the signing keys on")
 	flag.Parse()
 	if *endpoint == "" {
 		fmt.Fprintf(os.Stderr, "flocidispatch: name the emulator with -endpoint or %s\n", endpointVariable)
@@ -570,24 +487,6 @@ func serve() int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "flocidispatch:", err)
 		return 1
-	}
-	if *tasksListen != "" {
-		addresses, err := tasksAddresses(*tasksListen)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "flocidispatch:", err)
-			return 2
-		}
-		key, err := newSigningKey()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "flocidispatch:", err)
-			return 1
-		}
-		if err := d.serveTasks(ctx, addresses, newTasksAPI(func(ctx context.Context, request *cloudtaskspb.CreateTaskRequest) (*cloudtaskspb.Task, error) {
-			return d.tasks.CreateTask(ctx, request)
-		}, key)); err != nil {
-			fmt.Fprintln(os.Stderr, "flocidispatch:", err)
-			return 1
-		}
 	}
 	d.run(ctx)
 	return 0
