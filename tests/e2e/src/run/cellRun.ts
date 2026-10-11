@@ -243,6 +243,7 @@ export class CellRun {
       reach: this.deployment.reach ?? (async (url) => url),
       readExposed: () => this.readExposed(),
       countOriginRequests: (urlFragment) => this.countOriginRequests(urlFragment),
+      readReleaseFile: (path) => this.readReleaseFile(app, path),
       runInEnvironment: (command) => this.runInEnvironment(command),
       journeyNonce: this.journeyNonce,
       projectDir: configTree(this, this.target.name),
@@ -282,6 +283,15 @@ export class CellRun {
       `${target.name} has no way to count the requests its origin logged`,
     );
     return target.countOriginRequests(this, urlFragment);
+  }
+
+  private async readReleaseFile(app: string, path: string): Promise<Uint8Array> {
+    const target = this.target;
+    assert.ok(
+      hasRequestLog(target),
+      `${target.name} has no way to read the files a release uploaded`,
+    );
+    return target.readReleaseFile(this, app, path);
   }
 
   private async readExposed(): Promise<string> {
