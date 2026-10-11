@@ -14,6 +14,15 @@ const STORED_STATUSES = new Set([200, 301, 308, 404, 410]);
 
 const EDGE_POLICY_HEADERS = ["cloudflare-cdn-cache-control", "cdn-cache-control"] as const;
 
+const KEYED_VARY = new Set([
+  "accept-encoding",
+  "rsc",
+  "next-router-state-tree",
+  "next-router-prefetch",
+  "next-router-segment-prefetch",
+  "next-url",
+]);
+
 export interface CachedResponse {
   release: string;
   pathname: string;
@@ -39,6 +48,13 @@ function seconds(directives: Directives, name: string): number | undefined {
 
 function refusesStoring(directives: Directives): boolean {
   return directives.has("private") || directives.has("no-store") || directives.has("no-cache");
+}
+
+function variesOffKey(headers: Headers): boolean {
+  return (headers.get("vary") ?? "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .some((name) => name !== "" && !KEYED_VARY.has(name));
 }
 
 function notStored(response: Response): Response {
@@ -75,7 +91,11 @@ function releaseTags(headers: Headers, { release, pathname }: CachedResponse): s
 }
 
 export function forCache(response: Response, cached: CachedResponse): Response {
-  if (!STORED_STATUSES.has(response.status) || response.headers.has("set-cookie")) {
+  if (
+    !STORED_STATUSES.has(response.status) ||
+    response.headers.has("set-cookie") ||
+    variesOffKey(response.headers)
+  ) {
     return notStored(response);
   }
   const policy = edgePolicy(response.headers);

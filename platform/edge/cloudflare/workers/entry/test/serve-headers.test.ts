@@ -170,6 +170,24 @@ describe("the headers a cached response leaves Serve with", () => {
     expect(response.headers.get("x-ocel-vary")).toBe("rsc, next-router-state-tree");
   });
 
+  it.each([
+    ["a header no part of the key names", "rsc, x-marker-hello"],
+    ["a cookie", "cookie"],
+    ["anything", "*"],
+  ])("does not store a response that varies on %s", (_name, vary) => {
+    const response = shaped({ status: 200, headers: { ...stored, vary } });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+    expect(response.headers.get("vary")).toBe(vary);
+  });
+
+  it("stores a response that varies on the encoding and the flight headers only", () => {
+    const vary =
+      "Accept-Encoding, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch, Next-Url";
+    const response = shaped({ status: 200, headers: { ...stored, vary } });
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=60");
+  });
+
   it("adds no x-ocel-vary to a response that had no Vary", () => {
     expect(shaped({ status: 200, headers: stored }).headers.has("x-ocel-vary")).toBe(false);
   });
