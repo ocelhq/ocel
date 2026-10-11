@@ -22,6 +22,7 @@ type gateWorld struct {
 	mu        sync.Mutex
 	events    []string
 	uploads   int
+	deletes   int
 	unenforce map[string]int
 	probes    map[string]int
 	probeErr  error
@@ -33,6 +34,13 @@ func (w *world) Ensure(_ context.Context, plugin []byte) (string, error) {
 	w.gate.uploads++
 	digest := sha256.Sum256(plugin)
 	return "projects/acme-prod/locations/europe-west1/repositories/ocel-gate/genericArtifacts/previewgate:" + hex.EncodeToString(digest[:6]), nil
+}
+
+func (w *world) Delete(context.Context) error {
+	w.gate.mu.Lock()
+	defer w.gate.mu.Unlock()
+	w.gate.deletes++
+	return nil
 }
 
 func (w *world) probeGate(_ context.Context, hostname, address string) (bool, error) {

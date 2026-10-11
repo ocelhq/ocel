@@ -54,6 +54,26 @@ func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error)
 	return path + "/genericArtifacts/" + pluginPackage + ":" + version, nil
 }
 
+func (i pluginImages) Delete(ctx context.Context) error {
+	c, err := i.p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	service, err := c.Repositories()
+	if err != nil {
+		return err
+	}
+	repository := c.Repository(environment.TierPreview) + pluginRepository
+	deleting, err := attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(c, repository)).Context(ctx).Do)
+	if absent(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete the %s repository: %w", repository, err)
+	}
+	return bootstrap{clients: c}.repositoryAwaited(ctx, "deleting the "+repository+" repository", deleting)
+}
+
 func ensurePluginRepository(ctx context.Context, c *clients, service *artifactregistry.Service, name, path string) error {
 	_, err := attempted(ctx, service.Projects.Locations.Repositories.Get(path).Context(ctx).Do)
 	if err == nil {
