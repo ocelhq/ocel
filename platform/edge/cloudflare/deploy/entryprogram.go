@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 
@@ -36,6 +37,8 @@ type EntryProgram struct {
 	Env               string
 	PreviewBaseDomain string
 	PreviewKey        edge.PreviewKey
+	PreviewGate       *edge.PreviewGate
+	PreviewGates      map[string]edge.PreviewGate
 	Origin            OriginBindings
 	Values            map[string]string
 
@@ -69,7 +72,10 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 		worker = withVar(worker, envPreview, "1")
 		worker = withVar(worker, envPreviewGlobal, "1")
 		worker = withVar(worker, envPreviewBaseDomain, p.PreviewBaseDomain)
-		if spec.Worker, err = p.addPreviewKey(worker); err != nil {
+		if worker, err = p.addPreviewKey(worker); err != nil {
+			return provider.EdgeProgram{}, err
+		}
+		if spec.Worker, err = p.addPreviewGates(worker); err != nil {
 			return provider.EdgeProgram{}, err
 		}
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
@@ -77,7 +83,10 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	if p.Tier == environment.TierPreview {
 		spec.Name = previewWorkerName(p.Namespace, p.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
-		if spec.Worker, err = p.addPreviewKey(addPreviewVariables(worker, p.PreviewBaseDomain)); err != nil {
+		if worker, err = p.addPreviewKey(addPreviewVariables(worker, p.PreviewBaseDomain)); err != nil {
+			return provider.EdgeProgram{}, err
+		}
+		if spec.Worker, err = p.addPreviewGate(worker); err != nil {
 			return provider.EdgeProgram{}, err
 		}
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
@@ -112,6 +121,28 @@ func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
 		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
 	}
 	return worker
+}
+
+func (p EntryProgram) addPreviewGate(worker edge.Worker) (edge.Worker, error) {
+	if p.PreviewGate == nil {
+		return worker, nil
+	}
+	return withEncodedSecret(worker, edge.PreviewGateVar, p.PreviewGate)
+}
+
+func (p EntryProgram) addPreviewGates(worker edge.Worker) (edge.Worker, error) {
+	if len(p.PreviewGates) == 0 {
+		return worker, nil
+	}
+	return withEncodedSecret(worker, edge.PreviewGatesVar, p.PreviewGates)
+}
+
+func withEncodedSecret(worker edge.Worker, name string, value any) (edge.Worker, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return edge.Worker{}, fmt.Errorf("encode %s for the %s edge worker: %w", name, Kind, err)
+	}
+	return withSecret(worker, name, string(encoded)), nil
 }
 
 func (p EntryProgram) addPreviewKey(worker edge.Worker) (edge.Worker, error) {

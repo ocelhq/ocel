@@ -6,12 +6,18 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+)
+
+const (
+	PreviewGateVar  = "OCEL_PREVIEW_GATE"
+	PreviewGatesVar = "OCEL_PREVIEW_GATES"
 )
 
 const (
@@ -37,6 +43,18 @@ type PreviewGate struct {
 	PasswordMAC   string   `json:"passwordMac"`
 	BypassSecrets []string `json:"bypassSecrets"`
 	AllowOptions  []string `json:"allowOptions"`
+}
+
+func (g PreviewGate) MarshalJSON() ([]byte, error) {
+	type listedGate PreviewGate
+	listed := listedGate(g)
+	if listed.BypassSecrets == nil {
+		listed.BypassSecrets = []string{}
+	}
+	if listed.AllowOptions == nil {
+		listed.AllowOptions = []string{}
+	}
+	return json.Marshal(listed)
 }
 
 type PreviewRequest struct {

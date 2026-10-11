@@ -1,7 +1,9 @@
 package cloudflare
 
 import (
+	"encoding/json"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -341,5 +343,89 @@ func TestAnEntryWorkerWithNoOriginClientCertificateCarriesNone(t *testing.T) {
 	}
 	if built.Spec.Worker.ClientCertificates != nil {
 		t.Errorf("ClientCertificates = %v, want nil", built.Spec.Worker.ClientCertificates)
+	}
+}
+
+var previewGate = edge.PreviewGate{
+	Key:           "gate-key",
+	PasswordMAC:   "password-mac",
+	BypassSecrets: []string{"bypass-one", "bypass-two"},
+	AllowOptions:  []string{"/api/"},
+}
+
+func TestAProjectsPreviewWorkerReceivesItsGateKeysAsOneWorkerSecret(t *testing.T) {
+	entry := programmed("acme", environment.TierPreview)
+	entry.PreviewGate = &previewGate
+
+	built, err := entry.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	worker := built.Spec.Worker
+	var got edge.PreviewGate
+	if err := json.Unmarshal([]byte(worker.Secrets[edge.PreviewGateVar]), &got); err != nil {
+		t.Fatalf("Secrets[%s] = %q, want the gate as JSON: %v", edge.PreviewGateVar, worker.Secrets[edge.PreviewGateVar], err)
+	}
+	if !reflect.DeepEqual(got, previewGate) {
+		t.Errorf("gate secret = %+v, want %+v", got, previewGate)
+	}
+	if _, plain := worker.Variables[edge.PreviewGateVar]; plain {
+		t.Errorf("Variables carries %s, want the keys only as a secret", edge.PreviewGateVar)
+	}
+}
+
+func TestTheSharedPreviewEntryReceivesEveryProjectsGateKeysAsOneWorkerSecret(t *testing.T) {
+	entry := programmed("", environment.TierPreview)
+	entry.PreviewBaseDomain = "preview.acme.com"
+	entry.PreviewKey = previewKey
+	entry.PreviewGates = map[string]edge.PreviewGate{"acme": previewGate, "shop": {Key: "other"}}
+
+	built, err := entry.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var got map[string]edge.PreviewGate
+	if err := json.Unmarshal([]byte(built.Spec.Worker.Secrets[edge.PreviewGatesVar]), &got); err != nil {
+		t.Fatalf("Secrets[%s]: %v", edge.PreviewGatesVar, err)
+	}
+	want := map[string]edge.PreviewGate{"acme": previewGate, "shop": {Key: "other", BypassSecrets: []string{}, AllowOptions: []string{}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("gates secret = %+v, want %+v", got, want)
+	}
+}
+
+func TestAWorkerWithNoGateKeysReceivesNoGateSecret(t *testing.T) {
+	shared := programmed("", environment.TierPreview)
+	shared.PreviewBaseDomain = "preview.acme.com"
+	shared.PreviewKey = previewKey
+	for name, entry := range map[string]EntryProgram{
+		"the shared preview entry": shared,
+		"a project's preview":      programmed("acme", environment.TierPreview),
+		"a project's production":   programmed("acme", environment.TierProduction),
+	} {
+		t.Run(name, func(t *testing.T) {
+			built, err := entry.Build()
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			for _, name := range []string{edge.PreviewGateVar, edge.PreviewGatesVar} {
+				if _, ok := built.Spec.Worker.Secrets[name]; ok {
+					t.Errorf("Secrets carries %s, want none: no keys were given", name)
+				}
+			}
+		})
+	}
+}
+
+func TestAProductionWorkerIsNeverGivenGateKeys(t *testing.T) {
+	entry := programmed("acme", environment.TierProduction)
+	entry.PreviewGate = &previewGate
+
+	built, err := entry.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if _, ok := built.Spec.Worker.Secrets[edge.PreviewGateVar]; ok {
+		t.Errorf("a production worker received %s, want a gate only on preview workers", edge.PreviewGateVar)
 	}
 }
