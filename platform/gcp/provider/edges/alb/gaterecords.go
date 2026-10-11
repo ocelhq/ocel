@@ -91,27 +91,27 @@ func (e *Edge) readGateRecord(ctx context.Context, slug string) (gateRecord, boo
 	return record, true, nil
 }
 
-func (e *Edge) changeGateRecord(ctx context.Context, slug string, change func(held gateRecord, found bool) (next gateRecord, keep bool)) (bool, error) {
+func (e *Edge) changeGateRecord(ctx context.Context, slug string, change func(recorded gateRecord, found bool) (next gateRecord, keep bool)) (bool, error) {
 	key := gateRecordKey(slug)
 	for range gateRecordAttempts {
 		entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, key)
 		if err != nil {
 			return false, fmt.Errorf("read the preview gate of %s on the %s edge: %w", slug, Kind, err)
 		}
-		var held gateRecord
+		var recorded gateRecord
 		found := len(entry.Value) > 0
 		if found {
-			if err := e.openRecord(ctx, gateRecordData(slug), entry.Value, &held); err != nil {
+			if err := e.openRecord(ctx, gateRecordData(slug), entry.Value, &recorded); err != nil {
 				return false, err
 			}
 		}
-		next, keep := change(held, found)
+		next, keep := change(recorded, found)
 		switch {
 		case !keep && !found:
 			return false, nil
 		case !keep:
 			return true, keyvalue.Forget(ctx, e.deps.KeyValues, key)
-		case found && sameGateRecord(held, next):
+		case found && sameGateRecord(recorded, next):
 			return false, nil
 		}
 		if entry.Value, err = e.sealRecord(ctx, gateRecordData(slug), next); err != nil {
@@ -204,7 +204,7 @@ func (e *Edge) forgetGates(ctx context.Context) error {
 	}
 	for _, entry := range entries {
 		if err := keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key); err != nil {
-			return fmt.Errorf("release the preview gate %s on the %s edge: %w", entry.Key, Kind, err)
+			return fmt.Errorf("forget the preview gate %s on the %s edge: %w", entry.Key, Kind, err)
 		}
 	}
 	return keyvalue.Forget(ctx, e.deps.KeyValues, gatePublicationKey())

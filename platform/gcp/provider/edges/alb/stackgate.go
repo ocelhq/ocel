@@ -67,12 +67,12 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	}
 	routed := s.listRoutedHosts()
 	newlyGated := false
-	changed, err := s.e.changeGateRecord(ctx, spec.Slug, func(held gateRecord, found bool) (gateRecord, bool) {
+	changed, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
 		if gate == nil {
 			return gateRecord{}, false
 		}
 		newlyGated = !found
-		return gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(held.Hosts, routed))), Gate: *gate}, true
+		return gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *gate}, true
 	})
 	if err != nil || !changed {
 		return err
@@ -96,9 +96,9 @@ func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progres
 	if err != nil || !gated {
 		return err
 	}
-	if _, err := s.e.changeGateRecord(ctx, s.state.Slug, func(held gateRecord, _ bool) (gateRecord, bool) {
-		held.Hosts = slices.Sorted(maps.Keys(toSet(held.Hosts, hosts)))
-		return held, true
+	if _, err := s.e.changeGateRecord(ctx, s.state.Slug, func(recorded gateRecord, _ bool) (gateRecord, bool) {
+		recorded.Hosts = slices.Sorted(maps.Keys(toSet(recorded.Hosts, hosts)))
+		return recorded, true
 	}); err != nil {
 		return err
 	}
@@ -109,19 +109,19 @@ func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progre
 	if !s.isGated() || len(hosts) == 0 {
 		return
 	}
-	_, err := s.e.changeGateRecord(ctx, s.state.Slug, func(held gateRecord, found bool) (gateRecord, bool) {
+	_, err := s.e.changeGateRecord(ctx, s.state.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
 		if !found {
-			return held, false
+			return recorded, false
 		}
-		held.Hosts = slices.DeleteFunc(slices.Clone(held.Hosts), func(host string) bool { return slices.Contains(hosts, host) })
-		return held, true
+		recorded.Hosts = slices.DeleteFunc(slices.Clone(recorded.Hosts), func(host string) bool { return slices.Contains(hosts, host) })
+		return recorded, true
 	})
 	if err != nil {
 		log.Warn("The preview gate still lists " + hosts[0] + ", which is no longer served: " + err.Error())
 	}
 }
 
-func (s *stack) releaseGate(ctx context.Context) error {
+func (s *stack) withdrawGate(ctx context.Context) error {
 	if !s.isGated() {
 		return nil
 	}

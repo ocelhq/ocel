@@ -22,7 +22,7 @@ const (
 
 type pluginImages struct{ p *Provider }
 
-func (i pluginImages) EnsureImage(ctx context.Context, plugin []byte) (string, error) {
+func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error) {
 	c, err := i.p.openClients(ctx)
 	if err != nil {
 		return "", err

@@ -58,7 +58,7 @@ func (h *httpContext) OnHttpRequestHeaders(int, bool) types.Action {
 		answer(response.Status, response.Header, []byte(response.Body)...)
 		return types.ActionPause
 	}
-	remove, replace := gateplugin.Edits(req.Header, verdict.Forward)
+	remove, replace := gateplugin.ListHeaderEdits(req.Header, verdict.Forward)
 	for _, name := range remove {
 		_ = proxywasm.RemoveHttpRequestHeader(name)
 	}

@@ -47,10 +47,9 @@ async function checkOriginGate(
   const origin = readOriginGate(encoded);
   if (origin.kind === "unreadable") return newUnavailableResponse();
   const target = req.url ?? "/";
-  const body =
-    req.method === "POST" && target.split("?", 1)[0] === PREVIEW_LOGIN_PATH
-      ? ((await readCapped(req, PREVIEW_LOGIN_BODY_MAX_BYTES)) ?? oversizedLoginBody)
-      : undefined;
+  const body = isLogin(req)
+    ? ((await readCapped(req, PREVIEW_LOGIN_BODY_MAX_BYTES)) ?? oversizedLoginBody)
+    : undefined;
   const verdict = await checkPreview(
     origin.gate,
     {

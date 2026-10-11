@@ -53,7 +53,7 @@ func TestARequestForAHostNoGateNamesPassesUnchanged(t *testing.T) {
 	if verdict.Response != nil {
 		t.Fatalf("Check answered %d for a host nothing gates", verdict.Response.Status)
 	}
-	if remove, replace := gateplugin.Edits(req.Header, verdict.Forward); len(remove) != 0 || len(replace) != 0 {
+	if remove, replace := gateplugin.ListHeaderEdits(req.Header, verdict.Forward); len(remove) != 0 || len(replace) != 0 {
 		t.Errorf("Edits = remove %q replace %q, want the request forwarded as it came", remove, replace)
 	}
 }
@@ -103,7 +103,7 @@ func TestASessionCookieOnASecondCookieLineIsAdmittedAndRemovedBeforeForwarding(t
 	if verdict.Response != nil {
 		t.Fatalf("Check answered %d, want the session on the second Cookie line admitted", verdict.Response.Status)
 	}
-	_, replace := gateplugin.Edits(req.Header, verdict.Forward)
+	_, replace := gateplugin.ListHeaderEdits(req.Header, verdict.Forward)
 	if got := replace["cookie"]; got != "theme=dark" {
 		t.Errorf("the forwarded cookie = %q, want the app's own cookie alone", got)
 	}
@@ -126,7 +126,7 @@ func TestACookieTheGateDoesNotReadIsForwardedByteForByte(t *testing.T) {
 	})
 
 	verdict := config.Check(req, time.Unix(1700000000, 0))
-	remove, replace := gateplugin.Edits(req.Header, verdict.Forward)
+	remove, replace := gateplugin.ListHeaderEdits(req.Header, verdict.Forward)
 
 	if !slices.Equal(remove, []string{"x-ocel-preview-bypass"}) {
 		t.Errorf("remove = %q, want only the bypass header", remove)

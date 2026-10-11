@@ -77,9 +77,9 @@ func TestThePluginImageIsUploadedToAGenericRepositoryTheBootstrapCreates(t *test
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 
-	image, err := (pluginImages{p: p}).EnsureImage(context.Background(), []byte("\x00asm-gate"))
+	image, err := (pluginImages{p: p}).Ensure(context.Background(), []byte("\x00asm-gate"))
 	if err != nil {
-		t.Fatalf("EnsureImage = %v", err)
+		t.Fatalf("Ensure = %v", err)
 	}
 
 	if len(registry.created) != 1 || !strings.HasSuffix(registry.created[0], " GENERIC") {
@@ -98,12 +98,12 @@ func TestAPluginAlreadyInTheRegistryIsNotUploadedAgain(t *testing.T) {
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 	ensure := pluginImages{p: p}
-	first, err := ensure.EnsureImage(context.Background(), []byte("\x00asm-gate"))
+	first, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	again, err := ensure.EnsureImage(context.Background(), []byte("\x00asm-gate"))
+	again, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,12 +120,12 @@ func TestANewPluginBuildIsUploadedAsANewVersion(t *testing.T) {
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 	ensure := pluginImages{p: p}
-	first, err := ensure.EnsureImage(context.Background(), []byte("\x00asm-gate-one"))
+	first, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate-one"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	second, err := ensure.EnsureImage(context.Background(), []byte("\x00asm-gate-two"))
+	second, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate-two"))
 	if err != nil {
 		t.Fatal(err)
 	}
