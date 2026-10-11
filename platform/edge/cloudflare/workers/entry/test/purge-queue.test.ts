@@ -1,6 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import { newServePort, type PurgeQueue } from "../src/purge-queue";
+import { openInBandQueue, openPurgeQueue } from "../src/purge-request";
 import { newSqliteBacklogStore } from "../src/purge-sqlite-store";
 import { buildOriginCall, type ServeProps } from "../src/serve-key";
 import { memoryBacklogStore } from "./purge-backlog-store";
@@ -168,6 +169,34 @@ describe("the PurgeQueue object", () => {
       expect(logged).toHaveBeenCalled();
     } finally {
       logged.mockRestore();
+    }
+  });
+});
+
+describe("the queue an in-band purge falls back to", () => {
+  it("covers nothing the origin's later announcement of the same tag would purge", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const raisedAt = Date.now();
+      const tag = "rinband|a";
+      const exports = { PurgeQueue: env.PURGE_QUEUE };
+      const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
+      const durable = openPurgeQueue(exports) as DurableObjectStub<PurgeQueue>;
+      await runInDurableObject(fallback, async (instance) => {
+        instance.serve = { purgeTags: async () => ({ ok: true }) };
+      });
+
+      await fallback.raise("purge", [{ tag, raisedAt: raisedAt + 500 }]);
+      vi.setSystemTime(raisedAt + 2_000);
+      await runDurableObjectAlarm(fallback);
+      await durable.raise("purge", [{ tag, raisedAt }]);
+
+      await runInDurableObject(durable, async (_instance, state) => {
+        expect(newSqliteBacklogStore(state.storage).readBatch("purge", 100)).toContain(tag);
+      });
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

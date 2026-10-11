@@ -11,6 +11,8 @@ import type { RaisedTag } from "./purge-backlog";
 
 const PURGE_QUEUE_NAME = "purge";
 
+const IN_BAND_QUEUE_NAME = "in-band";
+
 const PURGE_PROJECT_PARAM = "project";
 
 export const maxPurgeBodyBytes = 512 * 1024;
@@ -117,11 +119,19 @@ export function respondOnControlHost(): Response {
   return reply(404, "Not Found");
 }
 
-export function openPurgeQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+function openQueue(exports: unknown, name: string): PurgeGatewayPorts["queue"] {
   const queues = (
     exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
   ).PurgeQueue;
-  return queues.getByName(PURGE_QUEUE_NAME);
+  return queues.getByName(name);
+}
+
+export function openPurgeQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+  return openQueue(exports, PURGE_QUEUE_NAME);
+}
+
+export function openInBandQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+  return openQueue(exports, IN_BAND_QUEUE_NAME);
 }
 
 function findPurgedProject(
