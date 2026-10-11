@@ -1,4 +1,4 @@
-import { postponedLengthHeader } from "@platform/edge-contract/edge-cache";
+export const POSTPONED_LENGTH_HEADER = "x-ocel-postponed-length";
 
 export const PPR_SHELL_VARIANT = ".ppr-shell";
 
@@ -23,12 +23,12 @@ export interface PostponedShell {
 export async function readPostponedShell(
   response: Response,
 ): Promise<PostponedShell | "unframed" | "malformed"> {
-  const declared = response.headers.get(postponedLengthHeader);
+  const declared = response.headers.get(POSTPONED_LENGTH_HEADER);
   if (declared === null) return "unframed";
   const length = Number(declared);
   const bytes = new Uint8Array(await response.arrayBuffer());
   const headers = new Headers(response.headers);
-  headers.delete(postponedLengthHeader);
+  headers.delete(POSTPONED_LENGTH_HEADER);
   headers.delete("content-length");
   if (!Number.isInteger(length) || length < 0 || length > bytes.byteLength) return "malformed";
   return {

@@ -9,6 +9,7 @@ import {
   buildOriginCall,
   ORIGIN_PURGE_SCOPE,
   RENDER_RELEASE_HEADER,
+  SERVE_NO_SHELL_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -345,5 +346,88 @@ describe("Serve answering the fallback shell every param of a route shares", () 
     expect(response.headers.get(SERVE_UNSHARED_HEADER)).toBe("1");
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(h.originCalls).toEqual([]);
+  });
+});
+
+describe("Serve answering the shell of a PPR document", () => {
+  const shellEntry = () => ({
+    lastModified: Date.now() - 10_000,
+    value: {
+      kind: "APP_PAGE",
+      status: 200,
+      html: "<html>shell</html>",
+      postponed: "STATE",
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-next-cache-tags": "_N_T_/blog/a,posts",
+      },
+    },
+  });
+  const shellRequest = (h: Used, headers: Record<string, string> = {}) => {
+    const plain = h.request();
+    const url = buildOriginCall(`${FN_URL}blog/a`, { ...coordinates, variant: ".ppr-shell" }).url;
+    return new Request(url, {
+      headers: { [RENDER_RELEASE_HEADER]: plain.headers.get(RENDER_RELEASE_HEADER)!, ...headers },
+    });
+  };
+
+  it("frames the stored shell with its postponed state and never asks the origin", async () => {
+    await seed(shellEntry());
+    const h = harness() as Used;
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(shellRequest(h)));
+
+    expect(await response.text()).toBe("STATE<html>shell</html>");
+    expect(response.headers.get("x-ocel-postponed-length")).toBe("5");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it.each([
+    ["the store has no entry", { entry: false, times: {} }],
+    [
+      "a tag of the entry was purged after it was written",
+      { entry: true, times: { "r1a2b3c4d|posts": { purgedAt: Date.now() - 1_000 } } },
+    ],
+    ["the purge queue cannot be reached", { entry: true, times: new Error("queue unreachable") }],
+  ])(
+    "answers that it has no shell, keeps nothing and never asks the origin when %s",
+    async (_, c) => {
+      if (c.entry) await seed(shellEntry());
+      const h = harness({ times: c.times }) as Used;
+
+      const response = await h.fetchOrigin(() => h.serve.fetch(shellRequest(h)));
+
+      expect(response.headers.get(SERVE_NO_SHELL_HEADER)).toBe("1");
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.has("cloudflare-cdn-cache-control")).toBe(false);
+      expect(h.originCalls).toEqual([]);
+    },
+  );
+
+  it("answers Workers Cache's revalidation of a fresh shell from the store, not the origin", async () => {
+    await seed(shellEntry());
+    const h = harness() as Used;
+
+    const response = await h.fetchOrigin(() =>
+      h.serve.fetch(shellRequest(h, { "if-none-match": 'W/"anything"' })),
+    );
+
+    expect(await response.text()).toBe("STATE<html>shell</html>");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers the revalidation of an invalidated shell from the store and has the origin regenerate the page", async () => {
+    await seed(shellEntry());
+    const h = harness({ times: { "r1a2b3c4d|posts": { invalidatedAt: Date.now() } } }) as Used;
+
+    const response = await h.fetchOrigin(async () => {
+      const answered = await h.serve.fetch(shellRequest(h, { "if-none-match": 'W/"anything"' }));
+      await h.settled();
+      return answered;
+    });
+
+    expect(await response.text()).toBe("STATE<html>shell</html>");
+    expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
+    expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
   });
 });

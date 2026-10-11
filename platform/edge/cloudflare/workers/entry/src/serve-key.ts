@@ -28,6 +28,8 @@ export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
 export const SERVE_REFUSED_HEADER = "x-ocel-serve-refused";
 
+export const SERVE_NO_SHELL_HEADER = "x-ocel-serve-no-shell";
+
 export const SERVE_UNSHARED_HEADER = "x-ocel-serve-unshared";
 
 export interface StoredEntryCall {

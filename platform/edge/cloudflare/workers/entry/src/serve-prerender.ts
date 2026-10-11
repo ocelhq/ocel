@@ -12,7 +12,7 @@ import {
   withStatus,
 } from "@framework/next-router/http-cache";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
-import { edgeCacheHeader, pprShellHeader } from "@platform/edge-contract/edge-cache";
+import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { PurgeGroup } from "@platform/edge-contract/purge";
 import { buildResumeRequest, composePpr, PPR_SHELL_VARIANT, readPostponedShell } from "./ppr";
@@ -25,6 +25,7 @@ import {
   buildVariantPath,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
+  SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
   type StoredEntryCall,
@@ -212,7 +213,6 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   if (target.entryKey !== undefined) safeHeaders.set(ENTRY_HEADER, target.entryKey);
   safeHeaders.set(edgeCacheHeader, "1");
   const pprDocument = isPprDocument(request, target);
-  if (pprDocument) safeHeaders.set(pprShellHeader, "1");
   const forwarded = forward(request, safeHeaders);
   const concreteUrl = new URL(buildCanonicalUrl(new URL(forwarded.url), target.allowQuery));
   const coordinates = {
@@ -244,7 +244,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     await response.body?.cancel();
     response = await askServe(false);
   }
-  if (response.headers.has(SERVE_REFUSED_HEADER)) {
+  if (response.headers.has(SERVE_REFUSED_HEADER) || response.headers.has(SERVE_NO_SHELL_HEADER)) {
     await response.body?.cancel();
     return withStatus(await answer(forwardUncached(headers)), "MISS");
   }
