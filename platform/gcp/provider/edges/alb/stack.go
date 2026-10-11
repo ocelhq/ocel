@@ -79,6 +79,9 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 			}
 			return errors.Join(err, s.raise(ctx, s.recorded.Hosts))
 		}
+		if slices.Contains(moved, hostname) {
+			s.recordHost(hostname, hosts[hostname])
+		}
 	}
 	s.recorded.Hosts = hosts
 	s.keep()
@@ -95,6 +98,13 @@ func (s *stack) adopt(balancer LoadBalancer) error {
 }
 
 func (s *stack) keep() { s.state.Private = edge.Own(s.recorded) }
+
+func (s *stack) recordHost(hostname string, host Host) {
+	hosts := maps.Clone(s.recorded.Hosts)
+	hosts[hostname] = host
+	s.recorded.Hosts = hosts
+	s.keep()
+}
 
 func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {

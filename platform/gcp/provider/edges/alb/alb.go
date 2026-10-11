@@ -32,8 +32,9 @@ type Deps struct {
 	Region    string
 	Shielded  bool
 
-	WaitBeforeRetry  func(ctx context.Context, attempt int) bool
-	ReadAssetsBucket func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
+	WaitBeforeRetry    func(ctx context.Context, attempt int) bool
+	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
+	CopyImmutableFiles func(ctx context.Context, tier environment.Tier, from, to StaticRoutes) error
 }
 
 type Edge struct{ deps Deps }
