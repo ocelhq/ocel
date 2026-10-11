@@ -2,7 +2,7 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import { settledWithin } from "./cache";
 import type { RaisedTag } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
-import { ORIGIN_PURGE_SCOPE, type OriginCoordinates } from "./serve-key";
+import { ORIGIN_PURGE_SCOPE, type RenderCoordinates } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import type { Serving } from "./serve-prerender";
 
@@ -18,7 +18,7 @@ export interface ServingPorts {
 
 export function newServing(
   ports: ServingPorts,
-  scope: Omit<OriginCoordinates, "variant"> & { slug: string; isrPrefix: string },
+  scope: Omit<RenderCoordinates, "variant"> & { slug: string; isrPrefix: string },
 ): Serving {
   return {
     serve: ports.serve,

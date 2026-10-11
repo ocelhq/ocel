@@ -18,14 +18,14 @@ import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
   buildEdgeUrl,
   buildOriginUrl,
-  EDGE_RELEASE_HEADER,
-  type EdgeRelease,
   encodeKeyPath,
   type ObjectProps,
   parseKeyRelease,
   parseObjectKey,
+  RENDER_RELEASE_HEADER,
+  type RenderRelease,
   readEdgeEntry,
-  readOriginCall,
+  readRenderCall,
   type ServeProps,
 } from "./serve-key";
 import { type ServeFactory, serveObjects } from "./serve-objects";
@@ -48,10 +48,10 @@ interface BucketAccess {
   secretAccessKey: string;
 }
 
-function parseEdgeRelease(header: string | null): EdgeRelease | undefined {
+function parseRenderRelease(header: string | null): RenderRelease | undefined {
   if (header === null) return undefined;
   try {
-    const parsed = JSON.parse(header) as Partial<EdgeRelease>;
+    const parsed = JSON.parse(header) as Partial<RenderRelease>;
     if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
     return { slug: parsed.slug, isrPrefix: parsed.isrPrefix, tags };
@@ -172,7 +172,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   }
 
   private async fromOrigin(request: Request): Promise<Response> {
-    const { host, release } = readOriginCall(request.url);
+    const { host, release } = readRenderCall(request.url);
     const originUrl = buildOriginUrl(request.url);
     const originFetch = originFetchFor(this.env) ?? fetch;
     const headers = new Headers(request.headers);
@@ -199,8 +199,8 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   }
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {
-    const { host, app, release } = readOriginCall(request.url);
-    const edge = parseEdgeRelease(request.headers.get(EDGE_RELEASE_HEADER));
+    const { host, app, release } = readRenderCall(request.url);
+    const edge = parseRenderRelease(request.headers.get(RENDER_RELEASE_HEADER));
     const { LOADER: loader, RELEASES: releases } = this.env;
     if (!edge || !loader) return respondNotStored(503, "no edge runtime to render with");
     const served = await releases.readServedRecord({ slug: edge.slug, isrPrefix: edge.isrPrefix });
@@ -233,7 +233,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       { ...record, edgeWorkers },
     );
     const headers = new Headers(request.headers);
-    headers.delete(EDGE_RELEASE_HEADER);
+    headers.delete(RENDER_RELEASE_HEADER);
     const publicUrl = buildEdgeUrl(request.url);
     const rendered = await invoke(
       entryKey,

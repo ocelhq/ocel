@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import {
   buildOriginUrl,
-  type OriginCoordinates,
-  readOriginCall,
+  type RenderCoordinates,
+  readRenderCall,
   type ServeProps,
 } from "../src/serve-key";
 import { answerEveryRecordWith, capturing, withGlobalFetch } from "./origin-deps";
@@ -171,13 +171,13 @@ describe("the gateway serving a prerender", () => {
   };
 
   function ctxServing() {
-    const origin: (OriginCoordinates & { props: ServeProps; originUrl: string })[] = [];
+    const origin: (RenderCoordinates & { props: ServeProps; originUrl: string })[] = [];
     const serve = ({ props }: { props: ServeProps }) => ({
       fetch: async (request: Request) => {
         if (props.kind === "origin") {
           origin.push({
             props,
-            ...readOriginCall(request.url),
+            ...readRenderCall(request.url),
             originUrl: buildOriginUrl(request.url),
           });
           return new Response("cached page", {

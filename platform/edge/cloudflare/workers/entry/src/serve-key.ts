@@ -13,7 +13,7 @@ export type ServeProps = ObjectProps | OriginPurgeScope;
 
 export const ORIGIN_PURGE_SCOPE: OriginPurgeScope = { kind: "origin" };
 
-export interface OriginCoordinates {
+export interface RenderCoordinates {
   host: string;
   app: string;
   release: string;
@@ -24,15 +24,15 @@ const NO_VARIANT = "-";
 
 const EDGE_SOURCE = "edge:";
 
-export const EDGE_RELEASE_HEADER = "x-ocel-edge-release";
+export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
-export interface EdgeRelease {
+export interface RenderRelease {
   slug: string;
   isrPrefix: string;
   tags: string[];
 }
 
-const ORIGIN_CALL_SEGMENTS = 5;
+const RENDER_CALL_SEGMENTS = 5;
 
 export interface ServeCall {
   url: string;
@@ -68,7 +68,7 @@ export function buildObjectCall(host: string, key: string): ServeCall {
   };
 }
 
-function buildSourceCall(source: string, url: string, coordinates: OriginCoordinates): ServeCall {
+function buildRenderCall(source: string, url: string, coordinates: RenderCoordinates): ServeCall {
   const { pathname, search } = new URL(url);
   const { host, app, release, variant } = coordinates;
   const scope = [host, app, release, source, variant || NO_VARIANT].map(encodeURIComponent);
@@ -78,48 +78,50 @@ function buildSourceCall(source: string, url: string, coordinates: OriginCoordin
   };
 }
 
-export function buildOriginCall(originUrl: string, coordinates: OriginCoordinates): ServeCall {
-  return buildSourceCall(new URL(originUrl).origin, originUrl, coordinates);
+export function buildOriginCall(originUrl: string, coordinates: RenderCoordinates): ServeCall {
+  return buildRenderCall(new URL(originUrl).origin, originUrl, coordinates);
 }
 
 export function buildEdgeCall(
   publicUrl: string,
-  coordinates: OriginCoordinates,
+  coordinates: RenderCoordinates,
   entryKey: string,
 ): ServeCall {
-  return buildSourceCall(`${EDGE_SOURCE}${entryKey}`, publicUrl, coordinates);
+  return buildRenderCall(`${EDGE_SOURCE}${entryKey}`, publicUrl, coordinates);
 }
 
-function splitOriginCall(requestUrl: string): { scope: string[]; rest: string } {
+function splitRenderCall(requestUrl: string): { scope: string[]; rest: string } {
   const { pathname, search } = new URL(requestUrl);
   const segments = pathname.split("/");
-  const scope = segments.slice(1, ORIGIN_CALL_SEGMENTS + 1);
-  if (segments.length < ORIGIN_CALL_SEGMENTS + 2 || scope.includes("")) {
-    throw new Error(`ocel: ${pathname} names no host, app, release, origin and variant`);
+  const scope = segments.slice(1, RENDER_CALL_SEGMENTS + 1);
+  if (segments.length < RENDER_CALL_SEGMENTS + 2 || scope.includes("")) {
+    throw new Error(
+      `ocel: ${pathname} names no host, app, release, origin or edge entry, and variant`,
+    );
   }
   return {
     scope: scope.map(decodeURIComponent),
-    rest: `/${segments.slice(ORIGIN_CALL_SEGMENTS + 1).join("/")}${search}`,
+    rest: `/${segments.slice(RENDER_CALL_SEGMENTS + 1).join("/")}${search}`,
   };
 }
 
-export function readOriginCall(requestUrl: string): Required<OriginCoordinates> {
-  const [host, app, release, , variant] = splitOriginCall(requestUrl).scope;
+export function readRenderCall(requestUrl: string): Required<RenderCoordinates> {
+  const [host, app, release, , variant] = splitRenderCall(requestUrl).scope;
   return { host, app, release, variant: variant === NO_VARIANT ? "" : variant };
 }
 
 export function buildOriginUrl(requestUrl: string): string {
-  const { scope, rest } = splitOriginCall(requestUrl);
+  const { scope, rest } = splitRenderCall(requestUrl);
   return `${scope[3]}${rest}`;
 }
 
 export function readEdgeEntry(requestUrl: string): string | undefined {
-  const source = splitOriginCall(requestUrl).scope[3];
+  const source = splitRenderCall(requestUrl).scope[3];
   return source.startsWith(EDGE_SOURCE) ? source.slice(EDGE_SOURCE.length) : undefined;
 }
 
 export function buildEdgeUrl(requestUrl: string): string {
-  const { scope, rest } = splitOriginCall(requestUrl);
+  const { scope, rest } = splitRenderCall(requestUrl);
   return `https://${scope[0]}${rest}`;
 }
 
