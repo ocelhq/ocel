@@ -4,6 +4,7 @@ import type { BacklogStore } from "./purge-backlog";
 const EVERYTHING_AT = "purgedEverythingAt";
 const RETRY_AT = "retryAt";
 const FAILURES = "failures";
+const COVERED_AT = "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0))";
 
 export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogStore {
   const { sql } = storage;
@@ -20,6 +21,7 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
        purged_at INTEGER,
        invalidated_at INTEGER
      );
+     CREATE INDEX IF NOT EXISTS purged_by_covered_at ON purged (${COVERED_AT});
      CREATE TABLE IF NOT EXISTS meta (
        key TEXT PRIMARY KEY,
        value INTEGER NOT NULL
@@ -45,8 +47,7 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
       return readNumber(
         mode === "purge"
           ? `SELECT purged_at AS value FROM purged WHERE tag = ?`
-          : `SELECT MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) AS value
-             FROM purged WHERE tag = ?`,
+          : `SELECT ${COVERED_AT} AS value FROM purged WHERE tag = ?`,
         tag,
       );
     },
@@ -125,11 +126,7 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
       });
     },
     forgetCoveredBefore(at) {
-      sql.exec(
-        `DELETE FROM purged
-         WHERE MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) < ?`,
-        at,
-      );
+      sql.exec(`DELETE FROM purged WHERE ${COVERED_AT} < ?`, at);
     },
   };
 }

@@ -24,6 +24,25 @@ describeBacklogStore("SQLite", async (body) => {
   });
 });
 
+describe("the SQLite backlog store", () => {
+  it("forgets covered tags through an index rather than reading every tag it keeps", async () => {
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const store = newSqliteBacklogStore(state.storage);
+      for (let i = 0; i < 20; i++) store.settleBatch("purge", [`r1|t${i}`], 10_000 + i);
+      const forget = state.storage.sql
+        .exec<{ detail: string }>(
+          `EXPLAIN QUERY PLAN DELETE FROM purged
+           WHERE MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) < ?`,
+          5_000,
+        )
+        .toArray()
+        .map((row) => row.detail);
+
+      expect(forget.join("\n")).toMatch(/USING INDEX/);
+    });
+  });
+});
+
 describe("the PurgeQueue object", () => {
   it("arms an alarm when a tag is raised", async () => {
     const queue = freshQueue();
