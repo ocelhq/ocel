@@ -24,6 +24,7 @@ import {
 } from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
+import { framePprShell, isPprShellRequest } from "./ppr-shell.mjs";
 import { prerenderedRoutes } from "./prerendered-routes.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
 import { purgedSince, purgeHeaderFor, purgeMark } from "./purge-signal.mjs";
@@ -80,8 +81,11 @@ async function boot(): Promise<void> {
       ? releaseOf(process.env.OCEL_ISR_PREFIX)
       : null;
 
+  const framesPprShells = !dispatchesAtOrigin(process.env);
+
   const invoke: Invoke = (req, res, ocel) => {
     noteRscRequest(req.headers);
+    const pprShell = framesPprShells && isPprShellRequest(req) ? framePprShell(res) : undefined;
     if (shaping) shapeOriginCache(req, res, shaping);
     if (purgeRelease !== null) announcePurges(res, purgeRelease);
     const { scheduleRefresh } = getNextHost();
@@ -97,6 +101,7 @@ async function boot(): Promise<void> {
           relativeProjectDir,
           hostname: req.headers.host,
           ...(isPprResume(req) && { minimalMode: true }),
+          ...pprShell,
         },
       }),
     );

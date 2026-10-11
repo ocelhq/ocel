@@ -12,9 +12,10 @@ import {
   withStatus,
 } from "@framework/next-router/http-cache";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
-import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
+import { edgeCacheHeader, pprShellHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { PurgeGroup } from "@platform/edge-contract/purge";
+import { buildResumeRequest, composePpr, PPR_SHELL_VARIANT, readPostponedShell } from "./ppr";
 import { buildPathTag, ORIGIN_VARY } from "./serve-headers";
 import {
   buildCanonicalUrl,
@@ -89,14 +90,17 @@ function buildVisitorResponse(response: Response, segment: boolean): Response {
   return withStatus(segment ? asSegmentPayload(restored) : restored, tier);
 }
 
+function isPprDocument(request: Request, target: PrerenderContext["target"]): boolean {
+  return target.config.renderingMode === "PARTIALLY_STATIC" && !request.headers.has("rsc");
+}
+
 function findVariant(
   request: Request,
   url: URL,
   target: PrerenderContext["target"],
 ): string | null {
-  const mode = target.config.renderingMode;
-  if (mode === "PARTIALLY_STATIC" && !request.headers.has("rsc")) return null;
-  const variant = buildVariantPath(url.pathname, request.headers, mode);
+  if (isPprDocument(request, target)) return PPR_SHELL_VARIANT;
+  const variant = buildVariantPath(url.pathname, request.headers, target.config.renderingMode);
   return variant === null ? null : variant.slice(url.pathname.length);
 }
 
@@ -160,6 +164,8 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
 
   if (target.entryKey !== undefined) safeHeaders.set(ENTRY_HEADER, target.entryKey);
   safeHeaders.set(edgeCacheHeader, "1");
+  const pprDocument = isPprDocument(request, target);
+  if (pprDocument) safeHeaders.set(pprShellHeader, "1");
   const forwarded = forward(request, safeHeaders);
   const canonicalUrl = buildCanonicalUrl(new URL(forwarded.url), target.allowQuery);
   const coordinates = {
@@ -181,5 +187,14 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     served.headers.set(EDGE_RELEASE_HEADER, JSON.stringify(release));
   }
   const response = await serving.serve({ props }).fetch(served);
-  return buildVisitorResponse(response, isSegmentPrefetch(request.headers));
+  const visitor = buildVisitorResponse(response, isSegmentPrefetch(request.headers));
+  if (!pprDocument) return visitor;
+  const postponed = await readPostponedShell(visitor);
+  if (!postponed) return visitor;
+  return composePpr(
+    postponed.shell,
+    render(
+      buildResumeRequest(ctx.forwardUrl, request, postponed.postponed, target.pprChain?.headers),
+    ),
+  );
 }

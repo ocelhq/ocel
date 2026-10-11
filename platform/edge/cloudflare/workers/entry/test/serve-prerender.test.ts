@@ -235,14 +235,6 @@ describe("a prerender that must not be stored", () => {
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
-  it("goes to the origin for the document of a PPR route, whose resume cannot be stored", async () => {
-    const { res } = await throughOrigin("/blog", undefined, {
-      config: { renderingMode: "PARTIALLY_STATIC" },
-    });
-
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
-  });
-
   it("goes to the origin for bare RSC of a PPR route", async () => {
     const { res } = await throughOrigin(
       "/blog",
@@ -253,6 +245,94 @@ describe("a prerender that must not be stored", () => {
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+  });
+});
+
+describe("the document of a PPR route", () => {
+  const pprTarget: Target = { config: { renderingMode: "PARTIALLY_STATIC" } };
+  const state = "STATE-\u00e9";
+
+  function framedShell(status = "HIT") {
+    return () =>
+      new Response(`${state}<html>shell`, {
+        headers: {
+          "cf-cache-status": status,
+          "x-ocel-postponed-length": String(new TextEncoder().encode(state).byteLength),
+          "x-nextjs-postponed": "1",
+          "cache-control": "public, max-age=0, must-revalidate",
+          "content-length": "99",
+        },
+      });
+  }
+
+  it("asks Serve for the route's static shell, keyed apart from its document and RSC", async () => {
+    const served = fakeServing(framedShell());
+
+    await get("/blog", deps(served, { target: pprTarget }));
+
+    expect(served.calls).toHaveLength(1);
+    expect(served.calls[0].coordinates.variant).toBe(".ppr-shell");
+    expect(served.calls[0].props).toEqual({ kind: "origin" });
+    expect(served.calls[0].request.headers.get("x-ocel-edge-cache")).toBe("1");
+    expect(served.calls[0].request.headers.get("x-ocel-ppr-shell")).toBe("1");
+    expect(served.calls[0].request.headers.has("cookie")).toBe(false);
+  });
+
+  it("serves the cached shell and resumes the dynamic part at the origin with its postponed state", async () => {
+    const served = fakeServing(framedShell());
+    const origin = recorder(() => new Response("<p>dynamic</p>"));
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+      headers: { cookie: "session=1" },
+    });
+
+    expect(await res.text()).toBe("<html>shell<p>dynamic</p>");
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.has("x-ocel-postponed-length")).toBe(false);
+    expect(res.headers.has("content-length")).toBe(false);
+    expect(origin.requests).toHaveLength(1);
+    const resume = origin.requests[0];
+    expect(resume.method).toBe("POST");
+    expect(resume.headers.get("next-resume")).toBe("1");
+    expect(resume.headers.get("cookie")).toBe("session=1");
+    expect(new URL(resume.url).toString()).toBe("https://fn.example.com/blog");
+    expect(await resume.text()).toBe(state);
+  });
+
+  it("resumes with the route's own resume headers", async () => {
+    const served = fakeServing(framedShell());
+    const origin = recorder(() => new Response("<p>dynamic</p>"));
+
+    await get(
+      "/blog",
+      deps(served, {
+        origin,
+        target: { ...pprTarget, pprChain: { headers: { "next-resume": "1", "x-chain": "on" } } },
+      }),
+    );
+
+    expect(origin.requests[0].headers.get("x-chain")).toBe("on");
+  });
+
+  it("serves the shell alone when the resume fails", async () => {
+    const served = fakeServing(framedShell());
+    const origin = recorder(() => new Response("boom", { status: 500 }));
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }));
+
+    expect(await res.text()).toBe("<html>shell");
+  });
+
+  it("serves a shell that did not postpone as the complete page it is", async () => {
+    const served = fakeServing(cached("HIT"));
+    const origin = recorder();
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }));
+
+    expect(await res.text()).toBe("page");
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(origin.requests).toHaveLength(0);
   });
 });
 
