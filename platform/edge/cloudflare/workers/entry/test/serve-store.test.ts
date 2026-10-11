@@ -505,3 +505,56 @@ describe("Serve answering the shell of a PPR document", () => {
     });
   });
 });
+
+describe("Serve answering the shell of a PPR page the store has only the route's fallback for", () => {
+  const fallbackShell = () => ({
+    lastModified: Date.now() - 10_000,
+    value: {
+      kind: "APP_PAGE",
+      status: 200,
+      html: "<html>fallback shell</html>",
+      postponed: "FALLBACK",
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-next-cache-tags": "_N_T_/blog/[id],posts",
+      },
+    },
+  });
+  const call = { call: { entry: { path: "/blog/a", fallbackPath: "/blog/[id]" } } };
+  const shellRequest = (h: Used, headers: Record<string, string> = {}) => {
+    const plain = h.request();
+    const url = buildOriginCall(`${FN_URL}blog/a`, { ...coordinates, variant: ".ppr-shell" }).url;
+    return new Request(url, {
+      headers: { [RENDER_RELEASE_HEADER]: plain.headers.get(RENDER_RELEASE_HEADER)!, ...headers },
+    });
+  };
+
+  it("answers the fallback shell without asking the origin", async () => {
+    await seed(fallbackShell(), fallbackKey);
+    const h = harness(call) as Used;
+
+    const response = await h.fetchOrigin(async () => {
+      const answered = await h.serve.fetch(shellRequest(h));
+      await h.settled();
+      return answered;
+    });
+
+    expect(await response.text()).toBe("FALLBACK<html>fallback shell</html>");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("has the origin render the concrete page on the revalidation, so the store holds its own entry", async () => {
+    await seed(fallbackShell(), fallbackKey);
+    const h = harness(call) as Used;
+
+    const response = await h.fetchOrigin(async () => {
+      const answered = await h.serve.fetch(shellRequest(h, { "if-none-match": 'W/"anything"' }));
+      await h.settled();
+      return answered;
+    });
+
+    expect(await response.text()).toBe("FALLBACK<html>fallback shell</html>");
+    expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
+    expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
+  });
+});
