@@ -44,6 +44,7 @@ import {
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { ownRouteTableKey, readRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
+import { serveNodeOrigin } from "./serve-node";
 import { type ServeFactory, serveObjects } from "./serve-objects";
 import { type Serving, servePrerender } from "./serve-prerender";
 import { newServing, type ServingPorts } from "./serving";
@@ -131,12 +132,18 @@ const routedRuntime: ServeRuntime = {
 };
 
 const originRuntime: ServeRuntime = {
-  serve: ({ record }, releases, base) =>
-    nodeOrigin({
-      app: releases.app ?? record.app,
+  serve: ({ record }, releases, base) => {
+    const app = releases.app ?? record.app;
+    const forward = nodeOrigin({
+      app,
       functionUrls: record.functionUrls,
       originFetch: base.originFetch,
-    }),
+    });
+    const serving = newReleaseServing(base.serving, record, releases, app);
+    const urls = Object.values(record.functionUrls);
+    if (!serving || urls.length !== 1) return forward;
+    return serveNodeOrigin({ serving, app, origin: urls[0], rules: record.cache ?? [], forward });
+  },
 };
 
 function runtimeFor(record: ReleaseRecord): ServeRuntime {
