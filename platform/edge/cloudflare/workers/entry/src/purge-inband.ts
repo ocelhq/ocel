@@ -10,19 +10,21 @@ export interface InBandPurgePorts {
 
 async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePorts): Promise<void> {
   const raisedAt = ports.now();
+  let recorded = false;
   try {
     await ports.times.record(
       mode,
       tags.map((tag) => ({ tag, raisedAt })),
     );
+    recorded = true;
   } catch (error) {
     console.error(`ocel: the purge queue kept no time for ${tags.length} tag(s)`, error);
   }
-  let purged = false;
-  try {
-    purged = (await ports.cache.purge(mode, tags)).ok;
-  } catch {}
-  if (purged) return;
+  if (recorded) {
+    try {
+      if ((await ports.cache.purge(mode, tags)).ok) return;
+    } catch {}
+  }
   try {
     await ports.queue.raise(
       mode,

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
+import { openPurgeQueue, PURGE_QUEUE_NAME } from "./purge-request";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
 import {
   newSqliteTagTimes,
@@ -30,6 +31,12 @@ async function settlePurgeCall(call: () => Promise<PurgeOutcome>): Promise<Purge
   }
 }
 
+export interface TimesRecorder {
+  record(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
+}
+
+const RECORDED_ON_RAISE: TimesRecorder = { record: async () => {} };
+
 export type ServePurgeFactory = (options: { props: ServeProps }) => ServePurgeRpc;
 
 export function newServePort(serve: ServePurgeFactory): PurgePort {
@@ -41,6 +48,7 @@ export function newServePort(serve: ServePurgeFactory): PurgePort {
 
 export class PurgeQueue extends DurableObject<Env> {
   serve: PurgePort;
+  recorder: TimesRecorder;
   private readonly backlog: PurgeBacklog;
   private readonly times: TagTimesStore;
   private failedFlushes = 0;
@@ -49,10 +57,14 @@ export class PurgeQueue extends DurableObject<Env> {
     super(ctx, env);
     this.serve = newServePort(ctx.exports.Serve as unknown as ServePurgeFactory);
     this.times = newSqliteTagTimes(ctx.storage);
+    const queues = (ctx.exports as unknown as { PurgeQueue: DurableObjectNamespace }).PurgeQueue;
+    this.recorder = ctx.id.equals(queues.idFromName(PURGE_QUEUE_NAME))
+      ? RECORDED_ON_RAISE
+      : openPurgeQueue(ctx.exports);
     this.backlog = new PurgeBacklog({
       store: newSqliteBacklogStore(ctx.storage),
       serve: {
-        purgeTags: (mode, tags) => this.serve.purgeTags(mode, tags),
+        purgeTags: (mode, tags) => this.purgeRecorded(mode, tags),
       },
       now: () => Date.now(),
       random: Math.random,
@@ -62,6 +74,23 @@ export class PurgeQueue extends DurableObject<Env> {
           releases.map((tag) => ({ tag, raisedAt: at })),
         ),
     });
+  }
+
+  private async purgeRecorded(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
+    const raisedAt = Date.now();
+    try {
+      await this.recorder.record(
+        mode,
+        tags.map((tag) => ({ tag, raisedAt })),
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        codes: [],
+        message: `the purge queue kept no time: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+    return this.serve.purgeTags(mode, tags);
   }
 
   async record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> {

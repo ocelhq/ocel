@@ -66,8 +66,8 @@ describe("a purge the origin announced in-band", () => {
     expect(recorded).toEqual([{ mode: "invalidate", tags: [{ tag: "r1|a", raisedAt: 5_000 }] }]);
   });
 
-  it("purges even when the times cannot be recorded", async () => {
-    const { port, purged } = ports();
+  it("purges nothing itself when the times cannot be recorded, and hands the tags to the purge queue, which records before it purges", async () => {
+    const { port, purged, raised } = ports();
     port.times.record = async () => {
       throw new Error("times down");
     };
@@ -75,7 +75,8 @@ describe("a purge the origin announced in-band", () => {
 
     try {
       await purgeInBand([{ mode: "purge", tags: ["r1|a"] }], port);
-      expect(purged).toHaveLength(1);
+      expect(purged).toEqual([]);
+      expect(raised).toEqual([{ mode: "purge", tags: [{ tag: "r1|a", raisedAt: 5_000 }] }]);
     } finally {
       logged.mockRestore();
     }
