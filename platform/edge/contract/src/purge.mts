@@ -38,6 +38,31 @@ export interface PurgeSender {
   attemptTimeoutMs?: number;
 }
 
+export const purgeHeader = "x-ocel-purge";
+
+export interface PurgeGroup {
+  mode: PurgeMode;
+  tags: string[];
+}
+
+export function formatPurge(groups: readonly PurgeGroup[]): string | undefined {
+  const written = groups
+    .filter(({ tags }) => tags.length > 0)
+    .map(({ mode, tags }) => `${mode} ${tags.join(",")}`);
+  return written.length > 0 ? written.join(" ") : undefined;
+}
+
+export function readPurge(value: string): PurgeGroup[] {
+  const words = value.split(/\s+/).filter((word) => word !== "");
+  const groups: PurgeGroup[] = [];
+  for (let i = 0; i + 1 < words.length; i += 2) {
+    const mode = words[i];
+    if (mode !== "purge" && mode !== "invalidate") return [];
+    groups.push({ mode, tags: (words[i + 1] ?? "").split(",").filter((tag) => tag !== "") });
+  }
+  return words.length % 2 === 0 ? groups : [];
+}
+
 export function readPurgeEntry(
   tag: string,
   record: TagRecord,

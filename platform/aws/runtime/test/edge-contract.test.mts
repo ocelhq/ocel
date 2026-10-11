@@ -1,6 +1,7 @@
 import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
-import { revalidatedHeader } from "@framework/next-runtime/revalidation-signal";
+import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
+import { purgeHeader } from "@platform/edge-contract/purge";
 import { afterEach, expect, test } from "vitest";
 import { isrPrefixOf, tagNamespace } from "../src/next/tag-index.mjs";
 
@@ -49,6 +50,10 @@ test("no store is adopted when the contract's bucket name is unset", async () =>
   expect(entriesAdopted()).toBe(false);
 });
 
-test("a revalidation is announced under the header name the edge reads", () => {
-  expect(revalidatedHeader).toBe(contract.revalidatedHeader);
+test("a purge is announced under the header name the edge reads", () => {
+  expect(purgeHeader).toBe(contract.purgeHeader);
+});
+
+test("the origin shapes for an edge cache under the header name the edge sends", () => {
+  expect(edgeCacheHeader).toBe(contract.edgeCacheHeader);
 });

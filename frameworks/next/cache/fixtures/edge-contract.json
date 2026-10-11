@@ -13,5 +13,6 @@
   "cacheStoreEnv": {
     "bucket": "OCEL_ISR_STORE_BUCKET"
   },
-  "revalidatedHeader": "x-ocel-revalidated"
+  "purgeHeader": "x-ocel-purge",
+  "edgeCacheHeader": "x-ocel-edge-cache"
 }
