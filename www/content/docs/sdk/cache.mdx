@@ -1,0 +1,77 @@
+---
+title: Cache
+description: Tag cached responses and revalidate them.
+---
+
+An edge that caches your app's responses keeps a page until its lifetime ends. `cacheTag`
+names the page, and `revalidateTag` and `revalidatePath` clear it sooner. They work in any
+Node framework: Express, Hono, Fastify, SvelteKit, and a plain handler. Next has its own
+`revalidateTag` and `revalidatePath`, which work as they always do.
+
+```ts title="app.ts"
+import { cacheTag, revalidatePath, revalidateTag } from "ocel/cache";
+
+app.get("/blog/:slug", async (req, res) => {
+  cacheTag("posts", `post:${req.params.slug}`);
+  res.send(await renderPost(req.params.slug));
+});
+
+app.post("/blog/:slug", async (req, res) => {
+  await savePost(req.params.slug, req.body);
+  revalidateTag(`post:${req.params.slug}`);
+  revalidateTag("posts", "max");
+  revalidatePath("/");
+  res.sendStatus(204);
+});
+```
+
+`cacheTag(...tags)` tags the response the request is answering. Call it before the response
+starts.
+
+`revalidateTag(tag)` expires every response with that tag at once, so the next request renders
+a fresh one. `revalidateTag(tag, "max")` serves them stale while a fresh copy is made.
+
+`revalidatePath(path)` expires the cached page at a pathname such as `/blog/a`, with no query.
+The pathname is the one the edge sees, in ASCII.
+
+All three do nothing where no edge caches the app, as in `ocel dev` and in tests. Call them
+while handling a request, and call the two that revalidate before the response starts: a
+raise made outside a request throws, and one made after the response began is lost and logged.
+Never put a user or tenant id in a tag, because the tag names reach the edge in a response
+header.
+
+## Which responses an edge caches
+
+An edge caches a response when it asks to and the response allows it. A response is cacheable
+when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `private`,
+`no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
+(`s-maxage` and `stale-while-revalidate`) or from the build's cache rules.
+
+A build states cache rules in the `cache` list of its `hosting.json`, which framework adapters
+write. Each rule names a path, the seconds the entry stays fresh, and optionally the seconds
+after which it is no longer served stale:
+
+```json title="hosting.json"
+{
+  "cache": [
+    { "path": "/", "revalidate": 30 },
+    { "path": "/blog/*", "revalidate": 60, "expire": 600 }
+  ]
+}
+```
+
+A path is exact, or ends in `/*` to name every path below it. The first rule that matches wins.
+A rule whose path is malformed, whose `revalidate` is below 1, or whose `expire` does not
+exceed `revalidate` refuses the deploy.
+
+## What each edge does
+
+| Edge | Caches | A revalidation |
+| --- | --- | --- |
+| Cloudflare | the paths a rule names, for `GET` requests with no `Authorization` header, keyed by host and every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered |
+| CloudFront | every response that allows it | reaches nothing: the app says so once in its log, and the entry lapses with its lifetime |
+| Google Cloud load balancer | every response that allows it | reaches nothing, as on CloudFront |
+| No edge | nothing | nothing |
+
+Cloudflare drops the visitor's cookies before it asks your app for a cacheable path, so a
+response there is the same for every visitor.
