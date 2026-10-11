@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -25,13 +24,10 @@ func routedSpec(key string) provider.StackSpec {
 	}
 }
 
-func TestADeployRoutedByAnEdgeRouteTablePutsItAtItsKeyInTheAdoptedCacheStoreAndAnswersTheKey(t *testing.T) {
-	t.Parallel()
-	h := newOffersHarness(t)
-	store, endpoint := serveCacheStore(t)
-	adoptCacheStoreAt(t, h, endpoint)
+func TestADeployRoutedByAnEdgeRouteTablePutsItAtItsKeyInTheTiersAssetsStoreAndAnswersTheKey(t *testing.T) {
+	server := &runServer{}
 	spec := routedSpec(routeTableKey)
-	wrapped := stacks{Stacks: recordingStacks{order: &orderLog{}}, p: programming(h)}
+	wrapped := stacks{Stacks: recordingStacks{order: &orderLog{}}, p: server.open(t)}
 
 	result, err := wrapped.Provision(t.Context(), spec, nil)
 	if err != nil {
@@ -41,54 +37,50 @@ func TestADeployRoutedByAnEdgeRouteTablePutsItAtItsKeyInTheAdoptedCacheStoreAndA
 	if result.RouteTableKey != routeTableKey {
 		t.Errorf("RouteTableKey = %q, want %q", result.RouteTableKey, routeTableKey)
 	}
-	if got := store.keys(); len(got) != 1 || got[0] != routeTableKey {
-		t.Fatalf("the cache store keeps %v, want only %q", got, routeTableKey)
+	uploads := server.stored()
+	if names := uploadNames(uploads); len(names) != 1 {
+		t.Fatalf("the deploy uploaded %v, want only the route table", names)
 	}
-	put := store.objects[routeTableKey]
-	if put.body != string(spec.App.EdgeRouteTable.Table) {
+	put := uploadNamed(t, uploads, provider.StoreAssets+"/"+routeTableKey)
+	if string(put.body) != string(spec.App.EdgeRouteTable.Table) {
 		t.Errorf("uploaded body = %q, want the table verbatim", put.body)
 	}
 	if put.contentType != "application/json" {
 		t.Errorf("content-type = %q, want application/json", put.contentType)
 	}
-	if !strings.Contains(put.authorization, "Credential=r2-key/") {
-		t.Errorf("authorization = %q, want a request signed with the adopted cache store's key", put.authorization)
+	if put.ifGenerationMatch != "0" {
+		t.Errorf("ifGenerationMatch = %q, want 0: the key names the table's digest, so a table already there is this one", put.ifGenerationMatch)
 	}
 }
 
-func TestADeployRoutedByAnEdgeRouteTableWithNoAdoptedCacheStoreIsNotReadyAndDeploysNothing(t *testing.T) {
-	t.Parallel()
-	h := newOffersHarness(t)
-	if err := h.adopt([]edge.Offer{storeOffer("c1"), writerOffer("c2"), certificateOffer()}, nil); err != nil {
-		t.Fatal(err)
-	}
+func TestADeployRoutedByAnEdgeRouteTableWithNoEdgeIsRefusedAndUploadsNothing(t *testing.T) {
+	server := &runServer{}
+	spec := routedSpec(routeTableKey)
+	spec.Edge = nil
 	order := &orderLog{}
-	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
+	wrapped := stacks{Stacks: recordingStacks{order: order}, p: server.open(t)}
 
-	_, err := wrapped.Provision(t.Context(), routedSpec(routeTableKey), nil)
+	_, err := wrapped.Provision(t.Context(), spec, nil)
 
-	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierProduction)) {
-		t.Errorf("Provision = %v, want a not-ready refusal naming %q", err, provider.BootstrapCommand(environment.TierProduction))
+	if refusalCode(err) != refusal.CodeInvalid {
+		t.Errorf("Provision = %v, want an invalid refusal", err)
 	}
-	if len(order.steps) != 0 {
-		t.Errorf("steps = %v, want nothing deployed", order.steps)
+	if len(order.steps) != 0 || len(server.stored()) != 0 {
+		t.Errorf("steps = %v and uploads = %v, want nothing deployed", order.steps, uploadNames(server.stored()))
 	}
 }
 
-func TestADeployRoutedByNoEdgeRouteTableAnswersNoKeyAndReachesNoCacheStore(t *testing.T) {
-	t.Parallel()
-	h := newOffersHarness(t)
-	store, endpoint := serveCacheStore(t)
-	adoptCacheStoreAt(t, h, endpoint)
+func TestADeployRoutedByNoEdgeRouteTableAnswersNoKeyAndUploadsNothing(t *testing.T) {
+	server := &runServer{}
 	spec := routedSpec(routeTableKey)
 	spec.App.EdgeRouteTable = nil
-	wrapped := stacks{Stacks: recordingStacks{order: &orderLog{}}, p: programming(h)}
+	wrapped := stacks{Stacks: recordingStacks{order: &orderLog{}}, p: server.open(t)}
 
 	result, err := wrapped.Provision(t.Context(), spec, nil)
 	if err != nil {
 		t.Fatalf("Provision = %v", err)
 	}
-	if result.RouteTableKey != "" || len(store.keys()) != 0 {
-		t.Errorf("RouteTableKey = %q and the cache store keeps %v, want neither", result.RouteTableKey, store.keys())
+	if result.RouteTableKey != "" || len(server.stored()) != 0 {
+		t.Errorf("RouteTableKey = %q and the deploy uploaded %v, want neither", result.RouteTableKey, uploadNames(server.stored()))
 	}
 }

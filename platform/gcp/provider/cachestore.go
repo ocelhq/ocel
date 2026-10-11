@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -38,18 +37,6 @@ func readAdoptedCacheStore(ctx context.Context, c *clients, records keyvalue.Sto
 		PathStyle:       true,
 	}
 	return cacheStore{bucket: adopted.CacheStore.Bucket, objects: store.Client()}, true, nil
-}
-
-func (s cacheStore) put(ctx context.Context, key, contentType string, body []byte) error {
-	if _, err := s.objects.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(body),
-		ContentType: aws.String(contentType),
-	}); err != nil {
-		return fmt.Errorf("upload %s to bucket %s: %w", key, s.bucket, err)
-	}
-	return nil
 }
 
 func (s cacheStore) removePrefix(ctx context.Context, prefix string) error {
