@@ -14,5 +14,7 @@
     "bucket": "OCEL_ISR_STORE_BUCKET"
   },
   "purgeHeader": "x-ocel-purge",
-  "edgeCacheHeader": "x-ocel-edge-cache"
+  "edgeCacheHeader": "x-ocel-edge-cache",
+  "pprShellHeader": "x-ocel-ppr-shell",
+  "postponedLengthHeader": "x-ocel-postponed-length"
 }

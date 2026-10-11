@@ -264,9 +264,14 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     fallback: { initialRevalidate: 60 },
   };
 
-  it("renders its document through the origin with the entry, never through Serve", async () => {
+  it("reads its shell through Serve and resumes its document at the origin, each with the entry", async () => {
     const origin = recorder();
-    const serving = fakeServing();
+    const serving = fakeServing(
+      () =>
+        new Response("STATE<html>shell", {
+          headers: { "cf-cache-status": "HIT", "x-ocel-postponed-length": "5" },
+        }),
+    );
 
     await dispatchTo(
       "/ppr",
@@ -284,7 +289,10 @@ describe("a PPR prerender whose parent is a node bundle", () => {
       }),
     );
 
-    expect(serving.calls).toHaveLength(0);
+    expect(serving.calls.map(({ request }) => request.headers.get(ENTRY_HEADER))).toEqual([
+      "app/ppr/page",
+    ]);
+    expect(origin.requests.map(({ method }) => method)).toEqual(["POST"]);
     expect(origin.entries()).toEqual(["app/ppr/page"]);
   });
 });
