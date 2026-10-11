@@ -13,14 +13,17 @@ const START = 1_700_000_000_000;
 class FakeServe implements PurgePort {
   calls: { mode: PurgeMode | "everything"; tags: string[] }[] = [];
   refusals: PurgeOutcome[] = [];
+  whileCalled: () => void = () => {};
 
   async purgeTags(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
     this.calls.push({ mode, tags });
+    this.whileCalled();
     return this.refusals.shift() ?? { ok: true };
   }
 
   async purgeEverything(): Promise<PurgeOutcome> {
     this.calls.push({ mode: "everything", tags: [] });
+    this.whileCalled();
     return this.refusals.shift() ?? { ok: true };
   }
 }
@@ -367,6 +370,21 @@ describe("the purge backlog escalating after 60 seconds", () => {
       { mode: "everything", tags: [] },
     ]);
     expect(next).toBeUndefined();
+  });
+
+  it("does not escalate a tag raised again during every call that purges it", async () => {
+    backlog.raise("purge", [raised("r1|hot")]);
+    serve.whileCalled = () => {
+      now += 10;
+      backlog.raise("purge", [raised("r1|hot", now)]);
+    };
+
+    for (let second = 0; second < 70; second++) {
+      now += 1_000;
+      await backlog.flush();
+    }
+
+    expect(serve.calls.filter((call) => call.mode === "everything").length).toBeLessThanOrEqual(1);
   });
 
   it("escalates a backlog that backing off kept past 60 seconds", async () => {

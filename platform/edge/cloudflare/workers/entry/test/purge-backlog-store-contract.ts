@@ -51,6 +51,36 @@ export function describeBacklogStore(
         expect(store.readCoveredAt("b", "purge")).toBe(200);
       }));
 
+    it("dates a raise that outlives a settled batch from when the batch began", () =>
+      withStore((store) => {
+        store.addPending("purge", "a", 100);
+        store.addPending("purge", "a", 400);
+
+        store.settleBatch("purge", ["a"], 200);
+
+        expect(store.readOldestRaisedAt()).toBe(200);
+      }));
+
+    it("keeps the raisedAt of a purge an invalidate of its tag did not cover", () =>
+      withStore((store) => {
+        store.addPending("purge", "a", 100);
+        store.addPending("purge", "a", 400);
+
+        store.settleBatch("invalidate", ["a"], 200);
+
+        expect(store.readOldestRaisedAt()).toBe(100);
+      }));
+
+    it("dates a raise that outlives purging everything from when that began", () =>
+      withStore((store) => {
+        store.addPending("purge", "a", 100);
+        store.addPending("purge", "a", 900);
+
+        store.settleEverything(500);
+
+        expect(store.readOldestRaisedAt()).toBe(500);
+      }));
+
     it("keeps a pending purge when only an invalidate of its tag settles", () =>
       withStore((store) => {
         store.addPending("invalidate", "a", 100);

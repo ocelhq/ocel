@@ -95,6 +95,12 @@ export function sqliteBacklogStore(storage: DurableObjectStorage): BacklogStore 
             mode,
             startedAt,
           );
+          sql.exec(
+            `UPDATE pending SET raised_at = MAX(raised_at, ?) WHERE tag = ? AND mode = ?`,
+            startedAt,
+            tag,
+            mode,
+          );
         }
       });
     },
@@ -102,6 +108,7 @@ export function sqliteBacklogStore(storage: DurableObjectStorage): BacklogStore 
       storage.transactionSync(() => {
         writeMeta(EVERYTHING_AT, startedAt);
         sql.exec(`DELETE FROM pending WHERE latest_at <= ?`, startedAt);
+        sql.exec(`UPDATE pending SET raised_at = MAX(raised_at, ?)`, startedAt);
       });
     },
     writeBackoff(failures, retryAt) {
