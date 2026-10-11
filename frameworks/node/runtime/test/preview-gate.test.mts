@@ -140,6 +140,7 @@ beforeAll(async () => {
 
 afterEach(() => {
   delete process.env.OCEL_PREVIEW_GATE;
+  delete process.env.OCEL_PREVIEW_GATE_AT_EDGE;
   delete process.env.OCEL_ORIGIN_DISPATCH;
   delete process.env.OCEL_ORIGIN_SECRET;
   seen = undefined;
@@ -405,6 +406,90 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 });
 
+describe.each(Object.keys(doors))("%s behind an edge that gates the preview", (door) => {
+  function gateIsAtTheEdge(): void {
+    gateIs();
+    process.env.OCEL_PREVIEW_GATE_AT_EDGE = "true";
+  }
+
+  test("a request the edge admitted is served untouched, with no second check of credentials", async () => {
+    gateIsAtTheEdge();
+    const port = await start(door, echo);
+
+    const answer = await reach(port, { headers: { authorization: "Bearer app-token" } });
+
+    expect(answer.status).toBe(200);
+    expect(answer.body).toBe("served");
+    expect(seen?.authorization).toBe("Bearer app-token");
+  });
+
+  test("the app adds nothing to a response the edge admitted", async () => {
+    gateIsAtTheEdge();
+    const port = await start(door, echo);
+
+    const answer = await reach(port);
+
+    expect(answer.headers["x-robots-tag"]).toBeUndefined();
+    expect(answer.headers["cache-control"]).toBeUndefined();
+  });
+
+  test("the password posted to the login path answers a session cookie", async () => {
+    gateIsAtTheEdge();
+    const port = await start(door, echo);
+
+    const login = await reach(port, {
+      method: "POST",
+      path: "/.ocel/preview/login",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `password=${encodeURIComponent(PASSWORD)}&next=%2Forders`,
+    });
+
+    expect(login.status).toBe(303);
+    expect(login.headers.location).toBe("/orders");
+    expect(String(login.headers["set-cookie"]?.[0])).toMatch(/^__Host-ocel-preview=/);
+    expect(login.headers["cache-control"]).toBe("private, no-store");
+    expect(reached).toBe(0);
+  });
+
+  test("a wrong password at the login path is refused, and a login body past a kilobyte too", async () => {
+    gateIsAtTheEdge();
+    const port = await start(door, echo);
+    const post = (body: string): Promise<Answer> =>
+      reach(port, {
+        method: "POST",
+        path: "/.ocel/preview/login",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body,
+      });
+
+    expect((await post("password=guess&next=%2F")).status).toBe(401);
+    expect((await post(`password=${"a".repeat(2048)}`)).status).toBe(413);
+    expect(reached).toBe(0);
+  });
+
+  test("keys that cannot be read still refuse the login rather than answer it", async () => {
+    process.env.OCEL_PREVIEW_GATE = "{not json";
+    process.env.OCEL_PREVIEW_GATE_AT_EDGE = "true";
+    const port = await start(door, echo);
+
+    const login = await reach(port, {
+      method: "POST",
+      path: "/.ocel/preview/login",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `password=${encodeURIComponent(PASSWORD)}`,
+    });
+
+    expect(login.status).toBe(503);
+  });
+
+  test("the flag leaves the environment the app can read", async () => {
+    gateIsAtTheEdge();
+    await start(door, echo);
+
+    expect(process.env.OCEL_PREVIEW_GATE_AT_EDGE).toBeUndefined();
+  });
+});
+
 describe("serveLocal", () => {
   test("the loopback an entry dispatches to is not gated again", async () => {
     gateIs();
@@ -485,6 +570,15 @@ describe("serveServer upgrades", () => {
     expect(await reachUpgrade(port, { authorization: basic(PASSWORD) })).toBe(101);
     expect(upgraded).toBe(1);
     expect(seenUpgrade?.authorization).toBeUndefined();
+  });
+
+  test("an upgrade the edge admitted reaches the app without a second check", async () => {
+    gateIs();
+    process.env.OCEL_PREVIEW_GATE_AT_EDGE = "true";
+    const port = await startUpgrading("before");
+
+    expect(await reachUpgrade(port)).toBe(101);
+    expect(upgraded).toBe(1);
   });
 
   test("an upgrade without the origin secret is refused before the gate", async () => {
