@@ -93,3 +93,22 @@ func TestASignedSessionIsAdmittedOnTheHostItWasSignedForAndNoOther(t *testing.T)
 		t.Error("the signed session was admitted on another host")
 	}
 }
+
+func TestOnlyAPostToTheLoginPathIsTheLogin(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		method, target string
+		want           bool
+	}{
+		{"POST", previewgate.LoginPath, true},
+		{"POST", previewgate.LoginPath + "?next=%2F", true},
+		{"GET", previewgate.LoginPath, false},
+		{"POST", previewgate.LoginPath + "/", false},
+		{"POST", "/", false},
+	} {
+		if got := previewgate.IsLogin(tc.method, tc.target); got != tc.want {
+			t.Errorf("IsLogin(%s, %s) = %t, want %t", tc.method, tc.target, got, tc.want)
+		}
+	}
+}

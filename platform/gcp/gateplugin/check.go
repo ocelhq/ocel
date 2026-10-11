@@ -9,10 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
-const (
-	methodPost   = "POST"
-	cookieHeader = "cookie"
-)
+const cookieHeader = "cookie"
 
 func ReadRequest(pairs [][2]string) previewgate.Request {
 	req := previewgate.Request{Header: previewgate.Header{}}
@@ -71,7 +68,7 @@ func (c Config) Check(req previewgate.Request, now time.Time) previewgate.Verdic
 	if !gated {
 		return previewgate.Verdict{Forward: req.Header}
 	}
-	if path, _, _ := strings.Cut(req.Target, "?"); req.Method == methodPost && path == previewgate.LoginPath {
+	if previewgate.IsLogin(req.Method, req.Target) {
 		return previewgate.Verdict{Forward: req.Header}
 	}
 	return gate.Check(req, now)

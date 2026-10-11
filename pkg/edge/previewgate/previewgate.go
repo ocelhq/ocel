@@ -26,21 +26,21 @@ const (
 )
 
 const (
-	CookieName                     = "__Host-ocel-preview"
-	LoginPath                      = "/.ocel/preview/login"
-	HeaderBypass                   = "x-ocel-preview-bypass"
-	HeaderSetBypassCookie          = "x-ocel-set-bypass-cookie"
-	SessionLifetime                = 7 * 24 * time.Hour
-	LoginBodyMaxBytes              = 1024
-	CacheControl                   = "private, no-store"
-	RobotsTag                      = "noindex"
-	previewFormContentType         = "application/x-www-form-urlencoded"
-	previewHTMLContentType         = "text/html; charset=utf-8"
-	previewSignatureHexLen         = 2 * sha256.Size
-	previewCookiePurpose           = "cookie"
-	previewPasswordPurpose         = "password"
-	previewBypassPurpose           = "bypass"
-	previewIncorrectPasswordNotice = "Incorrect password."
+	CookieName              = "__Host-ocel-preview"
+	LoginPath               = "/.ocel/preview/login"
+	HeaderBypass            = "x-ocel-preview-bypass"
+	HeaderSetBypassCookie   = "x-ocel-set-bypass-cookie"
+	SessionLifetime         = 7 * 24 * time.Hour
+	LoginBodyMaxBytes       = 1024
+	CacheControl            = "private, no-store"
+	RobotsTag               = "noindex"
+	formContentType         = "application/x-www-form-urlencoded"
+	htmlContentType         = "text/html; charset=utf-8"
+	signatureHexLen         = 2 * sha256.Size
+	cookiePurpose           = "cookie"
+	passwordPurpose         = "password"
+	bypassPurpose           = "bypass"
+	incorrectPasswordNotice = "Incorrect password."
 )
 
 type Gate struct {
@@ -83,26 +83,30 @@ type Verdict struct {
 }
 
 func HashPassword(key, password string) string {
-	return signPreview(key, previewPasswordPurpose, password)
+	return sign(key, passwordPurpose, password)
+}
+
+func IsLogin(method, target string) bool {
+	path, _, _ := strings.Cut(target, "?")
+	return method == methodPost && path == LoginPath
 }
 
 func (g Gate) Check(req Request, now time.Time) Verdict {
-	path, _, _ := strings.Cut(req.Target, "?")
-
-	if req.Method == methodPost && path == LoginPath {
+	if IsLogin(req.Method, req.Target) {
 		return g.checkLogin(req, now)
 	}
+	path, _, _ := strings.Cut(req.Target, "?")
 
 	hasBasic := g.hasPassword(joinHeaderValues(req.Header, "Authorization"))
 	hasBypass := g.hasBypassSecret(joinHeaderValues(req.Header, HeaderBypass))
 	hasCookie := g.hasSession(req, now)
 
 	if hasBypass && joinHeaderValues(req.Header, HeaderSetBypassCookie) == "true" && (req.Method == methodGet || req.Method == methodHead) {
-		return g.redirect(sanitizePreviewNext(req.Target), req.Host, now)
+		return g.redirect(sanitizeNext(req.Target), req.Host, now)
 	}
 
 	if !hasBasic && !hasBypass && !hasCookie && !g.allowsOptions(req.Method, path) {
-		return answerLoginForm(statusUnauthorized, sanitizePreviewNext(req.Target), false)
+		return answerLoginForm(statusUnauthorized, sanitizeNext(req.Target), false)
 	}
 
 	forward := req.Header.Clone()
@@ -111,7 +115,7 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 	if hasBasic {
 		forward.Del("Authorization")
 	}
-	dropPreviewCookie(forward)
+	dropSessionCookie(forward)
 	return Verdict{Forward: forward, ResponseHeader: Header{"X-Robots-Tag": {RobotsTag}}}
 }
 
@@ -120,11 +124,11 @@ func (g Gate) checkLogin(req Request, now time.Time) Verdict {
 		return answerStatus(statusRequestEntityTooLarge)
 	}
 	mediaType, _, _ := strings.Cut(joinHeaderValues(req.Header, "Content-Type"), ";")
-	if toLowerASCII(strings.Trim(mediaType, " \t")) != previewFormContentType {
+	if toLowerASCII(strings.Trim(mediaType, " \t")) != formContentType {
 		return answerStatus(statusUnsupportedMediaType)
 	}
-	form := parsePreviewForm(req.Body)
-	next := sanitizePreviewNext(form["next"])
+	form := parseForm(req.Body)
+	next := sanitizeNext(form["next"])
 	if !g.isPassword(form["password"]) {
 		return answerLoginForm(statusUnauthorized, next, true)
 	}
@@ -153,10 +157,10 @@ func (g Gate) hasBypassSecret(value string) bool {
 	if value == "" || !isASCII(value) {
 		return false
 	}
-	want := signPreview(g.Key, previewBypassPurpose, value)
+	want := sign(g.Key, bypassPurpose, value)
 	matched := false
 	for _, secret := range g.BypassSecrets {
-		if secret != "" && hmac.Equal([]byte(signPreview(g.Key, previewBypassPurpose, secret)), []byte(want)) {
+		if secret != "" && hmac.Equal([]byte(sign(g.Key, bypassPurpose, secret)), []byte(want)) {
 			matched = true
 		}
 	}
@@ -164,9 +168,9 @@ func (g Gate) hasBypassSecret(value string) bool {
 }
 
 func (g Gate) hasSession(req Request, now time.Time) bool {
-	for _, value := range readPreviewCookies(req.Header) {
+	for _, value := range readSessionCookies(req.Header) {
 		expiry, signature, found := strings.Cut(value, ".")
-		if !found || len(signature) != previewSignatureHexLen || !isLowerHex(signature) || !isDigits(expiry) {
+		if !found || len(signature) != signatureHexLen || !isLowerHex(signature) || !isDigits(expiry) {
 			continue
 		}
 		seconds, err := strconv.ParseInt(expiry, 10, 64)
@@ -194,7 +198,7 @@ func (g Gate) allowsOptions(method, path string) bool {
 }
 
 func (g Gate) signSession(host, expiry string) string {
-	return signPreview(g.Key, previewCookiePurpose, toLowerASCII(host)+"\n"+expiry)
+	return sign(g.Key, cookiePurpose, toLowerASCII(host)+"\n"+expiry)
 }
 
 func (g Gate) SignSession(host string, now time.Time) string {
@@ -213,16 +217,16 @@ func (g Gate) redirect(location, host string, now time.Time) Verdict {
 func answerLoginForm(status int, next string, incorrect bool) Verdict {
 	notice := ""
 	if incorrect {
-		notice = `<p role="alert">` + previewIncorrectPasswordNotice + `</p>`
+		notice = `<p role="alert">` + incorrectPasswordNotice + `</p>`
 	}
 	header := newGateResponseHeader()
-	header.Set("Content-Type", previewHTMLContentType)
+	header.Set("Content-Type", htmlContentType)
 	body := `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
 		`<title>Preview protected</title></head><body>` + notice +
 		`<form method="post" action="` + LoginPath + `">` +
 		`<label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>` +
-		`<input type="hidden" name="next" value="` + escapePreviewHTML(next) + `">` +
+		`<input type="hidden" name="next" value="` + escapeHTML(next) + `">` +
 		`<button type="submit">Continue</button></form></body></html>`
 	return Verdict{Response: &Response{Status: status, Header: header, Body: body}}
 }
@@ -238,7 +242,7 @@ func newGateResponseHeader() Header {
 	}
 }
 
-func signPreview(key, purpose, input string) string {
+func sign(key, purpose, input string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(purpose + "\n" + input))
 	return hex.EncodeToString(mac.Sum(nil))
@@ -248,7 +252,7 @@ func joinHeaderValues(header Header, name string) string {
 	return strings.Join(header.Values(name), ", ")
 }
 
-func sanitizePreviewNext(target string) string {
+func sanitizeNext(target string) string {
 	if !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.HasPrefix(target, `/\`) {
 		return "/"
 	}
@@ -263,7 +267,7 @@ func sanitizePreviewNext(target string) string {
 	return target
 }
 
-func parsePreviewForm(body []byte) map[string]string {
+func parseForm(body []byte) map[string]string {
 	form := map[string]string{}
 	for _, pair := range bytes.Split(body, []byte("&")) {
 		if len(pair) == 0 {
@@ -303,9 +307,9 @@ func decodeHexByte(digits []byte) (byte, bool) {
 	return decoded[0], err == nil
 }
 
-var previewHTMLEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
+var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 
-func escapePreviewHTML(s string) string { return previewHTMLEscaper.Replace(s) }
+func escapeHTML(s string) string { return htmlEscaper.Replace(s) }
 
 func readCookiePairs(header Header) []string {
 	var pairs []string
@@ -319,7 +323,7 @@ func readCookiePairs(header Header) []string {
 	return pairs
 }
 
-func readPreviewCookies(header Header) []string {
+func readSessionCookies(header Header) []string {
 	var values []string
 	for _, pair := range readCookiePairs(header) {
 		if name, value, _ := strings.Cut(pair, "="); name == CookieName {
@@ -329,7 +333,7 @@ func readPreviewCookies(header Header) []string {
 	return values
 }
 
-func dropPreviewCookie(header Header) {
+func dropSessionCookie(header Header) {
 	var kept []string
 	for _, pair := range readCookiePairs(header) {
 		if name, _, _ := strings.Cut(pair, "="); name != CookieName {

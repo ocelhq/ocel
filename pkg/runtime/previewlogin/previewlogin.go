@@ -35,10 +35,6 @@ func FromEnv(env []string) (*Login, []string) {
 	return login, kept
 }
 
-func IsLogin(method, path string) bool {
-	return method == http.MethodPost && path == previewgate.LoginPath
-}
-
 func ReadBody(body io.Reader) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(body, previewgate.LoginBodyMaxBytes+1))
 }
