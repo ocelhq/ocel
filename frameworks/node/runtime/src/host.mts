@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import Module from "node:module";
 import net from "node:net";
+import type { Duplex } from "node:stream";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -216,10 +217,19 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   };
 }
 
+const previewGateVar = "OCEL_PREVIEW_GATE";
+
+function takeOriginGate(env: NodeJS.ProcessEnv): string | undefined {
+  const declared = env[previewGateVar];
+  delete env[previewGateVar];
+  return declared;
+}
+
 interface Trust {
   entry?: boolean;
   forwarded?: boolean;
   guard?: OriginGuard;
+  gate?: string;
 }
 
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
@@ -257,6 +267,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
     const admitted = !trust.guard || trust.guard(req.headers);
+    const reachedHost = req.headers.host ?? "";
     normalizeLoopbackHeaders(req.headers, trust);
     const start = performance.now();
 
@@ -292,12 +303,16 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
     res.once("close", finalize);
 
     Promise.resolve()
-      .then(() => {
+      .then(async () => {
         if (!admitted) {
           req.resume();
           res.writeHead(403);
           res.end();
           return;
+        }
+        if (trust.gate !== undefined) {
+          const { admitPreview } = await import("./preview-gate.mjs");
+          if (!(await admitPreview(trust.gate, req, reachedHost, res))) return;
         }
         return invoke(req, res, { waitUntil });
       })
@@ -309,11 +324,13 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   };
 }
 
+function originTrust(env: NodeJS.ProcessEnv, forwarded: boolean): Trust {
+  return { forwarded, guard: originGuard(env), gate: takeOriginGate(env) };
+}
+
 export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
   return startServer(
-    http.createServer(
-      wrapWithOcelContext(invoke, { forwarded: true, guard: originGuard(process.env) }),
-    ),
+    http.createServer(wrapWithOcelContext(invoke, originTrust(process.env, true))),
     onListening,
     true,
     bind,
@@ -322,7 +339,7 @@ export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bi
 
 export function serveEntry(invoke: Invoke, bind?: Bind): Promise<void> {
   return startServer(
-    http.createServer(wrapWithOcelContext(invoke, { guard: originGuard(process.env) })),
+    http.createServer(wrapWithOcelContext(invoke, originTrust(process.env, false))),
     undefined,
     true,
     bind,
@@ -336,42 +353,57 @@ export function serveLocal(invoke: Invoke): Promise<number> {
   );
 }
 
+type Listener = (...args: any[]) => void;
+
+type UpgradeListener = (req: http.IncomingMessage, socket: Duplex, head: Buffer) => void;
+
+const forbiddenUpgradeAnswer =
+  "HTTP/1.1 403 Forbidden\r\nconnection: close\r\ncontent-length: 0\r\n\r\n";
+
+function wrapUpgrade(server: http.Server, lifted: Listener[], trust: Trust): UpgradeListener {
+  return (req, socket, head) => {
+    const admitted = !trust.guard || trust.guard(req.headers);
+    const reachedHost = req.headers.host ?? "";
+    normalizeLoopbackHeaders(req.headers, trust);
+    Promise.resolve()
+      .then(async () => {
+        if (!admitted) {
+          socket.end(forbiddenUpgradeAnswer);
+          return;
+        }
+        if (trust.gate !== undefined) {
+          const { admitPreviewUpgrade } = await import("./preview-gate.mjs");
+          if (!(await admitPreviewUpgrade(trust.gate, req, reachedHost, socket))) return;
+        }
+        for (const listener of [...lifted]) listener.call(server, req, socket, head);
+      })
+      .catch((err: any) => {
+        sendControl("log", { level: "error", message: String(err?.stack || err) });
+        socket.destroy();
+      });
+  };
+}
+
 export function serveServer(
   server: http.Server,
   onListening?: OnListening,
   bind?: Bind,
 ): Promise<void> {
-  const lifted = server.listeners("request") as http.RequestListener[];
-  server.removeAllListeners("request");
+  type Lifted = Listener & { listener?: Listener };
 
+  const lifted: Record<string, Lifted[]> = {};
+  for (const event of ["request", "upgrade"]) {
+    lifted[event] = server.listeners(event) as Lifted[];
+    server.removeAllListeners(event);
+  }
+  const isLifted = (event: string | symbol): event is "request" | "upgrade" =>
+    event === "request" || event === "upgrade";
+
+  const trust = originTrust(process.env, true);
   const invoke: Invoke = (req, res) => {
-    for (const listener of [...lifted]) listener.call(server, req, res);
+    for (const listener of [...lifted.request!]) listener.call(server, req, res);
   };
-  server.on(
-    "request",
-    wrapWithOcelContext(invoke, { forwarded: true, guard: originGuard(process.env) }),
-  );
-
-  type Lifted = http.RequestListener & { listener?: http.RequestListener };
-
-  const drop = (listener: http.RequestListener): void => {
-    for (let i = lifted.length - 1; i >= 0; i--) {
-      const entry = lifted[i] as Lifted;
-      if (entry === listener || entry.listener === listener) {
-        lifted.splice(i, 1);
-        return;
-      }
-    }
-  };
-
-  const onceWrapper = (listener: http.RequestListener): Lifted => {
-    const wrapper: Lifted = function (this: unknown, req, res) {
-      drop(wrapper);
-      listener.call(this, req, res);
-    };
-    wrapper.listener = listener;
-    return wrapper;
-  };
+  server.on("request", wrapWithOcelContext(invoke, trust));
 
   const realOn = server.on.bind(server);
   const realOnce = server.once.bind(server);
@@ -379,42 +411,72 @@ export function serveServer(
   const realPrependOnceListener = server.prependOnceListener.bind(server);
   const realRemoveListener = server.removeListener.bind(server);
 
+  const upgradeDoor = wrapUpgrade(server, lifted.upgrade!, trust);
+  let upgradeDoorOpen = false;
+  const matchUpgradeDoor = (): void => {
+    const wanted = lifted.upgrade!.length > 0;
+    if (wanted === upgradeDoorOpen) return;
+    upgradeDoorOpen = wanted;
+    if (wanted) realOn("upgrade", upgradeDoor);
+    else realRemoveListener("upgrade", upgradeDoor);
+  };
+  matchUpgradeDoor();
+
+  const drop = (event: "request" | "upgrade", listener: Listener): void => {
+    const listeners = lifted[event]!;
+    for (let i = listeners.length - 1; i >= 0; i--) {
+      const entry = listeners[i]!;
+      if (entry === listener || entry.listener === listener) {
+        listeners.splice(i, 1);
+        break;
+      }
+    }
+    matchUpgradeDoor();
+  };
+
+  const onceWrapper = (event: "request" | "upgrade", listener: Listener): Lifted => {
+    const wrapper: Lifted = function (this: unknown, ...args: any[]) {
+      drop(event, wrapper);
+      listener.apply(this, args);
+    };
+    wrapper.listener = listener;
+    return wrapper;
+  };
+
   const add = (
-    listener: http.RequestListener,
+    event: "request" | "upgrade",
+    listener: Listener,
     opts: { once?: boolean; prepend?: boolean },
   ): http.Server => {
-    const entry = opts.once ? onceWrapper(listener) : listener;
-    if (opts.prepend) lifted.unshift(entry);
-    else lifted.push(entry);
+    const entry = opts.once ? onceWrapper(event, listener) : listener;
+    if (opts.prepend) lifted[event]!.unshift(entry);
+    else lifted[event]!.push(entry);
+    matchUpgradeDoor();
     return server;
   };
 
-  type Listener = (...args: any[]) => void;
-
   server.on = ((event: string, listener: Listener) =>
-    event === "request"
-      ? add(listener as http.RequestListener, {})
-      : realOn(event, listener)) as typeof server.on;
+    isLifted(event) ? add(event, listener, {}) : realOn(event, listener)) as typeof server.on;
   server.addListener = server.on as typeof server.addListener;
 
   server.once = ((event: string, listener: Listener) =>
-    event === "request"
-      ? add(listener as http.RequestListener, { once: true })
+    isLifted(event)
+      ? add(event, listener, { once: true })
       : realOnce(event, listener)) as typeof server.once;
 
   server.prependListener = ((event: string, listener: Listener) =>
-    event === "request"
-      ? add(listener as http.RequestListener, { prepend: true })
+    isLifted(event)
+      ? add(event, listener, { prepend: true })
       : realPrependListener(event, listener)) as typeof server.prependListener;
 
   server.prependOnceListener = ((event: string, listener: Listener) =>
-    event === "request"
-      ? add(listener as http.RequestListener, { once: true, prepend: true })
+    isLifted(event)
+      ? add(event, listener, { once: true, prepend: true })
       : realPrependOnceListener(event, listener)) as typeof server.prependOnceListener;
 
   server.removeListener = ((event: string, listener: Listener) => {
-    if (event !== "request") return realRemoveListener(event, listener);
-    drop(listener as http.RequestListener);
+    if (!isLifted(event)) return realRemoveListener(event, listener);
+    drop(event, listener);
     return server;
   }) as typeof server.removeListener;
   server.off = server.removeListener as typeof server.off;
