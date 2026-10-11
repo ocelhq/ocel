@@ -268,6 +268,39 @@ describe("the /_next/image route through Workers Cache", () => {
     }
   });
 
+  it("tells Next's cache status from the tier Workers Cache answered from", async () => {
+    for (const [cfStatus, expected] of [
+      ["HIT", "HIT"],
+      ["STALE", "STALE"],
+      ["MISS", "MISS"],
+    ] as const) {
+      const { deps } = cachedImageDeps(() => {
+        const stored = optimized(cfStatus);
+        stored.headers.set("x-nextjs-cache", "MISS");
+        return stored;
+      });
+
+      const response = await serve(imageRequest(IMAGE), deps);
+
+      expect(response.headers.get("x-nextjs-cache")).toBe(expected);
+    }
+  });
+
+  it("asks Serve for an image whose path is not ASCII", async () => {
+    const { fake, deps } = cachedImageDeps();
+
+    const response = await serve(
+      imageRequest("https://app.example/_next/image?url=%2F%E5%9B%BE%E7%89%87.png&w=640&q=75"),
+      deps,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
+    const header = fake.calls[0].request.headers.get(IMAGE_CALL_HEADER)!;
+    expect(header).toMatch(/^[\x20-\x7e]*$/);
+    expect(JSON.parse(header).payload.url).toBe("/图片.png");
+  });
+
   it("serves a static import as immutable whatever lifetime Workers Cache keeps it for", async () => {
     const { deps } = cachedImageDeps();
 

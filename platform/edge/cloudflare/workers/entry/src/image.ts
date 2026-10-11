@@ -1,4 +1,4 @@
-import { withStatus } from "@framework/next-router/http-cache";
+import { NEXT_CACHE_STATUS, withStatus } from "@framework/next-router/http-cache";
 import {
   type ImageCache,
   type ImageCacheContext,
@@ -35,8 +35,16 @@ function buildVisitorResponse(response: Response, context: ImageCacheContext): R
     headers.delete(name);
   }
   if (response.status === 200) headers.set("vary", "accept");
+  if (headers.has(NEXT_CACHE_STATUS) && tier !== "MISS") headers.set(NEXT_CACHE_STATUS, tier);
   const visitor = new Response(response.body, { status: response.status, headers });
   return withServedCacheControl(withStatus(visitor, tier), context);
+}
+
+function asciiJson(value: unknown): string {
+  return JSON.stringify(value).replace(
+    /[\u007f-\uffff]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 }
 
 export function workersCacheImage(deps: WorkersCacheImageDeps): ImageCache {
@@ -54,7 +62,7 @@ export function workersCacheImage(deps: WorkersCacheImageDeps): ImageCache {
     const release: RenderRelease = { slug: serving.slug, isrPrefix: serving.isrPrefix, tags: [] };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
     const call: ImageCall = { payload: context.payload, minimumCacheTTL: context.minimumCacheTTL };
-    served.headers.set(IMAGE_CALL_HEADER, JSON.stringify(call));
+    served.headers.set(IMAGE_CALL_HEADER, asciiJson(call));
 
     const response = await serving.serve({ props }).fetch(served);
     if (response.headers.has(SERVE_REFUSED_HEADER)) {
