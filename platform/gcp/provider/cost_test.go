@@ -36,7 +36,7 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 
 func costServedIn(t *testing.T, region string) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	for _, variable := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT", "OCEL_FLOCI_TASKS_ENDPOINT"} {
+	for _, variable := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT"} {
 		t.Setenv(variable, "")
 	}
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: region})
@@ -456,7 +456,7 @@ func nextManifest(container bool) *contractv1.Manifest {
 	return &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{app}}
 }
 
-func TestShapeOfAServerlessNextAppListsTheTiersQueueAndRefreshAccount(t *testing.T) {
+func TestShapeOfAServerlessNextAppListsNoTaskQueueOrAccountBeyondAContainerAppsOwn(t *testing.T) {
 	client, _ := costServed(t)
 	shaped := func(container bool) *costv1.ResourceSet {
 		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -469,22 +469,16 @@ func TestShapeOfAServerlessNextAppListsTheTiersQueueAndRefreshAccount(t *testing
 		return set
 	}
 
-	serverless, container := shaped(false), shaped(true)
+	counts, without := typeCounts(shaped(false)), typeCounts(shaped(true))
 
-	counts, without := typeCounts(serverless), typeCounts(container)
-	if counts["google_cloud_tasks_queue"] != 1 {
-		t.Errorf("counts = %v, want the tier's delay queue", counts)
+	if counts["google_cloud_tasks_queue"] != 0 {
+		t.Errorf("counts = %v, want no delay queue: a Next app that declares no topic or task queues nothing", counts)
 	}
-	if counts["google_service_account"] != without["google_service_account"]+1 {
-		t.Errorf("counts = %v, want the refresh account beside the %d accounts of an app that refreshes on its own", counts, without["google_service_account"])
+	if counts["google_service_account"] != without["google_service_account"] {
+		t.Errorf("counts = %v, want the %d accounts of a container app", counts, without["google_service_account"])
 	}
 	if counts["google_firestore_database"] != without["google_firestore_database"] {
-		t.Errorf("counts = %v, want no task database: a refresh keeps no run records", counts)
-	}
-	for _, r := range serverless.GetResources() {
-		if r.GetType() == "google_cloud_tasks_queue" && r.GetScope() != "project:shop/shared:production" {
-			t.Errorf("the queue is scoped %q, want the tier it is shared by", r.GetScope())
-		}
+		t.Errorf("counts = %v, want no task database", counts)
 	}
 }
 
@@ -504,7 +498,7 @@ func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
 	}
 }
 
-func TestShapeOfANextPreviewBehindIdentityAwareProxyListsNoRefreshQueueAndKeepsItsCPU(t *testing.T) {
+func TestShapeOfANextPreviewBehindIdentityAwareProxyKeepsItsCPU(t *testing.T) {
 	client, _ := costServed(t)
 	shaped := func(container bool) *costv1.ResourceSet {
 		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -517,15 +511,8 @@ func TestShapeOfANextPreviewBehindIdentityAwareProxyListsNoRefreshQueueAndKeepsI
 		return set
 	}
 
-	set, container := shaped(false), shaped(true)
+	set := shaped(false)
 
-	counts, without := typeCounts(set), typeCounts(container)
-	if counts["google_cloud_tasks_queue"] != 0 {
-		t.Errorf("counts = %v, want no delay queue: a gated preview refreshes on its own", counts)
-	}
-	if counts["google_service_account"] != without["google_service_account"] {
-		t.Errorf("counts = %v, want no refresh account beside the %d accounts of an app that refreshes on its own", counts, without["google_service_account"])
-	}
 	for _, r := range set.GetResources() {
 		if r.GetType() != "google_cloud_run_v2_service" || !strings.HasSuffix(r.GetScope(), "/app:web") {
 			continue

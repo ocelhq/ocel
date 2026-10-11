@@ -65,9 +65,6 @@ func (p *Provider) ensureAppAccount(ctx context.Context, c *clients, spec provid
 		grants = append(grants, c.taskGrants(ctx, spec, member, declared)...)
 	}
 	grants = append(grants, c.bucketGrants(ctx, spec, member)...)
-	if refreshesByTask(spec.App.Framework, spec.App.Compute, factsOf(spec.Edge), p.servesBehindIAP(spec)) {
-		grants = append(grants, c.refreshGrants(ctx, tier, member)...)
-	}
 	for _, grant := range grants {
 		if err := untilVisible(ctx, grant); err != nil {
 			return "", err
@@ -101,24 +98,6 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 		},
 		func() error {
 			return topics.Topology{Names: taskNames(c.Names, spec.Ref), Topics: declared, Publisher: member}.GrantPublisher(ctx, c.Workload())
-		},
-	}
-}
-
-func (c *clients) refreshGrants(ctx context.Context, tier environment.Tier, member string) []func() error {
-	return []func() error{
-		func() error {
-			err := c.bindAccountRole(ctx, c.RefreshAccount(tier), runAsRole, member, true)
-			if absent(err) {
-				return refusal.Refuse(refusal.CodeNotReady,
-					"the %s tier's bootstrap predates the account Cloud Tasks signs a Next app's page refreshes as.\nRun `%s %s`, then deploy again",
-					tier, provider.BootstrapFeaturesCommand(tier), tasksFeature)
-			}
-			return explainMissingGrant(err, c.AppAccountsRolePath())
-		},
-		func() error {
-			return explainMissingGrant(c.bindQueueRoles(ctx, tier, member, queueRoles, queueRoles),
-				queueAdminGrant(c.DelayQueuePath(c.region, tier)))
 		},
 	}
 }

@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"slices"
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -78,7 +77,6 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
-	gated := p.gatesBehindIAP(req.Deploy.Tier, factsOf(front))
 	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
@@ -129,7 +127,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
-	shapeTopicsAndRefreshes(tree, names, req, factsOf(front), gated, region, shared, environment)
+	shapeTopics(tree, names, req, region, shared, environment)
 	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
 }
@@ -182,7 +180,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	return nil
 }
 
-func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, gated bool, region, shared, environment string) {
+func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) {
 	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	declared := false
 	for _, resource := range req.Resources {
@@ -201,21 +199,13 @@ func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.Shape
 			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})
 		}
 	}
-	refreshes := slices.ContainsFunc(req.Deploy.Apps, func(entry provider.AppEntry) bool {
-		return refreshesByTask(entry.Manifest.GetFramework().GetName(), entry.Compute(), front, gated)
-	})
-	if !declared && !refreshes {
+	if !declared {
 		return
 	}
 	tier := req.Deploy.Tier
-	if declared {
-		tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
-		tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
-	}
+	tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
+	tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
 	tree.Add(shared, string(Vendor), tfCloudTasksQueue, names.DelayQueue(tier), region, map[string]any{"location": region})
-	if refreshes {
-		tree.Add(shared, string(Vendor), tfServiceAccount, names.RefreshAccount(tier), region, map[string]any{})
-	}
 }
 
 func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {

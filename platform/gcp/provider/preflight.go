@@ -4,8 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -53,25 +51,6 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			}
 			needs = append(needs, featureNeed{feature: tasksFeature, declares: string(resource.Type) + " " + declared,
 				reason: "topics and tasks on gcp keep their runs in the tier's task database and wait in its delay queue, which its bootstrap has not installed"})
-		}
-	}
-	var facts edge.Facts
-	opened := false
-	for _, entry := range pre.Deploy.Apps {
-		framework, compute := entry.Manifest.GetFramework().GetName(), entry.Compute()
-		if framework != buildoutput.FrameworkNext || compute != provider.ComputeServerless {
-			continue
-		}
-		if !opened {
-			front, err := p.Edges().Open(pre.Edge, nil)
-			if err != nil {
-				return err
-			}
-			facts, opened = front.Facts(), true
-		}
-		if refreshesByTask(framework, compute, facts, proxied) {
-			needs = append(needs, featureNeed{feature: tasksFeature, declares: "Next app " + entry.App,
-				reason: "a serverless Next app on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
 		}
 	}
 	if len(needs) == 0 && !proxied {

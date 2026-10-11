@@ -63,8 +63,7 @@ var retiredTierQueueRoles = []string{queueEnqueuerRole, queueDeleterRole}
 
 func tasksSummary() string {
 	return "a Firestore database of the tier's own that its runs are kept in, a Cloud Tasks queue a delayed message waits in, " +
-		"the account Pub/Sub signs each push to a worker as, and the account Cloud Tasks signs each refresh of a stale Next page as: " +
-		"what topics, tasks, workers and Next refreshes run on, with no recurring cost of its own"
+		"and the account Pub/Sub signs each push to a worker as: what topics, tasks and workers run on, with no recurring cost of its own"
 }
 
 func taskDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
@@ -87,9 +86,6 @@ func (b bootstrap) raiseTasks(ctx context.Context, tier environment.Tier, progre
 		return err
 	}
 	if err := b.makeAccount(ctx, survey{Tier: tier}, b.clients.PushAccount(tier)); err != nil {
-		return err
-	}
-	if err := b.makeAccount(ctx, survey{Tier: tier}, b.clients.RefreshAccount(tier)); err != nil {
 		return err
 	}
 	ensureProgress(progress).Debug("The " + string(tier) + " tier keeps its runs in " + b.clients.TaskDatabase(tier) + " and delays messages in " + b.clients.DelayQueue(tier))
@@ -132,72 +128,12 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 				"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove feature %s again",
 			tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
 	}
-	return b.refuseRemovalWhileNextAppsRefresh(ctx, tier)
-}
-
-func (b bootstrap) refuseRemovalWhileNextAppsRefresh(ctx context.Context, tier environment.Tier) error {
-	policy, err := b.accountPolicy(ctx, b.clients.RefreshAccount(tier))
-	if absent(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var held []string
-	for _, binding := range policy.Bindings {
-		if binding.Role != runAsRole {
-			continue
-		}
-		for _, member := range binding.Members {
-			email, found := strings.CutPrefix(member, "serviceAccount:")
-			if !found {
-				continue
-			}
-			id, domain, found := strings.Cut(email, "@")
-			if !found || domain != b.clients.project+accountDomain || !b.clients.isHashedAccountID(id) {
-				continue
-			}
-			named, err := b.refreshingAppOf(ctx, id, email)
-			if err != nil {
-				return err
-			}
-			held = append(held, named)
-		}
-	}
-	slices.Sort(held)
-	held = slices.Compact(held)
-	if len(held) == 0 {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"tier %s still runs the Next apps %s, and taking feature %s down deletes the account Cloud Tasks signs their page refreshes as and purges the queue those refreshes wait in.\n"+
-			"An app's account keeps that grant until the app's last environment is destroyed, so an app moved to container compute or put behind an edge that runs code blocks the removal until then.\n"+
-			"Destroy every environment that runs them, then remove feature %s again",
-		tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
-}
-
-func (b bootstrap) refreshingAppOf(ctx context.Context, id, email string) (string, error) {
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return "", err
-	}
-	account, err := attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, id)).Context(ctx).Do)
-	if absent(err) {
-		return email, nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("read the %s service account: %w", id, err)
-	}
-	if app, ok := b.clients.readAppAccount(account); ok {
-		return app.app + " of project " + app.project, nil
-	}
-	return email, nil
+	return nil
 }
 
 func (b bootstrap) tearTasks(ctx context.Context, tier environment.Tier) error {
 	steps := []func() error{
 		func() error { return b.takeAccount(ctx, tier, b.clients.PushAccount(tier)) },
-		func() error { return b.takeAccount(ctx, tier, b.clients.RefreshAccount(tier)) },
 		func() error { return b.purgeDelayQueue(ctx, tier) },
 	}
 	if !b.clients.emulated() {
@@ -218,49 +154,10 @@ func (b bootstrap) tasksInstalled(ctx context.Context, tier environment.Tier) (b
 		return false, err
 	}
 	push, err := b.accountPresence(ctx, tier, b.clients.PushAccount(tier))
-	if err != nil || !push.present || push.mends != "" {
-		return false, err
-	}
-	refresh, err := b.accountPresence(ctx, tier, b.clients.RefreshAccount(tier))
 	if err != nil {
 		return false, err
 	}
-	return refresh.present && refresh.mends == "", nil
-}
-
-func (b bootstrap) refreshPurpose(tier environment.Tier) accountPurpose {
-	return accountPurpose{
-		displayName: "ocel " + string(tier) + " refreshes",
-		description: "the identity Cloud Tasks signs each refresh of a stale Next page in the " + string(tier) + " tier as, and the one alone a Next service takes a refresh from",
-		ungranted:   "it exists, and Cloud Tasks may not sign as it, so no stale Next page would be refreshed",
-		grant:       b.grantRefreshSigning,
-		forget:      b.forgetRefreshSigning,
-		granted:     b.refreshSigningGranted,
-	}
-}
-
-func (b bootstrap) grantRefreshSigning(ctx context.Context, tier environment.Tier) error {
-	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
-	if err != nil {
-		return err
-	}
-	return b.clients.bindAccountRole(ctx, b.clients.RefreshAccount(tier), runAsRole, agent, true)
-}
-
-func (b bootstrap) forgetRefreshSigning(ctx context.Context, tier environment.Tier) error {
-	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
-	if err != nil {
-		return err
-	}
-	return b.clients.bindAccountRole(ctx, b.clients.RefreshAccount(tier), runAsRole, agent, false)
-}
-
-func (b bootstrap) refreshSigningGranted(ctx context.Context, tier environment.Tier) (bool, error) {
-	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
-	if err != nil {
-		return false, err
-	}
-	return b.clients.accountRoleGranted(ctx, b.clients.RefreshAccount(tier), runAsRole, agent)
+	return push.present && push.mends == "", nil
 }
 
 func (b bootstrap) pushPurpose(tier environment.Tier) accountPurpose {
