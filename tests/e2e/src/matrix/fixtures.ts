@@ -12,6 +12,7 @@ import {
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
+  nextPprChecks,
   nextRoutingChecks,
   nextStateChecks,
   nodeRuntimeChecks,
@@ -41,6 +42,7 @@ import {
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
+  cloudflareReadingTheStore,
   cloudflareTunnel,
   cloudfrontShielded,
   container,
@@ -274,6 +276,11 @@ export const prerender = {
     checks: [...healthChecks, ...prerenderBucketChecks],
     on: { aws: [defaults], gcp: [defaults], vps: [defaults] },
     configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+  }),
+  nextPpr: fixture("prerender/next-ppr", {
+    apps: ["web"],
+    checks: [...healthChecks, ...nextPprChecks],
+    on: { aws: [defaults, cloudflareReadingTheStore] },
   }),
   nextDockerfile: fixture("prerender/next-dockerfile", {
     apps: ["web"],

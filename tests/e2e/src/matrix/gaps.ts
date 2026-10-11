@@ -61,6 +61,7 @@ import {
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
+  cloudflareReadingTheStore,
   cloudflareTunnel,
   cloudfrontShielded,
   container,
@@ -365,6 +366,7 @@ export const gaps: Gap[] = [
           buildVariables.next,
           clientEnv.next,
           prerender.nextBucket,
+          prerender.nextPpr,
         ],
         variants: [defaults, cloudfrontShielded],
         fails: [step.deploy],
@@ -393,7 +395,12 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        variants: [cloudflare, cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
+        variants: [
+          cloudflare,
+          cloudflareReadingTheStore,
+          cloudflareInFrontOfContainers,
+          cloudflareInFrontOfMixedComputes,
+        ],
         fails: [step.deploy],
         skipsCell: true,
       },

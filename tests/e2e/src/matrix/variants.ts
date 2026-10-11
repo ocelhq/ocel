@@ -1,4 +1,5 @@
 import { cloudfrontShieldChecks } from "../checks/cloudfrontShield";
+import { nextStoreReadChecks } from "../checks/nextPpr";
 import {
   CLIENT_CERTIFICATE_CHECKS,
   forwardedAppChecks,
@@ -29,6 +30,12 @@ export const cloudfrontShielded = variant("cloudfront-shield", {
 export const cloudflare = variant("cloudflare", {
   offeredOn: ["aws"],
   config: { edge: "cloudflare" },
+});
+
+export const cloudflareReadingTheStore = variant("cloudflare", {
+  offeredOn: ["aws"],
+  config: { edge: "cloudflare" },
+  checks: nextStoreReadChecks,
 });
 
 export const cloudflareInFrontOfContainers = variant("cloudflare-container", {

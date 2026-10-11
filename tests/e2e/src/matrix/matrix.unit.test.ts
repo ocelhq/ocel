@@ -895,3 +895,35 @@ describe("the prerender-from-a-bucket cell", () => {
     ]);
   });
 });
+
+describe("the partial prerendering cells", () => {
+  const cellNames = (lane: Lane) =>
+    planOn(lane)
+      .cells.map((cell) => cell.name)
+      .filter((name) => name.startsWith("prerender/next-ppr"));
+
+  it("deploys behind CloudFront and behind Cloudflare on aws", () => {
+    expect(cellNames("aws").sort()).toEqual([
+      "prerender/next-ppr",
+      "prerender/next-ppr-cloudflare",
+    ]);
+  });
+
+  it("reads the durable store through Cloudflare only", () => {
+    const placed = fixtures.find((one) => one.name === "prerender/next-ppr")?.on.aws ?? [];
+    const checksOf = (name: string) =>
+      placed.find((variant) => variant.name === name)?.checks?.map((one) => one.title);
+
+    expect(checksOf("cloudflare")).toEqual([
+      "a prerender nothing has read is answered from the durable store, not the function",
+    ]);
+    expect(checksOf("default")).toBeUndefined();
+  });
+
+  it("skips both on floci's aws, which serves neither CloudFront nor the Cloudflare API", () => {
+    const skipped = planOn("aws.floci").skipped;
+
+    expect(skipped["prerender/next-ppr"]?.map((gap) => gap.issue)).toEqual([852]);
+    expect(skipped["prerender/next-ppr-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
+  });
+});
