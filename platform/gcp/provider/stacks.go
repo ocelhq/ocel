@@ -471,6 +471,9 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *varia
 			return nil, fmt.Errorf("encode the keys that gate %s's preview: %w", app.App, err)
 		}
 		env[edge.PreviewGateVar] = string(gate)
+		if facts := factsOf(spec.Edge); facts.GatesPreviews && !facts.RunsCode {
+			env[edge.PreviewGateAtEdgeVar] = "true"
+		}
 	}
 	return env, nil
 }

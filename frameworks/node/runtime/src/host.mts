@@ -218,11 +218,14 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
 }
 
 const previewGateVar = "OCEL_PREVIEW_GATE";
+const previewGateAtEdgeVar = "OCEL_PREVIEW_GATE_AT_EDGE";
 
-function takeOriginGate(env: NodeJS.ProcessEnv): string | undefined {
-  const declared = env[previewGateVar];
+function takeOriginGate(env: NodeJS.ProcessEnv): Pick<Trust, "gate" | "gateAtEdge"> {
+  const gate = env[previewGateVar];
+  const gateAtEdge = env[previewGateAtEdgeVar] === "true";
   delete env[previewGateVar];
-  return declared;
+  delete env[previewGateAtEdgeVar];
+  return { gate, gateAtEdge };
 }
 
 interface Trust {
@@ -230,6 +233,7 @@ interface Trust {
   forwarded?: boolean;
   guard?: OriginGuard;
   gate?: string;
+  gateAtEdge?: boolean;
 }
 
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
@@ -312,7 +316,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
         }
         if (trust.gate !== undefined) {
           const { admitPreview } = await import("./preview-gate.mjs");
-          if (!(await admitPreview(trust.gate, req, reachedHost, res))) return;
+          if (!(await admitPreview(trust.gate, req, reachedHost, res, trust.gateAtEdge))) return;
         }
         return invoke(req, res, { waitUntil });
       })
@@ -325,7 +329,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
 }
 
 function originTrust(env: NodeJS.ProcessEnv, forwarded: boolean): Trust {
-  return { forwarded, guard: originGuard(env), gate: takeOriginGate(env) };
+  return { forwarded, guard: originGuard(env), ...takeOriginGate(env) };
 }
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
@@ -373,7 +377,8 @@ function wrapUpgrade(server: http.Server, lifted: Listener[], trust: Trust): Upg
         }
         if (trust.gate !== undefined) {
           const { admitPreviewUpgrade } = await import("./preview-gate.mjs");
-          if (!(await admitPreviewUpgrade(trust.gate, req, reachedHost, socket))) return;
+          if (!(await admitPreviewUpgrade(trust.gate, req, reachedHost, socket, trust.gateAtEdge)))
+            return;
         }
         for (const listener of [...lifted]) listener.call(server, req, socket, head);
       })

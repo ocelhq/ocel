@@ -67,12 +67,18 @@ async function checkOriginGate(
   return undefined;
 }
 
+function isLogin(req: http.IncomingMessage): boolean {
+  return req.method === "POST" && (req.url ?? "/").split("?", 1)[0] === PREVIEW_LOGIN_PATH;
+}
+
 export async function admitPreview(
   encoded: string,
   req: http.IncomingMessage,
   reachedHost: string,
   res: http.ServerResponse,
+  gatedAtEdge = false,
 ): Promise<boolean> {
+  if (gatedAtEdge && !isLogin(req)) return true;
   const answer = await checkOriginGate(encoded, req, reachedHost);
   if (answer) {
     const { status, headers, body } = answer;
@@ -90,7 +96,9 @@ export async function admitPreviewUpgrade(
   req: http.IncomingMessage,
   reachedHost: string,
   socket: Duplex,
+  gatedAtEdge = false,
 ): Promise<boolean> {
+  if (gatedAtEdge) return true;
   const answer = await checkOriginGate(encoded, req, reachedHost);
   if (answer) writeUpgradeAnswer(socket, answer);
   return answer === undefined;
