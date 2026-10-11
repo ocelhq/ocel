@@ -302,8 +302,9 @@ func TestReconcile(t *testing.T) {
 		}
 		want := testState(store.URL, "s3cr3t")
 		want.Private = edge.Own(private{EntryWorkers: []string{spec.Program.Name}, EnvelopeKey: testEnvelopeKey})
+		want.PurgeURL = "https://ocel-preview.acct-sub.workers.dev" + purgePath
 		if !state.Equal(want) {
-			t.Errorf("state = %+v, want prior plus the worker a domain binds to (%+v)", state, want)
+			t.Errorf("state = %+v, want prior plus the worker a domain binds to and the purge URL it answers at (%+v)", state, want)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
@@ -416,6 +417,49 @@ func TestReconcile(t *testing.T) {
 
 		if second.PurgeURL != first.PurgeURL || second.PurgeURL == "" {
 			t.Errorf("PurgeURL = %q, want the %q the first reconcile named", second.PurgeURL, first.PurgeURL)
+		}
+	})
+
+	t.Run("a reconcile at the spec stamp recovers the purge URL a deploy that failed after uploading never recorded", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
+		deployed, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		unrecorded := deployed
+		unrecorded.PurgeURL = ""
+
+		retried, err := reconcileState(t, p, spec, unrecorded)
+		if err != nil {
+			t.Fatalf("second Reconcile: %v", err)
+		}
+
+		if want := "https://ocel-preview.acct-sub.workers.dev" + purgePath; retried.PurgeURL != want {
+			t.Errorf("PurgeURL = %q, want %q: the worker is deployed and answers purges there", retried.PurgeURL, want)
+		}
+	})
+
+	t.Run("a prune-only reconcile at the spec stamp names no purge URL the deleted worker had", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := pruneOnlySpec(store.URL, "v2")
+		served := testState(store.URL, "s3cr3t")
+		served.PurgeURL = "https://ocel-preview.acct-sub.workers.dev" + purgePath
+		if _, err := reconcileState(t, p, spec, served); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		retried, err := reconcileState(t, p, spec, served)
+		if err != nil {
+			t.Fatalf("second Reconcile: %v", err)
+		}
+
+		if retried.PurgeURL != "" {
+			t.Errorf("PurgeURL = %q, want none: the worker is deleted", retried.PurgeURL)
 		}
 	})
 
