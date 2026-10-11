@@ -34,17 +34,13 @@ export type OriginBlocking = (refreshing: number) => Promise<Response>;
 export interface EntryMeta {
   lastModified: number;
   revalidate?: number;
-  expiration?: number;
 }
 
-export type Freshness = "fresh" | "stale" | "expired";
+export type Freshness = "fresh" | "stale";
 
-export function evaluate(meta: EntryMeta, now: number, tagStale: boolean): Freshness {
+export function evaluate(meta: EntryMeta, now: number): Freshness {
   const age = (now - meta.lastModified) / 1000;
-  const timeStale = meta.revalidate !== undefined && age >= meta.revalidate;
-  if (!timeStale && !tagStale) return "fresh";
-  if (meta.expiration !== undefined && age >= meta.expiration) return "expired";
-  return "stale";
+  return meta.revalidate !== undefined && age >= meta.revalidate ? "stale" : "fresh";
 }
 
 export function servedFromStore(response: Response, stale: boolean): Response {
@@ -173,17 +169,14 @@ async function serveOrRefresh(
     lastModified: modified,
     ...policy.window(cached.headers.get(ENTRY_WINDOW)),
   };
-  const state = evaluate(meta, now(), false);
+  const state = evaluate(meta, now());
   if (state === "fresh") {
     return policy.forServe(fromStorage(cached, false), "HIT");
   }
-  if (state === "stale") {
-    refreshOnce(deps, target.key, async () => {
-      await store(keyRequest, deps, policy, await originBlocking(modified));
-    });
-    return policy.forServe(fromStorage(cached, true), "STALE");
-  }
-  return null;
+  refreshOnce(deps, target.key, async () => {
+    await store(keyRequest, deps, policy, await originBlocking(modified));
+  });
+  return policy.forServe(fromStorage(cached, true), "STALE");
 }
 
 async function colo(
