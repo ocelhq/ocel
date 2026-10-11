@@ -4,16 +4,25 @@ import { type PurgeOutcome, type RaisedTag, TAGS_PER_CALL } from "./purge-backlo
 export interface InBandPurgePorts {
   cache: { purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> };
   queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
   now(): number;
 }
 
 async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePorts): Promise<void> {
+  const raisedAt = ports.now();
+  try {
+    await ports.times.record(
+      mode,
+      tags.map((tag) => ({ tag, raisedAt })),
+    );
+  } catch (error) {
+    console.error(`ocel: the purge queue kept no time for ${tags.length} tag(s)`, error);
+  }
   let purged = false;
   try {
     purged = (await ports.cache.purge(mode, tags)).ok;
   } catch {}
   if (purged) return;
-  const raisedAt = ports.now();
   try {
     await ports.queue.raise(
       mode,

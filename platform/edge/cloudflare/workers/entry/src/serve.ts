@@ -15,7 +15,7 @@ import { originFetchFor } from "./origin-fetch";
 import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
-import { openInBandQueue } from "./purge-request";
+import { openInBandQueue, openPurgeQueue } from "./purge-request";
 import type { ReleaseRecord } from "./releases";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
@@ -248,6 +248,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         purgeInBand(readPurge(announced), {
           cache: this,
           queue: openInBandQueue(this.ctx.exports),
+          times: openPurgeQueue(this.ctx.exports),
           now: Date.now,
         }),
       );

@@ -9,6 +9,7 @@ function base(over: { purge?: () => Promise<PurgeOutcome> } = {}) {
   const stubs: ServeProps[] = [];
   const purged: { mode: PurgeMode; tags: string[] }[] = [];
   const raised: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
+  const recorded: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
   const serving: ServingPorts = {
     serve: ({ props }) => {
       stubs.push(props);
@@ -25,16 +26,29 @@ function base(over: { purge?: () => Promise<PurgeOutcome> } = {}) {
         raised.push({ mode, tags });
       },
     },
+    times: {
+      record: async (mode, tags) => {
+        recorded.push({ mode, tags });
+      },
+    },
     waitUntil: (promise) => void pending.push(promise),
     now: () => 9_000,
   };
-  return { serving, pending, stubs, purged, raised };
+  return { serving, pending, stubs, purged, raised, recorded };
 }
 
 const scope = { host: "shop.example.com", app: "web", release: "r0a1b2c3d" };
 const groups = [{ mode: "purge" as const, tags: ["r0a1b2c3d|a"] }];
 
 describe("the serving of one release", () => {
+  it("records the time of an in-band purge before the purge is awaited", async () => {
+    const { serving, recorded } = base();
+
+    await newServing(serving, { ...scope, slug: "p1", isrPrefix: "p" }).purge(groups, true);
+
+    expect(recorded).toEqual([{ mode: "purge", tags: [{ tag: "r0a1b2c3d|a", raisedAt: 9_000 }] }]);
+  });
+
   it("purges through a Serve stub with the props every page is stored under", async () => {
     const { serving, stubs, purged } = base();
 

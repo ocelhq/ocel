@@ -8,6 +8,7 @@ import {
 } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import type { RaisedTag } from "./purge-backlog";
+import type { TagTimes } from "./purge-times";
 
 const PURGE_QUEUE_NAME = "purge";
 
@@ -24,6 +25,7 @@ export type ServedLookup =
 export interface PurgeGatewayPorts {
   readServed(isrPrefix: string): Promise<ServedLookup>;
   queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
   now?(): number;
   warn?(message: string): void;
 }
@@ -119,18 +121,23 @@ export function respondOnControlHost(): Response {
   return reply(404, "Not Found");
 }
 
-function openQueue(exports: unknown, name: string): PurgeGatewayPorts["queue"] {
-  const queues = (
-    exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
-  ).PurgeQueue;
+export interface PurgeQueuePort {
+  raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
+  record(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
+  readTimes(tags: string[]): Promise<TagTimes>;
+}
+
+function openQueue(exports: unknown, name: string): PurgeQueuePort {
+  const queues = (exports as { PurgeQueue: { getByName(name: string): PurgeQueuePort } })
+    .PurgeQueue;
   return queues.getByName(name);
 }
 
-export function openPurgeQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+export function openPurgeQueue(exports: unknown): PurgeQueuePort {
   return openQueue(exports, PURGE_QUEUE_NAME);
 }
 
-export function openInBandQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+export function openInBandQueue(exports: unknown): PurgeQueuePort {
   return openQueue(exports, IN_BAND_QUEUE_NAME);
 }
 
@@ -152,6 +159,7 @@ export function answerPurgeOnWorker(
   return answerPurge(request, {
     readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),
     queue: openPurgeQueue(ctx.exports),
+    times: openPurgeQueue(ctx.exports),
   });
 }
 
@@ -198,11 +206,10 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   }
   if (raisedAt.size === 0) return reply(202);
 
+  const raisedTags = [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at }));
   try {
-    await ports.queue.raise(
-      body.mode,
-      [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at })),
-    );
+    await ports.times.record(body.mode, raisedTags);
+    await ports.queue.raise(body.mode, raisedTags);
   } catch (error) {
     console.error(`ocel: the purge queue refused the tags of release ${release}`, error);
     return reply(503, "unavailable");

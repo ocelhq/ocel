@@ -48,6 +48,7 @@ const raise = {
 };
 
 let raised: { mode: PurgeMode; tags: RaisedTag[] }[];
+let recorded: { mode: PurgeMode; tags: RaisedTag[] }[];
 let served: Record<string, { purgeSecret?: string }>;
 let storeDown: boolean;
 let warnings: string[];
@@ -65,12 +66,18 @@ function deps(): PurgeGatewayPorts {
         raised.push({ mode, tags });
       },
     },
+    times: {
+      async record(mode, tags) {
+        recorded.push({ mode, tags });
+      },
+    },
     warn: (message) => warnings.push(message),
   };
 }
 
 beforeEach(() => {
   raised = [];
+  recorded = [];
   served = { [PREFIX]: { purgeSecret: SECRET } };
   storeDown = false;
   warnings = [];
@@ -95,6 +102,17 @@ describe("recognising a purge request", () => {
 });
 
 describe("answering a signed purge request", () => {
+  it("records the time the origin raised each tag at, as announced", async () => {
+    await answerPurge(await signed({ ...raise, mode: "invalidate" }), deps());
+
+    expect(recorded).toEqual([
+      {
+        mode: "invalidate",
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }],
+      },
+    ]);
+  });
+
   it("hands the queue the release-stamped tags with the mode, and accepts", async () => {
     const response = await answerPurge(await signed(raise), deps());
 

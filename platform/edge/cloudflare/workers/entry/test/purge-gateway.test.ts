@@ -82,6 +82,7 @@ function contextWithQueue() {
   const queues = {
     getByName: (name: string) => ({
       raise: async (mode: PurgeMode, tags: RaisedTag[]) => void raised.push({ name, mode, tags }),
+      record: async () => {},
     }),
   };
   Object.defineProperty(ctx, "exports", { value: { PurgeQueue: queues, Serve: () => ({}) } });

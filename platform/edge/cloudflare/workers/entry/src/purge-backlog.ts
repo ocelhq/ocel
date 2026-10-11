@@ -34,6 +34,7 @@ export interface PurgeBacklogOptions {
   now(): number;
   random(): number;
   warn?(message: string): void;
+  onReleasesPurged?(releases: string[], at: number): void;
 }
 
 export const TAGS_PER_CALL = 100;
@@ -101,6 +102,7 @@ export class PurgeBacklog {
         }
       }
       store.settleReleases(releases, startedAt);
+      this.options.onReleasesPurged?.(releases, startedAt);
       store.clearBackoff();
       return this.readNextFlushAt();
     }
