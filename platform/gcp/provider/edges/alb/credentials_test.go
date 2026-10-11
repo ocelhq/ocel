@@ -32,6 +32,16 @@ func TestTheAlbEdgeDocumentsTheCertificateManagerAndComputeRolesEachPurposeNeeds
 	}
 }
 
+func TestABootstrapOfTheLoadBalancerChecksItMayRaiseTheBackendBucketTheTiersAssetsAreServedFrom(t *testing.T) {
+	t.Parallel()
+
+	for _, permission := range []string{"compute.backendBuckets.create", "compute.backendBuckets.delete", "compute.backendBuckets.update", "compute.backendBuckets.use"} {
+		if !slices.Contains(Permissions, permission) {
+			t.Errorf("the load balancer's preflight checks %v, want %s: the balancer serves immutable files from a backend bucket and a url map names it", Permissions, permission)
+		}
+	}
+}
+
 func TestABootstrapOfTheShieldedLoadBalancerChecksItMayCreateThePlainHTTPRedirect(t *testing.T) {
 	t.Parallel()
 
