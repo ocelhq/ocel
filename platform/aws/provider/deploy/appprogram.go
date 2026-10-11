@@ -287,7 +287,7 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 	if isrEntriesAdopted(r.cfg.objectStores()) {
 		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
 		cache.WriterURL = r.cfg.ISRWriterEndpoint
-		cache.WriterSecret = cloudflare.DeriveISRWriteSecret(r.cfg.ISRWriterSeed, isr.Prefix)
+		cache.PurgeSecret = cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, isr.Prefix)
 	}
 	return cache
 }
@@ -423,7 +423,7 @@ func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (pr
 		Envelope:      work.delivery.Envelope,
 	}
 	if work.cache != nil {
-		result.PurgeSecret = work.cache.WriterSecret
+		result.PurgeSecret = work.cache.PurgeSecret
 	}
 	for _, logical := range work.logical {
 		fields, err := requireOutputFields(outputs, logical)

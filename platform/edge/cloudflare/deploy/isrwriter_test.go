@@ -41,11 +41,11 @@ func fakeWriter(t *testing.T, status int) (*httptest.Server, *[]writerCall) {
 	return srv, &calls
 }
 
-func TestAnISRWriteSecretDiffersPerPrefixAndRotatesWithTheSeed(t *testing.T) {
+func TestAPurgeSecretDiffersPerPrefixAndRotatesWithTheSeed(t *testing.T) {
 	t.Run("differs per prefix", func(t *testing.T) {
 		t.Parallel()
-		web := DeriveISRWriteSecret("seed-1", "prod/acme/web/B1")
-		admin := DeriveISRWriteSecret("seed-1", "prod/acme/admin/B1")
+		web := DerivePurgeSecret("seed-1", "prod/acme/web/B1")
+		admin := DerivePurgeSecret("seed-1", "prod/acme/admin/B1")
 		if web == admin {
 			t.Error("two apps in one deploy must not share a write secret")
 		}
@@ -53,32 +53,32 @@ func TestAnISRWriteSecretDiffersPerPrefixAndRotatesWithTheSeed(t *testing.T) {
 
 	t.Run("is stable", func(t *testing.T) {
 		t.Parallel()
-		web := DeriveISRWriteSecret("seed-1", "prod/acme/web/B1")
-		if web != DeriveISRWriteSecret("seed-1", "prod/acme/web/B1") {
+		web := DerivePurgeSecret("seed-1", "prod/acme/web/B1")
+		if web != DerivePurgeSecret("seed-1", "prod/acme/web/B1") {
 			t.Error("the same seed and prefix must derive the same secret on every call")
 		}
 	})
 
 	t.Run("rotates with a fresh deploy seed", func(t *testing.T) {
 		t.Parallel()
-		web := DeriveISRWriteSecret("seed-1", "prod/acme/web/B1")
-		if web == DeriveISRWriteSecret("seed-2", "prod/acme/web/B1") {
+		web := DerivePurgeSecret("seed-1", "prod/acme/web/B1")
+		if web == DerivePurgeSecret("seed-2", "prod/acme/web/B1") {
 			t.Error("a fresh deploy seed must rotate the secret")
 		}
 	})
 
 	t.Run("is not empty", func(t *testing.T) {
 		t.Parallel()
-		if DeriveISRWriteSecret("seed-1", "prod/acme/web/B1") == "" {
+		if DerivePurgeSecret("seed-1", "prod/acme/web/B1") == "" {
 			t.Error("derived secret is empty")
 		}
 	})
 }
 
-func TestAnISRWriteSecretHashIsTheHexSHA256TheWorkerStores(t *testing.T) {
+func TestAPurgeSecretHashIsTheHexSHA256TheWorkerStores(t *testing.T) {
 	t.Run("is the hex SHA256 the worker stores", func(t *testing.T) {
 		t.Parallel()
-		hash := isrWriteSecretHash("write-secret")
+		hash := purgeSecretHash("write-secret")
 		if len(hash) != 64 {
 			t.Fatalf("hash = %q, want 64 hex characters", hash)
 		}
@@ -96,7 +96,7 @@ func TestAnISRWriteSecretHashIsTheHexSHA256TheWorkerStores(t *testing.T) {
 func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredential(t *testing.T) {
 	srv, calls := fakeWriter(t, http.StatusNoContent)
 	w := writerAccess(srv.URL)
-	secret := DeriveISRWriteSecret(w.Seed, testPrefix)
+	secret := DerivePurgeSecret(w.Seed, testPrefix)
 
 	if err := w.Initialize(context.Background(), testPrefix); err != nil {
 		t.Fatalf("Initialize: %v", err)
@@ -111,7 +111,7 @@ func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredential(t *
 	if got.auth != "Bearer cred-1" {
 		t.Errorf("authorization = %q, want the bootstrap credential", got.auth)
 	}
-	if got.body["secretHash"] != isrWriteSecretHash(secret) {
+	if got.body["secretHash"] != purgeSecretHash(secret) {
 		t.Errorf("secretHash = %q, want the hash of the write secret", got.body["secretHash"])
 	}
 	if _, leaked := got.body["secret"]; leaked {
@@ -227,7 +227,7 @@ func TestPuttingAnEntrySendsItUnderTheReleasesWriteSecret(t *testing.T) {
 	if got.method != http.MethodPut || got.path != "/"+testPrefix+"/entry" || got.key != "blog/a b" {
 		t.Errorf("request = %s %s?key=%s, want PUT /%s/entry?key=blog/a b", got.method, got.path, got.key, testPrefix)
 	}
-	if want := "Bearer " + DeriveISRWriteSecret("seed-1", testPrefix); got.auth != want {
+	if want := "Bearer " + DerivePurgeSecret("seed-1", testPrefix); got.auth != want {
 		t.Errorf("Authorization = %q, want the release's write secret, never the bootstrap credential", got.auth)
 	}
 	if got.contentType != "application/json" || got.body != `{"lastModified":1}` {
@@ -342,7 +342,7 @@ func TestPuttingAnEntryTheWriterRejectedNamesTheKeyAndNotTheSecret(t *testing.T)
 			t.Errorf("error %q does not name %q", err, want)
 		}
 	}
-	if strings.Contains(err.Error(), DeriveISRWriteSecret("seed-1", testPrefix)) || strings.Contains(err.Error(), "seed-1") {
+	if strings.Contains(err.Error(), DerivePurgeSecret("seed-1", testPrefix)) || strings.Contains(err.Error(), "seed-1") {
 		t.Errorf("error %q holds the write secret", err)
 	}
 }

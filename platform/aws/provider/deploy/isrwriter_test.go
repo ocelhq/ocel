@@ -93,10 +93,10 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		if want := "prod/proj/web/r1/isr"; web.Prefix != want {
 			t.Errorf("web Prefix = %q, want %q", web.Prefix, want)
 		}
-		if web.WriterSecret == admin.WriterSecret {
+		if web.PurgeSecret == admin.PurgeSecret {
 			t.Error("two apps in one deploy must not share a write secret")
 		}
-		if web.WriterSecret != again.WriterSecret {
+		if web.PurgeSecret != again.PurgeSecret {
 			t.Error("a release must derive the same write secret on every call")
 		}
 	})
@@ -106,7 +106,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		cfg := Config{AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
 		cache := releasing(t, cfg).isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
-		if cache.WriterURL != "" || cache.WriterSecret != "" {
+		if cache.WriterURL != "" || cache.PurgeSecret != "" {
 			t.Errorf("writer coordinates = %+v, want unset", cache)
 		}
 	})
@@ -128,28 +128,28 @@ func TestISRWriterEnv(t *testing.T) {
 	t.Run("is a plain env var pair or nothing", func(t *testing.T) {
 		t.Parallel()
 		with := isrConfig{
-			Prefix:       testPrefix,
-			WriterURL:    "https://writer.example",
-			WriterSecret: "write-secret",
+			Prefix:      testPrefix,
+			WriterURL:   "https://writer.example",
+			PurgeSecret: "write-secret",
 		}.env()
 		if with["OCEL_ISR_WRITER_URL"] != "https://writer.example" {
 			t.Errorf("OCEL_ISR_WRITER_URL = %q", with["OCEL_ISR_WRITER_URL"])
 		}
-		if with["OCEL_ISR_WRITER_SECRET"] != "write-secret" {
-			t.Errorf("OCEL_ISR_WRITER_SECRET = %q", with["OCEL_ISR_WRITER_SECRET"])
+		if with["OCEL_PURGE_SECRET"] != "write-secret" {
+			t.Errorf("OCEL_PURGE_SECRET = %q", with["OCEL_PURGE_SECRET"])
 		}
 
 		for _, cfg := range []isrConfig{
 			{Prefix: testPrefix},
 			{Prefix: testPrefix, WriterURL: "https://writer.example"},
-			{Prefix: testPrefix, WriterSecret: "write-secret"},
+			{Prefix: testPrefix, PurgeSecret: "write-secret"},
 		} {
 			env := cfg.env()
 			if _, ok := env["OCEL_ISR_WRITER_URL"]; ok {
 				t.Errorf("OCEL_ISR_WRITER_URL set for %+v", cfg)
 			}
-			if _, ok := env["OCEL_ISR_WRITER_SECRET"]; ok {
-				t.Errorf("OCEL_ISR_WRITER_SECRET set for %+v", cfg)
+			if _, ok := env["OCEL_PURGE_SECRET"]; ok {
+				t.Errorf("OCEL_PURGE_SECRET set for %+v", cfg)
 			}
 		}
 	})

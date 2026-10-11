@@ -1,11 +1,6 @@
-import { createHmac } from "node:crypto";
-
 import type { TagRecord } from "@framework/next-cache";
 import { newIsrWriterClient } from "@platform/edge-contract/isr-writer";
-
-export function isrWriteSecret(seed: string, isrPrefix: string): string {
-  return createHmac("sha256", seed).update(isrPrefix).digest("hex");
-}
+import { purgeSecret } from "@platform/edge-contract/purge";
 
 export async function raise(
   send: typeof fetch,
@@ -17,7 +12,7 @@ export async function raise(
   await newIsrWriterClient({
     endpoint,
     isrPrefix,
-    secret: isrWriteSecret(seed, isrPrefix),
+    secret: purgeSecret(seed, isrPrefix),
     fetch: send,
   }).raiseTags(Object.fromEntries(records));
 }

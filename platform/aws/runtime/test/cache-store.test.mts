@@ -15,13 +15,13 @@ beforeEach(() => {
   process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
   for (const name of Object.keys(storeEnv)) delete process.env[name];
   delete process.env.OCEL_ISR_WRITER_URL;
-  delete process.env.OCEL_ISR_WRITER_SECRET;
+  delete process.env.OCEL_PURGE_SECRET;
 });
 
 const adoptWriter = () =>
   Object.assign(process.env, {
     OCEL_ISR_WRITER_URL: "https://writer.example",
-    OCEL_ISR_WRITER_SECRET: "write-secret",
+    OCEL_PURGE_SECRET: "write-secret",
   });
 
 afterEach(async () => {
@@ -145,10 +145,10 @@ test("a half-configured writer is a failure, not a fallback", async () => {
   await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
 
   process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
-  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_SECRET");
+  await expect(entryStore()).rejects.toThrow("OCEL_PURGE_SECRET");
 
   delete process.env.OCEL_ISR_WRITER_URL;
-  process.env.OCEL_ISR_WRITER_SECRET = "write-secret";
+  process.env.OCEL_PURGE_SECRET = "write-secret";
   await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
 
   process.env.OCEL_ISR_WRITER_URL = "https://writer.example";

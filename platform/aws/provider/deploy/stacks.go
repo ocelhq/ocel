@@ -280,7 +280,7 @@ func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.Co
 func (r *release) Secrets(spec provider.StackSpec) []string {
 	secrets := []string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.ISRWriterSeed}
 	if r.cfg.ISRWriterSeed != "" && spec.App != nil && spec.App.ISR != nil {
-		secrets = append(secrets, cloudflare.DeriveISRWriteSecret(r.cfg.ISRWriterSeed, spec.App.ISR.Prefix))
+		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, spec.App.ISR.Prefix))
 	}
 	return secrets
 }

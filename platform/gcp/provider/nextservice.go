@@ -36,7 +36,7 @@ const (
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	tagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
 	isrWriterURLEnvVar      = "OCEL_ISR_WRITER_URL"
-	isrWriterSecretEnvVar   = "OCEL_ISR_WRITER_SECRET"
+	purgeSecretEnvVar       = "OCEL_PURGE_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
 	assetBucketEnvVar       = "OCEL_ASSET_BUCKET"
 	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
@@ -191,7 +191,7 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
 	if store := cache.edgeStore; store != nil {
 		env[isrWriterURLEnvVar] = store.writer.Endpoint
-		env[isrWriterSecretEnvVar] = store.secret
+		env[purgeSecretEnvVar] = store.secret
 		if isr.PurgeURL != "" {
 			env[edge.PurgeURLVar] = isr.PurgeURL
 		}

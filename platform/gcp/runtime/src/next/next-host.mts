@@ -92,10 +92,10 @@ function openPurge(
   if (urlMap && release !== null) return newCdnPurge({ urlMap, release });
   const url = env.OCEL_PURGE_URL;
   if (!url) return undefined;
-  const secret = env.OCEL_ISR_WRITER_SECRET;
+  const secret = env.OCEL_PURGE_SECRET;
   if (release === null || !secret) {
     throw new Error(
-      "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_ISR_WRITER_SECRET to sign the purge with",
+      "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_PURGE_SECRET to sign the purge with",
     );
   }
   return newCloudflarePurge({ url, release, secret });
@@ -107,11 +107,11 @@ function openIsrWriter(
   tagDatabase: string | undefined,
 ): IsrWriterClient | undefined {
   const endpoint = env.OCEL_ISR_WRITER_URL;
-  const secret = env.OCEL_ISR_WRITER_SECRET;
+  const secret = env.OCEL_PURGE_SECRET;
   if (!endpoint && !secret) return undefined;
   if (!endpoint || !secret) {
     throw new Error(
-      "ocel: OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET must both be set when this service keeps its pages and tags in the edge's store; " +
+      "ocel: OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET must both be set when this service keeps its pages and tags in the edge's store; " +
         "re-run `ocel bootstrap` for the tier this service runs in, and redeploy",
     );
   }

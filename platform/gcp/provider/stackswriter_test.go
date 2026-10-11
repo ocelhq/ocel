@@ -117,7 +117,7 @@ func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsPurg
 		t.Fatalf("Provision = %v", err)
 	}
 
-	secret := cloudflare.DeriveISRWriteSecret(seed, isrPrefix)
+	secret := cloudflare.DerivePurgeSecret(seed, isrPrefix)
 	if result.PurgeSecret != secret {
 		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, secret)
 	}

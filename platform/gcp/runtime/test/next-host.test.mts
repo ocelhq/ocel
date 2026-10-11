@@ -386,7 +386,7 @@ const writerEnv = {
   OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
   OCEL_STORAGE_ENDPOINT: "http://storage.test",
   OCEL_ISR_WRITER_URL: "https://writer.example",
-  OCEL_ISR_WRITER_SECRET: "s",
+  OCEL_PURGE_SECRET: "s",
 };
 
 function stubFetch(answer: (url: URL, init: RequestInit | undefined) => Response) {
@@ -482,13 +482,13 @@ test("the GCP host told where the worker purges and no release refuses to start"
 });
 
 test("the GCP host refuses an isr-writer url without its secret", () => {
-  const { OCEL_ISR_WRITER_SECRET: _, ...env } = writerEnv;
+  const { OCEL_PURGE_SECRET: _, ...env } = writerEnv;
 
-  expect(() => newGcpNextHost(env)).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
+  expect(() => newGcpNextHost(env)).toThrow(/OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET/);
   expect(() => newGcpNextHost(env)).not.toThrow(/bootstrap production/);
-  expect(() =>
-    newGcpNextHost({ ...env, OCEL_ISR_WRITER_SECRET: "s", OCEL_ISR_WRITER_URL: "" }),
-  ).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
+  expect(() => newGcpNextHost({ ...env, OCEL_PURGE_SECRET: "s", OCEL_ISR_WRITER_URL: "" })).toThrow(
+    /OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET/,
+  );
 });
 
 test("the GCP host refuses an isr-writer beside a tags database", () => {

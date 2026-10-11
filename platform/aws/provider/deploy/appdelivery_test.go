@@ -61,7 +61,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.PurgeSecret != cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
+	if result.PurgeSecret != cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
 		t.Errorf("PurgeSecret = %q, want the secret the origin signs a purge with and the revalidation writer demands", result.PurgeSecret)
 	}
 }
@@ -101,7 +101,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 	cfg.ISRWriterSeed = "a-seed"
 
 	got := releasing(t, cfg).Secrets(spec)
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

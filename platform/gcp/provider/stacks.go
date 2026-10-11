@@ -620,7 +620,7 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	}
 	result.RouteTableKey = routeTableKey
 	if writer.IsConfigured() {
-		result.PurgeSecret = cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)
+		result.PurgeSecret = cloudflare.DerivePurgeSecret(writer.Seed, spec.App.ISR.Prefix)
 	}
 	return result, nil
 }
@@ -638,5 +638,5 @@ func (p *Provider) readEdgeISRStore(ctx context.Context, spec provider.StackSpec
 			"the %s edge's ISR writer is not adopted, and %s keeps its pages and tags in it: run `%s` again",
 			spec.Edge.Kind(), spec.App.App, provider.BootstrapCommand(spec.Ref.Tier))
 	}
-	return &edgeISRStore{writer: writer, secret: cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)}, nil
+	return &edgeISRStore{writer: writer, secret: cloudflare.DerivePurgeSecret(writer.Seed, spec.App.ISR.Prefix)}, nil
 }
