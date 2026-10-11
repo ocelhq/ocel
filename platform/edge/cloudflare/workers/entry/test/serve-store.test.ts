@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import type { TagTimes } from "../src/purge-times";
 import { Serve } from "../src/serve";
-import { buildOriginCall, ORIGIN_PURGE_SCOPE, RENDER_RELEASE_HEADER } from "../src/serve-key";
+import {
+  buildOriginCall,
+  ORIGIN_PURGE_SCOPE,
+  RENDER_RELEASE_HEADER,
+  SERVE_UNSHARED_HEADER,
+} from "../src/serve-key";
 import { dropTimesMemo } from "../src/store-read";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
 
@@ -49,6 +54,7 @@ function harness(
     originStatus?: number;
     entry?: object | null;
     release?: Record<string, unknown>;
+    call?: Record<string, unknown>;
   } = {},
 ): Harness {
   const pending: Promise<unknown>[] = [];
@@ -88,7 +94,11 @@ function harness(
       OCEL_EDGE_SECRET_KEY: "secretkey",
     } as unknown as Env,
   );
-  const headerValue = JSON.stringify({ ...released, entry: { path: "/blog/a" } });
+  const headerValue = JSON.stringify({
+    ...released,
+    entry: { path: "/blog/a" },
+    ...options.call,
+  });
   const request = (path = "blog/a") =>
     new Request(buildOriginCall(`${FN_URL}${path}`, coordinates).url, {
       headers: { [RENDER_RELEASE_HEADER]: headerValue },
@@ -114,9 +124,11 @@ function harness(
   return harnessed as unknown as Harness & { request: typeof request };
 }
 
-async function seed(entry: object | null): Promise<void> {
-  if (entry) await env.TAG_SNAPSHOT_STORE.put(entryKey, JSON.stringify(entry));
-  else await env.TAG_SNAPSHOT_STORE.delete(entryKey);
+const fallbackKey = `${isrPrefix}/cache/blog/[id].cache.json`;
+
+async function seed(entry: object | null, key = entryKey): Promise<void> {
+  if (entry) await env.TAG_SNAPSHOT_STORE.put(key, JSON.stringify(entry));
+  else await env.TAG_SNAPSHOT_STORE.delete(key);
 }
 
 type Used = Harness & { request: (path?: string) => Request };
@@ -124,6 +136,7 @@ type Used = Harness & { request: (path?: string) => Request };
 beforeEach(async () => {
   dropTimesMemo();
   await seed(null);
+  await seed(null, fallbackKey);
 });
 
 describe("Serve answering a miss from the durable store", () => {
@@ -226,5 +239,87 @@ describe("Serve answering a miss from the durable store", () => {
     const response = await h.fetchOrigin(() => h.serve.fetch(request));
 
     expect(await response.text()).toBe("<html>from the origin</html>");
+  });
+});
+
+describe("Serve answering the fallback shell every param of a route shares", () => {
+  const fallbackEntry = () => ({
+    lastModified: Date.now() - 10_000,
+    value: {
+      kind: "APP_PAGE",
+      status: 200,
+      html: "<html>fallback shell</html>",
+      postponed: "STATE",
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-next-cache-tags": "_N_T_/blog/[id],pprid",
+      },
+    },
+  });
+  const shared = (options: { times?: TagTimes | Error } = {}) =>
+    harness({
+      ...options,
+      call: {
+        sharesFallbackShell: true,
+        entry: { path: "/blog/[id]", fallbackPath: "/blog/[id]" },
+      },
+    }) as Used;
+
+  it("fills it from the deploy-time fallback entry and never asks the origin", async () => {
+    await seed(fallbackEntry(), fallbackKey);
+    const h = shared();
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/[id]")));
+
+    expect(await response.text()).toBe("<html>fallback shell</html>");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(
+      /^max-age=\d+, stale-if-error/,
+    );
+    expect(response.headers.has(SERVE_UNSHARED_HEADER)).toBe(false);
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers Workers Cache's revalidation of it from the store too, never from the origin", async () => {
+    await seed(fallbackEntry(), fallbackKey);
+    const h = shared();
+    const revalidation = h.request("blog/[id]");
+    revalidation.headers.set("if-none-match", 'W/"anything"');
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(revalidation));
+
+    expect(await response.text()).toBe("<html>fallback shell</html>");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers that it is unavailable, and keeps that answer, when there is no fallback entry", async () => {
+    const h = shared();
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/[id]")));
+
+    expect(response.headers.get(SERVE_UNSHARED_HEADER)).toBe("1");
+    expect(response.headers.has("cloudflare-cdn-cache-control")).toBe(true);
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers that it is unavailable, and keeps that answer, once a tag of the fallback was invalidated", async () => {
+    await seed(fallbackEntry(), fallbackKey);
+    const h = shared({ times: { "r1a2b3c4d|pprid": { invalidatedAt: Date.now() } } });
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/[id]")));
+
+    expect(response.headers.get(SERVE_UNSHARED_HEADER)).toBe("1");
+    expect(response.headers.has("cloudflare-cdn-cache-control")).toBe(true);
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers that it is unavailable, without keeping that answer, when the purge queue cannot be reached", async () => {
+    await seed(fallbackEntry(), fallbackKey);
+    const h = shared({ times: new Error("queue unreachable") });
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/[id]")));
+
+    expect(response.headers.get(SERVE_UNSHARED_HEADER)).toBe("1");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(h.originCalls).toEqual([]);
   });
 });

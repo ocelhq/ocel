@@ -17,7 +17,7 @@ import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import { openInBandQueue, openPurgeQueue } from "./purge-request";
 import type { ReleaseRecord } from "./releases";
-import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
+import { BROWSER_REVALIDATES, type CachedResponse, forCache, NOT_STORED } from "./serve-headers";
 import {
   buildEdgeUrl,
   buildOriginUrl,
@@ -30,11 +30,12 @@ import {
   readEdgeEntry,
   readRenderCall,
   SERVE_REFUSED_HEADER,
+  SERVE_UNSHARED_HEADER,
   type ServeProps,
   type StoredEntryCall,
 } from "./serve-key";
 import { type ServeFactory, serveObjects } from "./serve-objects";
-import { readFromStore } from "./store-read";
+import { readFromStore, type StoreAnswer } from "./store-read";
 import { openEntrySource } from "./store-source";
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
@@ -52,12 +53,11 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
     const parsed = JSON.parse(header) as Partial<RenderRelease>;
     if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
-    const originPath = typeof parsed.originPath === "string" ? parsed.originPath : undefined;
     return {
       slug: parsed.slug,
       isrPrefix: parsed.isrPrefix,
       tags,
-      originPath,
+      ...(parsed.sharesFallbackShell === true && { sharesFallbackShell: true }),
       entry: readStoredEntryCall(parsed.entry),
     };
   } catch {
@@ -77,14 +77,6 @@ function readStoredEntryCall(entry: unknown): StoredEntryCall | undefined {
   };
 }
 
-function askedOf(keyedUrl: string, render: RenderRelease): string {
-  const { originPath } = render;
-  if (originPath === undefined || !originPath.startsWith("/") || originPath.startsWith("//")) {
-    return keyedUrl;
-  }
-  return new URL(originPath, keyedUrl).toString();
-}
-
 function isRevalidation(request: Request): boolean {
   return request.headers.has("if-none-match") || request.headers.has("if-modified-since");
 }
@@ -95,6 +87,19 @@ function admitSegment(request: Request, response: Response): Response {
 
 function respondNotStored(status: number, message: string): Response {
   return new Response(message, { status, headers: { "cache-control": NOT_STORED } });
+}
+
+const UNSHARED_KEPT = "s-maxage=31536000";
+
+function respondUnshared(kept: boolean, cached: CachedResponse): Response {
+  const unshared = new Response(null, {
+    status: 404,
+    headers: {
+      "cache-control": kept ? UNSHARED_KEPT : NOT_STORED,
+      [SERVE_UNSHARED_HEADER]: "1",
+    },
+  });
+  return kept ? forCache(unshared, cached) : unshared;
 }
 
 function respondRefused(message: string): Response {
@@ -215,68 +220,80 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
       return respondRefused("the origin is not one of the served release's functions");
     }
-    const render = () =>
-      this.renderAtOrigin(request, {
-        host,
-        release,
-        keyedUrl,
-        originUrl: askedOf(keyedUrl, found.render),
-      });
-    if (isRevalidation(request)) return render();
-    const stored = await this.readStored(request, found.render, release, keyedUrl);
+    const cached = { release, pathname: new URL(keyedUrl).pathname };
+    if (found.render.sharesFallbackShell) {
+      return this.fromFallbackShell(request, found.render, release, cached);
+    }
+    const render = () => this.renderAtOrigin(request, { host, release, keyedUrl });
+    if (isRevalidation(request) || new URL(keyedUrl).search !== "") return render();
+    let stored: StoreAnswer | null = null;
+    try {
+      stored = await this.askStore(request, found.render, release);
+    } catch (error) {
+      console.error("ocel: the durable store was not read; rendering at the origin", error);
+    }
     if (!stored) return render();
-    return forCache(admitSegment(request, stored), {
-      release,
-      pathname: new URL(keyedUrl).pathname,
-    });
+    return forCache(admitSegment(request, stored.response), cached);
   }
 
-  private async readStored(
+  private async fromFallbackShell(
     request: Request,
     render: RenderRelease,
     release: string,
-    keyedUrl: string,
-  ): Promise<Response | undefined> {
-    const { entry } = render;
-    if (!entry || request.method !== "GET" || new URL(keyedUrl).search !== "") return undefined;
-    const source = openEntrySource(this.env);
-    if (!source) return undefined;
+    cached: CachedResponse,
+  ): Promise<Response> {
+    let shell: StoreAnswer | null;
     try {
-      const answer = await readFromStore(
-        {
-          isrPrefix: render.isrPrefix,
-          release,
-          entryPath: entry.path,
-          fallbackPath: entry.fallbackPath,
-          window: { revalidate: entry.revalidate, expire: entry.expire },
-          variant: readRenderCall(request.url).variant,
-          headers: request.headers,
-        },
-        {
-          source,
-          readTimes: (tags) => openPurgeQueue(this.ctx.exports).readTimes(tags),
-          now: Date.now,
-        },
-      );
-      return answer?.response;
+      shell = await this.askStore(request, render, release, true);
     } catch (error) {
-      console.error("ocel: the durable store was not read; rendering at the origin", error);
-      return undefined;
+      console.error("ocel: the durable store was not read for a fallback shell", error);
+      return respondUnshared(false, cached);
     }
+    if (!shell || shell.stale) return respondUnshared(true, cached);
+    return forCache(admitSegment(request, shell.response), cached);
+  }
+
+  private async askStore(
+    request: Request,
+    render: RenderRelease,
+    release: string,
+    sharedShell = false,
+  ): Promise<StoreAnswer | null> {
+    const { entry } = render;
+    if (!entry || request.method !== "GET") return null;
+    const source = openEntrySource(this.env);
+    if (!source) return null;
+    return readFromStore(
+      {
+        isrPrefix: render.isrPrefix,
+        release,
+        entryPath: entry.path,
+        fallbackPath: sharedShell ? undefined : entry.fallbackPath,
+        window: { revalidate: entry.revalidate, expire: entry.expire },
+        variant: readRenderCall(request.url).variant,
+        headers: request.headers,
+        sharedShell,
+      },
+      {
+        source,
+        readTimes: (tags) => openPurgeQueue(this.ctx.exports).readTimes(tags),
+        now: Date.now,
+      },
+    );
   }
 
   private async renderAtOrigin(
     request: Request,
-    call: { host: string; release: string; keyedUrl: string; originUrl: string },
+    call: { host: string; release: string; keyedUrl: string },
   ): Promise<Response> {
-    const { host, release, keyedUrl, originUrl } = call;
+    const { host, release, keyedUrl } = call;
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);
     const originFetch = originFetchFor(this.env) ?? fetch;
     headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(
-      new Request(originUrl, {
+      new Request(keyedUrl, {
         method: request.method,
         headers,
         redirect: "manual",

@@ -77,6 +77,16 @@ async function assertParamsShareTheFallbackShell(ctx: CheckContext): Promise<voi
   assert.equal(marker(alpha, "pprid:id"), "alpha");
   assert.equal(marker(beta, "pprid:id"), "beta");
   assert.equal(
+    marker(alpha, "pprid:param"),
+    "alpha",
+    "/ppr/alpha was answered with another param's shell",
+  );
+  assert.equal(
+    marker(beta, "pprid:param"),
+    "beta",
+    "/ppr/beta was answered with another param's shell",
+  );
+  assert.equal(
     marker(alpha, "pprid:cached"),
     marker(beta, "pprid:cached"),
     "two params the build did not prerender were answered with different shells",
