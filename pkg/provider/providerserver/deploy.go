@@ -656,7 +656,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	r.setEdgeStack(stack)
-	if err := recordPurgeTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
+	if err := recordInvalidationTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
 		return err
 	}
 	if err := r.checkpoint(ctx); err != nil {
