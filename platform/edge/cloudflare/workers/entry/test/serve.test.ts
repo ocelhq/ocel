@@ -9,6 +9,7 @@ import {
   buildServeRequest,
   ORIGIN_PURGE_SCOPE,
   RENDER_RELEASE_HEADER,
+  SERVE_REFUSED_HEADER,
   type ServeProps,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -328,12 +329,76 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 describe("Serve fetching from the origin", () => {
   const originProps: ServeProps = ORIGIN_PURGE_SCOPE;
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-  const originRequest = (path: string) =>
-    new Request(buildOriginCall(`${FN_URL}${path}`, coordinates).url);
-  const originEnv: Partial<Env> = {
+  const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
+  const renderRelease = { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix }) };
+  const originRequest = (path: string, origin = FN_URL) =>
+    new Request(buildOriginCall(`${origin}${path}`, coordinates).url, { headers: renderRelease });
+  const servedRecords = (record: object | null) => ({
+    readServedRecord: async () => (record ? { kind: "record", record } : { kind: "not-served" }),
+  });
+  const originRecord = {
+    app: "web",
+    framework: "next",
+    release: "build-1~fp1",
+    buildId: "build-1",
+    functionUrls: { "/blog": `${FN_URL}stage` },
+    assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
+    isrPrefix,
+    createdAt: 1,
+  };
+  const originEnv = {
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
-  };
+    RELEASES: servedRecords(originRecord),
+  } as unknown as Partial<Env>;
+
+  it("fetches nothing from an origin that is not one of the release's functions", async () => {
+    const wire = s3Answering(
+      () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),
+    );
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(
+        originRequest("blog/a", "https://elsewhere.example/"),
+      ),
+    );
+
+    expect(wire.calls).toEqual([]);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get(SERVE_REFUSED_HEADER)).toBe("1");
+  });
+
+  it("fetches nothing for a call that names no release", async () => {
+    const wire = s3Answering(
+      () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),
+    );
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(
+        new Request(buildOriginCall(`${FN_URL}blog/a`, coordinates).url),
+      ),
+    );
+
+    expect(wire.calls).toEqual([]);
+    expect(response.headers.get(SERVE_REFUSED_HEADER)).toBe("1");
+  });
+
+  it("fetches nothing for a release that is not served, or is not the one the call is keyed under", async () => {
+    for (const record of [null, { ...originRecord, isrPrefix: "prod/p1/web/r9z8y7x6w/isr" }]) {
+      const wire = s3Answering(() => new Response("page"));
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(
+          { ...originEnv, RELEASES: servedRecords(record) } as Partial<Env>,
+          originProps,
+        ).fetch(originRequest("blog/a")),
+      );
+
+      expect(wire.calls).toEqual([]);
+      expect(response.headers.get(SERVE_REFUSED_HEADER)).toBe("1");
+    }
+  });
 
   it("stamps the headers of what the origin answers", async () => {
     const wire = s3Answering(
@@ -363,10 +428,10 @@ describe("Serve fetching from the origin", () => {
       headers: { cookie: "session=1", authorization: "Bearer t", "if-none-match": '"e1"' },
     });
     const call = buildOriginCall(`${FN_URL}blog/a?page=2`, coordinates);
+    const sent = buildServeRequest(call.url, visitor);
+    sent.headers.set(RENDER_RELEASE_HEADER, renderRelease[RENDER_RELEASE_HEADER]);
 
-    await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, call.props).fetch(buildServeRequest(call.url, visitor)),
-    );
+    await withGlobalFetch(wire.fetch, () => serveWith(originEnv, call.props).fetch(sent));
 
     expect(wire.calls).toHaveLength(1);
     expect(wire.calls[0].url).toBe(`${FN_URL}blog/a?page=2`);
@@ -388,7 +453,7 @@ describe("Serve fetching from the origin", () => {
     rehosted.host = "shop.example.com";
 
     await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, call.props).fetch(new Request(rehosted)),
+      serveWith(originEnv, call.props).fetch(new Request(rehosted, { headers: renderRelease })),
     );
 
     expect(wire.calls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a?page=2`]);

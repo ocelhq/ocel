@@ -26,6 +26,8 @@ const EDGE_SOURCE = "edge:";
 
 export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
+export const SERVE_REFUSED_HEADER = "x-ocel-serve-refused";
+
 export interface RenderRelease {
   slug: string;
   isrPrefix: string;

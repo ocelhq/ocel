@@ -25,6 +25,7 @@ import {
   buildVariantPath,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
+  SERVE_REFUSED_HEADER,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 
@@ -178,15 +179,17 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     ? buildEdgeCall(canonicalUrl, coordinates, target.edgeEntryKey)
     : buildOriginCall(canonicalUrl, coordinates);
   const served = buildServeRequest(canonical, forwarded);
-  if (target.edgeEntryKey) {
-    const release: RenderRelease = {
-      slug: serving.slug,
-      isrPrefix: serving.isrPrefix,
-      tags: target.tags ?? [],
-    };
-    served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
-  }
+  const release: RenderRelease = {
+    slug: serving.slug,
+    isrPrefix: serving.isrPrefix,
+    tags: target.edgeEntryKey ? (target.tags ?? []) : [],
+  };
+  served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
   const response = await serving.serve({ props }).fetch(served);
+  if (response.headers.has(SERVE_REFUSED_HEADER)) {
+    await response.body?.cancel();
+    return withStatus(await answer(forwardUncached(headers)), "MISS");
+  }
   const visitor = buildVisitorResponse(response, isSegmentPrefetch(request.headers));
   if (!pprDocument) return visitor;
   const postponed = await readPostponedShell(visitor);
