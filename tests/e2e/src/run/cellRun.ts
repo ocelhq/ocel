@@ -28,6 +28,7 @@ import {
   hasExposure,
   hasPreviews,
   hasReleaseCycle,
+  hasRequestLog,
   hasRestart,
   type PreviewRelease,
   type Target,
@@ -241,6 +242,7 @@ export class CellRun {
       fetch: guard.fetch,
       reach: this.deployment.reach ?? (async (url) => url),
       readExposed: () => this.readExposed(),
+      countOriginRequests: (urlFragment) => this.countOriginRequests(urlFragment),
       runInEnvironment: (command) => this.runInEnvironment(command),
       journeyNonce: this.journeyNonce,
       projectDir: configTree(this, this.target.name),
@@ -271,6 +273,15 @@ export class CellRun {
       `${target.name} has no way to run a command against a deployed environment`,
     );
     return target.runInEnvironment(this, command);
+  }
+
+  private async countOriginRequests(urlFragment: string): Promise<number> {
+    const target = this.target;
+    assert.ok(
+      hasRequestLog(target),
+      `${target.name} has no way to count the requests its origin logged`,
+    );
+    return target.countOriginRequests(this, urlFragment);
   }
 
   private async readExposed(): Promise<string> {

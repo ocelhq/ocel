@@ -52,6 +52,7 @@ import {
   strayStores,
 } from "./memorystore";
 import { gcpSlug, namespaceOf } from "./names";
+import { countOriginRequests } from "./requestLog";
 import {
   ALB_FEATURE,
   accessToken,
@@ -375,6 +376,10 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       await simulateMaintenance(where, store.name);
     }
     return this.deployment(cell, "restart");
+  }
+
+  async countOriginRequests(_cell: CellUnderTest, urlFragment: string): Promise<number> {
+    return countOriginRequests(await this.where(), urlFragment);
   }
 
   async readExposed(cell: CellUnderTest): Promise<string> {

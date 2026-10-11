@@ -464,6 +464,16 @@ describe("the Next cache a cell is held to", () => {
     expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
   });
 
+  it("checks that a Next app behind the load balancer on gcp is served its immutable files by the backend bucket, and no other app", () => {
+    const planned = planOn("gcp", ZONED, EVERY_CELL);
+    const backendBucket = (cell: string) =>
+      titlesOf(planned, cell).filter((title) => title.includes("backend bucket"));
+
+    expect(backendBucket("deploy/next-alb")).not.toEqual([]);
+    expect(backendBucket("deploy/node-alb")).toEqual([]);
+    expect(backendBucket("deploy/next")).toEqual([]);
+  });
+
   it("holds a Next app on aws to the edge's cache", () => {
     const planned = planOn("aws", {}, EVERY_CELL);
     for (const cell of ["deploy/next", "deploy/next-cloudflare", "lifecycle/next"]) {

@@ -88,6 +88,13 @@ fallbacks) and its image config are uploaded at deploy to the tier's Cloud Stora
 the release's storage prefix, and the service reads them from there: its image carries none. A
 service account may read only its own app's files. Removing a release removes them with it.
 
+Behind the `alb` edge, a request for a file under one of the build's immutable prefixes, such as
+`/_next/static/`, never reaches Cloud Run: the load balancer sends it to a backend bucket over the
+tier's bucket, with Cloud CDN caching it, and rewrites the path onto the release's storage prefix.
+A promotion or rollback moves that rewrite to the release it serves. The load balancer's service
+agent may read only the static files of releases in the bucket. A file missing under an immutable
+prefix is a 404 from the bucket, not a request to the service.
+
 Each prerendered page renders on its first request after a deploy and is then served from the
 cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
 next request starts cold. See [Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings).

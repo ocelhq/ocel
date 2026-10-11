@@ -40,6 +40,7 @@ function context(fetch: Fetch): CheckContext {
     fetch,
     reach: async (url) => url,
     readExposed: async () => "",
+    countOriginRequests: async () => 0,
     runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir: "/nonexistent",
