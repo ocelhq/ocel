@@ -1,5 +1,5 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
-import type { BacklogStore } from "../src/purge-backlog";
+import { type BacklogStore, readTagRelease } from "../src/purge-backlog";
 
 interface Pending {
   mode: PurgeMode;
@@ -19,7 +19,6 @@ export interface MemoryBacklogStore extends BacklogStore {
 export function memoryBacklogStore(): MemoryBacklogStore {
   const pending = new Map<string, Pending>();
   const covered = new Map<string, Covered>();
-  let everythingAt: number | undefined;
   let failures = 0;
   let retryAt: number | undefined;
 
@@ -33,7 +32,6 @@ export function memoryBacklogStore(): MemoryBacklogStore {
       const times = [row.purgedAt, row.invalidatedAt].filter((t) => t !== undefined);
       return times.length > 0 ? Math.max(...times) : undefined;
     },
-    readPurgedEverythingAt: () => everythingAt,
     readRetryAt: () => retryAt,
     readFailures: () => failures,
     readOldestRaisedAt() {
@@ -48,6 +46,7 @@ export function memoryBacklogStore(): MemoryBacklogStore {
         .sort(([, a], [, b]) => a.raisedAt - b.raisedAt)
         .slice(0, limit)
         .map(([tag]) => tag),
+    readPendingReleases: () => [...new Set([...pending.keys()].map(readTagRelease))].sort(),
     addPending(mode, tag, raisedAt) {
       const row = pending.get(tag);
       if (!row) {
@@ -70,9 +69,14 @@ export function memoryBacklogStore(): MemoryBacklogStore {
         else waiting.raisedAt = Math.max(waiting.raisedAt, startedAt);
       }
     },
-    settleEverything(startedAt) {
-      everythingAt = startedAt;
+    settleReleases(releases, startedAt) {
+      for (const release of releases) {
+        const row = covered.get(release) ?? {};
+        row.purgedAt = Math.max(row.purgedAt ?? 0, startedAt);
+        covered.set(release, row);
+      }
       for (const [tag, row] of insertionOrder()) {
+        if (!releases.includes(readTagRelease(tag))) continue;
         if (row.latestAt <= startedAt) pending.delete(tag);
         else row.raisedAt = Math.max(row.raisedAt, startedAt);
       }

@@ -11,18 +11,12 @@ import { type MemoryBacklogStore, memoryBacklogStore } from "./purge-backlog-sto
 const START = 1_700_000_000_000;
 
 class FakeServe implements PurgePort {
-  calls: { mode: PurgeMode | "everything"; tags: string[] }[] = [];
+  calls: { mode: PurgeMode; tags: string[] }[] = [];
   refusals: PurgeOutcome[] = [];
   whileCalled: () => void = () => {};
 
   async purgeTags(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
     this.calls.push({ mode, tags });
-    this.whileCalled();
-    return this.refusals.shift() ?? { ok: true };
-  }
-
-  async purgeEverything(): Promise<PurgeOutcome> {
-    this.calls.push({ mode: "everything", tags: [] });
     this.whileCalled();
     return this.refusals.shift() ?? { ok: true };
   }
@@ -297,14 +291,33 @@ describe("the purge backlog backing off error 1134", () => {
 });
 
 describe("the purge backlog escalating after 60 seconds", () => {
-  it("purges everything once the oldest pending raise is older than 60 seconds", async () => {
-    backlog.raise("purge", [raised("r1|a", START)]);
-    backlog.raise("purge", [raised("r1|b", START + 30_000)]);
+  const releasePurge = (...releases: string[]) => ({ mode: "purge", tags: releases });
+
+  it("purges the release of every pending tag once the oldest pending raise is older than 60 seconds", async () => {
+    backlog.raise("purge", [raised("r2|a", START)]);
+    backlog.raise("invalidate", [raised("r1|b", START + 30_000)]);
+    backlog.raise("purge", [raised("r1|c", START + 30_000)]);
     now = START + 60_001;
 
     await backlog.flush();
 
-    expect(serve.calls).toEqual([{ mode: "everything", tags: [] }]);
+    expect(serve.calls).toEqual([releasePurge("r1", "r2")]);
+  });
+
+  it("purges at most 100 releases a call", async () => {
+    const releases = Array.from({ length: 150 }, (_, i) => `r${String(i).padStart(3, "0")}`);
+    backlog.raise(
+      "purge",
+      releases.map((release) => raised(`${release}|a`, START)),
+    );
+    now = START + 61_000;
+
+    await backlog.flush();
+
+    expect(serve.calls).toEqual([
+      releasePurge(...releases.slice(0, 100)),
+      releasePurge(...releases.slice(100)),
+    ]);
   });
 
   it("does not escalate a backlog that is exactly 60 seconds old", async () => {
@@ -313,7 +326,7 @@ describe("the purge backlog escalating after 60 seconds", () => {
 
     await backlog.flush();
 
-    expect(serve.calls.map((call) => call.mode)).toEqual(["purge"]);
+    expect(serve.calls).toEqual([{ mode: "purge", tags: ["r1|a"] }]);
   });
 
   it("drops the backlog after it escalates, so it escalates once", async () => {
@@ -326,10 +339,10 @@ describe("the purge backlog escalating after 60 seconds", () => {
     await backlog.flush();
     await backlog.flush();
 
-    expect(serve.calls).toEqual([{ mode: "everything", tags: [] }]);
+    expect(serve.calls).toEqual([releasePurge("r1")]);
   });
 
-  it("drops a late duplicate of what the escalation cleared", async () => {
+  it("drops a late raise of a tag in a release the escalation cleared", async () => {
     backlog.raise("purge", [raised("r1|a", START)]);
     now = START + 61_000;
     await backlog.flush();
@@ -337,7 +350,21 @@ describe("the purge backlog escalating after 60 seconds", () => {
     backlog.raise("purge", [raised("r1|a", START + 1_000), raised("r1|other", START + 10_000)]);
     await backlog.flush();
 
-    expect(serve.calls).toEqual([{ mode: "everything", tags: [] }]);
+    expect(serve.calls).toEqual([releasePurge("r1")]);
+  });
+
+  it("keeps a late raise of a release the escalation did not purge", async () => {
+    backlog.raise("purge", [raised("r1|a", START)]);
+    now = START + 61_000;
+    serve.whileCalled = () => {
+      serve.whileCalled = () => {};
+      backlog.raise("purge", [raised("r2|b", START + 30_000)]);
+    };
+    await backlog.flush();
+
+    await backlog.flush();
+
+    expect(serve.calls).toEqual([releasePurge("r1"), { mode: "purge", tags: ["r2|b"] }]);
   });
 
   it("keeps a raise made after the escalation began", async () => {
@@ -350,13 +377,10 @@ describe("the purge backlog escalating after 60 seconds", () => {
 
     await backlog.flush();
 
-    expect(serve.calls).toEqual([
-      { mode: "everything", tags: [] },
-      { mode: "purge", tags: ["r1|late"] },
-    ]);
+    expect(serve.calls).toEqual([releasePurge("r1"), { mode: "purge", tags: ["r1|late"] }]);
   });
 
-  it("tries again after the wait when purging everything is itself rate limited", async () => {
+  it("tries again after the wait when purging the releases is itself rate limited", async () => {
     backlog.raise("purge", [raised("r1|a", START)]);
     now = START + 61_000;
     serve.refusals.push(rateLimited);
@@ -365,10 +389,7 @@ describe("the purge backlog escalating after 60 seconds", () => {
     await backlog.flush();
     const next = await backlog.flush();
 
-    expect(serve.calls).toEqual([
-      { mode: "everything", tags: [] },
-      { mode: "everything", tags: [] },
-    ]);
+    expect(serve.calls).toEqual([releasePurge("r1"), releasePurge("r1")]);
     expect(next).toBeUndefined();
   });
 
@@ -384,7 +405,7 @@ describe("the purge backlog escalating after 60 seconds", () => {
       await backlog.flush();
     }
 
-    expect(serve.calls.filter((call) => call.mode === "everything").length).toBeLessThanOrEqual(1);
+    expect(serve.calls.filter((call) => call.tags[0] === "r1").length).toBeLessThanOrEqual(1);
   });
 
   it("escalates a backlog that backing off kept past 60 seconds", async () => {
@@ -396,7 +417,7 @@ describe("the purge backlog escalating after 60 seconds", () => {
 
     await backlog.flush();
 
-    expect(serve.calls).toEqual([{ mode: "everything", tags: [] }]);
+    expect(serve.calls).toEqual([releasePurge("r1")]);
   });
 });
 

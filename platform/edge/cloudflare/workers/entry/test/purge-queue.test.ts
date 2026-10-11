@@ -82,7 +82,6 @@ describe("the PurgeQueue object", () => {
             calls.push(`${mode}:${tags.join(",")}`);
             return limited ? { ok: false, codes: [1134], message: "rate limited" } : { ok: true };
           },
-          purgeEverything: async () => ({ ok: true }),
         };
       });
       await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
@@ -106,7 +105,7 @@ describe("the PurgeQueue object", () => {
     }
   });
 
-  it("purges everything once for a backlog older than 60 seconds, and nothing after", async () => {
+  it("purges the backlog's releases once for a backlog older than 60 seconds, and nothing after", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(1_800_000_000_000);
@@ -116,11 +115,9 @@ describe("the PurgeQueue object", () => {
         instance.serve = {
           purgeTags: async (mode, tags) => {
             calls.push(`${mode}:${tags.join(",")}`);
-            return { ok: false, codes: [1134], message: "rate limited" };
-          },
-          purgeEverything: async () => {
-            calls.push("everything");
-            return { ok: true };
+            return tags.includes("r1")
+              ? { ok: true }
+              : { ok: false, codes: [1134], message: "rate limited" };
           },
         };
       });
@@ -133,7 +130,7 @@ describe("the PurgeQueue object", () => {
       vi.setSystemTime(Date.now() + 10_000);
       await runDurableObjectAlarm(queue);
 
-      expect(calls).toEqual(["purge:r1|a", "everything"]);
+      expect(calls).toEqual(["purge:r1|a", "purge:r1"]);
       await runInDurableObject(queue, async (_instance, state) => {
         expect(await state.storage.getAlarm()).toBeNull();
       });
@@ -160,7 +157,6 @@ describe("the PurgeQueue object", () => {
     await runInDurableObject(queue, async (instance, state) => {
       instance.serve = {
         purgeTags: async () => ({ ok: true }),
-        purgeEverything: async () => ({ ok: true }),
       };
       state.storage.sql.exec("DROP TABLE purged");
     });
@@ -177,18 +173,16 @@ describe("the PurgeQueue object", () => {
 });
 
 describe("the PurgeQueue's port to Serve", () => {
-  it("purges and purges everything through a Serve stub with the props every page is stored under", async () => {
+  it("purges through a Serve stub with the props every page is stored under", async () => {
     const asked: ServeProps[] = [];
     const port = newServePort(({ props }) => {
       asked.push(props);
       return {
         purge: async () => ({ ok: true }) as const,
-        purgeEverything: async () => ({ ok: true }) as const,
       };
     });
 
     await port.purgeTags("purge", ["r1|a"]);
-    await port.purgeEverything();
 
     const stored = buildOriginCall("https://fn.example/blog", {
       host: "shop.example.com",
@@ -196,6 +190,6 @@ describe("the PurgeQueue's port to Serve", () => {
       release: "r1",
       variant: ".rsc",
     }).props;
-    expect(asked).toEqual([stored, stored]);
+    expect(asked).toEqual([stored]);
   });
 });
