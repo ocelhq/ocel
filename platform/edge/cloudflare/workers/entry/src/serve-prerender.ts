@@ -26,6 +26,7 @@ import {
   RENDER_RELEASE_HEADER,
   type RenderRelease,
   SERVE_REFUSED_HEADER,
+  SERVE_UNSHARED_HEADER,
   type StoredEntryCall,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
@@ -102,6 +103,7 @@ function sharesFallbackShell(ctx: PrerenderContext, pprDocument: boolean): boole
   const { resolvedPathname, routePath, target } = ctx;
   return (
     pprDocument &&
+    target.edgeEntryKey === undefined &&
     target.config.partialFallback === true &&
     resolvedPathname !== undefined &&
     routePath !== resolvedPathname &&
@@ -201,29 +203,35 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   if (pprDocument) safeHeaders.set(pprShellHeader, "1");
   const forwarded = forward(request, safeHeaders);
   const concreteUrl = new URL(buildCanonicalUrl(new URL(forwarded.url), target.allowQuery));
-  const sharedShell = sharesFallbackShell(ctx, pprDocument);
-  const canonicalUrl = sharedShell
-    ? withPathname(concreteUrl, ctx.resolvedPathname!).toString()
-    : concreteUrl.toString();
   const coordinates = {
     host: serving.host,
     app: deps.app,
     release: serving.release,
     variant: variant || undefined,
   };
-  const { url: canonical, props } = target.edgeEntryKey
-    ? buildEdgeCall(canonicalUrl, coordinates, target.edgeEntryKey)
-    : buildOriginCall(canonicalUrl, coordinates);
-  const served = buildServeRequest(canonical, forwarded);
-  const release: RenderRelease = {
-    slug: serving.slug,
-    isrPrefix: serving.isrPrefix,
-    tags: target.edgeEntryKey ? (target.tags ?? []) : [],
-    ...(sharedShell && { originPath: concreteUrl.pathname + concreteUrl.search }),
-    ...(!target.edgeEntryKey && { entry: buildStoredEntryCall(ctx, sharedShell) }),
+  const askServe = (sharedShell: boolean) => {
+    const canonicalUrl = sharedShell
+      ? withPathname(concreteUrl, ctx.resolvedPathname!).toString()
+      : concreteUrl.toString();
+    const { url: canonical, props } = target.edgeEntryKey
+      ? buildEdgeCall(canonicalUrl, coordinates, target.edgeEntryKey)
+      : buildOriginCall(canonicalUrl, coordinates);
+    const served = buildServeRequest(canonical, forwarded);
+    const release: RenderRelease = {
+      slug: serving.slug,
+      isrPrefix: serving.isrPrefix,
+      tags: target.edgeEntryKey ? (target.tags ?? []) : [],
+      ...(sharedShell && { sharesFallbackShell: true }),
+      ...(!target.edgeEntryKey && { entry: buildStoredEntryCall(ctx, sharedShell) }),
+    };
+    served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
+    return serving.serve({ props }).fetch(served);
   };
-  served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
-  const response = await serving.serve({ props }).fetch(served);
+  let response = await askServe(sharesFallbackShell(ctx, pprDocument));
+  if (response.headers.has(SERVE_UNSHARED_HEADER)) {
+    await response.body?.cancel();
+    response = await askServe(false);
+  }
   if (response.headers.has(SERVE_REFUSED_HEADER)) {
     await response.body?.cancel();
     return withStatus(await answer(forwardUncached(headers)), "MISS");

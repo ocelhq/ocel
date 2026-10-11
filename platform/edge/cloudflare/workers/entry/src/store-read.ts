@@ -35,6 +35,7 @@ export interface StoreCall {
   window?: StoreWindow;
   variant: string;
   headers: Headers;
+  sharedShell?: boolean;
 }
 
 export interface StoreReadDeps {
@@ -156,6 +157,12 @@ function revalidatesFor(
   return Math.max(1, Math.floor(expire - (now - entry.lastModified) / 1000));
 }
 
+function keptFor(entry: CacheEntryFile, now: number, window: StoreWindow | undefined): number {
+  const revalidate = entry.cacheControl?.revalidate ?? window?.revalidate;
+  if (typeof revalidate !== "number" || revalidate <= 0) return revalidatesFor(entry, now, window);
+  return Math.max(1, Math.floor(revalidate - (now - entry.lastModified) / 1000));
+}
+
 export function storeValidator(entry: CacheEntryFile): string {
   return `W/"ocel-store-${entry.lastModified}"`;
 }
@@ -253,7 +260,9 @@ export async function readFromStore(
   const { body, status, headers } = built;
   headers.set(
     "cache-control",
-    `s-maxage=0, stale-while-revalidate=${revalidatesFor(entry, now, call.window)}`,
+    call.sharedShell
+      ? `s-maxage=${keptFor(entry, now, call.window)}`
+      : `s-maxage=0, stale-while-revalidate=${revalidatesFor(entry, now, call.window)}`,
   );
   headers.set("etag", storeValidator(entry));
   headers.set(edgeCacheTagHeader, tags.join(","));

@@ -1,7 +1,12 @@
 import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
 import { describe, expect, it } from "vitest";
 import { dispatchResult, type RouteDeps } from "../src/index";
-import { buildEdgeUrl, RENDER_RELEASE_HEADER, readEdgeEntry } from "../src/serve-key";
+import {
+  buildEdgeUrl,
+  RENDER_RELEASE_HEADER,
+  readEdgeEntry,
+  SERVE_UNSHARED_HEADER,
+} from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 type Target = Record<string, unknown>;
@@ -455,14 +460,36 @@ describe("the document of a PPR route whose param was not prerendered", () => {
     expect(served.calls[1].request.url).toBe(served.calls[0].request.url);
   });
 
-  it("tells Serve which concrete path to ask the origin for", async () => {
+  it("marks the call as the shared shell, which Serve fills only from the store", async () => {
     const served = fakeServing();
 
     await getParam("42", depsFor(served, { target: fallbackTarget }));
 
-    expect(
-      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").originPath,
-    ).toBe("/blog/42");
+    const release = JSON.parse(
+      served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null",
+    );
+    expect(release.sharesFallbackShell).toBe(true);
+    expect(release).not.toHaveProperty("originPath");
+  });
+
+  it("keys the param by its own path when Serve answers that the shared shell is unavailable", async () => {
+    const served = fakeServing((call) =>
+      new URL(call.request.url).pathname.endsWith("/blog/[id]")
+        ? new Response(null, { status: 404, headers: { [SERVE_UNSHARED_HEADER]: "1" } })
+        : new Response("shell of 42", { headers: { "cf-cache-status": "MISS" } }),
+    );
+
+    const response = await getParam("42", depsFor(served, { target: fallbackTarget }));
+
+    expect(served.calls).toHaveLength(2);
+    expect(new URL(served.calls[1].request.url).pathname.endsWith("/blog/42")).toBe(true);
+    const release = JSON.parse(
+      served.calls[1].request.headers.get(RENDER_RELEASE_HEADER) ?? "null",
+    );
+    expect(release).not.toHaveProperty("sharesFallbackShell");
+    expect(release.entry).toEqual({ path: "/blog/42", fallbackPath: "/blog/[id]" });
+    expect(await response.text()).toBe("shell of 42");
+    expect(response.headers.has(SERVE_UNSHARED_HEADER)).toBe(false);
   });
 
   it("names the shared shell as the entry to answer from", async () => {

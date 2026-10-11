@@ -28,6 +28,8 @@ export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
 export const SERVE_REFUSED_HEADER = "x-ocel-serve-refused";
 
+export const SERVE_UNSHARED_HEADER = "x-ocel-serve-unshared";
+
 export interface StoredEntryCall {
   path: string;
   fallbackPath?: string;
@@ -39,7 +41,7 @@ export interface RenderRelease {
   slug: string;
   isrPrefix: string;
   tags: string[];
-  originPath?: string;
+  sharesFallbackShell?: boolean;
   entry?: StoredEntryCall;
 }
 
