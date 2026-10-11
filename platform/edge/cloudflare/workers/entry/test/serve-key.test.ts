@@ -1,5 +1,13 @@
+import cacheKeyFixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
 import { describe, expect, it } from "vitest";
-import { buildObjectCall, buildOriginCall, buildServeRequest } from "../src/serve-key";
+import {
+  buildCanonicalUrl,
+  buildObjectCall,
+  buildOriginCall,
+  buildServeRequest,
+  variantPath,
+} from "../src/serve-key";
+import { hasDraftCookie } from "../src/serve-prerender";
 
 const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
 
@@ -106,5 +114,135 @@ describe("the request the gateway hands Serve", () => {
 
   it("is a plain GET when no visitor asked", () => {
     expect(buildServeRequest("https://serve.example/").method).toBe("GET");
+  });
+});
+
+describe("the shared cache-key variants", () => {
+  const H = (init?: Record<string, string>) => new Headers(init);
+
+  for (const testCase of cacheKeyFixture.cases) {
+    it(testCase.name, () => {
+      for (const renderingMode of ["STATIC", undefined] as const) {
+        expect(variantPath(testCase.pathname, H(testCase.headers), renderingMode)).toBe(
+          testCase.variantPrerendered,
+        );
+      }
+      expect(variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC")).toBe(
+        testCase.variantPartiallyStatic,
+      );
+
+      const cookie = testCase.draft ? "__prerender_bypass=1" : "other=1";
+      expect(hasDraftCookie(new Request("https://app.example/", { headers: { cookie } }))).toBe(
+        testCase.draft,
+      );
+    });
+  }
+});
+
+describe("variantPath", () => {
+  const H = (init?: Record<string, string>) => new Headers(init);
+
+  it("maps a plain (non-RSC) request to the document pathname", () => {
+    expect(variantPath("/blog", H(), "STATIC")).toBe("/blog");
+  });
+
+  it("maps a segment prefetch to an encoded .segment.rsc path", () => {
+    const h = H({
+      RSC: "1",
+      "next-router-prefetch": "1",
+      "next-router-segment-prefetch": "/blog/__PAGE__",
+    });
+    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe(
+      "/blog.segments/%2Fblog%2F__PAGE__.segment.rsc",
+    );
+  });
+
+  it("maps a full-route prefetch (prefetch: 1, no segment) to .prefetch.rsc", () => {
+    const h = H({ RSC: "1", "next-router-prefetch": "1" });
+    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe("/blog.prefetch.rsc");
+  });
+
+  it("maps bare RSC on a STATIC route to .rsc", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), "STATIC")).toBe("/blog.rsc");
+  });
+
+  it("maps bare RSC to .rsc when the build declared no rendering mode", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), undefined)).toBe("/blog.rsc");
+  });
+
+  it("is non-cacheable for bare RSC on a PPR route (dynamic navigation)", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), "PARTIALLY_STATIC")).toBeNull();
+  });
+
+  it("is non-cacheable for a runtime prefetch (prefetch: 2)", () => {
+    const h = H({ RSC: "1", "next-router-prefetch": "2" });
+    expect(variantPath("/blog", h, "STATIC")).toBeNull();
+  });
+
+  it("folds next-url into a segment prefetch's path so an intercepted and a plain navigation to the same URL cannot collide", () => {
+    const plain = variantPath(
+      "/photo",
+      H({ RSC: "1", "next-router-segment-prefetch": "/children" }),
+      "PARTIALLY_STATIC",
+    );
+    const intercepted = variantPath(
+      "/photo",
+      H({
+        RSC: "1",
+        "next-router-segment-prefetch": "/children",
+        "next-url": "/feed",
+      }),
+      "PARTIALLY_STATIC",
+    );
+
+    expect(plain).not.toBeNull();
+    expect(intercepted).not.toBeNull();
+    expect(plain).not.toBe(intercepted);
+  });
+
+  it("folds next-url into a full-route prefetch and a bare-RSC static path too", () => {
+    const withUrl = H({ RSC: "1", "next-router-prefetch": "1", "next-url": "/feed" });
+    const withoutUrl = H({ RSC: "1", "next-router-prefetch": "1" });
+    expect(variantPath("/photo", withUrl, "PARTIALLY_STATIC")).not.toBe(
+      variantPath("/photo", withoutUrl, "PARTIALLY_STATIC"),
+    );
+
+    const staticWithUrl = H({ RSC: "1", "next-url": "/feed" });
+    const staticWithoutUrl = H({ RSC: "1" });
+    expect(variantPath("/photo", staticWithUrl, "STATIC")).not.toBe(
+      variantPath("/photo", staticWithoutUrl, "STATIC"),
+    );
+  });
+});
+
+describe("the canonical URL of an origin call", () => {
+  const url = (search: string) => new URL(`https://fn.example.com/blog${search}`);
+
+  it("drops query params the route does not allow", () => {
+    expect(buildCanonicalUrl(url("?page=2&ref=x"), [])).toBe("https://fn.example.com/blog");
+  });
+
+  it("keeps allowed query params, ordered by name", () => {
+    expect(buildCanonicalUrl(url("?b=2&a=1"), ["a", "b"])).toBe(
+      "https://fn.example.com/blog?a=1&b=2",
+    );
+  });
+
+  it("keeps every value of an allowed param in the order it came", () => {
+    expect(buildCanonicalUrl(url("?a=2&a=1"), ["a"])).toBe("https://fn.example.com/blog?a=2&a=1");
+  });
+
+  it("keeps all params when the route allows all query", () => {
+    expect(buildCanonicalUrl(url("?b=2&a=1"), undefined)).toBe(
+      "https://fn.example.com/blog?a=1&b=2",
+    );
+  });
+
+  it("strips _rsc even when the route allows all query", () => {
+    expect(buildCanonicalUrl(url("?_rsc=abc123"), undefined)).toBe("https://fn.example.com/blog");
+  });
+
+  it("names a param twice in the allow list once", () => {
+    expect(buildCanonicalUrl(url("?a=1"), ["a", "a"])).toBe("https://fn.example.com/blog?a=1");
   });
 });

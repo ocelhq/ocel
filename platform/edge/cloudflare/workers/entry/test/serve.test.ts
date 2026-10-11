@@ -382,4 +382,82 @@ describe("Serve fetching from the origin", () => {
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
+
+  it("hands the vary it drops to the gateway as x-ocel-vary", async () => {
+    const wire = s3Answering(
+      () =>
+        new Response("page", {
+          headers: { "cache-control": "s-maxage=15", vary: "rsc, next-router-state-tree" },
+        }),
+    );
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(new Request(`${FN_URL}blog/a`)),
+    );
+
+    expect(response.headers.get("x-ocel-vary")).toBe("rsc, next-router-state-tree");
+  });
+
+  describe("an origin response announcing a purge", () => {
+    function serveRaising(raised: { mode: string; tags: { tag: string }[] }[]): {
+      serve: Serve;
+      settled: () => Promise<void>;
+    } {
+      const pending: Promise<unknown>[] = [];
+      const ctx = Object.assign(createExecutionContext(), {
+        props: originProps,
+        waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
+        exports: {
+          PurgeQueue: {
+            getByName: () => ({
+              raise: async (mode: string, tags: { tag: string }[]) => {
+                raised.push({ mode, tags });
+              },
+            }),
+          },
+        },
+      });
+      return {
+        serve: new Serve(ctx as never, { ...originEnv } as Env),
+        settled: async () => void (await Promise.all(pending)),
+      };
+    }
+
+    const announcing = () =>
+      s3Answering(
+        () =>
+          new Response("page", {
+            headers: {
+              "cache-control": "s-maxage=15",
+              "x-ocel-purge": "purge r1a2b3c4d|a invalidate r1a2b3c4d|b",
+            },
+          }),
+      );
+
+    it("never stores the announcement with the page", async () => {
+      const raised: { mode: string; tags: { tag: string }[] }[] = [];
+      const { serve, settled } = serveRaising(raised);
+
+      const response = await withGlobalFetch(announcing().fetch, () =>
+        serve.fetch(new Request(`${FN_URL}blog/a`)),
+      );
+      await settled();
+
+      expect(response.headers.has("x-ocel-purge")).toBe(false);
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=15");
+    });
+
+    it("purges the announced tags behind the response, and queues what the cache cannot take", async () => {
+      const raised: { mode: string; tags: { tag: string }[] }[] = [];
+      const { serve, settled } = serveRaising(raised);
+
+      await withGlobalFetch(announcing().fetch, () => serve.fetch(new Request(`${FN_URL}blog/a`)));
+      await settled();
+
+      expect(raised.map(({ mode, tags }) => [mode, tags.map(({ tag }) => tag)])).toEqual([
+        ["purge", ["r1a2b3c4d|a"]],
+        ["invalidate", ["r1a2b3c4d|b"]],
+      ]);
+    });
+  });
 });

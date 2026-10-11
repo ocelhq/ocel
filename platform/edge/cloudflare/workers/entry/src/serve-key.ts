@@ -53,3 +53,35 @@ export function buildServeRequest(url: string, visitor?: Request): Request {
 export function parseObjectKey(url: string): string {
   return new URL(url).pathname.slice(1).split("/").map(decodeURIComponent).join("/");
 }
+
+export function variantPath(
+  pathname: string,
+  headers: Headers,
+  renderingMode: "STATIC" | "PARTIALLY_STATIC" | undefined,
+): string | null {
+  if (headers.get("RSC") === null) return pathname;
+
+  const nextUrl = headers.get("next-url");
+  const base = nextUrl !== null ? `${pathname}.iu/${encodeURIComponent(nextUrl)}` : pathname;
+
+  const segment = headers.get("next-router-segment-prefetch");
+  if (segment !== null) {
+    return `${base}.segments/${encodeURIComponent(segment)}.segment.rsc`;
+  }
+
+  const prefetch = headers.get("next-router-prefetch");
+  if (prefetch === "1") return `${base}.prefetch.rsc`;
+  if (prefetch !== null) return null;
+
+  return renderingMode === "PARTIALLY_STATIC" ? null : `${base}.rsc`;
+}
+
+export function buildCanonicalUrl(url: URL, allowQuery?: string[]): string {
+  const canonical = new URL(url);
+  canonical.search = "";
+  const names = (allowQuery ?? [...url.searchParams.keys()]).filter((name) => name !== "_rsc");
+  for (const name of [...new Set(names)].sort()) {
+    for (const value of url.searchParams.getAll(name)) canonical.searchParams.append(name, value);
+  }
+  return canonical.toString();
+}

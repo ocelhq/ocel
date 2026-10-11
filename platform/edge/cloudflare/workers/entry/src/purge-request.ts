@@ -115,6 +115,13 @@ export function respondOnControlHost(): Response {
   return reply(404, "Not Found");
 }
 
+export function openPurgeQueue(exports: unknown): PurgeGatewayPorts["queue"] {
+  const queues = (
+    exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
+  ).PurgeQueue;
+  return queues.getByName(PURGE_QUEUE_NAME);
+}
+
 export function answerPurgeOnWorker(
   request: Request,
   env: Pick<Env, "RELEASES" | "OCEL_SLUG">,
@@ -122,12 +129,9 @@ export function answerPurgeOnWorker(
 ): Promise<Response> | Response {
   const slug = env.OCEL_SLUG;
   if (!slug) return reply(404, "Not Found");
-  const queues = (
-    ctx.exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
-  ).PurgeQueue;
   return answerPurge(request, {
     readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),
-    queue: queues.getByName(PURGE_QUEUE_NAME),
+    queue: openPurgeQueue(ctx.exports),
   });
 }
 

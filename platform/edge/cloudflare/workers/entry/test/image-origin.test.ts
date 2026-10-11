@@ -8,7 +8,6 @@ import {
 import { describe, expect, it } from "vitest";
 import type { CacheDeps } from "../src/cache";
 import { serveImage } from "../src/image";
-import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
@@ -36,7 +35,7 @@ function recordingFetch(response: () => Response | Promise<Response>) {
 }
 
 function testCache(): CacheDeps {
-  return coloDeps({ cache: caches.default, now: () => 0, waitUntil: () => {} });
+  return { cache: caches.default, now: () => 0, waitUntil: () => {} };
 }
 
 function serveThrough(

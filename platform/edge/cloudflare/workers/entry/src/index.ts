@@ -8,7 +8,8 @@ import {
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { deploymentImageOrigin, functionUrlImageOrigin } from "@framework/next-router/image";
-import { buildScope, type CacheDeps } from "./cache";
+import { readReleaseToken } from "@platform/edge-contract/purge";
+import type { CacheDeps } from "./cache";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
@@ -17,20 +18,20 @@ import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
-import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
 import {
   answerPurgeOnWorker,
   isControlHost,
   isPurgeRequest,
+  openPurgeQueue,
   respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
-import { revalidationSender } from "./revalidation";
 import { ownRouteTableKey, readRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
 import { type ServeFactory, serveObjects } from "./serve-objects";
-import { invalidateSnapshot } from "./tag-clock";
+import { type Serving, servePrerender } from "./serve-prerender";
+import { newServing, type ServingBase } from "./serving";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
@@ -49,9 +50,9 @@ function withRouterHeader(response: Response): Response {
 }
 
 export interface RouteDeps
-  extends Omit<DispatchDeps, "prerender" | "imageCache" | "onRevalidated" | "hostRequestInit"> {
+  extends Omit<DispatchDeps, "prerender" | "imageCache" | "onPurge" | "hostRequestInit"> {
   cache?: CacheDeps;
-  interception?: InterceptionTier;
+  serving?: Serving;
   imageStore?: ImageStore;
 }
 
@@ -60,26 +61,14 @@ function hostRequestInit(request: Request): HostRequestExtras {
 }
 
 function bound(deps: RouteDeps): DispatchDeps {
-  const { cache, interception, imageStore, ...rest } = deps;
+  const { cache, serving, imageStore, ...rest } = deps;
   return {
     ...rest,
     hostRequestInit,
     imageCache: coloImageCache({ slug: deps.slug, cache, imageStore }),
-    prerender: cache
-      ? coloPrerender({
-          cache,
-          interception,
-          scope: buildScope(deps),
-          basePath: deps.manifest.basePath,
-        })
-      : undefined,
-    onRevalidated: interception ? () => forgetSnapshot(interception) : undefined,
+    prerender: serving ? servePrerender({ serving, app: deps.app }) : undefined,
+    onPurge: serving?.purge,
   };
-}
-
-function forgetSnapshot(tier: InterceptionTier): Promise<void> {
-  const { config, ...clockDeps } = tier;
-  return invalidateSnapshot(config, clockDeps);
 }
 
 export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
@@ -96,16 +85,9 @@ export function dispatchResult(
 
 export type ResolveBase = Omit<
   RouteDeps,
-  | "manifest"
-  | "functionUrls"
-  | "interception"
-  | "assetStore"
-  | "edge"
-  | "slug"
-  | "app"
-  | "appBuildId"
+  "manifest" | "functionUrls" | "serving" | "assetStore" | "edge" | "slug" | "app" | "appBuildId"
 > & {
-  interception?: Omit<InterceptionTier, "config">;
+  serving?: ServingBase;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   imagesAtDeployment?: boolean;
   routeTableStore?: EdgeObjectStore;
@@ -203,12 +185,23 @@ export async function resolveRouteDeps(
   return runtime.routeDeps(served, releases, base);
 }
 
+function servingOf(
+  base: ServingBase | undefined,
+  record: ReleaseRecord,
+  host: string,
+  app: string,
+): Serving | undefined {
+  const release = readReleaseToken(record.isrPrefix);
+  if (!base || release === undefined) return undefined;
+  return newServing(base, { host: host.toLowerCase(), app, release });
+}
+
 function routedDeps(
   { record, routeTable: manifest }: ServedRelease,
   releases: ReleaseLookup,
   base: ResolveBase,
 ): RouteDeps {
-  const { edgeRuntime, imagesAtDeployment, routeTableStore, ...rest } = base;
+  const { edgeRuntime, imagesAtDeployment, routeTableStore, serving, ...rest } = base;
   const { edgeWorkers } = record;
   if (!manifest) {
     throw new Error(`release ${record.release} has no route table to route with`);
@@ -256,10 +249,7 @@ function routedDeps(
         : undefined,
     manifest,
     functionUrls: record.functionUrls,
-    interception: base.interception && {
-      ...base.interception,
-      config: { isrPrefix: record.isrPrefix },
-    },
+    serving: servingOf(serving, record, releases.host, app),
     assetStore: {
       ...base.assetStore,
       assetPrefix: record.assetPrefix,
@@ -354,15 +344,15 @@ export default {
       cache: {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
-        enqueueRevalidation: revalidationSender(env),
       },
-      interception: store
-        ? {
-            store,
-            snapshotCache: caches.default,
-            waitUntil: (promise) => ctx.waitUntil(promise),
-          }
-        : undefined,
+      serving:
+        serve && env.OCEL_PREVIEW !== "1"
+          ? {
+              serve,
+              queue: { raise: (mode, tags) => openPurgeQueue(ctx.exports).raise(mode, tags) },
+              waitUntil: (promise) => ctx.waitUntil(promise),
+            }
+          : undefined,
       edgeRuntime:
         env.LOADER && objects
           ? {

@@ -7,6 +7,7 @@ import type {
 } from "@framework/next-protocol/route-table";
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
+import { type PurgeGroup, purgeHeader, readPurge } from "@platform/edge-contract/purge";
 
 import { type AssetStoreDeps, isImmutablePathname, serveStaticAsset } from "./assets.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
@@ -175,7 +176,7 @@ export interface RouteDeps {
 
   hostRequestInit?: (request: Request) => HostRequestExtras;
 
-  onRevalidated?: () => Promise<void>;
+  onPurge?: (groups: PurgeGroup[], awaited: boolean) => Promise<void>;
 
   keepCacheTags?: boolean;
 }
@@ -588,12 +589,9 @@ export async function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const response = await noteRevalidation(
-    await dispatch(
-      result,
-      new Request(request, { headers: withoutControlHeaders(request.headers) }),
-      deps,
-    ),
+  const response = await dispatch(
+    result,
+    new Request(request, { headers: withoutControlHeaders(request.headers) }),
     deps,
   );
   if (!result.resolvedHeaders && !result.resolvedPathname) return response;
@@ -661,13 +659,6 @@ function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): v
 }
 
 const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
-
-export const OCEL_REVALIDATED = "x-ocel-revalidated";
-
-async function noteRevalidation(response: Response, deps: RouteDeps): Promise<Response> {
-  if (response.headers.has(NEXT_ACTION_REVALIDATED)) await deps.onRevalidated?.();
-  return response;
-}
 
 const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";
 
@@ -1066,14 +1057,16 @@ function originFetch(deps: RouteDeps): typeof fetch {
     const hasCacheTags =
       response.headers.has(NEXT_CACHE_TAGS_HEADER) ||
       (!keepCacheTags && response.headers.has(CACHE_TAG_HEADER));
-    const announced = response.headers.has(OCEL_REVALIDATED);
-    if (!hasCacheTags && !announced) return response;
+    const announced = response.headers.get(purgeHeader);
+    if (!hasCacheTags && announced === null) return response;
 
-    if (announced) await deps.onRevalidated?.();
+    if (announced !== null) {
+      await deps.onPurge?.(readPurge(announced), response.headers.has(NEXT_ACTION_REVALIDATED));
+    }
     const rebuilt = new Response(response.body, response);
     rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
     if (!keepCacheTags) rebuilt.headers.delete(CACHE_TAG_HEADER);
-    rebuilt.headers.delete(OCEL_REVALIDATED);
+    rebuilt.headers.delete(purgeHeader);
     return rebuilt;
   }) as typeof fetch;
 }
