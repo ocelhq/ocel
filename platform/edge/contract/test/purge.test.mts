@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   derivePurgeSecret,
   postPurge,
-  purgeEntryOf,
   purgeSignatureHeader,
+  readPurgeEntry,
   readReleaseToken,
   tagsPerPurgeRequest,
 } from "../src/purge.mjs";
@@ -193,9 +193,11 @@ describe("postPurge", () => {
   );
 });
 
-describe("purgeEntryOf", () => {
+describe("readPurgeEntry", () => {
+  const now = 10_000;
+
   it("reads a tag expired when it was raised as a purge raised then", () => {
-    expect(purgeEntryOf("cart", { expired: 300 })).toEqual({
+    expect(readPurgeEntry("cart", { expired: 300 }, now)).toEqual({
       tag: "cart",
       mode: "purge",
       raisedAt: 300,
@@ -203,7 +205,7 @@ describe("purgeEntryOf", () => {
   });
 
   it("reads a tag stale now and expiring later as an invalidate raised when it went stale", () => {
-    expect(purgeEntryOf("home", { stale: 200, expired: 9_000 })).toEqual({
+    expect(readPurgeEntry("home", { stale: 200, expired: 90_000 }, now)).toEqual({
       tag: "home",
       mode: "invalidate",
       raisedAt: 200,
@@ -211,7 +213,7 @@ describe("purgeEntryOf", () => {
   });
 
   it("reads a tag only marked stale as an invalidate", () => {
-    expect(purgeEntryOf("home", { stale: 200 })).toEqual({
+    expect(readPurgeEntry("home", { stale: 200 }, now)).toEqual({
       tag: "home",
       mode: "invalidate",
       raisedAt: 200,
@@ -219,14 +221,30 @@ describe("purgeEntryOf", () => {
   });
 
   it("reads a tag stale and expired at once as a purge", () => {
-    expect(purgeEntryOf("home", { stale: 200, expired: 200 })).toEqual({
+    expect(readPurgeEntry("home", { stale: 200, expired: 200 }, now)).toEqual({
       tag: "home",
       mode: "purge",
       raisedAt: 200,
     });
   });
 
+  it("reads a tag gone stale and later expired as a purge raised when it expired", () => {
+    expect(readPurgeEntry("home", { stale: 200, expired: 2_000 }, now)).toEqual({
+      tag: "home",
+      mode: "purge",
+      raisedAt: 2_000,
+    });
+  });
+
+  it("reads a tag expired and later gone stale as an invalidate raised when it went stale", () => {
+    expect(readPurgeEntry("home", { stale: 2_000, expired: 200 }, now)).toEqual({
+      tag: "home",
+      mode: "invalidate",
+      raisedAt: 2_000,
+    });
+  });
+
   it("reads a record with neither time as nothing to purge", () => {
-    expect(purgeEntryOf("home", {})).toBeUndefined();
+    expect(readPurgeEntry("home", {}, now)).toBeUndefined();
   });
 });

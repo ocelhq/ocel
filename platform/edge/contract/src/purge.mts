@@ -26,14 +26,17 @@ export interface PurgeSender {
   random?: () => number;
 }
 
-export function purgeEntryOf(tag: string, record: TagRecord): PurgeEntry | undefined {
-  const raisedAt = record.stale ?? record.expired;
-  if (raisedAt === undefined) return undefined;
-  return {
-    tag,
-    mode: record.expired !== undefined && record.expired <= raisedAt ? "purge" : "invalidate",
-    raisedAt,
-  };
+export function readPurgeEntry(
+  tag: string,
+  record: TagRecord,
+  now: number,
+): PurgeEntry | undefined {
+  const { stale, expired } = record;
+  if (expired !== undefined && expired <= now && (stale === undefined || expired >= stale)) {
+    return { tag, mode: "purge", raisedAt: expired };
+  }
+  if (stale === undefined) return undefined;
+  return { tag, mode: "invalidate", raisedAt: stale };
 }
 
 export function readReleaseToken(isrPrefix: string): string | undefined {

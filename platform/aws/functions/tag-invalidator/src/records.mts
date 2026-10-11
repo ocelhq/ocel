@@ -1,6 +1,6 @@
 import { isrPrefixOf } from "@platform/aws-runtime/tag-index";
 
-import { type PurgeEntry, purgeEntryOf } from "@platform/edge-contract/purge";
+import { type PurgeEntry, readPurgeEntry } from "@platform/edge-contract/purge";
 
 type Attribute = { S?: string; N?: string };
 
@@ -30,18 +30,23 @@ function readTimestamp(attr: Attribute | undefined): number | undefined {
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function readWrittenAt(attr: Attribute | undefined): number | undefined {
+  if (attr?.S === undefined || !/^[0-9]+$/.test(attr.S)) return undefined;
+  return Number(attr.S);
+}
+
+function isCoveredBy(other: PurgeEntry, entry: PurgeEntry): boolean {
+  return (
+    entry.tag === other.tag &&
+    (entry.mode === "purge" || entry.mode === other.mode) &&
+    entry.raisedAt >= other.raisedAt
+  );
+}
+
 function mergeEntry(entries: PurgeEntry[], next: PurgeEntry): void {
-  const i = entries.findIndex((entry) => entry.tag === next.tag);
-  const known = entries[i];
-  if (known === undefined) {
-    entries.push(next);
-    return;
-  }
-  entries[i] = {
-    tag: next.tag,
-    mode: known.mode === "purge" || next.mode === "purge" ? "purge" : "invalidate",
-    raisedAt: Math.max(known.raisedAt, next.raisedAt),
-  };
+  if (entries.some((entry) => isCoveredBy(next, entry))) return;
+  const kept = entries.filter((entry) => !isCoveredBy(entry, next));
+  entries.splice(0, entries.length, ...kept, next);
 }
 
 export function coordinateOf(isrPrefix: string): Coordinate | null {
@@ -59,10 +64,11 @@ export function raisesOf(records: readonly StreamRecord[]): Raises {
     const isrPrefix = isrPrefixOf(image.gsi1pk?.S ?? "");
     const tag = image.tag?.S;
     if (isrPrefix === null || tag === undefined || tag === "") continue;
-    const entry = purgeEntryOf(tag, {
-      stale: readTimestamp(image.stale),
-      expired: readTimestamp(image.expired),
-    });
+    const entry = readPurgeEntry(
+      tag,
+      { stale: readTimestamp(image.stale), expired: readTimestamp(image.expired) },
+      readWrittenAt(image.gsi1sk) ?? Date.now(),
+    );
     if (entry === undefined) continue;
 
     const raise: Raise = raises.get(isrPrefix) ?? { tags: [], entries: [], sequenceNumbers: [] };
