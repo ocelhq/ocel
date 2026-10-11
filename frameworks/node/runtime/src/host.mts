@@ -266,8 +266,21 @@ function finishDrainingOnTerm(): void {
   });
 }
 
+export type RequestScope = <T>(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  run: () => T,
+) => T;
+
+let requestScope: RequestScope | undefined;
+
+export function setRequestScope(scope: RequestScope | undefined): void {
+  requestScope = scope;
+}
+
 function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener {
   finishDrainingOnTerm();
+  const scope = requestScope;
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
     const admitted = !trust.guard || trust.guard(req.headers);
@@ -318,7 +331,8 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
           const { admitPreview } = await import("./preview-gate.mjs");
           if (!(await admitPreview(trust.gate, req, reachedHost, res, trust.gateAtEdge))) return;
         }
-        return invoke(req, res, { waitUntil });
+        const run = () => invoke(req, res, { waitUntil });
+        return scope ? scope(req, res, run) : run();
       })
       .catch((err: any) => {
         sendControl("log", { level: "error", message: String(err?.stack || err) });
