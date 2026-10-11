@@ -184,9 +184,21 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 		return &stack{p: p, state: state, own: own}, nil
 	}
+	openedAsDeployed := func(state edge.StackState) (edge.EdgeStack, error) {
+		if spec.PruneOnly {
+			state.PurgeURL = ""
+		} else if state.PurgeURL == "" {
+			workersDev, err := p.subdomainURL(ctx, accountID, program.Name)
+			if err != nil {
+				return nil, fmt.Errorf("read generic worker subdomain: %w", err)
+			}
+			state.PurgeURL = workersDev + purgePath
+		}
+		return opened(state)
+	}
 	upToDate := stamps[program.Name] == stamp
 	if upToDate && p.skipChecks {
-		return opened(prior)
+		return openedAsDeployed(prior)
 	}
 
 	if spec.PruneOnly && program.Name == previewEntryScript {
@@ -214,7 +226,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	if upToDate {
-		return opened(prior)
+		return openedAsDeployed(prior)
 	}
 
 	if spec.PruneOnly {
