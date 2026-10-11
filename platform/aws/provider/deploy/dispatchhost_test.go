@@ -304,7 +304,7 @@ func TestAnOriginBehindACachingEdgeIsToldItsReleaseAndItsCacheRules(t *testing.T
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
 		}
-		if want := edge.CacheRulesVariable(rules); env[edge.CacheRulesVar] != want {
+		if want := edge.EncodeCacheRules(rules); env[edge.CacheRulesVar] != want {
 			t.Errorf("%s = %q behind %s, want %q", edge.CacheRulesVar, env[edge.CacheRulesVar], kind, want)
 		}
 		if _, asked := env[edge.EdgeAsksToCacheVar]; asked != asks {

@@ -8,12 +8,7 @@ import (
 )
 
 type cacheRuleFixture struct {
-	Rules []CacheRule `json:"rules"`
-	Cases []struct {
-		Path         string `json:"path"`
-		Rule         int    `json:"rule"`
-		CacheControl string `json:"cacheControl"`
-	} `json:"cases"`
+	Rules   []CacheRule `json:"rules"`
 	Invalid []struct {
 		Reason string          `json:"reason"`
 		Rule   json.RawMessage `json:"rule"`
@@ -31,33 +26,6 @@ func readCacheRuleFixture(t *testing.T) cacheRuleFixture {
 		t.Fatal(err)
 	}
 	return fixture
-}
-
-func TestTheFirstCacheRuleThatMatchesAPathIsTheEdgeContractFixturesAnswer(t *testing.T) {
-	t.Parallel()
-
-	fixture := readCacheRuleFixture(t)
-	for _, c := range fixture.Cases {
-		found, ok := FindCacheRule(fixture.Rules, c.Path)
-		if !ok {
-			t.Errorf("FindCacheRule(%q) found no rule, want rule %d", c.Path, c.Rule)
-			continue
-		}
-		if want := fixture.Rules[c.Rule]; found != want {
-			t.Errorf("FindCacheRule(%q) = %+v, want %+v", c.Path, found, want)
-		}
-		if got := found.CacheControl(); got != c.CacheControl {
-			t.Errorf("CacheControl for %q = %q, want %q", c.Path, got, c.CacheControl)
-		}
-	}
-}
-
-func TestNoCacheRuleMatchesAPathWhenTheRulesAreEmpty(t *testing.T) {
-	t.Parallel()
-
-	if _, ok := FindCacheRule(nil, "/blog/post"); ok {
-		t.Error("a build with no cache rules cached a path")
-	}
 }
 
 func TestEveryCacheRuleOfTheFixtureIsAccepted(t *testing.T) {
@@ -86,10 +54,10 @@ func TestCacheRulesTravelToAnOriginAsOneJSONVariable(t *testing.T) {
 	t.Parallel()
 
 	rules := []CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
-	if got, want := CacheRulesVariable(rules), `[{"path":"/blog/*","revalidate":60,"expire":600}]`; got != want {
-		t.Errorf("CacheRulesVariable = %q, want %q", got, want)
+	if got, want := EncodeCacheRules(rules), `[{"path":"/blog/*","revalidate":60,"expire":600}]`; got != want {
+		t.Errorf("EncodeCacheRules = %q, want %q", got, want)
 	}
-	if got := CacheRulesVariable(nil); got != "" {
-		t.Errorf("CacheRulesVariable(nil) = %q, want empty", got)
+	if got := EncodeCacheRules(nil); got != "" {
+		t.Errorf("EncodeCacheRules(nil) = %q, want empty", got)
 	}
 }

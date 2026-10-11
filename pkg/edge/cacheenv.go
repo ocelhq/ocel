@@ -13,7 +13,7 @@ func NewCachingOriginEnv(facts Facts, release string, rules []CacheRule) map[str
 	if facts.RunsCode {
 		env[EdgeAsksToCacheVar] = "1"
 	}
-	if declared := CacheRulesVariable(rules); declared != "" {
+	if declared := EncodeCacheRules(rules); declared != "" {
 		env[CacheRulesVar] = declared
 	}
 	return env
