@@ -378,7 +378,11 @@ func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, revision, 
 	if s.recorded.LoadBalancer.Shielded {
 		address = ""
 	}
-	if err := s.e.deps.WarmURL(ctx, "https://"+hostname+path, address); err != nil {
+	cookie, err := s.signGateSession(ctx, hostname)
+	if err != nil {
+		return fmt.Errorf("revision %s of %s: %w", revision, service, err)
+	}
+	if err := s.e.deps.WarmURL(ctx, "https://"+hostname+path, address, cookie); err != nil {
 		return fmt.Errorf("revision %s of %s: %w", revision, service, err)
 	}
 	return nil

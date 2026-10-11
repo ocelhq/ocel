@@ -4,8 +4,10 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -133,6 +135,17 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 		return err
 	}
 	return s.e.publishGates(ctx, gateProof{}, progress.Discard())
+}
+
+func (s *stack) signGateSession(ctx context.Context, hostname string) (string, error) {
+	if !s.isGated() {
+		return "", nil
+	}
+	recorded, gated, err := s.e.readGateRecord(ctx, s.state.Slug)
+	if err != nil || !gated {
+		return "", err
+	}
+	return previewgate.CookieName + "=" + recorded.Gate.SignSession(hostname, time.Now()), nil
 }
 
 func toSet(lists ...[]string) map[string]struct{} {
