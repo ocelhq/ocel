@@ -18,12 +18,14 @@ export interface ServingPorts {
 
 export function newServing(
   ports: ServingPorts,
-  scope: Omit<OriginCoordinates, "variant">,
+  scope: Omit<OriginCoordinates, "variant"> & { slug: string; isrPrefix: string },
 ): Serving {
   return {
     serve: ports.serve,
     host: scope.host,
     release: scope.release,
+    slug: scope.slug,
+    isrPrefix: scope.isrPrefix,
     purge(groups, awaited) {
       const run = purgeInBand(groups, {
         cache: ports.serve({ props: ORIGIN_PURGE_SCOPE }),

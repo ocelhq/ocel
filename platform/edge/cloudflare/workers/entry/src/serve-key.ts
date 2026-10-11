@@ -22,6 +22,16 @@ export interface OriginCoordinates {
 
 const NO_VARIANT = "-";
 
+const EDGE_SOURCE = "edge:";
+
+export const EDGE_RELEASE_HEADER = "x-ocel-edge-release";
+
+export interface EdgeRelease {
+  slug: string;
+  isrPrefix: string;
+  tags: string[];
+}
+
 const ORIGIN_CALL_SEGMENTS = 5;
 
 export interface ServeCall {
@@ -58,14 +68,26 @@ export function buildObjectCall(host: string, key: string): ServeCall {
   };
 }
 
-export function buildOriginCall(originUrl: string, coordinates: OriginCoordinates): ServeCall {
-  const { origin, pathname, search } = new URL(originUrl);
+function buildSourceCall(source: string, url: string, coordinates: OriginCoordinates): ServeCall {
+  const { pathname, search } = new URL(url);
   const { host, app, release, variant } = coordinates;
-  const scope = [host, app, release, origin, variant || NO_VARIANT].map(encodeURIComponent);
+  const scope = [host, app, release, source, variant || NO_VARIANT].map(encodeURIComponent);
   return {
     url: `${SERVE_ORIGIN}/${scope.join("/")}${pathname}${search}`,
     props: ORIGIN_PURGE_SCOPE,
   };
+}
+
+export function buildOriginCall(originUrl: string, coordinates: OriginCoordinates): ServeCall {
+  return buildSourceCall(new URL(originUrl).origin, originUrl, coordinates);
+}
+
+export function buildEdgeCall(
+  publicUrl: string,
+  coordinates: OriginCoordinates,
+  entryKey: string,
+): ServeCall {
+  return buildSourceCall(`${EDGE_SOURCE}${entryKey}`, publicUrl, coordinates);
 }
 
 function splitOriginCall(requestUrl: string): { scope: string[]; rest: string } {
@@ -89,6 +111,16 @@ export function readOriginCall(requestUrl: string): Required<OriginCoordinates> 
 export function buildOriginUrl(requestUrl: string): string {
   const { scope, rest } = splitOriginCall(requestUrl);
   return `${scope[3]}${rest}`;
+}
+
+export function readEdgeEntry(requestUrl: string): string | undefined {
+  const source = splitOriginCall(requestUrl).scope[3];
+  return source.startsWith(EDGE_SOURCE) ? source.slice(EDGE_SOURCE.length) : undefined;
+}
+
+export function buildEdgeUrl(requestUrl: string): string {
+  const { scope, rest } = splitOriginCall(requestUrl);
+  return `https://${scope[0]}${rest}`;
 }
 
 export function buildServeRequest(url: string, visitor?: Request): Request {

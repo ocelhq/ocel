@@ -29,6 +29,8 @@ export function fakeServing(
   const serving: Serving = {
     host: "shop.example.com",
     release: "r0a1b2c3d",
+    slug: "p1",
+    isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
     serve: ({ props }) => ({
       fetch: async (request) => {
         const call = {

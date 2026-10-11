@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import { Serve } from "../src/serve";
 import {
+  buildEdgeCall,
   buildObjectCall,
   buildOriginCall,
   buildServeRequest,
+  EDGE_RELEASE_HEADER,
   ORIGIN_PURGE_SCOPE,
   type ServeProps,
 } from "../src/serve-key";
@@ -478,5 +480,127 @@ describe("Serve fetching from the origin", () => {
         ["invalidate", ["r1a2b3c4d|b"]],
       ]);
     });
+  });
+});
+
+describe("Serve rendering an edge-runtime prerender", () => {
+  const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
+  const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
+  const bundleKey = "prod/p1/web/r1a2b3c4d/edge/bundle.json";
+  const edgeRecord = {
+    app: "web",
+    framework: "next",
+    release: "build-1~fp1",
+    buildId: "build-1",
+    functionUrls: {},
+    assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
+    isrPrefix,
+    createdAt: 1,
+    purgeSecret: "s3cr3t",
+    edgeWorkers: { bundleKey, id: "w1", compatDate: "2026-03-10" },
+  };
+
+  function edgeServe(answer: () => Response, record: object | null = edgeRecord) {
+    const rendered: { entryKey: string; request: Request }[] = [];
+    const served: { slug: string; isrPrefix: string }[] = [];
+    const loader = {
+      get: () => ({
+        getEntrypoint: (_name: unknown, options: { props: { entryKey: string } }) => ({
+          fetch: async (request: Request) => {
+            rendered.push({ entryKey: options.props.entryKey, request });
+            return answer();
+          },
+        }),
+      }),
+    };
+    const releases = {
+      readServedRecord: async (args: { slug: string; isrPrefix: string }) => {
+        served.push(args);
+        return record ? { kind: "record", record } : { kind: "not-served" };
+      },
+    };
+    const ctx = Object.assign(createExecutionContext(), {
+      props: ORIGIN_PURGE_SCOPE,
+      exports: { CacheEntrypoint: () => ({}) },
+    });
+    const serve = new Serve(
+      ctx as never,
+      {
+        LOADER: loader,
+        RELEASES: releases,
+        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+      } as unknown as Env,
+    );
+    return { serve, rendered, served };
+  }
+
+  function edgeRequest(path: string, tags: string[] = ["posts"]): Request {
+    const call = buildEdgeCall(`https://shop.example.com${path}`, coordinates, "app/edge-blog");
+    return new Request(call.url, {
+      headers: {
+        [EDGE_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags }),
+        "x-ocel-entry": "app/edge-blog/page",
+      },
+    });
+  }
+
+  const cacheable = () =>
+    new Response("<html>edge</html>", { headers: { "cache-control": "s-maxage=60" } });
+
+  it("renders the entry through the release's edge bundle at the public URL", async () => {
+    const { serve, rendered, served } = edgeServe(cacheable);
+
+    const response = await serve.fetch(edgeRequest("/blog?page=2"));
+
+    expect(served).toEqual([{ slug: "p1", isrPrefix }]);
+    expect(rendered.map(({ entryKey }) => entryKey)).toEqual(["app/edge-blog"]);
+    expect(rendered[0].request.url).toBe("https://shop.example.com/blog?page=2");
+    expect(rendered[0].request.headers.has(EDGE_RELEASE_HEADER)).toBe(false);
+    expect(rendered[0].request.headers.get("x-ocel-entry")).toBe("app/edge-blog/page");
+    expect(await response.text()).toBe("<html>edge</html>");
+  });
+
+  it("stores the render under the release, its path and the route's tags", async () => {
+    const { serve } = edgeServe(cacheable);
+
+    const response = await serve.fetch(edgeRequest("/blog", ["posts", "authors"]));
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=60");
+    expect(response.headers.get("cache-tag")?.split(",")).toEqual([
+      "r1a2b3c4d",
+      "r1a2b3c4d|path:/blog",
+      "r1a2b3c4d|posts",
+      "r1a2b3c4d|authors",
+    ]);
+  });
+
+  it("stores nothing the edge render did not mark storable", async () => {
+    const { serve } = edgeServe(() => new Response("<html>edge</html>"));
+
+    const response = await serve.fetch(edgeRequest("/blog"));
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("renders nothing for a release that is no longer served", async () => {
+    const { serve, rendered } = edgeServe(cacheable, null);
+
+    const response = await serve.fetch(edgeRequest("/blog"));
+
+    expect(rendered).toEqual([]);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("renders nothing from a record of another release than the one it is keyed under", async () => {
+    const { serve, rendered } = edgeServe(cacheable, {
+      ...edgeRecord,
+      isrPrefix: "prod/p1/web/r9z8y7x6w/isr",
+    });
+
+    const response = await serve.fetch(edgeRequest("/blog"));
+
+    expect(rendered).toEqual([]);
+    expect(response.status).toBe(503);
   });
 });
