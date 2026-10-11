@@ -276,7 +276,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read for a PPR shell", error);
     }
     if (!shell) return respondNoShell();
-    if (shell.stale && isRevalidation(request)) {
+    if ((shell.stale || shell.fallback) && isRevalidation(request)) {
       const regenerating = call
         .render()
         .then((regenerated) => regenerated.body?.pipeTo(new WritableStream()))

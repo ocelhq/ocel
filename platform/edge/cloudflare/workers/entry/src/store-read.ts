@@ -45,6 +45,7 @@ export interface StoreReadDeps {
 export interface StoreAnswer {
   response: Response;
   stale: boolean;
+  fallback: boolean;
 }
 
 type Verdict = "fresh" | "stale" | "purged" | "expired";
@@ -82,15 +83,22 @@ function suitsRequest(entry: CacheEntryFile, call: StoreCall): boolean {
   return segment === null || hasSegment(entry.value, segment);
 }
 
-async function findEntry(deps: StoreReadDeps, call: StoreCall): Promise<CacheEntryFile | null> {
+interface FoundEntry {
+  entry: CacheEntryFile;
+  fallback: boolean;
+}
+
+async function findEntry(deps: StoreReadDeps, call: StoreCall): Promise<FoundEntry | null> {
   const concrete = await readEntry(deps, call, call.entryPath);
-  if (concrete && suitsRequest(concrete, call)) return concrete;
-  if (call.fallbackPath === undefined || call.fallbackPath === call.entryPath) return concrete;
+  const own = concrete && { entry: concrete, fallback: false };
+  if (concrete && suitsRequest(concrete, call)) return own;
+  if (call.fallbackPath === undefined || call.fallbackPath === call.entryPath) return own;
   const fallback = await readEntry(deps, call, call.fallbackPath);
-  if (!fallback) return concrete;
+  if (!fallback) return own;
+  const shared = { entry: fallback, fallback: true };
   const segment = segmentOf(call.headers);
-  if (segment !== null) return hasSegment(fallback.value, segment) ? fallback : concrete;
-  return fallback.value.postponed === undefined ? concrete : fallback;
+  if (segment !== null) return hasSegment(fallback.value, segment) ? shared : own;
+  return fallback.value.postponed === undefined ? own : shared;
 }
 
 function judge(
@@ -212,8 +220,9 @@ export async function readFromStore(
   const prefetch = call.headers.get("next-router-prefetch");
   if (prefetch === "2" || prefetch === "3") return null;
 
-  const entry = await findEntry(deps, call);
-  if (!entry) return null;
+  const found = await findEntry(deps, call);
+  if (!found) return null;
+  const { entry } = found;
 
   const rawTags = tagsOf(entry.value, {});
   const { tags, unstorable } = storedCacheTags(call.release, rawTags);
@@ -238,5 +247,5 @@ export async function readFromStore(
   headers.set("etag", storeValidator(entry));
   headers.set(edgeCacheTagHeader, tags.join(","));
   headers.set(ENTRY_SOURCE_HEADER, stale ? "stale-store" : "store");
-  return { response: new Response(body, { status, headers }), stale };
+  return { response: new Response(body, { status, headers }), stale, fallback: found.fallback };
 }
