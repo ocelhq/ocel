@@ -69,6 +69,20 @@ func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	}
 }
 
+func TestAPreviewTiersLoadBalancerCachesAndServesStaticFilesFromABackendBucketLikeProduction(t *testing.T) {
+	t.Parallel()
+
+	balancer := ShapeLoadBalancer(environment.TierPreview, "preview.example.com")
+	if shapedCounts(balancer)[tfBackendBucket] != 1 {
+		t.Errorf("the preview tier's balancer shape lists %v, want the assets backend bucket production has", shapedCounts(balancer))
+	}
+	for _, shaped := range ShapeHosts("shop", environment.TierPreview, []string{"pr-7.preview.example.com"}) {
+		if shaped.Type == tfBackendService && shaped.Properties["enable_cdn"] != true {
+			t.Errorf("%s = %v, want Cloud CDN on: a preview is cached like production", shaped.Name, shaped.Properties)
+		}
+	}
+}
+
 func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 	t.Parallel()
 

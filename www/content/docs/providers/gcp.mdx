@@ -122,6 +122,11 @@ prints. No edge runs the preview gate for it, so the service runs the gate itsel
 the app, whenever the project has preview gate keys recorded; without them the URL answers
 anyone who knows it, and the deploy says so.
 
+A preview answered by the load balancer is cached like production, so a project with preview
+gate keys recorded is refused there: the load balancer runs no gate, and the service does not
+either, because a cached response the gate admitted would be served to anyone. Gate previews
+through an edge that runs the gate, or serve them from the service's own URL.
+
 A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
 provisions one global external Application Load Balancer per tier — one address, one
 certificate map, one URL map, Cloud CDN on every backend — and every project in that tier
