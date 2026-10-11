@@ -182,6 +182,33 @@ describe("an origin behind the Cloudflare gateway", () => {
     );
   });
 
+  test("names a path outside ASCII by the pathname the edge tags it with", async () => {
+    const get = await serve(behindCloudflare, (req, res) => {
+      if (req.method === "POST") cacheHost().revalidatePath("/blog/café");
+      page(req, res);
+    });
+
+    const read = await get("/blog/café", { headers: asked });
+    const write = await get("/api/publish", { method: "POST" });
+
+    expect(read.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|path:/blog/caf%C3%A9");
+    expect(write.headers.get("x-ocel-purge")).toBe("purge r0a1b2c3d|path:/blog/caf%C3%A9");
+  });
+
+  test("warns when it revalidates a tag no edge can store", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const get = await serve(behindCloudflare, (req, res) => {
+      cacheHost().revalidateTag("two words", "expire");
+      res.writeHead(200);
+      res.end();
+    });
+
+    const res = await get("/api/publish", { method: "POST" });
+
+    expect(res.headers.has("x-ocel-purge")).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/two words/));
+  });
+
   test("announces a raise on a request the gateway did not ask to cache", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
       cacheHost().revalidateTag("posts", "expire");
