@@ -33,22 +33,23 @@ func removeInvalidationTarget(targets []string, url string) []string {
 }
 
 func recordInvalidationTarget(ctx context.Context, store keyvalue.Store, tier environment.Tier, kind edge.Kind, slug, previous, current string) error {
-	if previous != "" && previous != current {
-		if err := forgetInvalidationTarget(ctx, store, tier, kind, slug, previous); err != nil {
-			return err
-		}
-	}
 	if current == "" {
-		return nil
+		return forgetInvalidationTarget(ctx, store, tier, kind, slug, previous)
 	}
 	return keyvalue.Change(ctx, store, buildInvalidationTargetsKey(tier, kind, slug), func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
-		if err != nil || slices.Contains(targets, current) {
+		if err != nil {
 			return nil, false, err
 		}
-		targets = append(targets, current)
-		slices.Sort(targets)
-		value, err := json.Marshal(targets)
+		kept := removeInvalidationTarget(targets, previous)
+		if !slices.Contains(kept, current) {
+			kept = append(kept, current)
+		}
+		slices.Sort(kept)
+		if slices.Equal(kept, targets) {
+			return nil, false, nil
+		}
+		value, err := json.Marshal(kept)
 		return value, true, err
 	})
 }
