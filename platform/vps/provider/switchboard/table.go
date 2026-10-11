@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -33,13 +34,14 @@ const (
 var storeAdminPaths = []string{"/rustfs", "/health"}
 
 type Table struct {
-	grace     time.Duration
-	answering map[string]answer
-	connector string
-	routed    map[string]bool
-	admitted  map[string]bool
-	tunneled  TunneledHostnames
-	visitor   visitorHeaders
+	grace        time.Duration
+	answering    map[string]answer
+	connector    string
+	routed       map[string]bool
+	admitted     map[string]bool
+	tunneled     TunneledHostnames
+	visitor      visitorHeaders
+	previewGates map[string]*previewgate.Gate
 }
 
 type visitorHeaders struct {
@@ -48,13 +50,15 @@ type visitorHeaders struct {
 }
 
 type answer struct {
-	upstream string
-	store    bool
+	upstream    string
+	store       bool
+	previewGate *previewgate.Gate
 }
 
 type Forward struct {
-	Upstream string
-	Strip    string
+	Upstream    string
+	Strip       string
+	PreviewGate *previewgate.Gate
 }
 
 type claim struct {
@@ -97,16 +101,22 @@ type pin struct {
 }
 
 type writtenTable struct {
-	Grace       string     `json:"grace"`
-	Claims      []claim    `json:"claims,omitempty"`
-	Routes      []route    `json:"routes,omitempty"`
-	Pins        []pin      `json:"pins,omitempty"`
-	Shields     []shield   `json:"shields,omitempty"`
-	PreviewBase string     `json:"preview,omitempty"`
-	Connector   string     `json:"connector,omitempty"`
-	Tunneled    []tunneled `json:"tunneled,omitempty"`
-	Tunnel      *tunnel    `json:"tunnel,omitempty"`
-	Retired     []tunnel   `json:"retired,omitempty"`
+	Grace        string        `json:"grace"`
+	Claims       []claim       `json:"claims,omitempty"`
+	Routes       []route       `json:"routes,omitempty"`
+	Pins         []pin         `json:"pins,omitempty"`
+	Shields      []shield      `json:"shields,omitempty"`
+	PreviewBase  string        `json:"preview,omitempty"`
+	Connector    string        `json:"connector,omitempty"`
+	Tunneled     []tunneled    `json:"tunneled,omitempty"`
+	Tunnel       *tunnel       `json:"tunnel,omitempty"`
+	Retired      []tunnel      `json:"retired,omitempty"`
+	PreviewGates []previewGate `json:"previewGates,omitempty"`
+}
+
+type previewGate struct {
+	Owner       string           `json:"owner"`
+	PreviewGate previewgate.Gate `json:"previewGate"`
 }
 
 type tunneled struct {
@@ -161,6 +171,16 @@ func Read(document []byte) (*Table, error) {
 				held.Hostname, held.Owner, len(held.ClientCAs))
 		}
 	}
+	previewGates := map[string]*previewgate.Gate{}
+	for _, held := range read.PreviewGates {
+		if held.Owner == "" || held.PreviewGate.Key == "" {
+			return nil, fmt.Errorf("a preview gate is incomplete: surface %q, key held: %t", held.Owner, held.PreviewGate.Key != "")
+		}
+		if _, twice := previewGates[held.Owner]; twice {
+			return nil, fmt.Errorf("%s holds more than one preview gate", held.Owner)
+		}
+		previewGates[held.Owner] = &held.PreviewGate
+	}
 	routes := slices.SortedFunc(slices.Values(read.Routes), byIdentity)
 	running := map[surfaceKey][]string{}
 	for at, appRoute := range routes {
@@ -181,11 +201,12 @@ func Read(document []byte) (*Table, error) {
 		}
 	}
 	table := &Table{
-		grace:     grace,
-		answering: map[string]answer{},
-		connector: read.Connector,
-		routed:    map[string]bool{},
-		admitted:  map[string]bool{},
+		grace:        grace,
+		answering:    map[string]answer{},
+		connector:    read.Connector,
+		routed:       map[string]bool{},
+		admitted:     map[string]bool{},
+		previewGates: previewGates,
 	}
 	hostnames := make([]string, 0, len(read.Tunneled))
 	for _, held := range read.Tunneled {
@@ -231,7 +252,11 @@ func Read(document []byte) (*Table, error) {
 					hostname, first.identity(), appRoute.identity())
 			}
 			answeredBy[hostname] = appRoute
-			table.answering[hostname] = answer{upstream: appRoute.Upstream, store: !appRoute.app()}
+			answered := answer{upstream: appRoute.Upstream, store: !appRoute.app()}
+			if appRoute.app() {
+				answered.previewGate = previewGates[appRoute.Owner]
+			}
+			table.answering[hostname] = answered
 		}
 		table.routed[appRoute.Upstream] = true
 	}
@@ -341,7 +366,7 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 	}) {
 		return Forward{}, false
 	}
-	return Forward{Upstream: answered.upstream}, true
+	return Forward{Upstream: answered.upstream, PreviewGate: answered.previewGate}, true
 }
 
 func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }

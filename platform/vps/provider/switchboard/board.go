@@ -228,6 +228,10 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer hangUp()
+	keepPreviewPrivate, passed := answerPreviewGate(w, r, forward.PreviewGate, named)
+	if !passed {
+		return
+	}
 	transport, host := b.tcp, forward.Upstream
 	if forward.Upstream == connectorDial {
 		transport, host = b.socket, connectorHost
@@ -251,10 +255,12 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		FlushInterval: -1,
 		ModifyResponse: func(answer *http.Response) error {
 			named(answer.Header)
+			keepPreviewPrivate(answer.Header)
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			named(w.Header())
+			keepPreviewPrivate(w.Header())
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
