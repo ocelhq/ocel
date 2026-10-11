@@ -163,3 +163,74 @@ export async function checkRefusedWithoutIdentity(
   }
   return seen;
 }
+
+export type PreviewGateCredentials = { password: string; bypassSecret: string };
+
+const GATE_LOGIN_PATH = "/.ocel/preview/login";
+const GATE_BASIC_USER = "ocel";
+
+async function requireGateRefusal(clock: Clock, url: string): Promise<void> {
+  const answered = await clock.fetch(url, { redirect: "manual" });
+  const body = await answered.text();
+  if (answered.status !== 401 || body.includes("data-ocel=")) {
+    throw new Error(
+      `${url} answered ${answered.status} to a request without credentials, want 401 and no page`,
+    );
+  }
+  if (answered.headers.get("cache-control") !== "private, no-store") {
+    throw new Error(
+      `${url} refused a request without credentials with cache-control "${answered.headers.get("cache-control")}", want "private, no-store"`,
+    );
+  }
+}
+
+async function requireGateServing(
+  clock: Clock,
+  url: string,
+  id: string,
+  how: string,
+  init: RequestInit,
+): Promise<void> {
+  const answered = await clock.fetch(url, { ...init, redirect: "manual" });
+  const body = await answered.text();
+  const found = answered.status === 200 ? markerOrNone(body, DEPLOYMENT_MARKER) : undefined;
+  if (found !== id) {
+    throw new Error(
+      `${url} answered ${answered.status} to a request with ${how}, want build ${id}`,
+    );
+  }
+  if (answered.headers.get("x-robots-tag") !== "noindex") {
+    throw new Error(`${url} served a request with ${how} without X-Robots-Tag: noindex`);
+  }
+}
+
+export async function checkPreviewGate(
+  clock: Clock,
+  release: PreviewRelease,
+  credentials: PreviewGateCredentials,
+): Promise<void> {
+  const url = `${release.deploymentUrl}${DEPLOYMENT_PATH}`;
+  await requireGateRefusal(clock, url);
+  await requireGateServing(clock, url, release.buildId, "Basic credentials", {
+    headers: { authorization: `Basic ${btoa(`${GATE_BASIC_USER}:${credentials.password}`)}` },
+  });
+  await requireGateServing(clock, url, release.buildId, "the bypass header", {
+    headers: { "x-ocel-preview-bypass": credentials.bypassSecret },
+  });
+  const login = await clock.fetch(`${release.deploymentUrl}${GATE_LOGIN_PATH}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ password: credentials.password, next: DEPLOYMENT_PATH }),
+    redirect: "manual",
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";", 1)[0];
+  if (login.status !== 303 || !cookie.startsWith("__Host-ocel-preview=")) {
+    throw new Error(
+      `${release.deploymentUrl}${GATE_LOGIN_PATH} answered ${login.status} to the password, want 303 with the session cookie`,
+    );
+  }
+  await requireGateServing(clock, url, release.buildId, "the session cookie", {
+    headers: { cookie },
+  });
+  await requireGateRefusal(clock, url);
+}

@@ -3,6 +3,7 @@ import type { PreviewRelease } from "../targets/types";
 import {
   type Clock,
   checkOwnReleases,
+  checkPreviewGate,
   checkPruned,
   checkRefusedWithoutIdentity,
   PREVIEW_TITLES,
@@ -124,5 +125,80 @@ describe("checkRefusedWithoutIdentity", () => {
 
     const open = clockOf(() => serving("A"));
     await expect(checkRefusedWithoutIdentity(open, [release("A")])).rejects.toThrow(/200/);
+  });
+});
+
+describe("checkPreviewGate", () => {
+  const credentials = { password: "pw", bypassSecret: "bp" };
+  const noindex = { "x-robots-tag": "noindex" };
+  const refusal = () =>
+    new Response("<form></form>", {
+      status: 401,
+      headers: { "cache-control": "private, no-store", ...noindex },
+    });
+  const served = (id: string) => new Response(page(id), { headers: noindex });
+
+  function gatedClock(
+    id: string,
+    accepts: { cookie?: boolean; basic?: boolean; bypass?: boolean } = {},
+  ): Clock {
+    const { cookie = true, basic = true, bypass = true } = accepts;
+    return {
+      fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        if (init?.method === "POST") {
+          return new Response(null, {
+            status: 303,
+            headers: { location: "/", "set-cookie": "__Host-ocel-preview=1.ab; Path=/" },
+          });
+        }
+        const sentCookie = headers.get("cookie")?.startsWith("__Host-ocel-preview=");
+        const sentBasic = headers.get("authorization") === `Basic ${btoa("ocel:pw")}`;
+        const sentBypass = headers.get("x-ocel-preview-bypass") === "bp";
+        if ((sentCookie && cookie) || (sentBasic && basic) || (sentBypass && bypass)) {
+          return served(id);
+        }
+        return refusal();
+      }) as typeof fetch,
+      sleep: async () => {},
+      now: () => 0,
+    };
+  }
+
+  it("passes when credentials are refused, and each of cookie, Basic and bypass serves the page", async () => {
+    await checkPreviewGate(gatedClock("A"), release("A"), credentials);
+  });
+
+  it("fails when a request without credentials is served", async () => {
+    await expect(
+      checkPreviewGate(
+        clockOf(() => served("A")),
+        release("A"),
+        credentials,
+      ),
+    ).rejects.toThrow(/answered 200 to a request without credentials/);
+  });
+
+  it("fails when a refusal may be cached", async () => {
+    const clock = clockOf(() => new Response("", { status: 401 }));
+    await expect(checkPreviewGate(clock, release("A"), credentials)).rejects.toThrow(/no-store/);
+  });
+
+  it("fails when Basic credentials are not accepted", async () => {
+    await expect(
+      checkPreviewGate(gatedClock("A", { basic: false }), release("A"), credentials),
+    ).rejects.toThrow(/Basic/);
+  });
+
+  it("fails when the bypass header is not accepted", async () => {
+    await expect(
+      checkPreviewGate(gatedClock("A", { bypass: false }), release("A"), credentials),
+    ).rejects.toThrow(/bypass/);
+  });
+
+  it("fails when the session cookie a login returned is not accepted", async () => {
+    await expect(
+      checkPreviewGate(gatedClock("A", { cookie: false }), release("A"), credentials),
+    ).rejects.toThrow(/cookie/);
   });
 });
