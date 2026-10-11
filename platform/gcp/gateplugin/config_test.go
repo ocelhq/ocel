@@ -133,3 +133,29 @@ func TestAConfigIsPlainLinesSoItStaysSmallAndReadable(t *testing.T) {
 		t.Errorf("the config carries JSON syntax: %q", text)
 	}
 }
+
+func TestAConfigErrorNamesTheLineAndFieldButNeverWhatTheyHold(t *testing.T) {
+	t.Parallel()
+
+	const secret = "s3cret-gate-key"
+	for name, text := range map[string]string{
+		"an unknown line":             "ocel-preview-gate 1\nz " + secret + "\n",
+		"a short gate":                "ocel-preview-gate 1\ng shop " + secret + "\n",
+		"a bad escape in the key":     "ocel-preview-gate 1\ng shop " + secret + "%zz mac - -\n",
+		"a truncated bypass secret":   "ocel-preview-gate 1\ng shop key mac " + secret + "% -\n",
+		"a bad escape in a host line": "ocel-preview-gate 1\nh " + secret + "%z shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := gateplugin.ParseConfig(text)
+			if err == nil {
+				t.Fatalf("ParseConfig(%q) accepted it", text)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("ParseConfig error %q carries what the config holds, and the plugin logs it", err)
+			}
+			if !strings.Contains(err.Error(), "line 2") {
+				t.Errorf("ParseConfig error %q does not name the line it refused", err)
+			}
+		})
+	}
+}
