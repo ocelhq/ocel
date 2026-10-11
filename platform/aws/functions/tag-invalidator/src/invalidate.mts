@@ -174,14 +174,13 @@ async function purgeCloudflareTargets(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   urls: readonly string[],
-  coordinate: { release: string; isrPrefix: string },
+  isrPrefix: string,
   raise: Raise,
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
-  const { release, isrPrefix } = coordinate;
   const secret = derivePurgeSecret(await readSeed(), isrPrefix);
   await settleEvery(
-    urls.map((url) => postPurge(inv.cloudflare!, url, secret, release, raise.entries)),
+    urls.map((url) => postPurge(inv.cloudflare!, url, secret, isrPrefix, raise.entries)),
     "some Cloudflare targets refused this purge",
   );
 }
@@ -196,7 +195,7 @@ async function invalidateOne(
   await settleEvery(
     [
       invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
-      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate, raise),
+      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate.isrPrefix, raise),
     ],
     "some fronts refused this invalidation",
   );

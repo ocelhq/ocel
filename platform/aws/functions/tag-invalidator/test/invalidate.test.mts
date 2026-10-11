@@ -369,7 +369,7 @@ describe("the Cloudflare target", () => {
     const sent = workers.sent[0]!;
     expect(sent.url).toBe(PURGE_URL);
     expect(sent.body).toEqual({
-      release: RELEASE,
+      isrPrefix: PREFIX,
       mode: "purge",
       tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
     });
@@ -403,11 +403,11 @@ describe("the Cloudflare target", () => {
 
     await invalidateAll(cloudflareInvalidator(), both);
 
-    expect(workers.sent.map((sent) => `${sent.body.release} ${sent.url}`).sort()).toEqual([
-      `r0a1b2c3d ${PURGE_URL}`,
-      "r0a1b2c3d https://acme-staging.sub.workers.dev/.ocel/purge",
-      `r1111111a ${PURGE_URL}`,
-      "r1111111a https://acme-staging.sub.workers.dev/.ocel/purge",
+    expect(workers.sent.map((sent) => `${sent.body.isrPrefix} ${sent.url}`).sort()).toEqual([
+      `prod/acme/api/r1111111a/isr ${PURGE_URL}`,
+      "prod/acme/api/r1111111a/isr https://acme-staging.sub.workers.dev/.ocel/purge",
+      `${PREFIX} ${PURGE_URL}`,
+      `${PREFIX} https://acme-staging.sub.workers.dev/.ocel/purge`,
     ]);
     expect(seedReads).toBe(1);
   });

@@ -1,13 +1,20 @@
 import { createExecutionContext } from "cloudflare:test";
-import type { PurgeMode } from "@platform/edge-contract/purge";
-import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
+import {
+  derivePurgeSecret,
+  type PurgeMode,
+  postPurge,
+  purgePath,
+  purgeSignatureHeader,
+} from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
 import type { PointerRecordResult, ReleasesBinding } from "../src/releases";
 import { makeRecord } from "./origin-deps";
 
-const SECRET = "feed".repeat(16);
+const SEED = "seed-1";
+const ISR_PREFIX = "production/p1/web/r0a1b2c3d/isr";
+const SECRET = derivePurgeSecret(SEED, ISR_PREFIX);
 const WORKERS_DEV = "https://web.acct.workers.dev";
 
 async function sign(body: string): Promise<string> {
@@ -32,14 +39,14 @@ async function purgeRequest(base: string, body: unknown = raise): Promise<Reques
 }
 
 const raise = {
-  release: "deploy-1",
+  isrPrefix: ISR_PREFIX,
   mode: "purge",
   tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
 };
 
 let raised: { name: string; mode: PurgeMode; tags: RaisedTag[] }[];
 let appReads: number;
-let servedReads: { slug: string; release: string }[];
+let servedReads: { slug: string; isrPrefix: string }[];
 
 function binding(): ReleasesBinding {
   const answer = async (): Promise<PointerRecordResult> => {
@@ -51,8 +58,16 @@ function binding(): ReleasesBinding {
     readLabelRecord: answer,
     async readServedRecord(args) {
       servedReads.push(args);
-      return args.release === "deploy-1"
-        ? { kind: "record", record: makeRecord({ purgeSecret: SECRET }) }
+      return args.isrPrefix === ISR_PREFIX
+        ? {
+            kind: "record",
+            record: makeRecord({
+              app: "web",
+              release: "build-1~fp1",
+              isrPrefix: ISR_PREFIX,
+              purgeSecret: SECRET,
+            }),
+          }
         : { kind: "not-served" };
     },
   };
@@ -88,19 +103,39 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", release: "deploy-1" }]);
+    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
     expect(raised).toEqual([
       {
         name: "purge",
         mode: "purge",
-        tags: [{ tag: "deploy-1|_N_T_/blog/a", raisedAt: 5_000 }],
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
+      },
+    ]);
+  });
+
+  it("queues what an origin's sender posts for the release it serves, under the release token the origin stamps its tags with", async () => {
+    const ctx = contextWithQueue();
+    const sender = {
+      fetch: ((url: string, init?: RequestInit) =>
+        worker.fetch(new Request(url, init), envWith(), ctx)) as typeof fetch,
+    };
+
+    await postPurge(sender, `${WORKERS_DEV}${purgePath}`, SECRET, ISR_PREFIX, [
+      { tag: "_N_T_/blog/a", mode: "invalidate", raisedAt: 5_000 },
+    ]);
+
+    expect(raised).toEqual([
+      {
+        name: "purge",
+        mode: "invalidate",
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
       },
     ]);
   });
 
   it("answers 204 for a release that is not served and raises nothing", async () => {
     const response = await worker.fetch(
-      await purgeRequest(WORKERS_DEV, { ...raise, release: "deploy-0" }),
+      await purgeRequest(WORKERS_DEV, { ...raise, isrPrefix: "production/p1/web/r0000000a/isr" }),
       envWith(),
       contextWithQueue(),
     );

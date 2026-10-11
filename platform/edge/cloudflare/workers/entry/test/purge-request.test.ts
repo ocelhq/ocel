@@ -39,7 +39,13 @@ async function signed(
   });
 }
 
-const raise = { release: "r1", mode: "purge", tags: [{ tag: "_N_T_/blog/a", raisedAt: 1_000 }] };
+const PREFIX = "production/p1/web/r0a1b2c3d/isr";
+
+const raise = {
+  isrPrefix: PREFIX,
+  mode: "purge",
+  tags: [{ tag: "_N_T_/blog/a", raisedAt: 1_000 }],
+};
 
 let raised: { mode: PurgeMode; tags: RaisedTag[] }[];
 let served: Record<string, { purgeSecret?: string }>;
@@ -49,9 +55,9 @@ let warnings: string[];
 function deps(): PurgeGatewayPorts {
   return {
     now: () => 1_000_000,
-    async readServed(release) {
+    async readServed(isrPrefix) {
       if (storeDown) throw new Error("releases store is down");
-      const record = served[release];
+      const record = served[isrPrefix];
       return record ? { kind: "record", record } : { kind: "not-served" };
     },
     queue: {
@@ -65,7 +71,7 @@ function deps(): PurgeGatewayPorts {
 
 beforeEach(() => {
   raised = [];
-  served = { r1: { purgeSecret: SECRET } };
+  served = { [PREFIX]: { purgeSecret: SECRET } };
   storeDown = false;
   warnings = [];
 });
@@ -94,7 +100,7 @@ describe("answering a signed purge request", () => {
 
     expect(response.status).toBe(202);
     expect(raised).toEqual([
-      { mode: "purge", tags: [{ tag: "r1|_N_T_/blog/a", raisedAt: 1_000 }] },
+      { mode: "purge", tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }] },
     ]);
   });
 
@@ -113,8 +119,8 @@ describe("answering a signed purge request", () => {
     await answerPurge(await signed({ ...raise, tags }), deps());
 
     expect(raised[0].tags).toEqual([
-      { tag: "r1|a", raisedAt: 10 },
-      { tag: "r1|b", raisedAt: 20 },
+      { tag: "r0a1b2c3d|a", raisedAt: 10 },
+      { tag: "r0a1b2c3d|b", raisedAt: 20 },
     ]);
   });
 
@@ -127,8 +133,8 @@ describe("answering a signed purge request", () => {
     await answerPurge(await signed({ ...raise, tags }), deps());
 
     expect(raised[0].tags).toEqual([
-      { tag: "r1|early", raisedAt: 999_000 },
-      { tag: "r1|ahead", raisedAt: 1_000_000 },
+      { tag: "r0a1b2c3d|early", raisedAt: 999_000 },
+      { tag: "r0a1b2c3d|ahead", raisedAt: 1_000_000 },
     ]);
   });
 
@@ -226,7 +232,7 @@ describe("answering a signed purge request", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(raised[0].tags.map((t) => t.tag)).toEqual(["r1|_N_T_/blog/a"]);
+    expect(raised[0].tags.map((t) => t.tag)).toEqual(["r0a1b2c3d|_N_T_/blog/a"]);
     expect(warnings).toHaveLength(1);
   });
 
@@ -243,7 +249,10 @@ describe("answering a signed purge request", () => {
 
 describe("refusing a purge request", () => {
   it("answers 204 for a release that is not served, since nothing caches under it", async () => {
-    const response = await answerPurge(await signed({ ...raise, release: "gone" }), deps());
+    const response = await answerPurge(
+      await signed({ ...raise, isrPrefix: "production/p1/web/r0000000a/isr" }),
+      deps(),
+    );
 
     expect(response.status).toBe(204);
     expect(raised).toEqual([]);
@@ -292,7 +301,7 @@ describe("refusing a purge request", () => {
   });
 
   it("answers 401 when the served release has no purge secret to check against", async () => {
-    served.r1 = {};
+    served[PREFIX] = {};
 
     const response = await answerPurge(await signed(raise), deps());
 
@@ -307,14 +316,19 @@ describe("refusing a purge request", () => {
   });
 
   it.each([
-    ["no release", { mode: "purge", tags: [] }],
-    ["an unknown mode", { release: "r1", mode: "obliterate", tags: [] }],
-    ["tags that are not a list", { release: "r1", mode: "purge", tags: "a" }],
-    ["a tag with no raisedAt", { release: "r1", mode: "purge", tags: [{ tag: "a" }] }],
-    ["an empty tag", { release: "r1", mode: "purge", tags: [{ tag: "", raisedAt: 1 }] }],
+    ["no ISR prefix", { mode: "purge", tags: [] }],
+    ["a release's name for its ISR prefix", { release: "build-1~fp1", mode: "purge", tags: [] }],
+    [
+      "an ISR prefix naming no release",
+      { isrPrefix: "production/p1/web", mode: "purge", tags: [] },
+    ],
+    ["an unknown mode", { isrPrefix: PREFIX, mode: "obliterate", tags: [] }],
+    ["tags that are not a list", { isrPrefix: PREFIX, mode: "purge", tags: "a" }],
+    ["a tag with no raisedAt", { isrPrefix: PREFIX, mode: "purge", tags: [{ tag: "a" }] }],
+    ["an empty tag", { isrPrefix: PREFIX, mode: "purge", tags: [{ tag: "", raisedAt: 1 }] }],
     [
       "a raisedAt that is not finite",
-      { release: "r1", mode: "purge", tags: [{ tag: "a", raisedAt: null }] },
+      { isrPrefix: PREFIX, mode: "purge", tags: [{ tag: "a", raisedAt: null }] },
     ],
   ])("answers 400 for %s", async (_name, body) => {
     const response = await answerPurge(await signed(body), deps());

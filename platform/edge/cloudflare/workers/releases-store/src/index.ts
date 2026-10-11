@@ -122,7 +122,7 @@ export default class extends WorkerEntrypoint<Env> {
     return stub(this.env, args.slug).readLabelRecord(args.label, args.knownRelease);
   }
 
-  async readServedRecord(args: { slug: string; release: string }): Promise<ServedRecordResult> {
-    return stub(this.env, args.slug).readServedRecord(args.release);
+  async readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult> {
+    return stub(this.env, args.slug).readServedRecord(args.isrPrefix);
   }
 }
