@@ -23,7 +23,7 @@ export interface RevalidatingRoutes {
 }
 
 export interface OriginShaping extends RevalidatingRoutes {
-  askedFor: boolean;
+  shapesOnlyWhenAsked: boolean;
   release: string | null;
   tagsPerObject: number;
 }
@@ -65,7 +65,7 @@ export function originShaping(
 
   return {
     ...routes,
-    askedFor: !dispatches,
+    shapesOnlyWhenAsked: !dispatches,
     release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     tagsPerObject,
   };
@@ -85,7 +85,7 @@ export function shapeOriginCache(
 }
 
 function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {
-  if (shaping.askedFor && req.headers[edgeCacheHeader] !== "1") return;
+  if (shaping.shapesOnlyWhenAsked && req.headers[edgeCacheHeader] !== "1") return;
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {
