@@ -18,6 +18,7 @@ type registryServer struct {
 	created    []string
 	uploads    []string
 	bodies     []string
+	deleted    []string
 }
 
 func (s *registryServer) serve(t *testing.T) *httptest.Server {
@@ -52,6 +53,15 @@ func (s *registryServer) serve(t *testing.T) *httptest.Server {
 			s.created = append(s.created, r.URL.Query().Get("repositoryId")+" "+body.Format)
 			s.repository = true
 			_, _ = io.WriteString(w, `{"name":"operations/make","done":true}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(path, repository+"/"):
+			if !s.repository {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, `{"error":{"code":404,"status":"NOT_FOUND","message":"no such repository"}}`)
+				return
+			}
+			s.repository = false
+			s.deleted = append(s.deleted, path[len(repository)+1:])
+			_, _ = io.WriteString(w, `{"name":"operations/remove","done":true}`)
 		case r.Method == http.MethodPost && strings.Contains(path, "/genericArtifacts:create"):
 			body, _ := io.ReadAll(r.Body)
 			s.uploads = append(s.uploads, path)
@@ -132,5 +142,25 @@ func TestANewPluginBuildIsUploadedAsANewVersion(t *testing.T) {
 
 	if first == second || len(registry.uploads) != 2 {
 		t.Errorf("images %q and %q after %d uploads, want two versions", first, second, len(registry.uploads))
+	}
+}
+
+func TestDeletingThePluginImagesRemovesTheRepositoryTheyWereUploadedTo(t *testing.T) {
+	registry := &registryServer{}
+	p := pushing(t, registry.serve(t).URL)
+	images := pluginImages{p: p}
+	if _, err := images.Ensure(context.Background(), []byte("\x00asm-gate")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := images.Delete(context.Background()); err != nil {
+		t.Fatalf("Delete = %v", err)
+	}
+
+	if len(registry.deleted) != 1 || !strings.HasSuffix(registry.deleted[0], "-gate") {
+		t.Errorf("deleted %v, want the plugin's own repository", registry.deleted)
+	}
+	if err := images.Delete(context.Background()); err != nil {
+		t.Errorf("Delete of a repository already gone = %v, want nil: a teardown that is run again finishes", err)
 	}
 }

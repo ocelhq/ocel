@@ -493,6 +493,20 @@ func TestAGatedDeployOnATierBootstrappedBeforeThePluginIsRefusedUntilItIsBootstr
 	}
 }
 
+func TestTearingDownThePreviewTierDeletesTheRepositoryThePluginWasUploadedTo(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := gatedEdge(t)
+
+	if err := balancer.Teardown(context.Background(), environment.TierPreview); err != nil {
+		t.Fatalf("Teardown(preview) = %v", err)
+	}
+
+	if w.gate.deletes != 1 {
+		t.Errorf("the teardown deleted the plugin's repository %d times, want once: what a bootstrap uploads its teardown removes", w.gate.deletes)
+	}
+}
+
 func TestDestroyingAGatedProjectRemovesItsGateFromThePlugin(t *testing.T) {
 	t.Parallel()
 

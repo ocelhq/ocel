@@ -25,6 +25,8 @@ const (
 
 type PluginImages interface {
 	Ensure(ctx context.Context, plugin []byte) (string, error)
+
+	Delete(ctx context.Context) error
 }
 
 type gateVersion struct {

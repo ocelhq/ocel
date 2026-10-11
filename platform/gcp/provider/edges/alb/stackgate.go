@@ -34,7 +34,10 @@ func (e *Edge) removeGate(ctx context.Context) error {
 			return err
 		}
 	}
-	return e.forgetGates(ctx)
+	if err := e.forgetGates(ctx); err != nil {
+		return err
+	}
+	return e.deps.Images.Delete(ctx)
 }
 
 func (s *stack) isGated() bool { return isGated(s.state.Tier, s.e.deps.Shielded) }
