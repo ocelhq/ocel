@@ -12,8 +12,13 @@ import { readReleaseToken } from "@platform/edge-contract/purge";
 import type { CacheDeps } from "./cache";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
-import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
-import type { CacheEntrypointProps, Env } from "./env";
+import {
+  createReleaseEdgeInvoker,
+  type EdgeObjectStore,
+  type EdgeRuntime,
+  ownBundleKey,
+} from "./edge";
+import type { Env } from "./env";
 import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
@@ -91,12 +96,7 @@ export type ResolveBase = Omit<
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   imagesAtDeployment?: boolean;
   routeTableStore?: EdgeObjectStore;
-  edgeRuntime?: {
-    loader: WorkerLoader;
-    store: EdgeObjectStore;
-    cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
-    envelopeKey?: string;
-  };
+  edgeRuntime?: EdgeRuntime;
 };
 
 export type ServeFetch = (request: Request) => Promise<Response>;
@@ -188,12 +188,18 @@ export async function resolveRouteDeps(
 function newReleaseServing(
   base: ServingPorts | undefined,
   record: ReleaseRecord,
-  host: string,
+  releases: ReleaseLookup,
   app: string,
 ): Serving | undefined {
   const release = readReleaseToken(record.isrPrefix);
   if (!base || release === undefined) return undefined;
-  return newServing(base, { host: host.toLowerCase(), app, release });
+  return newServing(base, {
+    host: releases.host.toLowerCase(),
+    app,
+    release,
+    slug: releases.slug,
+    isrPrefix: record.isrPrefix,
+  });
 }
 
 function routedDeps(
@@ -227,29 +233,11 @@ function routedDeps(
     appBuildId: record.buildId,
     edge:
       edgeRuntime && edgeWorkers
-        ? createEdgeInvoker(
-            edgeRuntime.loader,
-            edgeWorkers,
-            edgeRuntime.store,
-            edgeRuntime.cacheEntrypoint
-              ? {
-                  rpc: edgeRuntime.cacheEntrypoint({
-                    props: { purgeSecret: record.purgeSecret, scope: record.isrPrefix },
-                  }),
-                  scope: record.isrPrefix,
-                }
-              : undefined,
-            {
-              env: record.env,
-              envelope: record.envelope,
-              envelopeKey: edgeRuntime.envelopeKey,
-              releaseFingerprint: record.releaseFingerprint,
-            },
-          )
+        ? createReleaseEdgeInvoker(edgeRuntime, { ...record, edgeWorkers })
         : undefined,
     manifest,
     functionUrls: record.functionUrls,
-    serving: newReleaseServing(serving, record, releases.host, app),
+    serving: newReleaseServing(serving, record, releases, app),
     assetStore: {
       ...base.assetStore,
       assetPrefix: record.assetPrefix,

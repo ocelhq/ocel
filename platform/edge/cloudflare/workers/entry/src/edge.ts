@@ -1,4 +1,5 @@
 import type { EdgeCacheRpc } from "@framework/next-cache";
+import type { CacheEntrypointProps } from "./env";
 
 export interface EdgeStoredObject {
   text(): Promise<string>;
@@ -64,6 +65,44 @@ export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
 export interface EdgeCacheBinding {
   rpc: EdgeCacheStub;
   scope: string;
+}
+
+export interface EdgeRuntime {
+  loader: WorkerLoader;
+  store: EdgeObjectStore;
+  cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
+  envelopeKey?: string;
+}
+
+export interface EdgeRelease {
+  edgeWorkers: EdgeWorkers;
+  isrPrefix: string;
+  purgeSecret?: string;
+  env?: Record<string, string>;
+  envelope?: string;
+  releaseFingerprint?: string;
+}
+
+export function createReleaseEdgeInvoker(runtime: EdgeRuntime, record: EdgeRelease): EdgeInvoker {
+  return createEdgeInvoker(
+    runtime.loader,
+    record.edgeWorkers,
+    runtime.store,
+    runtime.cacheEntrypoint
+      ? {
+          rpc: runtime.cacheEntrypoint({
+            props: { purgeSecret: record.purgeSecret, scope: record.isrPrefix },
+          }),
+          scope: record.isrPrefix,
+        }
+      : undefined,
+    {
+      env: record.env,
+      envelope: record.envelope,
+      envelopeKey: runtime.envelopeKey,
+      releaseFingerprint: record.releaseFingerprint,
+    },
+  );
 }
 
 export function createEdgeInvoker(

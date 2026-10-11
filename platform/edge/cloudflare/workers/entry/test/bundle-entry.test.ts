@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
+import { buildEdgeUrl, readEdgeEntry } from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 const ENTRY_HEADER = "x-ocel-entry";
@@ -368,6 +369,7 @@ describe("a prerender whose parent renders on the edge", () => {
     over: {
       target?: typeof edgeTarget | typeof unnamedTarget;
       functionUrls?: Record<string, string>;
+      throughServe?: boolean;
     } = {},
   ): {
     serving: FakeServing;
@@ -402,13 +404,13 @@ describe("a prerender whose parent renders on the edge", () => {
         fetch: (async () => {
           throw new Error("an edge-parented prerender must not reach a Function URL");
         }) as unknown as typeof fetch,
-        serving: serving.serving,
+        serving: over.throughServe === false ? undefined : serving.serving,
       }),
     };
   }
 
-  it("renders through the edge entry when no cache tier can answer", async () => {
-    const { deps, invocations } = edgeDeps();
+  it("renders through the edge entry when no Serve is bound", async () => {
+    const { deps, invocations } = edgeDeps({ throughServe: false });
 
     const res = await dispatchTo("/edge-blog", deps);
 
@@ -417,7 +419,7 @@ describe("a prerender whose parent renders on the edge", () => {
   });
 
   it("renders through the edge entry with no id to name a parent at all", async () => {
-    const { deps, invocations } = edgeDeps({ target: unnamedTarget });
+    const { deps, invocations } = edgeDeps({ target: unnamedTarget, throughServe: false });
 
     const res = await dispatchTo("/edge-blog", deps);
 
@@ -436,6 +438,7 @@ describe("a prerender whose parent renders on the edge", () => {
   it("ignores a Function URL that its id happens to name", async () => {
     const { deps, invocations, urls } = edgeDeps({
       functionUrls: { "/edge-blog": "https://fn.example.com" },
+      throughServe: false,
     });
 
     const res = await dispatchTo("/edge-blog", deps);
@@ -445,11 +448,16 @@ describe("a prerender whose parent renders on the edge", () => {
     expect(urls()).toEqual(["https://app.example/edge-blog"]);
   });
 
-  it("never reaches Serve, since an edge render cannot be fetched from a Function URL", async () => {
-    const { deps, serving } = edgeDeps();
+  it("is rendered by Serve from its edge entry at the host it serves, and never by the gateway", async () => {
+    const { deps, serving, invocations } = edgeDeps({
+      functionUrls: { "/edge-blog": "https://fn.example.com" },
+    });
 
     await dispatchTo("/edge-blog", deps);
 
-    expect(serving.calls).toHaveLength(0);
+    expect(serving.calls).toHaveLength(1);
+    expect(readEdgeEntry(serving.calls[0].request.url)).toBe("middleware_app/edge-blog");
+    expect(buildEdgeUrl(serving.calls[0].request.url)).toBe("https://shop.example.com/edge-blog");
+    expect(invocations()).toEqual([]);
   });
 });

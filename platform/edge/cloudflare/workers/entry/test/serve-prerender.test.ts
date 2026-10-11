@@ -1,6 +1,7 @@
 import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
 import { describe, expect, it } from "vitest";
 import { dispatchResult, type RouteDeps } from "../src/index";
+import { buildEdgeUrl, EDGE_RELEASE_HEADER, readEdgeEntry } from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 type Target = Record<string, unknown>;
@@ -252,6 +253,52 @@ describe("a prerender that must not be stored", () => {
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+  });
+});
+
+describe("an edge-runtime prerender", () => {
+  const edgeTarget: Target = { edgeEntryKey: "middleware_app/edge-blog", tags: ["posts"] };
+
+  it("is rendered by Serve and stored under the purge scope, keyed by its edge entry, host and release", async () => {
+    const served = fakeServing();
+    const origin = recorder();
+
+    await get("/blog?page=2&utm=x", deps(served, { origin, target: edgeTarget }));
+
+    expect(origin.requests).toHaveLength(0);
+    expect(served.calls).toHaveLength(1);
+    const [call] = served.calls;
+    expect(call.props).toEqual({ kind: "origin" });
+    expect(call.coordinates).toEqual({
+      host: "shop.example.com",
+      app: "web",
+      release: "r0a1b2c3d",
+      variant: "",
+    });
+    expect(readEdgeEntry(call.request.url)).toBe("middleware_app/edge-blog");
+    expect(buildEdgeUrl(call.request.url)).toBe("https://shop.example.com/blog?page=2");
+  });
+
+  it("tells Serve the release to render it from and the route's tags", async () => {
+    const served = fakeServing();
+
+    await get("/blog", deps(served, { target: edgeTarget }));
+
+    expect(JSON.parse(served.calls[0].request.headers.get(EDGE_RELEASE_HEADER) ?? "null")).toEqual({
+      slug: "p1",
+      isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+      tags: ["posts"],
+    });
+  });
+
+  it("keys its RSC variant apart from its document", async () => {
+    const served = fakeServing();
+
+    await get("/blog", deps(served, { target: edgeTarget }));
+    await get("/blog", deps(served, { target: edgeTarget }), { headers: { rsc: "1" } });
+
+    expect(served.calls.map(({ coordinates }) => coordinates.variant)).toEqual(["", ".rsc"]);
+    expect(served.calls[0].request.url).not.toBe(served.calls[1].request.url);
   });
 });
 

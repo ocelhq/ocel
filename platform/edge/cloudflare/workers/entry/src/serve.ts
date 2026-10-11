@@ -1,6 +1,13 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { type PurgeMode, purgeHeader, readPurge } from "@platform/edge-contract/purge";
+import { storedCacheTags } from "@framework/next-cache";
+import {
+  type PurgeMode,
+  purgeHeader,
+  readPurge,
+  readReleaseToken,
+} from "@platform/edge-contract/purge";
 import { AwsClient } from "aws4fetch";
+import { createReleaseEdgeInvoker, type EdgeRuntime, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
 import type { PurgeOutcome } from "./purge-backlog";
@@ -9,14 +16,19 @@ import { parsePurgeOutcome } from "./purge-outcome";
 import { openPurgeQueue } from "./purge-request";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import {
+  buildEdgeUrl,
   buildOriginUrl,
+  EDGE_RELEASE_HEADER,
+  type EdgeRelease,
   encodeKeyPath,
   type ObjectProps,
   parseKeyRelease,
   parseObjectKey,
+  readEdgeEntry,
   readOriginCall,
   type ServeProps,
 } from "./serve-key";
+import { type ServeFactory, serveObjects } from "./serve-objects";
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
@@ -34,6 +46,18 @@ interface BucketAccess {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+}
+
+function parseEdgeRelease(header: string | null): EdgeRelease | undefined {
+  if (header === null) return undefined;
+  try {
+    const parsed = JSON.parse(header) as Partial<EdgeRelease>;
+    if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
+    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
+    return { slug: parsed.slug, isrPrefix: parsed.isrPrefix, tags };
+  } catch {
+    return undefined;
+  }
 }
 
 function respondNotStored(status: number, message: string): Response {
@@ -123,7 +147,10 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return respondNotStored(405, "Method Not Allowed");
     }
-    if (props?.kind === "origin") return this.fromOrigin(request);
+    if (props?.kind === "origin") {
+      const entryKey = readEdgeEntry(request.url);
+      return entryKey === undefined ? this.fromOrigin(request) : this.fromEdge(request, entryKey);
+    }
     if (!props?.host || !props.app || !props.release) {
       throw new Error("ocel: Serve was called with no host, app and release to key its cache by");
     }
@@ -169,6 +196,57 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       );
     }
     return forCache(res, { release, pathname: new URL(originUrl).pathname });
+  }
+
+  private async fromEdge(request: Request, entryKey: string): Promise<Response> {
+    const { host, app, release } = readOriginCall(request.url);
+    const edge = parseEdgeRelease(request.headers.get(EDGE_RELEASE_HEADER));
+    const { LOADER: loader, RELEASES: releases } = this.env;
+    if (!edge || !loader) return respondNotStored(503, "no edge runtime to render with");
+    const served = await releases.readServedRecord({ slug: edge.slug, isrPrefix: edge.isrPrefix });
+    if (served.kind !== "record") return respondNotStored(503, "the release is not served");
+    const { record } = served;
+    const { edgeWorkers } = record;
+    if (
+      readReleaseToken(record.isrPrefix) !== release ||
+      !edgeWorkers ||
+      !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)
+    ) {
+      return respondNotStored(503, "the release has no edge bundle of its own to render with");
+    }
+    const exports = this.ctx.exports as {
+      Serve?: ServeFactory;
+      CacheEntrypoint?: EdgeRuntime["cacheEntrypoint"];
+    };
+    const store =
+      exports.Serve && readsObjects(this.env)
+        ? serveObjects(exports.Serve, host)
+        : this.env.OCEL_CACHE_STORE;
+    if (!store) return respondNotStored(503, "no store to read the edge bundle from");
+    const invoke = createReleaseEdgeInvoker(
+      {
+        loader,
+        store,
+        cacheEntrypoint: exports.CacheEntrypoint,
+        envelopeKey: this.env.OCEL_ENVELOPE_KEY,
+      },
+      { ...record, edgeWorkers },
+    );
+    const headers = new Headers(request.headers);
+    headers.delete(EDGE_RELEASE_HEADER);
+    const publicUrl = buildEdgeUrl(request.url);
+    const rendered = await invoke(
+      entryKey,
+      new Request(publicUrl, { method: request.method, headers, redirect: "manual" }),
+    );
+    const tagged = new Headers(rendered.headers);
+    const routeTags = storedCacheTags(release, edge.tags).tags;
+    if (routeTags.length > 0) tagged.set("cache-tag", routeTags.join(","));
+    else tagged.delete("cache-tag");
+    return forCache(new Response(rendered.body, { status: rendered.status, headers: tagged }), {
+      release,
+      pathname: new URL(publicUrl).pathname,
+    });
   }
 
   async purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {

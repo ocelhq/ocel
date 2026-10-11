@@ -1048,14 +1048,11 @@ describe("edge-parented prerenders", () => {
          })`,
     });
 
-  it("invokes the edge entry on every request, with no Function URL bound and Serve never asked", async () => {
-    const serving = fakeServing();
-    const deps = { ...prerenderDeps(renderer()), serving: serving.serving };
+  it("invokes the edge entry with no Function URL bound when no Serve is bound to cache it", async () => {
+    const deps = { ...prerenderDeps(renderer()), serving: undefined };
 
     const res = await dispatchBlog(deps);
 
-    expect(serving.calls).toHaveLength(0);
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
   });
 

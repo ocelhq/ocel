@@ -18,9 +18,12 @@ import type { PurgeGroup } from "@platform/edge-contract/purge";
 import { buildPathTag, ORIGIN_VARY } from "./serve-headers";
 import {
   buildCanonicalUrl,
+  buildEdgeCall,
   buildOriginCall,
   buildServeRequest,
   buildVariantPath,
+  EDGE_RELEASE_HEADER,
+  type EdgeRelease,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 
@@ -38,6 +41,8 @@ export interface Serving {
   serve: ServeFactory;
   host: string;
   release: string;
+  slug: string;
+  isrPrefix: string;
   purge(groups: PurgeGroup[], awaited: boolean): Promise<void>;
 }
 
@@ -90,9 +95,7 @@ function findVariant(
   target: PrerenderContext["target"],
 ): string | null {
   const mode = target.config.renderingMode;
-  if (target.edgeEntryKey || (mode === "PARTIALLY_STATIC" && !request.headers.has("rsc"))) {
-    return null;
-  }
+  if (mode === "PARTIALLY_STATIC" && !request.headers.has("rsc")) return null;
   const variant = buildVariantPath(url.pathname, request.headers, mode);
   return variant === null ? null : variant.slice(url.pathname.length);
 }
@@ -158,15 +161,25 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   if (target.entryKey !== undefined) safeHeaders.set(ENTRY_HEADER, target.entryKey);
   safeHeaders.set(edgeCacheHeader, "1");
   const forwarded = forward(request, safeHeaders);
-  const { url: canonical, props } = buildOriginCall(
-    buildCanonicalUrl(new URL(forwarded.url), target.allowQuery),
-    {
-      host: serving.host,
-      app: deps.app,
-      release: serving.release,
-      variant: variant || undefined,
-    },
-  );
-  const response = await serving.serve({ props }).fetch(buildServeRequest(canonical, forwarded));
+  const canonicalUrl = buildCanonicalUrl(new URL(forwarded.url), target.allowQuery);
+  const coordinates = {
+    host: serving.host,
+    app: deps.app,
+    release: serving.release,
+    variant: variant || undefined,
+  };
+  const { url: canonical, props } = target.edgeEntryKey
+    ? buildEdgeCall(canonicalUrl, coordinates, target.edgeEntryKey)
+    : buildOriginCall(canonicalUrl, coordinates);
+  const served = buildServeRequest(canonical, forwarded);
+  if (target.edgeEntryKey) {
+    const release: EdgeRelease = {
+      slug: serving.slug,
+      isrPrefix: serving.isrPrefix,
+      tags: target.tags ?? [],
+    };
+    served.headers.set(EDGE_RELEASE_HEADER, JSON.stringify(release));
+  }
+  const response = await serving.serve({ props }).fetch(served);
   return buildVisitorResponse(response, isSegmentPrefetch(request.headers));
 }
