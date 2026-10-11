@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -37,7 +36,7 @@ func seedPreviewGates(t *testing.T, vendor *fake.Provider, gates map[string]prev
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := vendor.Cipher().Seal(t.Context(), environment.TierPreview, providerserver.PreviewGatesAssociatedData, plaintext)
+	sealed, err := vendor.Cipher().Seal(t.Context(), environment.TierPreview, stackrecords.PreviewGatesAssociatedData, plaintext)
 	if err != nil {
 		t.Fatal(err)
 	}
