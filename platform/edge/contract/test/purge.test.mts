@@ -4,9 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   derivePurgeSecret,
+  formatPurge,
   PurgeRefusedError,
   postPurge,
+  purgeHeader,
   purgeSignatureHeader,
+  readPurge,
   readPurgeEntry,
   readReleaseToken,
   tagsPerPurgeRequest,
@@ -282,5 +285,49 @@ describe("readPurgeEntry", () => {
 
   it("reads a record with neither time as nothing to purge", () => {
     expect(readPurgeEntry("home", {}, now)).toBeUndefined();
+  });
+});
+
+describe("the x-ocel-purge header", () => {
+  it("is named x-ocel-purge", () => {
+    expect(purgeHeader).toBe("x-ocel-purge");
+  });
+
+  it("writes one mode and its tags as '<mode> <tag>,<tag>'", () => {
+    expect(formatPurge([{ mode: "invalidate", tags: ["r0a1b2c3d|a", "r0a1b2c3d|b"] }])).toBe(
+      "invalidate r0a1b2c3d|a,r0a1b2c3d|b",
+    );
+  });
+
+  it("writes both modes one after the other", () => {
+    expect(
+      formatPurge([
+        { mode: "invalidate", tags: ["r0a1b2c3d|a"] },
+        { mode: "purge", tags: ["r0a1b2c3d|b"] },
+      ]),
+    ).toBe("invalidate r0a1b2c3d|a purge r0a1b2c3d|b");
+  });
+
+  it("writes nothing for no tags", () => {
+    expect(formatPurge([])).toBeUndefined();
+    expect(formatPurge([{ mode: "purge", tags: [] }])).toBeUndefined();
+  });
+
+  it("reads back what it wrote", () => {
+    const groups = [
+      { mode: "invalidate" as const, tags: ["r0a1b2c3d|a", "r0a1b2c3d|b"] },
+      { mode: "purge" as const, tags: ["r0a1b2c3d|c"] },
+    ];
+
+    expect(readPurge(formatPurge(groups)!)).toEqual(groups);
+  });
+
+  it.each([
+    ["an unknown mode", "evict r0a1b2c3d|a"],
+    ["a mode with no tags", "purge"],
+    ["a tag list with no mode", "r0a1b2c3d|a"],
+    ["an empty value", ""],
+  ])("reads %s as no purge", (_name, value) => {
+    expect(readPurge(value)).toEqual([]);
   });
 });
