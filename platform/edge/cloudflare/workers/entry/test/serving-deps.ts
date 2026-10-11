@@ -20,6 +20,7 @@ export function fakeServing(
   const calls: ServeCall[] = [];
   const purges: { groups: PurgeGroup[]; awaited: boolean }[] = [];
   const serving: Serving = {
+    host: "shop.example.com",
     release: "r0a1b2c3d",
     serve: ({ props }) => ({
       fetch: async (request) => {

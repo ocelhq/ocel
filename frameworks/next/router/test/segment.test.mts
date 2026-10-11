@@ -5,7 +5,7 @@ import { asSegmentPayload, isSegmentPayload, isSegmentPrefetch } from "../src/se
 describe("the segment-prefetch payload guard", () => {
   const H = (init?: Record<string, string>) => new Headers(init);
 
-  it("reads a segment prefetch only where variantPath mints a segment key", () => {
+  it("reads a segment prefetch only where buildVariantPath mints a segment key", () => {
     expect(isSegmentPrefetch(H({ RSC: "1", "next-router-segment-prefetch": "/_tree" }))).toBe(true);
     expect(isSegmentPrefetch(H({ "next-router-segment-prefetch": "/_tree" }))).toBe(false);
     expect(isSegmentPrefetch(H({ RSC: "1", "next-router-prefetch": "1" }))).toBe(false);

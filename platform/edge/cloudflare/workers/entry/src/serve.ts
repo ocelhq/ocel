@@ -148,8 +148,8 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (announced !== null) {
       this.ctx.waitUntil(
         purgeInBand(readPurge(announced), {
-          purge: (mode, tags) => this.purge(mode, tags),
-          raise: (mode, tags) => openPurgeQueue(this.ctx.exports).raise(mode, tags),
+          cache: this,
+          queue: openPurgeQueue(this.ctx.exports),
           now: Date.now,
         }),
       );
