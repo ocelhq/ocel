@@ -109,6 +109,7 @@ func TestADeployRecordsADeployCompletedEventWithNoNames(t *testing.T) {
 	wantProperties := []string{
 		"app_count", "arch", "agent", "assumed", "ci", "cli_version", "error_code", "first_deploy", "frameworks", "languages",
 		"os", "phase_ms", "plan_actions", "$process_person_profile", "provider", "resource_counts", "success", "target",
+		"install_method", "project_id", "framework_versions", "runtime_versions",
 	}
 	if got := slices.Sorted(maps.Keys(event.Properties)); !slices.Equal(got, slices.Sorted(slices.Values(wantProperties))) {
 		t.Errorf("properties = %v, want %v", got, slices.Sorted(slices.Values(wantProperties)))
@@ -127,6 +128,9 @@ func TestADeployRecordsADeployCompletedEventWithNoNames(t *testing.T) {
 		if got := marshalJSON(t, event.Properties[property]); got != marshalJSON(t, want) {
 			t.Errorf("%s = %s, want %s", property, got, marshalJSON(t, want))
 		}
+	}
+	if id, _ := event.Properties["project_id"].(string); len(id) != 16 {
+		t.Errorf("project_id = %#v, want the 16-character hash of the slug", event.Properties["project_id"])
 	}
 	for _, name := range []string{namedApp, namedResource, clitest.FixtureSlug, fixture.Root} {
 		if line := marshalJSON(t, event); strings.Contains(line, name) {

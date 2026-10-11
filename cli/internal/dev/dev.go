@@ -93,7 +93,7 @@ func RunProjected(ctx context.Context, opts Options, env map[string]string) erro
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
-	tally := newTally(opts.RecordEvent)
+	tally := newTally(opts.RecordEvent, telemetry.NewStack(opts.Project))
 	defer func() {
 		if !errors.Is(err, leader.ErrAlreadyRunning) {
 			tally.end(err)
@@ -206,7 +206,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
-	tally := newTally(opts.RecordEvent)
+	tally := newTally(opts.RecordEvent, telemetry.NewStack(opts.Project))
 	defer func() { tally.end(err) }()
 	stream, first, err := subscribe(ctx, opts, running)
 	if err != nil {

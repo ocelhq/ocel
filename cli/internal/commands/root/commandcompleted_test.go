@@ -230,6 +230,50 @@ func TestAnUncodedErrorRecordsInternalAndNoMessageText(t *testing.T) {
 	}
 }
 
+func panicWithSecret() {
+	panic("password hunter2 in /home/victor/acme")
+}
+
+func TestAPanickingCommandRecordsTheFunctionItPanickedInAndStillPanics(t *testing.T) {
+	debugTelemetry(t)
+	ocel := newCommand()
+	var errOut bytes.Buffer
+	ocel.root.SetOut(&bytes.Buffer{})
+	ocel.root.SetErr(&errOut)
+	ocel.root.AddCommand(&cobra.Command{Use: "crash", Run: func(*cobra.Command, []string) { panicWithSecret() }})
+
+	recovered := func() (recovered any) {
+		defer func() { recovered = recover() }()
+		ocel.executeAndReport([]string{"crash"})
+		return nil
+	}()
+
+	if recovered == nil {
+		t.Fatal("executeAndReport returned, want the panic to carry on")
+	}
+	event := theOnlyEvent(t, errOut.String())
+	want := map[string]any{"command": "crash", "exit_code": float64(2), "error_code": "internal", "panic_function": "cli/internal/commands/root.panicWithSecret"}
+	for property, value := range want {
+		if event.Properties[property] != value {
+			t.Errorf("%s = %#v, want %#v", property, event.Properties[property], value)
+		}
+	}
+	if line := eventLine(t, errOut.String()); strings.Contains(line, "hunter2") || strings.Contains(line, "victor") {
+		t.Errorf("event %q carries the panic message", line)
+	}
+}
+
+func TestACommandThatDoesNotPanicRecordsNoPanicFunction(t *testing.T) {
+	debugTelemetry(t)
+	t.Chdir(t.TempDir())
+
+	_, _, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes")
+
+	if got := theOnlyEvent(t, stderr).Properties["panic_function"]; got != "" {
+		t.Errorf("panic_function = %#v, want empty", got)
+	}
+}
+
 func TestAUsageErrorRecordsTheUsageCodeUnderJSONToo(t *testing.T) {
 	debugTelemetry(t)
 

@@ -37,6 +37,15 @@ describe.runIf(process.platform !== "win32")("the ocel wrapper", () => {
     expect(run.status).toBe(0);
   });
 
+  it("tells the platform binary it was installed through npm", () => {
+    install('#!/bin/sh\nprintf "%s" "$OCEL_INSTALL_METHOD"\n');
+    const run = spawnSync(process.execPath, [entry], {
+      encoding: "utf8",
+      env: { ...process.env, OCEL_INSTALL_METHOD: "" },
+    });
+    expect(run.stdout).toBe("npm");
+  });
+
   it("exits with the status the platform binary exited with", () => {
     install("#!/bin/sh\nexit 3\n");
     const run = spawnSync(process.execPath, [entry], { encoding: "utf8" });

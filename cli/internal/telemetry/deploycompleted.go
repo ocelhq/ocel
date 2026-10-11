@@ -18,11 +18,9 @@ type PlanActions struct {
 }
 
 type DeployCompletion struct {
+	Stack
 	Success        bool
 	Target         string
-	Provider       string
-	Frameworks     []string
-	Languages      []string
 	AppCount       int
 	ResourceCounts map[string]int
 	PlanActions    PlanActions
@@ -43,12 +41,10 @@ func (completion DeployCompletion) properties() map[string]any {
 	if resourceCounts == nil {
 		resourceCounts = map[string]int{}
 	}
-	return map[string]any{
+	properties := completion.stackProperties()
+	maps.Copy(properties, map[string]any{
 		"success":         completion.Success,
 		"target":          completion.Target,
-		"provider":        completion.Provider,
-		"frameworks":      sortedUnique(completion.Frameworks),
-		"languages":       sortedUnique(completion.Languages),
 		"app_count":       completion.AppCount,
 		"resource_counts": resourceCounts,
 		"plan_actions": map[string]int{
@@ -60,7 +56,8 @@ func (completion DeployCompletion) properties() map[string]any {
 		"first_deploy": completion.FirstDeploy,
 		"error_code":   completion.ErrorCode,
 		"assumed":      sortedUnique(completion.Assumed),
-	}
+	})
+	return properties
 }
 
 func sortedUnique(values []string) []string {

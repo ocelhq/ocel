@@ -15,11 +15,17 @@ import (
 
 func (c *command) executeAndReport(args []string) int {
 	started := time.Now()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			c.recordCommandCompleted(args, errPanicked, panicExitCode, time.Since(started), findPanicFunction())
+			panic(recovered)
+		}
+	}()
 	c.root.SetArgs(args)
 	err := c.execute()
 	elapsed := time.Since(started)
 	exitCode := c.reportFailure(args, err)
-	c.recordCommandCompleted(args, err, exitCode, elapsed)
+	c.recordCommandCompleted(args, err, exitCode, elapsed, "")
 	return exitCode
 }
 

@@ -166,6 +166,7 @@ func newCommand() *command {
 			return err
 		}
 		c.preRunReached = true
+		c.invoked = cmd
 		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
 		}

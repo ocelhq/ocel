@@ -1,6 +1,9 @@
 package telemetry
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"os"
@@ -14,18 +17,33 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
+const InstallMethodEnvVar = "OCEL_INSTALL_METHOD"
+
+const (
+	installMethodNPM    = "npm"
+	installMethodBinary = "binary"
+)
+
 type Identity struct {
-	InstallID  string
-	CLIVersion string
-	OS         string
-	Arch       string
-	Agent      string
-	CI         string
+	InstallID     string
+	CLIVersion    string
+	OS            string
+	Arch          string
+	Agent         string
+	CI            string
+	InstallMethod string
 }
 
 func NewIdentity(installID string) Identity {
 	agent, ci := invocation.Detect(os.Getenv)
-	return Identity{InstallID: installID, CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: agent, CI: ci}
+	return Identity{InstallID: installID, CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: agent, CI: ci, InstallMethod: detectInstallMethod()}
+}
+
+func detectInstallMethod() string {
+	if os.Getenv(InstallMethodEnvVar) == installMethodNPM {
+		return installMethodNPM
+	}
+	return installMethodBinary
 }
 
 type Event struct {
@@ -41,8 +59,25 @@ type Payload interface {
 	properties() map[string]any
 }
 
+type projectPayload interface {
+	projectSlug() string
+}
+
 func NewEvent(identity Identity, at time.Time, payload Payload) (Event, error) {
-	return newEvent(payload.name(), identity, at, payload.properties())
+	properties := payload.properties()
+	if project, ok := payload.(projectPayload); ok {
+		properties["project_id"] = projectID(identity.InstallID, project.projectSlug())
+	}
+	return newEvent(payload.name(), identity, at, properties)
+}
+
+func projectID(installID, slug string) string {
+	if slug == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, []byte(installID))
+	mac.Write([]byte(slug))
+	return hex.EncodeToString(mac.Sum(nil))[:16]
 }
 
 func newEvent(name string, identity Identity, at time.Time, properties map[string]any) (Event, error) {
@@ -59,6 +94,7 @@ func newEvent(name string, identity Identity, at time.Time, properties map[strin
 		"arch":                    identity.Arch,
 		"agent":                   identity.Agent,
 		"ci":                      identity.CI,
+		"install_method":          identity.InstallMethod,
 		"$process_person_profile": false,
 	})
 	for _, property := range slices.Sorted(maps.Keys(merged)) {

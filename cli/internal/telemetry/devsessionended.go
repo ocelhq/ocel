@@ -1,11 +1,13 @@
 package telemetry
 
 import (
+	"maps"
 	"slices"
 	"time"
 )
 
 type DevSession struct {
+	Stack
 	Duration      time.Duration
 	Reloads       int
 	ResourceKinds []string
@@ -21,10 +23,12 @@ func (session DevSession) properties() map[string]any {
 	if codes == nil {
 		codes = map[string]int{}
 	}
-	return map[string]any{
+	properties := session.stackProperties()
+	maps.Copy(properties, map[string]any{
 		"duration_ms":    session.Duration.Milliseconds(),
 		"reloads":        session.Reloads,
 		"resource_kinds": kinds,
 		"error_codes":    codes,
-	}
+	})
+	return properties
 }

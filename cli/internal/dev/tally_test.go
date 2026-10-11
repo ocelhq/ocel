@@ -174,6 +174,26 @@ func TestADevSessionWhoseCommandFailsCountsThatCodeOnce(t *testing.T) {
 	}
 }
 
+func TestADevSessionDescribesTheStackOfItsProject(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+	root := t.TempDir()
+	t.Cleanup(func() { releaseLeader(root) })
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+	var log sessionLog
+	var stdout, stderr syncBuffer
+
+	_ = runDev(context.Background(), recordingDeps(&log), false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
+
+	if session := log.theOnlySession(t); session.Project != "test-app" {
+		t.Errorf("stack = %+v, want the project test-app", session.Stack)
+	}
+}
+
 func TestADevSessionFollowingALeaderCountsItsRestartsAndKnowsNoKinds(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -216,7 +236,7 @@ func TestADevSessionFollowingALeaderCountsItsRestartsAndKnowsNoKinds(t *testing.
 
 func TestATallyCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure(t *testing.T) {
 	var log sessionLog
-	tally := newTally(log.record)
+	tally := newTally(log.record, telemetry.Stack{})
 
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("a secret detail")})
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("another")})

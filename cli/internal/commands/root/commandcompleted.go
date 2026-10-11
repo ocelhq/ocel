@@ -16,7 +16,7 @@ const bareCommandName = "help"
 
 var commandsThatRecordNothing = []string{"telemetry flush"}
 
-func (c *command) recordCommandCompleted(args []string, err error, exitCode int, elapsed time.Duration) {
+func (c *command) recordCommandCompleted(args []string, err error, exitCode int, elapsed time.Duration, panicFunction string) {
 	resolution := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
 	if !resolution.Enabled || !c.isRecorded() {
 		return
@@ -30,6 +30,7 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 		JSON:           jsonRequested(args),
 		TTY:            terminal.IsTerminal(c.root.OutOrStdout()),
 		SkillInstalled: c.isSkillInstalled(),
+		PanicFunction:  panicFunction,
 	})
 	c.startFlush(resolution)
 }
