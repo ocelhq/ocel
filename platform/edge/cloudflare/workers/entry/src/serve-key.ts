@@ -54,7 +54,7 @@ export function parseObjectKey(url: string): string {
   return new URL(url).pathname.slice(1).split("/").map(decodeURIComponent).join("/");
 }
 
-export function variantPath(
+export function buildVariantPath(
   pathname: string,
   headers: Headers,
   renderingMode: "STATIC" | "PARTIALLY_STATIC" | undefined,

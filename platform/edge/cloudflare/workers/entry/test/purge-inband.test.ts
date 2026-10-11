@@ -12,14 +12,18 @@ function ports(
     purged,
     raised,
     port: {
-      purge: async (mode: PurgeMode, tags: string[]) => {
-        purged.push({ mode, tags });
-        const outcome = answer(mode, tags);
-        if (outcome instanceof Error) throw outcome;
-        return outcome;
+      cache: {
+        purge: async (mode: PurgeMode, tags: string[]) => {
+          purged.push({ mode, tags });
+          const outcome = answer(mode, tags);
+          if (outcome instanceof Error) throw outcome;
+          return outcome;
+        },
       },
-      raise: async (mode: PurgeMode, tags: RaisedTag[]) => {
-        raised.push({ mode, tags });
+      queue: {
+        raise: async (mode: PurgeMode, tags: RaisedTag[]) => {
+          raised.push({ mode, tags });
+        },
       },
       now: () => 5_000,
     },
@@ -82,7 +86,7 @@ describe("a purge the origin announced in-band", () => {
 
   it("settles even when the purge queue refuses the tags too", async () => {
     const { port } = ports(() => refused);
-    port.raise = async () => {
+    port.queue.raise = async () => {
       throw new Error("queue down");
     };
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});

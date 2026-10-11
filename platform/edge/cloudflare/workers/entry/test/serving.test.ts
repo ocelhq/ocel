@@ -2,14 +2,14 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import { describe, expect, it } from "vitest";
 import type { PurgeOutcome, RaisedTag } from "../src/purge-backlog";
 import type { ServeProps } from "../src/serve-key";
-import { newServing, type ServingBase } from "../src/serving";
+import { newServing, type ServingPorts } from "../src/serving";
 
 function base(over: { purge?: () => Promise<PurgeOutcome> } = {}) {
   const pending: Promise<unknown>[] = [];
   const stubs: ServeProps[] = [];
   const purged: { mode: PurgeMode; tags: string[] }[] = [];
   const raised: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
-  const serving: ServingBase = {
+  const serving: ServingPorts = {
     serve: ({ props }) => {
       stubs.push(props);
       return {

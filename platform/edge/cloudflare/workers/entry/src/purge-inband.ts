@@ -2,20 +2,20 @@ import type { PurgeGroup, PurgeMode } from "@platform/edge-contract/purge";
 import { type PurgeOutcome, type RaisedTag, TAGS_PER_CALL } from "./purge-backlog";
 
 export interface InBandPurgePorts {
-  purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
-  raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
+  cache: { purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> };
+  queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
   now(): number;
 }
 
 async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePorts): Promise<void> {
-  let landed = false;
+  let purged = false;
   try {
-    landed = (await ports.purge(mode, tags)).ok;
+    purged = (await ports.cache.purge(mode, tags)).ok;
   } catch {}
-  if (landed) return;
+  if (purged) return;
   const raisedAt = ports.now();
   try {
-    await ports.raise(
+    await ports.queue.raise(
       mode,
       tags.map((tag) => ({ tag, raisedAt })),
     );

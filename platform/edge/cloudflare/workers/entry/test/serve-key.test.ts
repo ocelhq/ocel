@@ -5,7 +5,7 @@ import {
   buildObjectCall,
   buildOriginCall,
   buildServeRequest,
-  variantPath,
+  buildVariantPath,
 } from "../src/serve-key";
 import { hasDraftCookie } from "../src/serve-prerender";
 
@@ -123,11 +123,11 @@ describe("the shared cache-key variants", () => {
   for (const testCase of cacheKeyFixture.cases) {
     it(testCase.name, () => {
       for (const renderingMode of ["STATIC", undefined] as const) {
-        expect(variantPath(testCase.pathname, H(testCase.headers), renderingMode)).toBe(
+        expect(buildVariantPath(testCase.pathname, H(testCase.headers), renderingMode)).toBe(
           testCase.variantPrerendered,
         );
       }
-      expect(variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC")).toBe(
+      expect(buildVariantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC")).toBe(
         testCase.variantPartiallyStatic,
       );
 
@@ -139,11 +139,11 @@ describe("the shared cache-key variants", () => {
   }
 });
 
-describe("variantPath", () => {
+describe("the path a request's cache variant is stored under", () => {
   const H = (init?: Record<string, string>) => new Headers(init);
 
   it("maps a plain (non-RSC) request to the document pathname", () => {
-    expect(variantPath("/blog", H(), "STATIC")).toBe("/blog");
+    expect(buildVariantPath("/blog", H(), "STATIC")).toBe("/blog");
   });
 
   it("maps a segment prefetch to an encoded .segment.rsc path", () => {
@@ -152,40 +152,40 @@ describe("variantPath", () => {
       "next-router-prefetch": "1",
       "next-router-segment-prefetch": "/blog/__PAGE__",
     });
-    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe(
+    expect(buildVariantPath("/blog", h, "PARTIALLY_STATIC")).toBe(
       "/blog.segments/%2Fblog%2F__PAGE__.segment.rsc",
     );
   });
 
   it("maps a full-route prefetch (prefetch: 1, no segment) to .prefetch.rsc", () => {
     const h = H({ RSC: "1", "next-router-prefetch": "1" });
-    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe("/blog.prefetch.rsc");
+    expect(buildVariantPath("/blog", h, "PARTIALLY_STATIC")).toBe("/blog.prefetch.rsc");
   });
 
   it("maps bare RSC on a STATIC route to .rsc", () => {
-    expect(variantPath("/blog", H({ RSC: "1" }), "STATIC")).toBe("/blog.rsc");
+    expect(buildVariantPath("/blog", H({ RSC: "1" }), "STATIC")).toBe("/blog.rsc");
   });
 
   it("maps bare RSC to .rsc when the build declared no rendering mode", () => {
-    expect(variantPath("/blog", H({ RSC: "1" }), undefined)).toBe("/blog.rsc");
+    expect(buildVariantPath("/blog", H({ RSC: "1" }), undefined)).toBe("/blog.rsc");
   });
 
   it("is non-cacheable for bare RSC on a PPR route (dynamic navigation)", () => {
-    expect(variantPath("/blog", H({ RSC: "1" }), "PARTIALLY_STATIC")).toBeNull();
+    expect(buildVariantPath("/blog", H({ RSC: "1" }), "PARTIALLY_STATIC")).toBeNull();
   });
 
   it("is non-cacheable for a runtime prefetch (prefetch: 2)", () => {
     const h = H({ RSC: "1", "next-router-prefetch": "2" });
-    expect(variantPath("/blog", h, "STATIC")).toBeNull();
+    expect(buildVariantPath("/blog", h, "STATIC")).toBeNull();
   });
 
   it("folds next-url into a segment prefetch's path so an intercepted and a plain navigation to the same URL cannot collide", () => {
-    const plain = variantPath(
+    const plain = buildVariantPath(
       "/photo",
       H({ RSC: "1", "next-router-segment-prefetch": "/children" }),
       "PARTIALLY_STATIC",
     );
-    const intercepted = variantPath(
+    const intercepted = buildVariantPath(
       "/photo",
       H({
         RSC: "1",
@@ -203,14 +203,14 @@ describe("variantPath", () => {
   it("folds next-url into a full-route prefetch and a bare-RSC static path too", () => {
     const withUrl = H({ RSC: "1", "next-router-prefetch": "1", "next-url": "/feed" });
     const withoutUrl = H({ RSC: "1", "next-router-prefetch": "1" });
-    expect(variantPath("/photo", withUrl, "PARTIALLY_STATIC")).not.toBe(
-      variantPath("/photo", withoutUrl, "PARTIALLY_STATIC"),
+    expect(buildVariantPath("/photo", withUrl, "PARTIALLY_STATIC")).not.toBe(
+      buildVariantPath("/photo", withoutUrl, "PARTIALLY_STATIC"),
     );
 
     const staticWithUrl = H({ RSC: "1", "next-url": "/feed" });
     const staticWithoutUrl = H({ RSC: "1" });
-    expect(variantPath("/photo", staticWithUrl, "STATIC")).not.toBe(
-      variantPath("/photo", staticWithoutUrl, "STATIC"),
+    expect(buildVariantPath("/photo", staticWithUrl, "STATIC")).not.toBe(
+      buildVariantPath("/photo", staticWithoutUrl, "STATIC"),
     );
   });
 });

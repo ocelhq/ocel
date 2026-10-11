@@ -31,7 +31,7 @@ import { ownRouteTableKey, readRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
 import { type ServeFactory, serveObjects } from "./serve-objects";
 import { type Serving, servePrerender } from "./serve-prerender";
-import { newServing, type ServingBase } from "./serving";
+import { newServing, type ServingPorts } from "./serving";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
@@ -87,7 +87,7 @@ export type ResolveBase = Omit<
   RouteDeps,
   "manifest" | "functionUrls" | "serving" | "assetStore" | "edge" | "slug" | "app" | "appBuildId"
 > & {
-  serving?: ServingBase;
+  serving?: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   imagesAtDeployment?: boolean;
   routeTableStore?: EdgeObjectStore;
@@ -185,8 +185,8 @@ export async function resolveRouteDeps(
   return runtime.routeDeps(served, releases, base);
 }
 
-function servingOf(
-  base: ServingBase | undefined,
+function newReleaseServing(
+  base: ServingPorts | undefined,
   record: ReleaseRecord,
   host: string,
   app: string,
@@ -249,7 +249,7 @@ function routedDeps(
         : undefined,
     manifest,
     functionUrls: record.functionUrls,
-    serving: servingOf(serving, record, releases.host, app),
+    serving: newReleaseServing(serving, record, releases.host, app),
     assetStore: {
       ...base.assetStore,
       assetPrefix: record.assetPrefix,

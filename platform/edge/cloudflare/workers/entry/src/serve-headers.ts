@@ -58,9 +58,13 @@ function edgePolicy(headers: Headers): { source: string; directives: Directives 
   return undefined;
 }
 
+export function buildPathTag(release: string, pathname: string): string {
+  return `${release}|path:${pathname}`;
+}
+
 function releaseTags(headers: Headers, { release, pathname }: CachedResponse): string {
   const prefix = `${release}|`;
-  const own = [release, `${prefix}path:${pathname}`];
+  const own = [release, buildPathTag(release, pathname)];
   const origin = (headers.get("cache-tag") ?? "")
     .split(",")
     .map((tag) => tag.trim())

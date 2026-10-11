@@ -9,7 +9,7 @@ import {
   type ServeFetch,
 } from "../src/index";
 import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
-import type { ServingBase } from "../src/serving";
+import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith } from "./origin-deps";
 import { type CountingObjectStore, objectStoreHolding, routeTableKey } from "./route-table-store";
 import { fakeServing } from "./serving-deps";
@@ -78,7 +78,7 @@ function lookup(record: ReleaseRecord, slug = "p1") {
   };
 }
 
-function servingBase(): ServingBase {
+function servingBase(): ServingPorts {
   return {
     serve: fakeServing().serving.serve,
     queue: { raise: async () => {} },

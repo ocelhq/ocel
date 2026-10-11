@@ -15,8 +15,13 @@ import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segm
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { PurgeGroup } from "@platform/edge-contract/purge";
-import { ORIGIN_VARY } from "./serve-headers";
-import { buildCanonicalUrl, buildOriginCall, buildServeRequest, variantPath } from "./serve-key";
+import { buildPathTag, ORIGIN_VARY } from "./serve-headers";
+import {
+  buildCanonicalUrl,
+  buildOriginCall,
+  buildServeRequest,
+  buildVariantPath,
+} from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 
 const RSC_FORWARD_HEADERS = new Set([
@@ -31,6 +36,7 @@ const DRAFT_COOKIE = "__prerender_bypass";
 
 export interface Serving {
   serve: ServeFactory;
+  host: string;
   release: string;
   purge(groups: PurgeGroup[], awaited: boolean): Promise<void>;
 }
@@ -49,7 +55,7 @@ export function servePrerender(deps: ServePrerenderDeps): Prerenderer {
   return (context) => prerender(context, deps);
 }
 
-function tierOf(response: Response): CacheStatus {
+function readTier(response: Response): CacheStatus {
   switch (response.headers.get("cf-cache-status")?.toUpperCase()) {
     case "HIT":
     case "REVALIDATED":
@@ -62,8 +68,8 @@ function tierOf(response: Response): CacheStatus {
   }
 }
 
-function forVisitor(response: Response, segment: boolean): Response {
-  const tier = tierOf(response);
+function buildVisitorResponse(response: Response, segment: boolean): Response {
+  const tier = readTier(response);
   const headers = new Headers(response.headers);
   for (const name of ["cache-tag", "cloudflare-cdn-cache-control", "cf-cache-status"]) {
     headers.delete(name);
@@ -78,12 +84,16 @@ function forVisitor(response: Response, segment: boolean): Response {
   return withStatus(segment ? asSegmentPayload(restored) : restored, tier);
 }
 
-function variantOf(request: Request, url: URL, target: PrerenderContext["target"]): string | null {
+function findVariant(
+  request: Request,
+  url: URL,
+  target: PrerenderContext["target"],
+): string | null {
   const mode = target.config.renderingMode;
   if (target.edgeEntryKey || (mode === "PARTIALLY_STATIC" && !request.headers.has("rsc"))) {
     return null;
   }
-  const variant = variantPath(url.pathname, request.headers, mode);
+  const variant = buildVariantPath(url.pathname, request.headers, mode);
   return variant === null ? null : variant.slice(url.pathname.length);
 }
 
@@ -94,7 +104,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   const answer = isSegmentPrefetch(request.headers)
     ? async (rendered: Request) => asSegmentPayload(await render(rendered))
     : render;
-  const uncached = (forwarded: Headers) => {
+  const forwardUncached = (forwarded: Headers) => {
     const passed = new Headers(forwarded);
     passed.delete(edgeCacheHeader);
     return forward(request, passed);
@@ -110,7 +120,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     !onDemand &&
     (shouldBypass(request, url, target.config) || request.method !== "GET" || personalized)
   ) {
-    return withStatus(await answer(uncached(headers)), "BYPASS");
+    return withStatus(await answer(forwardUncached(headers)), "BYPASS");
   }
 
   const safeHeaders = new Headers();
@@ -133,16 +143,16 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
       forward(new Request(request.url, { method: "GET" }), onDemandHeaders),
     );
     if (rendered.ok) {
-      const tag = `${serving.release}|path:${ctx.forwardUrl.pathname}`;
+      const tag = buildPathTag(serving.release, ctx.forwardUrl.pathname);
       await serving.purge([{ mode: "purge", tags: [tag] }], true);
     }
     const answered = withStatus(rendered, "BYPASS");
     return request.method === "HEAD" ? headResponse(answered) : answered;
   }
 
-  const variant = variantOf(request, url, target);
+  const variant = findVariant(request, url, target);
   if (variant === null) {
-    return withStatus(await answer(uncached(headers)), "MISS");
+    return withStatus(await answer(forwardUncached(headers)), "MISS");
   }
 
   if (target.entryKey !== undefined) safeHeaders.set(ENTRY_HEADER, target.entryKey);
@@ -151,12 +161,12 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   const { url: canonical, props } = buildOriginCall(
     buildCanonicalUrl(new URL(forwarded.url), target.allowQuery),
     {
-      host: new URL(request.url).host.toLowerCase(),
+      host: serving.host,
       app: deps.app,
       release: serving.release,
       variant: variant || undefined,
     },
   );
   const response = await serving.serve({ props }).fetch(buildServeRequest(canonical, forwarded));
-  return forVisitor(response, isSegmentPrefetch(request.headers));
+  return buildVisitorResponse(response, isSegmentPrefetch(request.headers));
 }
