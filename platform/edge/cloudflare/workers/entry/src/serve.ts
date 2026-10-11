@@ -58,10 +58,19 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
     const parsed = JSON.parse(header) as Partial<RenderRelease>;
     if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
-    return { slug: parsed.slug, isrPrefix: parsed.isrPrefix, tags };
+    const originPath = typeof parsed.originPath === "string" ? parsed.originPath : undefined;
+    return { slug: parsed.slug, isrPrefix: parsed.isrPrefix, tags, originPath };
   } catch {
     return undefined;
   }
+}
+
+function askedOf(keyedUrl: string, render: RenderRelease): string {
+  const { originPath } = render;
+  if (originPath === undefined || !originPath.startsWith("/") || originPath.startsWith("//")) {
+    return keyedUrl;
+  }
+  return new URL(originPath, keyedUrl).toString();
 }
 
 function admitSegment(request: Request, response: Response): Response {
@@ -215,11 +224,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async fromOrigin(request: Request): Promise<Response> {
     const { host, release } = readRenderCall(request.url);
-    const originUrl = buildOriginUrl(request.url);
+    const keyedUrl = buildOriginUrl(request.url);
     const found = await readRenderRecord(this.env, request, release);
-    if (!found || !isReleaseOrigin(found.record, new URL(originUrl).origin)) {
+    if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
       return respondRefused("the origin is not one of the served release's functions");
     }
+    const originUrl = askedOf(keyedUrl, found.render);
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);
     const originFetch = originFetchFor(this.env) ?? fetch;
@@ -242,7 +252,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         }),
       );
     }
-    return forCache(admitSegment(request, res), { release, pathname: new URL(originUrl).pathname });
+    return forCache(admitSegment(request, res), { release, pathname: new URL(keyedUrl).pathname });
   }
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {

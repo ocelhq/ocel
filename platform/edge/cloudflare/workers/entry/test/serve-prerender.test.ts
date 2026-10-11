@@ -389,6 +389,71 @@ describe("the document of a PPR route", () => {
   });
 });
 
+describe("the document of a PPR route whose param was not prerendered", () => {
+  const fallbackTarget: Target = {
+    config: { renderingMode: "PARTIALLY_STATIC", partialFallback: true },
+    allowQuery: ["page"],
+  };
+
+  function depsFor(served: FakeServing, over: { target?: Target } = {}): RouteDeps {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog/[id]": { kind: "prerender", id: "/blog", ...over.target },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: recorder().fetch,
+      serving: served.serving,
+    });
+  }
+
+  const getParam = (id: string, deps: RouteDeps) =>
+    dispatchResult(
+      {
+        resolvedPathname: "/blog/[id]",
+        routePath: `/blog/${id}`,
+        invocationTarget: { pathname: `/blog/${id}` },
+      },
+      new Request(`https://shop.example.com/blog/${id}?utm=x`),
+      deps,
+    );
+
+  it("asks Serve for one shell shared by every param value", async () => {
+    const served = fakeServing();
+
+    await getParam("1", depsFor(served, { target: fallbackTarget }));
+    await getParam("2", depsFor(served, { target: fallbackTarget }));
+
+    expect(new URL(served.calls[0].request.url).pathname.endsWith("/blog/[id]")).toBe(true);
+    expect(served.calls[1].request.url).toBe(served.calls[0].request.url);
+  });
+
+  it("tells Serve which concrete path to ask the origin for", async () => {
+    const served = fakeServing();
+
+    await getParam("42", depsFor(served, { target: fallbackTarget }));
+
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").originPath,
+    ).toBe("/blog/42");
+  });
+
+  it("keeps a shell per path when the route's fallback is not partial", async () => {
+    const served = fakeServing();
+    const target = { config: { renderingMode: "PARTIALLY_STATIC" } };
+
+    await getParam("1", depsFor(served, { target }));
+    await getParam("2", depsFor(served, { target }));
+
+    expect(served.calls[1].request.url).not.toBe(served.calls[0].request.url);
+  });
+});
+
 describe("an edge-runtime prerender", () => {
   const edgeTarget: Target = { edgeEntryKey: "middleware_app/edge-blog", tags: ["posts"] };
 
