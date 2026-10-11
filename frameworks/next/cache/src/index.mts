@@ -1,9 +1,3 @@
-export {
-  type BoundCacheTags,
-  boundCacheTags,
-  type StoredCacheTags,
-  storedCacheTags,
-} from "./cache-tags.mjs";
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 export {
   latest,

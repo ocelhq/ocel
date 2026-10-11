@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import type { TagRecord } from "@framework/next-cache";
+import { storedCacheTags } from "./cache-tags.mjs";
 
 export const purgePath = "/.ocel/purge";
 
@@ -50,6 +51,31 @@ export function formatPurge(groups: readonly PurgeGroup[]): string | undefined {
     .filter(({ tags }) => tags.length > 0)
     .map(({ mode, tags }) => `${mode} ${tags.join(",")}`);
   return written.length > 0 ? written.join(" ") : undefined;
+}
+
+export const purgeHeaderBytes = 4_096;
+
+export function purgeHeaderFor(
+  release: string,
+  entries: readonly PurgeEntry[],
+): string | undefined {
+  const groups: PurgeGroup[] = [];
+  for (const mode of ["purge", "invalidate"] as PurgeMode[]) {
+    const { tags } = storedCacheTags(
+      release,
+      entries.filter((entry) => entry.mode === mode).map(({ tag }) => tag),
+    );
+    const kept: PurgeGroup = { mode, tags: [] };
+    groups.push(kept);
+    for (const tag of tags) {
+      kept.tags.push(tag);
+      if (formatPurge(groups)!.length > purgeHeaderBytes) {
+        kept.tags.pop();
+        return formatPurge(groups);
+      }
+    }
+  }
+  return formatPurge(groups);
 }
 
 export function readPurge(value: string): PurgeGroup[] {

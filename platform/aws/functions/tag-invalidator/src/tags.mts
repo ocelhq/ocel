@@ -1,4 +1,4 @@
-import { storedCacheTags } from "@framework/next-cache";
+import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 
 export const pathsPerInvalidation = 100;
 

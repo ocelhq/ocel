@@ -4,10 +4,10 @@ import { copyFile, lstat, mkdir, readdir, readFile, stat, writeFile } from "node
 import { basename, dirname, join, relative, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { refuseAppCacheHandlers } from "@framework/next-cache/app-cache-handlers";
-import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { BuildOutput } from "@framework/node-build/output";
+import { boundCacheTags } from "@platform/edge-contract/cache-tags";
 import type { Hosting } from "@platform/edge-contract/hosting";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";

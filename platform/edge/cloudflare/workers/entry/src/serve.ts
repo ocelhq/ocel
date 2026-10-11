@@ -1,5 +1,4 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { storedCacheTags } from "@framework/next-cache";
 import { deltaSeconds } from "@framework/next-router/http-cache";
 import {
   functionUrlImageOrigin,
@@ -9,6 +8,7 @@ import {
   servedImage,
 } from "@framework/next-router/image";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
+import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import {
   type PurgeMode,
