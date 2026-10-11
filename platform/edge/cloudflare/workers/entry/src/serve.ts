@@ -16,6 +16,8 @@ interface ObjectBody {
 
 interface BucketAccess {
   bucket: string;
+  origin: string;
+  prefix: string;
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -46,7 +48,7 @@ function respondMissing(release: string): Response {
   });
 }
 
-function findBucketAccess(env: Env): BucketAccess | undefined {
+function findAwsBucketAccess(env: Env): BucketAccess | undefined {
   const {
     OCEL_ASSET_BUCKET: bucket,
     OCEL_AWS_REGION: region,
@@ -54,21 +56,41 @@ function findBucketAccess(env: Env): BucketAccess | undefined {
     OCEL_EDGE_SECRET_KEY: secretAccessKey,
   } = env;
   if (!bucket || !region || !accessKeyId || !secretAccessKey) return undefined;
-  return { bucket, region, accessKeyId, secretAccessKey };
+  const origin = `https://${bucket}.s3.${region}.amazonaws.com`;
+  return { bucket, origin, prefix: "", region, accessKeyId, secretAccessKey };
+}
+
+function findHmacBucketAccess(env: Env): BucketAccess | undefined {
+  const {
+    OCEL_ASSET_STORE_ENDPOINT: endpoint,
+    OCEL_ASSET_STORE_BUCKET: bucket,
+    OCEL_ASSET_STORE_ACCESS_KEY_ID: accessKeyId,
+    OCEL_ASSET_STORE_SECRET_KEY: secretAccessKey,
+  } = env;
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return undefined;
+  const origin = `${endpoint.replace(/\/$/, "")}/${encodeURIComponent(bucket)}`;
+  const prefix = env.OCEL_ASSET_STORE_PREFIX ?? "";
+  return { bucket, origin, prefix, region: "auto", accessKeyId, secretAccessKey };
+}
+
+function findBucketAccess(env: Env): BucketAccess | undefined {
+  return findAwsBucketAccess(env) ?? findHmacBucketAccess(env);
+}
+
+export function readsObjects(env: Env): boolean {
+  return findBucketAccess(env) !== undefined || env.OCEL_CACHE_STORE !== undefined;
 }
 
 async function readBucket(access: BucketAccess, key: string, release: string): Promise<Response> {
-  const { bucket, region, accessKeyId, secretAccessKey } = access;
+  const { bucket, origin, prefix, region, accessKeyId, secretAccessKey } = access;
   const client = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region, retries: 0 });
-  const res = await client.fetch(
-    `https://${bucket}.s3.${region}.amazonaws.com/${encodeKeyPath(key)}`,
-  );
+  const res = await client.fetch(`${origin}/${encodeKeyPath(prefix + key)}`);
   if (res.ok) {
     return respondStored({ body: res.body, etag: res.headers.get("etag") ?? undefined }, release);
   }
   await res.body?.cancel();
   if (res.status === 404) return respondMissing(release);
-  console.error(`ocel: the bucket ${bucket} answered ${res.status} for ${key}`);
+  console.error(`ocel: the bucket ${bucket} answered ${res.status} for ${prefix}${key}`);
   return respondNotStored(502, "Bad Gateway");
 }
 
