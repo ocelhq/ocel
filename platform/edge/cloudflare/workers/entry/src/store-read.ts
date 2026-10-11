@@ -136,7 +136,9 @@ function judge(
   for (const tag of tags) {
     const time = times[tag];
     if (time?.purgedAt !== undefined && time.purgedAt >= floor) return "purged";
-    if (time?.invalidatedAt !== undefined && time.invalidatedAt >= floor) invalidated = true;
+    if (time?.invalidatedAt !== undefined && time.invalidatedAt > entry.lastModified) {
+      invalidated = true;
+    }
   }
   const revalidate = entry.cacheControl?.revalidate ?? window?.revalidate;
   const expire = entry.cacheControl?.expire ?? window?.expire;

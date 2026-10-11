@@ -229,6 +229,15 @@ describe("whether an entry in the store may still be served", () => {
     expect(answer?.stale).toBe(true);
   });
 
+  it("serves as fresh an entry the origin rewrote within a second after an invalidation, as the origin judges it", async () => {
+    const { deps } = harness(
+      { [key("blog/a")]: entry({}, NOW - 10_000) },
+      { "r1a2b3c4d|_N_T_/blog/a": { invalidatedAt: NOW - 10_500 } },
+    );
+
+    expect((await readFromStore(call(), deps))?.stale).toBe(false);
+  });
+
   it("serves an entry past its revalidate time as stale", async () => {
     const { deps } = harness({ [key("blog/a")]: entry() });
 
