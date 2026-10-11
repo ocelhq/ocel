@@ -59,13 +59,14 @@ type StackState struct {
 	Records       []Record          `json:"records,omitempty"`
 	GlobalPreview string            `json:"globalPreview,omitempty"`
 	PreviewBase   string            `json:"previewBase,omitempty"`
+	PurgeURL      string            `json:"purgeURL,omitempty"`
 	Private       Private           `json:"private,omitzero"`
 }
 
 func (s StackState) Empty() bool {
 	return s.Slug == "" && s.Tier == "" && s.Endpoint == "" && s.Secret == "" && s.OwnerToken == "" &&
 		s.Address == "" && len(s.Addresses) == 0 && len(s.Bound) == 0 && len(s.Records) == 0 &&
-		s.GlobalPreview == "" && s.PreviewBase == "" && s.Private.IsZero()
+		s.GlobalPreview == "" && s.PreviewBase == "" && s.PurgeURL == "" && s.Private.IsZero()
 }
 
 func (s StackState) Equal(other StackState) bool {
@@ -77,6 +78,7 @@ func (s StackState) Equal(other StackState) bool {
 		s.Address == other.Address &&
 		s.GlobalPreview == other.GlobalPreview &&
 		s.PreviewBase == other.PreviewBase &&
+		s.PurgeURL == other.PurgeURL &&
 		maps.Equal(s.Addresses, other.Addresses) &&
 		slices.Equal(s.Bound, other.Bound) &&
 		slices.Equal(s.Records, other.Records) &&

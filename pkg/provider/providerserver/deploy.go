@@ -656,6 +656,9 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	r.setEdgeStack(stack)
+	if err := recordPurgeTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
+		return err
+	}
 	if err := r.checkpoint(ctx); err != nil {
 		return err
 	}
@@ -1578,7 +1581,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		AssetPrefix:          coordinate.AssetKey(""),
 		IsrPrefix:            withoutSlash(coordinate.ISRPrefix()),
 		Prerenders:           facts.Prerenders,
-		IsrWriteSecret:       result.ISRWriteSecret,
+		PurgeSecret:          result.PurgeSecret,
 		CreatedAt:            time.Now().Unix(),
 		ReleaseFingerprint:   entry.Release.Fingerprint(),
 		Variables:            declaredVariables(entry.Manifest.GetFramework().GetName(), values),

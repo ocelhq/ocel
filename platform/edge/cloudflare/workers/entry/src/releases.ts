@@ -13,7 +13,7 @@ export interface ReleaseRecord {
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;
-  isrWriteSecret?: string;
+  purgeSecret?: string;
   createdAt: number;
   edgeWorkers?: EdgeWorkers;
   env?: Record<string, string>;
@@ -28,7 +28,10 @@ export type PointerRecordResult =
   | { kind: "record"; release: string; record: ReleaseRecord }
   | { kind: "dangling"; release: string };
 
+export type ServedRecordResult = { kind: "record"; record: ReleaseRecord } | { kind: "not-served" };
+
 export interface ReleasesBinding {
+  readServedRecord(args: { slug: string; release: string }): Promise<ServedRecordResult>;
   readPointerRecord(args: {
     slug: string;
     app?: string;

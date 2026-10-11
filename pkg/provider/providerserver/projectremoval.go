@@ -448,6 +448,9 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Log
 	if err := r.destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
+	if err := forgetPurgeTarget(ctx, r.provider.KeyValues(), r.tier, r.front.Kind(), r.slug, r.state.Edge.PurgeURL); err != nil {
+		return err
+	}
 	r.state = stackrecords.EdgeState{}
 	return r.store.write(ctx, r.state)
 }

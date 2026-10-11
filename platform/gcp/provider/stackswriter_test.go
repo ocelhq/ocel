@@ -100,7 +100,7 @@ func isrSpec(front edge.Edge, compute provider.Compute, isr *provider.ISRSpec) p
 
 const isrPrefix = "p/shop/main/web/r1/isr"
 
-func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsWriteSecretToTheRecord(t *testing.T) {
+func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsPurgeSecretToTheRecord(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	order := &orderLog{}
@@ -118,8 +118,8 @@ func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsWrit
 	}
 
 	secret := cloudflare.DeriveISRWriteSecret(seed, isrPrefix)
-	if result.ISRWriteSecret != secret {
-		t.Errorf("ISRWriteSecret = %q, want %q", result.ISRWriteSecret, secret)
+	if result.PurgeSecret != secret {
+		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, secret)
 	}
 	if len(writer.requests) != 1 {
 		t.Fatalf("%d writer requests, want 1", len(writer.requests))
@@ -158,7 +158,7 @@ func TestADeployNotBehindTheCodeRunningEdgeTouchesNoISRWriter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Provision = %v", err)
 			}
-			if len(writer.requests) != 0 || result.ISRWriteSecret != "" || result.EdgeBundleKey != "k" {
+			if len(writer.requests) != 0 || result.PurgeSecret != "" || result.EdgeBundleKey != "k" {
 				t.Errorf("requests = %d, result = %+v, want no writer call and the inner result unchanged", len(writer.requests), result)
 			}
 		})

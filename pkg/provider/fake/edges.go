@@ -199,6 +199,7 @@ type edgeAccount struct {
 	unbound      error
 	bindSays     string
 	warns        string
+	purgeURL     string
 	verify       func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
@@ -548,6 +549,12 @@ func (e *Edge) warn(warn func(string)) {
 	}
 }
 
+func (e *Edge) PurgesAt(url string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.purgeURL = url
+}
+
 func (e *Edge) WarnOnUnbind(err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -689,6 +696,9 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	state := prior
 	state.Slug, state.Tier = spec.Slug, spec.Tier
 	state.Address = e.front(spec.Slug)
+	e.mu.Lock()
+	state.PurgeURL = e.purgeURL
+	e.mu.Unlock()
 	return e.open(state)
 }
 

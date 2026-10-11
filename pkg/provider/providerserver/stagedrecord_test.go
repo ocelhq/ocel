@@ -151,8 +151,8 @@ func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testi
 	if _, named := record.Env["orders"]; named {
 		t.Errorf("env = %v, want no binding name among the variables the worker runs with", record.Env)
 	}
-	if record.IsrWriteSecret == "" {
-		t.Error("the staged record has no isrWriteSecret, so the edge cannot write a revalidated page back")
+	if record.PurgeSecret == "" {
+		t.Error("the staged record has no purgeSecret, so the origin cannot sign a purge the edge accepts")
 	}
 }
 

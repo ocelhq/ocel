@@ -20,7 +20,11 @@ export function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
 export function answerEveryRecordWith(
   answer: (args: { slug: string; app?: string }) => Promise<PointerRecordResult>,
 ): ReleasesBinding {
-  return { readPointerRecord: answer, readLabelRecord: answer };
+  return {
+    readPointerRecord: answer,
+    readLabelRecord: answer,
+    readServedRecord: async () => ({ kind: "not-served" }),
+  };
 }
 
 export function capturing(): { calls: Request[]; fetch: typeof fetch } {

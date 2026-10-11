@@ -198,7 +198,7 @@ type StackResult struct {
 
 	Envelope string
 
-	ISRWriteSecret string
+	PurgeSecret string
 }
 
 type Binding struct {

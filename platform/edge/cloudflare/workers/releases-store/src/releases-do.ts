@@ -2,7 +2,13 @@ import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
 import type { Env } from "./env";
-import type { Initialization, PointerMove, PointerMoveOutcome, PointerRecordResult } from "./store";
+import type {
+  Initialization,
+  PointerMove,
+  PointerMoveOutcome,
+  PointerRecordResult,
+  ServedRecordResult,
+} from "./store";
 import * as store from "./store";
 
 export class ReleasesStore extends DurableObject<Env> {
@@ -48,6 +54,10 @@ export class ReleasesStore extends DurableObject<Env> {
 
   async readLabelRecord(label: string, knownRelease?: string): Promise<PointerRecordResult> {
     return store.readLabelRecord(this.ctx.storage, label, knownRelease);
+  }
+
+  async readServedRecord(release: string): Promise<ServedRecordResult> {
+    return store.readServedRecord(this.ctx.storage, release);
   }
 
   async readVersionStamp(): Promise<string | undefined> {

@@ -16,7 +16,10 @@ const (
 	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
 )
 
-const serveEntrypoint = "Serve"
+const (
+	serveEntrypoint  = "Serve"
+	purgeQueueObject = "PurgeQueue"
+)
 
 type OriginBindings struct {
 	Variables map[string]string
@@ -99,7 +102,7 @@ func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker
 	}
 	variables := map[string]string{}
 	maps.Copy(variables, origin.Variables)
-	worker := edge.Worker{Main: entry, Variables: variables, CachedEntrypoints: []string{serveEntrypoint}}
+	worker := edge.Worker{Main: entry, Variables: variables, CachedEntrypoints: []string{serveEntrypoint}, DurableObjects: []string{purgeQueueObject}}
 	if len(origin.Secrets) > 0 {
 		worker.Secrets = maps.Clone(origin.Secrets)
 	}

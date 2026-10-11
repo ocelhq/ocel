@@ -191,6 +191,8 @@ type Worker struct {
 	Queues map[string]string
 
 	CachedEntrypoints []string
+
+	DurableObjects []string
 }
 
 type ObjectStore struct {

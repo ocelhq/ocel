@@ -24,7 +24,7 @@ type ReleaseRecord struct {
 	FunctionURLs         map[string]string   `json:"functionUrls"`
 	AssetPrefix          string              `json:"assetPrefix"`
 	IsrPrefix            string              `json:"isrPrefix"`
-	IsrWriteSecret       string              `json:"isrWriteSecret,omitempty"`
+	PurgeSecret          string              `json:"purgeSecret,omitempty"`
 	Prerenders           bool                `json:"prerenders,omitempty"`
 	CreatedAt            int64               `json:"createdAt"`
 	EdgeWorkers          *Code               `json:"edgeWorkers,omitempty"`

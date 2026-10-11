@@ -5,7 +5,7 @@ import { bearer } from "@platform/cf-auth";
 import { authorized } from "./auth";
 import type { Env } from "./env";
 import { ReleasesStore } from "./releases-do";
-import type { PointerMove, PointerRecordResult } from "./store";
+import type { PointerMove, PointerRecordResult, ServedRecordResult } from "./store";
 
 export { ReleasesStore };
 
@@ -120,5 +120,9 @@ export default class extends WorkerEntrypoint<Env> {
     knownRelease?: string;
   }): Promise<PointerRecordResult> {
     return stub(this.env, args.slug).readLabelRecord(args.label, args.knownRelease);
+  }
+
+  async readServedRecord(args: { slug: string; release: string }): Promise<ServedRecordResult> {
+    return stub(this.env, args.slug).readServedRecord(args.release);
   }
 }

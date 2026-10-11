@@ -61,8 +61,8 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.ISRWriteSecret != cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
-		t.Errorf("ISRWriteSecret = %q, want the secret the revalidation writer demands", result.ISRWriteSecret)
+	if result.PurgeSecret != cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
+		t.Errorf("PurgeSecret = %q, want the secret the origin signs a purge with and the revalidation writer demands", result.PurgeSecret)
 	}
 }
 
@@ -88,8 +88,8 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 		t.Errorf("EdgeBundleKey = %q, Envelope = %q, RouteTableKey = %q, want nothing named where nothing was uploaded",
 			result.EdgeBundleKey, result.Envelope, result.RouteTableKey)
 	}
-	if result.ISRWriteSecret != "" {
-		t.Errorf("ISRWriteSecret = %q, want nothing where the account adopts no cache store", result.ISRWriteSecret)
+	if result.PurgeSecret != "" {
+		t.Errorf("PurgeSecret = %q, want nothing where the account adopts no cache store", result.PurgeSecret)
 	}
 }
 

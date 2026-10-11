@@ -116,17 +116,18 @@ func (p *cloudflare) cacheStore() cacheStore {
 
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:          edge.AllNeeds(),
-		Compatibility:      edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
-		RunsCode:           true,
-		CachesResponses:    true,
-		Entry:              workerModule(entryBundle),
-		ServesUnbound:      true,
-		ProxiesRecords:     true,
-		ProxiedRecordNote:  "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
-		OriginFacingRanges: listOriginFacingRanges(),
-		TunnelsToOrigin:    p.options.Tunnel,
-		CredentialScope:    readAccountID(),
+		Supported:             edge.AllNeeds(),
+		Compatibility:         edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
+		RunsCode:              true,
+		CachesResponses:       true,
+		InvalidatesByCacheTag: true,
+		Entry:                 workerModule(entryBundle),
+		ServesUnbound:         true,
+		ProxiesRecords:        true,
+		ProxiedRecordNote:     "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
+		OriginFacingRanges:    listOriginFacingRanges(),
+		TunnelsToOrigin:       p.options.Tunnel,
+		CredentialScope:       readAccountID(),
 	}
 }
 
@@ -525,10 +526,8 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	}
 	if len(worker.CachedEntrypoints) > 0 {
 		metadata["cache_options"] = map[string]any{"enabled": false, "cross_version_cache": true}
-		exports := make(map[string]any, len(worker.CachedEntrypoints))
-		for _, name := range worker.CachedEntrypoints {
-			exports[name] = map[string]any{"type": "worker", "cache": map[string]any{"enabled": true}}
-		}
+	}
+	if exports := workerExports(worker); len(exports) > 0 {
 		metadata["exports"] = exports
 	}
 	if includeAssets {
@@ -557,6 +556,17 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 		return nil, "", err
 	}
 	return buf.Bytes(), w.FormDataContentType(), nil
+}
+
+func workerExports(worker edge.Worker) map[string]any {
+	exports := make(map[string]any, len(worker.CachedEntrypoints)+len(worker.DurableObjects))
+	for _, name := range worker.CachedEntrypoints {
+		exports[name] = map[string]any{"type": "worker", "cache": map[string]any{"enabled": true}}
+	}
+	for _, name := range worker.DurableObjects {
+		exports[name] = map[string]any{"type": "durable-object", "storage": "sqlite"}
+	}
+	return exports
 }
 
 const cacheStoreBinding = "OCEL_CACHE_STORE"
