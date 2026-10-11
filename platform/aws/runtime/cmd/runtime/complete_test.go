@@ -37,7 +37,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		go m.drainControl(bufio.NewReader(goSide))
 
 		done := make(chan error, 1)
-		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+		go func() { done <- handleInvocation(context.Background(), rt, m, loginFront{}) }()
 
 		select {
 		case err := <-done:
@@ -70,7 +70,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		}
 
 		done := make(chan error, 1)
-		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+		go func() { done <- handleInvocation(context.Background(), rt, m, loginFront{}) }()
 
 		select {
 		case err := <-done:
@@ -100,7 +100,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 
 		done := make(chan error, 1)
 		started := time.Now()
-		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+		go func() { done <- handleInvocation(context.Background(), rt, m, loginFront{}) }()
 
 		select {
 		case err := <-done:
@@ -130,7 +130,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		}
 
 		done := make(chan error, 1)
-		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+		go func() { done <- handleInvocation(context.Background(), rt, m, loginFront{}) }()
 
 		select {
 		case err := <-done:
@@ -154,7 +154,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &nodeChild{ready: make(chan struct{}), pending: map[string]chan struct{}{}}
 
-		if err := handleInvocation(context.Background(), rt, m); err != nil {
+		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		if late := time.Since(deadline); late > -completionMargin/2 {

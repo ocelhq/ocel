@@ -43,6 +43,7 @@ type Facts struct {
 
 	RetainsContainerReleases bool
 	MaxFunctionBytes         int64
+	AnswersPreviewLogin      bool
 }
 
 type EdgeProgramRequest struct {

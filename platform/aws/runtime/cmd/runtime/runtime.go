@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 )
@@ -31,6 +32,7 @@ func main() {
 	start := time.Now()
 
 	served := readArtifact()
+	front := readLoginFront()
 
 	var prime primer
 	if !executable(served) {
@@ -74,7 +76,7 @@ func main() {
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
-		if err := handleInvocation(ctx, rt, child); err != nil {
+		if err := handleInvocation(ctx, rt, child, front); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
 			os.Exit(1)
 		}
@@ -196,7 +198,7 @@ func fatalInit(msg string) {
 	os.Exit(1)
 }
 
-func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
+func handleInvocation(ctx context.Context, rt *runtimeClient, c child, front loginFront) error {
 	inv, err := rt.next(ctx)
 	if err != nil {
 		return err
@@ -242,7 +244,7 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 		waiter = controlled.beginInvocation(inv.lc.AwsRequestID)
 	}
 	appCtx, cancelApp := answerBefore(ctx)
-	reached, err := c.endpoint().forward(appCtx, inv, rw)
+	reached, err := c.endpoint().forward(appCtx, inv, rw, front)
 	cancelApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
@@ -322,22 +324,29 @@ func newLoopbackClient() *http.Client {
 	}
 }
 
-func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
+func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWriter, front loginFront) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
+	}
+	if previewlogin.IsLogin(ev.method(), ev.path()) {
+		return false, u.relay(ctx, rw, front.answer(ev, time.Now()))
 	}
 
 	resp, err := u.forwardToApp(ctx, ev)
 	if err != nil {
 		return false, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
+	return true, u.relay(ctx, rw, resp)
+}
+
+func (u upstream) relay(ctx context.Context, rw *responseWriter, resp *http.Response) error {
 	defer resp.Body.Close()
 
 	var first [1]byte
 	n, err := io.ReadFull(resp.Body, first[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return true, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
+		return u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
 	}
 	sentinel := n == 0 && !selfTerminating(resp.StatusCode)
 	if sentinel {
@@ -347,28 +356,28 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
-		return true, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("encode prelude: %v", err))
+		return u.fail(rw, http.StatusBadGateway, fmt.Sprintf("encode prelude: %v", err))
 	}
 	if _, err := rw.Write(prelude); err != nil {
-		return true, err
+		return err
 	}
 
 	if n == 0 {
 		if sentinel {
 			if _, err := rw.Write([]byte(emptyBodySentinel)); err != nil {
-				return true, err
+				return err
 			}
 		}
-		return true, rw.Close()
+		return rw.Close()
 	}
 	if _, err := rw.Write(first[:n]); err != nil {
-		return true, err
+		return err
 	}
 
 	if _, err := io.Copy(rw, resp.Body); err != nil {
-		return true, rw.closeWithError(errTypeUpstream, err.Error())
+		return rw.closeWithError(errTypeUpstream, err.Error())
 	}
-	return true, rw.Close()
+	return rw.Close()
 }
 
 func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Response, error) {

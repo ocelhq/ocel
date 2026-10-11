@@ -282,6 +282,9 @@ func (r *release) Secrets(spec provider.StackSpec) []string {
 	if r.cfg.ISRWriterSeed != "" && spec.App != nil && spec.App.ISR != nil {
 		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, spec.App.ISR.Prefix))
 	}
+	if spec.App != nil {
+		secrets = append(secrets, listPreviewGateSecrets(spec.App.PreviewGate)...)
+	}
 	return secrets
 }
 

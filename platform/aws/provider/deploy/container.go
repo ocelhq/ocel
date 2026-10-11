@@ -198,6 +198,11 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
+	if gate, err := encodePreviewGate(app.PreviewGate); err != nil {
+		return nil, err
+	} else if gate != "" {
+		env[edge.PreviewGateVar] = gate
+	}
 	values := executionRole{App: app.App, VariablesKeyARN: r.cfg.VariablesKeyARN}
 	if bundle.hasLive() {
 		values.ValuesTableARN = r.cfg.VariablesTableARN

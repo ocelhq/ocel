@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
 
 const healthPath = "/_ocel/health"
@@ -498,4 +501,78 @@ func TestGuardFromEnv(t *testing.T) {
 			t.Error("the guard admits a request with no secret")
 		}
 	})
+}
+
+func serveLoginFront(t *testing.T, up *upstream, login *previewlogin.Login) *httptest.Server {
+	t.Helper()
+	target, err := url.Parse(up.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httptest.NewServer(Handler(Options{Upstream: target, Guard: NewGuard("secret"), PreviewLogin: login}))
+	t.Cleanup(front.Close)
+	return front
+}
+
+func postLogin(t *testing.T, front *httptest.Server, secret string, body io.Reader) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, front.URL+edge.PreviewLoginPath, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if secret != "" {
+		req.Header.Set(OriginSecretHeader, secret)
+	}
+	client := front.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+func gatedLogin(t *testing.T) *previewlogin.Login {
+	t.Helper()
+	login, _ := previewlogin.FromEnv([]string{edge.PreviewGateVar + `={"key":"k","passwordMac":"` + edge.HashPreviewPassword("k", "pw") + `"}`})
+	return login
+}
+
+func TestAContainerAnswersThePreviewLoginWithoutTheApp(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveLoginFront(t, up, gatedLogin(t))
+
+	resp := postLogin(t, front, "secret", strings.NewReader("password=pw"))
+
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), edge.PreviewCookieName+"=") {
+		t.Errorf("answer = %d setting %q, want 303 with the session", resp.StatusCode, resp.Header.Get("Set-Cookie"))
+	}
+	if up.seen != 0 {
+		t.Error("the login reached the app, carrying the password")
+	}
+}
+
+func TestAContainerRefusesAChunkedLoginBodyPastTheCap(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveLoginFront(t, up, gatedLogin(t))
+	body := io.MultiReader(strings.NewReader("password=pw&pad="), strings.NewReader(strings.Repeat("a", 1<<20)))
+
+	resp := postLogin(t, front, "secret", struct{ io.Reader }{body})
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || up.seen != 0 {
+		t.Errorf("answer = %d, reached the app %d times, want 413 and never the app", resp.StatusCode, up.seen)
+	}
+}
+
+func TestAContainerRefusesALoginWithoutTheOriginSecret(t *testing.T) {
+	up := serveUpstream(t)
+	front := serveLoginFront(t, up, gatedLogin(t))
+
+	resp := postLogin(t, front, "", strings.NewReader("password=pw"))
+
+	if resp.StatusCode != http.StatusForbidden || resp.Header.Get("Set-Cookie") != "" || up.seen != 0 {
+		t.Errorf("answer = %d setting %q, want 403", resp.StatusCode, resp.Header.Get("Set-Cookie"))
+	}
 }

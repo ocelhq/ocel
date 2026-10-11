@@ -93,6 +93,7 @@ type AppSpec struct {
 	Guard          *OriginGuard
 	ISR            *ISRSpec
 	Bytecode       *BytecodeSpec
+	PreviewGate    *edge.PreviewGate
 
 	AssetPrefix string
 	Static      *edge.Static

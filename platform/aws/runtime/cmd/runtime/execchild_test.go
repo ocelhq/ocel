@@ -94,7 +94,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 
 		rt, captured := fakeRuntime(t, []byte(getEvent))
-		if err := handleInvocation(t.Context(), rt, child); err != nil {
+		if err := handleInvocation(t.Context(), rt, child, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		_, body := splitPrelude(t, captured.body)
@@ -111,7 +111,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 
 		rt, captured := fakeRuntime(t, []byte(warmEvent))
-		if err := handleInvocation(t.Context(), rt, child); err != nil {
+		if err := handleInvocation(t.Context(), rt, child, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		var summary warmSummary
@@ -159,7 +159,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 
 		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(20*time.Second))
-		if err := handleInvocation(t.Context(), rt, child); err != nil {
+		if err := handleInvocation(t.Context(), rt, child, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		_, body := splitPrelude(t, captured.body)
@@ -179,7 +179,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 
 		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(600*time.Millisecond))
-		if err := handleInvocation(t.Context(), rt, child); err != nil {
+		if err := handleInvocation(t.Context(), rt, child, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation = %v, want the loop to move on to the next invocation", err)
 		}
 		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusServiceUnavailable {
