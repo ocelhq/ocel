@@ -9,6 +9,7 @@ import {
   readReleaseToken,
 } from "@platform/edge-contract/purge";
 import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access";
+import { settledWithin } from "./cache";
 import { createReleaseEdgeInvoker, type EdgeRuntime, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
@@ -43,6 +44,8 @@ import { openEntrySource } from "./store-source";
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
 const MISSING_EDGE_CACHE = "max-age=60";
+
+export const REGENERATION_HOLD_MS = 10_000;
 
 interface ObjectBody {
   body: ReadableStream | null;
@@ -274,12 +277,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     }
     if (!shell) return respondNoShell();
     if (shell.stale && isRevalidation(request)) {
-      this.ctx.waitUntil(
-        call
-          .render()
-          .then((regenerated) => regenerated.body?.cancel())
-          .catch((error) => console.error("ocel: the origin did not regenerate a PPR page", error)),
-      );
+      const regenerating = call
+        .render()
+        .then((regenerated) => regenerated.body?.pipeTo(new WritableStream()))
+        .catch((error) => console.error("ocel: the origin did not regenerate a PPR page", error));
+      this.ctx.waitUntil(regenerating);
+      await settledWithin(regenerating, REGENERATION_HOLD_MS);
     }
     return forCache(admitSegment(request, shell.response), call.cached);
   }

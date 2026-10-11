@@ -1,10 +1,10 @@
 import { createExecutionContext, env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import type { PurgeQueue } from "../src/purge-queue";
 import { openPurgeQueue } from "../src/purge-request";
 import type { TagTimes } from "../src/purge-times";
-import { Serve } from "../src/serve";
+import { REGENERATION_HOLD_MS, Serve } from "../src/serve";
 import {
   buildOriginCall,
   ORIGIN_PURGE_SCOPE,
@@ -64,6 +64,7 @@ function harness(
     release?: Record<string, unknown>;
     call?: Record<string, unknown>;
     queues?: unknown;
+    origin?: () => Promise<Response>;
   } = {},
 ): Harness {
   const pending: Promise<unknown>[] = [];
@@ -122,6 +123,7 @@ function harness(
       withGlobalFetch(
         (async (input: RequestInfo | URL, init?: RequestInit) => {
           originCalls.push(new Request(input as RequestInfo, init));
+          if (options.origin) return options.origin();
           return new Response("<html>from the origin</html>", {
             status: originStatus,
             headers: { "cache-control": "s-maxage=300" },
@@ -429,5 +431,77 @@ describe("Serve answering the shell of a PPR document", () => {
     expect(await response.text()).toBe("STATE<html>shell</html>");
     expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
     expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
+  });
+
+  const invalidated = () => ({ "r1a2b3c4d|posts": { invalidatedAt: Date.now() } });
+  const revalidating = { "if-none-match": 'W/"anything"' };
+
+  function heldOrigin() {
+    let finish = () => {};
+    let reached = () => {};
+    const called = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const origin = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("<html>regenerated"));
+            finish = () => controller.close();
+            reached();
+          },
+        }),
+      );
+    return { origin, called, finish: () => finish() };
+  }
+
+  function track(pending: Promise<Response>) {
+    const state = { answered: false };
+    void pending.then(() => {
+      state.answered = true;
+    });
+    return state;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("holds the revalidation of an invalidated shell until the origin has rendered the page in full", async () => {
+    await seed(shellEntry());
+    const held = heldOrigin();
+    const h = harness({ times: invalidated(), origin: held.origin }) as Used;
+
+    await h.fetchOrigin(async () => {
+      const pending = h.serve.fetch(shellRequest(h, revalidating));
+      const state = track(pending);
+      await held.called;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(state.answered).toBe(false);
+
+      held.finish();
+      expect(await (await pending).text()).toBe("STATE<html>shell</html>");
+    });
+    expect(h.originCalls).toHaveLength(1);
+  });
+
+  it("answers the revalidation of an invalidated shell from the store once the origin has rendered for longer than the hold", async () => {
+    await seed(shellEntry());
+    const held = heldOrigin();
+    const h = harness({ times: invalidated(), origin: held.origin }) as Used;
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await h.fetchOrigin(async () => {
+      const pending = h.serve.fetch(shellRequest(h, revalidating));
+      const state = track(pending);
+      await held.called;
+      await vi.advanceTimersByTimeAsync(REGENERATION_HOLD_MS - 1);
+      expect(state.answered).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await (await pending).text()).toBe("STATE<html>shell</html>");
+      held.finish();
+      await h.settled();
+    });
   });
 });
