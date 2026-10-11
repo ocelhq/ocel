@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
 const (
@@ -27,8 +26,9 @@ type gateRecord struct {
 }
 
 type gatePublication struct {
-	Main   gateVersion  `json:"main"`
-	Before *gateVersion `json:"before,omitempty"`
+	Main      gateVersion   `json:"main"`
+	Before    []gateVersion `json:"before,omitempty"`
+	Confirmed bool          `json:"confirmed,omitempty"`
 }
 
 func gatePartition() keyvalue.Partition {
@@ -134,11 +134,6 @@ func sameGateRecord(a, b gateRecord) bool {
 	return string(left) == string(right)
 }
 
-type gateRecords struct {
-	records   map[string]gateRecord
-	revisions map[string]keyvalue.Revision
-}
-
 func (e *Edge) listGateEntries(ctx context.Context) ([]keyvalue.Entry, error) {
 	entries, err := e.deps.KeyValues.List(ctx, gatePartition(), string(Kind), gateRecordsSegment)
 	if err != nil {
@@ -147,66 +142,59 @@ func (e *Edge) listGateEntries(ctx context.Context) ([]keyvalue.Entry, error) {
 	return entries, nil
 }
 
-func revisionsOf(entries []keyvalue.Entry) map[string]keyvalue.Revision {
-	revisions := make(map[string]keyvalue.Revision, len(entries))
-	for _, entry := range entries {
-		revisions[entry.Key.Path[len(entry.Key.Path)-1]] = entry.Revision
+func (e *Edge) encodeGateConfig(ctx context.Context) (string, error) {
+	entries, err := e.listGateEntries(ctx)
+	if err != nil {
+		return "", err
 	}
-	return revisions
-}
-
-func (e *Edge) openGateRecords(ctx context.Context, entries []keyvalue.Entry) (gateRecords, error) {
-	opened := gateRecords{records: map[string]gateRecord{}, revisions: revisionsOf(entries)}
+	hosts := map[string]string{}
+	gates := make(map[string]previewgate.Gate, len(entries))
 	for _, entry := range entries {
 		slug := entry.Key.Path[len(entry.Key.Path)-1]
 		var record gateRecord
 		if err := e.openRecord(ctx, gateRecordData(slug), entry.Value, &record); err != nil {
-			return gateRecords{}, err
+			return "", err
 		}
-		opened.records[slug] = record
-	}
-	return opened, nil
-}
-
-func (r gateRecords) encodeConfig(encode func(hosts map[string]string, gates map[string]previewgate.Gate) string) string {
-	hosts := map[string]string{}
-	gates := make(map[string]previewgate.Gate, len(r.records))
-	for _, slug := range slices.Sorted(maps.Keys(r.records)) {
-		gates[slug] = r.records[slug].Gate
-		for _, host := range r.records[slug].Hosts {
+		gates[slug] = record.Gate
+		for _, host := range record.Hosts {
 			hosts[host] = slug
 		}
 	}
-	return encode(hosts, gates)
+	return gateplugin.EncodeConfig(hosts, gates), nil
 }
 
 func (e *Edge) readGatePublication(ctx context.Context) (gatePublication, bool, error) {
+	_, publication, found, err := e.readGatePublicationEntry(ctx)
+	return publication, found, err
+}
+
+func (e *Edge) readGatePublicationEntry(ctx context.Context) (keyvalue.Entry, gatePublication, bool, error) {
 	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, gatePublicationKey())
 	if err != nil {
-		return gatePublication{}, false, fmt.Errorf("read what the %s edge's gate plugin runs: %w", Kind, err)
+		return keyvalue.Entry{}, gatePublication{}, false, fmt.Errorf("read what the %s edge's gate plugin runs: %w", Kind, err)
 	}
 	if len(entry.Value) == 0 {
-		return gatePublication{}, false, nil
+		return entry, gatePublication{}, false, nil
 	}
 	var publication gatePublication
 	if err := e.openRecord(ctx, gatePublicationData, entry.Value, &publication); err != nil {
-		return gatePublication{}, false, err
+		return keyvalue.Entry{}, gatePublication{}, false, err
 	}
-	return publication, true, nil
+	return entry, publication, true, nil
 }
 
-func (e *Edge) writeGatePublication(ctx context.Context, publication gatePublication) error {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, gatePublicationKey())
-	if err != nil {
-		return fmt.Errorf("read what the %s edge's gate plugin runs: %w", Kind, err)
-	}
+func (e *Edge) writeGatePublication(ctx context.Context, entry keyvalue.Entry, publication gatePublication) (keyvalue.Entry, error) {
+	var err error
 	if entry.Value, err = e.sealRecord(ctx, gatePublicationData, publication); err != nil {
-		return err
+		return keyvalue.Entry{}, err
 	}
-	if _, err := e.deps.KeyValues.Write(ctx, entry); err != nil {
-		return fmt.Errorf("record what the %s edge's gate plugin runs: %w", Kind, err)
+	if entry.Revision, err = e.deps.KeyValues.Write(ctx, entry); err != nil {
+		if errors.Is(err, keyvalue.ErrStale) {
+			return keyvalue.Entry{}, err
+		}
+		return keyvalue.Entry{}, fmt.Errorf("record what the %s edge's gate plugin runs: %w", Kind, err)
 	}
-	return nil
+	return entry, nil
 }
 
 func (e *Edge) forgetGates(ctx context.Context) error {

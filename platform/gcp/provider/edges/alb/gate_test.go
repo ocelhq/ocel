@@ -5,11 +5,14 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -264,6 +267,34 @@ func TestChangingAGateAddsAVersionAndKeepsTheOneItReplacedForTheSwitch(t *testin
 	}
 }
 
+func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := gatedEdge(t)
+	reconcileGated(t, balancer, "shop", &shopGate)
+	running := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["mainVersionId"]
+	failed := shopGate
+	failed.BypassSecrets = []string{"failed"}
+	w.failUps(GateStack(environment.TierPreview), errors.New("the update was interrupted"))
+	if _, err := balancer.Reconcile(context.Background(),
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &failed}, edge.StackState{}); err == nil {
+		t.Fatal("Reconcile succeeded through a failed raise")
+	}
+	next := shopGate
+	next.BypassSecrets = []string{"next"}
+
+	reconcileGated(t, balancer, "shop", &next)
+
+	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["versions"].([]any)
+	var names []any
+	for _, each := range versions {
+		names = append(names, each.(map[string]any)["versionName"])
+	}
+	if len(names) != 3 || !slices.Contains(names, running) {
+		t.Errorf("the plugin lists versions %v, want the new one, the one the failed raise declared and %v, which may still be the one running", names, running)
+	}
+}
+
 func TestPublishingManyTimesNeverKeepsMoreThanTwoVersions(t *testing.T) {
 	t.Parallel()
 
@@ -317,6 +348,65 @@ func TestTwoProjectsGatesDeployedAtOnceAreBothInThePluginAtTheEnd(t *testing.T) 
 	for _, key := range []string{"shop-key", "blog-key"} {
 		if !strings.Contains(config, key) {
 			t.Errorf("the final plugin config lacks %s: a deploy that raced another published a snapshot without it\n%s", key, config)
+		}
+	}
+}
+
+type watchedKeyValues struct {
+	keyvalue.Store
+	onWrite func(key keyvalue.Key)
+}
+
+func (w watchedKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	revision, err := w.Store.Write(ctx, entry)
+	w.onWrite(entry.Key)
+	return revision, err
+}
+
+func TestAPublicationThatLostARaceRecordsThePluginVersionThatIsRunning(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	var shopPublishing atomic.Bool
+	shopWrote, blogWrote, blogUp := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var closeShopWrote, closeBlogWrote sync.Once
+	balancer.deps.KeyValues = watchedKeyValues{Store: balancer.deps.KeyValues, onWrite: func(key keyvalue.Key) {
+		if key.String() != gatePublicationKey().String() || !shopPublishing.Load() {
+			return
+		}
+		select {
+		case <-shopWrote:
+			closeBlogWrote.Do(func() { close(blogWrote) })
+		default:
+			closeShopWrote.Do(func() { close(shopWrote) })
+			<-blogWrote
+		}
+	}}
+	blogDone := make(chan error, 1)
+	w.beforeNextUp(func() {
+		w.afterNextUp(func() {
+			close(blogUp)
+			<-shopWrote
+		})
+		go func() {
+			_, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: "blog", Tier: environment.TierPreview, PreviewGate: &blogGate}, edge.StackState{})
+			blogDone <- err
+		}()
+		<-blogUp
+		shopPublishing.Store(true)
+	})
+
+	reconcileGated(t, balancer, "shop", &shopGate)
+	if err := <-blogDone; err != nil {
+		t.Fatalf("Reconcile(blog) = %v", err)
+	}
+	reconcileGated(t, balancer, "shop", &shopGate)
+
+	config := w.gateConfig(GateStack(environment.TierPreview))
+	for _, key := range []string{"shop-key", "blog-key"} {
+		if !strings.Contains(config, key) {
+			t.Errorf("the plugin runs a config without %s after blog's raise finished before shop's and recorded after it:\n%s", key, config)
 		}
 	}
 }
