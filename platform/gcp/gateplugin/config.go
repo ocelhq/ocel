@@ -4,6 +4,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
@@ -44,30 +45,31 @@ func ParseConfig(text string) (Config, error) {
 		return Config{}, errors.New("the plugin config does not start with " + title)
 	}
 	config := Config{hosts: map[string]string{}, gates: map[string]previewgate.Gate{}}
-	for _, line := range lines[1:] {
+	for i, line := range lines[1:] {
 		if line == "" {
 			continue
 		}
+		number := i + 2
 		fields := strings.Split(line, " ")
 		switch {
 		case fields[0] == gateLine && len(fields) == 6:
 			gate, slug, err := parseGate(fields[1:])
 			if err != nil {
-				return Config{}, err
+				return Config{}, refuseLine(number, err)
 			}
 			config.gates[slug] = gate
 		case fields[0] == hostLine && len(fields) == 3:
-			host, err := unescapeField(fields[1])
+			host, err := unescapeField(fields[1], "host")
 			if err != nil {
-				return Config{}, err
+				return Config{}, refuseLine(number, err)
 			}
-			slug, err := unescapeField(fields[2])
+			slug, err := unescapeField(fields[2], "slug")
 			if err != nil {
-				return Config{}, err
+				return Config{}, refuseLine(number, err)
 			}
 			config.hosts[host] = slug
 		default:
-			return Config{}, errors.New("the plugin config holds a line that is no gate and no host: " + line)
+			return Config{}, refuseLine(number, errors.New("it is no gate and no host"))
 		}
 	}
 	for host, slug := range config.hosts {
@@ -76,6 +78,10 @@ func ParseConfig(text string) (Config, error) {
 		}
 	}
 	return config, nil
+}
+
+func refuseLine(number int, err error) error {
+	return errors.New("line " + strconv.Itoa(number) + " of the plugin config is refused: " + err.Error())
 }
 
 func (c Config) ListHosts() []string { return slices.Sorted(maps.Keys(c.hosts)) }
@@ -92,23 +98,23 @@ func normalizeHost(host string) string {
 }
 
 func parseGate(fields []string) (previewgate.Gate, string, error) {
-	slug, err := unescapeField(fields[0])
+	slug, err := unescapeField(fields[0], "slug")
 	if err != nil {
 		return previewgate.Gate{}, "", err
 	}
-	key, err := unescapeField(fields[1])
+	key, err := unescapeField(fields[1], "key")
 	if err != nil {
 		return previewgate.Gate{}, "", err
 	}
-	mac, err := unescapeField(fields[2])
+	mac, err := unescapeField(fields[2], "password MAC")
 	if err != nil {
 		return previewgate.Gate{}, "", err
 	}
-	bypass, err := unescapeList(fields[3])
+	bypass, err := unescapeList(fields[3], "bypass secrets")
 	if err != nil {
 		return previewgate.Gate{}, "", err
 	}
-	options, err := unescapeList(fields[4])
+	options, err := unescapeList(fields[4], "allowed OPTIONS prefixes")
 	if err != nil {
 		return previewgate.Gate{}, "", err
 	}
@@ -126,14 +132,14 @@ func escapeList(values []string) string {
 	return strings.Join(escaped, ",")
 }
 
-func unescapeList(field string) ([]string, error) {
+func unescapeList(field, kind string) ([]string, error) {
 	if field == emptyField {
 		return nil, nil
 	}
 	parts := strings.Split(field, ",")
 	values := make([]string, len(parts))
 	for i, part := range parts {
-		value, err := unescapeField(part)
+		value, err := unescapeField(part, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +166,7 @@ func escapeField(value string) string {
 	return escaped.String()
 }
 
-func unescapeField(field string) (string, error) {
+func unescapeField(field, kind string) (string, error) {
 	if field == emptyField {
 		return "", nil
 	}
@@ -171,11 +177,11 @@ func unescapeField(field string) (string, error) {
 			continue
 		}
 		if i+2 >= len(field) {
-			return "", errors.New("the plugin config holds a truncated escape in " + field)
+			return "", errors.New("its " + kind + " field ends in a truncated escape")
 		}
 		high, low := strings.IndexByte(hexDigits, field[i+1]), strings.IndexByte(hexDigits, field[i+2])
 		if high < 0 || low < 0 {
-			return "", errors.New("the plugin config holds a bad escape in " + field)
+			return "", errors.New("its " + kind + " field holds an escape that is not two hex digits")
 		}
 		value.WriteByte(byte(high<<4 | low))
 		i += 2
