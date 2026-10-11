@@ -171,6 +171,7 @@ function shape(
 
   const pathname = (req.url ?? "/").split("?")[0]!;
   if (!declaredNames.includes("s-maxage")) {
+    if (carriesCredentials(req)) return;
     const rule = findCacheRule(cache.rules, pathname);
     if (!rule) return;
     const ruled = cacheControlOfRule(rule);
@@ -188,6 +189,10 @@ function shape(
     .split(",")
     .filter((tag) => tag !== "");
   res.setHeader(header, [...new Set([...existing, ...tags])].join(","));
+}
+
+function carriesCredentials(req: http.IncomingMessage): boolean {
+  return req.headers.cookie !== undefined || req.headers.authorization !== undefined;
 }
 
 function directives(declared: string): string[] {

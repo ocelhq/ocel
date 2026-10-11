@@ -47,6 +47,10 @@ when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `pr
 `no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
 (`s-maxage` and `stale-while-revalidate`) or from the build's cache rules.
 
+A request that carries a `Cookie` or `Authorization` header never takes its lifetime from a
+cache rule, on any edge. It reaches your app with them, and its response is cached only if it
+sets its own `s-maxage`, so a signed-in visitor's page is never cached for everyone by a rule.
+
 A build states cache rules in the `cache` list of its `hosting.json`, which framework adapters
 write. Each rule names a path, the seconds the entry stays fresh, and optionally the seconds
 after which it is no longer served stale:
@@ -68,10 +72,7 @@ exceed `revalidate` refuses the deploy.
 
 | Edge | Caches | A revalidation |
 | --- | --- | --- |
-| Cloudflare | the paths a rule names, for `GET` requests with no `Authorization` header, keyed by host and every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered |
+| Cloudflare | the paths a rule names, for `GET` requests with no `Cookie` or `Authorization` header, keyed by host and every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered |
 | CloudFront | every response that allows it | reaches nothing: the app says so once in its log, and the entry lapses with its lifetime |
 | Google Cloud load balancer | every response that allows it | reaches nothing, as on CloudFront |
 | No edge | nothing | nothing |
-
-Cloudflare drops the visitor's cookies before it asks your app for a cacheable path, so a
-response there is the same for every visitor.
