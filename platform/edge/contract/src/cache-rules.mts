@@ -14,13 +14,13 @@ export function findCacheRule(
   return rules?.find((rule) => matches(rule, pathname));
 }
 
-export function cacheControlOfRule({ revalidate, expire }: CacheRule): string {
+export function formatCacheControl({ revalidate, expire }: CacheRule): string {
   return expire !== undefined && expire > revalidate
     ? `s-maxage=${revalidate}, stale-while-revalidate=${expire - revalidate}`
     : `s-maxage=${revalidate}`;
 }
 
-function refusal(rule: CacheRule): string | undefined {
+function findRefusal(rule: CacheRule): string | undefined {
   const { path, revalidate, expire } = rule;
   if (typeof path !== "string" || !path.startsWith("/") || /[?#]/.test(path)) {
     return "a path starts with a slash and names no query or fragment";
@@ -49,7 +49,7 @@ export function readCacheRules(declared: string | undefined): CacheRule[] {
   if (!Array.isArray(parsed)) throw new Error(`ocel: ${cacheRulesVar} is not a list of rules`);
   for (const [i, rule] of parsed.entries()) {
     const refused =
-      typeof rule === "object" && rule !== null ? refusal(rule) : "a rule is an object";
+      typeof rule === "object" && rule !== null ? findRefusal(rule) : "a rule is an object";
     if (refused) throw new Error(`ocel: ${cacheRulesVar} rule ${i} is refused: ${refused}`);
   }
   return parsed as CacheRule[];

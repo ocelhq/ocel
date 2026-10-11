@@ -14,7 +14,7 @@ import {
 } from "./serve-key";
 import { buildVisitorResponse, type Serving } from "./serve-prerender";
 
-export interface ServeNodeDeps {
+export interface ServeNodePorts {
   serving: Serving;
   app: string;
   origin: string;
@@ -26,7 +26,7 @@ function isRead(request: Request): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
 
-function rawPath(request: Request): string {
+function readRawPath(request: Request): string {
   const pathAndQuery = request.url.replace(/^[a-z][a-z\d+.-]*:\/\/[^/]*/i, "");
   const queryIndex = pathAndQuery.indexOf("?");
   return queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
@@ -37,13 +37,13 @@ function isCacheable(request: Request, rules: readonly CacheRule[]): boolean {
     request.method === "GET" &&
     !request.headers.has("authorization") &&
     !request.headers.has("cookie") &&
-    !needsSlashNormalization(rawPath(request)) &&
+    !needsSlashNormalization(readRawPath(request)) &&
     findCacheRule(rules, new URL(request.url).pathname) !== undefined
   );
 }
 
-export function serveNodeOrigin(deps: ServeNodeDeps): (request: Request) => Promise<Response> {
-  const { serving, app, origin, rules, forward } = deps;
+export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Promise<Response> {
+  const { serving, app, origin, rules, forward } = ports;
 
   async function forwardUncached(request: Request): Promise<Response> {
     const response = await forward(request);

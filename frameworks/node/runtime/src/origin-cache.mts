@@ -1,12 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type http from "node:http";
 import {
-  cacheControlOfRule,
+  cacheRulesVar,
   findCacheRule,
+  formatCacheControl,
   readCacheRules,
 } from "@platform/edge-contract/cache-rules";
 import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
-import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
+import {
+  edgeAsksToCacheVar,
+  edgeCacheHeader,
+  edgeCacheTagHeader,
+  releaseTokenVar,
+} from "@platform/edge-contract/edge-cache";
 import type { CacheRule } from "@platform/edge-contract/hosting";
 import {
   type PurgeEntry,
@@ -17,9 +23,6 @@ import {
 import { setRequestScope } from "./host.mjs";
 
 const cacheHostKey = Symbol.for("ocel.cache.host");
-
-const releaseTokenVar = "OCEL_RELEASE_TOKEN";
-const edgeAsksVar = "OCEL_EDGE_ASKS_TO_CACHE";
 
 const releasePattern = /^r[0-9a-f]{8}$/;
 
@@ -33,7 +36,7 @@ interface OriginCache {
 
 interface RequestCache {
   tags: Set<string>;
-  raises: Map<string, PurgeMode>;
+  revalidations: Map<string, PurgeMode>;
 }
 
 function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
@@ -43,9 +46,9 @@ function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
     throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
   }
   return {
-    rules: readCacheRules(env.OCEL_CACHE_RULES),
+    rules: readCacheRules(env[cacheRulesVar]),
     release,
-    edgeAsks: Boolean(env[edgeAsksVar]),
+    edgeAsks: Boolean(env[edgeAsksToCacheVar]),
   };
 }
 
@@ -53,7 +56,7 @@ const requests = new AsyncLocalStorage<RequestCache>();
 
 let warnedUnreachable = false;
 
-function currentRequest(call: string): RequestCache {
+function readRequestCache(call: string): RequestCache {
   const store = requests.getStore();
   if (!store) {
     throw new Error(`ocel: ${call} was called outside a request, so no response can carry it`);
@@ -62,8 +65,8 @@ function currentRequest(call: string): RequestCache {
 }
 
 function installOriginCache(cache: OriginCache): void {
-  const raise = (tag: string, mode: PurgeMode, call: string): void => {
-    const store = currentRequest(call);
+  const revalidate = (tag: string, mode: PurgeMode, call: string): void => {
+    const store = readRequestCache(call);
     if (storedCacheTags(cache.release, [tag]).unstorable.length > 0) {
       console.warn(`ocel: ${call} names a tag no edge can store, so it clears nothing`);
       return;
@@ -71,20 +74,19 @@ function installOriginCache(cache: OriginCache): void {
     if (!cache.edgeAsks && !warnedUnreachable) {
       warnedUnreachable = true;
       console.warn(
-        `ocel: ${call} cannot reach the edge in front of this app, because only the Cloudflare edge purges for a node app; ${tag} lapses with the cache lifetime of what it names`,
+        `ocel: ${call} reaches no edge, because the edge in front of this app takes no purge from it; what ${tag} names lapses with its cache lifetime`,
       );
     }
-    if (store.raises.get(tag) !== "purge") store.raises.set(tag, mode);
+    if (store.revalidations.get(tag) !== "purge") store.revalidations.set(tag, mode);
   };
   (globalThis as Record<symbol, unknown>)[cacheHostKey] = {
     tag: (tags: readonly string[]) => {
-      const store = currentRequest("cacheTag");
+      const store = readRequestCache("cacheTag");
       for (const tag of tags) store.tags.add(tag);
     },
-    revalidateTag: (tag: string, mode: "expire" | "stale") =>
-      raise(tag, mode === "expire" ? "purge" : "invalidate", `revalidateTag(${tag})`),
+    revalidateTag: (tag: string, mode: PurgeMode) => revalidate(tag, mode, `revalidateTag(${tag})`),
     revalidatePath: (path: string) =>
-      raise(buildPathCacheTag(path), "purge", `revalidatePath(${path})`),
+      revalidate(buildPathCacheTag(path), "purge", `revalidatePath(${path})`),
   };
 }
 
@@ -105,7 +107,7 @@ function runInRequestCache<T>(
   res: http.ServerResponse,
   run: () => T,
 ): T {
-  const store: RequestCache = { tags: new Set(), raises: new Map() };
+  const store: RequestCache = { tags: new Set(), revalidations: new Map() };
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
     if (this.headersSent) return (writeHead as any).apply(this, args);
@@ -118,14 +120,14 @@ function runInRequestCache<T>(
     return (writeHead as any).apply(this, [status, ...message]);
   } as typeof res.writeHead;
   res.once("close", () => {
-    if (store.raises.size > 0 && cache.edgeAsks) warnLostRaises(store);
+    if (store.revalidations.size > 0 && cache.edgeAsks) warnLostRevalidations(store);
   });
   return requests.run(store, run);
 }
 
 function declareHeaders(res: http.ServerResponse, declared: unknown): void {
   if (Array.isArray(declared)) {
-    const pairs = Array.isArray(declared[0]) ? declared : chunked(declared);
+    const pairs = Array.isArray(declared[0]) ? declared : pairFlatHeaders(declared);
     for (const [name, value] of pairs) res.setHeader(name, value);
   } else if (declared !== null && typeof declared === "object") {
     for (const [name, value] of Object.entries(declared)) {
@@ -134,25 +136,29 @@ function declareHeaders(res: http.ServerResponse, declared: unknown): void {
   }
 }
 
-function chunked(flat: unknown[]): [string, string][] {
+function pairFlatHeaders(flat: unknown[]): [string, string][] {
   const pairs: [string, string][] = [];
   for (let i = 0; i + 1 < flat.length; i += 2) pairs.push([String(flat[i]), String(flat[i + 1])]);
   return pairs;
 }
 
-function warnLostRaises(store: RequestCache): void {
+function warnLostRevalidations(store: RequestCache): void {
   console.warn(
-    `ocel: ${[...store.raises.keys()].join(", ")} was revalidated before the response was sent, so it reaches no edge. Revalidate before the response begins`,
+    `ocel: ${[...store.revalidations.keys()].join(", ")} was revalidated before the response was sent, so it reaches no edge. Revalidate before the response begins`,
   );
 }
 
 function announce(res: http.ServerResponse, cache: OriginCache, store: RequestCache): void {
-  if (!cache.edgeAsks || store.raises.size === 0) return;
+  if (!cache.edgeAsks || store.revalidations.size === 0) return;
   const raisedAt = Date.now();
-  const entries: PurgeEntry[] = [...store.raises].map(([tag, mode]) => ({ tag, mode, raisedAt }));
+  const entries: PurgeEntry[] = [...store.revalidations].map(([tag, mode]) => ({
+    tag,
+    mode,
+    raisedAt,
+  }));
   const announced = purgeHeaderFor(cache.release, entries);
   if (announced !== undefined) res.setHeader(purgeHeader, announced);
-  store.raises.clear();
+  store.revalidations.clear();
 }
 
 function shape(
@@ -167,7 +173,7 @@ function shape(
   if (res.getHeader("set-cookie") !== undefined) return;
 
   const declared = String(res.getHeader("cache-control") ?? "");
-  const declaredNames = directives(declared);
+  const declaredNames = listDirectiveNames(declared);
   if (["private", "no-store", "no-cache"].some((name) => declaredNames.includes(name))) return;
 
   const pathname = (req.url ?? "/").split("?")[0]!;
@@ -175,7 +181,7 @@ function shape(
     if (carriesCredentials(req)) return;
     const rule = findCacheRule(cache.rules, pathname);
     if (!rule) return;
-    const ruled = cacheControlOfRule(rule);
+    const ruled = formatCacheControl(rule);
     res.setHeader("cache-control", declared === "" ? ruled : `${declared}, ${ruled}`);
   }
 
@@ -199,7 +205,7 @@ function carriesCredentials(req: http.IncomingMessage): boolean {
   return req.headers.cookie !== undefined || req.headers.authorization !== undefined;
 }
 
-function directives(declared: string): string[] {
+function listDirectiveNames(declared: string): string[] {
   return declared
     .toLowerCase()
     .split(",")

@@ -7,7 +7,7 @@ const hostKey = Symbol.for("ocel.cache.host");
 
 interface CacheHost {
   tag(tags: readonly string[]): void;
-  revalidateTag(tag: string, mode: "expire" | "stale"): void;
+  revalidateTag(tag: string, mode: "purge" | "invalidate"): void;
   revalidatePath(path: string): void;
 }
 
@@ -168,8 +168,8 @@ describe("an origin behind the Cloudflare gateway", () => {
 
   test("announces a tag revalidated while handling a request, stale or expired", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
-      cacheHost().revalidateTag("posts", "stale");
-      cacheHost().revalidateTag("post:1", "expire");
+      cacheHost().revalidateTag("posts", "invalidate");
+      cacheHost().revalidateTag("post:1", "purge");
       cacheHost().revalidatePath("/blog/a");
       res.writeHead(200);
       res.end();
@@ -198,7 +198,7 @@ describe("an origin behind the Cloudflare gateway", () => {
   test("warns when it revalidates a tag no edge can store", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const get = await serve(behindCloudflare, (req, res) => {
-      cacheHost().revalidateTag("two words", "expire");
+      cacheHost().revalidateTag("two words", "purge");
       res.writeHead(200);
       res.end();
     });
@@ -209,9 +209,9 @@ describe("an origin behind the Cloudflare gateway", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/two words/));
   });
 
-  test("announces a raise on a request the gateway did not ask to cache", async () => {
+  test("announces a revalidation on a request the gateway did not ask to cache", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
-      cacheHost().revalidateTag("posts", "expire");
+      cacheHost().revalidateTag("posts", "purge");
       res.writeHead(200);
       res.end();
     });
@@ -223,8 +223,8 @@ describe("an origin behind the Cloudflare gateway", () => {
 
   test("announces an expiry over a stale marking of the same tag", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
-      cacheHost().revalidateTag("posts", "expire");
-      cacheHost().revalidateTag("posts", "stale");
+      cacheHost().revalidateTag("posts", "purge");
+      cacheHost().revalidateTag("posts", "invalidate");
       res.writeHead(200);
       res.end();
     });
@@ -238,14 +238,14 @@ describe("an origin behind the Cloudflare gateway", () => {
     await serve(behindCloudflare, page);
 
     expect(() => cacheHost().tag(["posts"])).toThrow(/request/);
-    expect(() => cacheHost().revalidateTag("posts", "expire")).toThrow(/request/);
+    expect(() => cacheHost().revalidateTag("posts", "purge")).toThrow(/request/);
   });
 
-  test("warns that a raise made after the response began reaches nothing", async () => {
+  test("warns that a revalidation made after the response began reaches nothing", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const get = await serve(behindCloudflare, (req, res) => {
       res.writeHead(200);
-      cacheHost().revalidateTag("posts", "expire");
+      cacheHost().revalidateTag("posts", "purge");
       res.end();
     });
 
@@ -270,10 +270,10 @@ describe("an origin behind CloudFront or the load balancer", () => {
     expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
   });
 
-  test("announces no purge, and says once that a raise reaches nothing here", async () => {
+  test("announces no purge, and says once that a revalidation reaches nothing here", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const get = await serve(behindCloudFront, (req, res) => {
-      cacheHost().revalidateTag("posts", "expire");
+      cacheHost().revalidateTag("posts", "purge");
       res.writeHead(200);
       res.end();
     });
@@ -283,7 +283,7 @@ describe("an origin behind CloudFront or the load balancer", () => {
 
     expect(first.headers.has("x-ocel-purge")).toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/posts.*Cloudflare/));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/posts.*reaches no edge/));
   });
 });
 
