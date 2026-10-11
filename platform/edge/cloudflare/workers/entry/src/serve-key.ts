@@ -3,6 +3,7 @@ export interface ServeProps {
   host: string;
   app: string;
   release: string;
+  origin?: string;
   variant?: string;
 }
 
@@ -40,8 +41,20 @@ export function buildObjectCall(host: string, key: string): ServeCall {
   };
 }
 
-export function buildOriginCall(originUrl: string, props: Omit<ServeProps, "kind">): ServeCall {
-  return { url: originUrl, props: { ...props, kind: "origin" } };
+export function buildOriginCall(
+  originUrl: string,
+  props: Omit<ServeProps, "kind" | "origin">,
+): ServeCall {
+  const { origin, pathname, search } = new URL(originUrl);
+  return {
+    url: `${SERVE_ORIGIN}${pathname}${search}`,
+    props: { ...props, kind: "origin", origin },
+  };
+}
+
+export function buildOriginUrl(requestUrl: string, origin: string): string {
+  const { pathname, search } = new URL(requestUrl);
+  return `${origin}${pathname}${search}`;
 }
 
 export function buildServeRequest(url: string, visitor?: Request): Request {

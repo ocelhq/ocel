@@ -71,11 +71,16 @@ describe("the cache key of a page read through Serve from the origin", () => {
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
   const origin = "https://abc123.lambda-url.eu-west-2.on.aws/blog/a?page=2";
 
-  it("is the origin URL Serve fetches, with the host, app, release and variant", () => {
+  it("is the path and query Serve fetches, with the host, app, release, origin and variant", () => {
     const call = buildOriginCall(origin, { ...coordinates, variant: "rsc" });
     expect(call).toEqual({
-      url: origin,
-      props: { ...coordinates, kind: "origin", variant: "rsc" },
+      url: "https://serve.ocel.invalid/blog/a?page=2",
+      props: {
+        ...coordinates,
+        kind: "origin",
+        origin: "https://abc123.lambda-url.eu-west-2.on.aws",
+        variant: "rsc",
+      },
     });
   });
 

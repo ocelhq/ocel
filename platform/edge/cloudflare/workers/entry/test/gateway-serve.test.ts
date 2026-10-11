@@ -197,7 +197,13 @@ describe("the gateway serving a prerender", () => {
     );
 
     expect(origin).toEqual([
-      { kind: "origin", host: "shop.example.com", app: "web", release: "r0a1b2c3d" },
+      {
+        kind: "origin",
+        host: "shop.example.com",
+        app: "web",
+        release: "r0a1b2c3d",
+        origin: "https://abc.lambda-url.eu-west-2.on.aws",
+      },
     ]);
     expect(response.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await response.text()).toBe("cached page");

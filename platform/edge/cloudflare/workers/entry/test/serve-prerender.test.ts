@@ -77,8 +77,9 @@ describe("a prerender served through Serve", () => {
       host: "shop.example.com",
       app: "web",
       release: "r0a1b2c3d",
+      origin: "https://fn.example.com",
     });
-    expect(served.calls[0].request.url).toBe("https://fn.example.com/blog");
+    expect(new URL(served.calls[0].request.url).pathname).toBe("/blog");
   });
 
   it("tells the origin the request is for the edge cache, so it shapes the response", async () => {
@@ -119,9 +120,10 @@ describe("a prerender served through Serve", () => {
     await get("/blog?ref=a&page=2", deps(served));
     await get("/blog?page=2&utm=b", deps(served));
 
-    expect(served.calls.map(({ request }) => request.url)).toEqual([
-      "https://fn.example.com/blog?page=2",
-      "https://fn.example.com/blog?page=2",
+    const sent = served.calls.map(({ request }) => new URL(request.url));
+    expect(sent.map(({ pathname, search }) => pathname + search)).toEqual([
+      "/blog?page=2",
+      "/blog?page=2",
     ]);
   });
 

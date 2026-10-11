@@ -324,7 +324,7 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
 
     expect(res.headers.get("x-matched-path")).toBe("/ssg/hello");
     const sent = served.calls[0].request;
-    expect(new URL(sent.url).host).toBe("hello.example.com");
+    expect(served.calls[0].props.origin).toBe("https://hello.example.com");
     expect(sent.headers.get("x-marker-hello")).toBe("1");
     expect(sent.headers.has("x-marker-slug")).toBe(false);
   });

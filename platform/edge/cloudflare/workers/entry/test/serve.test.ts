@@ -323,7 +323,11 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 });
 
 describe("Serve fetching from the origin", () => {
-  const originProps: ServeProps = { ...props, kind: "origin" };
+  const originProps: ServeProps = {
+    ...props,
+    kind: "origin",
+    origin: new URL(FN_URL).origin,
+  };
   const originEnv: Partial<Env> = {
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
@@ -371,6 +375,19 @@ describe("Serve fetching from the origin", () => {
     expect(wire.calls[0].headers.get("authorization")).toMatch(
       /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\//,
     );
+  });
+
+  it("fetches the origin its props name, whatever host the runtime puts in the URL it hands Serve", async () => {
+    const wire = s3Answering(
+      () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),
+    );
+    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, props);
+
+    await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, call.props).fetch(new Request("https://shop.example.com/blog/a?page=2")),
+    );
+
+    expect(wire.calls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a?page=2`]);
   });
 
   it("makes a header-less page private", async () => {
