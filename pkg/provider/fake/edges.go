@@ -207,6 +207,7 @@ type edgeAccount struct {
 	entitlement *edge.CodeEntitlement
 
 	proxies      bool
+	caches       bool
 	issues       bool
 	runsTunnels  bool
 	tunnelEvents []string
@@ -283,6 +284,12 @@ func (e *Edge) purge(_ context.Context, hostnames []string) error {
 	}
 	e.purged = append(e.purged, slices.Clone(hostnames))
 	return nil
+}
+
+func (e *Edge) CachesResponses() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.caches = true
 }
 
 func (e *Edge) ProxiesRecords() {
@@ -595,6 +602,7 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:       edge.AllNeeds(),
 		RunsCode:        e.kind == KindRelay,
 		ProxiesRecords:  e.proxies,
+		CachesResponses: e.caches,
 		CredentialScope: "fake-account",
 		TunnelsToOrigin: e.options.Tunnel,
 		GatesPreviews:   e.gatesPreviews == nil || *e.gatesPreviews,

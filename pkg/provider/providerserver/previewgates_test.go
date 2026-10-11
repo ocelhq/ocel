@@ -291,3 +291,40 @@ func TestAPreviewDeployWithNoRecordedGateGoesAheadOnAnEdgeThatCannotGate(t *test
 		t.Fatalf("Deploy() = %q, want it to succeed: no gate is recorded for shop", result.GetError())
 	}
 }
+
+func directPreviewGatedAtOrigin(t *testing.T, shape func(*fake.Edge)) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
+	t.Helper()
+	client, vendor, req := directPreviewServed(t, recordedGates)
+	vendor.WithFacts(func(facts *provider.Facts) { facts.GatesPreviewsAtOrigin = true })
+	shape(vendor.Edges().(*fake.Edges).Edge(fake.KindDirect))
+	return client, vendor, req
+}
+
+func TestAPreviewDeployBehindAnEdgeThatCachesNothingHandsTheAppTheGateToRunAtTheOrigin(t *testing.T) {
+	client, vendor, req := directPreviewGatedAtOrigin(t, func(*fake.Edge) {})
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: nothing in front of the origin caches, so the origin gates", result.GetError())
+	}
+
+	got := provisionedApp(t, vendor).PreviewGate
+	if got == nil || !reflect.DeepEqual(*got, shopGate) {
+		t.Errorf("AppSpec.PreviewGate = %+v, want the gate recorded for shop, %+v", got, shopGate)
+	}
+}
+
+func TestAPreviewDeployBehindAnEdgeThatCachesResponsesIsRefusedEvenWhereTheOriginGates(t *testing.T) {
+	client, _, req := directPreviewGatedAtOrigin(t, func(e *fake.Edge) { e.CachesResponses() })
+
+	if result, _ := deploy(t, client, req); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused: the edge would cache an admitted response and serve it to anyone")
+	}
+}
+
+func TestAPreviewDeployBehindAProxiedEdgeIsRefusedEvenWhereTheOriginGates(t *testing.T) {
+	client, _, req := directPreviewGatedAtOrigin(t, func(e *fake.Edge) { e.ProxiesRecords() })
+
+	if result, _ := deploy(t, client, req); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused: the proxy would cache an admitted response and serve it to anyone")
+	}
+}
