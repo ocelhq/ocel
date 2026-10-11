@@ -108,14 +108,14 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err != nil {
 			return nil, err
 		}
-		values, err := mergedValues(fn.Name, app.Values.ContainerEnv, fn.Env)
+		values, err := mergeValues(fn.Name, specValues, app.Values.ContainerEnv, fn.Env)
 		if err != nil {
 			return nil, err
 		}
-		if values, err = mergedValues(fn.Name, values, own); err != nil {
+		if values, err = mergeValues(fn.Name, runtimeValues, values, own); err != nil {
 			return nil, err
 		}
-		if values, err = mergedValues(fn.Name, values, newCachingEdgeEnv(spec)); err != nil {
+		if values, err = mergeValues(fn.Name, cachingEdgeValues, values, newCachingEdgeEnv(spec)); err != nil {
 			return nil, err
 		}
 		served := serving{
@@ -134,10 +134,10 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), purgeSecret))); err != nil {
+			if values, err = mergeValues(fn.Name, nextValues, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), purgeSecret))); err != nil {
 				return nil, err
 			}
-			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
+			if values, err = mergeValues(fn.Name, cdnPurgeValues, values, newCDNPurgeEnv(names, spec)); err != nil {
 				return nil, err
 			}
 		}
@@ -163,7 +163,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if !hostsWorkers(app) {
 		return deployed, nil
 	}
-	values, err := mergedValues(app.App, app.Values.ContainerEnv, own)
+	values, err := mergeValues(app.App, runtimeValues, app.Values.ContainerEnv, own)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	values, err := mergedValues(app.App, app.Values.ContainerEnv, own)
+	values, err := mergeValues(app.App, runtimeValues, app.Values.ContainerEnv, own)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if servesNext(app) {
 		served = fillNextContainerDefaults(served)
-		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
+		if served.env, err = mergeValues(app.App, nextValues, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
 			return nil, err
 		}
 	}
@@ -514,18 +514,26 @@ func liveBindings(values provider.AppValues) []live.Binding {
 	return bindings
 }
 
-func mergedValues(what string, delivered, own map[string]string) (map[string]string, error) {
-	values := make(map[string]string, len(delivered)+len(own))
-	maps.Copy(values, delivered)
-	for _, name := range slices.Sorted(maps.Keys(own)) {
+const (
+	specValues        = "the environment its own spec names"
+	runtimeValues     = "the runtime environment Ocel gives it"
+	cachingEdgeValues = "the caching edge in front of it"
+	nextValues        = "the Next runtime"
+	cdnPurgeValues    = "Cloud CDN purging"
+)
+
+func mergeValues(what, source string, set, added map[string]string) (map[string]string, error) {
+	values := make(map[string]string, len(set)+len(added))
+	maps.Copy(values, set)
+	for _, name := range slices.Sorted(maps.Keys(added)) {
 		if _, taken := values[name]; taken {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"%s sets %s in the environment its own spec names, and the deploy already resolved a value for %s: "+
-					"a revision has one entry per name, so the spec's would silently take the place of what the deploy delivered "+
+				"%s takes %s from %s, and the deploy already set a value for %s: "+
+					"a revision has one entry per name, so one value would silently take the place of the other "+
 					"and the app would read a value nothing in it declared. Rename one of them",
-				what, name, name)
+				what, name, source, name)
 		}
-		values[name] = own[name]
+		values[name] = added[name]
 	}
 	return values, nil
 }

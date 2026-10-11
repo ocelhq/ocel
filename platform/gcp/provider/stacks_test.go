@@ -198,28 +198,41 @@ func TestAProductionReleaseIsNamedForItsNamespaceProjectEnvironmentAndApp(t *tes
 }
 
 func TestAFunctionGetsWhatTheDeployDeliveredAndWhatItsSpecNames(t *testing.T) {
-	values, err := mergedValues("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
+	values, err := mergeValues("fn", specValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
 	if err != nil {
-		t.Fatalf("mergedValues() = %v", err)
+		t.Fatalf("mergeValues() = %v", err)
 	}
 	if values["DATABASE_URL"] != "postgres://" || values["STAGE"] != "one" {
-		t.Errorf("mergedValues() = %v, want both what the deploy resolved and what the spec named", values)
+		t.Errorf("mergeValues() = %v, want both what the deploy resolved and what the spec named", values)
 	}
 }
 
 func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
-	_, err := mergedValues("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
+	_, err := mergeValues("fn", specValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
 	if err == nil {
-		t.Fatal("mergedValues() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
+		t.Fatal("mergeValues() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
 	}
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("mergedValues() code = %v, want %v", code, refusal.CodeInvalid)
+		t.Errorf("mergeValues() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("mergedValues() = %v, want the name that would be displaced said", err)
+		t.Errorf("mergeValues() = %v, want the name that would be displaced said", err)
 	}
 	if !strings.Contains(err.Error(), "fn") {
-		t.Errorf("mergedValues() = %v, want what sets it said", err)
+		t.Errorf("mergeValues() = %v, want what sets it said", err)
+	}
+}
+
+func TestAVariableTheEdgeSetsOverAValueAlreadySetIsRefusedNamingTheEdge(t *testing.T) {
+	_, err := mergeValues("fn", cachingEdgeValues, map[string]string{"OCEL_CACHE_RULES": "[]"}, map[string]string{"OCEL_CACHE_RULES": "[]"})
+	if err == nil {
+		t.Fatal("mergeValues() let the edge's value take the place of one already set")
+	}
+	if !strings.Contains(err.Error(), cachingEdgeValues) {
+		t.Errorf("mergeValues() = %v, want %q named as what sets it", err, cachingEdgeValues)
+	}
+	if strings.Contains(err.Error(), specValues) {
+		t.Errorf("mergeValues() = %v, want the spec not blamed for a value the edge sets", err)
 	}
 }
 
