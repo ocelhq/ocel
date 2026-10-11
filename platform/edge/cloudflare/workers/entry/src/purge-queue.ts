@@ -3,6 +3,7 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
+import { ORIGIN_PURGE_SCOPE, type ServeProps } from "./serve-key";
 
 const flushRetryMs = 1_000;
 const flushRetryCeilingMs = 60_000;
@@ -24,10 +25,13 @@ async function settlePurgeCall(call: () => Promise<PurgeOutcome>): Promise<Purge
   }
 }
 
-export function newServePort(serve: () => ServePurgeRpc): PurgePort {
+export type ServePurgeFactory = (options: { props: ServeProps }) => ServePurgeRpc;
+
+export function newServePort(serve: ServePurgeFactory): PurgePort {
+  const stub = () => serve({ props: ORIGIN_PURGE_SCOPE });
   return {
-    purgeTags: (mode, tags) => settlePurgeCall(() => serve().purge(mode, tags)),
-    purgeEverything: () => settlePurgeCall(() => serve().purgeEverything()),
+    purgeTags: (mode, tags) => settlePurgeCall(() => stub().purge(mode, tags)),
+    purgeEverything: () => settlePurgeCall(() => stub().purgeEverything()),
   };
 }
 
@@ -38,7 +42,7 @@ export class PurgeQueue extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.serve = newServePort(() => ctx.exports.Serve as unknown as ServePurgeRpc);
+    this.serve = newServePort(ctx.exports.Serve as unknown as ServePurgeFactory);
     this.backlog = new PurgeBacklog({
       store: newSqliteBacklogStore(ctx.storage),
       serve: {

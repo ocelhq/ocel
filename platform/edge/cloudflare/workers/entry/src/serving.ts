@@ -2,7 +2,7 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import { settledWithin } from "./cache";
 import type { RaisedTag } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
-import type { ServeProps } from "./serve-key";
+import { ORIGIN_PURGE_SCOPE, type OriginCoordinates } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import type { Serving } from "./serve-prerender";
 
@@ -18,7 +18,7 @@ export interface ServingPorts {
 
 export function newServing(
   ports: ServingPorts,
-  scope: Pick<ServeProps, "host" | "app" | "release">,
+  scope: Omit<OriginCoordinates, "variant">,
 ): Serving {
   return {
     serve: ports.serve,
@@ -26,7 +26,7 @@ export function newServing(
     release: scope.release,
     purge(groups, awaited) {
       const run = purgeInBand(groups, {
-        cache: ports.serve({ props: { kind: "origin", ...scope } }),
+        cache: ports.serve({ props: ORIGIN_PURGE_SCOPE }),
         queue: ports.queue,
         now: ports.now ?? Date.now,
       });

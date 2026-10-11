@@ -2,7 +2,12 @@ import { createExecutionContext, env as testEnv } from "cloudflare:test";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
-import type { ServeProps } from "../src/serve-key";
+import {
+  buildOriginUrl,
+  type OriginCoordinates,
+  readOriginCall,
+  type ServeProps,
+} from "../src/serve-key";
 import { answerEveryRecordWith, capturing, withGlobalFetch } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 
@@ -166,11 +171,15 @@ describe("the gateway serving a prerender", () => {
   };
 
   function ctxServing() {
-    const origin: ServeProps[] = [];
+    const origin: (OriginCoordinates & { props: ServeProps; originUrl: string })[] = [];
     const serve = ({ props }: { props: ServeProps }) => ({
       fetch: async (request: Request) => {
         if (props.kind === "origin") {
-          origin.push(props);
+          origin.push({
+            props,
+            ...readOriginCall(request.url),
+            originUrl: buildOriginUrl(request.url),
+          });
           return new Response("cached page", {
             headers: { "cf-cache-status": "HIT", "cache-tag": "r0a1b2c3d" },
           });
@@ -198,11 +207,12 @@ describe("the gateway serving a prerender", () => {
 
     expect(origin).toEqual([
       {
-        kind: "origin",
+        props: { kind: "origin" },
         host: "shop.example.com",
         app: "web",
         release: "r0a1b2c3d",
-        origin: "https://abc.lambda-url.eu-west-2.on.aws",
+        variant: "",
+        originUrl: "https://abc.lambda-url.eu-west-2.on.aws/blog",
       },
     ]);
     expect(response.headers.get("x-ocel-cache")).toBe("HIT");
@@ -229,11 +239,12 @@ describe("the gateway serving a prerender", () => {
 
     expect(origin).toEqual([
       {
-        kind: "origin",
+        props: { kind: "origin" },
         host,
         app: "web",
         release: "r0a1b2c3d",
-        origin: "https://abc.lambda-url.eu-west-2.on.aws",
+        variant: "",
+        originUrl: "https://abc.lambda-url.eu-west-2.on.aws/blog",
       },
     ]);
     expect(wire.calls).toHaveLength(0);

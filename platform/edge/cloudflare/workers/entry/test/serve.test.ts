@@ -6,6 +6,7 @@ import {
   buildObjectCall,
   buildOriginCall,
   buildServeRequest,
+  ORIGIN_PURGE_SCOPE,
   type ServeProps,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -323,11 +324,10 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 });
 
 describe("Serve fetching from the origin", () => {
-  const originProps: ServeProps = {
-    ...props,
-    kind: "origin",
-    origin: new URL(FN_URL).origin,
-  };
+  const originProps: ServeProps = ORIGIN_PURGE_SCOPE;
+  const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
+  const originRequest = (path: string) =>
+    new Request(buildOriginCall(`${FN_URL}${path}`, coordinates).url);
   const originEnv: Partial<Env> = {
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
@@ -342,7 +342,7 @@ describe("Serve fetching from the origin", () => {
     );
 
     const response = await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, originProps).fetch(new Request(`${FN_URL}blog/a`)),
+      serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
     );
 
     expect(wire.calls[0].url).toBe(`${FN_URL}blog/a`);
@@ -360,7 +360,7 @@ describe("Serve fetching from the origin", () => {
     const visitor = new Request("https://shop.example.com/blog/a?page=2", {
       headers: { cookie: "session=1", authorization: "Bearer t", "if-none-match": '"e1"' },
     });
-    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, props);
+    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, coordinates);
 
     await withGlobalFetch(wire.fetch, () =>
       serveWith(originEnv, call.props).fetch(buildServeRequest(call.url, visitor)),
@@ -377,14 +377,16 @@ describe("Serve fetching from the origin", () => {
     );
   });
 
-  it("fetches the origin its props name, whatever host the runtime puts in the URL it hands Serve", async () => {
+  it("fetches the origin its call names, whatever host the runtime puts in the URL it hands Serve", async () => {
     const wire = s3Answering(
       () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),
     );
-    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, props);
+    const call = buildOriginCall(`${FN_URL}blog/a?page=2`, coordinates);
+    const rehosted = new URL(call.url);
+    rehosted.host = "shop.example.com";
 
     await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, call.props).fetch(new Request("https://shop.example.com/blog/a?page=2")),
+      serveWith(originEnv, call.props).fetch(new Request(rehosted)),
     );
 
     expect(wire.calls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a?page=2`]);
@@ -394,7 +396,7 @@ describe("Serve fetching from the origin", () => {
     const wire = s3Answering(() => new Response("page"));
 
     const response = await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, originProps).fetch(new Request(`${FN_URL}blog/a`)),
+      serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
     );
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -409,7 +411,7 @@ describe("Serve fetching from the origin", () => {
     );
 
     const response = await withGlobalFetch(wire.fetch, () =>
-      serveWith(originEnv, originProps).fetch(new Request(`${FN_URL}blog/a`)),
+      serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
     );
 
     expect(response.headers.get("x-ocel-vary")).toBe("rsc, next-router-state-tree");
@@ -456,7 +458,7 @@ describe("Serve fetching from the origin", () => {
       const { serve, settled } = serveRaising(raised);
 
       const response = await withGlobalFetch(announcing().fetch, () =>
-        serve.fetch(new Request(`${FN_URL}blog/a`)),
+        serve.fetch(originRequest("blog/a")),
       );
       await settled();
 
@@ -468,7 +470,7 @@ describe("Serve fetching from the origin", () => {
       const raised: { mode: string; tags: { tag: string }[] }[] = [];
       const { serve, settled } = serveRaising(raised);
 
-      await withGlobalFetch(announcing().fetch, () => serve.fetch(new Request(`${FN_URL}blog/a`)));
+      await withGlobalFetch(announcing().fetch, () => serve.fetch(originRequest("blog/a")));
       await settled();
 
       expect(raised.map(({ mode, tags }) => [mode, tags.map(({ tag }) => tag)])).toEqual([

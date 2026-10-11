@@ -1,7 +1,7 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import { describe, expect, it } from "vitest";
 import type { PurgeOutcome, RaisedTag } from "../src/purge-backlog";
-import type { ServeProps } from "../src/serve-key";
+import { buildOriginCall, type ServeProps } from "../src/serve-key";
 import { newServing, type ServingPorts } from "../src/serving";
 
 function base(over: { purge?: () => Promise<PurgeOutcome> } = {}) {
@@ -35,12 +35,14 @@ const scope = { host: "shop.example.com", app: "web", release: "r0a1b2c3d" };
 const groups = [{ mode: "purge" as const, tags: ["r0a1b2c3d|a"] }];
 
 describe("the serving of one release", () => {
-  it("purges through a Serve stub keyed by the release it serves", async () => {
+  it("purges through a Serve stub with the props every page is stored under", async () => {
     const { serving, stubs, purged } = base();
 
     await newServing(serving, scope).purge(groups, true);
 
-    expect(stubs).toEqual([{ kind: "origin", ...scope }]);
+    expect(stubs).toEqual([
+      buildOriginCall("https://fn.example/blog", { ...scope, variant: ".rsc" }).props,
+    ]);
     expect(purged).toEqual([{ mode: "purge", tags: ["r0a1b2c3d|a"] }]);
   });
 

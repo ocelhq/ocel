@@ -72,14 +72,14 @@ describe("a prerender served through Serve", () => {
     await get("/blog", deps(served));
 
     expect(served.calls).toHaveLength(1);
-    expect(served.calls[0].props).toEqual({
-      kind: "origin",
+    expect(served.calls[0].props).toEqual({ kind: "origin" });
+    expect(served.calls[0].coordinates).toEqual({
       host: "shop.example.com",
       app: "web",
       release: "r0a1b2c3d",
-      origin: "https://fn.example.com",
+      variant: "",
     });
-    expect(new URL(served.calls[0].request.url).pathname).toBe("/blog");
+    expect(served.calls[0].originUrl).toBe("https://fn.example.com/blog");
   });
 
   it("tells the origin the request is for the edge cache, so it shapes the response", async () => {
@@ -120,11 +120,11 @@ describe("a prerender served through Serve", () => {
     await get("/blog?ref=a&page=2", deps(served));
     await get("/blog?page=2&utm=b", deps(served));
 
-    const sent = served.calls.map(({ request }) => new URL(request.url));
-    expect(sent.map(({ pathname, search }) => pathname + search)).toEqual([
-      "/blog?page=2",
-      "/blog?page=2",
+    expect(served.calls.map(({ originUrl }) => originUrl)).toEqual([
+      "https://fn.example.com/blog?page=2",
+      "https://fn.example.com/blog?page=2",
     ]);
+    expect(served.calls[0].request.url).toBe(served.calls[1].request.url);
   });
 
   it("keys an RSC request apart from the document by variant", async () => {
@@ -133,7 +133,9 @@ describe("a prerender served through Serve", () => {
     await get("/blog", deps(served));
     await get("/blog", deps(served), { headers: { rsc: "1" } });
 
-    expect(served.calls.map(({ props }) => props.variant)).toEqual([undefined, ".rsc"]);
+    expect(served.calls.map(({ coordinates }) => coordinates.variant)).toEqual(["", ".rsc"]);
+    expect(served.calls[0].request.url).not.toBe(served.calls[1].request.url);
+    expect(served.calls[0].props).toEqual(served.calls[1].props);
   });
 
   it.each([

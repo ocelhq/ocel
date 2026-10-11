@@ -1,11 +1,28 @@
-export interface ServeProps {
-  kind: "object" | "origin";
+export interface ObjectProps {
+  kind: "object";
   host: string;
   app: string;
   release: string;
-  origin?: string;
+}
+
+export interface OriginPurgeScope {
+  kind: "origin";
+}
+
+export type ServeProps = ObjectProps | OriginPurgeScope;
+
+export const ORIGIN_PURGE_SCOPE: OriginPurgeScope = { kind: "origin" };
+
+export interface OriginCoordinates {
+  host: string;
+  app: string;
+  release: string;
   variant?: string;
 }
+
+const NO_VARIANT = "-";
+
+const ORIGIN_CALL_SEGMENTS = 5;
 
 export interface ServeCall {
   url: string;
@@ -41,20 +58,37 @@ export function buildObjectCall(host: string, key: string): ServeCall {
   };
 }
 
-export function buildOriginCall(
-  originUrl: string,
-  props: Omit<ServeProps, "kind" | "origin">,
-): ServeCall {
+export function buildOriginCall(originUrl: string, coordinates: OriginCoordinates): ServeCall {
   const { origin, pathname, search } = new URL(originUrl);
+  const { host, app, release, variant } = coordinates;
+  const scope = [host, app, release, origin, variant || NO_VARIANT].map(encodeURIComponent);
   return {
-    url: `${SERVE_ORIGIN}${pathname}${search}`,
-    props: { ...props, kind: "origin", origin },
+    url: `${SERVE_ORIGIN}/${scope.join("/")}${pathname}${search}`,
+    props: ORIGIN_PURGE_SCOPE,
   };
 }
 
-export function buildOriginUrl(requestUrl: string, origin: string): string {
+function splitOriginCall(requestUrl: string): { scope: string[]; rest: string } {
   const { pathname, search } = new URL(requestUrl);
-  return `${origin}${pathname}${search}`;
+  const segments = pathname.split("/");
+  const scope = segments.slice(1, ORIGIN_CALL_SEGMENTS + 1);
+  if (segments.length < ORIGIN_CALL_SEGMENTS + 2 || scope.includes("")) {
+    throw new Error(`ocel: ${pathname} names no host, app, release, origin and variant`);
+  }
+  return {
+    scope: scope.map(decodeURIComponent),
+    rest: `/${segments.slice(ORIGIN_CALL_SEGMENTS + 1).join("/")}${search}`,
+  };
+}
+
+export function readOriginCall(requestUrl: string): Required<OriginCoordinates> {
+  const [host, app, release, , variant] = splitOriginCall(requestUrl).scope;
+  return { host, app, release, variant: variant === NO_VARIANT ? "" : variant };
+}
+
+export function buildOriginUrl(requestUrl: string): string {
+  const { scope, rest } = splitOriginCall(requestUrl);
+  return `${scope[3]}${rest}`;
 }
 
 export function buildServeRequest(url: string, visitor?: Request): Request {
