@@ -86,7 +86,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, cap := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -124,7 +124,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, _ := fakeRuntime(t, []byte(event))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		if observed != "app.ocel.site" {
@@ -156,7 +156,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				rt, cap := fakeRuntime(t, []byte(getEvent))
 				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-				if err := handleInvocation(t.Context(), rt, m); err != nil {
+				if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
 				}
 
@@ -197,7 +197,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				rt, cap := fakeRuntime(t, []byte(getEvent))
 				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-				if err := handleInvocation(t.Context(), rt, m); err != nil {
+				if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
 				}
 
@@ -237,7 +237,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				rt, cap := fakeRuntime(t, []byte(getEvent))
 				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-				if err := handleInvocation(t.Context(), rt, m); err != nil {
+				if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
 				}
 
@@ -268,7 +268,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, cap := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -299,7 +299,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, cap := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -323,7 +323,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, cap := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: deadPort, client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -351,7 +351,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		rt, cap := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(t.Context(), rt, m); err != nil {
+		if err := handleInvocation(t.Context(), rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -384,7 +384,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		ctx, cancel := context.WithDeadline(t.Context(), deadline)
 		defer cancel()
 
-		if err := handleInvocation(ctx, rt, m); err != nil {
+		if err := handleInvocation(ctx, rt, m, loginFront{}); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 		if time.Now().After(deadline) {

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -205,6 +206,53 @@ func TestAPreviewDeployOnAnEdgeThatRunsCodeLeavesTheGateToItsProgram(t *testing.
 
 	if got := onlyStack(t, vendor).PreviewGate; got != nil {
 		t.Errorf("PreviewGate = %+v, want none: the worker secret carries the gate", got)
+	}
+}
+
+func provisionedApp(t *testing.T, vendor *fake.Provider) *provider.AppSpec {
+	t.Helper()
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App != nil {
+			return spec.App
+		}
+	}
+	t.Fatal("the deploy provisioned no app")
+	return nil
+}
+
+func TestAPreviewDeployOnAnEdgeThatRunsNoCodeHandsTheAppTheGateItsLoginIsCheckedAgainst(t *testing.T) {
+	vendor := gatedDirectPreviewDeployed(t, "", "*.preview.shop.example")
+
+	got := provisionedApp(t, vendor).PreviewGate
+	if got == nil || !reflect.DeepEqual(*got, shopGate) {
+		t.Errorf("AppSpec.PreviewGate = %+v, want the gate recorded for shop, %+v: the edge hands the login to the origin", got, shopGate)
+	}
+}
+
+func TestAPreviewDeployOnAnEdgeThatRunsCodeHandsTheAppNoGate(t *testing.T) {
+	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
+
+	if got := provisionedApp(t, vendor).PreviewGate; got != nil {
+		t.Errorf("AppSpec.PreviewGate = %+v, want none: the edge answers the login itself", got)
+	}
+}
+
+func TestAPreviewDeployWithARecordedGateIsRefusedWhenTheOriginCannotAnswerTheLoginTheEdgeHandsIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	vendor.WithFacts(func(facts *provider.Facts) { facts.AnswersPreviewLogin = false })
+	previewBootstrapped(t, client)
+	seedPreviewGates(t, vendor, recordedGates)
+	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused: the login would reach the app")
+	}
+	if got := result.GetError(); !strings.Contains(got, "login") {
+		t.Errorf("Deploy() error = %q, want it to name the login the origin cannot answer", got)
 	}
 }
 

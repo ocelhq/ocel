@@ -3,13 +3,17 @@ package originguard
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"io"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
 
 const OriginSecretHeader = edge.OriginSecretHeader
@@ -75,10 +79,11 @@ func (g *Guard) Admits(r *http.Request) bool {
 }
 
 type Options struct {
-	Upstream   *url.URL
-	Guard      *Guard
-	HealthPath string
-	Ready      func() bool
+	Upstream     *url.URL
+	Guard        *Guard
+	HealthPath   string
+	Ready        func() bool
+	PreviewLogin *previewlogin.Login
 }
 
 func Handler(opts Options) http.Handler {
@@ -105,6 +110,10 @@ func Handler(opts Options) http.Handler {
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if opts.PreviewLogin != nil && previewlogin.IsLogin(r.Method, r.URL.Path) {
+			answerPreviewLogin(w, r, opts)
+			return
+		}
 		if opts.Ready != nil && !opts.Ready() {
 			w.Header().Set(AppUnansweredHeader, "true")
 			http.Error(w, "the app is still starting", http.StatusServiceUnavailable)
@@ -116,6 +125,28 @@ func Handler(opts Options) http.Handler {
 		}
 		w.WriteHeader(http.StatusForbidden)
 	})
+}
+
+func answerPreviewLogin(w http.ResponseWriter, r *http.Request, opts Options) {
+	if !opts.Guard.Admits(r) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	body, err := previewlogin.ReadBody(r.Body)
+	if err != nil {
+		http.Error(w, "the login body could not be read", http.StatusBadRequest)
+		return
+	}
+	answer := opts.PreviewLogin.Answer(edge.PreviewRequest{
+		Method: r.Method,
+		Host:   r.Host,
+		Target: r.URL.RequestURI(),
+		Header: r.Header,
+		Body:   body,
+	}, time.Now())
+	maps.Copy(w.Header(), answer.Header)
+	w.WriteHeader(answer.Status)
+	_, _ = io.WriteString(w, answer.Body)
 }
 
 func probe(r *http.Request, healthPath string) bool {

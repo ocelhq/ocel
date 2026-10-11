@@ -59,11 +59,26 @@ func (r *deployRun) readProjectPreviewGate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if gate != nil && !r.front.Facts().GatesPreviews {
+	if gate == nil {
+		return nil
+	}
+	if !r.front.Facts().GatesPreviews {
 		return refusal.Refuse(refusal.CodeUnsupported,
 			"%s has a preview gate recorded, and the %s edge does not run the preview gate yet, so it would serve this preview to anyone: deploy the preview through an edge that gates previews",
 			r.spec.Slug, r.front.Kind())
 	}
+	if !r.front.Facts().RunsCode && !r.provider.Facts().AnswersPreviewLogin {
+		return refusal.Refuse(refusal.CodeUnsupported,
+			"%s has a preview gate recorded, and the %s edge hands the preview login to the origin, which on %s does not answer it yet, so the password would reach the app: deploy the preview through an edge that runs code",
+			r.spec.Slug, r.front.Kind(), r.provider.Facts().Vendor)
+	}
 	r.previewGate = gate
 	return nil
+}
+
+func (r *deployRun) appPreviewGate() *edge.PreviewGate {
+	if r.front.Facts().RunsCode {
+		return nil
+	}
+	return r.previewGate
 }

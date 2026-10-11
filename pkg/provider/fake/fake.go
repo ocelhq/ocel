@@ -105,14 +105,15 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) Facts() provider.Facts {
 	facts := provider.Facts{
-		Vendor:          Vendor,
-		Bindings:        []provider.BindingType{provider.BindingPostgres, provider.BindingBucket},
-		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
-		Edges:           p.edges.kinds(),
-		DefaultEdge:     KindRelay,
-		Pairings:        p.edges.pairings(),
-		DNSKinds:        []provider.DNSKind{KindZone},
-		StoresArtifacts: true,
+		Vendor:              Vendor,
+		Bindings:            []provider.BindingType{provider.BindingPostgres, provider.BindingBucket},
+		Computes:            []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
+		Edges:               p.edges.kinds(),
+		DefaultEdge:         KindRelay,
+		Pairings:            p.edges.pairings(),
+		DNSKinds:            []provider.DNSKind{KindZone},
+		StoresArtifacts:     true,
+		AnswersPreviewLogin: true,
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -261,6 +261,10 @@ func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error
 func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 	guard := spec.App.Guard
 	if guard == nil {
+		if spec.App.PreviewGate != nil {
+			return nil, refusal.Refuse(refusal.CodeUnsupported,
+				"the edge hands the preview login of %s to its root function, and the app has no root function the edge reaches directly to answer it", spec.App.App)
+		}
 		return nil, nil
 	}
 	if r.cfg.OriginSecret == "" {
@@ -268,7 +272,11 @@ func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the root function to demand of it; re-run `%s`",
 			spec.App.App, provider.BootstrapCommand(r.cfg.Tier))
 	}
-	return &originGuard{RootFunction: guard.RootFunction, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
+	gate, err := encodePreviewGate(spec.App.PreviewGate)
+	if err != nil {
+		return nil, err
+	}
+	return &originGuard{RootFunction: guard.RootFunction, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret, PreviewGate: gate}, nil
 }
 
 func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
