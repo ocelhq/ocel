@@ -264,20 +264,20 @@ describe("previews on gcp", () => {
       .filter((one) => one.phase === "preview")
       .map((one) => one.title);
 
-  it("previews deploy/next on gcp through Identity-Aware Proxy and behind the load balancer when the run names a zone", () => {
+  it("previews deploy/next on gcp behind the load balancer when the run names a zone", () => {
     const planned = planOn("gcp", zoned);
 
-    expect(previewTitlesOf(planned, "deploy/next")).toEqual([PREVIEW_TITLES.refused]);
+    expect(previewTitlesOf(planned, "deploy/next")).toEqual([]);
     expect(previewTitlesOf(planned, "deploy/next-alb")).toEqual([
       PREVIEW_TITLES["own-release"],
       PREVIEW_TITLES.pruned,
     ]);
   });
 
-  it("previews deploy/next through Identity-Aware Proxy alone when the run names no zone", () => {
+  it("previews nothing on gcp when the run names no zone", () => {
     const planned = planOn("gcp");
 
-    expect(previewTitlesOf(planned, "deploy/next")).toEqual([PREVIEW_TITLES.refused]);
+    expect(previewTitlesOf(planned, "deploy/next")).toEqual([]);
     expect(planned.cells.map((cell) => cell.name)).not.toContain("deploy/next-alb");
   });
 

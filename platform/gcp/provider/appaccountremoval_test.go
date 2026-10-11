@@ -618,3 +618,50 @@ func TestDestroyingAStackOfSeveralServicesRevokesItsAppsGrants(t *testing.T) {
 		t.Errorf("the project still binds %q after the app's only stack was destroyed", projectBindingsOf(server.identities()))
 	}
 }
+
+func signersOf(policy *iam.Policy) []string {
+	var signers []string
+	for _, binding := range policyOrEmpty(policy) {
+		if binding.Role == tokenCreatorRole {
+			signers = append(signers, binding.Members...)
+		}
+	}
+	return signers
+}
+
+func TestRevokingAnAppsGrantsTakesBackEveryCredentialThatMaySignAsItsAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	own := "/v1/projects/acme-prod/serviceAccounts/" + strings.TrimPrefix(member, "serviceAccount:")
+	server.accountPolicies[own].Bindings = append(server.accountPolicies[own].Bindings,
+		&iam.Binding{Role: tokenCreatorRole, Members: []string{"user:ana@example.com", "serviceAccount:ci@acme-prod.iam.gserviceaccount.com"}})
+
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	}
+
+	if got := signersOf(server.accountPolicies[own]); len(got) != 0 {
+		t.Errorf("%v may still sign as the account after its app stopped running", got)
+	}
+}
+
+func TestAnEnvironmentRecordedWhileAnAppsSigningGrantsAreRevokedKeepsThem(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	own := "/v1/projects/acme-prod/serviceAccounts/" + strings.TrimPrefix(member, "serviceAccount:")
+	server.accountPolicies[own].Bindings = append(server.accountPolicies[own].Bindings,
+		&iam.Binding{Role: tokenCreatorRole, Members: []string{"user:ana@example.com"}})
+	lists := 0
+	var backing keyvalue.Store
+	records, backing := racingRecords(t, spec, func() { recordApp(t, backing, spec, stackOf("pr-8", "web", "r2")) }, &lists)
+
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	}
+
+	if got := signersOf(server.accountPolicies[own]); !slices.Equal(got, []string{"user:ana@example.com"}) {
+		t.Errorf("the account lets %v sign as it, want the signing grant restored once another environment started running the app", got)
+	}
+}

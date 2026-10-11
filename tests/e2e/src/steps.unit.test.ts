@@ -69,7 +69,7 @@ describe("the preview phase", () => {
     redeploys: true,
     checks: [ping],
     on: { gcp: [defaults, front] },
-    previews: { gcp: [defaults, front] },
+    previews: { gcp: [front] },
   });
   const cellOf = (one: typeof defaults): Cell => ({
     name: "lifecycle/next",
@@ -114,13 +114,12 @@ describe("the preview phase", () => {
     expect(phasesOf(refusing, false, true, true)).toEqual(["deploy", "destroy"]);
   });
 
-  it("walks the hostname steps behind an edge and the Identity-Aware Proxy step on gcp with none", () => {
+  it("walks the hostname steps in a cell the fixture previews", () => {
     expect(titlesOf(front).slice(-3)).toEqual([
       PREVIEW_TITLES["own-release"],
       PREVIEW_TITLES.pruned,
       "destroy",
     ]);
-    expect(titlesOf(defaults).slice(-2)).toEqual([PREVIEW_TITLES.refused, "destroy"]);
   });
 
   it("refuses to drive a preview phase on a target with no previews", () => {

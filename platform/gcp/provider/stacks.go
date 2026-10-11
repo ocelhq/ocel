@@ -25,7 +25,7 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 const rootHealthPath = "/"
 
 func (p *Provider) revisionTag(spec provider.StackSpec) string {
-	if !factsOf(spec.Edge).ShieldsOrigin && !p.servesBehindIAP(spec) {
+	if !factsOf(spec.Edge).ShieldsOrigin {
 		return ""
 	}
 	return spec.Ref.Name.Release.String()
@@ -39,14 +39,6 @@ func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.
 		return
 	}
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
-}
-
-func (p *Provider) exposeService(ctx context.Context, c *clients, spec provider.StackSpec, service string, progress progress.Log) error {
-	if !p.servesBehindIAP(spec) {
-		warnPreviewOpen(spec, service, progress)
-		return nil
-	}
-	return p.grantViewers(ctx, c, service, c.AppAccountEmail(spec.Ref.Tier, spec.Ref.Project, spec.App.App), progress)
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error) {
@@ -68,10 +60,6 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, err
 	}
 	names := c.Names
-	if err := refuseViewersWithoutKind(p.options.PreviewViewers); err != nil {
-		return nil, err
-	}
-	gated := p.servesBehindIAP(spec)
 	tasks, declared, err := p.tasksFor(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -85,9 +73,6 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	}
 	if err := grantAssets(ctx, c, spec, account); err != nil {
 		return nil, err
-	}
-	if gated {
-		allowWarming(ctx, c, spec.App.App, account, progress)
 	}
 	if err := grantCDNPurge(ctx, c, spec, account); err != nil {
 		return nil, err
@@ -133,8 +118,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			image:            fn.Image,
 			account:          account,
 			compute:          provider.ComputeServerless,
-			public:           !gated,
-			iap:              gated,
+			public:           true,
 			instanceBilled:   servesNext(app),
 			ingress:          ingressFor(factsOf(spec.Edge)),
 			memory:           fn.Memory,
@@ -157,9 +141,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err != nil {
 			return nil, err
 		}
-		if err := p.exposeService(ctx, c, spec, service, progress); err != nil {
-			return nil, err
-		}
+		warnPreviewOpen(spec, service, progress)
 		address := ran.url
 		if originBase != "" {
 			if served.tag == "" {
@@ -170,7 +152,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			}
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: address, DeploymentURL: ran.deploymentURL, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -280,10 +262,6 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseViewersWithoutKind(p.options.PreviewViewers); err != nil {
-		return nil, err
-	}
-	gated := p.servesBehindIAP(spec)
 	tasks, declared, err := p.tasksFor(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -294,9 +272,6 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
-	}
-	if gated {
-		allowWarming(ctx, c, spec.App.App, account, progress)
 	}
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
@@ -314,8 +289,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		compute:   provider.ComputeContainer,
 		health:    app.HealthCheckPath,
 		instances: app.Instances,
-		public:    !gated,
-		iap:       gated,
+		public:    true,
 		ingress:   ingressFor(factsOf(spec.Edge)),
 		egress:    p.egressFor(names, spec),
 		tag:       p.revisionTag(spec),
@@ -333,11 +307,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	if err := p.exposeService(ctx, c, spec, service, progress); err != nil {
-		return nil, err
-	}
+	warnPreviewOpen(spec, service, progress)
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: ran.url, DeploymentURL: ran.deploymentURL, Image: app.Image, Revision: ran.revision,
+		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}
 	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, progress)
 	if err != nil {

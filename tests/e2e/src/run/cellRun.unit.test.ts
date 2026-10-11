@@ -338,21 +338,27 @@ describe("a cell run", () => {
       };
     }
 
-    const refusing = (status: number, body = ""): Clock => ({
-      fetch: (async () => new Response(body, { status })) as unknown as typeof fetch,
-      sleep: async () => {},
-      now: () => 0,
-    });
+    const serving = (marker?: string): Clock => {
+      let now = 0;
+      return {
+        fetch: (async (input: string | URL | Request) => {
+          const id = marker ?? /R\d/.exec(String(input))?.[0];
+          return new Response(`<p data-ocel="deployment">${id}</p>`);
+        }) as unknown as typeof fetch,
+        sleep: async () => {},
+        now: () => (now += 60_000),
+      };
+    };
 
     it("deploys the preview twice once, however many preview steps run", async () => {
       const called: Called = [];
       const run = runOf(called, {
         target: previewingTarget(called),
-        clock: refusing(403),
+        clock: serving(),
       });
 
-      await Promise.all([run.preview("web", "refused"), run.preview("web", "refused")]);
-      await run.preview("web", "refused");
+      await Promise.all([run.preview("web", "own-release"), run.preview("web", "own-release")]);
+      await run.preview("web", "own-release");
 
       expect(called.filter((one) => one === "previewUp")).toHaveLength(2);
     });
@@ -361,10 +367,10 @@ describe("a cell run", () => {
       const called: Called = [];
       const run = runOf(called, {
         target: previewingTarget(called),
-        clock: refusing(200, '<p data-ocel="deployment">x</p>'),
+        clock: serving("other"),
       });
 
-      await expect(run.preview("web", "refused")).rejects.toThrow(/answered 200/);
+      await expect(run.preview("web", "own-release")).rejects.toThrow(/never served build/);
       await run.destroy();
 
       expect(called.slice(-2)).toEqual(["previewRemove", "destroy"]);
@@ -374,9 +380,9 @@ describe("a cell run", () => {
       const called: Called = [];
       const run = runOf(called, {
         target: previewingTarget(called, { removeFails: true }),
-        clock: refusing(403),
+        clock: serving(),
       });
-      await run.preview("web", "refused");
+      await run.preview("web", "own-release");
 
       await expect(run.destroy()).rejects.toThrow(
         /removing preview journey: the removal was refused/,
@@ -389,10 +395,10 @@ describe("a cell run", () => {
       const called: Called = [];
       const run = runOf(called, {
         target: previewingTarget(called, { releases: () => [] }),
-        clock: refusing(403),
+        clock: serving(),
       });
 
-      await expect(run.preview("web", "refused")).rejects.toThrow(/released nothing for web/);
+      await expect(run.preview("web", "own-release")).rejects.toThrow(/released nothing for web/);
     });
 
     it("prunes the older preview once and keeps the newer one", async () => {

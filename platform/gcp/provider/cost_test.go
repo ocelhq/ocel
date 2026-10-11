@@ -498,33 +498,6 @@ func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
 	}
 }
 
-func TestShapeOfANextPreviewBehindIdentityAwareProxyKeepsItsCPU(t *testing.T) {
-	client, _ := costServed(t)
-	shaped := func(container bool) *costv1.ResourceSet {
-		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
-			Manifest:    nextManifest(container),
-			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
-		})
-		if err != nil {
-			t.Fatalf("Shape() = %v", err)
-		}
-		return set
-	}
-
-	set := shaped(false)
-
-	for _, r := range set.GetResources() {
-		if r.GetType() != "google_cloud_run_v2_service" || !strings.HasSuffix(r.GetScope(), "/app:web") {
-			continue
-		}
-		template := r.GetProperties().AsMap()["template"].(map[string]any)
-		resources := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
-		if resources["cpu_idle"] != false {
-			t.Errorf("%s has cpu_idle = %v, want false: a gated Next preview is billed per instance", r.GetName(), resources["cpu_idle"])
-		}
-	}
-}
-
 func TestAServerlessNextAppIsPricedForEveryHourItsInstanceLivesAtTheInstanceRate(t *testing.T) {
 	client, costs := costServed(t)
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{

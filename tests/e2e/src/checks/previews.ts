@@ -1,5 +1,4 @@
 import { markerOrNone } from "../html";
-import type { Cell } from "../matrix/types";
 import type { PreviewRelease } from "../targets/types";
 
 const HOSTNAME_DEADLINE_MS = 5 * 60_000;
@@ -9,17 +8,14 @@ const PRUNE_DEADLINE_MS = 10 * 60_000;
 const PRUNE_POLL_MS = 15_000;
 const DEPLOYMENT_PATH = "/cache/deployment";
 const DEPLOYMENT_MARKER = "deployment";
-const REFUSING_STATUSES = [302, 401, 403];
 
-export type PreviewCheck = "own-release" | "pruned" | "refused";
+export type PreviewCheck = "own-release" | "pruned";
 
 export const PREVIEW_NAME = "journey";
 
 export const PREVIEW_TITLES: Record<PreviewCheck, string> = {
   "own-release": "preview · each deployment's own hostname serves its own release",
   pruned: "preview · a pruned deployment's own hostname stops serving",
-  refused:
-    "preview · a deployment url behind Identity-Aware Proxy refuses an unauthenticated request",
 };
 
 export type Clock = {
@@ -28,12 +24,7 @@ export type Clock = {
   now: () => number;
 };
 
-export function previewChecksFor(cell: Pick<Cell, "target" | "variant">): PreviewCheck[] {
-  if (cell.target === "gcp" && cell.variant.config.edge === undefined) {
-    return ["refused"];
-  }
-  return ["own-release", "pruned"];
-}
+export const PREVIEW_CHECKS: PreviewCheck[] = ["own-release", "pruned"];
 
 type Seen = { served: boolean; said: string };
 
@@ -142,26 +133,6 @@ export async function checkPruned(
     );
   }
   return last;
-}
-
-export async function checkRefusedWithoutIdentity(
-  clock: Clock,
-  releases: PreviewRelease[],
-): Promise<Record<string, number>> {
-  const seen: Record<string, number> = {};
-  for (const each of releases) {
-    for (const url of [...each.urls, each.deploymentUrl]) {
-      const answered = await clock.fetch(url, { redirect: "manual" });
-      const body = await answered.text();
-      seen[url] = answered.status;
-      if (!REFUSING_STATUSES.includes(answered.status) || body.includes("data-ocel=")) {
-        throw new Error(
-          `${url} answered ${answered.status} to a request with no identity, want one of ${REFUSING_STATUSES.join(", ")} and no page`,
-        );
-      }
-    }
-  }
-  return seen;
 }
 
 export type PreviewGateCredentials = { password: string; bypassSecret: string };

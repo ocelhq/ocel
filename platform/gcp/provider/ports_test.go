@@ -295,7 +295,6 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
-			"roles/iap.admin",
 		},
 		edge.PurposeBootstrap: {
 			"roles/run.admin",
@@ -404,26 +403,6 @@ func TestADeployMayGrantTheCachePurgeRoleAndNoRoleItCouldChange(t *testing.T) {
 	for _, line := range strings.Split(document.Document, "\n") {
 		if line == "roles/iam.roleAdmin" || line == "roles/iam.organizationRoleAdmin" || strings.Contains(line, "iam.roles.") {
 			t.Errorf("Permissions(deploy) names %q, and a deploy that could change a custom role could widen what the grant it holds hands out:\n%s", line, document.Document)
-		}
-	}
-}
-
-func TestADeployMayLetViewersThroughToTheCloudRunServicesOfItsNamespaceAndNoOtherProxiedResource(t *testing.T) {
-	t.Parallel()
-
-	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
-	if err != nil {
-		t.Fatalf("Permissions(deploy) = %v", err)
-	}
-	const proxied = `roles/iap.admin, on the condition ` +
-		`resource.type == "iap.googleapis.com/WebService" && ` +
-		`resource.name.startsWith("projects/PROJECT_NUMBER/iap_web/cloud_run-europe-west1/services/ocel-")`
-	if !strings.Contains(document.Document, proxied) {
-		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy sets who the proxy admits to its own previews and to nothing else the proxy guards", document.Document, proxied)
-	}
-	for _, line := range strings.Split(document.Document, "\n") {
-		if line == "roles/iap.admin" {
-			t.Errorf("Permissions(deploy) grants roles/iap.admin unconditioned, which rewrites who reaches every app, VM and tunnel the proxy guards in the project")
 		}
 	}
 }
