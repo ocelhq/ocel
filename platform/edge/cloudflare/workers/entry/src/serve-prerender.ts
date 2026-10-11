@@ -95,6 +95,25 @@ function isPprDocument(request: Request, target: PrerenderContext["target"]): bo
   return target.config.renderingMode === "PARTIALLY_STATIC" && !request.headers.has("rsc");
 }
 
+const DYNAMIC_SEGMENT = /\[[^\]/]+\]/;
+
+function sharesFallbackShell(ctx: PrerenderContext, pprDocument: boolean): boolean {
+  const { resolvedPathname, routePath, target } = ctx;
+  return (
+    pprDocument &&
+    target.config.partialFallback === true &&
+    resolvedPathname !== undefined &&
+    routePath !== resolvedPathname &&
+    DYNAMIC_SEGMENT.test(resolvedPathname)
+  );
+}
+
+function withPathname(url: URL, pathname: string): URL {
+  const moved = new URL(url);
+  moved.pathname = pathname;
+  return moved;
+}
+
 function findVariant(
   request: Request,
   url: URL,
@@ -168,7 +187,11 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   const pprDocument = isPprDocument(request, target);
   if (pprDocument) safeHeaders.set(pprShellHeader, "1");
   const forwarded = forward(request, safeHeaders);
-  const canonicalUrl = buildCanonicalUrl(new URL(forwarded.url), target.allowQuery);
+  const concreteUrl = new URL(buildCanonicalUrl(new URL(forwarded.url), target.allowQuery));
+  const sharedShell = sharesFallbackShell(ctx, pprDocument);
+  const canonicalUrl = sharedShell
+    ? withPathname(concreteUrl, ctx.resolvedPathname!).toString()
+    : concreteUrl.toString();
   const coordinates = {
     host: serving.host,
     app: deps.app,
@@ -183,6 +206,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     slug: serving.slug,
     isrPrefix: serving.isrPrefix,
     tags: target.edgeEntryKey ? (target.tags ?? []) : [],
+    ...(sharedShell && { originPath: concreteUrl.pathname + concreteUrl.search }),
   };
   served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
   const response = await serving.serve({ props }).fetch(served);

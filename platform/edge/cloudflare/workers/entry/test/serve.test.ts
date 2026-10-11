@@ -444,6 +444,24 @@ describe("Serve fetching from the origin", () => {
     expect(response.headers.has("x-ocel-cache-tag")).toBe(false);
   });
 
+  it("asks the origin for the concrete path a shared shell names while keying the page tag by the shared one", async () => {
+    const wire = s3Answering(
+      () => new Response("shell", { headers: { "cache-control": "s-maxage=15" } }),
+    );
+    const request = new Request(buildOriginCall(`${FN_URL}blog/[id]`, coordinates).url, {
+      headers: {
+        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, originPath: "/blog/42" }),
+      },
+    });
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(request),
+    );
+
+    expect(wire.calls[0].url).toBe(`${FN_URL}blog/42`);
+    expect(response.headers.get("cache-tag")).toContain("r1a2b3c4d|path:/blog/[id]");
+  });
+
   it("fetches the origin URL it was called with, as the visitor's host and without the visitor's credentials", async () => {
     const wire = s3Answering(
       () => new Response("page", { headers: { "cache-control": "s-maxage=15" } }),

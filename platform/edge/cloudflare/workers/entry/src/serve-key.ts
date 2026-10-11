@@ -32,6 +32,7 @@ export interface RenderRelease {
   slug: string;
   isrPrefix: string;
   tags: string[];
+  originPath?: string;
 }
 
 const RENDER_CALL_SEGMENTS = 5;
