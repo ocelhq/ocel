@@ -324,6 +324,30 @@ describe("the document of a PPR route", () => {
     expect(await res.text()).toBe("<html>shell");
   });
 
+  it("renders the page at the origin when the shell does not carry the postponed state it declares", async () => {
+    const served = fakeServing(() => {
+      const shell = framedShell()();
+      const headers = new Headers(shell.headers);
+      headers.set("x-ocel-postponed-length", "4096");
+      return new Response(`${state}<html>shell`, { headers });
+    });
+    const origin = recorder(() => new Response("<html>whole page"));
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+      headers: { cookie: "session=1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>whole page");
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.requests).toHaveLength(1);
+    const rendered = origin.requests[0];
+    expect(rendered.method).toBe("GET");
+    expect(rendered.headers.get("cookie")).toBe("session=1");
+    expect(rendered.headers.has("x-ocel-edge-cache")).toBe(false);
+    expect(rendered.headers.has("x-ocel-ppr-shell")).toBe(false);
+  });
+
   it("serves a shell that did not postpone as the complete page it is", async () => {
     const served = fakeServing(cached("HIT"));
     const origin = recorder();
