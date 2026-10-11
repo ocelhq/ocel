@@ -8,7 +8,13 @@ import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import { openPurgeQueue } from "./purge-request";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
-import { encodeKeyPath, parseKeyRelease, parseObjectKey, type ServeProps } from "./serve-key";
+import {
+  buildOriginUrl,
+  encodeKeyPath,
+  parseKeyRelease,
+  parseObjectKey,
+  type ServeProps,
+} from "./serve-key";
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
@@ -137,12 +143,17 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   }
 
   private async fromOrigin(request: Request, props: ServeProps): Promise<Response> {
+    if (!props.origin) throw new Error("ocel: Serve was called with no origin to fetch from");
     const originFetch = originFetchFor(this.env) ?? fetch;
     const headers = new Headers(request.headers);
     headers.set("x-forwarded-host", props.host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(
-      new Request(request.url, { method: request.method, headers, redirect: "manual" }),
+      new Request(buildOriginUrl(request.url, props.origin), {
+        method: request.method,
+        headers,
+        redirect: "manual",
+      }),
     );
     const announced = res.headers.get(purgeHeader);
     if (announced !== null) {
