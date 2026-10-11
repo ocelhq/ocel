@@ -1,6 +1,6 @@
 import type { TagRecord } from "@framework/next-cache";
 import { newIsrWriterClient } from "@platform/edge-contract/isr-writer";
-import { purgeSecret } from "@platform/edge-contract/purge";
+import { derivePurgeSecret } from "@platform/edge-contract/purge";
 
 export async function raise(
   send: typeof fetch,
@@ -12,7 +12,7 @@ export async function raise(
   await newIsrWriterClient({
     endpoint,
     isrPrefix,
-    secret: purgeSecret(seed, isrPrefix),
+    secret: derivePurgeSecret(seed, isrPrefix),
     fetch: send,
   }).raiseTags(Object.fromEntries(records));
 }

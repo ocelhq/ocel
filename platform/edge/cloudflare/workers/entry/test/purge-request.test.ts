@@ -260,7 +260,7 @@ describe("refusing a purge request", () => {
 
   it("answers 401 for a request with no signature", async () => {
     const response = await answerPurge(
-      new Request("https://x.workers.dev" + purgePath, {
+      new Request(`https://x.workers.dev${purgePath}`, {
         method: "POST",
         body: JSON.stringify(raise),
       }),
