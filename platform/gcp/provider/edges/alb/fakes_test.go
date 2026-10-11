@@ -40,6 +40,8 @@ type world struct {
 	entries  map[string]map[string]bool
 	declared map[string]map[string]declaration
 	breaks   map[string]error
+	failing  map[string][]error
+	waits    int
 	pinning  error
 
 	routeFails          map[string]error
@@ -123,6 +125,10 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 	defer w.mu.Unlock()
 	if broken := w.breaks[stack]; broken != nil {
 		return nil, broken
+	}
+	if pending := w.failing[stack]; len(pending) > 0 {
+		w.failing[stack] = pending[1:]
+		return nil, pending[0]
 	}
 	w.ups = append(w.ups, stack)
 	w.declared[stack] = seen
@@ -515,4 +521,26 @@ func (w *world) failUnrouteAfterApplying(hostname string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.unrouteAppliedFails[hostname] = err
+}
+
+func (w *world) failUps(stack string, errs ...error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.failing == nil {
+		w.failing = map[string][]error{}
+	}
+	w.failing[stack] = errs
+}
+
+func (w *world) waitBeforeRetry(context.Context, int) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.waits++
+	return true
+}
+
+func (w *world) waited() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.waits
 }

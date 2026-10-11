@@ -35,6 +35,7 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Project:   "acme-prod",
 		Region:    "europe-west1",
 
+		WaitBeforeRetry: w.waitBeforeRetry,
 		ReadAssetsBucket: func(context.Context, environment.Tier) (AssetsBucket, error) {
 			return tierAssets, nil
 		},

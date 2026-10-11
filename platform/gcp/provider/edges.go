@@ -65,6 +65,7 @@ func (e edges) openALB() *alb.Edge {
 		Project:   e.project,
 		Region:    e.region,
 
+		WaitBeforeRetry:  waitBeforeRetry,
 		ReadAssetsBucket: e.assets,
 	})
 }
@@ -103,4 +104,8 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		"this provider cannot front deployments with the %q edge: leave `provider.gcp.edge` out, and each service answers on the url Cloud Run gives it, "+
 			"or name %s, which provisions one load balancer per bootstrap tier at %s",
 		kind, alb.Kind, alb.BaselineCost)
+}
+
+func waitBeforeRetry(ctx context.Context, attempt int) bool {
+	return waitedFor(ctx, attempt, waitCeiling)
 }
