@@ -14,7 +14,12 @@ afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
   for (const v of Object.keys(process.env)) {
-    if (v.startsWith("OCEL_ISR_STORE_") || v.startsWith("OCEL_ISR_WRITER_")) delete process.env[v];
+    if (
+      v.startsWith("OCEL_ISR_STORE_") ||
+      v.startsWith("OCEL_ISR_WRITER_") ||
+      v === "OCEL_PURGE_SECRET"
+    )
+      delete process.env[v];
   }
   vi.unstubAllGlobals();
 });
@@ -44,7 +49,7 @@ test("stays on the provider's bucket when a cache store is adopted", async () =>
   Object.assign(process.env, {
     OCEL_ISR_STORE_BUCKET: "isr",
     OCEL_ISR_WRITER_URL: "https://writer.example",
-    OCEL_ISR_WRITER_SECRET: "write-secret",
+    OCEL_PURGE_SECRET: "write-secret",
   });
   const built: any[] = [];
   const sent: any[] = [];
@@ -345,7 +350,7 @@ function adoptWithWriter() {
   Object.assign(process.env, {
     OCEL_ISR_STORE_BUCKET: "isr",
     OCEL_ISR_WRITER_URL: "https://writer.example",
-    OCEL_ISR_WRITER_SECRET: "write-secret",
+    OCEL_PURGE_SECRET: "write-secret",
   });
 }
 
@@ -470,5 +475,5 @@ test("refuses an adopted store whose isr-writer is not fully configured", async 
   await expect(storeWithObjects([])).rejects.toThrow("OCEL_ISR_WRITER_URL");
 
   process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
-  await expect(storeWithObjects([])).rejects.toThrow("OCEL_ISR_WRITER_SECRET");
+  await expect(storeWithObjects([])).rejects.toThrow("OCEL_PURGE_SECRET");
 });

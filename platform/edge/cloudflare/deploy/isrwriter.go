@@ -30,13 +30,13 @@ type ISRWriter struct {
 	Seed                string
 }
 
-func DeriveISRWriteSecret(seed, isrPrefix string) string {
+func DerivePurgeSecret(seed, isrPrefix string) string {
 	mac := hmac.New(sha256.New, []byte(seed))
 	mac.Write([]byte(isrPrefix))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func isrWriteSecretHash(secret string) string {
+func purgeSecretHash(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])
 }
@@ -49,7 +49,7 @@ func (w ISRWriter) Initialize(ctx context.Context, isrPrefix string) error {
 	if !w.IsConfigured() {
 		return nil
 	}
-	body := map[string]string{"secretHash": isrWriteSecretHash(DeriveISRWriteSecret(w.Seed, isrPrefix))}
+	body := map[string]string{"secretHash": purgeSecretHash(DerivePurgeSecret(w.Seed, isrPrefix))}
 	return w.request(ctx, isrPrefix, "initialize", body)
 }
 
@@ -129,7 +129,7 @@ func (w ISRWriter) putEntryOnce(ctx context.Context, url, isrPrefix string, body
 	if err != nil {
 		return 0, fmt.Errorf("build the request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+DeriveISRWriteSecret(w.Seed, isrPrefix))
+	req.Header.Set("Authorization", "Bearer "+DerivePurgeSecret(w.Seed, isrPrefix))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := isrWriterClient.Do(req)
 	if err != nil {

@@ -110,8 +110,8 @@ type isrConfig struct {
 
 	CacheStoreBucket string
 
-	WriterURL    string
-	WriterSecret string
+	WriterURL   string
+	PurgeSecret string
 }
 
 func (c isrConfig) tagNamespace() string {
@@ -134,9 +134,9 @@ func (c isrConfig) env() map[string]string {
 	if c.CacheStoreBucket != "" {
 		env["OCEL_ISR_STORE_BUCKET"] = c.CacheStoreBucket
 	}
-	if c.WriterURL != "" && c.WriterSecret != "" {
+	if c.WriterURL != "" && c.PurgeSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
-		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
+		env["OCEL_PURGE_SECRET"] = c.PurgeSecret
 	}
 	return env
 }

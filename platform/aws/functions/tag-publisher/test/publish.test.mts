@@ -1,9 +1,8 @@
 import { type TagRecord, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
+import { purgeSecret } from "@platform/edge-contract/purge";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { publishAll } from "../src/publish.mjs";
 import type { Raises } from "../src/records.mjs";
-import { isrWriteSecret } from "../src/writer.mjs";
 
 const PREFIX = "prod/acme/web/BUILD1";
 const KEY = tagSnapshotKey(PREFIX);
@@ -106,7 +105,7 @@ describe("publishAll", () => {
 
     const [url, init] = ok.mock.calls[0]!;
     expect(url).toBe(`https://writer.example/${PREFIX}/tags`);
-    expect(init.headers.authorization).toBe(`Bearer ${isrWriteSecret(SEED, PREFIX)}`);
+    expect(init.headers.authorization).toBe(`Bearer ${purgeSecret(SEED, PREFIX)}`);
     expect(JSON.parse(init.body)).toEqual({ records: { cart: { expired: 5 } } });
   });
 

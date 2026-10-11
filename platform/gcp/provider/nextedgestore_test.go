@@ -77,8 +77,8 @@ func TestANextServiceBehindTheWorkerIsToldItsISRWriterAndNoTagDatabase(t *testin
 	if env["OCEL_ISR_WRITER_URL"] != w.url {
 		t.Errorf("OCEL_ISR_WRITER_URL = %q, want the adopted endpoint %q", env["OCEL_ISR_WRITER_URL"], w.url)
 	}
-	if want := cloudflare.DeriveISRWriteSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_ISR_WRITER_SECRET"] != want {
-		t.Errorf("OCEL_ISR_WRITER_SECRET = %q, want the deployment's derived secret", env["OCEL_ISR_WRITER_SECRET"])
+	if want := cloudflare.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
+		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
 	}
 	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_FIRESTORE_ENDPOINT"} {
 		if got, told := env[name]; told {
@@ -138,7 +138,7 @@ func TestANextServiceBehindTheLoadBalancerIsToldNoISRWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := envOf(server.created[0].Template.Containers[0])
-	for _, name := range []string{"OCEL_ISR_WRITER_URL", "OCEL_ISR_WRITER_SECRET"} {
+	for _, name := range []string{"OCEL_ISR_WRITER_URL", "OCEL_PURGE_SECRET"} {
 		if got, told := env[name]; told {
 			t.Errorf("%s = %q behind the load balancer, want none", name, got)
 		}
@@ -174,7 +174,7 @@ func TestPrerenderSeedsBehindTheWorkerGoThroughTheISRWriter(t *testing.T) {
 	if got, want := w.writer.puts(), []string{"/" + prefix + "/entry?key=blog/post"}; !slices.Equal(got, want) {
 		t.Errorf("writer entries = %v, want %v", got, want)
 	}
-	if want := "Bearer " + cloudflare.DeriveISRWriteSecret(w.seed, prefix); w.writer.auths[0] != want {
+	if want := "Bearer " + cloudflare.DerivePurgeSecret(w.seed, prefix); w.writer.auths[0] != want {
 		t.Errorf("Authorization = %q, want the deployment's write secret", w.writer.auths[0])
 	}
 	if got := uploadNames(w.server.stored()); len(got) != 0 {

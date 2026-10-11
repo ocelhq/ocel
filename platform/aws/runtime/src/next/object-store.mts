@@ -34,10 +34,10 @@ export function entriesAdopted(): boolean {
 
 export function openAdoptedIsrWriter(isrPrefix: string): IsrWriterClient {
   const endpoint = process.env.OCEL_ISR_WRITER_URL;
-  const secret = process.env.OCEL_ISR_WRITER_SECRET;
+  const secret = process.env.OCEL_PURGE_SECRET;
   if (!endpoint || !secret) {
     throw new Error(
-      "ocel cache handler: OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET must both be set " +
+      "ocel cache handler: OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET must both be set " +
         "when this deploy reads its ISR entries from an adopted cache store; " +
         "re-run `ocel bootstrap production` and redeploy",
     );

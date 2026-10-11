@@ -132,7 +132,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		if isrEntriesAdopted(cfg.objectStores()) {
 			cache.CacheStoreBucket = cfg.CacheStoreBucket
 			cache.WriterURL = cfg.ISRWriterEndpoint
-			cache.WriterSecret = cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, prefix)
+			cache.PurgeSecret = cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, prefix)
 		}
 		builds.caches[name] = cache
 	}
