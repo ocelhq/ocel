@@ -17,6 +17,13 @@ type notices struct {
 
 func (n notices) Say(message string) { n.notify(message) }
 
+func sayingTo(say func(string)) progress.Log {
+	if say == nil {
+		return progress.Discard()
+	}
+	return notices{Log: progress.Discard(), notify: say}
+}
+
 func (e *Edge) removeGate(ctx context.Context) error {
 	_, attached, err := e.readGatePublication(ctx)
 	if err != nil {
@@ -70,10 +77,7 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	if err != nil || !changed {
 		return err
 	}
-	log := progress.Discard()
-	if spec.Warn != nil {
-		log = notices{Log: log, notify: spec.Warn}
-	}
+	log := sayingTo(spec.Warn)
 	proof := gateProof{Address: s.recorded.LoadBalancer.Address}
 	if newlyGated {
 		proof.Hosts = routed
@@ -84,6 +88,9 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progress.Log) error {
 	if !s.isGated() || len(hosts) == 0 {
 		return nil
+	}
+	if log == nil {
+		log = progress.Discard()
 	}
 	_, gated, err := s.e.readGateRecord(ctx, s.state.Slug)
 	if err != nil || !gated {

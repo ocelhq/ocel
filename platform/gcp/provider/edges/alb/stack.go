@@ -64,6 +64,9 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 	if len(took) == 0 && len(moved) == 0 {
 		return nil
 	}
+	if err := s.admitGatedHosts(ctx, took, progress); err != nil {
+		return err
+	}
 	if len(took) > 0 {
 		if err := s.raise(ctx, hosts); err != nil {
 			return err
@@ -159,6 +162,11 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		}
 		return s.disown(ctx, binding.Hostname)
 	}
+	if served.Service != "" {
+		if err := s.admitGatedHosts(ctx, []string{binding.Hostname}, sayingTo(binding.Say)); err != nil {
+			return errors.Join(err, release())
+		}
+	}
 	if err := s.raise(ctx, hosts); err != nil {
 		return errors.Join(err, release())
 	}
@@ -191,6 +199,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.disown(ctx, hostname); err != nil {
 		return err
 	}
+	s.forgetGatedHosts(ctx, []string{hostname}, progress.Discard())
 	if len(hosts) == 0 {
 		hosts = nil
 	}
