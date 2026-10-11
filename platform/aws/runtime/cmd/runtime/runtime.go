@@ -20,9 +20,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 )
@@ -329,7 +329,7 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
-	if previewlogin.IsLogin(ev.method(), ev.path()) {
+	if previewgate.IsLogin(ev.method(), ev.path()) {
 		return false, u.relay(ctx, rw, front.answer(ev, time.Now()))
 	}
 

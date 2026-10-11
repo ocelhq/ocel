@@ -107,22 +107,6 @@ func TestReadingTheEnvironmentKeepsTheGateKeysFromTheApp(t *testing.T) {
 	}
 }
 
-func TestOnlyAPostToTheLoginPathIsTheLogin(t *testing.T) {
-	for _, tc := range []struct {
-		method, path string
-		want         bool
-	}{
-		{http.MethodPost, previewgate.LoginPath, true},
-		{http.MethodGet, previewgate.LoginPath, false},
-		{http.MethodPost, previewgate.LoginPath + "/", false},
-		{http.MethodPost, "/", false},
-	} {
-		if got := previewlogin.IsLogin(tc.method, tc.path); got != tc.want {
-			t.Errorf("IsLogin(%s, %s) = %t, want %t", tc.method, tc.path, got, tc.want)
-		}
-	}
-}
-
 func TestReadingTheBodyStopsPastTheLoginCap(t *testing.T) {
 	read, err := previewlogin.ReadBody(strings.NewReader(strings.Repeat("a", 1<<20)))
 	if err != nil {

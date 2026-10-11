@@ -113,7 +113,7 @@ func Handler(opts Options) http.Handler {
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if opts.PreviewLogin != nil && previewlogin.IsLogin(r.Method, r.URL.Path) {
+		if opts.PreviewLogin != nil && previewgate.IsLogin(r.Method, r.URL.Path) {
 			answerPreviewLogin(w, r, opts)
 			return
 		}
