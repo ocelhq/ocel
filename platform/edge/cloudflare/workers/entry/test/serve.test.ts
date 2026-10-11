@@ -581,6 +581,7 @@ describe("Serve fetching from the origin", () => {
               raise: async (mode: string, tags: { tag: string }[]) => {
                 raised.push({ mode, tags });
               },
+              record: async () => {},
             }),
           },
         },

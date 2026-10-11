@@ -26,6 +26,7 @@ import {
   RENDER_RELEASE_HEADER,
   type RenderRelease,
   SERVE_REFUSED_HEADER,
+  type StoredEntryCall,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 
@@ -106,6 +107,18 @@ function sharesFallbackShell(ctx: PrerenderContext, pprDocument: boolean): boole
     routePath !== resolvedPathname &&
     DYNAMIC_SEGMENT.test(resolvedPathname)
   );
+}
+
+function buildStoredEntryCall(ctx: PrerenderContext, sharedShell: boolean): StoredEntryCall {
+  const { target, routePath, resolvedPathname } = ctx;
+  const path = sharedShell ? resolvedPathname! : routePath;
+  const { initialRevalidate, initialExpiration } = target.fallback ?? {};
+  return {
+    path,
+    fallbackPath: resolvedPathname ?? path,
+    ...(typeof initialRevalidate === "number" && { revalidate: initialRevalidate }),
+    ...(typeof initialExpiration === "number" && { expire: initialExpiration }),
+  };
 }
 
 function withPathname(url: URL, pathname: string): URL {
@@ -207,6 +220,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     isrPrefix: serving.isrPrefix,
     tags: target.edgeEntryKey ? (target.tags ?? []) : [],
     ...(sharedShell && { originPath: concreteUrl.pathname + concreteUrl.search }),
+    ...(!target.edgeEntryKey && { entry: buildStoredEntryCall(ctx, sharedShell) }),
   };
   served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
   const response = await serving.serve({ props }).fetch(served);

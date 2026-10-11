@@ -8,7 +8,7 @@ import {
   readPurge,
   readReleaseToken,
 } from "@platform/edge-contract/purge";
-import { AwsClient } from "aws4fetch";
+import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access";
 import { createReleaseEdgeInvoker, type EdgeRuntime, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
@@ -31,8 +31,19 @@ import {
   readRenderCall,
   SERVE_REFUSED_HEADER,
   type ServeProps,
+  type StoredEntryCall,
 } from "./serve-key";
 import { type ServeFactory, serveObjects } from "./serve-objects";
+import { readFromStore } from "./store-read";
+import { openEntrySource } from "./store-source";
+
+const REFRESH_COOLDOWN_MS = 5_000;
+
+const refreshing = new Map<string, number>();
+
+export function dropRefreshes(): void {
+  refreshing.clear();
+}
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
@@ -43,15 +54,6 @@ interface ObjectBody {
   etag?: string;
 }
 
-interface BucketAccess {
-  bucket: string;
-  origin: string;
-  prefix: string;
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-}
-
 function parseRenderRelease(header: string | null): RenderRelease | undefined {
   if (header === null) return undefined;
   try {
@@ -59,10 +61,28 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
     if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
     const originPath = typeof parsed.originPath === "string" ? parsed.originPath : undefined;
-    return { slug: parsed.slug, isrPrefix: parsed.isrPrefix, tags, originPath };
+    return {
+      slug: parsed.slug,
+      isrPrefix: parsed.isrPrefix,
+      tags,
+      originPath,
+      entry: readStoredEntryCall(parsed.entry),
+    };
   } catch {
     return undefined;
   }
+}
+
+function readStoredEntryCall(entry: unknown): StoredEntryCall | undefined {
+  const call = entry as Partial<StoredEntryCall> | null | undefined;
+  if (typeof call?.path !== "string" || !call.path.startsWith("/")) return undefined;
+  const count = (value: unknown) => (typeof value === "number" && value >= 0 ? value : undefined);
+  return {
+    path: call.path,
+    fallbackPath: typeof call.fallbackPath === "string" ? call.fallbackPath : undefined,
+    revalidate: count(call.revalidate),
+    expire: count(call.expire),
+  };
 }
 
 function askedOf(keyedUrl: string, render: RenderRelease): string {
@@ -136,43 +156,13 @@ function respondMissing(release: string): Response {
   });
 }
 
-function findAwsBucketAccess(env: Env): BucketAccess | undefined {
-  const {
-    OCEL_ASSET_BUCKET: bucket,
-    OCEL_AWS_REGION: region,
-    OCEL_EDGE_ACCESS_KEY_ID: accessKeyId,
-    OCEL_EDGE_SECRET_KEY: secretAccessKey,
-  } = env;
-  if (!bucket || !region || !accessKeyId || !secretAccessKey) return undefined;
-  const origin = `https://${bucket}.s3.${region}.amazonaws.com`;
-  return { bucket, origin, prefix: "", region, accessKeyId, secretAccessKey };
-}
-
-function findHmacBucketAccess(env: Env): BucketAccess | undefined {
-  const {
-    OCEL_ASSET_STORE_ENDPOINT: endpoint,
-    OCEL_ASSET_STORE_BUCKET: bucket,
-    OCEL_ASSET_STORE_ACCESS_KEY_ID: accessKeyId,
-    OCEL_ASSET_STORE_SECRET_KEY: secretAccessKey,
-  } = env;
-  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return undefined;
-  const origin = `${endpoint.replace(/\/$/, "")}/${encodeURIComponent(bucket)}`;
-  const prefix = env.OCEL_ASSET_STORE_PREFIX ?? "";
-  return { bucket, origin, prefix, region: "auto", accessKeyId, secretAccessKey };
-}
-
-function findBucketAccess(env: Env): BucketAccess | undefined {
-  return findAwsBucketAccess(env) ?? findHmacBucketAccess(env);
-}
-
 export function readsObjects(env: Env): boolean {
   return findBucketAccess(env) !== undefined || env.OCEL_CACHE_STORE !== undefined;
 }
 
 async function readBucket(access: BucketAccess, key: string, release: string): Promise<Response> {
-  const { bucket, origin, prefix, region, accessKeyId, secretAccessKey } = access;
-  const client = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region, retries: 0 });
-  const res = await client.fetch(`${origin}/${encodeKeyPath(prefix + key)}`);
+  const { bucket, origin, prefix } = access;
+  const res = await signBucket(access).fetch(`${origin}/${encodeKeyPath(prefix + key)}`);
   if (res.ok) {
     return respondStored({ body: res.body, etag: res.headers.get("etag") ?? undefined }, release);
   }
@@ -229,7 +219,71 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
       return respondRefused("the origin is not one of the served release's functions");
     }
-    const originUrl = askedOf(keyedUrl, found.render);
+    const render = () =>
+      this.renderAtOrigin(request, {
+        host,
+        release,
+        keyedUrl,
+        originUrl: askedOf(keyedUrl, found.render),
+      });
+    const stored = await this.readStored(request, found.render, release, keyedUrl);
+    if (!stored) return render();
+    this.refreshBehind(request.url, render);
+    return forCache(admitSegment(request, stored), {
+      release,
+      pathname: new URL(keyedUrl).pathname,
+    });
+  }
+
+  private async readStored(
+    request: Request,
+    render: RenderRelease,
+    release: string,
+    keyedUrl: string,
+  ): Promise<Response | undefined> {
+    const { entry } = render;
+    if (!entry || request.method !== "GET" || new URL(keyedUrl).search !== "") return undefined;
+    const source = openEntrySource(this.env);
+    if (!source) return undefined;
+    try {
+      const answer = await readFromStore(
+        {
+          isrPrefix: render.isrPrefix,
+          release,
+          entryPath: entry.path,
+          fallbackPath: entry.fallbackPath,
+          window: { revalidate: entry.revalidate, expire: entry.expire },
+          variant: readRenderCall(request.url).variant,
+          headers: request.headers,
+        },
+        {
+          source,
+          readTimes: (tags) => openPurgeQueue(this.ctx.exports).readTimes(tags),
+          now: Date.now,
+        },
+      );
+      return answer?.response;
+    } catch (error) {
+      console.error("ocel: the durable store was not read; rendering at the origin", error);
+      return undefined;
+    }
+  }
+
+  private refreshBehind(key: string, render: () => Promise<Response>): void {
+    const now = Date.now();
+    if ((refreshing.get(key) ?? 0) > now) return;
+    refreshing.set(key, now + REFRESH_COOLDOWN_MS);
+    const run = render()
+      .then((res) => res.body?.cancel())
+      .catch((error) => console.error("ocel: the refresh behind a stored page failed", error));
+    this.ctx.waitUntil(run);
+  }
+
+  private async renderAtOrigin(
+    request: Request,
+    call: { host: string; release: string; keyedUrl: string; originUrl: string },
+  ): Promise<Response> {
+    const { host, release, keyedUrl, originUrl } = call;
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);
     const originFetch = originFetchFor(this.env) ?? fetch;
