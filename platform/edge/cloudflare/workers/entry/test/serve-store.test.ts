@@ -1,6 +1,8 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
+import type { PurgeQueue } from "../src/purge-queue";
+import { openPurgeQueue } from "../src/purge-request";
 import type { TagTimes } from "../src/purge-times";
 import { Serve } from "../src/serve";
 import {
@@ -10,6 +12,12 @@ import {
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
+
+declare module "cloudflare:test" {
+  interface ProvidedEnv {
+    PURGE_QUEUE: DurableObjectNamespace<PurgeQueue>;
+  }
+}
 
 const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
@@ -54,6 +62,7 @@ function harness(
     entry?: object | null;
     release?: Record<string, unknown>;
     call?: Record<string, unknown>;
+    queues?: unknown;
   } = {},
 ): Harness {
   const pending: Promise<unknown>[] = [];
@@ -64,7 +73,7 @@ function harness(
     props: ORIGIN_PURGE_SCOPE,
     waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
     exports: {
-      PurgeQueue: {
+      PurgeQueue: options.queues ?? {
         getByName: () => ({
           raise: async () => {},
           record: async () => {},
@@ -237,6 +246,23 @@ describe("Serve answering a miss from the durable store", () => {
     const response = await h.fetchOrigin(() => h.serve.fetch(request));
 
     expect(await response.text()).toBe("<html>from the origin</html>");
+  });
+});
+
+describe("Serve reading tag times from the purge queue itself", () => {
+  it("skips the store on the next miss once the purge queue recorded a purge of a tag of the entry", async () => {
+    await seed(storedEntry());
+    const queues = { PurgeQueue: env.PURGE_QUEUE };
+    const h = harness({ queues: queues.PurgeQueue }) as Used;
+
+    const before = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+    await openPurgeQueue(queues).record("purge", [
+      { tag: "r1a2b3c4d|posts", raisedAt: Date.now() },
+    ]);
+    const after = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+
+    expect(await before.text()).toBe("<html>from the store</html>");
+    expect(await after.text()).toBe("<html>from the origin</html>");
   });
 });
 
