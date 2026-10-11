@@ -82,12 +82,10 @@ describe("the headers a cached response leaves Serve with", () => {
     expect(response.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
   });
 
-  it("takes max-age as the edge's lifetime when there is no s-maxage", () => {
+  it("does not store a Cache-Control that names a browser's lifetime and no shared one", () => {
     const response = shaped({ status: 200, headers: { "cache-control": "public, max-age=120" } });
-    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
-      "max-age=120, stale-if-error=86400",
-    );
-    expect(response.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
   });
 
   it("prefers s-maxage to max-age", () => {
