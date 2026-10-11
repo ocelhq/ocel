@@ -4,7 +4,7 @@ export const purgePath = "/.ocel/purge";
 
 export const purgeSignatureHeader = "x-ocel-signature";
 
-export const purgesPerRequest = 500;
+export const tagsPerPurgeRequest = 500;
 
 const attempts = 4;
 const backoffMs = 500;
@@ -69,8 +69,8 @@ export async function postPurge(
     const tags = entries
       .filter((entry) => entry.mode === mode)
       .map(({ tag, raisedAt }) => ({ tag, raisedAt }));
-    for (let i = 0; i < tags.length; i += purgesPerRequest) {
-      const body = JSON.stringify({ release, mode, tags: tags.slice(i, i + purgesPerRequest) });
+    for (let i = 0; i < tags.length; i += tagsPerPurgeRequest) {
+      const body = JSON.stringify({ release, mode, tags: tags.slice(i, i + tagsPerPurgeRequest) });
       await post(sender, url, secret, body);
     }
   }

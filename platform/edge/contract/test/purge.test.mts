@@ -2,7 +2,12 @@ import { createHmac } from "node:crypto";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { postPurge, purgeSecret, purgeSignatureHeader, purgesPerRequest } from "../src/purge.mjs";
+import {
+  postPurge,
+  purgeSecret,
+  purgeSignatureHeader,
+  tagsPerPurgeRequest,
+} from "../src/purge.mjs";
 
 const URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
 const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
@@ -86,7 +91,7 @@ describe("postPurge", () => {
   });
 
   it("splits a mode into requests of at most the tags one request may carry", async () => {
-    const entries = Array.from({ length: purgesPerRequest + 1 }, (_, i) => ({
+    const entries = Array.from({ length: tagsPerPurgeRequest + 1 }, (_, i) => ({
       tag: `t${i}`,
       mode: "purge" as const,
       raisedAt: 1,
@@ -94,7 +99,10 @@ describe("postPurge", () => {
 
     await postPurge(sender(), URL, secret, "r1", entries);
 
-    expect(worker.sent.map((s) => JSON.parse(s.body).tags.length)).toEqual([purgesPerRequest, 1]);
+    expect(worker.sent.map((s) => JSON.parse(s.body).tags.length)).toEqual([
+      tagsPerPurgeRequest,
+      1,
+    ]);
   });
 
   it("sends nothing for no tags", async () => {
