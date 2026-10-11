@@ -22,6 +22,23 @@ export function isPprShellRequest(req: http.IncomingMessage): boolean {
   );
 }
 
+function dropContentLength(headers: unknown): unknown {
+  if (Array.isArray(headers)) {
+    const kept: unknown[] = [];
+    for (let i = 0; i < headers.length; i += 2) {
+      if (String(headers[i]).toLowerCase() !== "content-length")
+        kept.push(headers[i], headers[i + 1]);
+    }
+    return kept;
+  }
+  if (headers && typeof headers === "object") {
+    return Object.fromEntries(
+      Object.entries(headers).filter(([name]) => name.toLowerCase() !== "content-length"),
+    );
+  }
+  return headers;
+}
+
 export function framePprShell(res: http.ServerResponse): PprShellMeta {
   let postponed: Buffer | undefined;
   let framed = false;
@@ -39,6 +56,10 @@ export function framePprShell(res: http.ServerResponse): PprShellMeta {
 
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: unknown[]) {
+    if (postponed && !this.headersSent) {
+      const headersAt = typeof args[1] === "string" ? 2 : 1;
+      if (args.length > headersAt) args[headersAt] = dropContentLength(args[headersAt]);
+    }
     stampHeaders();
     return (writeHead as (...a: unknown[]) => http.ServerResponse).apply(this, args);
   } as typeof res.writeHead;
