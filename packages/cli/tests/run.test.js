@@ -87,6 +87,42 @@ describe.runIf(process.platform !== "win32")("the ocel wrapper", () => {
     10000,
   );
 
+  it("stops the platform binary when SIGTERM reaches the wrapper the moment it spawned it", async () => {
+    install("#!/bin/sh\nwhile :; do sleep 0.05; done\n");
+    const preload = join(root, "signal-on-spawn.mjs");
+    writeFileSync(
+      preload,
+      [
+        'import childProcess from "node:child_process";',
+        'import { syncBuiltinESMExports } from "node:module";',
+        "const spawn = childProcess.spawn;",
+        "childProcess.spawn = (...args) => {",
+        "  const child = spawn(...args);",
+        '  process.kill(process.pid, "SIGTERM");',
+        "  return child;",
+        "};",
+        "syncBuiltinESMExports();",
+      ].join("\n"),
+    );
+    const wrapper = spawn(process.execPath, ["--import", preload, entry], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    wrapper.stdout.resume();
+    const exited = new Promise((resolve) => wrapper.on("close", resolve));
+
+    try {
+      const outcome = await Promise.race([
+        exited.then(() => "exited"),
+        new Promise((resolve) => setTimeout(() => resolve("running"), 5000)),
+      ]);
+      expect(outcome).toBe("exited");
+      expect(wrapper.signalCode).toBeNull();
+    } finally {
+      wrapper.kill("SIGKILL");
+      spawnSync("pkill", ["-KILL", "-f", join(root, "node_modules")]);
+    }
+  }, 10000);
+
   it("reports the missing platform package rather than a stack trace", () => {
     const run = spawnSync(process.execPath, [entry], { encoding: "utf8" });
     expect(run.status).toBe(1);
