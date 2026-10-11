@@ -53,7 +53,7 @@ func TestStackState(t *testing.T) {
 			OwnerToken:    "owner",
 			Address:       "d123.cloudfront.net",
 			GlobalPreview: "preview.acme.com",
-			PurgeURL:      "https://shop.acct.workers.dev/.ocel/purge",
+			PurgeURL:      "https://shop.acct.workers.dev/purge",
 			Private:       Own(samplePrivateState{Distribution: "E123", Region: "eu-west-1"}),
 		}
 		state.Bind("shop.app.com")
@@ -71,7 +71,7 @@ func TestStackState(t *testing.T) {
 		for name, state := range map[string]StackState{
 			"a slug":          {Slug: "shop"},
 			"a front":         {Address: "d123.cloudfront.net"},
-			"a purge URL":     {PurgeURL: "https://web.acct.workers.dev/.ocel/purge"},
+			"a purge URL":     {PurgeURL: "https://web.acct.workers.dev/purge"},
 			"a private state": {Private: Own(samplePrivateState{Distribution: "E123"})},
 		} {
 			if state.Empty() {
