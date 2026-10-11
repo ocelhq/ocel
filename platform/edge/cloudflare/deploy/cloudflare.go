@@ -234,11 +234,8 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 		out.Offers = append(out.Offers, offer)
 		if p.trustClientCertificate != nil {
 			if err := p.trustClientCertificate(ctx, tier, offer); err != nil {
-				return out, fmt.Errorf("make the origin trust the worker client certificate's CA before the refresher presents it: %w", err)
+				return out, fmt.Errorf("make the origin trust the worker client certificate's CA before the entry worker presents it: %w", err)
 			}
-		}
-		if err := p.ensureRefreshQueue(ctx, accountID, state.refresh, offer.Values[edge.OfferKeyClientCertificateID]); err != nil {
-			return out, fmt.Errorf("bootstrap the refresh queue: %w", err)
 		}
 	}
 	return out, nil
@@ -261,11 +258,6 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	for _, name := range []string{storeScript, writerScript} {
 		if err := p.deleteScript(ctx, accountID, name); err != nil {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
-		}
-	}
-	if p.workerClientCertificate {
-		if err := p.tearDownRefreshQueue(ctx, accountID, tier); err != nil {
-			errs = append(errs, err)
 		}
 	}
 	if err := p.cacheStore().teardown(ctx, accountID, tier); err != nil {
@@ -402,7 +394,6 @@ var (
 	entryBundle         = bundles.Entry()
 	releasesStoreBundle = bundles.ReleasesStore()
 	isrWriterBundle     = bundles.ISRWriter()
-	refresherBundle     = bundles.Refresher()
 )
 
 func workerModule(content []byte) edge.WorkerModule {
@@ -631,13 +622,6 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 			"type":           "mtls_certificate",
 			"name":           name,
 			"certificate_id": worker.ClientCertificates[name],
-		})
-	}
-	for _, name := range slices.Sorted(maps.Keys(worker.Queues)) {
-		bindings = append(bindings, map[string]any{
-			"type":       "queue",
-			"name":       name,
-			"queue_name": worker.Queues[name],
 		})
 	}
 	return bindings

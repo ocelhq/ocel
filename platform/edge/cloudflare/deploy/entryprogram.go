@@ -26,8 +26,6 @@ type OriginBindings struct {
 	Secrets   map[string]string
 
 	ClientCertificate string
-
-	RefreshesThroughQueue bool
 }
 
 type EntryProgram struct {
@@ -54,13 +52,6 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	worker, err := newEntryWorker(p.Entry, p.Origin)
 	if err != nil {
 		return provider.EdgeProgram{}, err
-	}
-	if p.Origin.RefreshesThroughQueue {
-		queue, err := refreshQueueNameFor(p.Namespace, p.Tier)
-		if err != nil {
-			return provider.EdgeProgram{}, err
-		}
-		worker.Queues = map[string]string{refreshQueueBinding: queue}
 	}
 	spec := &edge.ProgramSpec{
 		StoreScriptName:     p.StoreScriptName,

@@ -58,13 +58,6 @@ func (s workerClientCertificateState) current() (heldWorkerClientCertificate, bo
 	return s.held[0], true
 }
 
-func (s workerClientCertificateState) keptID() string {
-	if current, held := s.current(); held && current.expiresOn.After(s.now) && !s.due(current) {
-		return current.id
-	}
-	return ""
-}
-
 func (s workerClientCertificateState) live() []heldWorkerClientCertificate {
 	return slices.DeleteFunc(slices.Clone(s.held), func(c heldWorkerClientCertificate) bool { return !c.expiresOn.After(s.now) })
 }
@@ -133,24 +126,6 @@ func (c workerClientCertificates) read(ctx context.Context, accountID string, ti
 		}
 		return strings.Compare(a.id, b.id)
 	})
-	return state, nil
-}
-
-func (c workerClientCertificates) readOne(ctx context.Context, accountID, id string, now time.Time) (workerClientCertificateState, error) {
-	state := workerClientCertificateState{enabled: true, now: now}
-	if id == "" {
-		return state, nil
-	}
-	certificate, err := c.client.MTLSCertificates.Get(ctx, id, mtls_certificates.MTLSCertificateGetParams{AccountID: cf.F(accountID)})
-	if hasStatus(err, http.StatusNotFound) {
-		return state, nil
-	}
-	if err != nil {
-		return workerClientCertificateState{}, fmt.Errorf("read the mTLS certificate %s: %w", id, err)
-	}
-	state.held = []heldWorkerClientCertificate{{
-		id: certificate.ID, name: certificate.Name, certificates: certificate.Certificates, expiresOn: certificate.ExpiresOn,
-	}}
 	return state, nil
 }
 
