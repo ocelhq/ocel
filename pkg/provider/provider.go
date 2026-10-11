@@ -52,6 +52,8 @@ type EdgeProgramRequest struct {
 	Env               string
 	PreviewBaseDomain string
 	PreviewKey        edge.PreviewKey
+	PreviewGate       *edge.PreviewGate
+	PreviewGates      map[string]edge.PreviewGate
 	Entry             edge.WorkerModule
 }
 
