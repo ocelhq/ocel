@@ -288,6 +288,31 @@ func TestAnOriginBehindACachingEdgeIsToldToServeOnlyFreshPages(t *testing.T) {
 	}
 }
 
+func TestAnOriginBehindACachingEdgeIsToldItsReleaseAndItsCacheRules(t *testing.T) {
+	t.Parallel()
+
+	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
+	token := naming.NewReleaseToken("b1", "f1")
+	for kind, asks := range map[edge.Kind]bool{cloudfront.Kind: false, cloudflare.Kind: true} {
+		env := releasing(t, routedConfig(t, kind)).appEnv(provider.StackSpec{
+			Kind: provider.StackApp,
+			Ref:  provider.StackRef{Name: naming.AppStack("production", "web", token)},
+			Edge: fakeEdgeOf(kind),
+			App:  &provider.AppSpec{App: "web", Cache: rules},
+		}, appBundle{}, sessionScope{})
+
+		if env[edge.ReleaseTokenVar] != token.String() {
+			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
+		}
+		if want := edge.CacheRulesVariable(rules); env[edge.CacheRulesVar] != want {
+			t.Errorf("%s = %q behind %s, want %q", edge.CacheRulesVar, env[edge.CacheRulesVar], kind, want)
+		}
+		if _, asked := env[edge.EdgeAsksToCacheVar]; asked != asks {
+			t.Errorf("%s set = %v behind %s, want %v: only an edge that runs code asks for the responses it caches", edge.EdgeAsksToCacheVar, asked, kind, asks)
+		}
+	}
+}
+
 func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 	t.Parallel()
 

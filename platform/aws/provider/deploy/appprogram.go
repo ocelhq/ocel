@@ -361,12 +361,7 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
-		if facts.InvalidatesByCacheTag {
-			env[edge.CacheTagPurgeVar] = "1"
-		}
-		if facts.CachesResponses {
-			env[edge.OriginFreshOnlyVar] = "1"
-		}
+		maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String(), app.Cache))
 	}
 	if app.Proxied {
 		env[envStateTable] = r.cfg.StateTable

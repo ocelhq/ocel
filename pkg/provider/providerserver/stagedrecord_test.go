@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -369,17 +370,40 @@ func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordCarriesTheCacheRulesTheBuildStates(t *testing.T) {
+	builtProject(t)
+	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
+	declaresHosting(t, "web", buildoutput.Hosting{Cache: rules})
+	client, provider := deployServed(t)
+	stager := staging(t, provider)
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	staged := stager.records()
+	if len(staged) != 1 || !reflect.DeepEqual(staged[0].Cache, rules) {
+		t.Errorf("records %+v, want one carrying the cache rules the gateway reads to decide which paths to cache", staged)
+	}
+}
+
 func declaresPrerenders(t *testing.T, app string) {
+	t.Helper()
+	declaresHosting(t, app, buildoutput.Hosting{
+		ISR:   true,
+		Needs: map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Routes: []string{"/feed"}}},
+	})
+}
+
+func declaresHosting(t *testing.T, app string, hosting buildoutput.Hosting) {
 	t.Helper()
 	dir := buildoutput.AppRoot(workingOutputRoot(t), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(buildoutput.Hosting{
-		Version: buildoutput.HostingVersion,
-		ISR:     true,
-		Needs:   map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Routes: []string{"/feed"}}},
-	})
+	hosting.Version = buildoutput.HostingVersion
+	raw, err := json.Marshal(hosting)
 	if err != nil {
 		t.Fatal(err)
 	}

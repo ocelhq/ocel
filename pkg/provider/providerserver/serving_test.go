@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,20 @@ func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T)
 			t.Error("Prerenders = true for a build that revalidates nothing, want false")
 		}
 	})
+}
+
+func TestAnAppServesTheCacheRulesItsBuildStates(t *testing.T) {
+	t.Parallel()
+
+	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
+	root := servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkSvelteKit, Cache: rules}, nil)
+	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkSvelteKit))
+	if err != nil {
+		t.Fatalf("AppServingFor() = %v", err)
+	}
+	if !reflect.DeepEqual(facts.Cache, rules) {
+		t.Errorf("Cache = %+v, want %+v", facts.Cache, rules)
+	}
 }
 
 func TestABuildThatDeclaresISRAsksForAnISRLedgerWhateverItsFramework(t *testing.T) {

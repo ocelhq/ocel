@@ -1,15 +1,10 @@
 package gcp
 
-import "github.com/ocelhq/ocel/pkg/edge"
+import (
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
+)
 
-func newCachingEdgeEnv(front edge.Edge) map[string]string {
-	facts := factsOf(front)
-	env := map[string]string{}
-	if facts.InvalidatesByCacheTag {
-		env[edge.CacheTagPurgeVar] = "1"
-	}
-	if facts.CachesResponses {
-		env[edge.OriginFreshOnlyVar] = "1"
-	}
-	return env
+func newCachingEdgeEnv(spec provider.StackSpec) map[string]string {
+	return edge.NewCachingOriginEnv(factsOf(spec.Edge), spec.Ref.Name.Release.String(), spec.App.Cache)
 }

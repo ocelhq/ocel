@@ -98,6 +98,7 @@ type AppSpec struct {
 
 	AssetPrefix string
 	Static      *edge.Static
+	Cache       []edge.CacheRule
 
 	VendorState any
 

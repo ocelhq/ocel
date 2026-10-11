@@ -1206,6 +1206,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
 					Static:                    facts.Static,
+					Cache:                     facts.Cache,
 					Guard:                     facts.Guard,
 					PreviewGate:               r.appPreviewGate(),
 					VendorState:               pack.VendorState,
@@ -1585,6 +1586,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 	record := router.ReleaseRecord{
 		RouteTable:           routeTable,
 		Static:               facts.Static,
+		Cache:                facts.Cache,
 		App:                  entry.App,
 		Framework:            entry.Manifest.GetFramework().GetName(),
 		Release:              r.spec.Releases[entry.App],
