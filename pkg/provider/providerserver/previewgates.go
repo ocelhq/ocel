@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -48,4 +49,21 @@ func readPreviewGate(ctx context.Context, p provider.Provider, slug string) (*ed
 		return nil, nil
 	}
 	return &gate, nil
+}
+
+func (r *deployRun) readProjectPreviewGate(ctx context.Context) error {
+	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	gate, err := readPreviewGate(ctx, r.provider, r.spec.Slug)
+	if err != nil {
+		return err
+	}
+	if gate != nil && !r.front.Facts().GatesPreviews {
+		return refusal.Refuse(refusal.CodeUnsupported,
+			"%s has a preview gate recorded, and the %s edge does not run the preview gate yet, so it would serve this preview to anyone: deploy the preview through an edge that gates previews",
+			r.spec.Slug, r.front.Kind())
+	}
+	r.previewGate = gate
+	return nil
 }

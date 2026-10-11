@@ -68,6 +68,7 @@ type Facts struct {
 	OriginFacingRanges    []string
 	InvalidatesByCacheTag bool
 	CachesResponses       bool
+	GatesPreviews         bool
 	CredentialScope       string
 }
 

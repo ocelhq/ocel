@@ -122,6 +122,7 @@ func (p *cloudFront) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
+		GatesPreviews:         true,
 	}
 }
 

@@ -3,9 +3,11 @@ package providerserver_test
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -203,5 +205,41 @@ func TestAPreviewDeployOnAnEdgeThatRunsCodeLeavesTheGateToItsProgram(t *testing.
 
 	if got := onlyStack(t, vendor).PreviewGate; got != nil {
 		t.Errorf("PreviewGate = %+v, want none: the worker secret carries the gate", got)
+	}
+}
+
+func directPreviewServed(t *testing.T, gates map[string]edge.PreviewGate) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
+	t.Helper()
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindDirect).GatesPreviews(false)
+	seedPreviewGates(t, vendor, gates)
+	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	return client, vendor, req
+}
+
+func TestAPreviewDeployWithARecordedGateIsRefusedOnAnEdgeThatCannotGateIt(t *testing.T) {
+	client, vendor, req := directPreviewServed(t, recordedGates)
+
+	result, _ := deploy(t, client, req)
+
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused: the edge would serve the gated preview to anyone")
+	}
+	if got := result.GetError(); !strings.Contains(got, "preview gate") || !strings.Contains(got, string(fake.KindDirect)) {
+		t.Errorf("Deploy() error = %q, want it to name the preview gate and the %s edge", got, fake.KindDirect)
+	}
+	if stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect).Stacks(); len(stacks) != 0 {
+		t.Errorf("the edge reconciled %d stacks, want none: the refusal comes before anything serves the preview", len(stacks))
+	}
+}
+
+func TestAPreviewDeployWithNoRecordedGateGoesAheadOnAnEdgeThatCannotGate(t *testing.T) {
+	client, _, req := directPreviewServed(t, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: no gate is recorded for shop", result.GetError())
 	}
 }
