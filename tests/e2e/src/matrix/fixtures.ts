@@ -37,6 +37,7 @@ import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
 import {
   alb,
+  albInFrontOfNext,
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
@@ -137,9 +138,9 @@ export const deploy = {
       dev: [defaults],
       aws: [defaults, container, cloudflare, cloudfrontShielded],
       vps: [defaults],
-      gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
+      gcp: [defaults, container, albInFrontOfNext, cloudflareOnGoogleCloud],
     },
-    previews: { gcp: [defaults, alb] },
+    previews: { gcp: [defaults, albInFrontOfNext] },
     configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   sveltekit: fixture("deploy/sveltekit", {

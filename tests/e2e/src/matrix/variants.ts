@@ -1,3 +1,4 @@
+import { backendBucketChecks } from "../checks/backendBucket";
 import { cloudfrontShieldChecks } from "../checks/cloudfrontShield";
 import {
   CLIENT_CERTIFICATE_CHECKS,
@@ -62,6 +63,12 @@ export const cloudflareOnGoogleCloud = variant("cloudflare", {
 });
 
 export const alb = variant("alb", { offeredOn: ["gcp"], config: { edge: "alb" } });
+
+export const albInFrontOfNext = variant("alb", {
+  offeredOn: ["gcp"],
+  config: { edge: "alb" },
+  checks: backendBucketChecks,
+});
 
 export const registry = variant("registry", {
   offeredOn: ["vps"],
