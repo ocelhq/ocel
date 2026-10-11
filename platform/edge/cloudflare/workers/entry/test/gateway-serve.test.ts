@@ -209,13 +209,14 @@ describe("the gateway serving a prerender", () => {
     expect(await response.text()).toBe("cached page");
   });
 
-  it("never stores a prerender on the shared preview entry, which has no purge channel", async () => {
+  it("serves a preview's prerender through Serve, keyed by the preview host and its release token", async () => {
     const { origin, ctx } = ctxServing();
     const wire = capturing();
+    const host = "pr-12-web-abcdefghijklmnopp3347l26.myapp.com";
 
     const response = await withGlobalFetch(wire.fetch, () =>
       worker.fetch(
-        new Request("https://pr-12-web-abcdefghijklmnopp3347l26.myapp.com/blog"),
+        new Request(`https://${host}/blog`),
         {
           ...prerenderEnv,
           OCEL_PREVIEW: "1",
@@ -226,10 +227,17 @@ describe("the gateway serving a prerender", () => {
       ),
     );
 
-    expect(origin).toEqual([]);
-    expect(wire.calls.map((call) => new URL(call.url).host)).toEqual([
-      "abc.lambda-url.eu-west-2.on.aws",
+    expect(origin).toEqual([
+      {
+        kind: "origin",
+        host,
+        app: "web",
+        release: "r0a1b2c3d",
+        origin: "https://abc.lambda-url.eu-west-2.on.aws",
+      },
     ]);
-    expect(await response.text()).toBe("origin");
+    expect(wire.calls).toHaveLength(0);
+    expect(response.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await response.text()).toBe("cached page");
   });
 });

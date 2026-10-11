@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -14,6 +15,16 @@ import (
 )
 
 const previewEntryScript = "ocel-preview-entry"
+
+const purgeProjectParam = "project"
+
+func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID, slug string) (string, error) {
+	workersDev, err := p.subdomainURL(ctx, accountID, previewEntryScript)
+	if err != nil {
+		return "", fmt.Errorf("read the shared preview entry worker's subdomain: %w", err)
+	}
+	return workersDev + purgePath + "?" + url.Values{purgeProjectParam: {slug}}.Encode(), nil
+}
 
 func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	accountID, err := requireAccountID("reconcile the shared preview entry worker")
@@ -42,7 +53,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err := p.reconcileWorkerRoutes(ctx, up, routeSpec{desired: []string{wildcard}}, spec.Warn); err != nil {
 		return "", err
 	}
-	if _, err := p.setSubdomain(ctx, up, false); err != nil {
+	if _, err := p.setSubdomain(ctx, up, true); err != nil {
 		return "", fmt.Errorf("set shared preview entry worker subdomain: %w", err)
 	}
 	return "", nil

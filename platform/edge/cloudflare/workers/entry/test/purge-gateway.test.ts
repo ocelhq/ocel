@@ -30,8 +30,12 @@ async function sign(body: string): Promise<string> {
 }
 
 async function purgeRequest(base: string, body: unknown = raise): Promise<Request> {
+  return purgeRequestTo(`${base}${purgePath}`, body);
+}
+
+async function purgeRequestTo(url: string, body: unknown = raise): Promise<Request> {
   const text = JSON.stringify(body);
-  return new Request(`${base}${purgePath}`, {
+  return new Request(url, {
     method: "POST",
     headers: { [purgeSignatureHeader]: await sign(text) },
     body: text,
@@ -166,6 +170,52 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("the shared preview entry answering a purge on its workers.dev host", () => {
+  const SHARED = "https://ocel-preview-entry.acct.workers.dev";
+  const sharedEnv = () =>
+    envWith({ OCEL_SLUG: undefined, OCEL_PREVIEW: "1", OCEL_PREVIEW_GLOBAL: "1" });
+
+  it("looks the release up under the project its purge URL names, and queues the raise", async () => {
+    const response = await worker.fetch(
+      await purgeRequestTo(`${SHARED}${purgePath}?project=p1`),
+      sharedEnv(),
+      contextWithQueue(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
+    expect(raised).toEqual([
+      {
+        name: "purge",
+        mode: "purge",
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
+      },
+    ]);
+  });
+
+  it("answers 404 to a purge whose URL names no project", async () => {
+    const response = await worker.fetch(
+      await purgeRequest(SHARED),
+      sharedEnv(),
+      contextWithQueue(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(servedReads).toEqual([]);
+  });
+
+  it("is never steered to another project on a worker that serves one", async () => {
+    const response = await worker.fetch(
+      await purgeRequestTo(`${WORKERS_DEV}${purgePath}?project=other`),
+      envWith(),
+      contextWithQueue(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
   });
 });
 

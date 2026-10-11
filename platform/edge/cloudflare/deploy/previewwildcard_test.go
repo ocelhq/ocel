@@ -136,6 +136,18 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		}
 	})
 
+	t.Run("the shared worker answers purges on workers.dev, where each project's origin sends them", func(t *testing.T) {
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
+
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+
+		if !m.subdomainOn[previewEntryScript] {
+			t.Errorf("workers.dev subdomain of %s = off, want on: a preview's cached prerenders are purged through it", previewEntryScript)
+		}
+	})
+
 	t.Run("a spec without a base domain is an error", func(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
 		spec := previewWildcardSpec()

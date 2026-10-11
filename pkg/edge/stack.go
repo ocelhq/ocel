@@ -30,6 +30,7 @@ type StackSpec struct {
 
 	ServedElsewhere []string
 	Values          map[string]string
+	GlobalPreview   string
 	PruneOnly       bool
 	PruneRoutes     bool
 	Warn            func(string)
