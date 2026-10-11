@@ -14,6 +14,7 @@
     "./undecoded-fetch": "./src/undecoded-fetch.mts",
     "./host": "./src/host.mts",
     "./live-values": "./src/live-values.mts",
+    "./preview-gate": "./src/preview-gate.mts",
     "./serve": "./src/serve.mts",
     "./user-app": "./src/user-app.mts"
   },
@@ -21,6 +22,9 @@
     "build": "bun scripts/bundle-serve.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",
