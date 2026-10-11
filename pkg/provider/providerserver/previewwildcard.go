@@ -235,7 +235,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 		if err != nil {
 			return "", err
 		}
-		spec.Program, spec.Values = program.Spec, program.Values
+		spec.Program = program.Spec
 	}
 	published, err := front.ReconcilePreviewWildcard(ctx, spec)
 	if err != nil {

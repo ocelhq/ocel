@@ -61,7 +61,7 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 	return nil
 }
 
-func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
+func TestTheEdgeShapesItsPlanStoreAndEntry(t *testing.T) {
 	t.Parallel()
 
 	set := shapedSet(t, environment.TierProduction)
@@ -72,8 +72,8 @@ func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
 			t.Errorf("%s is %s", r.GetId(), r.GetVendor())
 		}
 	}
-	if counts[cost.TypeAccountSubscription] != 1 || counts[cost.TypeR2Bucket] != 1 || counts[cost.TypeWorkersScript] != 3 {
-		t.Errorf("counts = %v, want the plan, the cache bucket, and the store, writer and entry workers", counts)
+	if counts[cost.TypeAccountSubscription] != 1 || counts[cost.TypeWorkersScript] != 2 || len(counts) != 2 {
+		t.Errorf("counts = %v, want the plan and the store and entry workers, and no bucket", counts)
 	}
 	preview := shapedSet(t, environment.TierPreview)
 	if n := len(preview.GetResources()); n != len(set.GetResources())+1 {
@@ -146,9 +146,6 @@ func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 	if requests.GetMonthlyCost() != "3.00" || requests.GetMonthlyQuantity() != "10000000" {
 		t.Errorf("entry's 10M requests = %v, want 3.00: the shared workers spent the plan's included 10M first", requests)
 	}
-	if got := estimateOfType(t, est, set, cost.TypeR2Bucket, "shared:production").GetMonthlyUsage(); got != "1.35" {
-		t.Errorf("r2 at 100 GB = %s, want 1.35 (90 GB past the 10 included at 0.015)", got)
-	}
 }
 
 func TestTheIncludedRequestsAreSpentOnceAcrossEveryWorker(t *testing.T) {
@@ -171,7 +168,7 @@ func TestTheIncludedRequestsAreSpentOnceAcrossEveryWorker(t *testing.T) {
 			}
 		}
 	}
-	if billed != 2 || total.String() != "6" {
-		t.Errorf("three workers at 10M requests each billed %d workers for %s; want the plan's 10M spent once, then 20M at 0.30 a million", billed, total)
+	if billed != 1 || total.String() != "3" {
+		t.Errorf("two workers at 10M requests each billed %d workers for %s; want the plan's 10M spent once, then 10M at 0.30 a million", billed, total)
 	}
 }

@@ -15,34 +15,21 @@ const KindCloudflare = "cloudflare"
 
 var cloudflareEdgeFeature = feature{
 	name:       FeatureCloudflareEdge,
-	summary:    "Cloudflare as the front — workers, credential, snapshot publisher",
+	summary:    "Cloudflare as the front — workers and the credential it reads the asset bucket with",
 	dependsOn:  []string{FeatureISR},
 	edges:      []edge.Kind{KindCloudflare},
 	template:   cloudflareEdgeTemplate,
-	payloads:   cloudflareEdgePayloads,
-	placements: cloudflareEdgePlacements,
+	payloads:   noPayloads,
+	placements: noPlacements,
 	after:      mintEdgeCredentials,
 	afterPlan:  plannedEdgeCredentials,
 	drop:       severCloudflareEdge,
 	dropPlan:   plannedCloudflareSever,
 }
 
-func cloudflareEdgePayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
-	var code stackPayloads
-	var err error
-	code.publisher, err = ensureTagPublisherPayload(ctx, store, bucket)
-	return code, err
-}
-
-func cloudflareEdgePlacements(bucket string) stackPayloads {
-	return stackPayloads{publisher: tagPublisherPlacement(bucket)}
-}
-
-func cloudflareEdgeTemplate(in featureInputs) featureStack {
+func cloudflareEdgeTemplate(in featureInputs) (featureStack, error) {
 	specs := []crossStackParam{
-		{paramAssetBucketName, "The core bootstrap's asset bucket, where the tag publisher seeds each build's tag snapshot.", in.refs.assetBucket},
-		{paramAssetBucketARN, "ARN of that bucket, so the tag publisher's role is scoped to it.", in.refs.assetBucketARN},
-		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the tag publisher has.", in.refs.stateTableStreamARN},
+		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the edge reader is scoped to the objects in it the deploy tagged edge-readable.", in.refs.assetBucketARN},
 	}
 	optimizer := in.alongside.Has(FeatureImageOptimization)
 	if optimizer {
@@ -50,17 +37,19 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	}
 	params, values := crossStack(specs)
 
-	userName, _ := in.ns.EdgeUserNameFor(in.tier)
+	userName, err := in.ns.EdgeUserNameFor(in.tier)
+	if err != nil {
+		return featureStack{}, err
+	}
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone, and the publisher that sends each build's tag snapshot out to the edge's ISR writer."
+Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone."
 %sResources:
-%s%s`,
+%s`,
 			FeatureCloudflareEdge, in.tier, params,
-			edgeUserResource(in.ns, userName, in.tier, optimizer),
-			tagPublisherResources(in.ns, in.code.publisher, in.tier)),
-	}
+			edgeUserResource(in.ns, userName, in.tier, optimizer)),
+	}, nil
 }
 
 func edgeUserResource(ns Namespace, userName string, tier environment.Tier, optimizer bool) string {

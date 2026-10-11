@@ -26,13 +26,6 @@ func appAssetPrefix(c naming.Coordinate) string {
 	return c.AssetKey("")
 }
 
-func assetPlaneTargets(cfg Config) []uploadTarget {
-	return []uploadTarget{
-		{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier},
-		{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: true},
-	}
-}
-
 type assetUpload struct {
 	key, src string
 	to       []uploadTarget
@@ -44,12 +37,12 @@ func staticAssetSet(cfg Config, app string, static *edge.Static, coord naming.Co
 	if static == nil {
 		return nil, nil
 	}
-	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
+	if !edgeReadsAssetBucket(cfg) {
 		return nil, nil
 	}
 
 	assetBucket := uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}
-	plane := assetPlaneTargets(cfg)
+	plane := []uploadTarget{{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: true}}
 	var uploads []assetUpload
 	manifest := newSetManifest()
 	root := appArtifactRoot(cfg.ArtifactRoot, app)

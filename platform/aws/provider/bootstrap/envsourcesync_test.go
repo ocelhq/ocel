@@ -107,7 +107,7 @@ func variablesKeyStackCases() []variablesKeyStackCase {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		cases = append(cases,
 			variablesKeyStackCase{"made/" + string(tier), tier, featureTemplate(provider.FeatureVariablesKey, tier), "VariablesKey.Arn"},
-			variablesKeyStackCase{"brought/" + string(tier), tier, variablesKeyFeature.template(featureInputs{
+			variablesKeyStackCase{"brought/" + string(tier), tier, renderedTemplate(variablesKeyFeature, featureInputs{
 				ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), variablesKey: broughtKeyARN,
 			}).body, broughtKeyARN},
 		)
@@ -218,7 +218,7 @@ func TestNoTwoVariablesKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
 	seen := map[string]string{}
 	for _, ns := range []Namespace{defaultNamespace, Namespace("j-1-deploy-next"), Namespace("j-2-deploy-next")} {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			body := variablesKeyFeature.template(featureInputs{
+			body := renderedTemplate(variablesKeyFeature, featureInputs{
 				ns: ns, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), variablesKey: broughtKeyARN,
 			}).body
 			name := parseEnvSourceSyncTemplate(t, body).Resources["EnvSourceSyncSchedule"].Properties.Name

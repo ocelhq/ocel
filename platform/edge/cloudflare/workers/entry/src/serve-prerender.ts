@@ -66,7 +66,7 @@ export function servePrerender(deps: ServePrerenderDeps): Prerenderer {
   return (context) => prerender(context, deps);
 }
 
-function readTier(response: Response): CacheStatus {
+export function readTier(response: Response): CacheStatus {
   switch (response.headers.get("cf-cache-status")?.toUpperCase()) {
     case "HIT":
     case "REVALIDATED":

@@ -305,87 +305,28 @@ test("a GCP host told a url map but no release refuses to start", () => {
   ).toThrow(/OCEL_CDN_URL_MAP/);
 });
 
-const writerEnv = {
-  PORT: "8080",
-  OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
-  OCEL_ISR_BUCKET: "b",
-  OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
-  OCEL_STORAGE_ENDPOINT: "http://storage.test",
-  OCEL_ISR_WRITER_URL: "https://writer.example",
-  OCEL_PURGE_SECRET: "s",
-};
-
-function stubFetch(answer: (url: URL, init: RequestInit | undefined) => Response) {
-  const calls: { url: URL; init: RequestInit | undefined }[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
-      calls.push({ url, init });
-      return answer(url, init);
-    }),
-  );
-  return calls;
-}
-
-test("the GCP host keeps pages and tags in the edge's store when its service is told an isr-writer", async () => {
-  const calls = stubFetch((url) =>
-    url.hostname === "writer.example" && url.pathname.endsWith("/tags")
-      ? new Response(null, { status: 204 })
-      : url.hostname === "writer.example"
-        ? new Response(null, { status: 204 })
-        : new Response(JSON.stringify({ generation: "1" }), {
-            headers: { "content-type": "application/json" },
-          }),
-  );
-  try {
-    const host = newGcpNextHost(writerEnv);
-    const store = await host.newCacheStore!();
-    const entry = { lastModified: 1, value: { kind: "FETCH", data: {} } };
-
-    await store.writeEntry("blog", entry);
-    await store.writeFetch("abc", entry);
-    await store.writeTags(["a", "b"], { stale: 5 });
-
-    const writer = calls.filter((call) => call.url.hostname === "writer.example");
-    const page = writer.find((call) => call.url.pathname.endsWith("/entry"))!;
-    expect(page.init?.method).toBe("PUT");
-    expect(page.url.href).toBe("https://writer.example/prod/shop/web/r1/isr/entry?key=blog");
-    expect(new Headers(page.init?.headers).get("authorization")).toBe("Bearer s");
-    const tags = writer.filter((call) => call.url.pathname.endsWith("/tags"));
-    expect(tags).toHaveLength(1);
-    expect(JSON.parse(String(tags[0]!.init?.body))).toEqual({
-      records: { a: { stale: 5 }, b: { stale: 5 } },
-    });
-    const storage = calls.filter((call) => call.url.hostname === "storage.test");
-    expect(storage).toHaveLength(1);
-    expect(storage[0]!.url.searchParams.get("name")).toBe(
-      "cache/shop/web/prod/r1/isr/fetch-cache/abc.cache.json",
-    );
-  } finally {
-    vi.unstubAllGlobals();
-  }
-});
-
-test("the GCP host told where the worker purges clears each tag it records at the worker, signed with the writer's secret", async () => {
-  const calls = stubFetch((url) =>
-    url.hostname === "shop.acct.workers.dev"
-      ? new Response(null, { status: 202 })
-      : new Response(null, { status: 204 }),
-  );
+test("the GCP host told where the worker purges clears each tag it records at the worker, signed with the secret its service is told", async () => {
+  const fetched: { url: URL; init: RequestInit | undefined }[] = [];
+  const { server, origin } = await listen(() => {});
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+    if (url.hostname !== "shop.acct.workers.dev") return realFetch(input, init);
+    fetched.push({ url, init });
+    return new Response(null, { status: 202 });
+  });
   try {
     const host = newGcpNextHost({
-      ...writerEnv,
-      OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
-      OCEL_CACHE_TAG_PURGE: "1",
+      ...purgeEnv,
+      OCEL_FIRESTORE_ENDPOINT: origin,
+      OCEL_PURGE_SECRET: "s",
       OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
     });
     const store = await host.newCacheStore!();
 
     await store.writeTags(["a", "b"], { expired: 5 });
 
-    const purges = calls.filter((call) => call.url.hostname === "shop.acct.workers.dev");
-    const bodies = purges.map((call) => JSON.parse(String(call.init?.body)));
+    const bodies = fetched.map((call) => JSON.parse(String(call.init?.body)));
     expect(
       bodies.every(
         (body) => body.isrPrefix === "prod/shop/web/r1a2b3c4d/isr" && body.mode === "purge",
@@ -394,35 +335,57 @@ test("the GCP host told where the worker purges clears each tag it records at th
     expect(
       bodies.flatMap((body) => body.tags.map((tag: { tag: string }) => tag.tag)).sort(),
     ).toEqual(["a", "b"]);
-    const writes = calls.findIndex((call) => call.url.pathname.endsWith("/tags"));
-    const firstPurge = calls.findIndex((call) => call.url.hostname === "shop.acct.workers.dev");
-    expect(writes).toBeGreaterThanOrEqual(0);
-    expect(firstPurge).toBeGreaterThan(writes);
   } finally {
     vi.unstubAllGlobals();
+    server.close();
   }
 });
 
 test("the GCP host told where the worker purges and no release refuses to start", () => {
   expect(() =>
-    newGcpNextHost({ ...writerEnv, OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge" }),
+    newGcpNextHost({
+      ...tagEnv,
+      OCEL_PURGE_SECRET: "s",
+      OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
+    }),
   ).toThrow(/OCEL_PURGE_URL/);
 });
 
-test("the GCP host refuses an isr-writer url without its secret", () => {
-  const { OCEL_PURGE_SECRET: _, ...env } = writerEnv;
-
-  expect(() => newGcpNextHost(env)).toThrow(/OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET/);
-  expect(() => newGcpNextHost(env)).not.toThrow(/bootstrap production/);
-  expect(() => newGcpNextHost({ ...env, OCEL_PURGE_SECRET: "s", OCEL_ISR_WRITER_URL: "" })).toThrow(
-    /OCEL_ISR_WRITER_URL and OCEL_PURGE_SECRET/,
-  );
+test("the GCP host told where the worker purges and no secret to sign with refuses to start", () => {
+  expect(() =>
+    newGcpNextHost({
+      ...purgeEnv,
+      OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
+    }),
+  ).toThrow(/OCEL_PURGE_SECRET/);
 });
 
-test("the GCP host refuses an isr-writer beside a tags database", () => {
-  expect(() =>
-    newGcpNextHost({ ...writerEnv, OCEL_TAG_DATABASE: "projects/p/databases/d" }),
-  ).toThrow(/OCEL_TAG_DATABASE/);
+test("the GCP host keeps pages in Cloud Storage and tags in the tags database, whoever fronts it", async () => {
+  const calls: URL[] = [];
+  const { server, origin } = await listen((req) => {
+    calls.push(new URL(req.url!, "http://x"));
+  });
+  try {
+    const host = newGcpNextHost({
+      ...tagEnv,
+      OCEL_FIRESTORE_ENDPOINT: origin,
+      OCEL_STORAGE_ENDPOINT: origin,
+    });
+    const store = await host.newCacheStore!();
+
+    await store.writeEntry("blog", { lastModified: 1, value: { kind: "FETCH", data: {} } });
+    await store.writeTags(["a"], { expired: 5 });
+
+    expect(calls.map((url) => url.pathname)).toEqual([
+      "/upload/storage/v1/b/b/o",
+      "/v1/projects/p/databases/d/documents:commit",
+    ]);
+    expect(calls[0]!.searchParams.get("name")).toBe(
+      "cache/shop/web/prod/r1/isr/cache/blog.cache.json",
+    );
+  } finally {
+    server.close();
+  }
 });
 
 test("the GCP host's origin invoke answers the optimizer's image path and leaves every other request to Next", async () => {

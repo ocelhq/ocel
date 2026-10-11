@@ -48,7 +48,7 @@ func TestTemplateDigest(t *testing.T) {
 		in := featureInputs{ns: defaultNamespace, tier: environment.TierProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
 		other := in
 		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
-		if cfn.TemplateDigest(imageOptimizationTemplate(in).body) != cfn.TemplateDigest(imageOptimizationTemplate(other).body) {
+		if cfn.TemplateDigest(renderedTemplate(imageOptimizationFeature, in).body) != cfn.TemplateDigest(renderedTemplate(imageOptimizationFeature, other).body) {
 			t.Fatal("the digest must not move when only a cross-stack parameter value moves")
 		}
 	})

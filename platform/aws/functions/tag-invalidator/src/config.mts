@@ -16,6 +16,6 @@ export function config(env: NodeJS.ProcessEnv): Config {
   return {
     table: required(env, "OCEL_STATE_TABLE"),
     bootstrapTier: required(env, "OCEL_INFRA_TIER"),
-    seedParam: env.OCEL_ISR_WRITER_SEED_PARAM || undefined,
+    seedParam: env.OCEL_PURGE_SEED_PARAM || undefined,
   };
 }

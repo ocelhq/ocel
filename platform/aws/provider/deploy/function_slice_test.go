@@ -906,37 +906,14 @@ func TestTagNamespace(t *testing.T) {
 }
 
 func TestISRCacheStore(t *testing.T) {
-	t.Run("names the adopted bucket from the edge contract", func(t *testing.T) {
-		body := nextCacheFixture(t, "edge-contract.json")
-		var contract struct {
-			CacheStoreEnv struct {
-				Bucket string `json:"bucket"`
-			} `json:"cacheStoreEnv"`
-		}
-		if err := json.Unmarshal(body, &contract); err != nil {
-			t.Fatalf("parse fixture: %v", err)
-		}
-
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		cfg.CacheStoreBucket = "ocel-edge-cache"
-
-		if got := cfg.env()[contract.CacheStoreEnv.Bucket]; got != "ocel-edge-cache" {
-			t.Errorf("%s = %q, want the adopted bucket", contract.CacheStoreEnv.Bucket, got)
-		}
-	})
-
 	t.Run("leaves no long-lived credential on the function", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		cfg.CacheStoreBucket = "ocel-edge-cache"
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg, nil)
 		for name, value := range env {
 			if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
 				t.Errorf("env contains %s = %q", name, value)
 			}
-		}
-		if _, ok := env["OCEL_CACHE_STORE_PARAM"]; ok {
-			t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named stored the R2 keys")
 		}
 
 		raw, err := isrPolicy(cfg)

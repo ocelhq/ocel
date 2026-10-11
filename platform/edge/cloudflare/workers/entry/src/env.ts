@@ -1,14 +1,5 @@
 import type { ReleasesBinding } from "./releases";
 
-export interface IsrWriterBinding {
-  fetch(request: Request): Promise<Response>;
-}
-
-export interface CacheEntrypointProps {
-  purgeSecret?: string;
-  scope?: string;
-}
-
 export interface Env {
   RELEASES: ReleasesBinding;
   OCEL_SLUG: string;
@@ -21,8 +12,6 @@ export interface Env {
   OCEL_PREVIEW_KEY?: string;
   OCEL_PREVIEW_GATE?: string;
   OCEL_PREVIEW_GATES?: string;
-  OCEL_CACHE_STORE?: R2Bucket;
-  ISR_WRITER?: IsrWriterBinding;
   OCEL_ASSET_BUCKET?: string;
   OCEL_AWS_REGION?: string;
   OCEL_EDGE_ACCESS_KEY_ID?: string;

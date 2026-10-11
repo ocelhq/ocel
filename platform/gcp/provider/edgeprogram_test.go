@@ -40,7 +40,7 @@ func entryRequest(tier environment.Tier, slug string) provider.EdgeProgramReques
 func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWSKeys(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1", "c2"), map[string]string{"cacheBucket": "b"}); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 	h.keyAssets(t, environment.TierProduction)
@@ -57,15 +57,12 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 		StoreScriptName:          "ocel-releases-store",
 		StoreEndpoint:            "https://s.example.workers.dev",
 		StoreBootstrapCredential: "c1",
-		ISRWriterScriptName:      "ocel-isr-writer",
-		Values:                   map[string]string{"cacheBucket": "b"},
 	}.Build()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if program.Spec.Name != want.Spec.Name || program.Spec.StoreScriptName != "ocel-releases-store" ||
-		program.Spec.StoreEndpoint != "https://s.example.workers.dev" || program.Spec.BootstrapCredential != "c1" ||
-		program.Spec.ISRWriterScriptName != "ocel-isr-writer" {
+		program.Spec.StoreEndpoint != "https://s.example.workers.dev" || program.Spec.BootstrapCredential != "c1" {
 		t.Errorf("program = %+v, want %+v", program.Spec, want.Spec)
 	}
 	if got := program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding]; got != "m1" {
@@ -77,15 +74,12 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	if _, keyed := program.Spec.Worker.Secrets[edge.EdgeSecretKeyVar]; keyed {
 		t.Error("the worker holds an AWS secret key")
 	}
-	if program.Values["cacheBucket"] != "b" {
-		t.Errorf("values = %v, want the adopted values", program.Values)
-	}
 }
 
 func TestTheSharedPreviewEntryProgramReadsEveryReleaseRecordThroughTheAdoptedStore(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 	h.keyAssets(t, environment.TierPreview)
@@ -110,7 +104,7 @@ func TestProgrammingAnEntryWorkerBeforeBootstrapIsNotReady(t *testing.T) {
 func TestProgrammingAnEntryWorkerWithoutAnAdoptedClientCertificateIsNotReady(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt([]edge.Offer{storeOffer("c1"), writerOffer("c2")}, nil); err != nil {
+	if err := h.adopt([]edge.Offer{storeOffer("c1")}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
@@ -129,10 +123,10 @@ func TestTheProviderHandsTheEntryWorkerProgramToItsHooks(t *testing.T) {
 func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 	h.keyAssets(t, environment.TierProduction)
@@ -152,7 +146,7 @@ func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.
 func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 	h.keyAssets(t, environment.TierProduction)
@@ -186,7 +180,7 @@ func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t
 func TestProgrammingAnEntryWorkerWithoutAnAssetReaderKeyIsNotReady(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,7 +193,7 @@ func TestProgrammingAnEntryWorkerWithoutAnAssetReaderKeyIsNotReady(t *testing.T)
 func TestTheGCPEntryWorkerProgramProgramsTheEdgeAsEveryProviderMust(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
+	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 	h.keyAssets(t, environment.TierPreview)

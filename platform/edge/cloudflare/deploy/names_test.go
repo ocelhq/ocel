@@ -10,21 +10,7 @@ import (
 const (
 	sharedStoreScriptName  = "ocel-releases-store"
 	previewStoreScriptName = "ocel-releases-store-preview"
-
-	isrWriterScriptName        = "ocel-isr-writer"
-	previewISRWriterScriptName = "ocel-isr-writer-preview"
-
-	cacheStoreBucketName        = "ocel-edge-cache"
-	previewCacheStoreBucketName = "ocel-edge-cache-preview"
 )
-
-func cacheStoreName(tier environment.Tier) string {
-	name, err := cacheStoreNameFor("ocel", tier)
-	if err != nil {
-		panic(err)
-	}
-	return name
-}
 
 func TestAccountNames(t *testing.T) {
 	t.Parallel()
@@ -35,8 +21,6 @@ func TestAccountNames(t *testing.T) {
 		prod, preview string
 	}{
 		{"the releases store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
-		{"the isr writer", isrWriterScriptNameFor, isrWriterScriptName, previewISRWriterScriptName},
-		{"the edge cache store", cacheStoreNameFor, cacheStoreBucketName, previewCacheStoreBucketName},
 	}
 
 	for _, tc := range derivations {
@@ -104,12 +88,4 @@ func TestAccountNames(t *testing.T) {
 			})
 		})
 	}
-
-	t.Run("the isr writer and the releases store never share a name", func(t *testing.T) {
-		t.Parallel()
-
-		if isrWriterScriptName == sharedStoreScriptName || previewISRWriterScriptName == previewStoreScriptName {
-			t.Error("the isr-writer and releases-store scripts must be distinct")
-		}
-	})
 }

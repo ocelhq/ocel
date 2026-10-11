@@ -28,27 +28,27 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"DomainApps", "Domains", "GlobalPreview", "PreviewGate", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Values", "Version", "Warn",
+				"DomainApps", "Domains", "GlobalPreview", "PreviewGate", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Version", "Warn",
 			},
 		},
 		{
 			typ: reflect.TypeFor[edge.ProgramSpec](),
 			want: []string{
-				"BootstrapCredential", "ISRWriterScriptName", "Name", "PruneWorkerStem", "RequiredRecord",
+				"BootstrapCredential", "Name", "PruneWorkerStem", "RequiredRecord",
 				"StoreEndpoint", "StoreScriptName", "Worker",
 			},
 		},
 		{
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
-				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
+				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName",
 				"Observability", "PreviewGate", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
-				"StoreEndpoint", "StoreScriptName", "Values",
+				"StoreEndpoint", "StoreScriptName",
 			},
 		},
 		{
 			typ:  reflect.TypeFor[edge.Worker](),
-			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "ObjectStore", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[edge.WorkerModule](),
@@ -57,10 +57,6 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ:  reflect.TypeFor[edge.StaticAsset](),
 			want: []string{"Content", "Path"},
-		},
-		{
-			typ:  reflect.TypeFor[edge.ObjectStore](),
-			want: []string{"Binding", "Bucket"},
 		},
 	} {
 		t.Run(tc.typ.Name()+" is hashed field for field", func(t *testing.T) {

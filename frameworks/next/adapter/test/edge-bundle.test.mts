@@ -594,79 +594,90 @@ test("emits a shim that is a loadable module exporting a fetch handler", async (
   expect(typeof mod.default.fetch).toBe("function");
 });
 
-test("hands the cache binding to the chunks on a global, before they evaluate", async () => {
+test("installs no fetch cache of its own and binds no cache on the global", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);
 
   const { shim } = await readBundle(projectDir);
-  expect(shim).toContain(
-    "globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }",
+  expect(shim).not.toContain("@next/cache-handlers");
+  expect(shim).not.toContain("__OCEL_EDGE_CACHE");
+  expect(shim).not.toContain("OCEL_CACHE_RPC");
+});
+
+async function writeChunk(projectDir: string, key: string, body: string) {
+  await writeFile(join(projectDir, ".next/server/edge", key), body);
+}
+
+async function edgeDataCacheWarnings(args: unknown): Promise<string[]> {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await adapter.onBuildComplete!(args as never);
+    return warn.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes("data cache"));
+  } finally {
+    warn.mockRestore();
+  }
+}
+
+test("says nothing of the data cache for edge routes that set no fetch lifetime or tags", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  await writeChunk(
+    projectDir,
+    "chunks/page.js",
+    'fetch(u,{cache:"no-store"});init.next.revalidate;this.incrementalCache.revalidateTag(t)',
   );
-  expect(shim.indexOf("__OCEL_EDGE_CACHE")).toBeLessThan(shim.indexOf("await import"));
+
+  expect(await edgeDataCacheWarnings(args)).toEqual([]);
 });
 
-test("installs the edge cache handler as Next's fetch cache before any chunk evaluates", async () => {
+test("warns once, naming the edge routes, when one sets next.revalidate on a fetch", async () => {
   const { projectDir, args } = await synthEdgeProject();
-  await adapter.onBuildComplete!(args as never);
-  const { shim } = await readBundle(projectDir);
-  await import(`data:text/javascript,${encodeURIComponent(shim)}`);
+  await writeChunk(projectDir, "chunks/page.js", "await fetch(url,{next:{revalidate:60}})");
 
-  const installed = (globalThis as Record<symbol, any>)[Symbol.for("@next/cache-handlers")];
-  try {
-    const sets: unknown[][] = [];
-    (globalThis as any).__OCEL_EDGE_CACHE = {
-      scope: "prod/app/build",
-      rpc: { fetchSet: (...args: unknown[]) => void sets.push(args) },
-    };
-    const entry = { kind: "FETCH", data: { body: "x" }, revalidate: 60 };
-    await new installed.FetchCache().set("k", entry, { tags: ["t"] });
+  const lines = await edgeDataCacheWarnings(args);
 
-    expect(sets).toEqual([
-      [
-        "prod/app/build",
-        "k",
-        { lastModified: expect.any(Number), value: { ...entry, tags: ["t"] } },
-        ["t"],
-      ],
-    ]);
-    expect(shim.indexOf("@next/cache-handlers")).toBeLessThan(shim.indexOf("await import"));
-  } finally {
-    delete (globalThis as Record<symbol, unknown>)[Symbol.for("@next/cache-handlers")];
-    delete (globalThis as any).__OCEL_EDGE_CACHE;
-  }
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("/edge-page");
+  expect(lines[0]).not.toContain("/api/edge");
 });
 
-test("rebinds every request from the load-time env, never from a request's ctx", async () => {
+test("warns when an edge route tags a fetch", async () => {
   const { projectDir, args } = await synthEdgeProject();
-  await adapter.onBuildComplete!(args as never);
-  const { shim } = await readBundle(projectDir);
-  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
+  await writeChunk(projectDir, "chunks/route.js", 'fetch(url,{ next : { tags : ["posts"] } })');
 
-  const rpc = { fetchGet: () => null };
-  const env = { OCEL_CACHE_RPC: rpc, OCEL_CACHE_SCOPE: "prod/app/build" };
-  const seen: unknown[] = [];
-  try {
-    for (let i = 0; i < 2; i++) {
-      const ctx = {
-        props: { entryKey: "unknown" },
-        waitUntil: () => {},
-        exports: { perRequest: i },
-      };
-      await mod.default.fetch(new Request("https://x/"), env, ctx);
-      seen.push((globalThis as Record<string, any>).__OCEL_EDGE_CACHE);
-    }
-  } finally {
-    delete (globalThis as Record<string, unknown>).__OCEL_EDGE_CACHE;
-    delete process.env.OCEL_CACHE_RPC;
-    delete process.env.OCEL_CACHE_SCOPE;
-    for (const key of Object.keys(buildEnv)) delete process.env[key];
-    delete process.env.MIDDLEWARE_ONLY;
-  }
+  const lines = await edgeDataCacheWarnings(args);
 
-  for (const bound of seen) {
-    expect(bound).toEqual({ rpc, scope: "prod/app/build" });
-  }
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("/api/edge");
+});
+
+test("warns when an edge route revalidates a tag or a path", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  await writeChunk(projectDir, "chunks/page.js", '(0,n.revalidateTag)("posts")');
+  await writeChunk(
+    projectDir,
+    "chunks/route.js",
+    '(0,__TURBOPACK__imported__module__1__.revalidatePath)("/")',
+  );
+
+  const lines = await edgeDataCacheWarnings(args);
+
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("/edge-page");
+  expect(lines[0]).toContain("/api/edge");
+});
+
+test("charges a chunk several routes share to each of them", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  await writeChunk(projectDir, "chunks/shared.js", "fetch(u,{next:{revalidate:1}})");
+
+  const lines = await edgeDataCacheWarnings(args);
+
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("/edge-page");
+  expect(lines[0]).toContain("/api/edge");
 });
 
 test("warns that revalidate is inert for a prerender parented by an edge route", async () => {

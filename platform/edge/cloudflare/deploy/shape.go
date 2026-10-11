@@ -13,21 +13,11 @@ func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 	if err != nil {
 		return pricing.EdgeShape{}, err
 	}
-	writer, err := isrWriterScriptNameFor(namespace, site.Tier)
-	if err != nil {
-		return pricing.EdgeShape{}, err
-	}
-	cache, err := cacheStoreNameFor(namespace, site.Tier)
-	if err != nil {
-		return pricing.EdgeShape{}, err
-	}
 	shape := pricing.EdgeShape{
 		Vendor: cost.Vendor,
 		Shared: []pricing.Shaped{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
-			{Name: cache, Type: cost.TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
 			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(releasesStoreWorker)},
-			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
 		Environment: []pricing.Shaped{
 			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: describeEntryScript()},

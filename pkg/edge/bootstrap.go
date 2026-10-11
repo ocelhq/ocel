@@ -4,12 +4,10 @@ import "strings"
 
 type BootstrapOutput struct {
 	Trust  TrustBoundary
-	Values map[string]string
 	Offers []Offer
 }
 
 type Adoption struct {
-	Values map[string]string
 	Offers []OfferKind
 }
 
@@ -87,11 +85,7 @@ type Offer struct {
 
 type OfferKind string
 
-const OfferCacheStore OfferKind = "cache-store"
-
 const OfferReleasesStore OfferKind = "releases-store"
-
-const OfferISRWriter OfferKind = "isr-writer"
 
 const OfferWorkerClientCertificate OfferKind = "worker-client-certificate"
 
@@ -101,21 +95,7 @@ const (
 )
 
 const (
-	OfferKeyISRWriterEndpoint            = "endpoint"
-	OfferKeyISRWriterScriptName          = "scriptName"
-	OfferKeyISRWriterBootstrapCredential = "bootstrapCred"
-)
-
-const (
 	OfferKeyStoreEndpoint            = "endpoint"
 	OfferKeyStoreScriptName          = "scriptName"
 	OfferKeyStoreBootstrapCredential = "bootstrapCred"
-)
-
-const (
-	OfferKeyBucket          = "bucket"
-	OfferKeyEndpoint        = "endpoint"
-	OfferKeyRegion          = "region"
-	OfferKeyAccessKeyID     = "accessKeyId"
-	OfferKeySecretAccessKey = "secretAccessKey"
 )

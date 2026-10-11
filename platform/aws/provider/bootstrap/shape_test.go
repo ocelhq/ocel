@@ -59,7 +59,7 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 			t.Errorf("%s architectures = %v, want arm64", fn.Name, fn.Properties["architectures"])
 		}
 	}
-	want := map[string]float64{"EnvSourceSync": 128, "ImageOptimizer": 1769, "TagInvalidator": 512, "TagPublisher": 512}
+	want := map[string]float64{"EnvSourceSync": 128, "ImageOptimizer": 1769, "TagInvalidator": 512}
 	for name, mb := range want {
 		if memory[name] != mb {
 			t.Errorf("%s memory = %v, want %v", name, memory[name], mb)
@@ -72,8 +72,8 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 		t.Errorf("KMS keys = %d, want the variables key", got)
 	}
 	queues := shapedOf(shaped, "aws_sqs_queue")
-	if len(queues) != 2 {
-		t.Errorf("queues = %d, want one dead letter queue per invalidator and publisher", len(queues))
+	if len(queues) != 1 {
+		t.Errorf("queues = %d, want the invalidator's dead letter queue alone", len(queues))
 	}
 }
 

@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go/v4/r2"
-
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -53,10 +51,9 @@ func certificateName(expires time.Time) string {
 
 func mutualTLSEdge(t *testing.T, m *cfMock) *cloudflare {
 	t.Helper()
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+	seedBootstrapBundle(t, "export default {}")
 	p := m.provider(t)
 	p.workerClientCertificate = true
-	p.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} }
 	return p
 }
 
@@ -93,7 +90,7 @@ func authoritiesOf(t *testing.T, offer edge.Offer) []*x509.Certificate {
 }
 
 func TestABootstrapUploadsOneClientCertificateForItsWorkersAndOffersItsCA(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	p := mutualTLSEdge(t, m)
 
 	before := time.Now()
@@ -134,7 +131,7 @@ func TestABootstrapUploadsOneClientCertificateForItsWorkersAndOffersItsCA(t *tes
 }
 
 func TestABootstrapKeepsAClientCertificateFarFromExpiry(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 	id := m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 	p := mutualTLSEdge(t, m)
@@ -161,7 +158,7 @@ func TestABootstrapKeepsAClientCertificateFarFromExpiry(t *testing.T) {
 }
 
 func TestABootstrapUploadsANewClientCertificateBesideOneNearExpiryAndTrustsBoth(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	expires := time.Now().Add(100 * 24 * time.Hour)
 	old := m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 	p := mutualTLSEdge(t, m)
@@ -193,7 +190,7 @@ func TestABootstrapUploadsANewClientCertificateBesideOneNearExpiryAndTrustsBoth(
 }
 
 func TestABootstrapDeletesAnExpiredClientCertificateAndStopsOfferingItsCA(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	current := time.Now().Add(5 * 365 * 24 * time.Hour)
 	expired := time.Now().Add(-24 * time.Hour)
 	m.holdWorkerClientCertificate(t, certificateName(expired), expired)
@@ -221,7 +218,7 @@ func TestABootstrapDeletesAnExpiredClientCertificateAndStopsOfferingItsCA(t *tes
 }
 
 func TestABootstrapThatCannotDeleteAnExpiredClientCertificateStillSucceeds(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	m.refuseMTLSDelete = true
 	current := time.Now().Add(5 * 365 * 24 * time.Hour)
 	expired := time.Now().Add(-24 * time.Hour)
@@ -257,7 +254,7 @@ func TestABootstrapThatCannotDeleteAnExpiredClientCertificateStillSucceeds(t *te
 }
 
 func TestABootstrapRefusesAHeldClientCertificateWhoseCAItCannotRead(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 	m.mtlsCertificates = append(m.mtlsCertificates, map[string]any{
 		"id": "unreadable-1", "ca": false, "certificates": "", "name": certificateName(expires),
@@ -284,7 +281,7 @@ func TestABootstrapRefusesAHeldClientCertificateWhoseCAItCannotRead(t *testing.T
 }
 
 func TestTheProductionClientCertificateIgnoresThePreviewTiersCertificates(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 	m.holdWorkerClientCertificate(t, "ocel-origin-client-preview-"+expires.UTC().Format("20060102"), expires)
 	p := mutualTLSEdge(t, m)
@@ -303,7 +300,7 @@ func TestTheProductionClientCertificateIgnoresThePreviewTiersCertificates(t *tes
 }
 
 func TestTearingABootstrapDownDeletesItsWorkerClientCertificates(t *testing.T) {
-	m := bootstrapMock(t, true)
+	m := bootstrapMock(t)
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 	m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 	m.holdWorkerClientCertificate(t, certificateName(expires.Add(-48*time.Hour)), expires.Add(-48*time.Hour))
@@ -321,7 +318,7 @@ func TestTearingABootstrapDownDeletesItsWorkerClientCertificates(t *testing.T) {
 
 func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	t.Run("a tier with none creates one", func(t *testing.T) {
-		p := mutualTLSEdge(t, bootstrapMock(t, true))
+		p := mutualTLSEdge(t, bootstrapMock(t))
 		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("planBootstrap: %v", err)
@@ -333,7 +330,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	})
 
 	t.Run("a current one is kept", func(t *testing.T) {
-		m := bootstrapMock(t, true)
+		m := bootstrapMock(t)
 		expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 		m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 		changes, err := mutualTLSEdge(t, m).planBootstrap(t.Context(), environment.TierProduction)
@@ -347,7 +344,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	})
 
 	t.Run("one near expiry is updated by uploading beside it", func(t *testing.T) {
-		m := bootstrapMock(t, true)
+		m := bootstrapMock(t)
 		expires := time.Now().Add(100 * 24 * time.Hour)
 		m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 		p := mutualTLSEdge(t, m)
@@ -374,7 +371,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	})
 
 	t.Run("an expired one is deleted", func(t *testing.T) {
-		m := bootstrapMock(t, true)
+		m := bootstrapMock(t)
 		current := time.Now().Add(5 * 365 * 24 * time.Hour)
 		expired := time.Now().Add(-24 * time.Hour)
 		m.holdWorkerClientCertificate(t, certificateName(current), current)
@@ -390,7 +387,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	})
 
 	t.Run("a removal deletes every held certificate", func(t *testing.T) {
-		m := bootstrapMock(t, true)
+		m := bootstrapMock(t)
 		expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 		m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 		changes, err := mutualTLSEdge(t, m).planRemoveBootstrap(t.Context(), environment.TierProduction)
@@ -404,7 +401,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 	})
 
 	t.Run("the adoption lists the offer", func(t *testing.T) {
-		adoption, err := mutualTLSEdge(t, bootstrapMock(t, true)).adoption(t.Context(), environment.TierProduction)
+		adoption, err := mutualTLSEdge(t, bootstrapMock(t)).adoption(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("adoption: %v", err)
 		}
@@ -415,12 +412,11 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 }
 
 func TestAnEdgeNotOpenedForAMutualTLSOriginKeepsNoClientCertificate(t *testing.T) {
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-	m := bootstrapMock(t, true)
+	seedBootstrapBundle(t, "export default {}")
+	m := bootstrapMock(t)
 	expires := time.Now().Add(-24 * time.Hour)
 	m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 	p := m.provider(t)
-	p.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} }
 
 	out, err := p.Bootstrap(t.Context(), environment.TierProduction)
 	if err != nil {

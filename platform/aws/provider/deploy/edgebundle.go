@@ -44,7 +44,7 @@ func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
 }
 
 func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
-	return cfg.CacheStoreBucket != "" && cfg.CacheStoreObjects != nil && len(bundle.Ciphertext) > 0
+	return edgeReadsAssetBucket(cfg) && len(bundle.Ciphertext) > 0
 }
 
 type edgeDelivery struct {
@@ -54,7 +54,7 @@ type edgeDelivery struct {
 }
 
 func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, edgeDelivery, error) {
-	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
+	if !edgeReadsAssetBucket(cfg) {
 		return nil, edgeDelivery{}, nil
 	}
 	bundle, present, err := readEdgeBundle(cfg, app)

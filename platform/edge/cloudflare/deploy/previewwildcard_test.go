@@ -112,24 +112,16 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		}
 	})
 
-	t.Run("the cache bucket and the isr writer are bound", func(t *testing.T) {
+	t.Run("the code loader is bound, and no bucket is", func(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
-		spec := previewWildcardSpec()
-		spec.Values = map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"}
-		spec.Program.ISRWriterScriptName = "ocel-isr-writer-preview"
 
-		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
 		meta := uploadedMetadata(t, m, previewEntryScript)
-		buckets := bindingsByType(meta, "r2_bucket")
-		if len(buckets) != 1 || buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != "ocel-edge-cache-preview" {
-			t.Errorf("r2_bucket bindings = %v, want %s bound to the preview cache bucket: without it every static asset 404s", buckets, cacheStoreBinding)
-		}
-		services := bindingsByType(meta, "service")
-		if len(services) != 1 || services[0]["name"] != genericISRWriterBinding || services[0]["service"] != "ocel-isr-writer-preview" {
-			t.Errorf("service bindings = %v, want the ISR writer bound", services)
+		if got := bindingsByType(meta, "r2_bucket"); len(got) != 0 {
+			t.Errorf("r2_bucket bindings = %v, want none: the entry reads objects through Serve", got)
 		}
 		if got := bindingsByType(meta, "worker_loader"); len(got) != 1 {
 			t.Errorf("worker_loader bindings = %v, want the loader the entry runs preview code through", got)

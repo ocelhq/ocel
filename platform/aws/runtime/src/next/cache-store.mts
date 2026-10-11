@@ -5,29 +5,14 @@ import type { CacheStore } from "@framework/next-runtime/cache-store";
 import {
   edgeReadable,
   edgeReadableTagging,
-  entriesAdopted,
   isNotFound,
   type ObjectStore,
-  openAdoptedIsrWriter,
   providerObjectStore,
   readBodyText,
   requireEnv,
 } from "./object-store.mjs";
 import { newDynamoDBClient } from "./sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
-
-interface EntryStore {
-  read(key: string): Promise<CacheEntryFile | null>;
-  write(key: string, entry: CacheEntryFile): Promise<void>;
-}
-
-function openAdoptedEntryStore(isrPrefix: string): EntryStore {
-  const client = openAdoptedIsrWriter(isrPrefix);
-  return {
-    read: (key) => client.readEntry(key),
-    write: (key, entry) => client.writeEntry(key, entry),
-  };
-}
 
 const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
 
@@ -82,16 +67,9 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
   const taggingOf = (entry: CacheEntryFile) =>
     tagsPages && EDGE_SERVED_KINDS.has(entry.value?.kind) ? edgeReadableTagging : undefined;
 
-  const entries: EntryStore = entriesAdopted()
-    ? openAdoptedEntryStore(prefix)
-    : {
-        read: async (key) => read(provider, objectKey(key)),
-        write: async (key, entry) => write(provider, objectKey(key), entry, taggingOf(entry)),
-      };
-
   return {
-    readEntry: (key) => entries.read(key),
-    writeEntry: (key, entry) => entries.write(key, entry),
+    readEntry: async (key) => read(provider, objectKey(key)),
+    writeEntry: async (key, entry) => write(provider, objectKey(key), entry, taggingOf(entry)),
     readFetch: (hash) => read(provider, fetchKey(hash)),
     writeFetch: (hash, entry) => write(provider, fetchKey(hash), entry),
 

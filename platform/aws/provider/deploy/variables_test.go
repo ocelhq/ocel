@@ -206,56 +206,6 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 	})
 }
 
-func TestCheckEdgeOwnedNames(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		key   string
-		class resourcesv1.VariableClass
-	}{
-		{"OCEL_CACHE_RPC", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
-		{"OCEL_CACHE_SCOPE", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
-		{"OCEL_CACHE_RPC", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE},
-	} {
-		key := tc.key
-		t.Run("refuses "+tc.class.String()+" "+key, func(t *testing.T) {
-			t.Parallel()
-
-			app := &contractv1.ManifestApp{
-				Name:      "web",
-				Variables: []*contractv1.ManifestVariable{variable(key, "mine", tc.class)},
-			}
-
-			err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app))
-			if err == nil {
-				t.Fatalf("%s was accepted; the entry worker would overwrite it", key)
-			}
-			for _, want := range []string{key, "web"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error = %q, want it to name %s", err, want)
-				}
-			}
-		})
-	}
-
-	t.Run("leaves every other name alone", func(t *testing.T) {
-		t.Parallel()
-
-		app := &contractv1.ManifestApp{
-			Name: "web",
-			Variables: []*contractv1.ManifestVariable{
-				variable("OCEL_CACHE_TTL", "60", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-			},
-		}
-
-		if err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app)); err != nil {
-			t.Errorf("checkEdgeOwnedNames = %v, want every one of these accepted", err)
-		}
-	})
-}
-
 func TestCheckEdgeEnvBudget(t *testing.T) {
 	t.Parallel()
 

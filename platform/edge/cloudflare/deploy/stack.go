@@ -29,10 +29,6 @@ func storeScriptNameFor(namespace string, tier environment.Tier) (string, error)
 	return accountNameFor("releases store", namespace, tier, "releases-store")
 }
 
-func isrWriterScriptNameFor(namespace string, tier environment.Tier) (string, error) {
-	return accountNameFor("isr writer", namespace, tier, "isr-writer")
-}
-
 func accountNameFor(what, namespace string, tier environment.Tier, stem string) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
@@ -80,21 +76,9 @@ var (
 			{tag: "v1", sqliteClasses: []string{"ReleasesStore"}},
 		},
 	}
-	isrWriterWorker = durableObjectWorker{
-		classes: []durableObjectClass{
-			{binding: "ISR_WRITER_DO", className: "IsrDeploy"},
-			{binding: "ISR_SNAPSHOT_DO", className: "IsrSnapshot"},
-		},
-		migrations: []migrationStep{
-			{tag: "v1", sqliteClasses: []string{"IsrDeploy"}},
-			{tag: "v2", sqliteClasses: []string{"IsrSnapshot"}},
-		},
-	}
 )
 
 const genericStoreBinding = "RELEASES"
-
-const genericISRWriterBinding = "ISR_WRITER"
 
 const genericSlugBinding = "OCEL_SLUG"
 
@@ -537,9 +521,6 @@ func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, 
 	if envelopeKey != "" {
 		worker = withSecret(worker, envelopeKeyBinding, envelopeKey)
 	}
-	if spec.Program.ISRWriterScriptName != "" {
-		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
-	}
 	if len(spec.Domains)+len(spec.ServedElsewhere) == 0 {
 		worker = withVar(worker, genericServesWorkersDevBinding, "1")
 	}
@@ -550,7 +531,7 @@ func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, 
 		}
 		worker = withVar(worker, genericDomainAppsBinding, string(encoded))
 	}
-	return bindCodeLoader(bindObjectStore(worker, spec.Values)), nil
+	return bindCodeLoader(worker), nil
 }
 
 func withService(worker edge.Worker, name, service string) edge.Worker {

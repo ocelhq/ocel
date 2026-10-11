@@ -21,13 +21,8 @@ const credentialHeading = "Cloudflare API token"
 
 var accountPermissions = []string{
 	"Account · Workers Scripts · Edit",
-	"Account · Workers R2 Storage · Edit",
 	"Account · Account Settings · Read",
 	"Account · Billing · Read",
-}
-
-var tokenMinting = []string{
-	"User · API Tokens · Edit",
 }
 
 var zonePermissions = []string{
@@ -38,11 +33,7 @@ var zonePermissions = []string{
 	"Zone · Workers Routes · Edit",
 }
 
-func bootstrapPermissions() []string {
-	return slices.Concat(accountPermissions, tokenMinting, zonePermissions)
-}
-
-func deployPermissions() []string {
+func workerPermissions() []string {
 	return slices.Concat(accountPermissions, zonePermissions)
 }
 
@@ -69,12 +60,12 @@ func (p *cloudflare) describeCredentialPermissions(purpose edge.CredentialPurpos
 	var permissions []string
 	switch purpose {
 	case edge.PurposeBootstrap:
-		permissions = bootstrapPermissions()
+		permissions = workerPermissions()
 		if p.workerClientCertificate {
 			permissions = slices.Concat(permissions, workerClientCertificatePermissions)
 		}
 	case edge.PurposeDeploy:
-		permissions = deployPermissions()
+		permissions = workerPermissions()
 	default:
 		return edge.CredentialDocument{}, fmt.Errorf(
 			"cloudflare: the token permissions are listed for bootstrap or deploy credentials, not %q", string(purpose))

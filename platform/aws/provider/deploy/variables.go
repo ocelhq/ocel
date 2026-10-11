@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -223,25 +222,7 @@ func checkRuntimeOwnedNames(app string, values provider.AppValues) error {
 	)
 }
 
-func checkEdgeOwnedNames(app string, values provider.AppValues) error {
-	taken := deliveredNamesTaken(values, func(key string) bool {
-		return slices.Contains(edge.OwnedVariableNames, key)
-	})
-	if len(taken) == 0 {
-		return nil
-	}
-
-	return fmt.Errorf(
-		"app %s declares %s, which the edge entry worker injects into every worker environment (%s). "+
-			"Every variable is delivered under its own name, so the entry worker would overwrite it. Rename it",
-		app, strings.Join(taken, ", "), strings.Join(edge.OwnedVariableNames, ", "),
-	)
-}
-
 func checkEdgeVariables(app string, values provider.AppValues, ciphertext []byte) error {
-	if err := checkEdgeOwnedNames(app, values); err != nil {
-		return err
-	}
 	return checkEdgeEnvBudget(app, plainEnv(values), ciphertext)
 }
 

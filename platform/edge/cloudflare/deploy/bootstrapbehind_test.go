@@ -61,21 +61,24 @@ func refusedNotReady(t *testing.T, err error) refusal.Refusal {
 	return refused
 }
 
-func bootstrapScriptNames(t *testing.T, tier environment.Tier) (store, writer string) {
+func bootstrapScriptName(t *testing.T, tier environment.Tier) string {
 	t.Helper()
 	planned, err := bootstrapWorkers("ocel", tier)
 	if err != nil {
 		t.Fatalf("bootstrapWorkers: %v", err)
 	}
-	return planned[0].scriptName, planned[1].scriptName
+	if len(planned) != 1 {
+		t.Fatalf("bootstrapWorkers = %d workers, want the releases store alone", len(planned))
+	}
+	return planned[0].scriptName
 }
 
 func TestADeployOntoABootstrapWhoseStoreIsBehindIsRefusedBeforeAnythingIsUploaded(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierProduction)
-	seedBootstrapBundles(t, "store-v2", "writer-v1")
+	seedBootstrapBundle(t, "store-v2")
 
 	store, _ := fakeStoreFor(t, "")
 	var reached atomic.Int32
@@ -88,7 +91,7 @@ func TestADeployOntoABootstrapWhoseStoreIsBehindIsRefusedBeforeAnythingIsUploade
 	_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(store.URL), edge.StackState{})
 
 	refused := refusedNotReady(t, err)
-	storeScript, _ := bootstrapScriptNames(t, environment.TierProduction)
+	storeScript := bootstrapScriptName(t, environment.TierProduction)
 	for _, want := range []string{provider.BootstrapCommand(environment.TierProduction), storeScript, "behind"} {
 		if !strings.Contains(refused.Error(), want) {
 			t.Errorf("refusal %q does not mention %q", refused.Error(), want)
@@ -104,10 +107,10 @@ func TestADeployOntoABootstrapWhoseStoreIsBehindIsRefusedBeforeAnythingIsUploade
 
 func TestADeployOntoABootstrapWithoutTheReleasesStoreIsRefused(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierProduction)
-	storeScript, _ := bootstrapScriptNames(t, environment.TierProduction)
+	storeScript := bootstrapScriptName(t, environment.TierProduction)
 	delete(m.putBodies, storeScript)
 	delete(m.scriptSettings, storeScript)
 	delete(m.scriptSecrets, storeScript)
@@ -126,32 +129,12 @@ func TestADeployOntoABootstrapWithoutTheReleasesStoreIsRefused(t *testing.T) {
 	}
 }
 
-func TestADeployOntoABootstrapWithoutTheISRWriterIsRefused(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	installBootstrap(t, m, environment.TierProduction)
-	_, writer := bootstrapScriptNames(t, environment.TierProduction)
-	delete(m.putBodies, writer)
-	delete(m.scriptSettings, writer)
-	store := fakeStoreServer(t, "")
-
-	_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(store.URL), edge.StackState{})
-
-	refused := refusedNotReady(t, err)
-	for _, want := range []string{writer, "missing"} {
-		if !strings.Contains(refused.Error(), want) {
-			t.Errorf("refusal %q does not mention %q", refused.Error(), want)
-		}
-	}
-}
-
 func TestADeployOntoABootstrapWhoseWorkerBindingsDriftedIsRefused(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierProduction)
-	storeScript, _ := bootstrapScriptNames(t, environment.TierProduction)
+	storeScript := bootstrapScriptName(t, environment.TierProduction)
 	stripBinding(t, m, storeScript, durableObjectBindingType)
 	store := fakeStoreServer(t, "")
 
@@ -165,7 +148,7 @@ func TestADeployOntoABootstrapWhoseWorkerBindingsDriftedIsRefused(t *testing.T) 
 
 func TestADeployOntoACurrentBootstrapUploadsItsEntryWorker(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierProduction)
 	store := fakeStoreServer(t, "")
@@ -182,10 +165,10 @@ func TestADeployOntoACurrentBootstrapUploadsItsEntryWorker(t *testing.T) {
 
 func TestTheSharedPreviewEntryIsNotUploadedOntoABootstrapThatIsBehind(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierPreview)
-	seedBootstrapBundles(t, "store-v1", "writer-v2")
+	seedBootstrapBundle(t, "store-v2")
 
 	_, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec())
 
@@ -210,7 +193,7 @@ func TestAPruneOnlyReconcileIsNotGatedOnTheBootstrap(t *testing.T) {
 
 func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	seedBootstrapBundles(t, "store-v1", "writer-v1")
+	seedBootstrapBundle(t, "store-v1")
 
 	cases := []struct {
 		name    string
@@ -219,12 +202,12 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "a deploy with one worker behind",
+			name: "a deploy with the worker missing",
 			tier: environment.TierProduction,
 			trigger: func(t *testing.T, m *cfMock) error {
-				_, writer := bootstrapScriptNames(t, environment.TierProduction)
-				delete(m.putBodies, writer)
-				delete(m.scriptSettings, writer)
+				script := bootstrapScriptName(t, environment.TierProduction)
+				delete(m.putBodies, script)
+				delete(m.scriptSettings, script)
 				store := fakeStoreServer(t, "")
 				_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(store.URL), edge.StackState{})
 				return err
@@ -233,25 +216,10 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 				provider.BootstrapCommand(environment.TierProduction) + "` to install this build's, then deploy again",
 		},
 		{
-			name: "a deploy with both workers missing",
-			tier: environment.TierProduction,
-			trigger: func(t *testing.T, m *cfMock) error {
-				store, writer := bootstrapScriptNames(t, environment.TierProduction)
-				for _, name := range []string{store, writer} {
-					delete(m.putBodies, name)
-					delete(m.scriptSettings, name)
-				}
-				srv := fakeStoreServer(t, "")
-				_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(srv.URL), edge.StackState{})
-				return err
-			},
-			want: "and the entry worker this deploy uploads calls them, so",
-		},
-		{
-			name: "the preview wildcard with one worker behind",
+			name: "the preview wildcard with the worker behind",
 			tier: environment.TierPreview,
 			trigger: func(t *testing.T, m *cfMock) error {
-				seedBootstrapBundles(t, "store-v1", "writer-v2")
+				seedBootstrapBundle(t, "store-v2")
 				_, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec())
 				return err
 			},
@@ -261,7 +229,7 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seedBootstrapBundles(t, "store-v1", "writer-v1")
+			seedBootstrapBundle(t, "store-v1")
 			m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 			installBootstrap(t, m, tc.tier)
 

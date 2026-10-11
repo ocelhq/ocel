@@ -92,9 +92,20 @@ func migrationSteps(t *testing.T, migrations map[string]any) [][]string {
 	return out
 }
 
+var twoStepWorker = durableObjectWorker{
+	classes: []durableObjectClass{
+		{binding: "FIRST_DO", className: "First"},
+		{binding: "SECOND_DO", className: "Second"},
+	},
+	migrations: []migrationStep{
+		{tag: "v1", sqliteClasses: []string{"First"}},
+		{tag: "v2", sqliteClasses: []string{"Second"}},
+	},
+}
+
 func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	t.Run("every declared class gets its binding", func(t *testing.T) {
-		for _, do := range []durableObjectWorker{releasesStoreWorker, isrWriterWorker} {
+		for _, do := range []durableObjectWorker{releasesStoreWorker, twoStepWorker} {
 			found := doBindings(t, doMetadataFromMultipart(t, testStoreWorker(), do, nil))
 			if len(found) != len(do.classes) {
 				t.Errorf("bound %d Durable Object classes, want %d: %v", len(found), len(do.classes), found)
@@ -108,7 +119,7 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	})
 
 	t.Run("a fresh bootstrap declares the whole migration log", func(t *testing.T) {
-		meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, nil)
+		meta := doMetadataFromMultipart(t, testStoreWorker(), twoStepWorker, nil)
 		migrations, ok := meta["migrations"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected a migrations object on a fresh bootstrap, got %v", meta["migrations"])
@@ -119,13 +130,13 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 		if migrations["new_tag"] != "v2" {
 			t.Errorf("migrations.new_tag = %v, want v2", migrations["new_tag"])
 		}
-		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
+		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"First"}, {"Second"}}) {
 			t.Errorf("migrations.steps = %v, want the whole log", steps)
 		}
 	})
 
 	t.Run("a bootstrapped account declares only what it lacks", func(t *testing.T) {
-		meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, []string{"IsrDeploy"})
+		meta := doMetadataFromMultipart(t, testStoreWorker(), twoStepWorker, []string{"First"})
 		migrations, ok := meta["migrations"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected a migrations object for a script behind the log, got %v", meta["migrations"])
@@ -136,13 +147,13 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 		if migrations["new_tag"] != "v2" {
 			t.Errorf("migrations.new_tag = %v, want v2", migrations["new_tag"])
 		}
-		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrSnapshot"}}) {
+		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"Second"}}) {
 			t.Errorf("migrations.steps = %v, want only the class the script lacks", steps)
 		}
 	})
 
 	t.Run("an up-to-date script declares no migration at all", func(t *testing.T) {
-		for _, do := range []durableObjectWorker{releasesStoreWorker, isrWriterWorker} {
+		for _, do := range []durableObjectWorker{releasesStoreWorker, twoStepWorker} {
 			var deployed []string
 			for _, step := range do.migrations {
 				deployed = append(deployed, step.sqliteClasses...)
@@ -155,22 +166,8 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	})
 
 	t.Run("a deployed class this build's log does not create is refused", func(t *testing.T) {
-		if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), isrWriterWorker, []string{"IsrDeploy", "IsrFuture"}, nil); err == nil {
-			t.Error("buildDurableObjectScriptMultipart(deployed IsrFuture) = nil error, want a refusal")
-		}
-	})
-
-	t.Run("the account-level bucket binding rides along", func(t *testing.T) {
-		worker := testStoreWorker()
-		worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(environment.TierProduction)}
-
-		meta := doMetadataFromMultipart(t, worker, isrWriterWorker, nil)
-		buckets := bindingsByType(meta, "r2_bucket")
-		if len(buckets) != 1 {
-			t.Fatalf("r2_bucket bindings = %v, want 1", buckets)
-		}
-		if buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != cacheStoreName(environment.TierProduction) {
-			t.Errorf("r2 binding = %v, want name %s bucket %s", buckets[0], cacheStoreBinding, cacheStoreName(environment.TierProduction))
+		if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), twoStepWorker, []string{"First", "Future"}, nil); err == nil {
+			t.Error("buildDurableObjectScriptMultipart(deployed Future) = nil error, want a refusal")
 		}
 	})
 
@@ -521,9 +518,9 @@ func TestReconcile(t *testing.T) {
 		if _, err := reconcileState(t, p, spec, state); err != nil {
 			t.Fatalf("second Reconcile: %v", err)
 		}
-		const bootstrapReads = 8
+		const bootstrapReads = 4
 		if m.requests != spent+bootstrapReads {
-			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile spent plus the %d reads of the two bootstrap workers", m.requests, spent, bootstrapReads)
+			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile spent plus the %d reads of the releases-store worker", m.requests, spent, bootstrapReads)
 		}
 	})
 
@@ -1096,13 +1093,12 @@ func TestWorkerDecoration(t *testing.T) {
 		}
 	})
 
-	t.Run("the generic worker binds every account worker it reaches", func(t *testing.T) {
+	t.Run("the generic worker binds the account worker it reaches", func(t *testing.T) {
 		t.Parallel()
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{
-			Worker:              testStoreWorker(),
-			StoreScriptName:     "ocel-releases-store",
-			ISRWriterScriptName: "ocel-isr-writer",
+			Worker:          testStoreWorker(),
+			StoreScriptName: "ocel-releases-store",
 		}}
 
 		worker, err := genericWorker(spec, "acme-web", "")
@@ -1113,26 +1109,8 @@ func TestWorkerDecoration(t *testing.T) {
 		if worker.Services[genericStoreBinding] != "ocel-releases-store" {
 			t.Errorf("Services[%s] = %q", genericStoreBinding, worker.Services[genericStoreBinding])
 		}
-		if worker.Services[genericISRWriterBinding] != "ocel-isr-writer" {
-			t.Errorf("Services[%s] = %q", genericISRWriterBinding, worker.Services[genericISRWriterBinding])
-		}
 		if worker.Variables[genericSlugBinding] != "acme-web" {
 			t.Errorf("Variables[%s] = %q", genericSlugBinding, worker.Variables[genericSlugBinding])
-		}
-	})
-
-	t.Run("the isr writer is left unbound when the bootstrap offers none", func(t *testing.T) {
-		t.Parallel()
-
-		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"}}
-
-		worker, err := genericWorker(spec, "acme-web", "")
-		if err != nil {
-			t.Fatalf("genericWorker: %v", err)
-		}
-
-		if _, bound := worker.Services[genericISRWriterBinding]; bound {
-			t.Errorf("Services = %v, want no %s binding", worker.Services, genericISRWriterBinding)
 		}
 	})
 }

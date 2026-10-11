@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cloudflare/cloudflare-go/v4/r2"
-
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -66,9 +64,8 @@ func TestTheCloudflareEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 		},
 		Hostname: "shop.app.com",
 		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
-			seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-			p := bootstrapMock(t, false).provider(t)
-			p.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} }
+			seedBootstrapBundle(t, "export default {}")
+			p := bootstrapMock(t).provider(t)
 			return p, environment.TierProduction
 		},
 	})
@@ -83,10 +80,9 @@ func TestTheCloudflareEdgeForAMutualTLSOriginBehavesAsEveryEdgeMust(t *testing.T
 		},
 		Hostname: "shop.app.com",
 		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
-			seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-			p := bootstrapMock(t, false).provider(t)
+			seedBootstrapBundle(t, "export default {}")
+			p := bootstrapMock(t).provider(t)
 			p.workerClientCertificate = true
-			p.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} }
 			return p, environment.TierProduction
 		},
 	})

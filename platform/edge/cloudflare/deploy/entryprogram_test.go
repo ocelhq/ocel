@@ -24,11 +24,9 @@ func programmed(slug string, tier environment.Tier) EntryProgram {
 			Variables: map[string]string{"OCEL_ORIGIN_ONLY": "v"},
 			Secrets:   map[string]string{"OCEL_ORIGIN_KEY": "s"},
 		},
-		Values:                   map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
 		StoreScriptName:          "ocel-releases-store-preview",
 		StoreEndpoint:            "https://store.example",
 		StoreBootstrapCredential: "store-cred",
-		ISRWriterScriptName:      "ocel-isr-writer-preview",
 	}
 }
 
@@ -110,12 +108,6 @@ func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *test
 	}
 	if built.Spec.Name != "" {
 		t.Errorf("Name = %q, want empty: the edge names the shared entry itself", built.Spec.Name)
-	}
-	if built.Spec.ISRWriterScriptName != entry.ISRWriterScriptName {
-		t.Errorf("ISRWriterScriptName = %q, want %q", built.Spec.ISRWriterScriptName, entry.ISRWriterScriptName)
-	}
-	if built.Values["cacheBucket"] != "ocel-edge-cache-preview" {
-		t.Errorf("Values = %v, want the cache bucket the entry serves assets from", built.Values)
 	}
 }
 

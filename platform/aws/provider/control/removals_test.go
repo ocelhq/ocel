@@ -57,7 +57,7 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	}
 	b.Edge = &planningEdge{removals: []edge.PlanChange{
 		{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanDelete},
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete, Slow: true},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanDelete, Slow: true},
 	}}
 	b.Edges = registryOf(b.Edge)
 	b.Kinds = kindsOf(b.Edge)
@@ -162,8 +162,8 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	if len(front.Changes) != 2 {
 		t.Fatalf("the edge group has %+v, want a row per thing the edge provisioned", front.Changes)
 	}
-	if cache := changeNamed(front, "ocel-edge-cache"); cache == nil || !cache.Slow {
-		t.Errorf("the R2 bucket row = %+v, want the pace of emptying it kept", cache)
+	if cache := changeNamed(front, "ocel-releases-store/BOOTSTRAP_SECRET"); cache == nil || !cache.Slow {
+		t.Errorf("the slow row = %+v, want its pace kept", cache)
 	}
 }
 
@@ -266,7 +266,7 @@ func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 	if other == nil || other.Feature != bootstrap.FeatureCloudflareEdge {
 		t.Fatalf("plan groups = %s, want the installed edge too, under its own kind and feature", groupNames(plan))
 	}
-	if changeNamed(other, "ocel-edge-cache") == nil {
+	if changeNamed(other, "ocel-releases-store/BOOTSTRAP_SECRET") == nil {
 		t.Errorf("the %s group has %+v, want the rows that edge planned", other.Name, other.Changes)
 	}
 	for _, group := range []*provider.ChangeGroup{front, other} {

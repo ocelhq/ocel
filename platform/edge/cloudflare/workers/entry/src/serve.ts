@@ -1,5 +1,13 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { storedCacheTags } from "@framework/next-cache";
+import { deltaSeconds } from "@framework/next-router/http-cache";
+import {
+  functionUrlImageOrigin,
+  type ImageCall,
+  type ImageOriginRequest,
+  originImagePath,
+  servedImage,
+} from "@framework/next-router/image";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import {
@@ -9,8 +17,7 @@ import {
   readReleaseToken,
 } from "@platform/edge-contract/purge";
 import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access";
-import { settledWithin } from "./cache";
-import { createReleaseEdgeInvoker, type EdgeRuntime, ownBundleKey } from "./edge";
+import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
 import { PPR_SHELL_VARIANT } from "./ppr";
@@ -24,12 +31,14 @@ import {
   buildEdgeUrl,
   buildOriginUrl,
   encodeKeyPath,
+  IMAGE_CALL_HEADER,
   type ObjectProps,
   parseKeyRelease,
   parseObjectKey,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
   readEdgeEntry,
+  readImageOptimizer,
   readRenderCall,
   SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
@@ -38,12 +47,59 @@ import {
   type StoredEntryCall,
 } from "./serve-key";
 import { type ServeFactory, serveObjects } from "./serve-objects";
+import { settledWithin } from "./settled";
 import { readFromStore, type StoreAnswer } from "./store-read";
 import { openEntrySource } from "./store-source";
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
 const MISSING_EDGE_CACHE = "max-age=60";
+
+const IMAGE_STALE_SECONDS = 86_400;
+
+const IMAGE_PATH_TAG_PATHNAME = "/_next/image";
+
+function readImageCall(header: string | null): ImageCall | undefined {
+  if (header === null) return undefined;
+  try {
+    const parsed = JSON.parse(header) as { payload?: Partial<ImageOriginRequest> } & {
+      minimumCacheTTL?: unknown;
+    };
+    const { payload } = parsed;
+    const text = [
+      payload?.assetPrefix,
+      payload?.url,
+      payload?.accept,
+      payload?.mimeType,
+      payload?.configHash,
+    ];
+    if (
+      !payload ||
+      !text.every((value) => typeof value === "string") ||
+      typeof payload.w !== "number" ||
+      typeof payload.q !== "number" ||
+      typeof parsed.minimumCacheTTL !== "number"
+    ) {
+      return undefined;
+    }
+    return { payload: payload as ImageOriginRequest, minimumCacheTTL: parsed.minimumCacheTTL };
+  } catch {
+    return undefined;
+  }
+}
+
+function imageForCache(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.delete("vary");
+  const ttl = deltaSeconds(headers.get("cache-control"), "max-age") ?? 0;
+  if (response.status === 200 && ttl > 0) {
+    headers.set(
+      "cdn-cache-control",
+      `max-age=${ttl}, stale-while-revalidate=${IMAGE_STALE_SECONDS}`,
+    );
+  }
+  return new Response(response.body, { status: response.status, headers });
+}
 
 export const REGENERATION_HOLD_MS = 10_000;
 
@@ -138,6 +194,16 @@ async function readRenderRecord(
   return { record: served.record, render };
 }
 
+function isReleaseImageOptimizer(env: Env, record: ReleaseRecord, optimizerUrl: string): boolean {
+  if (optimizerUrl === env.OCEL_IMAGE_OPTIMIZER_URL) return true;
+  try {
+    const url = new URL(optimizerUrl);
+    return url.pathname === originImagePath && isReleaseOrigin(record, url.origin);
+  } catch {
+    return false;
+  }
+}
+
 function isReleaseOrigin(record: ReleaseRecord, origin: string): boolean {
   return Object.values(record.functionUrls).some((functionUrl) => {
     try {
@@ -170,7 +236,7 @@ function respondMissing(release: string): Response {
 }
 
 export function readsObjects(env: Env): boolean {
-  return findBucketAccess(env) !== undefined || env.OCEL_CACHE_STORE !== undefined;
+  return findBucketAccess(env) !== undefined;
 }
 
 async function readBucket(access: BucketAccess, key: string, release: string): Promise<Response> {
@@ -185,12 +251,6 @@ async function readBucket(access: BucketAccess, key: string, release: string): P
   return respondNotStored(502, "Bad Gateway");
 }
 
-async function readStore(store: R2Bucket, key: string, release: string): Promise<Response> {
-  const object = await store.get(key);
-  if (!object) return respondMissing(release);
-  return respondStored({ body: object.body, etag: object.httpEtag }, release);
-}
-
 type PurgeableCache = CacheContext & {
   invalidate(options: { tags: string[] }): Promise<CachePurgeResult>;
 };
@@ -202,6 +262,8 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       return respondNotStored(405, "Method Not Allowed");
     }
     if (props?.kind === "origin") {
+      const optimizer = readImageOptimizer(request.url);
+      if (optimizer !== undefined) return this.fromImage(request, optimizer);
       const entryKey = readEdgeEntry(request.url);
       return entryKey === undefined ? this.fromOrigin(request) : this.fromEdge(request, entryKey);
     }
@@ -220,9 +282,20 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     }
     const access = findBucketAccess(this.env);
     if (access) return readBucket(access, key, release);
-    const store = this.env.OCEL_CACHE_STORE;
-    if (store) return readStore(store, key, release);
     return respondNotStored(503, "no store to read from");
+  }
+
+  private async fromImage(request: Request, optimizerUrl: string): Promise<Response> {
+    const { release } = readRenderCall(request.url);
+    const found = await readRenderRecord(this.env, request, release);
+    if (!found || !isReleaseImageOptimizer(this.env, found.record, optimizerUrl)) {
+      return respondRefused("the image optimizer is not one of the served release's");
+    }
+    const call = readImageCall(request.headers.get(IMAGE_CALL_HEADER));
+    const optimize = functionUrlImageOrigin(optimizerUrl, originFetchFor(this.env) ?? fetch);
+    if (!call || !optimize) return respondRefused("there is no image to optimize");
+    const optimized = servedImage(await optimize(call.payload), call.minimumCacheTTL);
+    return forCache(imageForCache(optimized), { release, pathname: IMAGE_PATH_TAG_PATHNAME });
   }
 
   private async fromOrigin(request: Request): Promise<Response> {
@@ -379,22 +452,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!edgeWorkers || !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)) {
       return respondRefused("the release has no edge bundle of its own to render with");
     }
-    const exports = this.ctx.exports as {
-      Serve?: ServeFactory;
-      CacheEntrypoint?: EdgeRuntime["cacheEntrypoint"];
-    };
-    const store =
-      exports.Serve && readsObjects(this.env)
-        ? serveObjects(exports.Serve, host)
-        : this.env.OCEL_CACHE_STORE;
-    if (!store) return respondRefused("no store to read the edge bundle from");
+    const { Serve: serve } = this.ctx.exports as { Serve?: ServeFactory };
+    if (!serve || !readsObjects(this.env)) {
+      return respondRefused("no store to read the edge bundle from");
+    }
     const invoke = createReleaseEdgeInvoker(
-      {
-        loader,
-        store,
-        cacheEntrypoint: exports.CacheEntrypoint,
-        envelopeKey: this.env.OCEL_ENVELOPE_KEY,
-      },
+      { loader, store: serveObjects(serve, host), envelopeKey: this.env.OCEL_ENVELOPE_KEY },
       { ...record, edgeWorkers },
     );
     const headers = new Headers(request.headers);

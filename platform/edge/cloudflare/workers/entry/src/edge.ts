@@ -1,6 +1,3 @@
-import type { EdgeCacheRpc } from "@framework/next-cache";
-import type { CacheEntrypointProps } from "./env";
-
 export interface EdgeStoredObject {
   text(): Promise<string>;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -34,6 +31,7 @@ const SEALED_FILE = "sealed.bin";
 const NONCE_BYTES = 12;
 
 export interface EdgeVariables {
+  scope?: string;
   env?: Record<string, string>;
   envelope?: string;
   envelopeKey?: string;
@@ -60,56 +58,34 @@ import type { EdgeEntryKind, EdgeInvoker } from "@framework/next-router";
 
 export type { EdgeEntryKind, EdgeInvoker };
 
-export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
-
-export interface EdgeCacheBinding {
-  rpc: EdgeCacheStub;
-  scope: string;
-}
-
 export interface EdgeRuntime {
   loader: WorkerLoader;
   store: EdgeObjectStore;
-  cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
   envelopeKey?: string;
 }
 
 export interface EdgeRelease {
   edgeWorkers: EdgeWorkers;
   isrPrefix: string;
-  purgeSecret?: string;
   env?: Record<string, string>;
   envelope?: string;
   releaseFingerprint?: string;
 }
 
 export function createReleaseEdgeInvoker(runtime: EdgeRuntime, record: EdgeRelease): EdgeInvoker {
-  return createEdgeInvoker(
-    runtime.loader,
-    record.edgeWorkers,
-    runtime.store,
-    runtime.cacheEntrypoint
-      ? {
-          rpc: runtime.cacheEntrypoint({
-            props: { purgeSecret: record.purgeSecret, scope: record.isrPrefix },
-          }),
-          scope: record.isrPrefix,
-        }
-      : undefined,
-    {
-      env: record.env,
-      envelope: record.envelope,
-      envelopeKey: runtime.envelopeKey,
-      releaseFingerprint: record.releaseFingerprint,
-    },
-  );
+  return createEdgeInvoker(runtime.loader, record.edgeWorkers, runtime.store, {
+    scope: record.isrPrefix,
+    env: record.env,
+    envelope: record.envelope,
+    envelopeKey: runtime.envelopeKey,
+    releaseFingerprint: record.releaseFingerprint,
+  });
 }
 
 export function createEdgeInvoker(
   loader: WorkerLoader,
   workers: EdgeWorkers,
   store: EdgeObjectStore,
-  cache?: EdgeCacheBinding,
   variables?: EdgeVariables,
 ): EdgeInvoker {
   const envelope = variables?.envelope;
@@ -158,7 +134,6 @@ export function createEdgeInvoker(
               await sealed.arrayBuffer(),
             )
           : {}),
-        ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
       },
     };
   };
@@ -166,7 +141,7 @@ export function createEdgeInvoker(
   const idFor = (kind: EdgeEntryKind) =>
     `edge:${JSON.stringify([
       workers.id,
-      cache?.scope ?? null,
+      variables?.scope ?? null,
       variables?.releaseFingerprint ?? null,
       kind,
     ])}`;

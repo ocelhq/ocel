@@ -55,7 +55,11 @@ func Shape(ns Namespace, tier environment.Tier, features []string, options ...Sh
 		if !known {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q", name)
 		}
-		bodies = append(bodies, f.planned(in).body)
+		stack, err := f.planned(in)
+		if err != nil {
+			return nil, err
+		}
+		bodies = append(bodies, stack.body)
 	}
 	var shaped []pricing.Shaped
 	for _, body := range bodies {

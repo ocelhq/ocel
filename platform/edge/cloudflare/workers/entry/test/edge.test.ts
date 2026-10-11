@@ -3,8 +3,6 @@ import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
 import {
   createEdgeInvoker,
-  type EdgeCacheBinding,
-  type EdgeCacheStub,
   type EdgeEntryKind,
   type EdgeInvoker,
   type EdgeObjectStore,
@@ -20,8 +18,6 @@ declare module "cloudflare:test" {
     RELEASES: Fetcher;
   }
 }
-
-const remoteStub = () => env.RELEASES as unknown as EdgeCacheStub;
 
 interface EdgeEntry {
   chunks: string[];
@@ -65,7 +61,6 @@ export default {
     globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
-    globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
     globalThis.__OCEL_EDGE_ENTRY = k
     const e = ENTRIES[k]
@@ -114,8 +109,8 @@ let bundles = 0;
 function invokerFor(
   handlers: Record<string, string>,
   chunkSource: (entryKey: string, handler: string) => string = chunkFor,
-  cache?: EdgeCacheBinding,
   id?: string,
+  scope?: string,
   assetBytes: Record<string, Uint8Array> = {},
 ): EdgeInvoker {
   const chunks: Record<string, string> = {};
@@ -163,7 +158,7 @@ function invokerFor(
       compatFlags: ["nodejs_compat"],
     },
     store,
-    cache,
+    { scope },
   );
 }
 
@@ -1075,54 +1070,16 @@ describe("edge-parented prerenders", () => {
   });
 });
 
-describe("the cache loopback", () => {
-  it("stays live across every request a warm isolate serves", async () => {
-    const edge = invokerFor(
-      {
-        e: `async () => {
-          const cache = globalThis.__OCEL_EDGE_CACHE
-          const probe = await cache.rpc.fetch("https://loopback/")
-          return new Response(cache.scope + ":" + probe.status)
-        }`,
-      },
-      chunkFor,
-      { rpc: remoteStub(), scope: "prod/proj/app/build" },
-    );
-
-    for (let i = 0; i < 3; i++) {
-      const response = await edge("e", new Request("https://x/"));
-      expect(await response.text()).toBe("prod/proj/app/build:501");
-    }
-  });
-
-  it("leaves the bundle's own env intact", async () => {
-    const edge = invokerFor(
-      { e: `async () => new Response(process.env.__NEXT_BUILD_ID)` },
-      chunkFor,
-      { rpc: remoteStub(), scope: "prod/proj/app/build" },
-    );
-    expect(await (await edge("e", new Request("https://x/"))).text()).toBe("t");
-  });
-
-  it("is simply absent when nothing bound one", async () => {
-    const edge = invokerFor({
-      e: `async () => new Response(String(globalThis.__OCEL_EDGE_CACHE.rpc))`,
-    });
-    expect(await (await edge("e", new Request("https://x/"))).text()).toBe("undefined");
-  });
-});
-
 describe("the loaded isolate's identity", () => {
   const servedCount = (entryKey: string) => `let served = 0
 globalThis._ENTRIES ??= {}
 globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   handler: async () =>
-    new Response(++served + ":" + globalThis.__OCEL_EDGE_CACHE.scope),
+    new Response(++served + ":" + globalThis.__OCEL_EDGE_ENTRY),
 }
 `;
 
-  const deployment = (id: string, scope: string) =>
-    invokerFor({ e: "" }, servedCount, { rpc: remoteStub(), scope }, id);
+  const deployment = (id: string, scope: string) => invokerFor({ e: "" }, servedCount, id, scope);
 
   const serve = async (edge: EdgeInvoker, kind?: EdgeEntryKind) =>
     (await edge("e", new Request("https://x/"), kind)).text();
@@ -1131,31 +1088,31 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     const prod = deployment("shared-bundle-a", "prod/p/app/b1");
     const same = deployment("shared-bundle-a", "prod/p/app/b1");
 
-    expect(await serve(prod)).toBe("1:prod/p/app/b1");
-    expect(await serve(same)).toBe("2:prod/p/app/b1");
+    expect(await serve(prod)).toBe("1:e");
+    expect(await serve(same)).toBe("2:e");
   });
 
   it("separates two deployments that share a bundle but not a scope", async () => {
     const prod = deployment("shared-bundle-b", "prod/p/app/b1");
     const preview = deployment("shared-bundle-b", "preview/p/app/b1");
 
-    expect(await serve(prod)).toBe("1:prod/p/app/b1");
-    expect(await serve(preview)).toBe("1:preview/p/app/b1");
+    expect(await serve(prod)).toBe("1:e");
+    expect(await serve(preview)).toBe("1:e");
   });
 
   it("keeps a middleware entry off the isolate a page entry already warmed", async () => {
     const bundle = deployment("shared-bundle-c", "prod/p/app/b1");
 
-    expect(await serve(bundle)).toBe("1:prod/p/app/b1");
-    expect(await serve(bundle, "middleware")).toBe("1:prod/p/app/b1");
+    expect(await serve(bundle)).toBe("1:e");
+    expect(await serve(bundle, "middleware")).toBe("1:e");
   });
 
   it("reuses the middleware isolate across its own requests", async () => {
     const bundle = deployment("shared-bundle-d", "prod/p/app/b1");
 
-    expect(await serve(bundle, "middleware")).toBe("1:prod/p/app/b1");
-    expect(await serve(bundle, "middleware")).toBe("2:prod/p/app/b1");
-    expect(await serve(bundle)).toBe("1:prod/p/app/b1");
+    expect(await serve(bundle, "middleware")).toBe("1:e");
+    expect(await serve(bundle, "middleware")).toBe("2:e");
+    expect(await serve(bundle)).toBe("1:e");
   });
 });
 
@@ -1518,7 +1475,6 @@ describe("the variables a deployment declares", () => {
     bundleEnv?: Record<string, string>;
     variables?: EdgeVariables;
     sealed?: Uint8Array;
-    cache?: EdgeCacheBinding;
     id?: string;
   }
 
@@ -1564,7 +1520,6 @@ describe("the variables a deployment declares", () => {
         compatFlags: ["nodejs_compat"],
       },
       store,
-      bundle.cache,
       bundle.variables,
     );
     return { edge, reads };
@@ -1602,19 +1557,6 @@ describe("the variables a deployment declares", () => {
     });
 
     expect((await workerEnv(edge)).SHARED).toBe("from-record");
-  });
-
-  it("keeps the names it owns for itself", async () => {
-    const { edge } = variablesInvoker({
-      cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
-      variables: {
-        env: { OCEL_CACHE_SCOPE: "hijacked", OCEL_CACHE_RPC: "hijacked" },
-      },
-    });
-
-    const values = await workerEnv(edge);
-    expect(values.OCEL_CACHE_SCOPE).toBe("prod/p/app/b1");
-    expect(values.OCEL_CACHE_RPC).not.toBe("hijacked");
   });
 
   it("unseals what the origin sealed in Go, each value under its own name", async () => {
@@ -1752,7 +1694,6 @@ describe("the variables a deployment declares", () => {
       variablesInvoker({
         handler: COUNTER,
         id: "shared-bundle-variables",
-        cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
         variables: { releaseFingerprint },
       }).edge;
     const served = async (edge: EdgeInvoker) => (await edge("e", new Request("https://x/"))).text();

@@ -48,8 +48,8 @@ func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testi
 	t.Parallel()
 
 	front := &describingEdge{parts: []edge.BootstrapPart{
-		{Name: "ocel-edge-cache", Current: true},
-		{Name: "ocel-isr-writer", Current: false},
+		{Name: "ocel-releases-store/BOOTSTRAP_SECRET", Current: true},
+		{Name: "ocel-sample-worker", Current: false},
 	}}
 	b := bootstrapperWithEdge(t, front)
 
@@ -58,8 +58,8 @@ func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testi
 		t.Fatalf("Describe: %v", err)
 	}
 	want := []provider.BootstrapStack{
-		{Name: "cloudflare/ocel-edge-cache", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: true},
-		{Name: "cloudflare/ocel-isr-writer", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: false},
+		{Name: "cloudflare/ocel-releases-store/BOOTSTRAP_SECRET", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: true},
+		{Name: "cloudflare/ocel-sample-worker", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: false},
 	}
 	var got []provider.BootstrapStack
 	for _, stack := range described.Stacks {
@@ -99,7 +99,7 @@ func TestAnAWSBootstrapStatusReportsAnUndescribableEdgeAsUnreadableRatherThanFai
 func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 	t.Parallel()
 
-	planned := []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep}}
+	planned := []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanKeep}}
 	req := provider.BootstrapRequest{
 		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
@@ -116,7 +116,7 @@ func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 	without := planWith(&planningEdge{planned: planned})
 	with := planWith(&planningDescribingEdge{
 		planningEdge: planningEdge{planned: planned},
-		parts:        []edge.BootstrapPart{{Name: "ocel-isr-writer", Current: false}},
+		parts:        []edge.BootstrapPart{{Name: "ocel-sample-worker", Current: false}},
 	})
 	if !reflect.DeepEqual(with, without) {
 		t.Errorf("plan with the edge's parts = %+v, want the plan without them %+v", with, without)

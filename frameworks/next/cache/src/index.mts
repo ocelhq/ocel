@@ -4,7 +4,6 @@ export {
   type StoredCacheTags,
   storedCacheTags,
 } from "./cache-tags.mjs";
-export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 export {
   latest,
@@ -62,8 +61,6 @@ export function entryObjectKey(isrPrefix: string, key: string): string | null {
   }
   return `${isrPrefix}/cache/${key}.cache.json`;
 }
-
-export const entryMissHeader = "ocel-isr-entry-miss";
 
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   if (value?.kind === "FETCH") {

@@ -129,13 +129,13 @@ func TestTheRepairRequestSendsTheEdgeTheProjectChose(t *testing.T) {
 
 func TestABootstrapGapNamesEachFeatureOnce(t *testing.T) {
 	status := bootstrapOf(
-		&contractv1.BootstrapStack{Name: "cloudflare/ocel-edge-cache", Feature: "cloudflare-edge", Present: true, Required: true},
-		&contractv1.BootstrapStack{Name: "cloudflare/ocel-isr-writer", Feature: "cloudflare-edge", Present: true, Required: true},
+		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store-secret", Feature: "cloudflare-edge", Present: true, Required: true},
+		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store", Feature: "cloudflare-edge", Present: true, Required: true},
 	)
 
 	gap := NewGap(status)
 
-	if want := []string{"cloudflare/ocel-edge-cache", "cloudflare/ocel-isr-writer"}; !slices.Equal(gap.Stale, want) {
+	if want := []string{"cloudflare/ocel-releases-store-secret", "cloudflare/ocel-releases-store"}; !slices.Equal(gap.Stale, want) {
 		t.Errorf("stale = %v, want %v", gap.Stale, want)
 	}
 	command := gap.RepairCommand(environmentv1.Tier_TIER_PRODUCTION)

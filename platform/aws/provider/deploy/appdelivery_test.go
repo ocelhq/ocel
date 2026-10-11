@@ -16,10 +16,9 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := appStackSpec(t)
-	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreObjects = &fakeArtifactStore{}
-	cfg.ISRWriterEndpoint = "https://writer.example"
-	cfg.ISRWriterSeed = "a-seed"
+	cfg.Objects = &fakeArtifactStore{}
+	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
+	cfg.PurgeSeed = "a-seed"
 
 	bundlePath := filepath.Join(cfg.ArtifactRoot, "apps", "web", filepath.FromSlash(edge.AppBundleFile))
 	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
@@ -61,8 +60,8 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.PurgeSecret != cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
-		t.Errorf("PurgeSecret = %q, want the secret the origin signs a purge with and the revalidation writer demands", result.PurgeSecret)
+	if result.PurgeSecret != cloudflare.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix) {
+		t.Errorf("PurgeSecret = %q, want the secret the edge accepts a purge signed with", result.PurgeSecret)
 	}
 }
 
@@ -98,10 +97,10 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 
 	cfg, spec := appStackSpec(t)
 	cfg.OriginSecret, cfg.PreviousOriginSecret = "origin-now", "origin-before"
-	cfg.ISRWriterSeed = "a-seed"
+	cfg.PurgeSeed = "a-seed"
 
 	got := releasing(t, cfg).Secrets(spec)
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix)} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

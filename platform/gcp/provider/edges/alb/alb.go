@@ -70,17 +70,10 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
 	}
-	balancer, err := e.raise(ctx, tier, progress.Discard())
-	if err != nil {
+	if _, err := e.raise(ctx, tier, progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	return edge.BootstrapOutput{Trust: edge.TrustExternal, Values: map[string]string{
-		outputAddress:        balancer.Address,
-		outputCertificateMap: balancer.CertificateMap,
-		outputURLMap:         balancer.URLMap,
-		outputNotFound:       balancer.NotFound,
-		outputAssetsBackend:  balancer.AssetsBackend,
-	}}, nil
+	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
 
 func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Log) (LoadBalancer, error) {

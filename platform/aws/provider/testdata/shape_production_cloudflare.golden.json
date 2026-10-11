@@ -179,53 +179,6 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_sqs_queue:TagPublisherDeadLetterQueue",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_sqs_queue",
-      "name": "TagPublisherDeadLetterQueue",
-      "region": "us-east-1",
-      "properties": {
-        "fifo_queue": false
-      }
-    },
-    {
-      "id": "project:shop/shared:production/aws_lambda_function:TagPublisher",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_lambda_function",
-      "name": "TagPublisher",
-      "region": "us-east-1",
-      "properties": {
-        "architectures": [
-          "arm64"
-        ],
-        "memory_size": 512,
-        "runtime": "nodejs24.x",
-        "timeout": 60
-      }
-    },
-    {
-      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:TagPublisherStream",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_lambda_event_source_mapping",
-      "name": "TagPublisherStream",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:TagPublisherLogGroup",
-      "scope": "project:shop/shared:production",
-      "vendor": "aws",
-      "type": "aws_cloudwatch_log_group",
-      "name": "TagPublisherLogGroup",
-      "region": "us-east-1",
-      "properties": {
-        "retention_in_days": 14
-      }
-    },
-    {
       "id": "project:shop/shared:production/aws_kms_key:VariablesKey",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
@@ -399,16 +352,6 @@
       }
     },
     {
-      "id": "project:shop/shared:production/cloudflare_r2_bucket:ocel-edge-cache",
-      "scope": "project:shop/shared:production",
-      "vendor": "cloudflare",
-      "type": "cloudflare_r2_bucket",
-      "name": "ocel-edge-cache",
-      "properties": {
-        "storage_class": "Standard"
-      }
-    },
-    {
       "id": "project:shop/shared:production/cloudflare_workers_script:ocel-releases-store",
       "scope": "project:shop/shared:production",
       "vendor": "cloudflare",
@@ -417,19 +360,6 @@
       "properties": {
         "durable_objects": [
           "ReleasesStore"
-        ]
-      }
-    },
-    {
-      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-isr-writer",
-      "scope": "project:shop/shared:production",
-      "vendor": "cloudflare",
-      "type": "cloudflare_workers_script",
-      "name": "ocel-isr-writer",
-      "properties": {
-        "durable_objects": [
-          "IsrDeploy",
-          "IsrSnapshot"
         ]
       }
     },

@@ -814,17 +814,17 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("mints the secrets a release and its publisher authenticate with", func(t *testing.T) {
+	t.Run("mints the seed every release's purge secret is derived from", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		frontedBy(t, &fakeEdge{
 			kind: "cloudflare",
-			out:  edge.BootstrapOutput{Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred-prod")}}},
+			out:  edge.BootstrapOutput{Offers: []edge.Offer{{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()}}},
 		})
 
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, cloudflareNames(environment.TierProduction).isrWriterSeedParam)
+		assertMintedSecrets(t, ssmc, cloudflareNames(environment.TierProduction).purgeSeedParam)
 		assertMintedOriginSecret(t, ssmc, originSecretParam)
 	})
 
@@ -874,53 +874,12 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("persists edge values", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		values := map[string]string{"bucketName": "edge-cache-7f3", "namespaceId": "ns-42"}
-		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
-
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		got, err := ReadEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
-		if err != nil {
-			t.Fatalf("ReadEdgeValues: %v", err)
-		}
-		if len(got) != len(values) {
-			t.Fatalf("read back %v, want %v", got, values)
-		}
-		for k, v := range values {
-			if got[k] != v {
-				t.Errorf("value %q = %q, want %q", k, got[k], v)
-			}
-		}
-	})
-
-	t.Run("no edge values stores nothing", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).valuesParam]; ok {
-			t.Errorf("stored an edge values parameter for an edge that reported none")
-		}
-		got, err := ReadEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
-		if err != nil {
-			t.Fatalf("ReadEdgeValues on an absent parameter: %v", err)
-		}
-		if len(got) != 0 {
-			t.Errorf("ReadEdgeValues = %v, want empty", got)
-		}
-	})
-
 	t.Run("ignores unrecognised offer", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 			Offers: []edge.Offer{
 				{Kind: "something-invented-later", Values: map[string]string{"id": "x"}},
-				{Kind: edge.OfferCacheStore, Values: offeredStore()},
+				{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()},
 			},
 		}})
 
@@ -933,7 +892,7 @@ func TestRun(t *testing.T) {
 		if len(iamc.created) != 1 {
 			t.Errorf("an unrecognised offer changed what was minted: %v", iamc.created)
 		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).cacheStoreParam]; !ok {
+		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).releasesStoreParam]; !ok {
 			t.Errorf("the recognised offer alongside it was not adopted")
 		}
 	})
@@ -946,7 +905,7 @@ func TestRun(t *testing.T) {
 					edge.OfferKeyClientCertificateID:          "certificate-1",
 					edge.OfferKeyClientCertificateAuthorities: "-----BEGIN CERTIFICATE-----",
 				}},
-				{Kind: edge.OfferCacheStore, Values: offeredStore()},
+				{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()},
 			},
 		}})
 		log := &warningLog{Log: progress.Discard()}
@@ -962,69 +921,75 @@ func TestRun(t *testing.T) {
 				t.Errorf("stored the worker client certificate offer in %s", name)
 			}
 		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).cacheStoreParam]; !ok {
-			t.Errorf("the cache store offer alongside it was not adopted")
+		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).releasesStoreParam]; !ok {
+			t.Errorf("the releases store offer alongside it was not adopted")
 		}
 	})
 
-	t.Run("no offers stores no cache store", func(t *testing.T) {
+	t.Run("no offers stores no releases store and mints no seed", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).cacheStoreParam]; ok {
-			t.Errorf("stored a cache store for an edge that offered none")
+		names := cloudflareNames(environment.TierProduction)
+		for _, param := range []string{names.releasesStoreParam, names.purgeSeedParam} {
+			if _, ok := ssmc.params[param]; ok {
+				t.Errorf("stored %s for an edge that offered no releases store", param)
+			}
 		}
 	})
 
-	t.Run("adopts cache store per tier", func(t *testing.T) {
+	t.Run("adopts the releases store per tier", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
 			tier  environment.Tier
 			param string
 		}{
-			{"production", environment.TierProduction, cloudflareNames(environment.TierProduction).cacheStoreParam},
-			{"preview", environment.TierPreview, cloudflareNames(environment.TierPreview).cacheStoreParam},
+			{"production", environment.TierProduction, cloudflareNames(environment.TierProduction).releasesStoreParam},
+			{"preview", environment.TierPreview, cloudflareNames(environment.TierPreview).releasesStoreParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
 				frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-					Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offeredStore()}},
+					Offers: []edge.Offer{{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()}},
 				}})
 
 				if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), defaultNamespace, tc.tier, everything(), nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				if _, ok := ssmc.params[tc.param]; !ok {
-					t.Fatalf("no cache store stored at %s", tc.param)
+					t.Fatalf("no releases store stored at %s", tc.param)
 				}
-				got, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, tc.tier, KindCloudflare)
+				got, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, tc.tier, KindCloudflare)
 				if err != nil {
-					t.Fatalf("ReadCacheStore: %v", err)
+					t.Fatalf("ReadReleasesStoreFor: %v", err)
 				}
-				if got.Bucket != "ocel-edge-cache" || got.SecretAccessKey != "sha-of-tok-1" {
+				if got.ScriptName != "ocel-releases-store" || got.BootstrapCredential != "cred-prod" {
 					t.Errorf("stored store = %+v, want the offered coordinates", got)
 				}
 			})
 		}
 	})
 
-	t.Run("dangling cache store token fails bootstrap", func(t *testing.T) {
+	t.Run("a dangling releases store credential fails bootstrap", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		offer := offeredStore()
-		delete(offer, edge.OfferKeySecretAccessKey)
+		offer := offeredReleasesStore()
+		delete(offer, edge.OfferKeyStoreBootstrapCredential)
 		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-			Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offer}},
+			Offers: []edge.Offer{{Kind: edge.OfferReleasesStore, Values: offer}},
 		}})
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil)
 		if err == nil {
-			t.Fatal("expected Run to fail on an unrecoverable cache-store credential")
+			t.Fatal("expected Run to fail on an unrecoverable releases-store credential")
 		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).cacheStoreParam]; ok {
-			t.Error("stored a credential-less cache store despite the hazard")
+		names := cloudflareNames(environment.TierProduction)
+		for _, param := range []string{names.releasesStoreParam, names.purgeSeedParam} {
+			if _, ok := ssmc.params[param]; ok {
+				t.Errorf("stored %s despite the hazard", param)
+			}
 		}
 		if slices.Contains(stacks.stacks(), edgeStack(environment.TierProduction)) {
 			t.Error("provisioned the edge stack despite the hazard")
@@ -1033,9 +998,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("idempotent", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-			Values: map[string]string{"namespaceId": "ns-42"},
-		}})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		for i := range 2 {
 			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
@@ -1103,18 +1066,18 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunPreview(t *testing.T) {
-	t.Run("mints the preview secrets a release and its publisher authenticate with", func(t *testing.T) {
+	t.Run("mints the preview seed every release's purge secret is derived from", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-			Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("-preview", "cred-preview")}},
+			Offers: []edge.Offer{{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()}},
 		}})
 
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), defaultNamespace, environment.TierPreview, everything(), nil); err != nil {
 			t.Fatalf("RunPreview: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, cloudflareNames(environment.TierPreview).isrWriterSeedParam)
+		assertMintedSecrets(t, ssmc, cloudflareNames(environment.TierPreview).purgeSeedParam)
 		assertMintedOriginSecret(t, ssmc, previewOriginSecret)
-		for _, name := range []string{originSecretParam, cloudflareNames(environment.TierProduction).isrWriterSeedParam} {
+		for _, name := range []string{originSecretParam, cloudflareNames(environment.TierProduction).purgeSeedParam} {
 			if _, ok := ssmc.params[name]; ok {
 				t.Errorf("a preview bootstrap wrote %s, want the production secrets left alone", name)
 			}
@@ -1123,8 +1086,7 @@ func TestRunPreview(t *testing.T) {
 
 	t.Run("idempotent", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		values := map[string]string{"namespaceId": "ns-42"}
-		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		var passphrase string
 		for i := range 2 {
@@ -1160,14 +1122,6 @@ func TestRunPreview(t *testing.T) {
 		}
 		if got := ssmc.params[passphraseParam]; got != passphrase {
 			t.Error("the second bootstrap regenerated the Pulumi passphrase, orphaning every preview stack encrypted under the first")
-		}
-
-		got, err := ReadEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierPreview, KindCloudflare)
-		if err != nil {
-			t.Fatalf("ReadEdgeValues: %v", err)
-		}
-		if got["namespaceId"] != values["namespaceId"] {
-			t.Errorf("edge values after a re-run = %v, want %v", got, values)
 		}
 
 		tmpl := parseVariablesTemplate(t, stacks.template(previewStackName))
@@ -1255,11 +1209,8 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-					Values: map[string]string{"namespaceId": "ns-42"},
 					Offers: []edge.Offer{
-						{Kind: edge.OfferCacheStore, Values: offeredStore()},
 						{Kind: edge.OfferReleasesStore, Values: offeredReleasesStore()},
-						{Kind: edge.OfferISRWriter, Values: offeredISRWriter(previewSuffix(tc.tier), "cred")},
 					},
 				}})
 				apis := apisOf(stacks, ssmc, iamc, preloadedStore())
@@ -1321,13 +1272,6 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 			t.Errorf("the edge reader still has %v after the closure took its stack", iamc.keys)
 		}
 	})
-}
-
-func previewSuffix(tier environment.Tier) string {
-	if tier == environment.TierPreview {
-		return "-preview"
-	}
-	return ""
 }
 
 func originSecretFor(t *testing.T, tier environment.Tier) string {

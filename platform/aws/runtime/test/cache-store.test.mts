@@ -2,28 +2,13 @@ import type { PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-const storeEnv = {
-  OCEL_ISR_STORE_BUCKET: "isr",
-};
-
-const adoptStore = () => Object.assign(process.env, storeEnv);
-
 beforeEach(() => {
   process.env.OCEL_ISR_BUCKET = "assets";
   process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
-  for (const name of Object.keys(storeEnv)) delete process.env[name];
-  delete process.env.OCEL_ISR_WRITER_URL;
-  delete process.env.OCEL_PURGE_SECRET;
   delete process.env.OCEL_ISR_EDGE_READABLE;
 });
-
-const adoptWriter = () =>
-  Object.assign(process.env, {
-    OCEL_ISR_WRITER_URL: "https://writer.example",
-    OCEL_PURGE_SECRET: "write-secret",
-  });
 
 afterEach(async () => {
   (await import("@framework/next-runtime/tag-clock")).setTagClockStore(null);
@@ -110,98 +95,13 @@ async function entryStore(responses: any[] = []) {
   return { store: newAwsCacheStore(publishNothing), built, sent, ddbSent };
 }
 
-function writerAnswering(...responses: Response[]) {
-  const calls: Array<[string, any]> = [];
-  vi.stubGlobal("fetch", async (url: any, init: any) => {
-    calls.push([String(url), init ?? {}]);
-    return responses.shift() ?? new Response(null, { status: 204 });
-  });
-  return calls;
-}
-
-test("routes entry reads through the ISR writer when one is injected", async () => {
-  adoptStore();
-  adoptWriter();
-  const calls = writerAnswering(new Response(`{"lastModified":1,"value":{}}`, { status: 200 }));
-
-  const { store, built, sent } = await entryStore();
-
-  expect(await store.readEntry("index")).toEqual({ lastModified: 1, value: {} });
-  expect(calls).toHaveLength(1);
-  expect(calls[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=index");
-  expect(calls[0][1].headers.authorization).toBe("Bearer write-secret");
-  expect(built.some((cfg) => cfg.credentials !== undefined)).toBe(false);
-  expect(sent).toHaveLength(0);
-});
-
-test("refuses to run with an adopted store and no writer to write into it", async () => {
-  adoptStore();
-
-  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
-});
-
-test("a half-configured writer is a failure, not a fallback", async () => {
-  adoptStore();
-
-  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
-
-  process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
-  await expect(entryStore()).rejects.toThrow("OCEL_PURGE_SECRET");
-
-  delete process.env.OCEL_ISR_WRITER_URL;
-  process.env.OCEL_PURGE_SECRET = "write-secret";
-  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
-
-  process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
-  await expect(entryStore()).resolves.toBeDefined();
-});
-
-test("names an entry the same way on the read as on the write", async () => {
-  adoptStore();
-  adoptWriter();
-  const calls = writerAnswering(
-    new Response(`{"lastModified":1,"value":{}}`, { status: 200 }),
-    new Response(null, { status: 204 }),
-  );
-
-  const { store } = await entryStore();
-  await store.readEntry("blog/");
-  await store.writeEntry("blog/", { lastModified: 1, value: {} });
-
-  expect(calls[0][0]).toBe(calls[1][0]);
-  expect(calls[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=blog%2F");
-});
-
-test.each([
-  ["unreachable", () => Promise.reject(new TypeError("fetch failed"))],
-  [
-    "timing out",
-    () => Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" })),
-  ],
-  ["erroring", () => Promise.resolve(new Response("Internal Error", { status: 503 }))],
-  ["refusing the credential", () => Promise.resolve(new Response("Unauthorized", { status: 401 }))],
-  ["refusing the key", () => Promise.resolve(new Response("Bad Request", { status: 400 }))],
-])("serves a cache miss when the writer is %s", async (_name, outcome) => {
-  adoptStore();
-  adoptWriter();
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.stubGlobal("fetch", outcome);
-
-  const { store } = await entryStore();
-
-  await expect(store.readEntry("blog/post")).resolves.toBeNull();
-  await expect(store.readEntry("../other/index")).resolves.toBeNull();
-});
-
 test("refuses a key that would address something outside the deploy's prefix", async () => {
   const { store } = await entryStore();
 
   await expect(store.readEntry("../other/index")).rejects.toThrow("not addressable");
 });
 
-test("keeps fetch entries on the provider's bucket even when a store is adopted", async () => {
-  adoptStore();
-  adoptWriter();
+test("keeps fetch entries on the provider's bucket", async () => {
   const { store, built, sent } = await entryStore([
     { Body: { transformToString: async () => `{"lastModified":9,"value":{}}` } },
   ]);
@@ -220,8 +120,6 @@ test("keeps fetch entries on the provider's bucket even when a store is adopted"
 });
 
 test("writes fetch entries to the provider's bucket under the fetch prefix", async () => {
-  adoptStore();
-  adoptWriter();
   const { store, sent } = await entryStore();
 
   await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
@@ -232,7 +130,7 @@ test("writes fetch entries to the provider's bucket under the fetch prefix", asy
   });
 });
 
-test("stays on the provider's own bucket when no store is adopted", async () => {
+test("keeps page entries on the provider's own bucket", async () => {
   const { store, built, sent } = await entryStore();
 
   await store.writeEntry("index", { lastModified: 1, value: {} });
@@ -407,42 +305,6 @@ test("an older singular write cannot walk back a newer plural one", async () => 
   const item = items.get("PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products")!;
   expect(item.expired.N).toBe("2000");
   expect(Number(item.gsi1sk.S)).toBe(2_000);
-});
-
-test("routes entry writes through the ISR writer when one is injected", async () => {
-  adoptStore();
-  adoptWriter();
-  const fetches: Array<[string, any]> = [];
-  vi.stubGlobal("fetch", async (url: any, init: any) => {
-    fetches.push([String(url), init]);
-    return new Response(null, { status: 204 });
-  });
-
-  const { store, sent } = await entryStore();
-  await store.writeEntry("blog/post", { lastModified: 1, value: {} });
-
-  expect(fetches).toHaveLength(1);
-  expect(fetches[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=blog%2Fpost");
-  expect(sent).toHaveLength(0);
-});
-
-test("keeps fetch entries off the ISR writer", async () => {
-  adoptStore();
-  adoptWriter();
-  const fetches: string[] = [];
-  vi.stubGlobal("fetch", async (url: any) => {
-    fetches.push(String(url));
-    return new Response(null, { status: 204 });
-  });
-
-  const { store, sent } = await entryStore();
-  await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
-
-  expect(fetches).toHaveLength(0);
-  expect(sent[0]).toMatchObject({
-    Bucket: "assets",
-    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
-  });
 });
 
 const edgeReadableTagging = "ocel%3Aedge=readable";

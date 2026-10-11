@@ -10,7 +10,6 @@
     "./client-authorization": "./src/client-authorization.mts",
     "./edge-cache": "./src/edge-cache.mts",
     "./empty-body": "./src/empty-body.mts",
-    "./isr-writer": "./src/isr-writer.mts",
     "./preview-gate": "./src/preview-gate.mts",
     "./purge": "./src/purge.mts",
     "./hosting": "./src/hosting.mts",

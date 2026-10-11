@@ -2,10 +2,6 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -53,38 +49,9 @@ func (o *orderLog) add(step string) {
 	o.steps = append(o.steps, step)
 }
 
-type writerRequest struct {
-	path, authorization string
-	body                map[string]string
-}
-
-type isrWriterServer struct {
-	mu       sync.Mutex
-	requests []writerRequest
-}
-
-func serveISRWriter(t *testing.T, order *orderLog) (*isrWriterServer, string) {
+func adoptTheWorker(t *testing.T, h *offersHarness) {
 	t.Helper()
-	s := &isrWriterServer{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
-		var body map[string]string
-		_ = json.Unmarshal(raw, &body)
-		s.mu.Lock()
-		s.requests = append(s.requests, writerRequest{path: r.URL.Path, authorization: r.Header.Get("Authorization"), body: body})
-		s.mu.Unlock()
-		order.add("initialize")
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	t.Cleanup(server.Close)
-	return s, server.URL
-}
-
-func adoptWriterAt(t *testing.T, h *offersHarness, endpoint string) {
-	t.Helper()
-	writer := writerOffer("c2")
-	writer.Values[edge.OfferKeyISRWriterEndpoint] = endpoint
-	if err := h.adopt([]edge.Offer{storeOffer("c1"), writer, certificateOffer()}, nil); err != nil {
+	if err := h.adopt([]edge.Offer{storeOffer("c1"), certificateOffer()}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,13 +67,12 @@ func isrSpec(front edge.Edge, compute provider.Compute, isr *provider.ISRSpec) p
 
 const isrPrefix = "p/shop/main/web/r1/isr"
 
-func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsPurgeSecretToTheRecord(t *testing.T) {
+func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	order := &orderLog{}
-	writer, endpoint := serveISRWriter(t, order)
-	adoptWriterAt(t, h, endpoint)
-	seed, err := readISRWriterSeed(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	adoptTheWorker(t, h)
+	seed, err := readPurgeSeed(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,26 +83,15 @@ func TestANextDeployBehindTheCodeRunningEdgeRegistersItsISRPrefixAndHandsItsPurg
 		t.Fatalf("Provision = %v", err)
 	}
 
-	secret := cloudflare.DerivePurgeSecret(seed, isrPrefix)
-	if result.PurgeSecret != secret {
-		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, secret)
+	if want := cloudflare.DerivePurgeSecret(seed, isrPrefix); result.PurgeSecret != want {
+		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, want)
 	}
-	if len(writer.requests) != 1 {
-		t.Fatalf("%d writer requests, want 1", len(writer.requests))
-	}
-	got := writer.requests[0]
-	if got.path != "/"+isrPrefix+"/initialize" || got.authorization != "Bearer c2" {
-		t.Errorf("request = %+v, want POST /%s/initialize with the writer credential", got, isrPrefix)
-	}
-	if got.body["secretHash"] == "" || got.body["secretHash"] == secret {
-		t.Errorf("body = %v, want the SHA-256 of the write secret and never the secret", got.body)
-	}
-	if !slices.Equal(order.steps, []string{"initialize", "provision"}) {
-		t.Errorf("order = %v, want the prefix registered before the deploy provisions", order.steps)
+	if !slices.Equal(order.steps, []string{"provision"}) {
+		t.Errorf("order = %v, want the deploy provisioned and nothing else called", order.steps)
 	}
 }
 
-func TestADeployNotBehindTheCodeRunningEdgeTouchesNoISRWriter(t *testing.T) {
+func TestADeployNotBehindTheCodeRunningEdgeHandsNoPurgeSecretToTheRecord(t *testing.T) {
 	t.Parallel()
 	for name, spec := range map[string]provider.StackSpec{
 		"the alb front":       isrSpec(codeRunningFront{kind: "alb"}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix}),
@@ -149,8 +104,7 @@ func TestADeployNotBehindTheCodeRunningEdgeTouchesNoISRWriter(t *testing.T) {
 			t.Parallel()
 			h := newOffersHarness(t)
 			order := &orderLog{}
-			writer, endpoint := serveISRWriter(t, order)
-			adoptWriterAt(t, h, endpoint)
+			adoptTheWorker(t, h)
 			inner := provider.StackResult{EdgeBundleKey: "k"}
 			wrapped := stacks{Stacks: recordingStacks{order: order, result: inner}, p: programming(h)}
 
@@ -158,8 +112,8 @@ func TestADeployNotBehindTheCodeRunningEdgeTouchesNoISRWriter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Provision = %v", err)
 			}
-			if len(writer.requests) != 0 || result.PurgeSecret != "" || result.EdgeBundleKey != "k" {
-				t.Errorf("requests = %d, result = %+v, want no writer call and the inner result unchanged", len(writer.requests), result)
+			if result.PurgeSecret != "" || result.EdgeBundleKey != "k" {
+				t.Errorf("result = %+v, want the inner result unchanged and no purge secret", result)
 			}
 		})
 	}
@@ -181,12 +135,11 @@ func TestANextDeployBehindAnEdgeItNeverAdoptedIsNotReadyAndDeploysNothing(t *tes
 	}
 }
 
-func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardRegistersNothingWithTheISRWriter(t *testing.T) {
+func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardProvisionsNothing(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	order := &orderLog{}
-	writer, endpoint := serveISRWriter(t, order)
-	adoptWriterAt(t, h, endpoint)
+	adoptTheWorker(t, h)
 	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix})
 	spec.App.Functions = []provider.FunctionSpec{{Name: "web"}}
 	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
@@ -196,7 +149,7 @@ func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardRegistersNothingWi
 	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "originDomain") {
 		t.Errorf("Provision = %v, want an invalid refusal naming originDomain", err)
 	}
-	if len(writer.requests) != 0 || len(order.steps) != 0 {
-		t.Errorf("writer requests %v and steps %v, want the refusal before the prefix is registered or anything provisioned", writer.requests, order.steps)
+	if len(order.steps) != 0 {
+		t.Errorf("steps %v, want the refusal before anything provisioned", order.steps)
 	}
 }

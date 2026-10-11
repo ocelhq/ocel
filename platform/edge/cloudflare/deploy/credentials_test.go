@@ -57,22 +57,22 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 		gone    []string
 	}{
 		{
-			name:    "bootstrap mints the R2 access token, so it edits API tokens",
+			name:    "bootstrap mints no token and keeps no bucket, so it edits neither API tokens nor R2",
 			purpose: edge.PurposeBootstrap,
 			want: []string{
-				"User · API Tokens · Edit",
 				"Account · Workers Scripts · Edit",
 				"Zone · Workers Routes · Edit",
 			},
+			gone: []string{"User · API Tokens", "R2"},
 		},
 		{
-			name:    "deploy mints nothing, so it never edits API tokens",
+			name:    "deploy mints nothing, so it never edits API tokens or R2",
 			purpose: edge.PurposeDeploy,
 			want: []string{
 				"Account · Workers Scripts · Edit",
 				"Zone · Workers Routes · Edit",
 			},
-			gone: []string{"User · API Tokens · Edit"},
+			gone: []string{"User · API Tokens", "R2"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

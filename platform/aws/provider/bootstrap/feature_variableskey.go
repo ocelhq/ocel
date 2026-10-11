@@ -36,7 +36,7 @@ func variablesKeyPlacements(bucket string) stackPayloads {
 	return stackPayloads{envSourceSync: envSourceSyncPlacement(bucket)}
 }
 
-func variablesKeyTemplate(in featureInputs) featureStack {
+func variablesKeyTemplate(in featureInputs) (featureStack, error) {
 	params, values := crossStack([]crossStackParam{
 		{paramVariablesTableName, "The core bootstrap's variables table, which the env source sync reads registrations from and writes values into.", in.refs.variablesTable},
 		{paramVariablesTableARN, "ARN of that table, so the env source sync's role reaches this table and no other.", in.refs.variablesTableARN},
@@ -53,7 +53,7 @@ Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this a
 %s`,
 			provider.FeatureVariablesKey, in.tier, params, in.tier,
 			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, fmt.Sprintf("%q", in.variablesKey)),
-			broughtVariablesKeyOutput(in.variablesKey))}
+			broughtVariablesKeyOutput(in.variablesKey))}, nil
 	}
 	return featureStack{
 		params: values,
@@ -66,7 +66,7 @@ Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted vari
 			variablesKeyResources(in.ns, in.tier),
 			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, "!GetAtt VariablesKey.Arn"),
 			variablesKeyOutputs()),
-	}
+	}, nil
 }
 
 func broughtVariablesKeyOutput(named string) string {

@@ -203,8 +203,6 @@ func (r *release) store(name string) (string, error) {
 		return r.cfg.ArtifactBucket, nil
 	case provider.StoreAssets:
 		return r.cfg.AssetBucket, nil
-	case provider.StoreCache:
-		return r.cfg.CacheStoreBucket, nil
 	}
 	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
@@ -292,12 +290,11 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
-	if isrEntriesAdopted(r.cfg.objectStores()) {
-		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
-		cache.WriterURL = r.cfg.ISRWriterEndpoint
-		cache.PurgeSecret = cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, isr.Prefix)
-	} else {
-		cache.EdgeReadable = edgeReadsAssetBucket(r.cfg)
+	if edgeReadsAssetBucket(r.cfg) {
+		cache.EdgeReadable = true
+		if r.cfg.PurgeSeed != "" {
+			cache.PurgeSecret = cloudflare.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Prefix)
+		}
 	}
 	return cache
 }

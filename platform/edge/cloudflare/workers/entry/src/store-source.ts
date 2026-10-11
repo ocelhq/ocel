@@ -16,23 +16,7 @@ function openBucketSource(access: BucketAccess): StoreSource {
   };
 }
 
-function openR2Source(store: R2Bucket): StoreSource {
-  return {
-    async get(key) {
-      const object = await store.get(key);
-      return object ? { text: () => object.text() } : null;
-    },
-  };
-}
-
 export function openEntrySource(env: Env): StoreSource | undefined {
   const access = findBucketAccess(env);
-  const bucket = access && openBucketSource(access);
-  const r2 = env.OCEL_CACHE_STORE && openR2Source(env.OCEL_CACHE_STORE);
-  if (!bucket || !r2) return bucket ?? r2;
-  return {
-    async get(key) {
-      return (await bucket.get(key)) ?? r2.get(key);
-    },
-  };
+  return access?.holdsEntries ? openBucketSource(access) : undefined;
 }

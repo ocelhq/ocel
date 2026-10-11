@@ -29,12 +29,16 @@ func isrPlacements(bucket string) stackPayloads {
 	}
 }
 
-func isrTemplate(in featureInputs) featureStack {
+func isrTemplate(in featureInputs) (featureStack, error) {
 	params, values := crossStack([]crossStackParam{
 		{paramStateTableName, "The core bootstrap's state table, which stores the tag clock the invalidator turns into cache invalidations.", in.refs.stateTable},
 		{paramStateTableARN, "ARN of that table, so the invalidator's role can read the ledger items naming which distributions to reach.", in.refs.stateTableARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the invalidator has.", in.refs.stateTableStreamARN},
 	})
+	seedParam, err := PurgeSeedParamFor(in.ns, in.tier, KindCloudflare)
+	if err != nil {
+		return featureStack{}, err
+	}
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
@@ -42,6 +46,6 @@ Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration 
 %sResources:
 %s`,
 			FeatureISR, in.tier, params,
-			tagInvalidatorResources(in.ns, in.code.invalidator, in.tier)),
-	}
+			tagInvalidatorResources(in.ns, in.code.invalidator, in.tier, seedParam)),
+	}, nil
 }

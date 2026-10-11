@@ -93,9 +93,6 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}
-	if err := seedISRWriter(ctx, cfg.isrWriter(), app, cache); err != nil {
-		return err
-	}
 	if len(uploads) == 0 {
 		return nil
 	}
@@ -158,17 +155,11 @@ func seedTagSnapshot(ctx context.Context, cfg Config, cache *isrConfig, at time.
 }
 
 func snapshotTargets(cfg Config) []uploadTarget {
-	var targets []uploadTarget
-	for _, t := range []uploadTarget{{up: cfg.Objects, bucket: cfg.AssetBucket}, entryTarget(cfg)} {
-		if t.validate() != nil {
-			continue
-		}
-		if len(targets) == 1 && targets[0].bucket == t.bucket {
-			continue
-		}
-		targets = append(targets, t)
+	target := uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}
+	if target.validate() != nil {
+		return nil
 	}
-	return targets
+	return []uploadTarget{target}
 }
 
 func isPreconditionFailed(err error) bool {
@@ -181,18 +172,11 @@ func isPreconditionFailed(err error) bool {
 }
 
 func entryTarget(cfg Config) uploadTarget {
-	if isrEntriesAdopted(cfg.objectStores()) {
-		return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier}
-	}
 	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier, edgeReadable: edgeReadsAssetBucket(cfg)}
 }
 
 func edgeReadsAssetBucket(cfg Config) bool {
 	return cfg.AssetBucket != "" && cfg.Objects != nil && cfg.EdgeAccessKeyID != "" && cfg.EdgeSecretKey != ""
-}
-
-func isrEntriesAdopted(stores ObjectStores) bool {
-	return stores.CacheStoreBucket != "" && stores.CacheStoreObjects != nil
 }
 
 type collectedFile struct {

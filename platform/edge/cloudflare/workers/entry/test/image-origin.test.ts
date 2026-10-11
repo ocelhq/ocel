@@ -3,11 +3,10 @@ import {
   functionUrlImageOrigin,
   type ImageConfig,
   type ImageOriginRequest,
+  serveImage,
   unprovisionedImageOrigin,
 } from "@framework/next-router/image";
 import { describe, expect, it } from "vitest";
-import type { CacheDeps } from "../src/cache";
-import { serveImage } from "../src/image";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
@@ -34,10 +33,6 @@ function recordingFetch(response: () => Response | Promise<Response>) {
   return { fetch: fn, calls };
 }
 
-function testCache(): CacheDeps {
-  return { cache: caches.default, now: () => 0, waitUntil: () => {} };
-}
-
 function serveThrough(
   origin = unprovisionedImageOrigin,
   {
@@ -52,9 +47,9 @@ function serveThrough(
     basePath: "",
     assetPrefix: ASSET_PREFIX,
     slug,
-    buildId: "b1",
+    app: "web",
+    appBuildId: "b1",
     origin,
-    cache: testCache(),
   });
 }
 
@@ -207,7 +202,7 @@ describe("the image route without an optimizer", () => {
     });
 
     expect(response.status).toBe(502);
-    expect(response.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
     expect(response.headers.get("cache-control")).toBeNull();
   });
 

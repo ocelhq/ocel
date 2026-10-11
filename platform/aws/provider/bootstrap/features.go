@@ -66,7 +66,7 @@ type feature struct {
 	serves    buildoutput.Uses
 	edges     []edge.Kind
 
-	template   func(featureInputs) featureStack
+	template   func(featureInputs) (featureStack, error)
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
@@ -75,7 +75,7 @@ type feature struct {
 	dropPlan   func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 }
 
-func (f feature) planned(in featureInputs) featureStack {
+func (f feature) planned(in featureInputs) (featureStack, error) {
 	if f.placements != nil {
 		in.code = f.placements(in.artifactBucket)
 	}
@@ -90,7 +90,7 @@ func (f feature) staged(ctx context.Context, store ObjectStore, in featureInputs
 		}
 		in.code = code
 	}
-	return f.template(in), nil
+	return f.template(in)
 }
 
 func (f feature) edgeKind() (edge.Kind, bool) {

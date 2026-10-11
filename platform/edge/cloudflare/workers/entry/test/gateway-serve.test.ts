@@ -1,4 +1,4 @@
-import { createExecutionContext, env as testEnv } from "cloudflare:test";
+import { createExecutionContext } from "cloudflare:test";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
@@ -44,7 +44,7 @@ function ctxWithServe(answer: (key: string) => Response) {
     },
   });
   const ctx = createExecutionContext();
-  Object.defineProperty(ctx, "exports", { value: { Serve: serve, CacheEntrypoint: () => ({}) } });
+  Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
   return { asked, headers, ctx };
 }
 
@@ -78,7 +78,6 @@ describe("the gateway on an origin whose bucket an HMAC key reads", () => {
   const hmacEnv: Env = {
     RELEASES: env.RELEASES,
     OCEL_SLUG: "p1",
-    OCEL_CACHE_STORE: testEnv.TAG_SNAPSHOT_STORE,
     OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com",
     OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
     OCEL_ASSET_STORE_PREFIX: "assets/",
@@ -192,7 +191,7 @@ describe("the gateway serving a prerender", () => {
       purge: async () => ({ ok: true }),
     });
     const ctx = createExecutionContext();
-    Object.defineProperty(ctx, "exports", { value: { Serve: serve, CacheEntrypoint: () => ({}) } });
+    Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
     return { origin, ctx };
   }
 

@@ -302,14 +302,14 @@ func TestDroppingTheEdgeFeatureForgetsWhatItsBootstrapAdopted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			b, registry, h := frontingWithSecrets(t)
-			registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1", "c2"), Values: map[string]string{"cacheBucket": "b"}}
+			registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
 			raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
 			if err := b.raiseFronts(context.Background(), raising, nil); err != nil {
 				t.Fatalf("raiseFronts = %v", err)
 			}
 			kind := registry.front.Kind()
 			credentials := h.clients.EdgeCredentialsSecret(environment.TierProduction, kind)
-			seed := h.clients.ISRWriterSeedSecret(environment.TierProduction, kind)
+			seed := h.clients.PurgeSeedSecret(environment.TierProduction, kind)
 			if _, found := adoptedAs(t, h, kind); !found || !h.secrets.has(credentials) || !h.secrets.has(seed) {
 				t.Fatal("the raise adopted nothing")
 			}
@@ -331,7 +331,7 @@ func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
 	t.Parallel()
 
 	b, registry, h := frontingWithSecrets(t)
-	registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1", "c2")}
+	registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
 	if err := b.raiseFronts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
 	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature}); err == nil {
 		t.Fatal("tearFronts = nil though the front refused")
 	}
-	if !h.secrets.has(h.clients.ISRWriterSeedSecret(environment.TierProduction, registry.front.Kind())) {
+	if !h.secrets.has(h.clients.PurgeSeedSecret(environment.TierProduction, registry.front.Kind())) {
 		t.Error("the seed went before the edge did, though its workers still run")
 	}
 }

@@ -16,38 +16,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func seedBootstrapBundles(t *testing.T, store, writer string) {
+func seedBootstrapBundle(t *testing.T, store string) {
 	t.Helper()
-	priorStore, priorWriter := releasesStoreBundle, isrWriterBundle
-	releasesStoreBundle, isrWriterBundle = []byte(store), []byte(writer)
-	t.Cleanup(func() { releasesStoreBundle, isrWriterBundle = priorStore, priorWriter })
+	prior := releasesStoreBundle
+	releasesStoreBundle = []byte(store)
+	t.Cleanup(func() { releasesStoreBundle = prior })
 }
 
-func bootstrapMock(t *testing.T, provisioned bool) *cfMock {
+func bootstrapMock(t *testing.T) *cfMock {
 	t.Helper()
 	t.Setenv(envAccountID, "acct")
 	t.Setenv(envAPIToken, "tok")
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	if provisioned {
-		m.existingBuckets = []string{cacheStoreName(environment.TierProduction)}
-		m.existingTokens = []map[string]any{{"id": "token-1", "name": cacheStoreName(environment.TierProduction)}}
-	}
-	return m
+	return &cfMock{zoneID: "zone1", zoneName: "app.com"}
 }
 
 func productionPlan(action edge.PlanAction, reason string) []edge.PlanChange {
-	changes := []edge.PlanChange{
-		{Kind: kindR2Bucket, Name: cacheStoreName(environment.TierProduction), Action: action, Reason: reason},
-		{Kind: kindAPIToken, Name: cacheStoreName(environment.TierProduction), Action: action, Reason: reason},
+	return []edge.PlanChange{
+		{Kind: kindWorker, Name: sharedStoreScriptName, Action: action, Reason: reason},
+		{Kind: kindWorkerSecret, Name: sharedStoreScriptName + "/" + bootstrapSecretBinding, Action: action, Reason: reason},
+		{Kind: kindWorkerSubdomain, Name: sharedStoreScriptName, Action: action, Reason: reason},
 	}
-	for _, script := range []string{sharedStoreScriptName, isrWriterScriptName} {
-		changes = append(changes,
-			edge.PlanChange{Kind: kindWorker, Name: script, Action: action, Reason: reason},
-			edge.PlanChange{Kind: kindWorkerSecret, Name: script + "/" + bootstrapSecretBinding, Action: action, Reason: reason},
-			edge.PlanChange{Kind: kindWorkerSubdomain, Name: script, Action: action, Reason: reason},
-		)
-	}
-	return changes
 }
 
 func driftedWorker(script, reason string) []edge.PlanChange {
@@ -87,8 +75,8 @@ func planner(t *testing.T, m *cfMock) func(context.Context, environment.Tier) ([
 
 func TestPlanBootstrap(t *testing.T) {
 	t.Run("an untouched account creates every resource", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, false)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 
 		changes, err := planner(t, m)(t.Context(), environment.TierProduction)
 		if err != nil {
@@ -100,8 +88,8 @@ func TestPlanBootstrap(t *testing.T) {
 	})
 
 	t.Run("a bootstrapped account keeps every resource", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -117,8 +105,8 @@ func TestPlanBootstrap(t *testing.T) {
 	})
 
 	t.Run("a rebuilt bundle updates only the worker that drifted", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -135,8 +123,8 @@ func TestPlanBootstrap(t *testing.T) {
 	})
 
 	t.Run("a compatibility bump plans and applies an update to a script that has not changed", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -164,31 +152,31 @@ func TestPlanBootstrap(t *testing.T) {
 	})
 
 	t.Run("a binding the deployed worker no longer has plans as an update", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		uploads := len(m.putScripts)
-		stripBinding(t, m, isrWriterScriptName, "r2_bucket")
+		stripBinding(t, m, sharedStoreScriptName, durableObjectBindingType)
 
 		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
-		if !reflect.DeepEqual(changes, driftedWorker(isrWriterScriptName, reasonMetadataDrift)) {
-			t.Errorf("plan = %+v, want the isr writer updated for the binding it lost", changes)
+		if !reflect.DeepEqual(changes, driftedWorker(sharedStoreScriptName, reasonMetadataDrift)) {
+			t.Errorf("plan = %+v, want the releases store updated for the binding it lost", changes)
 		}
 
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
-		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{isrWriterScriptName}) {
-			t.Errorf("uploads = %v, want the isr writer alone re-uploaded", got)
+		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{sharedStoreScriptName}) {
+			t.Errorf("uploads = %v, want the releases store alone re-uploaded", got)
 		}
-		if len(bindingsByType(uploadedMetadata(t, m, isrWriterScriptName), "r2_bucket")) != 1 {
-			t.Error("the re-upload does not restore the cache store binding it was missing")
+		if len(bindingsByType(uploadedMetadata(t, m, sharedStoreScriptName), durableObjectBindingType)) != 1 {
+			t.Error("the re-upload does not restore the durable object binding it was missing")
 		}
 	})
 
@@ -211,8 +199,8 @@ func TestPlanBootstrap(t *testing.T) {
 
 func TestBootstrapConverges(t *testing.T) {
 	t.Run("a second run writes nothing and reoffers no credential", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 
 		first, err := p.Bootstrap(t.Context(), environment.TierProduction)
@@ -220,9 +208,6 @@ func TestBootstrapConverges(t *testing.T) {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		for _, offer := range first.Offers {
-			if offer.Kind == edge.OfferCacheStore {
-				continue
-			}
 			if credOf(t, offer) == "" {
 				t.Errorf("first Bootstrap offered %q with no bootstrap credential", offer.Kind)
 			}
@@ -239,13 +224,7 @@ func TestBootstrapConverges(t *testing.T) {
 		if len(m.subdomainCalls) != subdomains {
 			t.Errorf("re-run set %v subdomains, want none", m.subdomainCalls[subdomains:])
 		}
-		if len(m.createdBuckets) != 0 {
-			t.Errorf("created buckets = %v, want none", m.createdBuckets)
-		}
 		for _, offer := range second.Offers {
-			if offer.Kind == edge.OfferCacheStore {
-				continue
-			}
 			if cred := credOf(t, offer); cred != "" {
 				t.Errorf("re-run offered %q a fresh credential %q, want the stored one left alone", offer.Kind, cred)
 			}
@@ -256,8 +235,8 @@ func TestBootstrapConverges(t *testing.T) {
 	})
 
 	t.Run("a drifted bundle is re-uploaded inheriting the existing secret", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -268,7 +247,7 @@ func TestBootstrapConverges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
-		if got := m.putScripts; !reflect.DeepEqual(got, []string{sharedStoreScriptName, isrWriterScriptName, sharedStoreScriptName}) {
+		if got := m.putScripts; !reflect.DeepEqual(got, []string{sharedStoreScriptName, sharedStoreScriptName}) {
 			t.Errorf("uploads = %v, want the drifted store worker alone re-uploaded", got)
 		}
 
@@ -303,8 +282,8 @@ func missingSecret(script string) []edge.PlanChange {
 
 func TestBootstrapWithTheCredentialGone(t *testing.T) {
 	t.Run("a worker that lost its secret is planned and repaired by setting the secret alone", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -331,15 +310,11 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			t.Errorf("secrets set = %+v, want %s alone on %s", m.putSecrets, bootstrapSecretBinding, sharedStoreScriptName)
 		}
 		for _, offer := range out.Offers {
-			switch offer.Kind {
-			case edge.OfferReleasesStore:
-				if cred := credOf(t, offer); cred != m.putSecrets[0].text {
-					t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
-				}
-			case edge.OfferISRWriter:
-				if cred := credOf(t, offer); cred != "" {
-					t.Errorf("the isr writer was reoffered %q, want the credential it still has left alone", cred)
-				}
+			if offer.Kind != edge.OfferReleasesStore {
+				continue
+			}
+			if cred := credOf(t, offer); cred != m.putSecrets[0].text {
+				t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
 			}
 		}
 
@@ -358,8 +333,6 @@ func credOf(t *testing.T, offer edge.Offer) string {
 	switch offer.Kind {
 	case edge.OfferReleasesStore:
 		return offer.Values[edge.OfferKeyStoreBootstrapCredential]
-	case edge.OfferISRWriter:
-		return offer.Values[edge.OfferKeyISRWriterBootstrapCredential]
 	default:
 		t.Fatalf("offer %q includes no bootstrap credential", offer.Kind)
 		return ""
@@ -369,11 +342,8 @@ func credOf(t *testing.T, offer edge.Offer) string {
 func endpoints(out edge.BootstrapOutput) map[edge.OfferKind]string {
 	found := map[edge.OfferKind]string{}
 	for _, offer := range out.Offers {
-		switch offer.Kind {
-		case edge.OfferReleasesStore:
+		if offer.Kind == edge.OfferReleasesStore {
 			found[offer.Kind] = offer.Values[edge.OfferKeyStoreEndpoint]
-		case edge.OfferISRWriter:
-			found[offer.Kind] = offer.Values[edge.OfferKeyISRWriterEndpoint]
 		}
 	}
 	return found

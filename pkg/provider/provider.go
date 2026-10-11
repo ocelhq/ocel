@@ -59,8 +59,7 @@ type EdgeProgramRequest struct {
 }
 
 type EdgeProgram struct {
-	Spec   *edge.ProgramSpec
-	Values map[string]string
+	Spec *edge.ProgramSpec
 }
 
 type DeployPreflight struct {

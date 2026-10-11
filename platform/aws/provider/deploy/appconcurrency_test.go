@@ -117,8 +117,7 @@ func TestOneStacksPortProvisionsSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.Region = "us-east-1"
 	cfg.ImageOptimizerURL = ""
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
 	stacks := stacksWith(cfg, engine)

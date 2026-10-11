@@ -481,3 +481,5 @@ func TestADNSWriterWithNoAccountIDRefusesToWrite(t *testing.T) {
 		t.Errorf("Ensure() error = %v, want the unset account id named", err)
 	}
 }
+
+const testAccountID = "acct-123"

@@ -24,6 +24,10 @@ const NO_VARIANT = "-";
 
 const EDGE_SOURCE = "edge:";
 
+const IMAGE_SOURCE = "image:";
+
+export const IMAGE_CALL_HEADER = "x-ocel-image-call";
+
 export const RENDER_RELEASE_HEADER = "x-ocel-render-release";
 
 export const SERVE_REFUSED_HEADER = "x-ocel-serve-refused";
@@ -117,6 +121,18 @@ export function buildEdgeCall(
   return buildRenderCall(`${EDGE_SOURCE}${entryKey}`, publicUrl, coordinates);
 }
 
+export function buildImageCall(
+  optimizerUrl: string,
+  coordinates: Omit<RenderCoordinates, "variant">,
+  digest: string,
+): ServeCall {
+  return buildRenderCall(
+    `${IMAGE_SOURCE}${optimizerUrl}`,
+    `https://image.ocel/${digest}`,
+    coordinates,
+  );
+}
+
 function splitRenderCall(requestUrl: string): { scope: string[]; rest: string } {
   const { pathname, search } = new URL(requestUrl);
   const segments = pathname.split("/");
@@ -145,6 +161,11 @@ export function buildOriginUrl(requestUrl: string): string {
 export function readEdgeEntry(requestUrl: string): string | undefined {
   const source = splitRenderCall(requestUrl).scope[3];
   return source.startsWith(EDGE_SOURCE) ? source.slice(EDGE_SOURCE.length) : undefined;
+}
+
+export function readImageOptimizer(requestUrl: string): string | undefined {
+  const source = splitRenderCall(requestUrl).scope[3];
+  return source.startsWith(IMAGE_SOURCE) ? source.slice(IMAGE_SOURCE.length) : undefined;
 }
 
 export function buildEdgeUrl(requestUrl: string): string {

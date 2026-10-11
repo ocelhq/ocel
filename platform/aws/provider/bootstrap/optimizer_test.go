@@ -97,7 +97,6 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 func bootstrapPayloads() map[string]payloads.Payload {
 	byPrefix := map[string]payloads.Payload{
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
-		tagPublisherKeyPrefix:   payloads.TagPublisher(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
 		envSourceSyncKeyPrefix:  payloads.EnvSourceSync(),
 	}

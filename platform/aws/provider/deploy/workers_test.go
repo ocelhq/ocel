@@ -29,8 +29,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	cfg.Region = "us-east-1"
 	cfg.ImageOptimizerURL = ""
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
 	for _, worker := range workers {
 		spec.App.Workers = append(spec.App.Workers, provider.WorkerSpec{Name: worker})
 	}

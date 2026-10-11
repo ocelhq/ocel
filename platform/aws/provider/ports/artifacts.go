@@ -13,7 +13,6 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -40,17 +39,6 @@ type Stores interface {
 type Buckets struct {
 	Functions string
 	Assets    string
-	Caches    []CacheBucket
-}
-
-type CacheBucket struct {
-	Name   string
-	S3     S3API
-	Writer ISRWriter
-}
-
-type ISRWriter interface {
-	Destroy(ctx context.Context, isrPrefix string) error
 }
 
 func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
@@ -71,37 +59,22 @@ func (a Artifacts) bucket(ctx context.Context, tier environment.Tier, store stri
 	if err != nil {
 		return "", nil, err
 	}
-	name, client := "", a.S3
+	var name string
 	switch store {
 	case provider.StoreFunctions:
 		name = buckets.Functions
 	case provider.StoreAssets:
 		name = buckets.Assets
-	case provider.StoreCache:
-		if len(buckets.Caches) > 1 {
-			return "", nil, refusal.Refuse(refusal.CodeInvalid,
-				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(buckets.Caches))
-		}
-		if len(buckets.Caches) == 1 {
-			name, client = buckets.Caches[0].Name, a.reach(buckets.Caches[0])
-		}
 	default:
 		return "", nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider keeps no %q store; it keeps %q, %q and %q",
-			store, provider.StoreFunctions, provider.StoreAssets, provider.StoreCache)
+			"this provider keeps no %q store; it keeps %q and %q",
+			store, provider.StoreFunctions, provider.StoreAssets)
 	}
 	if name == "" {
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
 			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, provider.BootstrapCommand(tier))
 	}
-	return name, client, nil
-}
-
-func (a Artifacts) reach(cache CacheBucket) S3API {
-	if cache.S3 != nil {
-		return cache.S3
-	}
-	return a.S3
+	return name, a.S3, nil
 }
 
 func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
@@ -185,27 +158,14 @@ func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 	if err != nil {
 		return err
 	}
-	sweeps := []CacheBucket{{Name: buckets.Functions, S3: a.S3}, {Name: buckets.Assets, S3: a.S3}}
-	for _, cache := range buckets.Caches {
-		sweeps = append(sweeps, CacheBucket{Name: cache.Name, S3: a.reach(cache)})
-	}
+	sweeps := []string{buckets.Functions, buckets.Assets}
 	var errs []error
-	if isrPrefix, covers := naming.ISRPrefixUnder(prefix); covers {
-		for _, cache := range buckets.Caches {
-			if cache.Writer == nil {
-				continue
-			}
-			if err := cache.Writer.Destroy(ctx, isrPrefix); err != nil {
-				errs = append(errs, fmt.Errorf("retire the isr writer's record of %s: %w", isrPrefix, err))
-			}
-		}
-	}
 	swept := 0
-	for _, sweeping := range sweeps {
-		if sweeping.Name == "" {
+	for _, bucket := range sweeps {
+		if bucket == "" {
 			continue
 		}
-		if err := a.sweep(ctx, sweeping.S3, sweeping.Name, prefix); err != nil {
+		if err := a.sweep(ctx, a.S3, bucket, prefix); err != nil {
 			errs = append(errs, err)
 			continue
 		}

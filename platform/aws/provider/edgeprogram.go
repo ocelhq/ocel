@@ -40,10 +40,6 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		StoreScriptName:          params.ReleasesStore.ScriptName,
 		StoreEndpoint:            params.ReleasesStore.Endpoint,
 		StoreBootstrapCredential: params.ReleasesStore.BootstrapCredential,
-		ISRWriterScriptName:      params.ISRWriter.ScriptName,
-	}
-	if params.EdgeValuesErr == nil {
-		program.Values = params.EdgeValues
 	}
 	return program.Build()
 }

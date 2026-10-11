@@ -31,11 +31,9 @@ func programmed(slug string, tier environment.Tier) cloudflare.EntryProgram {
 		Slug:                     slug,
 		Env:                      "prod",
 		Origin:                   awsWorkerValues().Bindings(),
-		Values:                   map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
 		StoreScriptName:          "ocel-releases-store-preview",
 		StoreEndpoint:            "https://store.example",
 		StoreBootstrapCredential: "store-cred",
-		ISRWriterScriptName:      "ocel-isr-writer-preview",
 	}
 }
 
@@ -53,7 +51,6 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		maps.Copy(out, extra)
 		return out
 	}
-	values := map[string]string{"cacheBucket": "ocel-edge-cache-preview"}
 	key := string(previewKey)
 
 	production := programmed("proj", environment.TierProduction)
@@ -68,24 +65,22 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		program cloudflare.EntryProgram
 		want    provider.EdgeProgram
 	}{
-		"a production project": {production, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
+		"a production project": {production, provider.EdgeProgram{Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--prod--root",
 			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}, Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
-			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
-		"a preview project": {previewProject, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
+		"a preview project": {previewProject, provider.EdgeProgram{Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--preview--root",
 			PruneWorkerStem:     "ocel--proj--preview",
 			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}, Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
-			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
-		"the shared preview entry": {sharedEntry, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
+		"the shared preview entry": {sharedEntry, provider.EdgeProgram{Spec: &edge.ProgramSpec{
 			Worker: edge.Worker{
 				CachedEntrypoints: []string{"Serve"},
 				DurableObjects:    []string{"PurgeQueue"},
@@ -97,7 +92,6 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
-			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
 	} {
 		t.Run(name, func(t *testing.T) {

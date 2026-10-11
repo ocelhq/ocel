@@ -260,7 +260,7 @@ describe("routes withoutInternalRedirects keeps", () => {
 describe("the resolved path is what keys the response", () => {
   const ENTRY_HEADER = "x-ocel-entry";
 
-  describe("a static prerender, read from R2", () => {
+  describe("a static prerender, read from the asset store", () => {
     it.each([false, true])(
       "serves /a/ from /a.html under trailingSlash: true (skipTrailingSlashRedirect: %s)",
       async (skipTrailingSlashRedirect) => {

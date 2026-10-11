@@ -3,21 +3,13 @@ import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import {
-  mergeRecord,
   type PublishTag,
   readableSnapshot,
-  type TagRecord,
   type TagSnapshot,
   tagSnapshotKey,
 } from "@framework/next-cache";
 import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use-cache-store";
-import {
-  entriesAdopted,
-  isNotFound,
-  openAdoptedIsrWriter,
-  readBodyText,
-  requireEnv,
-} from "./object-store.mjs";
+import { isNotFound, readBodyText, requireEnv } from "./object-store.mjs";
 import { newDynamoDBClient, newS3Client } from "./sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
@@ -29,26 +21,6 @@ function isNotModified(err: any): boolean {
   return err?.name === "NotModified" || err?.$metadata?.httpStatusCode === 304;
 }
 
-function mergeTagRecords(
-  a: Record<string, TagRecord>,
-  b: Record<string, TagRecord>,
-): Record<string, TagRecord> {
-  const merged: Record<string, TagRecord> = { ...a };
-  for (const [tag, record] of Object.entries(b)) merged[tag] = mergeRecord(a[tag], record);
-  return merged;
-}
-
-function decodeCursor(cursor: string | null): [string | null, string | null] {
-  try {
-    const parsed = JSON.parse(cursor ?? "null");
-    const isVersion = (v: unknown) => v === null || typeof v === "string";
-    if (Array.isArray(parsed) && parsed.length === 2 && parsed.every(isVersion)) {
-      return [parsed[0] as string | null, parsed[1] as string | null];
-    }
-  } catch {}
-  return [null, null];
-}
-
 export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const table = requireEnv("OCEL_STATE_TABLE");
   const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
@@ -58,11 +30,9 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const ddb = newDynamoDBClient();
   const s3 = newS3Client();
 
-  const edgeTags = entriesAdopted() ? openAdoptedIsrWriter(prefix) : null;
-
   const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
 
-  async function readOwnSnapshot(etag: string | null): Promise<TagSnapshotRead> {
+  async function readTagSnapshot(etag: string | null): Promise<TagSnapshotRead> {
     let out;
     try {
       out = await s3.send(
@@ -111,28 +81,7 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
       );
     },
 
-    async readTagSnapshot(cursor) {
-      if (edgeTags === null) return readOwnSnapshot(cursor);
-
-      const [ownEtag, edgeEtag] = decodeCursor(cursor);
-      const [own, edge] = await Promise.all([
-        readOwnSnapshot(ownEtag),
-        edgeTags.readTagSnapshot(edgeEtag),
-      ]);
-      if (own.status === "unusable" || edge.kind === "absent") return { status: "unusable" };
-      if (own.status === "unchanged" && edge.kind === "unchanged") return { status: "unchanged" };
-
-      const ownRecords = own.status === "fresh" ? own.records : {};
-      const edgeRecords = edge.kind === "fresh" ? edge.snapshot.records : {};
-      return {
-        status: "fresh",
-        records: mergeTagRecords(ownRecords, edgeRecords),
-        cursor: JSON.stringify([
-          own.status === "fresh" ? own.cursor : ownEtag,
-          edge.kind === "fresh" ? edge.etag : edgeEtag,
-        ]),
-      };
-    },
+    readTagSnapshot,
 
     async writeTag(tag, record) {
       const indexed = async () => {

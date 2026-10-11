@@ -279,15 +279,12 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockARepair(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stack := edgeStack(environment.TierProduction)
 	stacks.fallBehind(stack)
-	stacks.plan(stack,
-		cfntypes.ResourceChange{
-			Action:            cfntypes.ChangeActionModify,
-			LogicalResourceId: aws.String("EdgeUser"),
-			ResourceType:      aws.String("AWS::IAM::User"),
-			Scope:             []cfntypes.ResourceAttribute{cfntypes.ResourceAttributeTags},
-		},
-		change(cfntypes.ChangeActionModify, "TagPublisher", "AWS::Lambda::Function", cfntypes.ReplacementFalse),
-	)
+	stacks.plan(stack, cfntypes.ResourceChange{
+		Action:            cfntypes.ChangeActionModify,
+		LogicalResourceId: aws.String("EdgeUser"),
+		ResourceType:      aws.String("AWS::IAM::User"),
+		Scope:             []cfntypes.ResourceAttribute{cfntypes.ResourceAttributeTags},
+	})
 	var log repairLog
 
 	repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)

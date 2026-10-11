@@ -29,7 +29,7 @@ func TestTagInvalidator(t *testing.T) {
 			{"preview", featureTemplate(FeatureISR, environment.TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				tmpl := parsePublisherTemplate(t, tc.template)
+				tmpl := parseFunctionTemplate(t, tc.template)
 
 				fn, ok := tmpl.Resources["TagInvalidator"]
 				if !ok {
@@ -93,7 +93,7 @@ func TestTagInvalidator(t *testing.T) {
 			{"preview", featureTemplate(FeatureISR, environment.TierPreview), environment.TierPreview},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
+				env := parseFunctionTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
 				if env["OCEL_INFRA_TIER"] != string(tc.tier) {
 					t.Errorf("%s = %q, want %q — the tier scopes every state table read to its own bootstrap", "OCEL_INFRA_TIER", env["OCEL_INFRA_TIER"], tc.tier)
 				}
@@ -105,7 +105,7 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("role reaches only the stream, the state table and invalidation", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureISR, environment.TierProduction))
+		tmpl := parseFunctionTemplate(t, featureTemplate(FeatureISR, environment.TierProduction))
 		role, ok := tmpl.Resources["TagInvalidatorRole"]
 		if !ok {
 			t.Fatal("template is missing the TagInvalidatorRole")
@@ -145,18 +145,18 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("signs a Cloudflare purge with the seed of its own tier's ISR writer and no other", func(t *testing.T) {
+	t.Run("signs a Cloudflare purge with the purge seed of its own tier and no other", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string
 			template  string
 			seedParam string
 			other     string
 		}{
-			{"production", featureTemplate(FeatureISR, environment.TierProduction), cloudflareNames(environment.TierProduction).isrWriterSeedParam, cloudflareNames(environment.TierPreview).isrWriterSeedParam},
-			{"preview", featureTemplate(FeatureISR, environment.TierPreview), cloudflareNames(environment.TierPreview).isrWriterSeedParam, cloudflareNames(environment.TierProduction).isrWriterSeedParam},
+			{"production", featureTemplate(FeatureISR, environment.TierProduction), cloudflareNames(environment.TierProduction).purgeSeedParam, cloudflareNames(environment.TierPreview).purgeSeedParam},
+			{"preview", featureTemplate(FeatureISR, environment.TierPreview), cloudflareNames(environment.TierPreview).purgeSeedParam, cloudflareNames(environment.TierProduction).purgeSeedParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				tmpl := parsePublisherTemplate(t, tc.template)
+				tmpl := parseFunctionTemplate(t, tc.template)
 
 				env := tmpl.Resources["TagInvalidator"].Properties.Environment.Variables
 				if env[tagInvalidatorSeedParamEnvVar] != tc.seedParam {
@@ -189,7 +189,7 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("renders no alarms", func(t *testing.T) {
-		for name, res := range parsePublisherTemplate(t, featureTemplate(FeatureISR, environment.TierProduction)).Resources {
+		for name, res := range parseFunctionTemplate(t, featureTemplate(FeatureISR, environment.TierProduction)).Resources {
 			if res.Type == "AWS::CloudWatch::Alarm" {
 				t.Errorf("%s is an alarm billed every month in a stack that must be free to leave idle", name)
 			}
