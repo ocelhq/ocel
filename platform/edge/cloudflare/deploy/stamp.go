@@ -25,6 +25,7 @@ type stampedSpec struct {
 	CompatDate          string
 	CompatFlags         []string
 	Observability       map[string]any
+	PreviewGate         *edge.PreviewGate
 }
 
 func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {
@@ -45,6 +46,7 @@ func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {
 		CompatDate:          compatDate,
 		CompatFlags:         compatFlags,
 		Observability:       observability(),
+		PreviewGate:         spec.PreviewGate,
 	}); err != nil {
 		return "", fmt.Errorf("hash stack spec: %w", err)
 	}
