@@ -7,8 +7,8 @@ import {
   buildObjectCall,
   buildOriginCall,
   buildServeRequest,
-  EDGE_RELEASE_HEADER,
   ORIGIN_PURGE_SCOPE,
+  RENDER_RELEASE_HEADER,
   type ServeProps,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -538,7 +538,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
     const call = buildEdgeCall(`https://shop.example.com${path}`, coordinates, "app/edge-blog");
     return new Request(call.url, {
       headers: {
-        [EDGE_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags }),
+        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags }),
         "x-ocel-entry": "app/edge-blog/page",
       },
     });
@@ -555,7 +555,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
     expect(served).toEqual([{ slug: "p1", isrPrefix }]);
     expect(rendered.map(({ entryKey }) => entryKey)).toEqual(["app/edge-blog"]);
     expect(rendered[0].request.url).toBe("https://shop.example.com/blog?page=2");
-    expect(rendered[0].request.headers.has(EDGE_RELEASE_HEADER)).toBe(false);
+    expect(rendered[0].request.headers.has(RENDER_RELEASE_HEADER)).toBe(false);
     expect(rendered[0].request.headers.get("x-ocel-entry")).toBe("app/edge-blog/page");
     expect(await response.text()).toBe("<html>edge</html>");
   });

@@ -23,8 +23,8 @@ import {
   buildOriginCall,
   buildServeRequest,
   buildVariantPath,
-  EDGE_RELEASE_HEADER,
-  type EdgeRelease,
+  RENDER_RELEASE_HEADER,
+  type RenderRelease,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 
@@ -179,12 +179,12 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     : buildOriginCall(canonicalUrl, coordinates);
   const served = buildServeRequest(canonical, forwarded);
   if (target.edgeEntryKey) {
-    const release: EdgeRelease = {
+    const release: RenderRelease = {
       slug: serving.slug,
       isrPrefix: serving.isrPrefix,
       tags: target.tags ?? [],
     };
-    served.headers.set(EDGE_RELEASE_HEADER, JSON.stringify(release));
+    served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
   }
   const response = await serving.serve({ props }).fetch(served);
   const visitor = buildVisitorResponse(response, isSegmentPrefetch(request.headers));

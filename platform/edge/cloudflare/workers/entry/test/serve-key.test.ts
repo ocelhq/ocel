@@ -8,7 +8,7 @@ import {
   buildServeRequest,
   buildVariantPath,
   ORIGIN_PURGE_SCOPE,
-  readOriginCall,
+  readRenderCall,
 } from "../src/serve-key";
 import { hasDraftCookie } from "../src/serve-prerender";
 
@@ -86,7 +86,7 @@ describe("the cache key of a page read through Serve from the origin", () => {
     for (const variant of [undefined, ".rsc", ".prefetch.rsc", ".segments/%2F_tree.segment.rsc"]) {
       const call = buildOriginCall(origin, { ...coordinates, variant });
       expect(buildOriginUrl(call.url)).toBe(origin);
-      expect(readOriginCall(call.url)).toEqual({ ...coordinates, variant: variant ?? "" });
+      expect(readRenderCall(call.url)).toEqual({ ...coordinates, variant: variant ?? "" });
     }
   });
 

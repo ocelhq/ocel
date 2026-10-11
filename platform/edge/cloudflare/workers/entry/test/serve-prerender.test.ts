@@ -1,7 +1,7 @@
 import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
 import { describe, expect, it } from "vitest";
 import { dispatchResult, type RouteDeps } from "../src/index";
-import { buildEdgeUrl, EDGE_RELEASE_HEADER, readEdgeEntry } from "../src/serve-key";
+import { buildEdgeUrl, RENDER_RELEASE_HEADER, readEdgeEntry } from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 type Target = Record<string, unknown>;
@@ -388,7 +388,9 @@ describe("an edge-runtime prerender", () => {
 
     await get("/blog", deps(served, { target: edgeTarget }));
 
-    expect(JSON.parse(served.calls[0].request.headers.get(EDGE_RELEASE_HEADER) ?? "null")).toEqual({
+    expect(
+      JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
+    ).toEqual({
       slug: "p1",
       isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
       tags: ["posts"],
