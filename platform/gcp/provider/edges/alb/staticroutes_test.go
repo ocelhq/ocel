@@ -99,6 +99,24 @@ func TestAPromotionMovesTheStaticRoutesOfAHostnameAlreadyServedWithoutRaisingAny
 	}
 }
 
+func TestAReleaseOfTheSameAppOnAnotherServiceLeavesAHostnamesStaticRoutesAlone(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	stage(t, stack, staticRecord("b1"))
+	promote(t, stack, "p1", "b1")
+	bindShop(t, stack)
+	other := staticRecord("b2")
+	other.RootFunctionPhysical = "ocel-shop-staging-web"
+	other.Revisions = map[string]string{"ocel-shop-staging-web": "ocel-shop-staging-web-b2"}
+	other.AssetPrefix = "staging/shop/web/b2/assets"
+	stage(t, stack, other)
+	promote(t, stack, "p2", "b2")
+
+	expectStaticRoutes(t, w, "shop.example.com", staticRoutesFor("b1"),
+		"the hostname still reaches the service it was bound to, so its immutable files must stay that service's release's")
+}
+
 func TestAPromotionBackToAnEarlierReleaseRoutesItsFilesAgain(t *testing.T) {
 	t.Parallel()
 

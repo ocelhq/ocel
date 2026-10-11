@@ -53,7 +53,7 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 			}
 			host.Service, host.StaticRoutes = service, routes
 			took = append(took, hostname)
-		case found && host.StaticRoutes != routes:
+		case found && pin.ResolveService(record) == host.Service && host.StaticRoutes != routes:
 			host.StaticRoutes = routes
 			moved = append(moved, hostname)
 		default:
