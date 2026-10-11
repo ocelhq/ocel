@@ -50,6 +50,26 @@ func TestAPromotionGivesTheLiveAndTheNextReleaseEachOthersImmutableFilesBeforeIt
 	}
 }
 
+func TestADeploymentPointerMoveCopiesNoFilesForTheHostnamesItLeavesAlone(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	stage(t, stack, staticRecord("b1"))
+	stage(t, stack, staticRecord("b2"))
+	promote(t, stack, "p1", "b1")
+	bindShop(t, stack)
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{
+		Pointer:   router.FormatDeploymentPointer("pr-42", "p2"),
+		Promotion: router.Promotion{PromotionID: "p2", Releases: map[string]string{"web": "b2"}},
+	}, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+
+	if got := w.copied(); len(got) != 0 {
+		t.Errorf("the deployment's move copied %+v, want nothing: it moves no rewrite of the hostnames the default pointer serves", got)
+	}
+}
+
 func TestARollbackGivesTheReleasesEachOthersImmutableFilesToo(t *testing.T) {
 	t.Parallel()
 
