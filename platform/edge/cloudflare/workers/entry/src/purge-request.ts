@@ -1,20 +1,25 @@
 import { storedCacheTags } from "@framework/next-cache";
-import { purgePath, purgeSignatureHeader } from "@platform/edge-contract/purge";
+import {
+  type PurgeMode,
+  purgePath,
+  purgeSignatureHeader,
+  tagsPerPurgeRequest,
+} from "@platform/edge-contract/purge";
 import type { Env } from "./env";
-import type { PurgeMode, RaisedTag } from "./purge-backlog";
+import type { RaisedTag } from "./purge-backlog";
 
 const PURGE_QUEUE_NAME = "purge";
 
-export const MAX_TAGS_PER_REQUEST = 1000;
-const MAX_BODY_BYTES = 512 * 1024;
+export const maxPurgeBodyBytes = 512 * 1024;
 
 export type ServedLookup =
   | { kind: "record"; record: { purgeSecret?: string } }
   | { kind: "not-served" };
 
-export interface PurgeDeps {
+export interface PurgeGatewayPorts {
   readServed(release: string): Promise<ServedLookup>;
   queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  now?(): number;
   warn?(message: string): void;
 }
 
@@ -60,7 +65,33 @@ function hexBytes(hex: string): Uint8Array | undefined {
   return Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
 }
 
-async function isSignedBy(secret: string, text: string, signature: string): Promise<boolean> {
+async function readCapped(request: Request): Promise<Uint8Array | undefined> {
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > maxPurgeBodyBytes) return undefined;
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxPurgeBodyBytes) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function isSignedBy(secret: string, bytes: Uint8Array, signature: string): Promise<boolean> {
   const expected = hexBytes(signature);
   if (!expected) return false;
   const key = await crypto.subtle.importKey(
@@ -70,7 +101,7 @@ async function isSignedBy(secret: string, text: string, signature: string): Prom
     false,
     ["verify"],
   );
-  return crypto.subtle.verify("HMAC", key, expected, new TextEncoder().encode(text));
+  return crypto.subtle.verify("HMAC", key, expected, bytes);
 }
 
 export function isControlHost(host: string): boolean {
@@ -88,25 +119,26 @@ export function answerPurgeOnWorker(
 ): Promise<Response> | Response {
   const slug = env.OCEL_SLUG;
   if (!slug) return reply(404, "Not Found");
-  const queues = (ctx.exports as { PurgeQueue: { getByName(name: string): PurgeDeps["queue"] } })
-    .PurgeQueue;
+  const queues = (
+    ctx.exports as { PurgeQueue: { getByName(name: string): PurgeGatewayPorts["queue"] } }
+  ).PurgeQueue;
   return answerPurge(request, {
     readServed: (release) => env.RELEASES.readServedRecord({ slug, release }),
     queue: queues.getByName(PURGE_QUEUE_NAME),
   });
 }
 
-export async function answerPurge(request: Request, deps: PurgeDeps): Promise<Response> {
-  const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) return reply(413, "too large");
+export async function answerPurge(request: Request, ports: PurgeGatewayPorts): Promise<Response> {
+  const bytes = await readCapped(request);
+  if (!bytes) return reply(413, "too large");
 
-  const body = parseBody(text);
+  const body = parseBody(new TextDecoder().decode(bytes));
   if (!body) return reply(400, "bad request");
-  if (body.tags.length > MAX_TAGS_PER_REQUEST) return reply(413, "too many tags");
+  if (body.tags.length > tagsPerPurgeRequest) return reply(413, "too many tags");
 
   let served: ServedLookup;
   try {
-    served = await deps.readServed(body.release);
+    served = await ports.readServed(body.release);
   } catch (error) {
     console.error(`ocel: cannot tell whether release ${body.release} is served`, error);
     return reply(503, "unavailable");
@@ -115,29 +147,31 @@ export async function answerPurge(request: Request, deps: PurgeDeps): Promise<Re
 
   const { purgeSecret } = served.record;
   const signature = request.headers.get(purgeSignatureHeader);
-  if (!purgeSecret || !signature || !(await isSignedBy(purgeSecret, text, signature))) {
+  if (!purgeSecret || !signature || !(await isSignedBy(purgeSecret, bytes, signature))) {
     return reply(401, "unauthorized");
   }
 
-  const { unstorable } = storedCacheTags(
-    body.release,
-    body.tags.map((entry) => entry.tag),
-  );
-  if (unstorable.length > 0) {
-    (deps.warn ?? console.warn)(
-      `ocel: ${unstorable.length} tag(s) of release ${body.release} are longer or wider than a cache tag Cloudflare stores, so nothing purges them: ${unstorable.join(", ")}`,
-    );
-  }
+  const now = (ports.now ?? Date.now)();
+  const unstorable: string[] = [];
   const raisedAt = new Map<string, number>();
   for (const { tag, raisedAt: at } of body.tags) {
-    if (unstorable.includes(tag)) continue;
-    const stamped = `${body.release}|${tag}`;
-    raisedAt.set(stamped, Math.max(raisedAt.get(stamped) ?? at, at));
+    const [stamped] = storedCacheTags(body.release, [tag]).tags;
+    if (stamped === undefined) {
+      unstorable.push(tag);
+      continue;
+    }
+    const clamped = Math.min(at, now);
+    raisedAt.set(stamped, Math.max(raisedAt.get(stamped) ?? clamped, clamped));
+  }
+  if (unstorable.length > 0) {
+    (ports.warn ?? console.warn)(
+      `ocel: ${unstorable.length} tag(s) of release ${body.release} are longer or wider than a cache tag Cloudflare stores, so nothing purges them: ${unstorable.join(", ")}`,
+    );
   }
   if (raisedAt.size === 0) return reply(202);
 
   try {
-    await deps.queue.raise(
+    await ports.queue.raise(
       body.mode,
       [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at })),
     );
