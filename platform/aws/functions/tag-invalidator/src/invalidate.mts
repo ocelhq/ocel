@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { derivePurgeSecret, type PurgeSender, postPurge } from "@platform/edge-contract/purge";
+import {
+  derivePurgeSecret,
+  PurgeRefusedError,
+  type PurgeSender,
+  postPurge,
+} from "@platform/edge-contract/purge";
 import { coordinateOf, type Raise, type Raises } from "./records.mjs";
 import { invalidationBatches } from "./tags.mjs";
 import {
@@ -36,6 +41,8 @@ interface ProjectTargets {
 const alreadySent = "InvalidationBatchAlreadyExists";
 
 const goneFront = "NoSuchDistribution";
+
+const goneWorkerStatus = 404;
 
 const congested = [
   "TooManyInvalidationsInProgress",
@@ -179,10 +186,23 @@ async function purgeCloudflareTargets(
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
   const secret = derivePurgeSecret(await readSeed(), isrPrefix);
-  await settleEvery(
+  const results = await Promise.allSettled(
     urls.map((url) => postPurge(inv.cloudflare!, url, secret, isrPrefix, raise.entries)),
-    "some Cloudflare targets refused this purge",
   );
+  const refused: unknown[] = [];
+  results.forEach((result, i) => {
+    if (result.status === "fulfilled") return;
+    const { reason } = result;
+    if (reason instanceof PurgeRefusedError && reason.status === goneWorkerStatus) {
+      console.warn(
+        `ocel: no worker answers purges at ${urls[i]} any longer, so this raise skips it; the project still names it as an invalidation target`,
+        reason,
+      );
+      return;
+    }
+    refused.push(reason);
+  });
+  refuseIfAny(refused, "some Cloudflare targets refused this purge");
 }
 
 async function invalidateOne(

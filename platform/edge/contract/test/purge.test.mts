@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   derivePurgeSecret,
+  PurgeRefusedError,
   postPurge,
   purgeSignatureHeader,
   readPurgeEntry,
@@ -196,6 +197,22 @@ describe("postPurge", () => {
     expect((failure as Error).message).toContain("503");
     expect((failure as Error).message).not.toContain(secret);
     expect(worker.sent.length).toBeLessThan(10);
+  });
+
+  it("rejects with the status the worker last answered, and none for a network failure", async () => {
+    worker.answers.push(new Response(null, { status: 404 }));
+    const answered = await postPurge(sender(), URL, secret, PREFIX, [
+      { tag: "a", mode: "purge", raisedAt: 1 },
+    ]).catch((error: unknown) => error);
+    for (let i = 0; i < 10; i++) worker.answers.push(new TypeError("fetch failed"));
+    const unreached = await postPurge(sender(), URL, secret, PREFIX, [
+      { tag: "a", mode: "purge", raisedAt: 1 },
+    ]).catch((error: unknown) => error);
+
+    expect(answered).toBeInstanceOf(PurgeRefusedError);
+    expect((answered as PurgeRefusedError).status).toBe(404);
+    expect(unreached).toBeInstanceOf(PurgeRefusedError);
+    expect((unreached as PurgeRefusedError).status).toBeUndefined();
   });
 
   it.each([400, 401, 404])(

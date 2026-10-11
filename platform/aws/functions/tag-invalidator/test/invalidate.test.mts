@@ -313,6 +313,7 @@ describe("the Cloudflare target", () => {
   class FakeWorkers {
     sent: { url: string; body: any; signature: string | null }[] = [];
     refuse: Response | Error | null = null;
+    gone = new Set<string>();
 
     fetch = (async (url: string, init: RequestInit) => {
       this.sent.push({
@@ -320,6 +321,7 @@ describe("the Cloudflare target", () => {
         body: JSON.parse(String(init.body)),
         signature: new Headers(init.headers).get(purgeSignatureHeader),
       });
+      if (this.gone.has(url)) return new Response("Not Found", { status: 404 });
       if (this.refuse instanceof Error) throw this.refuse;
       return this.refuse?.clone() ?? new Response(null, { status: 202 });
     }) as unknown as typeof fetch;
@@ -452,6 +454,19 @@ describe("the Cloudflare target", () => {
     const failed = await invalidateAll(cloudflareInvalidator(), raises(["products"]));
 
     expect(failed).toEqual(["seq-1"]);
+  });
+
+  it("skips a URL whose worker is gone, warning, and purges at the URLs still there", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const STAGING = "https://acme-staging.sub.workers.dev/.ocel/purge";
+    dynamo = new FakeDynamo(new Map([[CLOUDFLARE_PROJECT, [PURGE_URL, STAGING]]]));
+    workers.gone.add(STAGING);
+
+    const failed = await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(failed).toEqual([]);
+    expect(workers.sent.map((sent) => sent.url).sort()).toEqual([PURGE_URL, STAGING]);
+    expect(warn.mock.calls.flat().join(" ")).toContain(STAGING);
   });
 
   it("fails the records of a build whose seed cannot be read", async () => {
