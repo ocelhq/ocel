@@ -11,6 +11,7 @@ export const tagsPerPurgeRequest = 500;
 const attempts = 4;
 const backoffMs = 500;
 const backoffCeilingMs = 10_000;
+const attemptTimeoutMs = 5_000;
 
 export type PurgeMode = "purge" | "invalidate";
 
@@ -24,6 +25,7 @@ export interface PurgeSender {
   fetch: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  attemptTimeoutMs?: number;
 }
 
 export function readPurgeEntry(
@@ -67,6 +69,7 @@ async function post(sender: PurgeSender, url: string, secret: string, body: stri
         method: "POST",
         headers: { "content-type": "application/json", [purgeSignatureHeader]: signature },
         body,
+        signal: AbortSignal.timeout(sender.attemptTimeoutMs ?? attemptTimeoutMs),
       });
       await res.body?.cancel();
       if (res.ok) return;
