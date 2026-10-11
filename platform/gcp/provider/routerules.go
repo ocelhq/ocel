@@ -37,7 +37,7 @@ func routeRulesOf(clients *clients, dynamic string, routes *alb.StaticRoutes) []
 
 func sameRouteRules(current, want []*compute.HttpRouteRule) bool {
 	return slices.EqualFunc(current, want, func(a, b *compute.HttpRouteRule) bool {
-		return a.Priority == b.Priority && a.Service == b.Service && prefixOf(a) == prefixOf(b) && rewriteOf(a) == rewriteOf(b)
+		return a.Priority == b.Priority && sameLink(a.Service, b.Service) && prefixOf(a) == prefixOf(b) && rewriteOf(a) == rewriteOf(b)
 	})
 }
 
@@ -53,4 +53,13 @@ func rewriteOf(rule *compute.HttpRouteRule) string {
 		return ""
 	}
 	return rule.RouteAction.UrlRewrite.PathPrefixRewrite
+}
+
+func sameLink(a, b string) bool { return relativeLink(a) == relativeLink(b) }
+
+func relativeLink(link string) string {
+	if at := strings.Index(link, "projects/"); at >= 0 {
+		return link[at:]
+	}
+	return link
 }

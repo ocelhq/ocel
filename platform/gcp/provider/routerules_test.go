@@ -121,3 +121,19 @@ func TestRoutingWithoutStaticRoutesDropsTheRulesAReleaseLeft(t *testing.T) {
 		t.Errorf("the path matcher keeps route rules %+v for a release with no static files", rules)
 	}
 }
+
+func TestRoutingTheSameStaticRoutesAgainWritesNothingWhenComputeAnswersWithFullURLs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	p, server := routing(t, emptyMap())
+	server.answersFullURLs()
+	for range 2 {
+		if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, shopRoutes()); err != nil {
+			t.Fatalf("Route = %v", err)
+		}
+	}
+	if got := server.writes(); got != 1 {
+		t.Errorf("routing identical static routes twice wrote %d times, want 1: Compute names a backend by its full URL, and a reach must not rewrite the url map for it", got)
+	}
+}

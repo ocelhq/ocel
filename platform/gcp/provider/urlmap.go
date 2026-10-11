@@ -149,7 +149,7 @@ func matched(current *compute.UrlMap, hostname string, want *compute.PathMatcher
 }
 
 func answers(current, want *compute.PathMatcher) bool {
-	return current.DefaultService == want.DefaultService &&
+	return sameLink(current.DefaultService, want.DefaultService) &&
 		aborting(current.DefaultRouteAction) == aborting(want.DefaultRouteAction) &&
 		sameRouteRules(current.RouteRules, want.RouteRules)
 }
