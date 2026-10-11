@@ -12,6 +12,7 @@ import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access
 import { createReleaseEdgeInvoker, type EdgeRuntime, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
+import { PPR_SHELL_VARIANT } from "./ppr";
 import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
@@ -29,6 +30,7 @@ import {
   type RenderRelease,
   readEdgeEntry,
   readRenderCall,
+  SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
   type ServeProps,
@@ -100,6 +102,13 @@ function respondUnshared(kept: boolean, cached: CachedResponse): Response {
     },
   });
   return kept ? forCache(unshared, cached) : unshared;
+}
+
+function respondNoShell(): Response {
+  return new Response(null, {
+    status: 404,
+    headers: { "cache-control": NOT_STORED, [SERVE_NO_SHELL_HEADER]: "1" },
+  });
 }
 
 function respondRefused(message: string): Response {
@@ -214,7 +223,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   }
 
   private async fromOrigin(request: Request): Promise<Response> {
-    const { host, release } = readRenderCall(request.url);
+    const { host, release, variant } = readRenderCall(request.url);
     const keyedUrl = buildOriginUrl(request.url);
     const found = await readRenderRecord(this.env, request, release);
     if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
@@ -225,6 +234,15 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       return this.fromFallbackShell(request, found.render, release, cached);
     }
     const render = () => this.renderAtOrigin(request, { host, release, keyedUrl });
+    if (variant === PPR_SHELL_VARIANT) {
+      const regenerate = () =>
+        this.renderAtOrigin(request, { host, release, keyedUrl, unconditional: true });
+      return this.fromStoredShell(
+        request,
+        { render: regenerate, release, keyedUrl, cached },
+        found.render,
+      );
+    }
     if (isRevalidation(request) || new URL(keyedUrl).search !== "") return render();
     let stored: StoreAnswer | null = null;
     try {
@@ -234,6 +252,36 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     }
     if (!stored) return render();
     return forCache(admitSegment(request, stored.response), cached);
+  }
+
+  private async fromStoredShell(
+    request: Request,
+    call: {
+      render: () => Promise<Response>;
+      release: string;
+      keyedUrl: string;
+      cached: CachedResponse;
+    },
+    render: RenderRelease,
+  ): Promise<Response> {
+    let shell: StoreAnswer | null = null;
+    try {
+      if (new URL(call.keyedUrl).search === "") {
+        shell = await this.askStore(request, render, call.release);
+      }
+    } catch (error) {
+      console.error("ocel: the durable store was not read for a PPR shell", error);
+    }
+    if (!shell) return respondNoShell();
+    if (shell.stale && isRevalidation(request)) {
+      this.ctx.waitUntil(
+        call
+          .render()
+          .then((regenerated) => regenerated.body?.cancel())
+          .catch((error) => console.error("ocel: the origin did not regenerate a PPR page", error)),
+      );
+    }
+    return forCache(admitSegment(request, shell.response), call.cached);
   }
 
   private async fromFallbackShell(
@@ -284,11 +332,15 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async renderAtOrigin(
     request: Request,
-    call: { host: string; release: string; keyedUrl: string },
+    call: { host: string; release: string; keyedUrl: string; unconditional?: boolean },
   ): Promise<Response> {
     const { host, release, keyedUrl } = call;
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);
+    if (call.unconditional) {
+      headers.delete("if-none-match");
+      headers.delete("if-modified-since");
+    }
     const originFetch = originFetchFor(this.env) ?? fetch;
     headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");

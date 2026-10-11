@@ -1,11 +1,6 @@
 import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
-import {
-  edgeCacheHeader,
-  edgeCacheTagHeader,
-  postponedLengthHeader,
-  pprShellHeader,
-} from "@platform/edge-contract/edge-cache";
+import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 import { afterEach, expect, test } from "vitest";
 import { edgeReadableTagging } from "../src/next/object-store.mjs";
@@ -66,11 +61,6 @@ test("the origin shapes for an edge cache under the header name the edge sends",
 
 test("the origin names an edge-cached page's tags under the header name the edge reads", () => {
   expect(edgeCacheTagHeader).toBe(contract.edgeCacheTagHeader);
-});
-
-test("the origin frames a PPR shell under the header names the edge sends and reads", () => {
-  expect(pprShellHeader).toBe(contract.pprShellHeader);
-  expect(postponedLengthHeader).toBe(contract.postponedLengthHeader);
 });
 
 test("page entries are tagged edge-readable exactly as the deploy tags what the edge may read", () => {

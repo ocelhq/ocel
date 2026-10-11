@@ -6,8 +6,8 @@ import {
   storedCacheTags,
   tagsOf,
 } from "@framework/next-cache";
-import { edgeCacheTagHeader, postponedLengthHeader } from "@platform/edge-contract/edge-cache";
-import { PPR_SHELL_VARIANT } from "./ppr";
+import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
+import { POSTPONED_LENGTH_HEADER, PPR_SHELL_VARIANT } from "./ppr";
 import type { TagTimes } from "./purge-times";
 
 export const STORE_REVALIDATES_FOR_S = 31_536_000;
@@ -198,7 +198,7 @@ function build(
     const framed = new Uint8Array(postponed.byteLength + html.byteLength);
     framed.set(postponed, 0);
     framed.set(html, postponed.byteLength);
-    headers.set(postponedLengthHeader, String(postponed.byteLength));
+    headers.set(POSTPONED_LENGTH_HEADER, String(postponed.byteLength));
     headers.set("x-nextjs-postponed", "1");
     return { body: framed, status, headers };
   }

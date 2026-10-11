@@ -5,6 +5,7 @@ import {
   buildEdgeUrl,
   RENDER_RELEASE_HEADER,
   readEdgeEntry,
+  SERVE_NO_SHELL_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
@@ -355,7 +356,6 @@ describe("the document of a PPR route", () => {
     expect(served.calls[0].coordinates.variant).toBe(".ppr-shell");
     expect(served.calls[0].props).toEqual({ kind: "origin" });
     expect(served.calls[0].request.headers.get("x-ocel-edge-cache")).toBe("1");
-    expect(served.calls[0].request.headers.get("x-ocel-ppr-shell")).toBe("1");
     expect(served.calls[0].request.headers.has("cookie")).toBe(false);
   });
 
@@ -426,7 +426,31 @@ describe("the document of a PPR route", () => {
     expect(rendered.method).toBe("GET");
     expect(rendered.headers.get("cookie")).toBe("session=1");
     expect(rendered.headers.has("x-ocel-edge-cache")).toBe(false);
-    expect(rendered.headers.has("x-ocel-ppr-shell")).toBe(false);
+  });
+
+  it("renders the page at the origin as one plain GET when Serve has no shell for it", async () => {
+    const served = fakeServing(
+      () =>
+        new Response(null, {
+          status: 404,
+          headers: { "cache-control": "private, no-store", [SERVE_NO_SHELL_HEADER]: "1" },
+        }),
+    );
+    const origin = recorder(() => new Response("<html>whole page"));
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+      headers: { cookie: "session=1" },
+    });
+
+    expect(await res.text()).toBe("<html>whole page");
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(served.calls).toHaveLength(1);
+    expect(origin.requests).toHaveLength(1);
+    const rendered = origin.requests[0];
+    expect(rendered.method).toBe("GET");
+    expect(rendered.headers.get("cookie")).toBe("session=1");
+    expect(rendered.headers.has("x-ocel-edge-cache")).toBe(false);
+    expect(rendered.headers.has("next-resume")).toBe(false);
   });
 
   it("serves a shell that did not postpone as the complete page it is", async () => {
