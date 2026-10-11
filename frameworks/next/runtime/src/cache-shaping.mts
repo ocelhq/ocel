@@ -1,6 +1,7 @@
 import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
 import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import { type ProjectManifest, walkPrerender } from "./project-manifest.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
@@ -22,6 +23,7 @@ export interface RevalidatingRoutes {
 }
 
 export interface OriginShaping extends RevalidatingRoutes {
+  askedFor: boolean;
   release: string | null;
   tagsPerObject: number;
 }
@@ -58,10 +60,12 @@ export function originShaping(
   env: NodeJS.ProcessEnv,
   tagsPerObject = Number.POSITIVE_INFINITY,
 ): OriginShaping | null {
-  if (!dispatchesAtOrigin(env)) return null;
+  const dispatches = dispatchesAtOrigin(env);
+  if (!dispatches && !invalidatesByCacheTag(env)) return null;
 
   return {
     ...routes,
+    askedFor: !dispatches,
     release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     tagsPerObject,
   };
@@ -81,6 +85,7 @@ export function shapeOriginCache(
 }
 
 function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {
+  if (shaping.askedFor && req.headers[edgeCacheHeader] !== "1") return;
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {

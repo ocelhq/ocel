@@ -7,20 +7,27 @@ import {
   type Invoke,
   installCompileCacheFlush,
   installCompileCacheWarm,
+  invalidatesByCacheTag,
   reportFatalBoot,
   serveEntry,
   serveInvoke,
   serveLocal,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
+import { purgeHeader } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
-import { originShaping, revalidatingRoutes, shapeOriginCache } from "./cache-shaping.mjs";
+import {
+  originShaping,
+  releaseOf,
+  revalidatingRoutes,
+  shapeOriginCache,
+} from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { prerenderedRoutes } from "./prerendered-routes.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
+import { purgedSince, purgeHeaderFor, purgeMark } from "./purge-signal.mjs";
 import { routeStaleHitsToRefresh } from "./refresh.mjs";
-import { revalidatedHeader, revalidationTicks } from "./revalidation-signal.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
 import { loadTagsManifest, mirrorTagsInto } from "./tags-manifest.mjs";
 
@@ -28,12 +35,13 @@ function isPprResume(req: http.IncomingMessage): boolean {
   return req.method === "POST" && req.headers["next-resume"] === "1";
 }
 
-function announceRevalidations(res: http.ServerResponse): void {
-  const before = revalidationTicks();
+function announcePurges(res: http.ServerResponse, release: string): void {
+  const before = purgeMark();
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (!this.headersSent && revalidationTicks() !== before) {
-      this.setHeader(revalidatedHeader, "1");
+    if (!this.headersSent) {
+      const announced = purgeHeaderFor(release, purgedSince(before));
+      if (announced !== undefined) this.setHeader(purgeHeader, announced);
     }
     return (writeHead as any).apply(this, args);
   } as typeof res.writeHead;
@@ -67,11 +75,14 @@ async function boot(): Promise<void> {
   const routes = revalidatingRoutes(manifest);
   const prerendered = prerenderedRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
+  const purgeRelease = invalidatesByCacheTag(process.env)
+    ? releaseOf(process.env.OCEL_ISR_PREFIX)
+    : null;
 
   const invoke: Invoke = (req, res, ocel) => {
     noteRscRequest(req.headers);
     if (shaping) shapeOriginCache(req, res, shaping);
-    announceRevalidations(res);
+    if (purgeRelease !== null) announcePurges(res, purgeRelease);
     const { scheduleRefresh } = getNextHost();
     if (scheduleRefresh)
       routeStaleHitsToRefresh(req, res, prerendered, scheduleRefresh, ocel.waitUntil);

@@ -13,8 +13,8 @@ import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
 import { collectTags, notedTags } from "../src/origin-tags.mjs";
+import { purgedSince, purgeMark } from "../src/purge-signal.mjs";
 import { noteServedRoute, readStaleEntry } from "../src/refresh.mjs";
-import { revalidationTicks } from "../src/revalidation-signal.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
 
 function fakeStore() {
@@ -475,35 +475,44 @@ test("a refresh leaves fetch entries to their own windows", async () => {
   expect(entry?.value.data.body).toBe("cached");
 });
 
-test("ticks the revalidation signal so the request can announce it", async () => {
+test("announces an expired tag as a purge so the request can send it in-band", async () => {
   fakeStore();
-  const before = revalidationTicks();
+  const mark = purgeMark();
 
   await new OcelCacheHandler().revalidateTag("products");
 
-  expect(revalidationTicks()).toBe(before + 1);
+  expect(purgedSince(mark)).toMatchObject([{ tag: "products", mode: "purge" }]);
 });
 
-test("ticks before the tag write finishes, so a response sent meanwhile announces it", async () => {
+test("announces a tag revalidated with a profile as an invalidate", async () => {
+  fakeStore();
+  const mark = purgeMark();
+
+  await new OcelCacheHandler().revalidateTag("products", { expire: 3600 });
+
+  expect(purgedSince(mark)).toMatchObject([{ tag: "products", mode: "invalidate" }]);
+});
+
+test("announces before the tag write finishes, so a response sent meanwhile carries it", async () => {
   const store = fakeStore();
   const release = store.holdWrites();
-  const before = revalidationTicks();
+  const mark = purgeMark();
 
   const pending = new OcelCacheHandler().revalidateTag("products");
   await Promise.resolve();
 
-  expect(revalidationTicks()).toBe(before + 1);
+  expect(purgedSince(mark)).toHaveLength(1);
   release();
   await pending;
 });
 
-test("ticks nothing for a revalidation naming no tags", async () => {
+test("announces nothing for a revalidation naming no tags", async () => {
   fakeStore();
-  const before = revalidationTicks();
+  const mark = purgeMark();
 
   await new OcelCacheHandler().revalidateTag([]);
 
-  expect(revalidationTicks()).toBe(before);
+  expect(purgedSince(mark)).toEqual([]);
 });
 
 test("keeps an entry written after its tag was revalidated", async () => {

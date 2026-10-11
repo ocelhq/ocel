@@ -14,9 +14,9 @@ import { servesOnlyFresh } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
+import { notePurge } from "./purge-signal.mjs";
 import { noteStaleEntry, readServedRoute } from "./refresh.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
-import { noteRevalidation } from "./revalidation-signal.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
 import { recordTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
 
@@ -231,7 +231,7 @@ export default class OcelCacheHandler {
         }
       : { expired: now };
 
-    noteRevalidation();
+    for (const tag of list) notePurge(tag, record, now);
     recordTags(list, record);
     await keptUntilSettled(this.openStore().then((store) => store.writeTags(list, record)));
   }
