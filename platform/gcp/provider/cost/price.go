@@ -80,6 +80,8 @@ var formulas = pricing.Table{
 	"google_compute_backend_service":                        backendService,
 	"google_compute_backend_bucket":                         free,
 	"google_project_iam_member":                             free,
+	"google_network_services_wasm_plugin":                   free,
+	"google_network_services_lb_edge_extension":             free,
 	"google_certificate_manager_certificate_map":            free,
 	"google_certificate_manager_certificate_map_entry":      free,
 	"google_compute_url_map":                                free,

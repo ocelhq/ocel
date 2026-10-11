@@ -65,6 +65,9 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	if err := s.refuseExhaustedLimits(ctx, took, withdrawn); err != nil {
 		return router.Unserved{Err: err}
 	}
+	if err := s.admitGatedHosts(ctx, took, progress); err != nil {
+		return router.Unserved{Err: err}
+	}
 	for i, hostname := range withdrawn {
 		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
 			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, nil, withdrawn[:i+1]))}
@@ -87,6 +90,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		s.recordTagsToRemove(replaced[hostname])
 	}
 	s.recordPreviewHosts(hosts, tags)
+	s.forgetGatedHosts(ctx, withdrawn, progress)
 	return nil
 }
 
@@ -300,6 +304,7 @@ func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemov
 		s.recordTagsToRemove(tagsOf(withdrawn[hostname], recorded[hostname]))
 	}
 	s.recordPreviewHosts(hosts, kept)
+	s.forgetGatedHosts(ctx, going, progress.Discard())
 	return nil
 }
 

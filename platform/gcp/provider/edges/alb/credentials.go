@@ -12,9 +12,10 @@ import (
 const (
 	loadBalancerRole = "roles/compute.loadBalancerAdmin"
 	certificatesRole = "roles/certificatemanager.owner"
+	extensionsRole   = "roles/networkservices.admin"
 )
 
-var roles = []string{loadBalancerRole, certificatesRole}
+var roles = []string{loadBalancerRole, certificatesRole, extensionsRole}
 
 func Roles() []string { return slices.Clone(roles) }
 
@@ -65,6 +66,16 @@ var Permissions = []string{
 	"certificatemanager.certmapentries.delete",
 	"certificatemanager.certmapentries.list",
 	"certificatemanager.operations.get",
+	"networkservices.wasmPlugins.create",
+	"networkservices.wasmPlugins.delete",
+	"networkservices.wasmPlugins.get",
+	"networkservices.wasmPlugins.update",
+	"networkservices.wasmPlugins.use",
+	"networkservices.lbEdgeExtensions.create",
+	"networkservices.lbEdgeExtensions.delete",
+	"networkservices.lbEdgeExtensions.get",
+	"networkservices.lbEdgeExtensions.update",
+	"networkservices.operations.get",
 }
 
 func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {

@@ -23,8 +23,9 @@ const (
 )
 
 var (
-	albAPIs         = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
-	albShieldedAPIs = slices.Concat(albAPIs, []string{"networksecurity.googleapis.com"})
+	albBaseAPIs     = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
+	albAPIs         = slices.Concat(albBaseAPIs, []string{"networkservices.googleapis.com"})
+	albShieldedAPIs = slices.Concat(albBaseAPIs, []string{"networksecurity.googleapis.com"})
 )
 
 func (bootstrap) Catalogue() []provider.Feature {
@@ -32,7 +33,10 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Name: albFeature,
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
 			"the one bootstrap item with a recurring cost, about $18 a month plus egress, " +
-			"and a custom role that may only clear Cloud CDN, which Next apps behind it are granted",
+			"a custom role that may only clear Cloud CDN, which Next apps behind it are granted, " +
+			"and, on the preview tier, the preview gate as a Service Extensions plugin that runs in front of Cloud CDN, " +
+			"kept as a generic artifact in a repository in Artifact Registry. " +
+			"A tier bootstrapped before the plugin existed needs `ocel bootstrap` once more before it can gate a preview",
 		Edges: []edge.Kind{alb.Kind},
 	}, {
 		Name: albShieldedFeature,

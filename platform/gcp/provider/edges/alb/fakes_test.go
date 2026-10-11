@@ -61,6 +61,8 @@ type world struct {
 	untagFails       error
 
 	backendServiceQuota *BackendServiceQuota
+
+	gate gateWorld
 }
 
 func (w *world) warmThrough(_ context.Context, url, address string) error {
@@ -133,6 +135,7 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 		return nil, pending[0]
 	}
 	w.ups = append(w.ups, stack)
+	w.noteEvent("up " + stack)
 	w.declared[stack] = seen
 	backends := map[string]bool{}
 	for name, declaration := range seen {
@@ -199,6 +202,7 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string, route
 		return fmt.Errorf("route %s onto a url map already holding %d host rules, the most Compute allows", hostname, len(hosts))
 	}
 	hosts[hostname] = backend
+	w.noteEvent("route " + hostname)
 	w.keepStaticRoutes(urlMap, hostname, routes)
 	return nil
 }

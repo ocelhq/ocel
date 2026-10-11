@@ -41,6 +41,8 @@ const (
 	tfNetworkEndpointGroup = "google_compute_region_network_endpoint_group"
 	tfBackendBucket        = "google_compute_backend_bucket"
 	tfProjectIAMMember     = "google_project_iam_member"
+	tfWasmPlugin           = "google_network_services_wasm_plugin"
+	tfLBEdgeExtension      = "google_network_services_lb_edge_extension"
 )
 
 func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
@@ -58,6 +60,12 @@ func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricin
 			"network_tier":          premiumTier,
 			"port_range":            httpsPortRange,
 		}},
+	}
+	if isGated(tier, false) {
+		shaped = append(shaped,
+			pricing.Shaped{Name: balancer.GatePlugin, Type: tfWasmPlugin, Properties: map[string]any{}},
+			pricing.Shaped{Name: balancer.GateExtension, Type: tfLBEdgeExtension, Properties: map[string]any{"load_balancing_scheme": externalManaged}},
+		)
 	}
 	if previewBaseDomain != "" {
 		shaped = append(shaped,
