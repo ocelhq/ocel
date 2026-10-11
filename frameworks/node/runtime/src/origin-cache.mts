@@ -5,7 +5,7 @@ import {
   findCacheRule,
   readCacheRules,
 } from "@platform/edge-contract/cache-rules";
-import { storedCacheTags } from "@platform/edge-contract/cache-tags";
+import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import type { CacheRule } from "@platform/edge-contract/hosting";
 import {
@@ -64,6 +64,10 @@ function currentRequest(call: string): RequestCache {
 function installOriginCache(cache: OriginCache): void {
   const raise = (tag: string, mode: PurgeMode, call: string): void => {
     const store = currentRequest(call);
+    if (storedCacheTags(cache.release, [tag]).unstorable.length > 0) {
+      console.warn(`ocel: ${call} names a tag no edge can store, so it clears nothing`);
+      return;
+    }
     if (!cache.edgeAsks && !warnedUnreachable) {
       warnedUnreachable = true;
       console.warn(
@@ -79,7 +83,8 @@ function installOriginCache(cache: OriginCache): void {
     },
     revalidateTag: (tag: string, mode: "expire" | "stale") =>
       raise(tag, mode === "expire" ? "purge" : "invalidate", `revalidateTag(${tag})`),
-    revalidatePath: (path: string) => raise(pathTag(path), "purge", `revalidatePath(${path})`),
+    revalidatePath: (path: string) =>
+      raise(buildPathCacheTag(path), "purge", `revalidatePath(${path})`),
   };
 }
 
@@ -92,10 +97,6 @@ export function useOriginCache(env: NodeJS.ProcessEnv): void {
   }
   installOriginCache(cache);
   setRequestScope((req, res, run) => runInRequestCache(cache, req, res, run));
-}
-
-function pathTag(pathname: string): string {
-  return `path:${pathname}`;
 }
 
 function runInRequestCache<T>(
@@ -178,7 +179,10 @@ function shape(
     res.setHeader("cache-control", declared === "" ? ruled : `${declared}, ${ruled}`);
   }
 
-  const { tags, unstorable } = storedCacheTags(cache.release, [...store.tags, pathTag(pathname)]);
+  const { tags, unstorable } = storedCacheTags(cache.release, [
+    ...store.tags,
+    buildPathCacheTag(pathname),
+  ]);
   if (unstorable.length > 0) {
     console.warn(
       `ocel: ${req.url} has cache tags the edge cannot store, so revalidating ${unstorable.join(", ")} will not reach it`,

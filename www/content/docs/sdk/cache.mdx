@@ -32,7 +32,7 @@ starts.
 a fresh one. `revalidateTag(tag, "max")` serves them stale while a fresh copy is made.
 
 `revalidatePath(path)` expires the cached page at a pathname such as `/blog/a`, with no query.
-The pathname is the one the edge sees, in ASCII.
+`/blog/café` and `/blog/caf%C3%A9` name the same page.
 
 All three do nothing where no edge caches the app, as in `ocel dev` and in tests. Call them
 while handling a request, and call the two that revalidate before the response starts: a

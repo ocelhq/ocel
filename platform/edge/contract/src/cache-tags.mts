@@ -10,6 +10,10 @@ const releaseSeparator = "|";
 
 const maxStoredTagLength = 256;
 
+const pathTagPrefix = "path:";
+
+const pathBase = "http://path.invalid";
+
 export interface BoundCacheTags {
   tags: string[];
   dropped: number;
@@ -63,6 +67,15 @@ export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
   return { tags, dropped };
 }
 
+export function buildPathCacheTag(pathname: string): string {
+  return pathTagPrefix + new URL(pathname, pathBase).pathname;
+}
+
+function isStorable(tag: string): boolean {
+  if (sanitize(tag) === tag) return true;
+  return tag.startsWith(pathTagPrefix) && [...tag].every((ch) => ch === "%" || transmittable(ch));
+}
+
 function soft(tag: string): boolean {
   return tag.startsWith(softTagPrefix);
 }
@@ -89,7 +102,7 @@ export function storedCacheTags(
 
   for (const tag of ordered) {
     const stamped = release + releaseSeparator + tag;
-    if (stamped.length > maxStoredTagLength || sanitize(tag) !== tag) {
+    if (stamped.length > maxStoredTagLength || !isStorable(tag)) {
       unstorable.push(tag);
       continue;
     }

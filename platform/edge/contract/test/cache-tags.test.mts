@@ -1,5 +1,23 @@
 import { expect, test } from "vitest";
-import { boundCacheTags } from "../src/cache-tags.mjs";
+import { boundCacheTags, buildPathCacheTag, storedCacheTags } from "../src/cache-tags.mjs";
+
+test("names a path by its percent-encoded pathname, however the path was written", () => {
+  expect(buildPathCacheTag("/café")).toBe("path:/caf%C3%A9");
+  expect(buildPathCacheTag("/caf%C3%A9")).toBe("path:/caf%C3%A9");
+  expect(buildPathCacheTag("/blog/a")).toBe("path:/blog/a");
+});
+
+test("stores a path tag with its percent escapes as it is", () => {
+  expect(storedCacheTags("r0a1b2c3d", [buildPathCacheTag("/café")])).toEqual({
+    tags: ["r0a1b2c3d|path:/caf%C3%A9"],
+    unstorable: [],
+    overflowed: [],
+  });
+});
+
+test("refuses to store a tag that names a percent escape but no path", () => {
+  expect(storedCacheTags("r0a1b2c3d", ["a%20b", "a b"]).unstorable).toEqual(["a%20b", "a b"]);
+});
 
 test("keeps tags in the order they were produced", () => {
   expect(boundCacheTags(["products", "_N_T_/layout"])).toEqual({

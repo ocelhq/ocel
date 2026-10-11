@@ -1,3 +1,4 @@
+import { buildPathCacheTag } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 
@@ -77,7 +78,7 @@ function edgePolicy(headers: Headers): { source: string; directives: Directives 
 }
 
 export function buildPathTag(release: string, pathname: string): string {
-  return `${release}|path:${pathname}`;
+  return `${release}|${buildPathCacheTag(pathname)}`;
 }
 
 function releaseTags(headers: Headers, { release, pathname }: CachedResponse): string {
