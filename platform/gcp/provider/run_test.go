@@ -885,17 +885,26 @@ func TestWarmingAPromotedRevisionAsksItsOwnUrlOnTheAppsHealthPath(t *testing.T) 
 }
 
 func TestAWarmTheServiceTurnsAwayOrFailsToServeIsReportedAndAnAnswerFromTheAppIsNot(t *testing.T) {
+	gateRefusal := map[string]string{"X-Robots-Tag": "noindex", "Cache-Control": "private, no-store"}
 	for name, tc := range map[string]struct {
 		status  int
+		headers map[string]string
 		wantErr bool
 	}{
-		"the proxy refusing the token":           {http.StatusForbidden, true},
-		"the proxy finding no token":             {http.StatusUnauthorized, true},
-		"an app failing to start":                {http.StatusServiceUnavailable, true},
-		"an app with nothing at its health path": {http.StatusNotFound, false},
+		"the proxy refusing the token":                 {http.StatusForbidden, nil, true},
+		"the proxy finding no token":                   {http.StatusUnauthorized, nil, true},
+		"an app failing to start":                      {http.StatusServiceUnavailable, nil, true},
+		"an app with nothing at its health path":       {http.StatusNotFound, nil, false},
+		"the preview gate asking the app's visitor in": {http.StatusUnauthorized, gateRefusal, false},
+		"a 401 that only claims noindex":               {http.StatusUnauthorized, map[string]string{"X-Robots-Tag": "noindex"}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status) }))
+			app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for header, value := range tc.headers {
+					w.Header().Set(header, value)
+				}
+				w.WriteHeader(tc.status)
+			}))
 			t.Cleanup(app.Close)
 			server := &runServer{}
 			open := serves("ocel-shop-prod-app")

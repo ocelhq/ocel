@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -204,10 +205,19 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 		return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
 	}
 	defer answered.Body.Close()
+	if answeredByPreviewGate(answered) {
+		return nil
+	}
 	if answered.StatusCode == http.StatusUnauthorized || answered.StatusCode == http.StatusForbidden || answered.StatusCode >= http.StatusInternalServerError {
 		return fmt.Errorf("warm revision %s of %s: it answered %s", revision, service, answered.Status)
 	}
 	return nil
+}
+
+func answeredByPreviewGate(answered *http.Response) bool {
+	return answered.StatusCode == http.StatusUnauthorized &&
+		answered.Header.Get("Cache-Control") == edge.PreviewGateCacheControl &&
+		answered.Header.Get("X-Robots-Tag") == edge.PreviewRobotsTag
 }
 
 func warmAddress(current *run.GoogleCloudRunV2Service, revision string) string {
