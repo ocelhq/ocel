@@ -75,6 +75,7 @@ describe("reading a page from the durable store on a Serve miss", () => {
       "r1a2b3c4d|_N_T_/layout,r1a2b3c4d|_N_T_/blog/a,r1a2b3c4d|posts",
     );
     expect(answer?.response.headers.get("x-ocel-entry-source")).toBe("store");
+    expect(answer?.response.headers.has("x-ocel-entry-modified")).toBe(false);
     expect(answer?.response.headers.get("cache-control")).toBe(
       "s-maxage=0, stale-while-revalidate=31536000",
     );
@@ -220,6 +221,7 @@ describe("whether an entry in the store may still be served", () => {
     const answer = await readFromStore(call(), deps);
 
     expect(answer?.stale).toBe(true);
+    expect(answer?.response.headers.get("x-ocel-entry-source")).toBe("stale-store");
   });
 
   it("serves as fresh an entry the origin rewrote within a second after an invalidation, as the origin judges it", async () => {

@@ -30,6 +30,7 @@ import {
   type StoredEntryCall,
 } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
+import { ENTRY_SOURCE_HEADER } from "./store-read";
 
 const RSC_FORWARD_HEADERS = new Set([
   "rsc",
@@ -72,6 +73,12 @@ function readTier(response: Response): CacheStatus {
     case "STALE":
     case "UPDATING":
       return "STALE";
+  }
+  switch (response.headers.get(ENTRY_SOURCE_HEADER)) {
+    case "store":
+      return "HIT";
+    case "stale-store":
+      return "STALE";
     default:
       return "MISS";
   }
@@ -80,7 +87,12 @@ function readTier(response: Response): CacheStatus {
 function buildVisitorResponse(response: Response, segment: boolean): Response {
   const tier = readTier(response);
   const headers = new Headers(response.headers);
-  for (const name of ["cache-tag", "cloudflare-cdn-cache-control", "cf-cache-status"]) {
+  for (const name of [
+    "cache-tag",
+    "cloudflare-cdn-cache-control",
+    "cf-cache-status",
+    ENTRY_SOURCE_HEADER,
+  ]) {
     headers.delete(name);
   }
   const vary = headers.get(ORIGIN_VARY);
