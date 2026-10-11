@@ -158,15 +158,16 @@ domain: a deploy that names another is refused. The first deploy of a tier asks 
 again while Google is still issuing the wildcard certificate. AWS refuses `originDomain`.
 
 Bootstrapping the edge on Google Cloud keeps, per tier, a client certificate for the worker
-(renewed beside the old one, which stays trusted until it expires), the worker that stores
-each deployment's records and the worker that writes pages and tags into R2. The edge caches
-pages itself and serves a stale one while the app renders a fresh one; revalidating a tag
-purges them at the edge and purges nothing at Google Cloud. An app's static files and route
-table stay in the tier's Cloud Storage bucket rather than R2: the worker reads them from there
-over Cloud Storage's S3-compatible API and caches them at the edge, signing each read with an
-HMAC key of a service account that bootstrapping keeps for the tier and that may read the
-bucket's static files and route tables and nothing else. Removing the bootstrap deletes the
-key and the account. Container apps are not served by the worker: they are forwarded through
+(renewed beside the old one, which stays trusted until it expires) and the worker that stores
+each deployment's records. The edge caches pages itself and serves a stale one while the app
+renders a fresh one; revalidating a tag records it in the tier's tag database and purges the
+tag at the edge. The app keeps its pages in the tier's Cloud Storage bucket, out of the
+worker's reach: a page the edge does not hold is rendered at the origin. An app's static
+files and route table stay in the tier's Cloud Storage bucket as well: the worker reads them
+from there over Cloud Storage's S3-compatible API and caches them at the edge, signing each
+read with an HMAC key of a service account that bootstrapping keeps for the tier and that may
+read the bucket's static files and route tables and nothing else. Removing the bootstrap
+deletes the key and the account. Container apps are not served by the worker: they are forwarded through
 the tier's load balancer as a proxied record, as a VPS is.
 
 Besides the permissions above, the token needs Account SSL and Certificates Edit on the
