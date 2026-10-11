@@ -35,8 +35,9 @@ a fresh one. `revalidateTag(tag, "max")` serves them stale while a fresh copy is
 `/blog/café` and `/blog/caf%C3%A9` name the same page.
 
 All three do nothing where no edge caches the app, as in `ocel dev` and in tests. Call them
-while handling a request, and call the two that revalidate before the response starts: a
-raise made outside a request throws, and one made after the response began is lost and logged.
+while handling a request, and call the two that revalidate before the response starts: a call
+made outside a request throws, and a revalidation made after the response began is lost and
+logged, as is one that names a tag no edge can store, such as a tag with a space.
 Never put a user or tenant id in a tag, because the tag names reach the edge in a response
 header.
 

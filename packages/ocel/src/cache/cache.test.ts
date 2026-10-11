@@ -54,13 +54,13 @@ describe("revalidateTag", () => {
   it("expires everything the tag names at once when it is given no profile", () => {
     const recorded = installHost();
     revalidateTag("posts");
-    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "expire" }]);
+    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "purge" }]);
   });
 
   it("serves what the tag names stale while it refreshes, when the profile is max", () => {
     const recorded = installHost();
     revalidateTag("posts", "max");
-    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "stale" }]);
+    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "invalidate" }]);
   });
 
   it("refuses a profile it does not know", () => {

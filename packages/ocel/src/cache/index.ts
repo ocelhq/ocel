@@ -2,11 +2,11 @@ const cacheHost = Symbol.for("ocel.cache.host");
 
 interface CacheHost {
   tag(tags: readonly string[]): void;
-  revalidateTag(tag: string, mode: "expire" | "stale"): void;
+  revalidateTag(tag: string, mode: "purge" | "invalidate"): void;
   revalidatePath(path: string): void;
 }
 
-function host(): CacheHost | undefined {
+function findCacheHost(): CacheHost | undefined {
   return (globalThis as Record<symbol, CacheHost | undefined>)[cacheHost];
 }
 
@@ -27,7 +27,7 @@ export function cacheTag(...tags: string[]): void {
       throw new TypeError("ocel: a cache tag is a non-empty string");
     }
   }
-  host()?.tag(tags);
+  findCacheHost()?.tag(tags);
 }
 
 /**
@@ -43,7 +43,7 @@ export function revalidateTag(tag: string, profile?: RevalidateProfile): void {
   if (profile !== undefined && profile !== "max") {
     throw new TypeError(`ocel: revalidateTag knows the profile "max", not ${String(profile)}`);
   }
-  host()?.revalidateTag(tag, profile === "max" ? "stale" : "expire");
+  findCacheHost()?.revalidateTag(tag, profile === "max" ? "invalidate" : "purge");
 }
 
 /**
@@ -55,5 +55,5 @@ export function revalidatePath(path: string): void {
   if (typeof path !== "string" || !path.startsWith("/") || /[?#]/.test(path)) {
     throw new TypeError("ocel: a revalidated path starts with a slash and has no query");
   }
-  host()?.revalidatePath(path);
+  findCacheHost()?.revalidatePath(path);
 }

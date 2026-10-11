@@ -1,13 +1,13 @@
 import { expect, it } from "vitest";
 
 import fixture from "../fixtures/cache-rules.json" with { type: "json" };
-import { cacheControlOfRule, findCacheRule, readCacheRules } from "../src/cache-rules.mjs";
+import { findCacheRule, formatCacheControl, readCacheRules } from "../src/cache-rules.mjs";
 
-it("finds the first rule that matches each path, as the fixture pkg/edge reads says", () => {
+it("finds the first rule that matches each path, as the fixture says", () => {
   for (const { path, rule, cacheControl } of fixture.cases) {
     const found = findCacheRule(fixture.rules, path);
     expect(found, path).toEqual(fixture.rules[rule]);
-    expect(cacheControlOfRule(found!), path).toBe(cacheControl);
+    expect(formatCacheControl(found!), path).toBe(cacheControl);
   }
 });
 
