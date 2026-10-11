@@ -22,7 +22,6 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
-	"github.com/cloudflare/cloudflare-go/v4/r2"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/contenttype"
@@ -62,7 +61,6 @@ type cloudflare struct {
 	store     *http.Client
 	namespace string
 	options   Options
-	objects   func(endpoint string, creds r2.TemporaryCredentialNewResponse) objectAPI
 
 	workerClientCertificate bool
 	trustClientCertificate  ClientCertificateTrust
@@ -104,14 +102,6 @@ func requireAccountID(doing string) (string, error) {
 		return "", fmt.Errorf("%s is not set; it is required to %s", envAccountID, doing)
 	}
 	return accountID, nil
-}
-
-func (p *cloudflare) cacheStore() cacheStore {
-	store := newCacheStore(p.client, p.namespace)
-	if p.objects != nil {
-		store.objects = p.objects
-	}
-	return store
 }
 
 func (p *cloudflare) Facts() edge.Facts {
@@ -216,10 +206,7 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	out, err := p.cacheStore().bootstrap(ctx, accountID, state.store)
-	if err != nil {
-		return out, err
-	}
+	out := edge.BootstrapOutput{Trust: edge.TrustExternal}
 	for _, worker := range state.workers {
 		offer, err := p.ensureWorker(ctx, accountID, worker)
 		if err != nil {
@@ -251,18 +238,9 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
-	writerScript, err := isrWriterScriptNameFor(p.namespace, tier)
-	if err != nil {
-		return err
-	}
 	var errs []error
-	for _, name := range []string{storeScript, writerScript} {
-		if err := p.deleteScript(ctx, accountID, name); err != nil {
-			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
-		}
-	}
-	if err := p.cacheStore().teardown(ctx, accountID, tier); err != nil {
-		errs = append(errs, err)
+	if err := p.deleteScript(ctx, accountID, storeScript); err != nil {
+		errs = append(errs, fmt.Errorf("delete worker %q: %w", storeScript, err))
 	}
 	if p.workerClientCertificate {
 		if err := p.workerClientCertificates().teardown(ctx, accountID, tier); err != nil {
@@ -293,16 +271,6 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 		return nil, err
 	}
 	storeWorker := edge.Worker{Main: workerModule(releasesStoreBundle)}
-	writerScript, err := isrWriterScriptNameFor(namespace, tier)
-	if err != nil {
-		return nil, err
-	}
-	writerWorker := edge.Worker{Main: workerModule(isrWriterBundle)}
-	bucket, err := cacheStoreNameFor(namespace, tier)
-	if err != nil {
-		return nil, err
-	}
-	writerWorker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: bucket}
 
 	return []bootstrapWorker{
 		{
@@ -315,18 +283,6 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 				endpoint:   edge.OfferKeyStoreEndpoint,
 				scriptName: edge.OfferKeyStoreScriptName,
 				cred:       edge.OfferKeyStoreBootstrapCredential,
-			},
-		},
-		{
-			scriptName: writerScript,
-			worker:     writerWorker,
-			do:         isrWriterWorker,
-			what:       "isr-writer worker",
-			offer:      edge.OfferISRWriter,
-			keys: offerKeys{
-				endpoint:   edge.OfferKeyISRWriterEndpoint,
-				scriptName: edge.OfferKeyISRWriterScriptName,
-				cred:       edge.OfferKeyISRWriterBootstrapCredential,
 			},
 		},
 	}, nil
@@ -394,7 +350,6 @@ func (p *cloudflare) ensureSubdomain(ctx context.Context, up upload, on bool, wh
 var (
 	entryBundle         = bundles.Entry()
 	releasesStoreBundle = bundles.ReleasesStore()
-	isrWriterBundle     = bundles.ISRWriter()
 )
 
 func workerModule(content []byte) edge.WorkerModule {
@@ -561,14 +516,6 @@ func buildWorkerExports(worker edge.Worker) map[string]any {
 	return exports
 }
 
-const cacheStoreBinding = "OCEL_CACHE_STORE"
-
-func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
-	worker.ObjectStore.Binding = cacheStoreBinding
-	worker.ObjectStore.Bucket = values[valueKeyCacheBucket]
-	return worker
-}
-
 const codeLoaderBinding = "LOADER"
 
 func bindCodeLoader(worker edge.Worker) edge.Worker {
@@ -582,13 +529,6 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 		bindings = append(bindings, map[string]any{
 			"type": "assets",
 			"name": worker.AssetBinding,
-		})
-	}
-	if store := worker.ObjectStore; store.Binding != "" && store.Bucket != "" {
-		bindings = append(bindings, map[string]any{
-			"type":        "r2_bucket",
-			"name":        store.Binding,
-			"bucket_name": store.Bucket,
 		})
 	}
 	if worker.LoaderBinding != "" {
@@ -666,4 +606,9 @@ func (p *cloudflare) subdomainURL(ctx context.Context, accountID, scriptName str
 		return "", err
 	}
 	return fmt.Sprintf("https://%s.%s.workers.dev", scriptName, account.Subdomain), nil
+}
+
+func hasStatus(err error, status int) bool {
+	var apiErr *cf.Error
+	return errors.As(err, &apiErr) && apiErr.StatusCode == status
 }

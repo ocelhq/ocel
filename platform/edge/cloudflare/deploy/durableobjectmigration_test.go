@@ -28,7 +28,7 @@ const liveReleasesStoreSettings = `{
 const absentScriptSettings = `{"success":false,"errors":[{"code":10007,"message":"workers.api.error.script_not_found"}],"result":null}`
 
 const foreignClassSettings = `{"result":{"bindings":[
-	{"class_name":"IsrDeploy","name":"ISR_WRITER_DO","script_name":"some-other-worker",
+	{"class_name":"ReleasesStore","name":"RELEASES_DO","script_name":"some-other-worker",
 	 "type":"durable_object_namespace"}
 ]},"success":true,"errors":[],"messages":[]}`
 
@@ -77,14 +77,14 @@ func TestDeployedClasses(t *testing.T) {
 			name:   "a script that does not exist has no classes",
 			status: http.StatusNotFound,
 			body:   absentScriptSettings,
-			script: "ocel-isr-writer-preview",
+			script: "ocel-releases-store-preview",
 			want:   nil,
 		},
 		{
 			name:   "a class owned by another script is not ours",
 			status: http.StatusOK,
 			body:   foreignClassSettings,
-			script: "ocel-isr-writer-preview",
+			script: "ocel-releases-store-preview",
 			want:   nil,
 		},
 	} {
@@ -117,18 +117,18 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	})
 
 	t.Run("a class another script owns is still created locally", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-isr-writer-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-releases-store-preview")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}
 
-		meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, classes)
+		meta := doMetadataFromMultipart(t, testStoreWorker(), releasesStoreWorker, classes)
 		migrations, ok := meta["migrations"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected a migrations object, got %v", meta["migrations"])
 		}
-		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
-			t.Errorf("migrations.steps = %v, want both classes still created locally", steps)
+		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"ReleasesStore"}}) {
+			t.Errorf("migrations.steps = %v, want the class still created locally", steps)
 		}
 	})
 }

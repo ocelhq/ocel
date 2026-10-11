@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
@@ -35,7 +34,6 @@ const (
 	isrObjectPrefixEnvVar   = "OCEL_ISR_OBJECT_PREFIX"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	tagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
-	isrWriterURLEnvVar      = "OCEL_ISR_WRITER_URL"
 	purgeSecretEnvVar       = "OCEL_PURGE_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
 	assetBucketEnvVar       = "OCEL_ASSET_BUCKET"
@@ -74,16 +72,11 @@ type nextCache struct {
 	tagDatabase     string
 	storageEndpoint string
 	tagEndpoint     string
-	edgeStore       *edgeISRStore
+	purgeSecret     string
 }
 
-type edgeISRStore struct {
-	writer cloudflare.ISRWriter
-	secret string
-}
-
-func keepsISRInEdgeStore(spec provider.StackSpec) bool {
-	return spec.App != nil && servesNext(spec.App) && spec.App.ISR != nil &&
+func signsEdgePurges(spec provider.StackSpec) bool {
+	return spec.App != nil && spec.App.ISR != nil &&
 		spec.App.Compute == provider.ComputeServerless && factsOf(spec.Edge).RunsCode
 }
 
@@ -127,19 +120,17 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	env[isrTagNamespaceEnvVar] = isr.TagNamespace
 	env[isrBucketEnvVar] = cache.bucket
 	env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
-	if store := cache.edgeStore; store != nil {
-		env[isrWriterURLEnvVar] = store.writer.Endpoint
-		env[purgeSecretEnvVar] = store.secret
+	env[tagDatabaseEnvVar] = cache.tagDatabase
+	if cache.purgeSecret != "" {
+		env[purgeSecretEnvVar] = cache.purgeSecret
 		if isr.PurgeURL != "" {
 			env[edge.PurgeURLVar] = isr.PurgeURL
 		}
-	} else {
-		env[tagDatabaseEnvVar] = cache.tagDatabase
 	}
 	if cache.storageEndpoint != "" {
 		env[storageEndpointEnvVar] = cache.storageEndpoint
 	}
-	if cache.tagEndpoint != "" && cache.edgeStore == nil {
+	if cache.tagEndpoint != "" {
 		env[firestoreEndpointEnvVar] = cache.tagEndpoint
 	}
 	return env
@@ -158,9 +149,9 @@ func fillNextContainerDefaults(s serving) serving {
 	return s
 }
 
-func newNextCache(names Names, tier environment.Tier, storageEndpoint, tagEndpoint string, edgeStore *edgeISRStore) nextCache {
+func newNextCache(names Names, tier environment.Tier, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
-		edgeStore:       edgeStore,
+		purgeSecret:     purgeSecret,
 		bucket:          names.Bucket(tier),
 		tagDatabase:     "projects/" + names.project + "/databases/" + names.TagDatabase(tier),
 		storageEndpoint: storageEndpoint,

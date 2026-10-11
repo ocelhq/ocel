@@ -14,7 +14,7 @@ v8.setFlagsFromString("--expose-gc");
 const collectGarbage = vm.runInNewContext("gc") as () => void;
 
 describe("dispatchResult", () => {
-  it("serves a static route from the R2 asset store", async () => {
+  it("serves a static route from the asset store", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -861,7 +861,7 @@ describe("dispatchResult", () => {
     ).rejects.toThrow(/"\/ssr".*"lambda"/);
   });
 
-  it("falls back to the R2 asset store when the path is not in the manifest", async () => {
+  it("falls back to the asset store when the path is not in the manifest", async () => {
     const deps = baseDeps({
       assetStore: assetStoreServing({ "/unenumerated.txt": "found" }),
     });
@@ -876,7 +876,7 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("found");
   });
 
-  it("returns 404 when neither the manifest nor the R2 asset store has the path", async () => {
+  it("returns 404 when neither the manifest nor the asset store has the path", async () => {
     const deps = baseDeps({ assetStore: assetStoreServing({}) });
 
     const res = await dispatchResult(
@@ -888,7 +888,7 @@ describe("dispatchResult", () => {
     expect(res.status).toBe(404);
   });
 
-  it("falls back to the R2 asset store when routing produced no resolved pathname", async () => {
+  it("falls back to the asset store when routing produced no resolved pathname", async () => {
     const deps = baseDeps({
       assetStore: assetStoreServing({ "/whatever": "asset" }),
     });
@@ -938,7 +938,7 @@ describe("dispatchResult", () => {
     expect(res.status).toBe(404);
   });
 
-  it("falls through to the R2 asset store for a _next/data request without x-middleware-prefetch", async () => {
+  it("falls through to the asset store for a _next/data request without x-middleware-prefetch", async () => {
     const deps = baseDeps({
       assetStore: assetStoreServing({
         "/_next/data/test/dashboard.json": "asset",

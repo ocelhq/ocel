@@ -2,12 +2,11 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -25,8 +24,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -91,9 +88,6 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		AssetBucket:       deployed.AssetBucket,
 		ImageOptimizerURL: deployed.ImageOptimizerURL,
 
-		CacheStoreBucket:  params.CacheStore.Bucket,
-		CacheStoreObjects: cacheStoreObjects(params.CacheStore),
-
 		Objects:     s3.NewFromConfig(p.aws),
 		Getter:      s3.NewFromConfig(p.aws),
 		Invoker:     lambda.NewFromConfig(p.aws),
@@ -103,10 +97,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		StoreEndpoint:            params.ReleasesStore.Endpoint,
 		StoreBootstrapCredential: params.ReleasesStore.BootstrapCredential,
 
-		ISRWriterEndpoint:            params.ISRWriter.Endpoint,
-		ISRWriterBootstrapCredential: params.ISRWriter.BootstrapCredential,
-		ISRWriterScriptName:          params.ISRWriter.ScriptName,
-		ISRWriterSeed:                params.ISRWriterSeed,
+		PurgeSeed: params.PurgeSeed,
 
 		OriginSecret:         params.OriginSecret.Current,
 		PreviousOriginSecret: params.OriginSecret.Previous,
@@ -115,12 +106,12 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		Retention: &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
-	if params.EdgeCredentialsErr == nil {
+	switch {
+	case params.EdgeCredentialsErr == nil:
 		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
 		cfg.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
-	}
-	if params.EdgeValuesErr == nil {
-		cfg.EdgeValues = params.EdgeValues
+	case !errors.Is(params.EdgeCredentialsErr, bootstrap.ErrEdgeCredentialsAbsent):
+		cfg.EdgeCredentialsErr = params.EdgeCredentialsErr
 	}
 	return cfg, nil
 }
@@ -154,19 +145,6 @@ func (p *Provider) transformPass() transform.Pass {
 
 func tableARN(region, account, table string) string {
 	return fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", region, account, table)
-}
-
-func cacheStoreObjects(store bootstrap.CacheStore) payloads.ObjectStore {
-	if store.Bucket == "" {
-		return nil
-	}
-	return s3.NewFromConfig(aws.Config{
-		Region:      store.Region,
-		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
-		Retryer:     sdkconfig.ControlRetryer,
-	}, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(store.Endpoint)
-	})
 }
 
 const s3Scheme = "s3"

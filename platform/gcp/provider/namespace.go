@@ -19,7 +19,7 @@ const (
 	stateBucketSuffix     = "-state"
 	passphraseSuffix      = "-pulumi-passphrase"
 	edgeCredentialsSuffix = "-edge-credentials"
-	isrWriterSeedSuffix   = "-isr-writer-seed"
+	purgeSeedSuffix       = "-purge-seed"
 )
 
 const (
@@ -349,8 +349,8 @@ func (n Names) EdgeCredentialsSecret(tier environment.Tier, kind edge.Kind) stri
 	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + edgeCredentialsSuffix
 }
 
-func (n Names) ISRWriterSeedSecret(tier environment.Tier, kind edge.Kind) string {
-	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + isrWriterSeedSuffix
+func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
+	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + purgeSeedSuffix
 }
 
 func (n Names) fit() error {

@@ -1,10 +1,10 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
-import { settledWithin } from "./cache";
 import type { RaisedTag } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { ORIGIN_PURGE_SCOPE, type RenderCoordinates } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import type { Serving } from "./serve-prerender";
+import { settledWithin } from "./settled";
 
 export const AWAITED_PURGE_MS = 3_000;
 

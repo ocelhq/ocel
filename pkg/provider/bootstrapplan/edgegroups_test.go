@@ -21,16 +21,16 @@ func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 		{
 			name: "nothing exists yet",
 			planned: []edge.PlanChange{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
-				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanCreate},
+				{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanCreate},
+				{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate},
 			},
 			action: provider.ActionCreate,
 		},
 		{
 			name: "everything is current",
 			planned: []edge.PlanChange{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep, Reason: "already current"},
-				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
+				{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanKeep, Reason: "already current"},
+				{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanKeep, Reason: "already current"},
 			},
 			action: provider.ActionKeep,
 			reason: "already current",
@@ -38,16 +38,16 @@ func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 		{
 			name: "one has drifted",
 			planned: []edge.PlanChange{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
-				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate, Reason: "the deployed script differs"},
+				{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanKeep},
+				{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanUpdate, Reason: "the deployed script differs"},
 			},
 			action: provider.ActionUpdate,
 		},
 		{
 			name: "one is missing",
 			planned: []edge.PlanChange{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
-				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanCreate},
+				{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanKeep},
+				{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate},
 			},
 			action: provider.ActionUpdate,
 		},
@@ -87,12 +87,12 @@ func TestEdgeGroupRefusesAnActionNoRendererKnows(t *testing.T) {
 	t.Parallel()
 
 	_, err := bootstrapplan.EdgeGroup("cloudflare", "cloudflare-edge", []edge.PlanChange{
-		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanAction("recreate")},
+		{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanAction("recreate")},
 	})
 	if err == nil {
 		t.Fatal("EdgeGroup() took an action no renderer knows, which the CLI draws as a bare ?")
 	}
-	for _, want := range []string{"recreate", "ocel-isr-writer"} {
+	for _, want := range []string{"recreate", "ocel-releases-store"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %v does not name %q", err, want)
 		}
@@ -118,13 +118,13 @@ func TestEdgeGroupRollsUpWhatTheOriginRaisesForTheEdgeAfterTheEdgesOwnChanges(t 
 	t.Parallel()
 
 	group, err := bootstrapplan.EdgeGroup("cloudflare", "cloudflare-edge",
-		[]edge.PlanChange{{Kind: "worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: provider.ReasonCurrent}},
+		[]edge.PlanChange{{Kind: "worker", Name: "ocel-releases-store", Action: edge.PlanKeep, Reason: provider.ReasonCurrent}},
 		provider.Change{Kind: "storage:hmackey", Name: "reader", Action: provider.ActionCreate, Reason: "the edge reads assets with it"},
 	)
 	if err != nil {
 		t.Fatalf("EdgeGroup() error = %v", err)
 	}
-	if len(group.Changes) != 2 || group.Changes[0].Name != "ocel-isr-writer" || group.Changes[1].Name != "reader" {
+	if len(group.Changes) != 2 || group.Changes[0].Name != "ocel-releases-store" || group.Changes[1].Name != "reader" {
 		t.Fatalf("group changes = %+v, want the edge's worker and then the origin's key", group.Changes)
 	}
 	if group.Action == provider.ActionKeep {
@@ -172,13 +172,13 @@ func TestEdgeGroupFromPlanGroup(t *testing.T) {
 			Name:   "cloudflare/edge",
 			Action: edge.PlanDelete,
 			Changes: []edge.PlanChange{
-				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanAction("recreate")},
+				{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanAction("recreate")},
 			},
 		})
 		if err == nil {
 			t.Fatal("EdgeGroupFromPlanGroup() took a row action no renderer knows")
 		}
-		for _, want := range []string{"recreate", "ocel-isr-writer"} {
+		for _, want := range []string{"recreate", "ocel-releases-store"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %v does not name %q", err, want)
 			}

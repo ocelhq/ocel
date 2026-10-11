@@ -15,21 +15,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
 	adoptedEdgeRecord = "bootstrap"
-	isrWriterSeedLen  = 32
+	purgeSeedLen      = 32
 	latestVersion     = "latest"
 )
 
 type adoptedEdge struct {
 	ReleasesStore     adoptedWorker            `json:"releasesStore"`
-	ISRWriter         adoptedWorker            `json:"isrWriter"`
 	ClientCertificate adoptedClientCertificate `json:"clientCertificate"`
-	CacheStore        adoptedCacheStore        `json:"cacheStore"`
-	Values            map[string]string        `json:"values,omitempty"`
 }
 
 type adoptedWorker struct {
@@ -42,17 +38,8 @@ type adoptedClientCertificate struct {
 	Authorities string `json:"authorities"`
 }
 
-type adoptedCacheStore struct {
-	Bucket   string `json:"bucket"`
-	Endpoint string `json:"endpoint"`
-	Region   string `json:"region"`
-}
-
 type edgeCredentials struct {
 	ReleasesStore             string `json:"releasesStore"`
-	ISRWriter                 string `json:"isrWriter"`
-	CacheStoreAccessKeyID     string `json:"cacheStoreAccessKeyId,omitempty"`
-	CacheStoreSecretAccessKey string `json:"cacheStoreSecretAccessKey,omitempty"`
 	AssetStoreAccessKeyID     string `json:"assetStoreAccessKeyId,omitempty"`
 	AssetStoreSecretAccessKey string `json:"assetStoreSecretAccessKey,omitempty"`
 }
@@ -74,7 +61,7 @@ func adoptEdgeOffers(
 	out edge.BootstrapOutput,
 	runProgress progress.Log,
 ) error {
-	if len(out.Offers) == 0 && len(out.Values) == 0 {
+	if len(out.Offers) == 0 {
 		return nil
 	}
 	say := ensureProgress(runProgress)
@@ -83,11 +70,12 @@ func adoptEdgeOffers(
 		return err
 	}
 	adopted, credentials := stored, storedCredentials
-	sawISRWriter := false
+	sawReleasesStore := false
 	for _, offer := range out.Offers {
 		switch offer.Kind {
 		case edge.OfferReleasesStore:
 			say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
+			sawReleasesStore = true
 			adopted.ReleasesStore = adoptedWorker{
 				Endpoint:   offer.Values[edge.OfferKeyStoreEndpoint],
 				ScriptName: offer.Values[edge.OfferKeyStoreScriptName],
@@ -98,52 +86,22 @@ func adoptEdgeOffers(
 			if credentials.ReleasesStore == "" {
 				return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
 			}
-		case edge.OfferISRWriter:
-			say.Say(fmt.Sprintf("Adopting the %s edge's isr-writer worker (Secret Manager)", kind))
-			sawISRWriter = true
-			adopted.ISRWriter = adoptedWorker{
-				Endpoint:   offer.Values[edge.OfferKeyISRWriterEndpoint],
-				ScriptName: offer.Values[edge.OfferKeyISRWriterScriptName],
-			}
-			if offered := offer.Values[edge.OfferKeyISRWriterBootstrapCredential]; offered != "" {
-				credentials.ISRWriter = offered
-			}
-			if credentials.ISRWriter == "" {
-				return edgeCredentialUnrecorded(c, tier, kind, "ISR writer", adopted.ISRWriter.ScriptName)
-			}
 		case edge.OfferWorkerClientCertificate:
 			adopted.ClientCertificate = adoptedClientCertificate{
 				ID:          offer.Values[edge.OfferKeyClientCertificateID],
 				Authorities: offer.Values[edge.OfferKeyClientCertificateAuthorities],
 			}
-		case edge.OfferCacheStore:
-			say.Say(fmt.Sprintf("Adopting the %s edge's cache store (Secret Manager)", kind))
-			adopted.CacheStore = adoptedCacheStore{
-				Bucket:   offer.Values[edge.OfferKeyBucket],
-				Endpoint: offer.Values[edge.OfferKeyEndpoint],
-				Region:   offer.Values[edge.OfferKeyRegion],
-			}
-			accessKeyID := offer.Values[edge.OfferKeyAccessKeyID]
-			if offered := offer.Values[edge.OfferKeySecretAccessKey]; offered != "" {
-				credentials.CacheStoreAccessKeyID, credentials.CacheStoreSecretAccessKey = accessKeyID, offered
-			}
-			if credentials.CacheStoreAccessKeyID != accessKeyID || credentials.CacheStoreSecretAccessKey == "" {
-				return cacheStoreCredentialUnrecorded(c, tier, kind, accessKeyID, adopted.CacheStore.Bucket)
-			}
 		default:
 			say.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", kind, offer.Kind))
 		}
-	}
-	if len(out.Values) > 0 {
-		adopted.Values = out.Values
 	}
 	if credentials != storedCredentials {
 		if err := writeEdgeCredentials(ctx, c, tier, kind, credentials); err != nil {
 			return err
 		}
 	}
-	if sawISRWriter {
-		if err := ensureISRWriterSeed(ctx, c, tier, kind); err != nil {
+	if sawReleasesStore {
+		if err := ensurePurgeSeed(ctx, c, tier, kind); err != nil {
 			return err
 		}
 	}
@@ -159,14 +117,6 @@ func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind,
 			"but secret %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
 			"back, so delete the bootstrap credential set on %q at the %s edge and re-run bootstrap to mint a fresh one",
 		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
-}
-
-func cacheStoreCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind, accessKeyID, bucket string) error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"the %s edge reoffered cache-store credential %q without a secret, meaning it minted that credential before, "+
-			"but secret %s stores no secret for it: a prior bootstrap minted it and failed before storing it. Its secret cannot be read "+
-			"back, so delete credential %q for bucket %q at the %s edge and re-run bootstrap to mint a fresh one",
-		kind, accessKeyID, c.EdgeCredentialsSecret(tier, kind), accessKeyID, bucket, kind)
 }
 
 func readAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
@@ -224,21 +174,21 @@ func writeEdgeCredentials(ctx context.Context, c *clients, tier environment.Tier
 	return c.destroyVersionsBefore(ctx, service, name, added)
 }
 
-func ensureISRWriterSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) error {
+func ensurePurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) error {
 	service, err := c.Secrets()
 	if err != nil {
 		return err
 	}
-	name := c.ISRWriterSeedSecret(tier, kind)
+	name := c.PurgeSeedSecret(tier, kind)
 	if _, found, err := c.readSecretVersion(ctx, service, name, firstSecretVersion); err != nil || found {
 		return err
 	}
 	if err := c.ensureSecret(ctx, service, name); err != nil {
 		return err
 	}
-	minted := make([]byte, isrWriterSeedLen)
+	minted := make([]byte, purgeSeedLen)
 	if _, err := rand.Read(minted); err != nil {
-		return fmt.Errorf("mint the %s edge's ISR writer seed: %w", kind, err)
+		return fmt.Errorf("mint the %s edge's purge seed: %w", kind, err)
 	}
 	_, err = c.addSecretVersion(ctx, service, name, []byte(hex.EncodeToString(minted)))
 	return err
@@ -277,9 +227,6 @@ func requireAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store,
 		{"no releases-store endpoint", adopted.ReleasesStore.Endpoint},
 		{"no releases-store script name", adopted.ReleasesStore.ScriptName},
 		{"no releases-store credential", credentials.ReleasesStore},
-		{"no isr-writer endpoint", adopted.ISRWriter.Endpoint},
-		{"no isr-writer script name", adopted.ISRWriter.ScriptName},
-		{"no isr-writer credential", credentials.ISRWriter},
 	} {
 		if missing.got == "" {
 			return adoptedEdge{}, edgeCredentials{}, notBootstrapped(tier, kind, missing.what)
@@ -288,17 +235,17 @@ func requireAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store,
 	return adopted, credentials, nil
 }
 
-func readISRWriterSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) (string, error) {
+func readPurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) (string, error) {
 	service, err := c.Secrets()
 	if err != nil {
 		return "", err
 	}
-	seed, found, err := c.readSecretVersion(ctx, service, c.ISRWriterSeedSecret(tier, kind), firstSecretVersion)
+	seed, found, err := c.readSecretVersion(ctx, service, c.PurgeSeedSecret(tier, kind), firstSecretVersion)
 	if err != nil {
 		return "", err
 	}
 	if !found || len(seed) == 0 {
-		return "", notBootstrapped(tier, kind, "no isr-writer seed")
+		return "", notBootstrapped(tier, kind, "no purge seed")
 	}
 	return string(seed), nil
 }
@@ -311,21 +258,10 @@ func forgetEdgeOffers(ctx context.Context, c *clients, records keyvalue.Store, t
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.ISRWriterSeedSecret(tier, kind)} {
+	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.PurgeSeedSecret(tier, kind)} {
 		if err := c.deleteSecret(ctx, service, name); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func readAdoptedISRWriter(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (cloudflare.ISRWriter, bool, error) {
-	adopted, credentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
-	if err != nil || adopted.ISRWriter.Endpoint == "" {
-		return cloudflare.ISRWriter{}, false, err
-	}
-	if credentials.ISRWriter == "" {
-		return cloudflare.ISRWriter{}, false, notBootstrapped(tier, kind, "no isr-writer credential")
-	}
-	return cloudflare.ISRWriter{Endpoint: adopted.ISRWriter.Endpoint, BootstrapCredential: credentials.ISRWriter}, true, nil
 }

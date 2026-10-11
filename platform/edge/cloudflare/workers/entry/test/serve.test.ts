@@ -1,4 +1,4 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { createExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import { Serve } from "../src/serve";
@@ -134,42 +134,24 @@ describe("Serve reading an object from the asset bucket", () => {
     ).rejects.toThrow(/app/);
   });
 
-  it("takes the bucket's 404 as final, never reading the edge's object store", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("takes the bucket's 404 as final", async () => {
     const s3 = s3Answering(() => new Response("<Error/>", { status: 404 }));
 
-    const response = await withGlobalFetch(s3.fetch, () =>
-      serveWith({ ...s3Env, OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE }).fetch(get()),
-    );
+    const response = await withGlobalFetch(s3.fetch, () => serveWith(s3Env).fetch(get()));
 
     expect(s3.calls).toHaveLength(1);
     expect(response.status).toBe(404);
   });
 
-  it("reads the edge's object store when the bucket is bound without the edge's key", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("reads nothing when the bucket is bound without the edge's key", async () => {
     const s3 = s3Answering(() => new Response("bytes"));
 
     const response = await withGlobalFetch(s3.fetch, () =>
-      serveWith({
-        OCEL_ASSET_BUCKET: "assets-bucket",
-        OCEL_AWS_REGION: "us-east-1",
-        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
-      }).fetch(get()),
+      serveWith({ OCEL_ASSET_BUCKET: "assets-bucket", OCEL_AWS_REGION: "us-east-1" }).fetch(get()),
     );
 
     expect(s3.calls).toHaveLength(0);
-    expect(await response.text()).toBe("from r2");
-  });
-
-  it("does not fall back from a failure of the bucket", async () => {
-    const s3 = s3Answering(() => new Response("slow down", { status: 503 }));
-
-    const response = await withGlobalFetch(s3.fetch, () =>
-      serveWith({ ...s3Env, OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE }).fetch(get()),
-    );
-
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
   });
 
   it("answers only GET and HEAD", async () => {
@@ -251,13 +233,10 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
     expect(gcs.calls[0].url).not.toContain("examplesecret");
   });
 
-  it("takes the bucket's 404 as final, never reading the edge's object store", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("takes the bucket's 404 as final", async () => {
     const gcs = s3Answering(() => new Response("<Error/>", { status: 404 }));
 
-    const response = await withGlobalFetch(gcs.fetch, () =>
-      serveWith({ ...hmacEnv, OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE }).fetch(get()),
-    );
+    const response = await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
 
     expect(gcs.calls).toHaveLength(1);
     expect(response.status).toBe(404);
@@ -281,43 +260,19 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
     }
   });
 
-  it("reads the edge's object store when the origin names no endpoint", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("reads nothing when the origin names no endpoint", async () => {
     const gcs = s3Answering(() => new Response("bytes"));
 
     const response = await withGlobalFetch(gcs.fetch, () =>
-      serveWith({
-        ...hmacEnv,
-        OCEL_ASSET_STORE_ENDPOINT: undefined,
-        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
-      }).fetch(get()),
+      serveWith({ ...hmacEnv, OCEL_ASSET_STORE_ENDPOINT: undefined }).fetch(get()),
     );
 
     expect(gcs.calls).toHaveLength(0);
-    expect(await response.text()).toBe("from r2");
+    expect(response.status).toBe(503);
   });
 });
 
 describe("Serve reading an object where the origin has no asset bucket", () => {
-  const r2Env = (): Partial<Env> => ({ OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE });
-
-  it("reads the edge's own object store", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "stored");
-
-    const response = await serveWith(r2Env()).fetch(get());
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("stored");
-    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("max-age=31536000");
-  });
-
-  it("keeps a missing object as a 404 for a minute", async () => {
-    const response = await serveWith(r2Env()).fetch(get(`${key}.missing`));
-
-    expect(response.status).toBe(404);
-    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("max-age=60");
-  });
-
   it("is unavailable, and never stored, when there is nowhere to read from", async () => {
     const response = await serveWith({}).fetch(get());
 
@@ -651,15 +606,11 @@ describe("Serve rendering an edge-runtime prerender", () => {
     };
     const ctx = Object.assign(createExecutionContext(), {
       props: ORIGIN_PURGE_SCOPE,
-      exports: { CacheEntrypoint: () => ({}) },
+      exports: { Serve: () => ({ fetch: async () => new Response("{}") }) },
     });
     const serve = new Serve(
       ctx as never,
-      {
-        LOADER: loader,
-        RELEASES: releases,
-        OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
-      } as unknown as Env,
+      { ...s3Env, LOADER: loader, RELEASES: releases } as unknown as Env,
     );
     return { serve, rendered, served };
   }

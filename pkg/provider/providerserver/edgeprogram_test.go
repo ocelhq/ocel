@@ -74,9 +74,6 @@ func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testin
 		t.Errorf("Variables[%s] = %q, want the wildcard's base domain",
 			fake.ProgramPreviewVar, spec.Program.Worker.Variables[fake.ProgramPreviewVar])
 	}
-	if spec.Values[fake.ProgramEdgeVar] != string(fake.KindRelay) {
-		t.Errorf("Values = %v, want the values the provider hands the entry", spec.Values)
-	}
 }
 
 func TestUsePreviewWildcardLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
@@ -144,9 +141,6 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	}
 	if key, carried := spec.Program.Worker.Secrets[edge.PreviewKeyVar]; carried {
 		t.Errorf("Secrets[%s] = %q, want none: production serves no preview hostname to verify", edge.PreviewKeyVar, key)
-	}
-	if spec.Values[fake.ProgramEdgeVar] != string(fake.KindRelay) {
-		t.Errorf("Values = %v, want the values the provider hands the entry", spec.Values)
 	}
 	if spec.PruneOnly {
 		t.Error("the production stack is prune-only, though its worker is the one serving every request")

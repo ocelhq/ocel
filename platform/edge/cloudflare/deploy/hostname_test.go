@@ -40,9 +40,6 @@ type cfMock struct {
 	refusesPackOrders     bool
 	existingScripts       []string
 	refuseScriptDeletes   map[string]bool
-	existingBuckets       []string
-	existingTokens        []map[string]any
-	refusesTokenListing   bool
 
 	requests   int
 	zoneLists  int
@@ -59,10 +56,8 @@ type cfMock struct {
 	scriptSettings       map[string]map[string]any
 	scriptSecrets        map[string][]string
 	subdomainOn          map[string]bool
-	createdBuckets       []string
 	deletedScripts       []string
-	deletedBuckets       []string
-	deletedTokens        []string
+	refusedCalls         []string
 	subdomainCalls       []subdomainCall
 	putSecrets           []putSecret
 	updatedRecords       []string
@@ -273,15 +268,6 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /accounts/acct/workers/subdomain", func(w http.ResponseWriter, _ *http.Request) {
 		writeResult(w, map[string]any{"subdomain": "acct-sub"})
-	})
-
-	mux.HandleFunc("POST /accounts/acct/r2/buckets", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		name := fmt.Sprint(body["name"])
-		m.createdBuckets = append(m.createdBuckets, name)
-		m.existingBuckets = append(m.existingBuckets, name)
-		writeResult(w, map[string]any{"name": name})
 	})
 
 	mux.HandleFunc("DELETE /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -545,66 +531,14 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 	})
 
-	mux.HandleFunc("GET /user/tokens", func(w http.ResponseWriter, r *http.Request) {
-		if m.refusesTokenListing {
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":9109,"message":"Unauthorized to access requested resource"}]}`))
-			return
-		}
-		if !firstPage(r) {
-			writeResult(w, []any{})
-			return
-		}
-		writeResult(w, m.existingTokens)
-	})
-
-	mux.HandleFunc("POST /user/tokens", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		id := fmt.Sprintf("token-new-%d", len(m.existingTokens)+1)
-		m.existingTokens = append(m.existingTokens, map[string]any{"id": id, "name": body["name"]})
-		writeResult(w, map[string]any{"id": id, "name": body["name"], "value": "token-value-" + id})
-	})
-
-	mux.HandleFunc("GET /user/tokens/verify", func(w http.ResponseWriter, _ *http.Request) {
-		writeResult(w, map[string]any{"id": "verified", "status": "active"})
-	})
-
-	mux.HandleFunc("GET /user/tokens/permission_groups", func(w http.ResponseWriter, r *http.Request) {
-		writeResult(w, []map[string]any{{"id": "group-r2-write", "name": r.URL.Query().Get("name")}})
-	})
-
-	mux.HandleFunc("DELETE /user/tokens/{id}", func(w http.ResponseWriter, r *http.Request) {
-		m.existingTokens = slices.DeleteFunc(m.existingTokens, func(token map[string]any) bool {
-			return token["id"] == r.PathValue("id")
-		})
-		m.deletedTokens = append(m.deletedTokens, r.PathValue("id"))
-		writeResult(w, map[string]any{"id": r.PathValue("id")})
-	})
-
-	mux.HandleFunc("GET /accounts/acct/r2/buckets/{name}", func(w http.ResponseWriter, r *http.Request) {
-		name := r.PathValue("name")
-		if !slices.Contains(m.existingBuckets, name) {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		writeResult(w, map[string]any{"name": name})
-	})
-
-	mux.HandleFunc("DELETE /accounts/acct/r2/buckets/{name}", func(w http.ResponseWriter, r *http.Request) {
-		name := r.PathValue("name")
-		if !slices.Contains(m.existingBuckets, name) {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		m.deletedBuckets = append(m.deletedBuckets, name)
-		m.existingBuckets = slices.DeleteFunc(m.existingBuckets, func(bucket string) bool { return bucket == name })
-		writeResult(w, map[string]any{})
-	})
-
-	mux.HandleFunc("POST /accounts/acct/r2/temp-access-credentials", func(w http.ResponseWriter, _ *http.Request) {
-		writeResult(w, map[string]any{"accessKeyId": "temp-id", "secretAccessKey": "temp-secret", "sessionToken": "temp-session"})
-	})
+	refuse := func(w http.ResponseWriter, r *http.Request) {
+		m.refusedCalls = append(m.refusedCalls, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":9109,"message":"Unauthorized to access requested resource"}]}`))
+	}
+	mux.HandleFunc("/user/tokens", refuse)
+	mux.HandleFunc("/user/tokens/", refuse)
+	mux.HandleFunc("/accounts/acct/r2/", refuse)
 
 	m.serveTunnels(mux)
 
@@ -1311,4 +1245,11 @@ func signOriginCertificate(csrPEM string, hostnames []string, validity time.Dura
 		return "", err
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
+}
+
+func assertNoAPITokenOrR2Calls(t *testing.T, m *cfMock) {
+	t.Helper()
+	if len(m.refusedCalls) != 0 {
+		t.Errorf("the edge called %v, but a token without \"API Tokens Write\" and \"Workers R2 Storage\" is refused every one of them", m.refusedCalls)
+	}
 }

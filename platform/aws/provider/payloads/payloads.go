@@ -35,7 +35,6 @@ var (
 	envSourceSync      = load("envsourcesync.zip")
 	realtimeAuthorizer = load("realtime-authorizer.zip")
 	imageOptimizer     = load("image-optimizer.zip")
-	tagPublisher       = load("tag-publisher.zip")
 	tagInvalidator     = load("tag-invalidator.zip")
 )
 
@@ -62,8 +61,6 @@ func EnvSourceSync() Payload { return envSourceSync }
 func RealtimeAuthorizer() Payload { return realtimeAuthorizer }
 
 func ImageOptimizer() Payload { return imageOptimizer }
-
-func TagPublisher() Payload { return tagPublisher }
 
 func TagInvalidator() Payload { return tagInvalidator }
 

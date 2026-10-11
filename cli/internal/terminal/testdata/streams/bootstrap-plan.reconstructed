@@ -7,7 +7,7 @@ stages:
 plan:
   stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelDispatchFunction
   stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret
-  edge/cloudflare/edge ACTION_CREATE Cloudflare::R2Bucket/ocel-edge-cache
+  edge/cloudflare/edge ACTION_CREATE Cloudflare::WorkerSecret/ocel-releases-store/BOOTSTRAP_SECRET
   edge/cloudflare/edge ACTION_CREATE Cloudflare::Worker/ocel-releases-store
 waits:
   waiting on 0 unset, remedy ""

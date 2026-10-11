@@ -22,11 +22,14 @@ export interface ImageOriginRequest {
 
 export type ImageOrigin = (payload: ImageOriginRequest) => Promise<Response>;
 
-export interface ImageCacheContext {
+export interface ImageCall {
+  payload: ImageOriginRequest;
+  minimumCacheTTL: number;
+}
+
+export interface ImageCacheContext extends ImageCall {
   request: Request;
-  key: string;
   digest: string;
-  absolute: boolean;
   servedCacheControl?: string;
   origin: () => Promise<Response>;
 }
@@ -252,53 +255,51 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
   }
 
   const { params } = result;
-  const origin = async () =>
-    servedImage(
-      await deps.origin({
-        assetPrefix: deps.assetPrefix,
-        url: params.href,
-        w: params.width,
-        q: params.quality,
-        accept,
-        mimeType: params.mimeType,
-        configHash: deps.config.configHash,
-      }),
-      deps.config,
-    );
+  const payload: ImageOriginRequest = {
+    assetPrefix: deps.assetPrefix,
+    url: params.href,
+    w: params.width,
+    q: params.quality,
+    accept,
+    mimeType: params.mimeType,
+    configHash: deps.config.configHash,
+  };
+  const origin = async () => servedImage(await deps.origin(payload), deps.config.minimumCacheTTL);
 
-  const { digest, key } = await imageCacheKey(params, deps);
-  const servedCacheControl = params.isStatic ? IMMUTABLE : undefined;
+  const context: ImageCacheContext = {
+    request,
+    digest: await imageDigest(params, deps),
+    servedCacheControl: params.isStatic ? IMMUTABLE : undefined,
+    payload,
+    minimumCacheTTL: deps.config.minimumCacheTTL,
+    origin,
+  };
+  return deps.imageCache ? deps.imageCache(context) : serveUncachedImage(context);
+}
 
-  if (deps.imageCache) {
-    return deps.imageCache({
-      request,
-      key,
-      digest,
-      absolute: params.isAbsolute,
-      servedCacheControl,
-      origin,
-    });
+export async function serveUncachedImage(context: ImageCacheContext): Promise<Response> {
+  return withServedCacheControl(withStatus(await context.origin(), "BYPASS"), context);
+}
+
+export function withServedCacheControl(response: Response, context: ImageCacheContext): Response {
+  if (context.servedCacheControl && response.status === 200) {
+    response.headers.set("cache-control", context.servedCacheControl);
   }
-
-  const served = withStatus(await origin(), "BYPASS");
-  if (servedCacheControl && served.status === 200) {
-    served.headers.set("cache-control", servedCacheControl);
-  }
-  return request.method === "HEAD" ? headResponse(served) : served;
+  return context.request.method === "HEAD" ? headResponse(response) : response;
 }
 
 export const IMAGE_PASSTHROUGH = "x-ocel-image-passthrough";
 
 const IMMUTABLE = "public, max-age=315360000, immutable";
 
-function servedImage(response: Response, config: ImageConfig): Response {
+export function servedImage(response: Response, minimumCacheTTL: number): Response {
   if (response.status !== 200) return response;
 
   const passthrough = response.headers.has(IMAGE_PASSTHROUGH);
   const upstream = passthrough
     ? 0
     : (deltaSeconds(response.headers.get("cache-control"), "s-maxage", "max-age") ?? 0);
-  const ttl = Math.max(config.minimumCacheTTL, upstream);
+  const ttl = Math.max(minimumCacheTTL, upstream);
 
   const headers = new Headers(response.headers);
   headers.delete(IMAGE_PASSTHROUGH);
@@ -315,11 +316,8 @@ function servedImage(response: Response, config: ImageConfig): Response {
 
 const KEY_VERSION = 1;
 
-async function imageCacheKey(
-  params: ImageParams,
-  deps: ImageDeps,
-): Promise<{ digest: string; key: string }> {
-  const digest = await sha256(
+async function imageDigest(params: ImageParams, deps: ImageDeps): Promise<string> {
+  return sha256(
     JSON.stringify([
       KEY_VERSION,
       deps.slug,
@@ -330,7 +328,6 @@ async function imageCacheKey(
       deps.config.configHash,
     ]),
   );
-  return { digest, key: `https://image.ocel/${digest}` };
 }
 
 function sourceIdentity(params: ImageParams, deps: ImageDeps): string {

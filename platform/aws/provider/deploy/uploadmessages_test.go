@@ -40,15 +40,15 @@ func TestAnUploadSaysWhichAppAndHowManyFilesOrWhere(t *testing.T) {
 				set, _, err := edgeBundleSet(cfg, "web", builds.coords["web"], builds.baked["web"])
 				return set, err
 			},
-			want: "INFO Uploading web's edge bundle to bucket isr",
+			want: "INFO Uploading web's edge bundle to bucket assets",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := Config{
 				ArtifactRoot: tc.tree(t), AssetBucket: "assets", Env: "prod",
-				Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-				CacheStoreBucket: "isr", CacheStoreObjects: &fakeArtifactStore{exists: map[string]bool{}},
+				Objects:         &fakeArtifactStore{exists: map[string]bool{}},
+				EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 			}
 			set, err := tc.set(deployedConfig(cfg), appBuildsFor(t, cfg, twoAppManifest()))
 			if err != nil {

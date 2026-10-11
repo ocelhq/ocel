@@ -108,9 +108,6 @@ type isrConfig struct {
 	Table    string
 	TableARN string
 
-	CacheStoreBucket string
-
-	WriterURL   string
 	PurgeSecret string
 
 	EdgeReadable bool
@@ -133,15 +130,8 @@ func (c isrConfig) env() map[string]string {
 		"OCEL_STATE_TABLE":       c.Table,
 		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
 	}
-	if c.CacheStoreBucket != "" {
-		env["OCEL_ISR_STORE_BUCKET"] = c.CacheStoreBucket
-	}
 	if c.EdgeReadable {
 		env["OCEL_ISR_EDGE_READABLE"] = "1"
-	}
-	if c.WriterURL != "" && c.PurgeSecret != "" {
-		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
-		env["OCEL_PURGE_SECRET"] = c.PurgeSecret
 	}
 	return env
 }

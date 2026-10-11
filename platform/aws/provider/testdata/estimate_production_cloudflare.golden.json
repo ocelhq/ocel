@@ -340,84 +340,6 @@
       "monthlyUsage": "0.52"
     },
     {
-      "resource": "project:shop/shared:production/aws_sqs_queue:TagPublisherDeadLetterQueue",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0.0000004",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 requests",
-          "rateRef": "aws/sqs/requests"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.00"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_function:TagPublisher",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0.0000002",
-          "monthlyCost": "0.20",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 requests",
-          "rateRef": "aws/lambda/requests-arm"
-        },
-        {
-          "name": "Duration",
-          "unit": "GB-seconds",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0.0000133334",
-          "monthlyCost": "1.33",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 GB-seconds",
-          "rateRef": "aws/lambda/duration-arm"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "1.53"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:TagPublisherStream",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:TagPublisherLogGroup",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Ingested",
-          "unit": "GB",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.5",
-          "monthlyCost": "0.50",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GB",
-          "rateRef": "aws/logs/ingest"
-        },
-        {
-          "name": "Stored",
-          "unit": "GB-month",
-          "monthlyQuantity": "0.5",
-          "unitPrice": "0.03",
-          "monthlyCost": "0.02",
-          "usageBased": true,
-          "assumption": "moderate profile: 0.5 GB-month",
-          "rateRef": "aws/logs/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.52"
-    },
-    {
       "resource": "project:shop/shared:production/aws_kms_key:VariablesKey",
       "status": "STATUS_PRICED",
       "components": [
@@ -742,123 +664,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/cloudflare_r2_bucket:ocel-edge-cache",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Storage",
-          "unit": "GB-month",
-          "monthlyQuantity": "10",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 10 GB-month",
-          "rateRef": "cloudflare/r2/storage"
-        },
-        {
-          "name": "Class A operations",
-          "unit": "operations",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 operations",
-          "rateRef": "cloudflare/r2/class-a"
-        },
-        {
-          "name": "Class B operations",
-          "unit": "operations",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 operations",
-          "rateRef": "cloudflare/r2/class-b"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.00"
-    },
-    {
       "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-releases-store",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 requests",
-          "rateRef": "cloudflare/workers/requests"
-        },
-        {
-          "name": "CPU time",
-          "unit": "CPU-milliseconds",
-          "monthlyQuantity": "5000000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 5000000 CPU-milliseconds",
-          "rateRef": "cloudflare/workers/cpu-time"
-        },
-        {
-          "name": "Durable Object requests",
-          "unit": "requests",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 requests",
-          "rateRef": "cloudflare/durable-objects/requests"
-        },
-        {
-          "name": "Durable Object duration",
-          "unit": "GB-seconds",
-          "monthlyQuantity": "640",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 640 GB-seconds",
-          "rateRef": "cloudflare/durable-objects/duration"
-        },
-        {
-          "name": "Rows read",
-          "unit": "rows",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 rows",
-          "rateRef": "cloudflare/durable-objects/rows-read"
-        },
-        {
-          "name": "Rows written",
-          "unit": "rows",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 rows",
-          "rateRef": "cloudflare/durable-objects/rows-written"
-        },
-        {
-          "name": "Stored data",
-          "unit": "GB-month",
-          "monthlyQuantity": "1",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GB-month",
-          "rateRef": "cloudflare/durable-objects/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.00"
-    },
-    {
-      "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-isr-writer",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -1036,12 +842,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "6.40",
-      "monthlyUsage": "110.05"
+      "monthlyUsage": "108.00"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "6.00",
-      "monthlyUsage": "11.61"
+      "monthlyUsage": "9.56"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -1055,8 +861,8 @@
     }
   ],
   "coverage": {
-    "supported": 30,
-    "free": 6,
+    "supported": 25,
+    "free": 5,
     "supportedTypes": [
       "aws_cloudwatch_log_group",
       "aws_data_transfer",
@@ -1072,7 +878,6 @@
       "aws_secretsmanager_secret",
       "aws_sqs_queue",
       "cloudflare_account_subscription",
-      "cloudflare_r2_bucket",
       "cloudflare_workers_script"
     ]
   },
@@ -1083,5 +888,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution uses"
   ],
   "monthlyFixed": "6.40",
-  "monthlyUsage": "110.05"
+  "monthlyUsage": "108.00"
 }

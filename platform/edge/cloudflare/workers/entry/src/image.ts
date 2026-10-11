@@ -1,54 +1,66 @@
+import { withStatus } from "@framework/next-router/http-cache";
 import {
-  type ImageDeps as DispatchImageDeps,
-  serveImage as dispatchImage,
   type ImageCache,
+  type ImageCacheContext,
+  type ImageCall,
+  serveUncachedImage,
+  withServedCacheControl,
 } from "@framework/next-router/image";
-
-import { answerableImageRequest, type CacheDeps, serveCachedImage } from "./cache";
 import {
-  durableImageOrigin,
-  durableImageRefresh,
-  type ImageStore,
-  imageObjectKey,
-} from "./image-store";
+  buildImageCall,
+  buildServeRequest,
+  IMAGE_CALL_HEADER,
+  RENDER_RELEASE_HEADER,
+  type RenderRelease,
+  SERVE_REFUSED_HEADER,
+} from "./serve-key";
+import { readTier, type Serving } from "./serve-prerender";
+import { ENTRY_SOURCE_HEADER } from "./store-read";
 
-export interface ImageColoDeps {
-  slug: string;
-  cache?: CacheDeps;
-  imageStore?: ImageStore;
+export interface WorkersCacheImageDeps {
+  serving: Serving;
+  app: string;
+  optimizerUrl: string;
 }
 
-export type ImageDeps = Omit<DispatchImageDeps, "imageCache"> & {
-  cache?: CacheDeps;
-  imageStore?: ImageStore;
-};
+function buildVisitorResponse(response: Response, context: ImageCacheContext): Response {
+  const tier = readTier(response);
+  const headers = new Headers(response.headers);
+  for (const name of [
+    "cache-tag",
+    "cloudflare-cdn-cache-control",
+    "cf-cache-status",
+    ENTRY_SOURCE_HEADER,
+  ]) {
+    headers.delete(name);
+  }
+  if (response.status === 200) headers.set("vary", "accept");
+  const visitor = new Response(response.body, { status: response.status, headers });
+  return withServedCacheControl(withStatus(visitor, tier), context);
+}
 
-export function coloImageCache(deps: ImageColoDeps): ImageCache {
-  return (context) => {
-    let readThrough = context.origin;
-    let refresh = context.origin;
-    if (deps.imageStore && deps.cache && answerableImageRequest(context.request)) {
-      const objectKey = imageObjectKey(deps.slug, context.digest);
-      readThrough = durableImageOrigin(deps.imageStore, deps.cache, objectKey, context.origin);
-      refresh = context.absolute
-        ? durableImageRefresh(deps.imageStore, deps.cache, objectKey, context.origin)
-        : readThrough;
-    }
+export function workersCacheImage(deps: WorkersCacheImageDeps): ImageCache {
+  const { serving, app, optimizerUrl } = deps;
+  return async (context) => {
+    const { method } = context.request;
+    if (method !== "GET" && method !== "HEAD") return serveUncachedImage(context);
 
-    return serveCachedImage(
-      context.request,
-      { key: context.key },
-      deps.cache,
-      readThrough,
-      refresh,
-      context.servedCacheControl,
+    const { url, props } = buildImageCall(
+      optimizerUrl,
+      { host: serving.host, app, release: serving.release },
+      context.digest,
     );
-  };
-}
+    const served = buildServeRequest(url);
+    const release: RenderRelease = { slug: serving.slug, isrPrefix: serving.isrPrefix, tags: [] };
+    served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
+    const call: ImageCall = { payload: context.payload, minimumCacheTTL: context.minimumCacheTTL };
+    served.headers.set(IMAGE_CALL_HEADER, JSON.stringify(call));
 
-export function serveImage(request: Request, url: URL, deps: ImageDeps): Promise<Response> {
-  return dispatchImage(request, url, {
-    ...deps,
-    imageCache: coloImageCache(deps),
-  });
+    const response = await serving.serve({ props }).fetch(served);
+    if (response.headers.has(SERVE_REFUSED_HEADER)) {
+      await response.body?.cancel();
+      return serveUncachedImage(context);
+    }
+    return buildVisitorResponse(response, context);
+  };
 }

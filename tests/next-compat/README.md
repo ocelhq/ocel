@@ -153,7 +153,6 @@ the comparison and not the Lambda.
 
 | script                          | how to run                                                    |
 | ------------------------------- | ------------------------------------------------------------- |
-| `assert-tag-publisher.mjs`      | `node …/assert-tag-publisher.mjs "$SMOKE_URL"`                 |
 | `assert-bytecode.mjs`           | from the deployed app's directory; deploy with `OCEL_BYTECODE_CACHE=1` first, or it has nothing to find |
 | `assert-embed.mjs`              | same, and additionally `OCEL_BYTECODE_EMBED=1`                 |
 

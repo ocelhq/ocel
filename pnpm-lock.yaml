@@ -826,37 +826,6 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
-  platform/aws/functions/tag-publisher:
-    dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1083.0
-        version: 3.1083.0
-      '@aws-sdk/client-ssm':
-        specifier: ^3.1083.0
-        version: 3.1101.0
-      '@framework/next-cache':
-        specifier: workspace:*
-        version: link:../../../../frameworks/next/cache
-      '@platform/aws-runtime':
-        specifier: workspace:*
-        version: link:../../runtime
-      '@platform/edge-contract':
-        specifier: workspace:*
-        version: link:../../../edge/contract
-    devDependencies:
-      '@types/aws-lambda':
-        specifier: ^8.10.160
-        version: 8.10.162
-      '@types/node':
-        specifier: ^24
-        version: 24.13.2
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
   platform/aws/provider/edges/cloudfront/resolver:
     devDependencies:
       '@platform/edge-contract':
@@ -880,9 +849,6 @@ importers:
       '@platform/aws-tag-invalidator':
         specifier: workspace:*
         version: link:../../functions/tag-invalidator
-      '@platform/aws-tag-publisher':
-        specifier: workspace:*
-        version: link:../../functions/tag-publisher
 
   platform/aws/runtime:
     dependencies:
@@ -932,9 +898,6 @@ importers:
       '@platform/cf-entry':
         specifier: workspace:*
         version: link:../../workers/entry
-      '@platform/cf-isr-writer':
-        specifier: workspace:*
-        version: link:../../workers/isr-writer
       '@platform/cf-releases-store':
         specifier: workspace:*
         version: link:../../workers/releases-store
@@ -971,31 +934,6 @@ importers:
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
-    devDependencies:
-      '@cloudflare/vitest-pool-workers':
-        specifier: ^0.12.4
-        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
-      vitest:
-        specifier: ~3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-      wrangler:
-        specifier: ^4.110.0
-        version: 4.110.0
-
-  platform/edge/cloudflare/workers/isr-writer:
-    dependencies:
-      '@framework/next-cache':
-        specifier: workspace:*
-        version: link:../../../../../frameworks/next/cache
-      '@platform/cf-auth':
-        specifier: workspace:*
-        version: link:../../lib/auth
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.12.4

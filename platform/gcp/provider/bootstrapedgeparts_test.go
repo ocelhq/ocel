@@ -15,8 +15,8 @@ func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testin
 
 	b, registry := fronting(t)
 	registry.front.parts = []edge.BootstrapPart{
-		{Name: "ocel-edge-cache", Current: true},
-		{Name: "ocel-isr-writer", Current: false},
+		{Name: "ocel-releases-store", Current: true},
+		{Name: "ocel-releases-store/BOOTSTRAP_SECRET", Current: false},
 	}
 
 	stacks, err := b.edgeBootstrapStacks(context.Background(), surveyed(albFeature))
@@ -25,8 +25,8 @@ func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testin
 	}
 	kind := string(registry.front.Kind())
 	want := []provider.BootstrapStack{
-		{Name: kind + "/ocel-edge-cache", Feature: albFeature, Present: true, DigestCurrent: true},
-		{Name: kind + "/ocel-isr-writer", Feature: albFeature, Present: true, DigestCurrent: false},
+		{Name: kind + "/ocel-releases-store", Feature: albFeature, Present: true, DigestCurrent: true},
+		{Name: kind + "/ocel-releases-store/BOOTSTRAP_SECRET", Feature: albFeature, Present: true, DigestCurrent: false},
 	}
 	if !reflect.DeepEqual(stacks, want) {
 		t.Errorf("edge stacks = %+v, want %+v", stacks, want)

@@ -33,7 +33,7 @@ func assetShippingConfig(t *testing.T, app string) Config {
 	cfg.PulumiProject = "ocel-shop"
 	cfg.Region = "us-east-1"
 	cfg.ImageOptimizerURL = ""
-	cfg.CacheStoreBucket = "isr"
+	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
 	return cfg
 }
 
@@ -54,10 +54,9 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	assets, store := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
+	assets := &fakeArtifactStore{exists: map[string]bool{}}
 	cfg := assetShippingConfig(t, "web")
 	cfg.Objects = assets
-	cfg.CacheStoreObjects = store
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
 	stacks := stacksWith(cfg, engine)
@@ -71,16 +70,15 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 	if got := assetSetRows(planned); !slices.Equal(got, want) {
 		t.Errorf("Plan() showed asset-set rows %v, want %v: an upload is a mutation the plan has to name", got, want)
 	}
-	if len(assets.puts)+len(store.puts) != 0 {
-		t.Errorf("Plan() wrote %v and %v, want nothing: a plan says what an apply would do before it does it",
-			assets.puts, store.puts)
+	if len(assets.puts) != 0 {
+		t.Errorf("Plan() wrote %v, want nothing: a plan says what an apply would do before it does it", assets.puts)
 	}
 
 	if _, err := stacks.Provision(ctx, siblingAppSpec(t, "web"), nil); err != nil {
 		t.Fatalf("Provision() of the app whose plan showed the asset sets = %v", err)
 	}
-	if !slices.ContainsFunc(store.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
-		t.Errorf("the cache store has %v, want the static asset the plan's row promised", store.puts)
+	if !slices.ContainsFunc(assets.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
+		t.Errorf("the asset bucket has %v, want the static asset the plan's row promised", assets.puts)
 	}
 }
 
@@ -111,7 +109,6 @@ func TestNoFunctionIsProvisionedBeforeTheAssetsItServes(t *testing.T) {
 
 	cfg := assetShippingConfig(t, "web")
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	order := &registrationOrder{}
 	engine := &mockedEngine{outputs: siblingAppOutputs("web"), mocks: order}
@@ -141,7 +138,6 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 	cfg := assetShippingConfig(t, "web")
 	cfg.ArtifactRoot = writeTree(t, files)
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
 	planned, err := stacksWith(cfg, engine).Plan(context.Background(), siblingAppSpec(t, "web"), nil)
@@ -158,7 +154,6 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 
 	cfg := assetShippingConfig(t, "web")
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
 
 	first, err := staticAssetSet(cfg, "web", nextStatic, coord)

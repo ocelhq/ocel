@@ -131,9 +131,5 @@ func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID st
 }
 
 func previewEntryWorker(spec edge.PreviewWildcardSpec) edge.Worker {
-	worker := spec.Program.Worker
-	if spec.Program.ISRWriterScriptName != "" {
-		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
-	}
-	return bindCodeLoader(bindObjectStore(worker, spec.Values))
+	return bindCodeLoader(spec.Program.Worker)
 }

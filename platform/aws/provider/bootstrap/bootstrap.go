@@ -186,19 +186,23 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 			continue
 		}
 		stamp := stamps[f.name]
+		intended, err := f.planned(featureInputs{
+			ns:             ns,
+			tier:           tier,
+			artifactBucket: d.ArtifactBucket,
+			refs:           refs,
+			alongside:      d.Features,
+			variablesKey:   broughtVariablesKey(d.Outputs),
+		})
+		if err != nil {
+			return Deployed{}, stackRefs{}, err
+		}
 		d.Stacks = append(d.Stacks, StackStamp{
-			Name:    f.stackName(ns, tier),
-			Feature: f.name,
-			Present: true,
-			Digest:  stamp.Digest,
-			Intended: cfn.TemplateDigest(f.planned(featureInputs{
-				ns:             ns,
-				tier:           tier,
-				artifactBucket: d.ArtifactBucket,
-				refs:           refs,
-				alongside:      d.Features,
-				variablesKey:   broughtVariablesKey(d.Outputs),
-			}).body),
+			Name:      f.stackName(ns, tier),
+			Feature:   f.name,
+			Present:   true,
+			Digest:    stamp.Digest,
+			Intended:  cfn.TemplateDigest(intended.body),
 			WrittenBy: stamp.WrittenBy,
 		})
 	}
@@ -294,7 +298,6 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 
 type stackPayloads struct {
 	optimizer     payloads.Placement
-	publisher     payloads.Placement
 	invalidator   payloads.Placement
 	envSourceSync payloads.Placement
 }
@@ -563,22 +566,12 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	}
 	for _, offer := range out.Offers {
 		switch offer.Kind {
-		case edge.OfferCacheStore:
-			d.progress.Say(fmt.Sprintf("Adopting the %s edge's cache store (SSM SecureString)", front.Kind()))
-			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
-				return err
-			}
 		case edge.OfferReleasesStore:
 			d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (SSM SecureString)", front.Kind()))
 			if err := adoptReleasesStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-		case edge.OfferISRWriter:
-			d.progress.Say(fmt.Sprintf("Adopting the %s edge's ISR writer worker (SSM SecureString)", front.Kind()))
-			if err := adoptISRWriter(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
-				return err
-			}
-			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.ns, d.tier, front.Kind()); err != nil {
+			if _, err := ensurePurgeSeed(ctx, d.ssm, d.ns, d.tier, front.Kind()); err != nil {
 				return err
 			}
 		case edge.OfferWorkerClientCertificate:
@@ -586,11 +579,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			d.progress.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", front.Kind(), offer.Kind))
 		}
 	}
-	if len(out.Values) == 0 {
-		return nil
-	}
-	d.progress.Say(fmt.Sprintf("Storing the %s edge's %d bootstrap outputs (SSM SecureString)", front.Kind(), len(out.Values)))
-	return writeEdgeValues(ctx, d.ssm, d.ns, d.tier, front.Kind(), out.Values)
+	return nil
 }
 
 func absorbRefs(refs *stackRefs, out map[string]string) error {

@@ -27,7 +27,7 @@ const (
 	tagInvalidatorDLQRetentionSeconds = 1209600
 
 	tagInvalidatorStateTableEnvVar = "OCEL_STATE_TABLE"
-	tagInvalidatorSeedParamEnvVar  = "OCEL_ISR_WRITER_SEED_PARAM"
+	tagInvalidatorSeedParamEnvVar  = "OCEL_PURGE_SEED_PARAM"
 )
 
 func tagInvalidatorPlacement(bucket string) payloads.Placement {
@@ -38,8 +38,7 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }
 
-func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environment.Tier) string {
-	_, seedParam := isrWriterParamNames(ns, tier)
+func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environment.Tier, seedParam string) string {
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -138,3 +137,5 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environ
 		tagInvalidatorStateTableEnvVar, awsports.TierEnvVar, tier, tagInvalidatorSeedParamEnvVar, seedParam,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)
 }
+
+const tagRecordStreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`

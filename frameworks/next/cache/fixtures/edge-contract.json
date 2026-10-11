@@ -10,9 +10,6 @@
     "isrPrefix": "prod/acme/web/r3f8a1c9d/isr",
     "partitionKeyPrefix": "PROJECT#acme#STACK#prod--web--r3f8a1c9d#TAG#"
   },
-  "cacheStoreEnv": {
-    "bucket": "OCEL_ISR_STORE_BUCKET"
-  },
   "purgeHeader": "x-ocel-purge",
   "edgeCacheHeader": "x-ocel-edge-cache",
   "edgeCacheTagHeader": "x-ocel-cache-tag",

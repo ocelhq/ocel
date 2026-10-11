@@ -14,8 +14,7 @@ import (
 
 func cloudflareAdoption() edge.Adoption {
 	return edge.Adoption{
-		Values: map[string]string{"cacheBucket": "ocel-edge-cache"},
-		Offers: []edge.OfferKind{edge.OfferCacheStore, edge.OfferReleasesStore, edge.OfferISRWriter},
+		Offers: []edge.OfferKind{edge.OfferReleasesStore},
 	}
 }
 
@@ -35,20 +34,11 @@ func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, time.Now()); err != nil {
 		t.Fatalf("ensureEdgeCredentials: %v", err)
 	}
-	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredStore()); err != nil {
-		t.Fatalf("adoptCacheStore: %v", err)
-	}
 	if err := adoptReleasesStore(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredReleasesStore()); err != nil {
 		t.Fatalf("adoptReleasesStore: %v", err)
 	}
-	if err := adoptISRWriter(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
-		t.Fatalf("adoptISRWriter: %v", err)
-	}
-	if _, err := ensureISRWriterSeed(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare); err != nil {
-		t.Fatalf("ensureISRWriterSeed: %v", err)
-	}
-	if err := writeEdgeValues(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, cloudflareAdoption().Values); err != nil {
-		t.Fatalf("writeEdgeValues: %v", err)
+	if _, err := ensurePurgeSeed(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare); err != nil {
+		t.Fatalf("ensurePurgeSeed: %v", err)
 	}
 	return ssmc, iamc
 }
@@ -89,11 +79,8 @@ func TestPlanParametersOnAFreshAccountCreatesEveryParameter(t *testing.T) {
 	want := []string{
 		originSecretParam,
 		passphraseParam,
-		names.valuesParam,
-		names.cacheStoreParam,
 		names.releasesStoreParam,
-		names.isrWriterParam,
-		names.isrWriterSeedParam,
+		names.purgeSeedParam,
 		names.credentialsParam,
 		names.user,
 	}
@@ -133,32 +120,6 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 	}
 	if ssmc.puts != writes {
 		t.Errorf("planning wrote %d parameters, want a plan that only reads", ssmc.puts-writes)
-	}
-}
-
-func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
-	ssmc, iamc := installedParams(t)
-	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
-		t.Fatalf("writeEdgeValues: %v", err)
-	}
-
-	group := plannedParams(t, ssmc, iamc, fronting())
-
-	if group.Action != provider.ActionUpdate {
-		t.Errorf("group action = %q, want update where one parameter drifted", group.Action)
-	}
-	names := cloudflareNames(environment.TierProduction)
-	for _, change := range group.Changes {
-		want := provider.ActionKeep
-		if change.Name == names.valuesParam {
-			want = provider.ActionUpdate
-		}
-		if change.Action != want {
-			t.Errorf("%s = %q, want %q", change.Name, change.Action, want)
-		}
-	}
-	if got := actions(group)[names.valuesParam]; got != provider.ActionUpdate {
-		t.Fatalf("%s = %q, want the drifted values updated", names.valuesParam, got)
 	}
 }
 

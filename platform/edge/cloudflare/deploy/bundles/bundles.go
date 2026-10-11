@@ -13,14 +13,11 @@ var embedded embed.FS
 var (
 	entry         = load("dist/entry.js")
 	releasesStore = load("dist/releases-store.js")
-	isrWriter     = load("dist/isr-writer.js")
 )
 
 func Entry() []byte { return entry }
 
 func ReleasesStore() []byte { return releasesStore }
-
-func ISRWriter() []byte { return isrWriter }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

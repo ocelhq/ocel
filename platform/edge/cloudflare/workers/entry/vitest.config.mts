@@ -11,7 +11,6 @@ export default defineWorkersConfig({
             RELEASES: () => new Response(null, { status: 501 }),
           },
           workerLoaders: { LOADER: {} },
-          r2Buckets: ["TAG_SNAPSHOT_STORE"],
         },
       },
     },

@@ -23,7 +23,6 @@ func TestPayloads(t *testing.T) {
 		{"env source sync", EnvSourceSync, "bootstrap"},
 		{"realtime authorizer", RealtimeAuthorizer, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
-		{"tag publisher", TagPublisher, "index.mjs"},
 		{"tag invalidator", TagInvalidator, "index.mjs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -84,7 +83,6 @@ func TestPayloadsDiffer(t *testing.T) {
 		"upload completer":     UploadCompleter(),
 		"env source sync":      EnvSourceSync(),
 		"image optimizer":      ImageOptimizer(),
-		"tag publisher":        TagPublisher(),
 		"tag invalidator":      TagInvalidator(),
 	} {
 		if other, ok := seen[p.SHA256]; ok {

@@ -248,34 +248,6 @@ const specs = [
   },
   {
     "version": 1,
-    "slug": "aws-dynamodb-tag-stream-consumer",
-    "description": "AWS Lambda DynamoDB stream batch handler for ISR tag publication.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "platform/aws/functions/tag-publisher/src/*.mts"
-    ],
-    "patterns": [
-      {
-        "source": "^\\s*export\\s+const\\s+handler\\s*=\\s*async\\s*\\(\\s*event\\s*:\\s*\\{\\s*Records\\?\\s*:\\s*StreamRecord\\[\\]\\s*\\}\\s*\\)",
-        "flags": "m",
-        "label": "DynamoDB stream Lambda handler"
-      },
-      {
-        "source": "^\\s*const\\s+raises\\s*=\\s*raisesOf\\s*\\(\\s*event\\.Records\\s*\\?\\?\\s*\\[\\]\\s*\\)\\s*;?",
-        "flags": "m",
-        "label": "DynamoDB stream record dispatch"
-      }
-    ],
-    "examples": [
-      "export const handler = async (event: { Records?: StreamRecord[] }): Promise<BatchResponse> => {",
-      "const raises = raisesOf(event.Records ?? []);"
-    ],
-    "closesSurfaceIds": [
-      "dynamodb-tag-publisher"
-    ]
-  },
-  {
-    "version": 1,
     "slug": "aws-function-url-runtime-bridge",
     "description": "Ocel AWS Function URL event dispatch into Node and Next.js origin runtimes.",
     "noiseTier": "precise",
@@ -428,52 +400,6 @@ const specs = [
     ],
     "closesSurfaceIds": [
       "ocel-cli"
-    ]
-  },
-  {
-    "version": 1,
-    "slug": "aws-dynamodb-tag-publication-dispatch",
-    "description": "DynamoDB tag-stream dispatch through record merging, snapshot persistence, and authenticated edge publication.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "platform/aws/functions/tag-publisher/src/*.mts"
-    ],
-    "patterns": [
-      {
-        "source": "export const handler = async \\(event: \\{ Records\\?: StreamRecord\\[\\] \\}\\)",
-        "label": "DynamoDB stream Lambda handler"
-      },
-      {
-        "source": "export function raisesOf\\(",
-        "label": "DynamoDB stream record dispatcher"
-      },
-      {
-        "source": "export async function publishAll\\(",
-        "label": "Tag snapshot batch publisher"
-      },
-      {
-        "source": "export class S3TagSnapshotStore",
-        "label": "Tag snapshot persistence adapter"
-      },
-      {
-        "source": "export async function raise\\(",
-        "label": "Authenticated ISR writer dispatch"
-      },
-      {
-        "source": "export function config\\(ssm: SSMClient\\)",
-        "label": "Tag publisher runtime configuration"
-      }
-    ],
-    "examples": [
-      "export const handler = async (event: { Records?: StreamRecord[] }): Promise<BatchResponse> => {",
-      "export function raisesOf(records: readonly StreamRecord[]): Raises {",
-      "export async function publishAll(",
-      "export class S3TagSnapshotStore implements TagSnapshotStore {",
-      "export async function raise(",
-      "export function config(ssm: SSMClient): Promise<Config> {"
-    ],
-    "closesSurfaceIds": [
-      "dynamodb-tag-publisher"
     ]
   },
   {

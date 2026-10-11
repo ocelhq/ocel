@@ -134,8 +134,8 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	t.Parallel()
 
 	front := &planningEdge{planned: []edge.PlanChange{
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
-		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanCreate},
+		{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanKeep, Reason: "already current"},
 	}}
 	b := planningBootstrapper(front)
 
@@ -186,8 +186,8 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	t.Parallel()
 
 	front := &planningEdge{planned: []edge.PlanChange{
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
-		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanKeep},
+		{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanUpdate},
 		{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate},
 	}}
 	b := planningBootstrapper(front)
@@ -226,7 +226,7 @@ func TestPlanShowsAnEdgeFeatureArrivingBehindAnotherFront(t *testing.T) {
 	t.Parallel()
 
 	other := &planningEdge{planned: []edge.PlanChange{
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanCreate},
 	}}
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
@@ -244,7 +244,7 @@ func TestPlanShowsAnEdgeFeatureArrivingBehindAnotherFront(t *testing.T) {
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the edge the feature set names, whichever edge fronts this run", groupNames(plan))
 	}
-	if group.Action != provider.ActionCreate || changeNamed(group, "ocel-edge-cache") == nil {
+	if group.Action != provider.ActionCreate || changeNamed(group, "ocel-releases-store/BOOTSTRAP_SECRET") == nil {
 		t.Errorf("the %s group = %+v, want the rows that edge planned", group.Name, group)
 	}
 }
@@ -253,7 +253,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	t.Parallel()
 
 	other := &planningEdge{removals: []edge.PlanChange{
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanDelete},
 	}}
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
@@ -272,7 +272,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the edge being dropped, whichever edge fronts this run", groupNames(plan))
 	}
-	if group.Action != provider.ActionDelete || changeNamed(group, "ocel-edge-cache") == nil {
+	if group.Action != provider.ActionDelete || changeNamed(group, "ocel-releases-store/BOOTSTRAP_SECRET") == nil {
 		t.Errorf("the %s group = %+v, want the rows dropping the feature takes with it", group.Name, group)
 	}
 	if group.Reason == "" {
@@ -598,7 +598,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	t.Parallel()
 
 	front := &planningEdge{planned: []edge.PlanChange{
-		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
+		{Kind: "Cloudflare::WorkerSecret", Name: "ocel-releases-store/BOOTSTRAP_SECRET", Action: edge.PlanCreate},
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)

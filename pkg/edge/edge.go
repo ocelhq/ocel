@@ -184,7 +184,6 @@ type Worker struct {
 	AssetBinding  string
 	LoaderBinding string
 	Assets        []StaticAsset
-	ObjectStore   ObjectStore
 	Services      map[string]string
 
 	ClientCertificates map[string]string
@@ -192,11 +191,6 @@ type Worker struct {
 	CachedEntrypoints []string
 
 	DurableObjects []string
-}
-
-type ObjectStore struct {
-	Binding string
-	Bucket  string
 }
 
 type WorkerModule struct {

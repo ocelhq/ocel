@@ -58,13 +58,13 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		release: make(chan struct{}),
 	}
 	cfg := Config{
-		ArtifactRoot:      staticAssetApps(t, apps, uploadConcurrency),
-		Env:               "prod",
-		Slug:              "shop",
-		AssetBucket:       "assets",
-		Objects:           uploader,
-		CacheStoreBucket:  "isr",
-		CacheStoreObjects: uploader,
+		ArtifactRoot:    staticAssetApps(t, apps, uploadConcurrency),
+		Env:             "prod",
+		Slug:            "shop",
+		AssetBucket:     "assets",
+		Objects:         uploader,
+		EdgeAccessKeyID: "AKIAEDGE",
+		EdgeSecretKey:   "edge-secret",
 	}
 
 	var group sync.WaitGroup

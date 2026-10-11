@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	kindR2Bucket        = "Cloudflare::R2Bucket"
-	kindAPIToken        = "Cloudflare::APIToken"
 	kindWorker          = "Cloudflare::Worker"
 	kindWorkerSecret    = "Cloudflare::WorkerSecret"
 	kindWorkerSubdomain = "Cloudflare::WorkerSubdomain"
@@ -35,7 +33,6 @@ const (
 	reasonCurrent       = "already current"
 	reasonScriptDrift   = "the deployed script differs from this build's bundle"
 	reasonMetadataDrift = "the deployed worker's compatibility settings or bindings differ from this build's"
-	reasonBucketEmptied = "every cached object in it, emptied one page at a time first"
 )
 
 func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
@@ -63,18 +60,11 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 }
 
 func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Adoption, error) {
-	name, err := cacheStoreNameFor(p.namespace, tier)
-	if err != nil {
-		return edge.Adoption{}, err
-	}
 	workers, err := bootstrapWorkers(p.namespace, tier)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
-	adoption := edge.Adoption{
-		Values: adoptedValues(name),
-		Offers: []edge.OfferKind{edge.OfferCacheStore},
-	}
+	var adoption edge.Adoption
 	for _, worker := range workers {
 		adoption.Offers = append(adoption.Offers, worker.offer)
 	}
@@ -90,18 +80,6 @@ func (s bootstrapState) removals() []edge.PlanChange {
 		changes = append(changes, worker.removals()...)
 	}
 	changes = append(changes, s.certificates.removals()...)
-	if s.store.bucketPresent {
-		changes = append(changes, edge.PlanChange{
-			Kind:   kindR2Bucket,
-			Name:   s.store.name,
-			Action: edge.PlanDelete,
-			Reason: reasonBucketEmptied,
-			Slow:   true,
-		})
-	}
-	if s.store.tokenPresent {
-		changes = append(changes, edge.PlanChange{Kind: kindAPIToken, Name: s.store.name, Action: edge.PlanDelete})
-	}
 	return changes
 }
 
@@ -136,29 +114,16 @@ func bootstrapCredentials() (string, error) {
 }
 
 type bootstrapState struct {
-	store        cacheStoreState
 	workers      []workerState
 	certificates workerClientCertificateState
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
-	state, err := p.readVisibleState(ctx, accountID, tier)
-	if err == nil {
-		err = state.store.tokensRefused
-	}
-	return state, err
-}
-
-func (p *cloudflare) readVisibleState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
-	store, err := p.cacheStore().read(ctx, accountID, tier)
-	if err != nil {
-		return bootstrapState{}, err
-	}
 	planned, err := bootstrapWorkers(p.namespace, tier)
 	if err != nil {
 		return bootstrapState{}, err
 	}
-	state := bootstrapState{store: store}
+	var state bootstrapState
 	for _, b := range planned {
 		read, err := p.readWorkerState(ctx, accountID, b)
 		if err != nil {
@@ -176,10 +141,7 @@ func (p *cloudflare) readVisibleState(ctx context.Context, accountID string, tie
 }
 
 func (s bootstrapState) changes() []edge.PlanChange {
-	changes := []edge.PlanChange{
-		{Kind: kindR2Bucket, Name: s.store.name, Action: presence(s.store.bucketPresent), Reason: keptReason(s.store.bucketPresent)},
-		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenKept()), Reason: keptReason(s.store.tokenKept())},
-	}
+	var changes []edge.PlanChange
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)
 	}
@@ -345,8 +307,6 @@ func (b bootstrapWorker) bindings() []binding {
 func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 	ref := binding{kind: kind, name: fmt.Sprint(declared["name"])}
 	switch kind {
-	case "r2_bucket":
-		ref.value = fmt.Sprint(declared["bucket_name"])
 	case "service":
 		ref.value = fmt.Sprint(declared["service"])
 	case "plain_text":
@@ -365,8 +325,6 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 	for _, deployed := range settings.Bindings {
 		ref := binding{kind: string(deployed.Type), name: deployed.Name}
 		switch ref.kind {
-		case "r2_bucket":
-			ref.value = deployed.BucketName
 		case "service":
 			ref.value = deployed.Service
 		case "plain_text":

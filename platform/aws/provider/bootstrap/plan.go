@@ -56,7 +56,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 		}()
 	}
 	for i, group := range groups {
-		stack, ok := renderGroup(target, group.Feature, featureInputs{
+		stack, ok, err := renderGroup(target, group.Feature, featureInputs{
 			ns:             read.ns,
 			tier:           tier,
 			artifactBucket: deployed.ArtifactBucket,
@@ -64,6 +64,10 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 			alongside:      alongside,
 			variablesKey:   req.VariablesKey,
 		})
+		if err != nil {
+			work.Wait()
+			return nil, err
+		}
 		switch {
 		case !ok:
 			planned[i] = group
@@ -119,7 +123,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 			Feature: feature,
 			Action:  provider.ActionDelete,
 		}
-		stack, ok := renderGroup(target, feature, featureInputs{
+		stack, ok, err := renderGroup(target, feature, featureInputs{
 			ns:             read.ns,
 			tier:           read.tier,
 			artifactBucket: read.Deployed.ArtifactBucket,
@@ -127,6 +131,9 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 			alongside:      alongside,
 			variablesKey:   broughtVariablesKey(read.Deployed.Outputs),
 		})
+		if err != nil {
+			return nil, err
+		}
 		if ok {
 			group = noteStranded(planDelete(ctx, stacks, group, stack.body))
 		}
@@ -199,15 +206,16 @@ func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 	return group
 }
 
-func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool) {
+func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool, error) {
 	if feature == "" {
-		return featureStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true
+		return featureStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true, nil
 	}
 	f, ok := featureNamed(feature)
 	if !ok {
-		return featureStack{}, false
+		return featureStack{}, false, nil
 	}
-	return f.planned(in), true
+	stack, err := f.planned(in)
+	return stack, true, err
 }
 
 func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environment.Tier, group provider.ChangeGroup, stack featureStack, writer provider.WrittenBy) provider.ChangeGroup {

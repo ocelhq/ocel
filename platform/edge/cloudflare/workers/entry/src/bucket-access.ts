@@ -5,6 +5,7 @@ export interface BucketAccess {
   bucket: string;
   origin: string;
   prefix: string;
+  holdsEntries: boolean;
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -19,7 +20,7 @@ function findAwsBucketAccess(env: Env): BucketAccess | undefined {
   } = env;
   if (!bucket || !region || !accessKeyId || !secretAccessKey) return undefined;
   const origin = `https://${bucket}.s3.${region}.amazonaws.com`;
-  return { bucket, origin, prefix: "", region, accessKeyId, secretAccessKey };
+  return { bucket, origin, prefix: "", holdsEntries: true, region, accessKeyId, secretAccessKey };
 }
 
 function findHmacBucketAccess(env: Env): BucketAccess | undefined {
@@ -32,7 +33,15 @@ function findHmacBucketAccess(env: Env): BucketAccess | undefined {
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return undefined;
   const origin = `${endpoint.replace(/\/$/, "")}/${encodeURIComponent(bucket)}`;
   const prefix = env.OCEL_ASSET_STORE_PREFIX ?? "";
-  return { bucket, origin, prefix, region: "auto", accessKeyId, secretAccessKey };
+  return {
+    bucket,
+    origin,
+    prefix,
+    holdsEntries: false,
+    region: "auto",
+    accessKeyId,
+    secretAccessKey,
+  };
 }
 
 export function findBucketAccess(env: Env): BucketAccess | undefined {

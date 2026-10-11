@@ -620,7 +620,6 @@ function edgeEntryOf(output: EdgeOutput): {
 }
 
 function renderEdgeShim(
-  edgeCacheHandler: string,
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
   wasmIdByName: Map<string, string>,
@@ -629,13 +628,6 @@ function renderEdgeShim(
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 globalThis.NEXT_CLIENT_ASSET_SUFFIX = ${JSON.stringify(clientAssetSuffix)}
-
-globalThis[Symbol.for("@next/cache-handlers")] = {
-  FetchCache: ((module) => {
-${edgeCacheHandler}
-    return module.exports
-  })({ exports: {} }),
-}
 
 const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
@@ -672,7 +664,6 @@ export default {
     globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
-    globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
     globalThis.__OCEL_EDGE_ENTRY = k
     const e = ENTRIES[k]
@@ -815,6 +806,40 @@ async function classifyEdgeSources(
   };
 }
 
+const DATA_CACHE_CALLS: readonly RegExp[] = [
+  /\bnext\s*:\s*\{[^{}]*\b(?:revalidate|tags)\s*:/,
+  /\(0,\s*[\w$]+\.(?:revalidateTag|revalidatePath|updateTag|unstable_cache)\)\(/,
+];
+
+async function warnEdgeDataCache(
+  sources: readonly EdgeOutput[],
+  chunkPathByKey: ReadonlyMap<string, string>,
+  entryAssets: ReadonlyMap<string, ReadonlySet<string>>,
+): Promise<void> {
+  const callingChunks = new Set<string>();
+  for (const [key, path] of chunkPathByKey) {
+    const text = await readFile(path, "utf8");
+    if (DATA_CACHE_CALLS.some((call) => call.test(text))) callingChunks.add(key);
+  }
+  const callingEntries = new Set(
+    [...entryAssets]
+      .filter(([, chunks]) => [...chunks].some((key) => callingChunks.has(key)))
+      .map(([entryKey]) => entryKey),
+  );
+  const routes = [
+    ...new Set(
+      sources
+        .filter((s) => s.type !== "MIDDLEWARE" && callingEntries.has(edgeEntryOf(s).entryKey))
+        .map((s) => s.pathname),
+    ),
+  ].sort();
+  if (routes.length === 0) return;
+
+  console.warn(
+    `ocel: edge route(s) ${routes.join(", ")} set next.revalidate or tags on a fetch, or revalidate a tag or path — the edge keeps no data cache, so each request fetches again and a revalidation raised from the edge reaches nothing`,
+  );
+}
+
 const originEdgeDirName = "__ocel_edge";
 
 const originEdgeRuntimeName = "__ocel_edge_entry.cjs";
@@ -911,6 +936,8 @@ async function emitEdgeBundle(
   const { chunkPathByKey, wasmPathByName, assetPathByName, env, entryAssets, handlerExports } =
     await classifyEdgeSources(distDir, sources);
 
+  await warnEdgeDataCache(sources, chunkPathByKey, entryAssets);
+
   const { idByKey: chunkIdByKey, modules: chunks } = await moduleIds(
     chunkPathByKey,
     (n) => `c/${n}.js`,
@@ -938,13 +965,7 @@ async function emitEdgeBundle(
   const json = stableStringify({
     version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(
-      await readFile(new URL("edge-cache-handler.cjs", import.meta.url), "utf8"),
-      entries,
-      assetIdByName,
-      wasmIdByName,
-      clientAssetSuffix,
-    ),
+    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName, clientAssetSuffix),
     chunks,
     wasm: wasmModules,
     assets: assetModules,

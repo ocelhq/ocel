@@ -210,18 +210,18 @@ func TestBootstrappingReplacesAKeyThatWasDeactivated(t *testing.T) {
 	}
 }
 
-func TestBootstrappingKeepsTheCredentialsOfTheWorkersItAdopted(t *testing.T) {
+func TestBootstrappingKeepsTheCredentialOfTheWorkerItAdopted(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind,
-		edgeCredentials{ReleasesStore: "c1", ISRWriter: "c2"}); err != nil {
+		edgeCredentials{ReleasesStore: "c1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	h.raise(t)
 
-	if got := h.stored(t); got.ReleasesStore != "c1" || got.ISRWriter != "c2" {
-		t.Errorf("the recorded credentials = %+v, want the workers' credentials kept beside the asset key", got)
+	if got := h.stored(t); got.ReleasesStore != "c1" {
+		t.Errorf("the recorded credentials = %+v, want the worker's credential kept beside the asset key", got)
 	}
 }
 

@@ -26,30 +26,6 @@
       "verified": "2026-09-13"
     },
     {
-      "id": "cloudflare/r2/storage",
-      "unit": "GB-month",
-      "allowance": "account",
-      "steps": [{ "start": "0", "price": "0" }, { "start": "10", "price": "0.015" }],
-      "source": "https://developers.cloudflare.com/r2/pricing/",
-      "verified": "2026-09-13"
-    },
-    {
-      "id": "cloudflare/r2/class-a",
-      "unit": "operations",
-      "allowance": "account",
-      "steps": [{ "start": "0", "price": "0" }, { "start": "1000000", "price": "0.0000045" }],
-      "source": "https://developers.cloudflare.com/r2/pricing/",
-      "verified": "2026-09-13"
-    },
-    {
-      "id": "cloudflare/r2/class-b",
-      "unit": "operations",
-      "allowance": "account",
-      "steps": [{ "start": "0", "price": "0" }, { "start": "10000000", "price": "0.00000036" }],
-      "source": "https://developers.cloudflare.com/r2/pricing/",
-      "verified": "2026-09-13"
-    },
-    {
       "id": "cloudflare/durable-objects/requests",
       "unit": "requests",
       "allowance": "account",

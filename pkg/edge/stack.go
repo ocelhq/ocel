@@ -29,7 +29,6 @@ type StackSpec struct {
 	DomainApps map[string]string
 
 	ServedElsewhere []string
-	Values          map[string]string
 	GlobalPreview   string
 	PruneOnly       bool
 	PruneRoutes     bool
@@ -42,7 +41,6 @@ type ProgramSpec struct {
 	Name                string
 	Worker              Worker
 	StoreScriptName     string
-	ISRWriterScriptName string
 	StoreEndpoint       string
 	BootstrapCredential string
 	PruneWorkerStem     string
@@ -145,5 +143,3 @@ func (p Private) sameAs(other Private) bool {
 	}
 	return bytes.Equal(mine, theirs)
 }
-
-var OwnedVariableNames = []string{"OCEL_CACHE_RPC", "OCEL_CACHE_SCOPE"}

@@ -129,10 +129,9 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 			Table:    cfg.StateTable,
 			TableARN: cfg.StateTableARN,
 		}
-		if isrEntriesAdopted(cfg.objectStores()) {
-			cache.CacheStoreBucket = cfg.CacheStoreBucket
-			cache.WriterURL = cfg.ISRWriterEndpoint
-			cache.PurgeSecret = cloudflare.DerivePurgeSecret(cfg.ISRWriterSeed, prefix)
+		if edgeReadsAssetBucket(cfg) {
+			cache.EdgeReadable = true
+			cache.PurgeSecret = cloudflare.DerivePurgeSecret(cfg.PurgeSeed, prefix)
 		}
 		builds.caches[name] = cache
 	}
@@ -255,24 +254,19 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("seeds the adopted cache store", func(t *testing.T) {
+	t.Run("seeds the entries and the tag snapshots into the asset bucket the edge reads", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: asset,
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
-		cfg = adoptISRWriter(t, cfg)
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		if got := entryPuts(asset.puts); len(got) != 0 {
-			t.Errorf("asset bucket received entries %v, want none once a store is adopted", got)
-		}
-		got := append([]string(nil), store.puts...)
+		got := append([]string(nil), asset.puts...)
 		slices.Sort(got)
 		want := []string{
 			isrKeyFor("admin", testBuildID, "cache/dash.cache.json"),
@@ -281,22 +275,17 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			isrKeyFor("web", testBuildID, "cache/index.cache.json"),
 			isrKeyFor("web", testBuildID, "tag-clock.json"),
 		}
-		if len(got) != len(want) {
+		if !slices.Equal(got, want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
 		}
-		for i := range want {
-			if got[i] != want[i] {
-				t.Errorf("uploaded key[%d] = %q, want %q", i, got[i], want[i])
-			}
-		}
-		for _, b := range store.buckets {
-			if b != "isr" {
-				t.Errorf("uploaded into bucket %q, want the adopted store %q", b, "isr")
+		for _, b := range asset.buckets {
+			if b != "assets" {
+				t.Errorf("uploaded into bucket %q, want the asset bucket %q", b, "assets")
 			}
 		}
 	})
 
-	t.Run("unadopted store stays on the asset bucket", func(t *testing.T) {
+	t.Run("an edge holding no key to the asset bucket leaves the entries in it untagged", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: f}
@@ -313,15 +302,14 @@ func TestUploadPrerenderAssets(t *testing.T) {
 				t.Errorf("uploaded into bucket %q, want the provider's own %q", b, "assets")
 			}
 		}
+		if len(f.taggings) != 0 {
+			t.Errorf("taggings = %v, want none where no edge reads the bucket", f.taggings)
+		}
 	})
 
 	t.Run("seeds the genesis tag snapshot", func(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := Config{
-			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects: &fakeArtifactStore{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreObjects: store,
-		}
-		cfg = adoptISRWriter(t, cfg)
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: store}
 
 		before := time.Now().UnixMilli()
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -353,39 +341,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("seeds the genesis into both stores", func(t *testing.T) {
-		t.Parallel()
-		own := &fakeArtifactStore{exists: map[string]bool{}}
-		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := Config{
-			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects: own, CacheStoreBucket: "isr", CacheStoreObjects: store,
-		}
-		cfg = adoptISRWriter(t, cfg)
-
-		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
-			t.Fatalf("uploadPrerenderAssets: %v", err)
-		}
-
-		for _, key := range []string{isrKeyFor("web", testBuildID, "tag-clock.json"), isrKeyFor("admin", testBuildID, "tag-clock.json")} {
-			mine, ok := own.putBodies[key]
-			if !ok {
-				t.Fatalf("no snapshot seeded into the provider's own bucket at %q; puts = %v", key, own.puts)
-			}
-			if theirs := store.putBodies[key]; theirs != mine {
-				t.Errorf("%s differs between the two stores:\n own %s\nedge %s", key, mine, theirs)
-			}
-		}
-	})
-
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{isrKeyFor("web", testBuildID, "tag-clock.json"): true}}
-		cfg := Config{
-			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects: &fakeArtifactStore{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreObjects: store,
-		}
-		cfg = adoptISRWriter(t, cfg)
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: store}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -399,7 +358,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("unadopted store seeds one copy", func(t *testing.T) {
+	t.Run("seeds one snapshot per app", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: f}
@@ -414,7 +373,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			}
 		}
 		if seeded != 2 {
-			t.Errorf("seeded %d snapshots, want one per app into the one bucket that serves both roles", seeded)
+			t.Errorf("seeded %d snapshots, want one per app", seeded)
 		}
 	})
 
@@ -540,7 +499,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("fetch entries stay on the asset bucket", func(t *testing.T) {
+	t.Run("fetch entries are never tagged edge-readable beside a tagged page", func(t *testing.T) {
 		t.Parallel()
 		hash := "a1b2c3"
 		root := writeTree(t, map[string]string{
@@ -548,30 +507,22 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/cache/index.cache.json":              `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})
-
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: asset,
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
-		cfg = adoptISRWriter(t, cfg)
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		want := isrKeyFor("web", testBuildID, "fetch-cache/") + hash + ".cache.json"
-		if got := entryPuts(asset.puts); len(got) != 1 || got[0] != want {
-			t.Fatalf("asset bucket got %v, want exactly [%s]", got, want)
+		fetch := isrKeyFor("web", testBuildID, "fetch-cache/") + hash + ".cache.json"
+		if !slices.Contains(asset.puts, fetch) {
+			t.Fatalf("asset bucket got %v, want the fetch entry %s", asset.puts, fetch)
 		}
-		if asset.buckets[0] != "assets" {
-			t.Errorf("fetch entry landed in %q, want the provider's own %q", asset.buckets[0], "assets")
-		}
-		for _, k := range store.puts {
-			if strings.Contains(k, "fetch-cache") {
-				t.Errorf("fetch entry %q leaked into the adopted store", k)
-			}
+		if got, tagged := asset.taggings[fetch]; tagged {
+			t.Errorf("fetch entry tagging = %q, want none", got)
 		}
 	})
 }

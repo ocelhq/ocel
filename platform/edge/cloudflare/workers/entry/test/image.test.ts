@@ -2,8 +2,9 @@ import type { AssetBucket } from "@framework/next-router/assets";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import type { ImageConfig } from "@framework/next-router/image";
 import { describe, expect, it } from "vitest";
-import type { CacheDeps } from "../src/cache";
 import { type RouteDeps, serve } from "../src/index";
+import { IMAGE_CALL_HEADER, RENDER_RELEASE_HEADER, readImageOptimizer } from "../src/serve-key";
+import { fakeServing } from "./serving-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
@@ -119,79 +120,6 @@ describe("the /_next/image route", () => {
     });
   });
 
-  it("serves a repeat request from the colo cache, across a redeploy", async () => {
-    const clock = { ms: 0 };
-    const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = {
-      cache: caches.default,
-      now: () => clock.ms,
-      waitUntil: (promise) => {
-        pending.push(promise);
-      },
-    };
-    let calls = 0;
-    const deps = imageDeps({
-      cache,
-      imageOrigin: async () => {
-        calls++;
-        return new Response("optimized", {
-          status: 200,
-          headers: { "cache-control": "public, max-age=60" },
-        });
-      },
-    });
-    deps.manifest.assetHashes = { "/a.png": "f".repeat(64) };
-    const image = () =>
-      serve(imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"), deps);
-
-    expect((await image()).headers.get("x-ocel-cache")).toBe("MISS");
-    await Promise.all(pending.splice(0));
-
-    clock.ms = 1_000;
-    expect((await image()).headers.get("x-ocel-cache")).toBe("HIT");
-
-    deps.manifest.buildId = "b2";
-    const redeployed = await image();
-    expect(redeployed.headers.get("x-ocel-cache")).toBe("HIT");
-    expect(await redeployed.text()).toBe("optimized");
-    expect(calls).toBe(1);
-  });
-
-  it("never shares an unhashed variant between two deployments of one build", async () => {
-    const clock = { ms: 0 };
-    const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = {
-      cache: caches.default,
-      now: () => clock.ms,
-      waitUntil: (promise) => {
-        pending.push(promise);
-      },
-    };
-    let calls = 0;
-    const imageOrigin = async () => {
-      calls++;
-      return new Response("optimized", {
-        status: 200,
-        headers: { "cache-control": "public, max-age=60" },
-      });
-    };
-    const image = (deps: RouteDeps) =>
-      serve(imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"), deps);
-
-    const first = imageDeps({ cache, imageOrigin, appBuildId: "d1" });
-    const second = imageDeps({ cache, imageOrigin, appBuildId: "d2" });
-    expect(second.manifest.buildId).toBe(first.manifest.buildId);
-    expect(first.manifest.assetHashes).toBeUndefined();
-
-    expect((await image(first)).headers.get("x-ocel-cache")).toBe("MISS");
-    await Promise.all(pending.splice(0));
-
-    clock.ms = 1_000;
-    expect((await image(first)).headers.get("x-ocel-cache")).toBe("HIT");
-    expect((await image(second)).headers.get("x-ocel-cache")).toBe("MISS");
-    expect(calls).toBe(2);
-  });
-
   it("answers a validated request with 502 when no origin is provisioned", async () => {
     const response = await serve(
       imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"),
@@ -246,5 +174,152 @@ describe("the /_next/image route", () => {
     await serve(imageRequest("https://app.example/dashboard"), deps);
 
     expect(middlewareRan).toBe(1);
+  });
+});
+
+describe("the /_next/image route through Workers Cache", () => {
+  const OPTIMIZER = "https://opt.lambda-url.eu-west-2.on.aws/";
+  const IMAGE = "https://app.example/_next/image?url=%2Fa.png&w=640&q=75";
+  const optimized = (cacheStatus = "MISS") =>
+    new Response("optimized", {
+      status: 200,
+      headers: {
+        "content-type": "image/webp",
+        "cache-control": "public, max-age=14400, must-revalidate",
+        "cache-tag": "r0a1b2c3d,r0a1b2c3d|path:/_next/image",
+        "cloudflare-cdn-cache-control": "max-age=14400",
+        "cf-cache-status": cacheStatus,
+      },
+    });
+
+  function cachedImageDeps(answer: () => Response | Promise<Response> = optimized) {
+    const fake = fakeServing(answer);
+    let originCalls = 0;
+    const deps = imageDeps({
+      serving: fake.serving,
+      imageOptimizerUrl: OPTIMIZER,
+      imageOrigin: async () => {
+        originCalls++;
+        return new Response("from the optimizer", {
+          status: 200,
+          headers: { "content-type": "image/webp" },
+        });
+      },
+    });
+    return { fake, deps, originCalls: () => originCalls };
+  }
+
+  it("asks Serve for the image under the release, keyed by the image's digest", async () => {
+    const { fake, deps } = cachedImageDeps();
+
+    await serve(imageRequest(IMAGE, { headers: { accept: "image/webp" } }), deps);
+
+    expect(fake.calls).toHaveLength(1);
+    const [{ request, props }] = fake.calls;
+    expect(props).toEqual({ kind: "origin" });
+    expect(request.method).toBe("GET");
+    expect(readImageOptimizer(request.url)).toBe(OPTIMIZER);
+    expect(new URL(request.url).pathname).toMatch(/\/[0-9a-f]{64}$/);
+    expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toMatchObject({
+      slug: "p1",
+      isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+    });
+    expect(JSON.parse(request.headers.get(IMAGE_CALL_HEADER)!)).toEqual({
+      payload: {
+        assetPrefix: ASSET_PREFIX,
+        url: "/a.png",
+        w: 640,
+        q: 75,
+        accept: "image/webp",
+        mimeType: "image/webp",
+        configHash: BASE_CONFIG.configHash,
+      },
+      minimumCacheTTL: BASE_CONFIG.minimumCacheTTL,
+    });
+  });
+
+  it("gives the visitor the image without the edge's cache headers", async () => {
+    const { deps } = cachedImageDeps();
+
+    const response = await serve(imageRequest(IMAGE), deps);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("optimized");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=14400, must-revalidate");
+    expect(response.headers.get("vary")).toBe("accept");
+    for (const name of ["cache-tag", "cloudflare-cdn-cache-control", "cf-cache-status"]) {
+      expect(response.headers.has(name)).toBe(false);
+    }
+  });
+
+  it("reports the tier Workers Cache answered from", async () => {
+    for (const [cfStatus, expected] of [
+      ["HIT", "HIT"],
+      ["REVALIDATED", "HIT"],
+      ["STALE", "STALE"],
+      ["MISS", "MISS"],
+      ["EXPIRED", "MISS"],
+    ] as const) {
+      const { deps } = cachedImageDeps(() => optimized(cfStatus));
+
+      const response = await serve(imageRequest(IMAGE), deps);
+
+      expect(response.headers.get("x-ocel-cache")).toBe(expected);
+    }
+  });
+
+  it("serves a static import as immutable whatever lifetime Workers Cache keeps it for", async () => {
+    const { deps } = cachedImageDeps();
+
+    const response = await serve(
+      imageRequest(
+        `https://app.example/_next/image?url=${encodeURIComponent("/_next/static/media/logo.abc123.png")}&w=640&q=75`,
+      ),
+      deps,
+    );
+
+    expect(response.headers.get("cache-control")).toBe("public, max-age=315360000, immutable");
+  });
+
+  it("answers a HEAD without a body", async () => {
+    const { deps } = cachedImageDeps();
+
+    const response = await serve(imageRequest(IMAGE, { method: "HEAD" }), deps);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+  });
+
+  it("renders at the optimizer, uncached, when Serve refuses the call", async () => {
+    const { deps, originCalls } = cachedImageDeps(
+      () => new Response("refused", { status: 503, headers: { "x-ocel-serve-refused": "1" } }),
+    );
+
+    const response = await serve(imageRequest(IMAGE), deps);
+
+    expect(await response.text()).toBe("from the optimizer");
+    expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
+    expect(originCalls()).toBe(1);
+  });
+
+  it("does not ask Serve for a method that is not a read", async () => {
+    const { fake, deps, originCalls } = cachedImageDeps();
+
+    const response = await serve(imageRequest(IMAGE, { method: "POST" }), deps);
+
+    expect(fake.calls).toHaveLength(0);
+    expect(originCalls()).toBe(1);
+    expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
+  });
+
+  it("does not ask Serve when no optimizer address is known to name in the call", async () => {
+    const { fake, deps, originCalls } = cachedImageDeps();
+    deps.imageOptimizerUrl = undefined;
+
+    const response = await serve(imageRequest(IMAGE), deps);
+
+    expect(fake.calls).toHaveLength(0);
+    expect(originCalls()).toBe(1);
+    expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 });

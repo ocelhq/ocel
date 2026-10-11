@@ -96,16 +96,12 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	edgeStore, err := p.readEdgeISRStore(ctx, spec)
+	purgeSecret, err := p.readEdgePurgeSecret(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
 	if servesNext(app) && app.ISR != nil {
-		var writer *cloudflare.ISRWriter
-		if edgeStore != nil {
-			writer = &edgeStore.writer
-		}
-		if err := p.seedPrerenders(ctx, spec, writer, progress); err != nil {
+		if err := p.seedPrerenders(ctx, spec, progress); err != nil {
 			return nil, err
 		}
 	}
@@ -149,7 +145,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), edgeStore))); err != nil {
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), purgeSecret))); err != nil {
 				return nil, err
 			}
 			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
@@ -328,12 +324,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		opensOnPromotion: true,
 	}
 	if servesNext(app) {
-		edgeStore, err := p.readEdgeISRStore(ctx, spec)
-		if err != nil {
-			return nil, err
-		}
 		served = fillNextContainerDefaults(served)
-		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), edgeStore))); err != nil {
+		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
 			return nil, err
 		}
 	}
@@ -551,24 +543,22 @@ func mergedValues(what string, delivered, own map[string]string) (map[string]str
 	return values, nil
 }
 
-func (p *Provider) readEdgeISRWriter(ctx context.Context, spec provider.StackSpec) (cloudflare.ISRWriter, error) {
-	app := spec.App
-	if app == nil || app.ISR == nil || app.Compute != provider.ComputeServerless || !factsOf(spec.Edge).RunsCode {
-		return cloudflare.ISRWriter{}, nil
+func (p *Provider) readEdgePurgeSecret(ctx context.Context, spec provider.StackSpec) (string, error) {
+	if !signsEdgePurges(spec) {
+		return "", nil
 	}
 	c, err := p.openClients(ctx)
 	if err != nil {
-		return cloudflare.ISRWriter{}, err
+		return "", err
 	}
-	adopted, credentials, err := requireAdoptedEdge(ctx, c, p.KeyValues(), spec.Ref.Tier, spec.Edge.Kind())
+	if _, _, err := requireAdoptedEdge(ctx, c, p.KeyValues(), spec.Ref.Tier, spec.Edge.Kind()); err != nil {
+		return "", err
+	}
+	seed, err := readPurgeSeed(ctx, c, spec.Ref.Tier, spec.Edge.Kind())
 	if err != nil {
-		return cloudflare.ISRWriter{}, err
+		return "", err
 	}
-	seed, err := readISRWriterSeed(ctx, c, spec.Ref.Tier, spec.Edge.Kind())
-	if err != nil {
-		return cloudflare.ISRWriter{}, err
-	}
-	return cloudflare.ISRWriter{Endpoint: adopted.ISRWriter.Endpoint, BootstrapCredential: credentials.ISRWriter, Seed: seed}, nil
+	return cloudflare.DerivePurgeSecret(seed, spec.App.ISR.Prefix), nil
 }
 
 type stacks struct {
@@ -580,14 +570,9 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	if _, err := s.p.readOriginBase(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	writer, err := s.p.readEdgeISRWriter(ctx, spec)
+	purgeSecret, err := s.p.readEdgePurgeSecret(ctx, spec)
 	if err != nil {
 		return provider.StackResult{}, err
-	}
-	if writer.IsConfigured() {
-		if err := writer.Initialize(ctx, spec.App.ISR.Prefix); err != nil {
-			return provider.StackResult{}, fmt.Errorf("register %s's ISR prefix with the %s edge's writer: %w", spec.App.App, spec.Edge.Kind(), err)
-		}
 	}
 	routeTableKey, err := s.p.putEdgeRouteTable(ctx, spec, runProgress)
 	if err != nil {
@@ -598,24 +583,6 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 		return result, err
 	}
 	result.RouteTableKey = routeTableKey
-	if writer.IsConfigured() {
-		result.PurgeSecret = cloudflare.DerivePurgeSecret(writer.Seed, spec.App.ISR.Prefix)
-	}
+	result.PurgeSecret = purgeSecret
 	return result, nil
-}
-
-func (p *Provider) readEdgeISRStore(ctx context.Context, spec provider.StackSpec) (*edgeISRStore, error) {
-	if !keepsISRInEdgeStore(spec) {
-		return nil, nil
-	}
-	writer, err := p.readEdgeISRWriter(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
-	if !writer.IsConfigured() {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"the %s edge's ISR writer is not adopted, and %s keeps its pages and tags in it: run `%s` again",
-			spec.Edge.Kind(), spec.App.App, provider.BootstrapCommand(spec.Ref.Tier))
-	}
-	return &edgeISRStore{writer: writer, secret: cloudflare.DerivePurgeSecret(writer.Seed, spec.App.ISR.Prefix)}, nil
 }

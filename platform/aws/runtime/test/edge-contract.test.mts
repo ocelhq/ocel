@@ -2,13 +2,9 @@ import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
 import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
-import { afterEach, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import { edgeReadableTagging } from "../src/next/object-store.mjs";
 import { isrPrefixOf, tagNamespace } from "../src/next/tag-index.mjs";
-
-afterEach(() => {
-  for (const name of Object.values(contract.cacheStoreEnv)) delete process.env[name];
-});
 
 test("the snapshot is keyed at the suffix the deploy seeds it under", () => {
   const prefix = contract.tagNamespace.isrPrefix;
@@ -33,22 +29,6 @@ test("the contract's prefix and key are one coordinate, spelled twice", () => {
   expect(contract.tagNamespace.partitionKeyPrefix).toBe(
     `PROJECT#${project}#STACK#${env}--${app}--${release}#TAG#`,
   );
-});
-
-test("the adopted store is named by exactly the variable the deploy injects", async () => {
-  const env = contract.cacheStoreEnv;
-  expect(Object.keys(env)).toEqual(["bucket"]);
-  process.env[env.bucket] = "isr";
-
-  const { entriesAdopted } = await import("../src/next/object-store.mjs");
-
-  expect(entriesAdopted()).toBe(true);
-});
-
-test("no store is adopted when the contract's bucket name is unset", async () => {
-  const { entriesAdopted } = await import("../src/next/object-store.mjs");
-
-  expect(entriesAdopted()).toBe(false);
 });
 
 test("a purge is announced under the header name the edge reads", () => {

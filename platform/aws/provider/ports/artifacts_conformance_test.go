@@ -87,31 +87,19 @@ func artifacts() ports.Artifacts {
 	return ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{}}
 }
 
-type tierBuckets struct {
-	cacheless bool
-	cache     ports.S3API
-}
+type tierBuckets struct{}
 
-func (b tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buckets, error) {
-	buckets := ports.Buckets{
+func (tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buckets, error) {
+	return ports.Buckets{
 		Functions: "ocel-artifacts-" + string(tier),
 		Assets:    "ocel-assets-" + string(tier),
-	}
-	if !b.cacheless {
-		buckets.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(tier), S3: b.cache}}
-	}
-	return buckets, nil
-}
-
-func cacheRef() provider.ArtifactRef {
-	return provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
+	}, nil
 }
 
 func everyStoreRef() []provider.ArtifactRef {
 	return []provider.ArtifactRef{
 		{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
 		{Tier: environment.TierProduction, Bucket: provider.StoreAssets, Key: "shop/prod/web/static/app.js"},
-		cacheRef(),
 	}
 }
 
@@ -119,13 +107,12 @@ func TestArtifactsRunTheConformancePortTier(t *testing.T) {
 	conformance.RunArtifactStore(t, provider.Facts{StoresArtifacts: true}, artifacts())
 }
 
-func TestAStoreThisAccountHasNoBucketForRefusesRatherThanWritingNowhere(t *testing.T) {
+func TestAStoreThisProviderKeepsNoneOfRefusesRatherThanWritingNowhere(t *testing.T) {
 	t.Parallel()
 
-	store := artifacts()
-	store.Stores = tierBuckets{cacheless: true}
-	if err := store.Put(context.Background(), cacheRef(), bytes.NewReader([]byte("x"))); err == nil {
-		t.Fatal("Put() into a store this account has no bucket for succeeded, so the artifact went nowhere")
+	cache := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
+	if err := artifacts().Put(context.Background(), cache, bytes.NewReader([]byte("x"))); err == nil {
+		t.Fatal("Put() into a store this provider keeps none of succeeded, so the artifact went nowhere")
 	}
 }
 
@@ -143,7 +130,7 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", &progress); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
-	if want := []string{"INFO Removed the production artifacts under shop/prod/ from 3 buckets"}; !slices.Equal(progress.Lines(), want) {
+	if want := []string{"INFO Removed the production artifacts under shop/prod/ from 2 buckets"}; !slices.Equal(progress.Lines(), want) {
 		t.Errorf("RemovePrefix() said %q, want %q", progress.Lines(), want)
 	}
 	for _, ref := range everyStoreRef() {
@@ -155,38 +142,17 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 	}
 }
 
-func TestACacheStoreOffTheAccountsEndpointIsSweptThroughItsOwnClient(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	elsewhere := newFakeS3()
-	store := ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{cache: elsewhere}}
-	ref := cacheRef()
-	if err := store.Put(ctx, ref, bytes.NewReader([]byte("x"))); err != nil {
-		t.Fatal(err)
-	}
-	if _, stored := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Tier), ref.Key)]; !stored {
-		t.Fatal("Put() wrote the cache artifact through the account's own client, not the store's")
-	}
-	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", nil); err != nil {
-		t.Fatalf("RemovePrefix() = %v", err)
-	}
-	if len(elsewhere.objects) != 0 {
-		t.Fatalf("the cache store still has %d object(s) after the sweep", len(elsewhere.objects))
-	}
-}
-
 type goneS3 struct{ *fakeS3 }
 
 func (goneS3) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	return nil, &s3types.NoSuchBucket{}
 }
 
-func TestASweepOfACacheStoreAlreadyTornDownIsNoWork(t *testing.T) {
+func TestASweepOfABucketAlreadyTornDownIsNoWork(t *testing.T) {
 	t.Parallel()
 
-	store := ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{cache: goneS3{newFakeS3()}}}
+	store := ports.Artifacts{S3: goneS3{newFakeS3()}, Stores: tierBuckets{}}
 	if err := store.RemovePrefix(context.Background(), environment.TierProduction, "shop/prod/", nil); err != nil {
-		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to continue", err)
+		t.Fatalf("RemovePrefix() over buckets already gone = %v, want the destroy to continue", err)
 	}
 }

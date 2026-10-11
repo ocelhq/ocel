@@ -21,16 +21,13 @@ func describedParts(current bool, names ...string) []edge.BootstrapPart {
 
 func TestTheCloudflareEdgeDescribesEachBootstrapPartAndWhetherItIsCurrent(t *testing.T) {
 	names := []string{
-		cacheStoreName(environment.TierProduction),
 		sharedStoreScriptName,
 		sharedStoreScriptName + "/" + bootstrapSecretBinding,
-		isrWriterScriptName,
-		isrWriterScriptName + "/" + bootstrapSecretBinding,
 	}
 
 	t.Run("a fresh account has no part current", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, false)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 
 		parts, err := m.provider(t).Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
@@ -42,8 +39,8 @@ func TestTheCloudflareEdgeDescribesEachBootstrapPartAndWhetherItIsCurrent(t *tes
 	})
 
 	t.Run("an installed bootstrap has every part current", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
@@ -58,21 +55,21 @@ func TestTheCloudflareEdgeDescribesEachBootstrapPartAndWhetherItIsCurrent(t *tes
 		}
 	})
 
-	t.Run("a drifted isr-writer is the only part not current", func(t *testing.T) {
-		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-		m := bootstrapMock(t, true)
+	t.Run("a drifted releases store leaves its secret current", func(t *testing.T) {
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
 		p := m.provider(t)
 		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		isrWriterBundle = []byte("export default {writer:2}")
+		releasesStoreBundle = []byte("export default {rebuilt:1}")
 
 		parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("DescribeBootstrap: %v", err)
 		}
 		want := describedParts(true, names...)
-		want[3].Current = false
+		want[0].Current = false
 		if !reflect.DeepEqual(parts, want) {
 			t.Errorf("parts = %+v, want %+v", parts, want)
 		}
@@ -80,8 +77,8 @@ func TestTheCloudflareEdgeDescribesEachBootstrapPartAndWhetherItIsCurrent(t *tes
 }
 
 func TestDescribingTheBootstrapWithTheChecksSkippedReadsNothingAndCallsItCurrent(t *testing.T) {
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-	m := bootstrapMock(t, false)
+	seedBootstrapBundle(t, "export default {}")
+	m := bootstrapMock(t)
 	p := m.provider(t)
 	p.skipChecks = true
 
@@ -97,15 +94,17 @@ func TestDescribingTheBootstrapWithTheChecksSkippedReadsNothingAndCallsItCurrent
 	}
 }
 
-func TestATokenThatMayNotListAPITokensDescribesAnInstalledBootstrapAsCurrent(t *testing.T) {
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-	m := bootstrapMock(t, true)
+func TestATokenWithoutAPITokensWriteOrR2PlansInstallsDescribesAndTearsTheBootstrapDown(t *testing.T) {
+	seedBootstrapBundle(t, "export default {}")
+	m := bootstrapMock(t)
 	p := m.provider(t)
+
+	if _, err := p.planBootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatalf("planBootstrap: %v", err)
+	}
 	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	m.refusesTokenListing = true
-
 	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("DescribeBootstrap: %v", err)
@@ -115,21 +114,19 @@ func TestATokenThatMayNotListAPITokensDescribesAnInstalledBootstrapAsCurrent(t *
 			t.Errorf("part %q is described as behind, want every installed part current: %+v", part.Name, parts)
 		}
 	}
-}
-
-func TestPlanningACloudflareBootstrapWithATokenThatMayNotListAPITokensIsAnError(t *testing.T) {
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-	m := bootstrapMock(t, true)
-	m.refusesTokenListing = true
-
-	if _, err := planner(t, m)(t.Context(), environment.TierProduction); err == nil || !strings.Contains(err.Error(), "list Cloudflare API tokens") {
-		t.Fatalf("PlanBootstrap error = %v, want the refused token listing", err)
+	if _, err := p.planRemoveBootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatalf("planRemoveBootstrap: %v", err)
 	}
+	if err := p.Teardown(t.Context(), environment.TierProduction); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+
+	assertNoAPITokenOrR2Calls(t, m)
 }
 
 func TestDescribingACloudflareBootstrapWithoutCredentialsIsAnError(t *testing.T) {
-	seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
-	m := bootstrapMock(t, true)
+	seedBootstrapBundle(t, "export default {}")
+	m := bootstrapMock(t)
 	t.Setenv(envAPIToken, "")
 
 	_, err := m.provider(t).Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
@@ -148,7 +145,7 @@ func partNamed(parts []edge.BootstrapPart, name string) (edge.BootstrapPart, boo
 }
 
 func TestTheCloudflareEdgeDescribesItsWorkerClientCertificate(t *testing.T) {
-	m := bootstrapMock(t, false)
+	m := bootstrapMock(t)
 	p := mutualTLSEdge(t, m)
 	names := []string{productionCertificateBase}
 
@@ -177,7 +174,7 @@ func TestTheCloudflareEdgeDescribesItsWorkerClientCertificate(t *testing.T) {
 }
 
 func TestACertificateDueForRenewalShowsTheCertificateNotCurrent(t *testing.T) {
-	m := bootstrapMock(t, false)
+	m := bootstrapMock(t)
 	p := mutualTLSEdge(t, m)
 	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 		t.Fatal(err)
@@ -200,7 +197,7 @@ func TestACertificateDueForRenewalShowsTheCertificateNotCurrent(t *testing.T) {
 }
 
 func TestACertificatesBootstrapPartKeepsItsNameAcrossARenewal(t *testing.T) {
-	m := bootstrapMock(t, false)
+	m := bootstrapMock(t)
 	p := mutualTLSEdge(t, m)
 	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 		t.Fatal(err)

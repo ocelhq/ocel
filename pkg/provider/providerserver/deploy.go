@@ -658,7 +658,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	if err != nil {
 		return err
 	}
-	spec.Program, spec.Values = program.Spec, program.Values
+	spec.Program = program.Spec
 	if !r.front.Facts().RunsCode {
 		spec.PreviewGate = r.previewGate
 	}

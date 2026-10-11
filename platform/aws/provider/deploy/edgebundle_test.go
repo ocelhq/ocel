@@ -47,8 +47,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			Objects:         store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -68,8 +68,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 			t.Errorf("uploaded body = %q, want the bundle verbatim", body)
 		}
 		for _, b := range store.buckets {
-			if b != "isr" {
-				t.Errorf("uploaded into bucket %q, want the adopted store %q", b, "isr")
+			if b != "assets" {
+				t.Errorf("uploaded into bucket %q, want the asset bucket %q", b, "assets")
 			}
 		}
 	})
@@ -84,8 +84,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 				"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js","shim":"REBUILT"}`,
 			}),
 			AssetBucket: "assets", Env: "prod",
-			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			Objects:         store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -105,8 +105,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			Objects:         store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -136,8 +136,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: nodeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreObjects: store,
+			Objects:         store,
+			EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nodeManifest(), appBuildsFor(t, cfg, nodeManifest())); err != nil {
@@ -205,8 +205,8 @@ func edgeStoreConfig(t *testing.T, store *fakeArtifactStore) Config {
 	t.Helper()
 	return Config{
 		ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-		Objects:          &fakeArtifactStore{exists: map[string]bool{}},
-		CacheStoreBucket: "isr", CacheStoreObjects: store,
+		Objects:         store,
+		EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "edge-secret",
 	}
 }
 
@@ -266,9 +266,8 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
-func TestAnEdgeBundleAndItsSealedOverlayLandOnlyInTheAssetBucketTaggedEdgeReadableWhenTheEdgeHoldsCredentials(t *testing.T) {
+func TestAnEdgeBundleAndItsSealedOverlayLandInTheAssetBucketTaggedEdgeReadable(t *testing.T) {
 	t.Parallel()
-	edgeStore := &fakeArtifactStore{exists: map[string]bool{}}
 	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
 	cfg := Config{
 		ArtifactRoot: writeTree(t, map[string]string{
@@ -276,8 +275,7 @@ func TestAnEdgeBundleAndItsSealedOverlayLandOnlyInTheAssetBucketTaggedEdgeReadab
 			"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js"}`,
 		}),
 		AssetBucket: "assets", Env: "prod",
-		Objects:          assetStore,
-		CacheStoreBucket: "isr", CacheStoreObjects: edgeStore,
+		Objects:         assetStore,
 		EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret",
 	}
 	manifest := edgeVariablesManifest(variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
@@ -290,9 +288,6 @@ func TestAnEdgeBundleAndItsSealedOverlayLandOnlyInTheAssetBucketTaggedEdgeReadab
 	slices.Sort(want)
 	if got := sortedPuts(assetStore); !slices.Equal(got, want) {
 		t.Errorf("the asset bucket was given %v, want %v", got, want)
-	}
-	if len(edgeStore.puts) != 0 {
-		t.Errorf("the adopted store was given %v, want nothing: the edge reads its bundle from the asset bucket alone", edgeStore.puts)
 	}
 	for _, key := range want {
 		if got := assetStore.taggings[key]; got != wantEdgeReadableTagging {
@@ -320,22 +315,7 @@ func appValuesOf(app *contractv1.ManifestApp) provider.AppValues {
 }
 
 func TestCheckAppEdgeVariables(t *testing.T) {
-	t.Run("a name the entry worker owns fails the deploy with no cache store", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod"}
-		manifest := edgeVariablesManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
-		app := manifest.GetApps()[0]
-
-		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
-		if err == nil {
-			t.Fatal("checkAppEdgeVariables = nil, want the deploy refused")
-		}
-		if !strings.Contains(err.Error(), "OCEL_CACHE_SCOPE") {
-			t.Errorf("error = %q, want it to name the variable", err)
-		}
-	})
-
-	t.Run("an over-budget edge environment fails the deploy with no cache store", func(t *testing.T) {
+	t.Run("an over-budget edge environment fails the deploy with no edge key", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod"}
 		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
@@ -353,7 +333,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("an app with no edge output is left alone", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: t.TempDir(), Env: "prod"}
-		manifest := edgeVariablesManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		app := manifest.GetApps()[0]
 		if err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), appBundle{}); err != nil {

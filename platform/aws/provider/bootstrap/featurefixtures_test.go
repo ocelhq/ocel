@@ -49,11 +49,19 @@ func featureStackFor(name string, tier environment.Tier, alongside FeatureSet) f
 	if !ok {
 		panic("no feature named " + name)
 	}
-	return f.template(featureInputs{
+	return renderedTemplate(f, featureInputs{
 		ns:        defaultNamespace,
 		tier:      tier,
 		code:      fixturePayloads(),
 		refs:      fixtureRefs(),
 		alongside: alongside,
 	})
+}
+
+func renderedTemplate(f feature, in featureInputs) featureStack {
+	stack, err := f.template(in)
+	if err != nil {
+		panic(err)
+	}
+	return stack
 }

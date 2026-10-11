@@ -45,7 +45,7 @@ var apiGatewayEdgeFeature = feature{
 	placements: noPlacements,
 }
 
-func apiGatewayEdgeTemplate(in featureInputs) featureStack {
+func apiGatewayEdgeTemplate(in featureInputs) (featureStack, error) {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
 	})
@@ -67,7 +67,7 @@ Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs 
 			notFoundDeploymentResource(published),
 			notFoundStageResource(published),
 			apiGatewayEdgeOutputs()),
-	}
+	}, nil
 }
 
 func notFoundDeploymentID(responder string) string {

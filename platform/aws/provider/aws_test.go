@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 
@@ -23,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -314,7 +313,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	}
 }
 
-func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
+func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
 		return bootstrap.Reading{Deployed: bootstrap.Deployed{
@@ -328,73 +327,13 @@ func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for kind, store := range map[edge.Kind]bootstrap.CacheStore{
-		cloudflare.Kind: {
-			Bucket:          "cache-cloudflare",
-			Endpoint:        "https://account.r2.cloudflarestorage.com",
-			Region:          "auto",
-			AccessKeyID:     "key",
-			SecretAccessKey: "secret",
-		},
-		cloudfront.Kind: {Bucket: "cache-cloudfront"},
-	} {
-		if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: kind}, func() (bootstrap.TierParams, error) {
-			return bootstrap.TierParams{CacheStore: store}, nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	buckets, err := p.Buckets(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
-	var got []string
-	for _, cache := range buckets.Caches {
-		got = append(got, cache.Name)
-		reached := cache.S3 != nil
-		if want := cache.Name == "cache-cloudflare"; reached != want {
-			t.Errorf("cache %q has its own client = %v, want %v: only a store off this account's endpoint needs one",
-				cache.Name, reached, want)
-		}
-	}
-	slices.Sort(got)
-	if !slices.Equal(got, []string{"cache-cloudflare", "cache-cloudfront"}) {
-		t.Fatalf("Buckets() returns caches %v, want one for each edge installed in the account", got)
-	}
-}
-
-func TestTheEdgeCacheStoreCarriesTheISRWriterAdoptedWithIt(t *testing.T) {
-	for _, writer := range []bootstrap.ISRWriter{
-		{Endpoint: "https://writer.example", BootstrapCredential: "cred"},
-		{Endpoint: "https://writer.example"},
-	} {
-		p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-		if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-			return bootstrap.Reading{Deployed: bootstrap.Deployed{
-				ArtifactBucket: "functions",
-				AssetBucket:    "assets",
-				Features:       bootstrap.FeatureSet{bootstrap.FeatureCloudflareEdge: true},
-			}}, nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
-			return bootstrap.TierParams{CacheStore: bootstrap.CacheStore{Bucket: "cache-cloudflare"}, ISRWriter: writer}, nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		buckets, err := p.Buckets(context.Background(), environment.TierProduction)
-		if err != nil {
-			t.Fatalf("Buckets error = %v", err)
-		}
-		if len(buckets.Caches) != 1 {
-			t.Fatalf("Buckets() returns caches %v, want the one the edge keeps", buckets.Caches)
-		}
-		if has := buckets.Caches[0].Writer != nil; has != (writer.BootstrapCredential != "") {
-			t.Errorf("the cache store holds a writer = %v for %+v, want one only where the credential to retire a record with was adopted", has, writer)
-		}
+	if want := (awsports.Buckets{Functions: "functions", Assets: "assets"}); buckets != want {
+		t.Fatalf("Buckets() = %+v, want %+v: the ISR entries an edge reads live in the asset bucket, and no edge keeps a store of its own", buckets, want)
 	}
 }
 

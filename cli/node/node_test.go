@@ -19,7 +19,6 @@ func TestEnsure(t *testing.T) {
 		for _, path := range []string{
 			BuildScriptPath(dir),
 			NextAdapterPath(dir),
-			filepath.Join(DistDir(dir), "next-adapter", "edge-cache-handler.cjs"),
 			filepath.Join(DistDir(dir), "next-adapter", "edge-node-entry.cjs"),
 			filepath.Join(DistDir(dir), "next-adapter", "next-dispatch.cjs"),
 			stampPath(dir),

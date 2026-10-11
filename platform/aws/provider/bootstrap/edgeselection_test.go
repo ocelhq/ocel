@@ -111,9 +111,7 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 func TestAnEdgeFeatureInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
 	ctx := context.Background()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare, out: edge.BootstrapOutput{
-		Values: map[string]string{"namespaceId": "ns-cloudflare"},
-	}})
+	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare})
 	apis := apisAcross(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: KindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction,
@@ -124,13 +122,6 @@ func TestAnEdgeFeatureInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
 	front := registry.at(KindCloudflare)
 	if front.bootstraps != 1 {
 		t.Fatalf("the cloudflare edge was bootstrapped %d times, want once: the feature owns the edge, not the front this run picked", front.bootstraps)
-	}
-	values, err := ReadEdgeValues(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
-	if err != nil {
-		t.Fatalf("ReadEdgeValues: %v", err)
-	}
-	if values["namespaceId"] != "ns-cloudflare" {
-		t.Errorf("the cloudflare edge's values read back %v, want what it handed over: a deploy through it reads zero otherwise", values)
 	}
 }
 
@@ -197,14 +188,12 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 
 	for _, kind := range []edge.Kind{KindCloudflare, KindCloudFront} {
 		front := &fakeEdge{kind: kind, out: edge.BootstrapOutput{
-			Values: map[string]string{"namespaceId": "ns-" + string(kind)},
 			Offers: []edge.Offer{
-				{Kind: edge.OfferCacheStore, Values: map[string]string{
-					edge.OfferKeyBucket:          "cache-" + string(kind),
-					edge.OfferKeyAccessKeyID:     "tok-" + string(kind),
-					edge.OfferKeySecretAccessKey: "secret-" + string(kind),
+				{Kind: edge.OfferReleasesStore, Values: map[string]string{
+					edge.OfferKeyStoreEndpoint:            "https://ocel-releases-store-" + string(kind) + ".acct.workers.dev",
+					edge.OfferKeyStoreScriptName:          "ocel-releases-store-" + string(kind),
+					edge.OfferKeyStoreBootstrapCredential: "cred-" + string(kind),
 				}},
-				{Kind: edge.OfferISRWriter, Values: offeredISRWriter("-"+string(kind), "cred-"+string(kind))},
 			},
 		}}
 		apis := apisFronting(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore(), front)
@@ -222,7 +211,7 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 		if err != nil {
 			t.Fatalf("edgeNamesFor(defaultNamespace, %q): %v", kind, err)
 		}
-		for _, param := range []string{names.valuesParam, names.cacheStoreParam, names.isrWriterParam, names.isrWriterSeedParam} {
+		for _, param := range []string{names.releasesStoreParam, names.purgeSeedParam} {
 			if !strings.HasPrefix(param, prefix+"/") {
 				t.Errorf("%s lies outside the %s edge's namespace %s", param, kind, prefix)
 			}
@@ -231,40 +220,24 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 			}
 		}
 
-		values, err := ReadEdgeValues(ctx, ssmc, defaultNamespace, environment.TierProduction, kind)
+		store, err := ReadReleasesStoreFor(ctx, ssmc, defaultNamespace, environment.TierProduction, kind)
 		if err != nil {
-			t.Fatalf("ReadEdgeValues(%q): %v", kind, err)
+			t.Fatalf("ReadReleasesStoreFor(%q): %v", kind, err)
 		}
-		if want := "ns-" + string(kind); values["namespaceId"] != want {
-			t.Errorf("the %s edge reads back namespace %q, want %q: a second edge bootstrapped in this account overwrote it", kind, values["namespaceId"], want)
-		}
-
-		store, err := ReadCacheStore(ctx, ssmc, defaultNamespace, environment.TierProduction, kind)
-		if err != nil {
-			t.Fatalf("ReadCacheStore(%q): %v", kind, err)
-		}
-		if want := "cache-" + string(kind); store.Bucket != want {
-			t.Errorf("the %s edge reads back cache store %q, want %q", kind, store.Bucket, want)
-		}
-
-		writer, err := ReadISRWriterFor(ctx, ssmc, defaultNamespace, environment.TierProduction, kind)
-		if err != nil {
-			t.Fatalf("ReadISRWriterFor(%q): %v", kind, err)
-		}
-		if want := "ocel-isr-writer-" + string(kind); writer.ScriptName != want {
-			t.Errorf("the %s edge reads back ISR writer %q, want %q", kind, writer.ScriptName, want)
+		if want := "ocel-releases-store-" + string(kind); store.ScriptName != want {
+			t.Errorf("the %s edge reads back releases store %q, want %q", kind, store.ScriptName, want)
 		}
 	}
 
-	cloudflare, err := ReadISRWriterSeedFor(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
-	if err != nil {
-		t.Fatalf("ReadISRWriterSeedFor(cloudflare): %v", err)
+	seeds := map[edge.Kind]string{}
+	for _, kind := range []edge.Kind{KindCloudflare, KindCloudFront} {
+		param, err := PurgeSeedParamFor(defaultNamespace, environment.TierProduction, kind)
+		if err != nil {
+			t.Fatalf("PurgeSeedParamFor(%q): %v", kind, err)
+		}
+		seeds[kind] = ssmc.params[param]
 	}
-	cloudfront, err := ReadISRWriterSeedFor(ctx, ssmc, defaultNamespace, environment.TierProduction, KindCloudFront)
-	if err != nil {
-		t.Fatalf("ReadISRWriterSeedFor(cloudfront): %v", err)
-	}
-	if cloudflare == "" || cloudflare == cloudfront {
-		t.Errorf("both edges authenticate their tag writes with %q; each edge's writer has a seed of its own", cloudflare)
+	if cloudflare := seeds[KindCloudflare]; cloudflare == "" || cloudflare == seeds[KindCloudFront] {
+		t.Errorf("both edges sign their purges with %q; each edge has a seed of its own", cloudflare)
 	}
 }

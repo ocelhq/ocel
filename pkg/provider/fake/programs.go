@@ -50,7 +50,6 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 			Worker:          worker,
 			StoreScriptName: ProgramStore,
 		},
-		Values: map[string]string{ProgramEdgeVar: string(req.Kind)},
 	}, nil
 }
 

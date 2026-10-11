@@ -65,7 +65,7 @@ func variablesKeyAPIs(crypto *fakeKMS) ParamAPIs {
 
 func TestABroughtVariablesKeyIsRecordedWithoutAStackOwningIt(t *testing.T) {
 	t.Run("a stack owning no key still records the ARN", func(t *testing.T) {
-		stack := variablesKeyFeature.template(featureInputs{ns: defaultNamespace, tier: environment.TierProduction, variablesKey: broughtKeyARN})
+		stack := renderedTemplate(variablesKeyFeature, featureInputs{ns: defaultNamespace, tier: environment.TierProduction, variablesKey: broughtKeyARN})
 		tmpl := parseVariablesTemplate(t, stack.body)
 
 		for name, resource := range tmpl.Resources {

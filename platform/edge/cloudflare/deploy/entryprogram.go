@@ -40,12 +40,10 @@ type EntryProgram struct {
 	PreviewGate       *edge.PreviewGate
 	PreviewGates      map[string]edge.PreviewGate
 	Origin            OriginBindings
-	Values            map[string]string
 
 	StoreScriptName          string
 	StoreEndpoint            string
 	StoreBootstrapCredential string
-	ISRWriterScriptName      string
 }
 
 func (p EntryProgram) Build() (provider.EdgeProgram, error) {
@@ -60,7 +58,6 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 		StoreScriptName:     p.StoreScriptName,
 		StoreEndpoint:       p.StoreEndpoint,
 		BootstrapCredential: p.StoreBootstrapCredential,
-		ISRWriterScriptName: p.ISRWriterScriptName,
 	}
 	if p.Slug == "" {
 		if p.StoreScriptName == "" {
@@ -78,7 +75,7 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 		if spec.Worker, err = p.addPreviewGates(worker); err != nil {
 			return provider.EdgeProgram{}, err
 		}
-		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
+		return provider.EdgeProgram{Spec: spec}, nil
 	}
 	if p.Tier == environment.TierPreview {
 		spec.Name = previewWorkerName(p.Namespace, p.Slug)
@@ -89,11 +86,11 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 		if spec.Worker, err = p.addPreviewGate(worker); err != nil {
 			return provider.EdgeProgram{}, err
 		}
-		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
+		return provider.EdgeProgram{Spec: spec}, nil
 	}
 	spec.Name = rootWorkerName(p.Namespace, p.Slug, p.Env)
 	spec.Worker = worker
-	return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
+	return provider.EdgeProgram{Spec: spec}, nil
 }
 
 func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker, error) {

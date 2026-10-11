@@ -7,9 +7,12 @@ import {
   type RouteResult,
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
-import { deploymentImageOrigin, functionUrlImageOrigin } from "@framework/next-router/image";
+import {
+  deploymentImageOrigin,
+  functionUrlImageOrigin,
+  originImagePath,
+} from "@framework/next-router/image";
 import { readReleaseToken } from "@platform/edge-contract/purge";
-import type { CacheDeps } from "./cache";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -19,8 +22,7 @@ import {
   ownBundleKey,
 } from "./edge";
 import type { Env } from "./env";
-import { coloImageCache } from "./image";
-import type { ImageStore } from "./image-store";
+import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { findPreviewTarget } from "./preview";
@@ -46,7 +48,6 @@ import { type ServeFactory, serveObjects } from "./serve-objects";
 import { type Serving, servePrerender } from "./serve-prerender";
 import { newServing, type ServingPorts } from "./serving";
 
-export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
 export { PurgeQueue } from "./purge-queue";
 export { Serve } from "./serve";
@@ -64,9 +65,8 @@ function withRouterHeader(response: Response): Response {
 
 export interface RouteDeps
   extends Omit<DispatchDeps, "prerender" | "imageCache" | "onPurge" | "hostRequestInit"> {
-  cache?: CacheDeps;
   serving?: Serving;
-  imageStore?: ImageStore;
+  imageOptimizerUrl?: string;
 }
 
 function hostRequestInit(request: Request): HostRequestExtras {
@@ -74,11 +74,14 @@ function hostRequestInit(request: Request): HostRequestExtras {
 }
 
 function bound(deps: RouteDeps): DispatchDeps {
-  const { cache, serving, imageStore, ...rest } = deps;
+  const { serving, imageOptimizerUrl, ...rest } = deps;
   return {
     ...rest,
     hostRequestInit,
-    imageCache: coloImageCache({ slug: deps.slug, cache, imageStore }),
+    imageCache:
+      serving && imageOptimizerUrl
+        ? workersCacheImage({ serving, app: deps.app, optimizerUrl: imageOptimizerUrl })
+        : undefined,
     prerender: serving ? servePrerender({ serving, app: deps.app }) : undefined,
     onPurge: serving?.purge,
   };
@@ -210,6 +213,15 @@ function newReleaseServing(
   });
 }
 
+function deploymentOptimizerUrl(entryUrl: string | undefined): string | undefined {
+  if (!entryUrl) return undefined;
+  try {
+    return new URL(originImagePath, entryUrl).href;
+  } catch {
+    return undefined;
+  }
+}
+
 function routedDeps(
   { record, routeTable: manifest }: ServedRelease,
   releases: ReleaseLookup,
@@ -235,6 +247,11 @@ function routedDeps(
             record.functionUrls[manifest.rootFunction],
             rest.originFetch ?? rest.fetch ?? fetch,
           )
+        : undefined),
+    imageOptimizerUrl:
+      rest.imageOptimizerUrl ??
+      (imagesAtDeployment
+        ? deploymentOptimizerUrl(record.functionUrls[manifest.rootFunction])
         : undefined),
     slug: releases.slug,
     app,
@@ -318,9 +335,8 @@ export default {
       if (isPurgeRequest(request)) return answerPurgeOnWorker(request, env, ctx);
       if (env.OCEL_SERVES_WORKERS_DEV !== "1") return respondOnControlHost();
     }
-    const store = env.OCEL_CACHE_STORE;
     const serve = ctx.exports?.Serve as ServeFactory | undefined;
-    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : store;
+    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : undefined;
     const originFetch = originFetchFor(env);
 
     let visitor: Request = request;
@@ -352,14 +368,10 @@ export default {
       imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
       imagesAtDeployment:
         !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,
-      imageStore: store,
+      imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL,
       routeTableStore: objects,
       assetStore: {
         store: objects,
-        cache: caches.default,
-        waitUntil: (promise) => ctx.waitUntil(promise),
-      },
-      cache: {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
@@ -376,7 +388,6 @@ export default {
           ? {
               loader: env.LOADER,
               store: objects,
-              cacheEntrypoint: ctx.exports.CacheEntrypoint,
               envelopeKey: env.OCEL_ENVELOPE_KEY,
             }
           : undefined,

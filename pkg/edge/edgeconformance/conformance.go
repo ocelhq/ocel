@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"maps"
 	"net/netip"
 	"slices"
 	"testing"
@@ -572,17 +571,11 @@ func runBootstrap(t *testing.T, suite Suite) {
 		if !slices.Equal(offerKinds(second.Offers), offerKinds(first.Offers)) {
 			t.Errorf("second Bootstrap offered %v, want the %v the first did: a re-run converges on what is already installed", offerKinds(second.Offers), offerKinds(first.Offers))
 		}
-		if !maps.Equal(second.Values, first.Values) {
-			t.Errorf("second Bootstrap values = %v, want the %v the first published", second.Values, first.Values)
-		}
 
 		if adopt := e.Hooks().PlanAdoption; adopt != nil {
 			adoption, err := adopt(ctx, tier)
 			if err != nil {
 				t.Fatalf("PlanAdoption: %v", err)
-			}
-			if !maps.Equal(adoption.Values, first.Values) {
-				t.Errorf("Adoption values = %v, want the %v Bootstrap published; an origin adopting an installed edge must land on the same coordinates", adoption.Values, first.Values)
 			}
 			offered := slices.Clone(adoption.Offers)
 			slices.Sort(offered)

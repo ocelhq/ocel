@@ -27,7 +27,7 @@ func imageOptimizationPlacements(bucket string) stackPayloads {
 	return stackPayloads{optimizer: optimizerPlacement(bucket)}
 }
 
-func imageOptimizationTemplate(in featureInputs) featureStack {
+func imageOptimizationTemplate(in featureInputs) (featureStack, error) {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketName, "The core bootstrap's asset bucket, where the optimizer reads each build's source images and image config.", in.refs.assetBucket},
 		{paramAssetBucketARN, "ARN of that bucket, so the optimizer's role reaches the asset and image-config prefixes and nothing else.", in.refs.assetBucketARN},
@@ -42,5 +42,5 @@ Description: "Ocel bootstrap feature (%s, %s) - the shared image optimizer every
 			FeatureImageOptimization, in.tier, params,
 			imageOptimizerResources(in.ns, in.tier, in.code.optimizer),
 			imageOptimizerOutputs()),
-	}
+	}, nil
 }

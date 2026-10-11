@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"time"
 
@@ -57,22 +56,16 @@ type edgeKeyOutcome struct {
 type edgeNames struct {
 	user               string
 	credentialsParam   string
-	valuesParam        string
-	cacheStoreParam    string
 	releasesStoreParam string
-	isrWriterParam     string
-	isrWriterSeedParam string
+	purgeSeedParam     string
 	originSecretParam  string
 }
 
 func (n edgeNames) edgeParams() []string {
 	return []string{
 		n.credentialsParam,
-		n.valuesParam,
-		n.cacheStoreParam,
 		n.releasesStoreParam,
-		n.isrWriterParam,
-		n.isrWriterSeedParam,
+		n.purgeSeedParam,
 	}
 }
 
@@ -92,11 +85,8 @@ func edgeNamesFor(ns Namespace, tier environment.Tier, kind edge.Kind) (edgeName
 	return edgeNames{
 		user:               user,
 		credentialsParam:   prefix + "/credentials",
-		valuesParam:        prefix + "/values",
-		cacheStoreParam:    prefix + "/cache-store",
 		releasesStoreParam: prefix + "/releases-store",
-		isrWriterParam:     prefix + "/isr-writer",
-		isrWriterSeedParam: prefix + "/isr-writer-seed",
+		purgeSeedParam:     prefix + "/purge-seed",
 		originSecretParam:  secret,
 	}, nil
 }
@@ -121,65 +111,6 @@ func ReleasesStoreParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) 
 		return "", err
 	}
 	return names.releasesStoreParam, nil
-}
-
-func ISRWriterParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return "", err
-	}
-	return names.isrWriterParam, nil
-}
-
-func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	stored, err := ReadEdgeValues(ctx, ssmClient, ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	if maps.Equal(stored, values) {
-		return nil
-	}
-	payload, err := json.Marshal(values)
-	if err != nil {
-		return fmt.Errorf("marshal edge values: %w", err)
-	}
-	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(names.valuesParam),
-		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this bootstrap to reach it. Rewritten in full by each bootstrap of this tier.", tier)),
-		Value:       aws.String(string(payload)),
-		Type:        ssmtypes.ParameterTypeSecureString,
-		Overwrite:   aws.Bool(true),
-	}); err != nil {
-		return fmt.Errorf("write edge values parameter: %w", err)
-	}
-	return nil
-}
-
-func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (map[string]string, error) {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return nil, err
-	}
-	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(names.valuesParam),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		var notFound *ssmtypes.ParameterNotFound
-		if errors.As(err, &notFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read edge values parameter: %w", err)
-	}
-	var values map[string]string
-	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &values); err != nil {
-		return nil, fmt.Errorf("parse edge values: %w", err)
-	}
-	return values, nil
 }
 
 func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, now time.Time) (edgeKeyOutcome, error) {
@@ -344,14 +275,6 @@ func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, ns Namespace, ti
 	return creds, nil
 }
 
-type CacheStore struct {
-	Bucket          string `json:"bucket"`
-	Endpoint        string `json:"endpoint"`
-	Region          string `json:"region"`
-	AccessKeyID     string `json:"accessKeyId"`
-	SecretAccessKey string `json:"secretAccessKey"`
-}
-
 type ReleasesStore struct {
 	Endpoint            string `json:"endpoint"`
 	ScriptName          string `json:"scriptName"`
@@ -427,175 +350,18 @@ func ReadReleasesStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, t
 	return store, nil
 }
 
-type ISRWriter struct {
-	Endpoint            string `json:"endpoint"`
-	ScriptName          string `json:"scriptName"`
-	BootstrapCredential string `json:"bootstrapCred"`
-}
-
-func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
-	paramName, err := ISRWriterParamFor(ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	writer := ISRWriter{
-		Endpoint:            values[edge.OfferKeyISRWriterEndpoint],
-		ScriptName:          values[edge.OfferKeyISRWriterScriptName],
-		BootstrapCredential: values[edge.OfferKeyISRWriterBootstrapCredential],
-	}
-	stored, err := ReadISRWriterFor(ctx, ssmClient, ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	if writer.BootstrapCredential == "" {
-		if writer.BootstrapCredential = stored.BootstrapCredential; writer.BootstrapCredential == "" {
-			return edgeCredUnrecorded(kind, "ISR writer", writer.ScriptName, paramName)
-		}
-	}
-	if writer == stored {
-		return nil
-	}
-	payload, err := json.Marshal(writer)
-	if err != nil {
-		return fmt.Errorf("marshal isr writer: %w", err)
-	}
-	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's ISR writer, the worker the tag publisher pushes tag snapshots into. Read at runtime by the tag publisher.", tier)),
-		Value:       aws.String(string(payload)),
-		Type:        ssmtypes.ParameterTypeSecureString,
-		Overwrite:   aws.Bool(true),
-	}); err != nil {
-		return fmt.Errorf("write isr writer parameter: %w", err)
-	}
-	return nil
-}
-
-func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (ISRWriter, error) {
-	paramName, err := ISRWriterParamFor(ns, tier, kind)
-	if err != nil {
-		return ISRWriter{}, err
-	}
-	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		var notFound *ssmtypes.ParameterNotFound
-		if errors.As(err, &notFound) {
-			return ISRWriter{}, nil
-		}
-		return ISRWriter{}, fmt.Errorf("read isr writer parameter: %w", err)
-	}
-	var writer ISRWriter
-	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &writer); err != nil {
-		return ISRWriter{}, fmt.Errorf("parse isr writer: %w", err)
-	}
-	return writer, nil
-}
-
-func ISRWriterSeedParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
+func PurgeSeedParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return "", err
 	}
-	return names.isrWriterSeedParam, nil
+	return names.purgeSeedParam, nil
 }
 
-func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
-	paramName, err := ISRWriterSeedParamFor(ns, tier, kind)
+func ensurePurgeSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
+	paramName, err := PurgeSeedParamFor(ns, tier, kind)
 	if err != nil {
 		return "", err
 	}
-	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with, read at runtime by name.", tier))
-}
-
-func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
-	paramName, err := ISRWriterSeedParamFor(ns, tier, kind)
-	if err != nil {
-		return "", err
-	}
-	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		var notFound *ssmtypes.ParameterNotFound
-		if errors.As(err, &notFound) {
-			return "", nil
-		}
-		return "", fmt.Errorf("read isr writer seed parameter: %w", err)
-	}
-	return aws.ToString(out.Parameter.Value), nil
-}
-
-func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	store := CacheStore{
-		Bucket:          values[edge.OfferKeyBucket],
-		Endpoint:        values[edge.OfferKeyEndpoint],
-		Region:          values[edge.OfferKeyRegion],
-		AccessKeyID:     values[edge.OfferKeyAccessKeyID],
-		SecretAccessKey: values[edge.OfferKeySecretAccessKey],
-	}
-
-	stored, err := ReadCacheStore(ctx, ssmClient, ns, tier, kind)
-	if err != nil {
-		return err
-	}
-	if store.SecretAccessKey == "" {
-		if stored.AccessKeyID != store.AccessKeyID || stored.SecretAccessKey == "" {
-			return fmt.Errorf(
-				"the %s edge reoffered cache-store credential %q without a secret, but %s stores no secret for it: "+
-					"a prior bootstrap minted that credential and failed before storing it. Its secret cannot be read "+
-					"back, so delete credential %q for bucket %q at the %s edge and re-run bootstrap to mint a fresh one",
-				kind, store.AccessKeyID, names.cacheStoreParam, store.AccessKeyID, store.Bucket, kind,
-			)
-		}
-		store.SecretAccessKey = stored.SecretAccessKey
-	}
-	if store == stored {
-		return nil
-	}
-
-	payload, err := json.Marshal(store)
-	if err != nil {
-		return fmt.Errorf("marshal cache store: %w", err)
-	}
-	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(names.cacheStoreParam),
-		Description: aws.String(fmt.Sprintf("Ocel: bucket, endpoint and credentials for the %s edge's cache store, where the edge keeps the fetch cache it serves from. This is the only copy of that credential's secret; the %s edge cannot show it again.", tier, kind)),
-		Value:       aws.String(string(payload)),
-		Type:        ssmtypes.ParameterTypeSecureString,
-		Overwrite:   aws.Bool(true),
-	}); err != nil {
-		return fmt.Errorf("write cache store parameter: %w", err)
-	}
-	return nil
-}
-
-func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (CacheStore, error) {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return CacheStore{}, err
-	}
-	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(names.cacheStoreParam),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		var notFound *ssmtypes.ParameterNotFound
-		if errors.As(err, &notFound) {
-			return CacheStore{}, nil
-		}
-		return CacheStore{}, fmt.Errorf("read cache store parameter: %w", err)
-	}
-	var store CacheStore
-	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &store); err != nil {
-		return CacheStore{}, fmt.Errorf("parse cache store: %w", err)
-	}
-	return store, nil
+	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf("Ocel: the secret every release's purge secret on the %s edge is derived from. The tag invalidator signs its purges with it, read at runtime by name.", tier))
 }

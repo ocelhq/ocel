@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"time"
 
@@ -26,7 +25,6 @@ const (
 	kindAccessKey = "AWS::IAM::AccessKey"
 
 	paramCurrent    = "already current"
-	valuesDrifted   = "what the edge hands back differs from what is stored"
 	keyGone         = "the access key it records is no longer on the user"
 	keyUnrecorded   = "it records no access key"
 	keyStale        = "the access key it records is older than 90 days and is rotated"
@@ -157,7 +155,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 }
 
 func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
-	if len(adoption.Values) == 0 && len(adoption.Offers) == 0 {
+	if len(adoption.Offers) == 0 {
 		return nil, nil
 	}
 	names, err := edgeNamesFor(ns, tier, kind)
@@ -166,30 +164,12 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier e
 	}
 
 	var changes []provider.Change
-	if len(adoption.Values) > 0 {
-		stored, err := ReadEdgeValues(ctx, ssmClient, ns, tier, kind)
-		if err != nil {
-			return nil, err
-		}
-		change := provider.Change{Kind: kindParameter, Name: names.valuesParam}
-		switch {
-		case stored == nil:
-			change.Action = provider.ActionCreate
-		case maps.Equal(stored, adoption.Values):
-			change.Action, change.Reason = provider.ActionKeep, paramCurrent
-		default:
-			change.Action, change.Reason = provider.ActionUpdate, valuesDrifted
-		}
-		changes = append(changes, change)
-	}
 
 	for _, adopted := range []struct {
 		offer  edge.OfferKind
 		params []string
 	}{
-		{edge.OfferCacheStore, []string{names.cacheStoreParam}},
-		{edge.OfferReleasesStore, []string{names.releasesStoreParam}},
-		{edge.OfferISRWriter, []string{names.isrWriterParam, names.isrWriterSeedParam}},
+		{edge.OfferReleasesStore, []string{names.releasesStoreParam, names.purgeSeedParam}},
 	} {
 		if !slices.Contains(adoption.Offers, adopted.offer) {
 			continue

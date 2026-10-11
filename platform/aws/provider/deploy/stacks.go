@@ -278,9 +278,9 @@ func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.Co
 }
 
 func (r *release) Secrets(spec provider.StackSpec) []string {
-	secrets := []string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.ISRWriterSeed}
-	if r.cfg.ISRWriterSeed != "" && spec.App != nil && spec.App.ISR != nil {
-		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.ISRWriterSeed, spec.App.ISR.Prefix))
+	secrets := []string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.PurgeSeed}
+	if r.cfg.PurgeSeed != "" && spec.App != nil && spec.App.ISR != nil {
+		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Prefix))
 	}
 	if spec.App != nil {
 		secrets = append(secrets, listPreviewGateSecrets(spec.App.PreviewGate)...)

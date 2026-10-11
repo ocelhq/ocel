@@ -50,7 +50,5 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		StoreScriptName:          adopted.ReleasesStore.ScriptName,
 		StoreEndpoint:            adopted.ReleasesStore.Endpoint,
 		StoreBootstrapCredential: credentials.ReleasesStore,
-		ISRWriterScriptName:      adopted.ISRWriter.ScriptName,
-		Values:                   adopted.Values,
 	}.Build()
 }

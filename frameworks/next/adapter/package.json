@@ -11,7 +11,7 @@
     "@framework/node-build": "workspace:*"
   },
   "scripts": {
-    "build": "tsc && node scripts/copy-edge-handler.mjs",
+    "build": "tsc && node scripts/copy-runtime-files.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

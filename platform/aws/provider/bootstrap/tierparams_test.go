@@ -47,11 +47,8 @@ func fullProductionParams() map[string]string {
 	return map[string]string{
 		passphraseParam:          "pass-1",
 		names.credentialsParam:   `{"accessKeyId":"AKIA1","secretAccessKey":"sec-1"}`,
-		names.valuesParam:        `{"bucketName":"edge-cache-7f3"}`,
-		names.cacheStoreParam:    `{"bucket":"cache-1","endpoint":"https://r2","region":"auto","accessKeyId":"AKIA2","secretAccessKey":"sec-2"}`,
 		names.releasesStoreParam: `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
-		names.isrWriterParam:     `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
-		names.isrWriterSeedParam: "seed-1",
+		names.purgeSeedParam:     "seed-1",
 		names.originSecretParam:  `{"current":"origin-1","createdAt":"2026-01-01T00:00:00Z"}`,
 	}
 }
@@ -70,11 +67,8 @@ func TestReadTierParamsBatches(t *testing.T) {
 	want := []string{
 		passphraseParam,
 		names.credentialsParam,
-		names.valuesParam,
-		names.cacheStoreParam,
 		names.releasesStoreParam,
-		names.isrWriterParam,
-		names.isrWriterSeedParam,
+		names.purgeSeedParam,
 		names.originSecretParam,
 	}
 	slices.Sort(want)
@@ -98,20 +92,11 @@ func TestReadTierParamsBatches(t *testing.T) {
 	if got.EdgeCredentialsErr != nil {
 		t.Errorf("EdgeCredentialsErr = %v, want nil", got.EdgeCredentialsErr)
 	}
-	if !reflect.DeepEqual(got.EdgeValues, map[string]string{"bucketName": "edge-cache-7f3"}) {
-		t.Errorf("EdgeValues = %v", got.EdgeValues)
-	}
-	if got.CacheStore.Bucket != "cache-1" || got.CacheStore.SecretAccessKey != "sec-2" {
-		t.Errorf("CacheStore = %+v", got.CacheStore)
-	}
 	if got.ReleasesStore.ScriptName != "store" {
 		t.Errorf("ReleasesStore = %+v", got.ReleasesStore)
 	}
-	if got.ISRWriter.Endpoint != "https://isr" {
-		t.Errorf("ISRWriter = %+v", got.ISRWriter)
-	}
-	if got.ISRWriterSeed != "seed-1" {
-		t.Errorf("ISRWriterSeed = %q, want seed-1", got.ISRWriterSeed)
+	if got.PurgeSeed != "seed-1" {
+		t.Errorf("PurgeSeed = %q, want seed-1", got.PurgeSeed)
 	}
 }
 
@@ -119,8 +104,8 @@ func TestReadTierParamsPreviewNames(t *testing.T) {
 	preview := cloudflareNames(environment.TierPreview)
 	ssmc := &fakeBatchSSM{params: map[string]string{
 		defaultNamespace.PassphraseParamFor(environment.TierPreview): "pass-1",
-		preview.credentialsParam:   `{"accessKeyId":"AKIA-prev"}`,
-		preview.isrWriterSeedParam: "seed-prev",
+		preview.credentialsParam: `{"accessKeyId":"AKIA-prev"}`,
+		preview.purgeSeedParam:   "seed-prev",
 	}}
 
 	got, err := ReadTierParams(context.Background(), ssmc, defaultNamespace, environment.TierPreview, KindCloudflare)
@@ -130,8 +115,8 @@ func TestReadTierParamsPreviewNames(t *testing.T) {
 	if got.EdgeCredentials.AccessKeyID != "AKIA-prev" {
 		t.Errorf("EdgeCredentials = %+v, want the preview credential", got.EdgeCredentials)
 	}
-	if got.ISRWriterSeed != "seed-prev" {
-		t.Errorf("ISRWriterSeed = %q, want seed-prev", got.ISRWriterSeed)
+	if got.PurgeSeed != "seed-prev" {
+		t.Errorf("PurgeSeed = %q, want seed-prev", got.PurgeSeed)
 	}
 	for _, name := range ssmc.requested {
 		if name == cloudflareNames(environment.TierProduction).credentialsParam {
@@ -195,8 +180,8 @@ func TestReadTierParamsEdgeFailures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadTierParams: %v", err)
 		}
-		if got.EdgeCredentialsErr == nil {
-			t.Error("EdgeCredentialsErr = nil, want the absence reported")
+		if !errors.Is(got.EdgeCredentialsErr, ErrEdgeCredentialsAbsent) {
+			t.Errorf("EdgeCredentialsErr = %v, want the absence reported", got.EdgeCredentialsErr)
 		}
 		if got.EdgeCredentials != (EdgeCredentials{}) {
 			t.Errorf("EdgeCredentials = %+v, want the zero credentials", got.EdgeCredentials)
@@ -214,43 +199,11 @@ func TestReadTierParamsEdgeFailures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadTierParams: %v", err)
 		}
-		if got.EdgeCredentialsErr == nil {
-			t.Error("EdgeCredentialsErr = nil, want the parse failure reported")
+		if got.EdgeCredentialsErr == nil || errors.Is(got.EdgeCredentialsErr, ErrEdgeCredentialsAbsent) {
+			t.Errorf("EdgeCredentialsErr = %v, want the parse failure reported as something other than absence", got.EdgeCredentialsErr)
 		}
 		if got.EdgeCredentials != (EdgeCredentials{}) {
 			t.Errorf("EdgeCredentials = %+v, want the zero credentials", got.EdgeCredentials)
-		}
-	})
-
-	t.Run("absent values are silent", func(t *testing.T) {
-		params := fullProductionParams()
-		delete(params, cloudflareNames(environment.TierProduction).valuesParam)
-
-		got, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, environment.TierProduction, KindCloudflare)
-		if err != nil {
-			t.Fatalf("ReadTierParams: %v", err)
-		}
-		if got.EdgeValuesErr != nil {
-			t.Errorf("EdgeValuesErr = %v, want an absent values parameter to go unreported", got.EdgeValuesErr)
-		}
-		if got.EdgeValues != nil {
-			t.Errorf("EdgeValues = %v, want none", got.EdgeValues)
-		}
-	})
-
-	t.Run("unparsable values are reported", func(t *testing.T) {
-		params := fullProductionParams()
-		params[cloudflareNames(environment.TierProduction).valuesParam] = "{not json"
-
-		got, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, environment.TierProduction, KindCloudflare)
-		if err != nil {
-			t.Fatalf("ReadTierParams: %v", err)
-		}
-		if got.EdgeValuesErr == nil {
-			t.Error("EdgeValuesErr = nil, want the parse failure reported")
-		}
-		if got.EdgeValues != nil {
-			t.Errorf("EdgeValues = %v, want none", got.EdgeValues)
 		}
 	})
 }
@@ -299,26 +252,18 @@ func TestReadTierParamsAbsentOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadTierParams: %v", err)
 	}
-	if got.CacheStore != (CacheStore{}) {
-		t.Errorf("CacheStore = %+v, want the zero store", got.CacheStore)
-	}
 	if got.ReleasesStore != (ReleasesStore{}) {
 		t.Errorf("ReleasesStore = %+v, want the zero store", got.ReleasesStore)
 	}
-	if got.ISRWriter != (ISRWriter{}) {
-		t.Errorf("ISRWriter = %+v, want the zero writer", got.ISRWriter)
-	}
-	if got.ISRWriterSeed != "" {
-		t.Errorf("ISRWriterSeed = %q, want empty", got.ISRWriterSeed)
+	if got.PurgeSeed != "" {
+		t.Errorf("PurgeSeed = %q, want empty", got.PurgeSeed)
 	}
 }
 
 func TestReadTierParamsUnparsableStores(t *testing.T) {
 	names := cloudflareNames(environment.TierProduction)
 	for _, name := range []string{
-		names.cacheStoreParam,
 		names.releasesStoreParam,
-		names.isrWriterParam,
 	} {
 		t.Run(name, func(t *testing.T) {
 			params := fullProductionParams()

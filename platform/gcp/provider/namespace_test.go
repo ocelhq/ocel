@@ -59,11 +59,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				}
 			}
 			for tier, want := range map[environment.Tier]string{
-				environment.TierProduction: tc.stem + "-production-cloudflare-isr-writer-seed",
-				environment.TierPreview:    tc.stem + "-preview-cloudflare-isr-writer-seed",
+				environment.TierProduction: tc.stem + "-production-cloudflare-purge-seed",
+				environment.TierPreview:    tc.stem + "-preview-cloudflare-purge-seed",
 			} {
-				if got := names.ISRWriterSeedSecret(tier, edge.Kind("cloudflare")); got != want {
-					t.Errorf("ISRWriterSeedSecret(%s) = %q, want %q", tier, got, want)
+				if got := names.PurgeSeedSecret(tier, edge.Kind("cloudflare")); got != want {
+					t.Errorf("PurgeSeedSecret(%s) = %q, want %q", tier, got, want)
 				}
 			}
 			if got, want := names.Repository(environment.TierPreview), tc.stem+"-acme-prod-preview"; got != want {

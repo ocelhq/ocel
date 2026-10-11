@@ -65,14 +65,11 @@ type Config struct {
 
 	ImageOptimizerURL string
 
-	CacheStoreBucket  string
-	CacheStoreObjects payloads.ObjectStore
-	Env               string
+	Env string
 
-	EdgeAccessKeyID string
-	EdgeSecretKey   string
-
-	EdgeValues map[string]string
+	EdgeAccessKeyID    string
+	EdgeSecretKey      string
+	EdgeCredentialsErr error
 
 	GlobalPreviewDomain string
 
@@ -81,10 +78,7 @@ type Config struct {
 	StoreEndpoint            string
 	StoreBootstrapCredential string
 
-	ISRWriterEndpoint            string
-	ISRWriterBootstrapCredential string
-	ISRWriterScriptName          string
-	ISRWriterSeed                string
+	PurgeSeed string
 
 	OriginSecret         string
 	PreviousOriginSecret string

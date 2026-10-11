@@ -133,30 +133,6 @@ func TestScriptBindings(t *testing.T) {
 			want:   nil,
 		},
 		{
-			name:   "an object store with both halves maps to an r2_bucket binding",
-			worker: edge.Worker{Main: mainModule(), ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE", Bucket: "ocel-edge-cache"}},
-			typ:    "r2_bucket",
-			want:   []map[string]string{{"name": "OCEL_CACHE_STORE", "bucket_name": "ocel-edge-cache"}},
-		},
-		{
-			name:   "an object store with neither half emits no bucket binding",
-			worker: edge.Worker{Main: mainModule(), ObjectStore: edge.ObjectStore{}},
-			typ:    "r2_bucket",
-			want:   nil,
-		},
-		{
-			name:   "an object store binding with no bucket emits no bucket binding",
-			worker: edge.Worker{Main: mainModule(), ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"}},
-			typ:    "r2_bucket",
-			want:   nil,
-		},
-		{
-			name:   "a bucket nothing binds emits no bucket binding",
-			worker: edge.Worker{Main: mainModule(), ObjectStore: edge.ObjectStore{Bucket: "ocel-edge-cache"}},
-			typ:    "r2_bucket",
-			want:   nil,
-		},
-		{
 			name:   "a service maps to a service binding",
 			worker: edge.Worker{Main: mainModule(), Services: map[string]string{"RELEASES": "ocel-proj-store"}},
 			typ:    "service",
@@ -201,7 +177,7 @@ func TestScriptBindings(t *testing.T) {
 			Main:      mainModule(),
 			Variables: map[string]string{"FUNCTION_URLS": "{}"},
 		}, "")
-		for _, typ := range []string{"r2_bucket", "worker_loader", "service", "secret_text", "assets"} {
+		for _, typ := range []string{"worker_loader", "service", "secret_text", "assets"} {
 			if got := bindingsByType(meta, typ); len(got) != 0 {
 				t.Errorf("%s bindings = %v, want none", typ, got)
 			}
@@ -276,72 +252,9 @@ func TestBuildScriptMultipart(t *testing.T) {
 	})
 }
 
-func TestBindObjectStore(t *testing.T) {
-	t.Run("takes the bucket from the bootstrap values", func(t *testing.T) {
-		worker := edge.Worker{ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"}}
-
-		bound := bindObjectStore(worker, map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"})
-		if bound.ObjectStore.Bucket != "ocel-edge-cache-preview" {
-			t.Errorf("ObjectStore.Bucket = %q, want the bootstrapped bucket", bound.ObjectStore.Bucket)
-		}
-	})
-
-	t.Run("leaves the bucket empty when bootstrap reported none", func(t *testing.T) {
-		worker := edge.Worker{ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"}}
-
-		unbootstrapped := bindObjectStore(worker, map[string]string{"unrelated": "x"})
-		if unbootstrapped.ObjectStore.Bucket != "" {
-			t.Errorf("ObjectStore.Bucket = %q, want empty when bootstrap reported no cache bucket", unbootstrapped.ObjectStore.Bucket)
-		}
-	})
-
-	t.Run("a bundle with no store still gets the binding", func(t *testing.T) {
-		composed := bindObjectStore(
-			withService(edge.Worker{Main: mainModule()}, "RELEASES", "ocel-proj-store"),
-			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
-		)
-
-		buckets := bindingsByType(metadataFromMultipart(t, composed, ""), "r2_bucket")
-		if len(buckets) != 1 {
-			t.Fatalf("got %d r2_bucket bindings, want 1", len(buckets))
-		}
-		if buckets[0]["name"] != "OCEL_CACHE_STORE" {
-			t.Errorf("r2_bucket binding name = %v, want OCEL_CACHE_STORE", buckets[0]["name"])
-		}
-		if buckets[0]["bucket_name"] != "ocel-edge-cache" {
-			t.Errorf("r2_bucket bucket_name = %v, want ocel-edge-cache", buckets[0]["bucket_name"])
-		}
-	})
-
-	t.Run("binding a store after a service leaves both bindings in place", func(t *testing.T) {
-		worker := edge.Worker{
-			Main:        mainModule(),
-			ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"},
-		}
-
-		composed := bindObjectStore(
-			withService(worker, "RELEASES", "ocel-proj-store"),
-			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
-		)
-		meta := metadataFromMultipart(t, composed, "")
-
-		buckets := bindingsByType(meta, "r2_bucket")
-		if len(buckets) != 1 || buckets[0]["bucket_name"] != "ocel-edge-cache" {
-			t.Errorf("r2_bucket bindings = %v, want one bound to ocel-edge-cache", buckets)
-		}
-		services := bindingsByType(meta, "service")
-		if len(services) != 1 || services[0]["service"] != "ocel-proj-store" {
-			t.Errorf("service bindings = %v, want one bound to ocel-proj-store", services)
-		}
-	})
-}
-
 func TestBindCodeLoader(t *testing.T) {
 	t.Run("a bundle with no loader still gets the binding beside its store", func(t *testing.T) {
-		composed := bindCodeLoader(bindObjectStore(
-			edge.Worker{Main: mainModule()},
-			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
-		))
+		composed := bindCodeLoader(withService(edge.Worker{Main: mainModule()}, "RELEASES", "ocel-proj-store"))
 		meta := metadataFromMultipart(t, composed, "")
 
 		loaders := bindingsByType(meta, "worker_loader")
@@ -351,8 +264,8 @@ func TestBindCodeLoader(t *testing.T) {
 		if loaders[0]["name"] != codeLoaderBinding {
 			t.Errorf("worker_loader binding name = %v, want %q", loaders[0]["name"], codeLoaderBinding)
 		}
-		if got := len(bindingsByType(meta, "r2_bucket")); got != 1 {
-			t.Errorf("r2_bucket bindings = %d, want the object store's binding to survive", got)
+		if got := len(bindingsByType(meta, "service")); got != 1 {
+			t.Errorf("service bindings = %d, want the store's binding to survive", got)
 		}
 	})
 }
@@ -535,29 +448,24 @@ func TestTeardown(t *testing.T) {
 		{
 			name: "production takes the workers production bootstrapped",
 			tier: environment.TierProduction,
-			want: []string{sharedStoreScriptName, isrWriterScriptName},
+			want: []string{sharedStoreScriptName},
 		},
 		{
 			name: "preview takes the workers preview bootstrapped",
 			tier: environment.TierPreview,
-			want: []string{previewStoreScriptName, previewISRWriterScriptName},
+			want: []string{previewStoreScriptName},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(envAccountID, "acct")
 
-			store := cacheStoreName(tc.tier)
-			m := &cfMock{
-				zoneID:         "zone1",
-				zoneName:       "app.com",
-				existingTokens: []map[string]any{{"id": "token-" + string(tc.tier), "name": store}},
-			}
+			m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 			p := m.provider(t)
 			if err := p.Teardown(t.Context(), tc.tier); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			assertSet(t, "deleted scripts", m.deletedScripts, tc.want)
-			assertSet(t, "deleted tokens", m.deletedTokens, []string{"token-" + string(tc.tier)})
+			assertNoAPITokenOrR2Calls(t, m)
 		})
 	}
 

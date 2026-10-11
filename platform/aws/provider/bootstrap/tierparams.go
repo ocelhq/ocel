@@ -27,13 +27,8 @@ type TierParams struct {
 	EdgeCredentials    EdgeCredentials
 	EdgeCredentialsErr error
 
-	EdgeValues    map[string]string
-	EdgeValuesErr error
-
-	CacheStore    CacheStore
 	ReleasesStore ReleasesStore
-	ISRWriter     ISRWriter
-	ISRWriterSeed string
+	PurgeSeed     string
 
 	OriginSecret    OriginSecret
 	OriginSecretErr error
@@ -59,7 +54,6 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 		OriginSecret:       secret,
 		OriginSecretErr:    secretErr,
 		EdgeCredentialsErr: errUnnamedEdge,
-		EdgeValuesErr:      errUnnamedEdge,
 	}, nil
 }
 
@@ -81,6 +75,8 @@ func refuseMissingPassphrase(name string, tier environment.Tier) error {
 		"%s, the passphrase the %s tier's Pulumi state is encrypted under, does not exist: run `ocel bootstrap %s` first", name, tier, tier)
 }
 
+var ErrEdgeCredentialsAbsent = errors.New("no edge credentials are stored")
+
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
 
 func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (TierParams, error) {
@@ -92,11 +88,8 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 	wanted := []string{
 		passphraseParam,
 		names.credentialsParam,
-		names.valuesParam,
-		names.cacheStoreParam,
 		names.releasesStoreParam,
-		names.isrWriterParam,
-		names.isrWriterSeedParam,
+		names.purgeSeedParam,
 		names.originSecretParam,
 	}
 
@@ -119,32 +112,15 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 			p.EdgeCredentialsErr = fmt.Errorf("parse edge credentials: %w", err)
 		}
 	} else {
-		p.EdgeCredentialsErr = fmt.Errorf("read edge credentials parameter: %s not found", names.credentialsParam)
+		p.EdgeCredentialsErr = fmt.Errorf("%w at %s", ErrEdgeCredentialsAbsent, names.credentialsParam)
 	}
 
-	if raw, ok := found[names.valuesParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.EdgeValues); err != nil {
-			p.EdgeValues = nil
-			p.EdgeValuesErr = fmt.Errorf("parse edge values: %w", err)
-		}
-	}
-
-	if raw, ok := found[names.cacheStoreParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.CacheStore); err != nil {
-			return TierParams{}, fmt.Errorf("parse cache store: %w", err)
-		}
-	}
 	if raw, ok := found[names.releasesStoreParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.ReleasesStore); err != nil {
 			return TierParams{}, fmt.Errorf("parse releases store: %w", err)
 		}
 	}
-	if raw, ok := found[names.isrWriterParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.ISRWriter); err != nil {
-			return TierParams{}, fmt.Errorf("parse isr writer: %w", err)
-		}
-	}
-	p.ISRWriterSeed = found[names.isrWriterSeedParam]
+	p.PurgeSeed = found[names.purgeSeedParam]
 	p.OriginSecret, p.OriginSecretErr = originSecretIn(found, names.originSecretParam)
 	return p, nil
 }

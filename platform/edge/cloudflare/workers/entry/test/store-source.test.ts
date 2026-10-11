@@ -1,4 +1,3 @@
-import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { openEntrySource } from "../src/store-source";
@@ -6,12 +5,19 @@ import { withGlobalFetch } from "./origin-deps";
 
 const key = "prod/p1/web/r9source0/isr/cache/blog/a.cache.json";
 
-const bothStores = {
+const awsBucket = {
   OCEL_ASSET_BUCKET: "assets",
   OCEL_AWS_REGION: "eu-west-2",
   OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
   OCEL_EDGE_SECRET_KEY: "secretkey",
-  OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+} as unknown as Env;
+
+const hmacBucket = {
+  OCEL_ASSET_STORE_ENDPOINT: "https://storage.googleapis.com",
+  OCEL_ASSET_STORE_BUCKET: "tier-bucket",
+  OCEL_ASSET_STORE_PREFIX: "assets/",
+  OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOGEXAMPLE",
+  OCEL_ASSET_STORE_SECRET_KEY: "secretkey",
 } as unknown as Env;
 
 function bucketAnswering(answer: () => Response) {
@@ -24,38 +30,33 @@ function bucketAnswering(answer: () => Response) {
 }
 
 describe("the store a Serve miss reads page entries from", () => {
-  it("reads the asset bucket first", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("reads the AWS asset bucket", async () => {
     const bucket = bucketAnswering(() => new Response("from the bucket"));
 
     const read = await withGlobalFetch(bucket.fetch, async () =>
-      (await openEntrySource(bothStores)?.get(key))?.text(),
+      (await openEntrySource(awsBucket)?.get(key))?.text(),
     );
 
     expect(read).toBe("from the bucket");
     expect(bucket.asked).toEqual([`https://assets.s3.eu-west-2.amazonaws.com/${key}`]);
   });
 
-  it("reads the bound R2 store when the asset bucket has no such entry", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("finds no entry the bucket does not hold, and reads nowhere else", async () => {
     const bucket = bucketAnswering(() => new Response(null, { status: 404 }));
 
     const read = await withGlobalFetch(bucket.fetch, async () =>
-      (await openEntrySource(bothStores)?.get(key))?.text(),
+      openEntrySource(awsBucket)?.get(key),
     );
 
-    expect(read).toBe("from r2");
+    expect(read).toBeNull();
+    expect(bucket.asked).toHaveLength(1);
   });
 
-  it("reads the R2 store alone when the edge holds no key to a bucket", async () => {
-    await env.TAG_SNAPSHOT_STORE.put(key, "from r2");
+  it("is not opened when the edge holds no key to a bucket", () => {
+    expect(openEntrySource({} as Env)).toBeUndefined();
+  });
 
-    const read = await (
-      await openEntrySource({ OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE } as unknown as Env)?.get(
-        key,
-      )
-    )?.text();
-
-    expect(read).toBe("from r2");
+  it("is not opened on the Google tier bucket, which keeps no page entry the edge may read", () => {
+    expect(openEntrySource(hmacBucket)).toBeUndefined();
   });
 });

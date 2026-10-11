@@ -10,43 +10,39 @@ import (
 )
 
 type stampedSpec struct {
-	Generic             edge.Worker
-	GenericName         string
-	Slug                string
-	StoreScriptName     string
-	ISRWriterScriptName string
-	StoreEndpoint       string
-	Domains             []string
-	PruneOnly           bool
-	PruneRoutes         bool
-	PruneWorkerStem     string
-	RequiredRecord      string
-	Values              map[string]string
-	CompatDate          string
-	CompatFlags         []string
-	Observability       map[string]any
-	PreviewGate         *edge.PreviewGate
+	Generic         edge.Worker
+	GenericName     string
+	Slug            string
+	StoreScriptName string
+	StoreEndpoint   string
+	Domains         []string
+	PruneOnly       bool
+	PruneRoutes     bool
+	PruneWorkerStem string
+	RequiredRecord  string
+	CompatDate      string
+	CompatFlags     []string
+	Observability   map[string]any
+	PreviewGate     *edge.PreviewGate
 }
 
 func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {
 	sum := sha256.New()
 	if err := json.NewEncoder(sum).Encode(stampedSpec{
-		Generic:             generic,
-		GenericName:         spec.Program.Name,
-		Slug:                spec.Slug,
-		StoreScriptName:     spec.Program.StoreScriptName,
-		ISRWriterScriptName: spec.Program.ISRWriterScriptName,
-		StoreEndpoint:       spec.Program.StoreEndpoint,
-		Domains:             spec.Domains,
-		PruneOnly:           spec.PruneOnly,
-		PruneRoutes:         spec.PruneRoutes,
-		PruneWorkerStem:     spec.Program.PruneWorkerStem,
-		RequiredRecord:      spec.Program.RequiredRecord,
-		Values:              spec.Values,
-		CompatDate:          compatDate,
-		CompatFlags:         compatFlags,
-		Observability:       observability(),
-		PreviewGate:         spec.PreviewGate,
+		Generic:         generic,
+		GenericName:     spec.Program.Name,
+		Slug:            spec.Slug,
+		StoreScriptName: spec.Program.StoreScriptName,
+		StoreEndpoint:   spec.Program.StoreEndpoint,
+		Domains:         spec.Domains,
+		PruneOnly:       spec.PruneOnly,
+		PruneRoutes:     spec.PruneRoutes,
+		PruneWorkerStem: spec.Program.PruneWorkerStem,
+		RequiredRecord:  spec.Program.RequiredRecord,
+		CompatDate:      compatDate,
+		CompatFlags:     compatFlags,
+		Observability:   observability(),
+		PreviewGate:     spec.PreviewGate,
 	}); err != nil {
 		return "", fmt.Errorf("hash stack spec: %w", err)
 	}

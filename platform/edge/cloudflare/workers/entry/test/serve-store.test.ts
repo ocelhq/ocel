@@ -20,6 +20,19 @@ declare module "cloudflare:test" {
   }
 }
 
+const BUCKET_HOST = "assets-bucket.s3.us-east-1.amazonaws.com";
+
+const objects = new Map<string, string>();
+
+function viaBucket(next: typeof fetch): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { host, pathname } = new URL(new Request(input as RequestInfo, init).url);
+    if (host !== BUCKET_HOST) return next(input, init);
+    const body = objects.get(decodeURIComponent(pathname.slice(1)));
+    return body === undefined ? new Response("<Error/>", { status: 404 }) : new Response(body);
+  }) as typeof fetch;
+}
+
 const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
 const entryKey = `${isrPrefix}/cache/blog/a.cache.json`;
@@ -99,7 +112,8 @@ function harness(
       RELEASES: {
         readServedRecord: async () => ({ kind: "record", record }),
       },
-      OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+      OCEL_ASSET_BUCKET: "assets-bucket",
+      OCEL_AWS_REGION: "us-east-1",
       OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
       OCEL_EDGE_SECRET_KEY: "secretkey",
     } as unknown as Env,
@@ -121,14 +135,14 @@ function harness(
     request,
     fetchOrigin: async <T>(run: () => Promise<T>) =>
       withGlobalFetch(
-        (async (input: RequestInfo | URL, init?: RequestInit) => {
+        viaBucket((async (input: RequestInfo | URL, init?: RequestInit) => {
           originCalls.push(new Request(input as RequestInfo, init));
           if (options.origin) return options.origin();
           return new Response("<html>from the origin</html>", {
             status: originStatus,
             headers: { "cache-control": "s-maxage=300" },
           });
-        }) as typeof fetch,
+        }) as typeof fetch),
         run,
       ),
   };
@@ -138,15 +152,22 @@ function harness(
 const fallbackKey = `${isrPrefix}/cache/blog/[id].cache.json`;
 
 async function seed(entry: object | null, key = entryKey): Promise<void> {
-  if (entry) await env.TAG_SNAPSHOT_STORE.put(key, JSON.stringify(entry));
-  else await env.TAG_SNAPSHOT_STORE.delete(key);
+  if (entry) objects.set(key, JSON.stringify(entry));
+  else objects.delete(key);
 }
 
 type Used = Harness & { request: (path?: string) => Request };
 
+const realFetch = globalThis.fetch;
+
 beforeEach(async () => {
+  globalThis.fetch = viaBucket(realFetch);
   await seed(null);
   await seed(null, fallbackKey);
+});
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
 });
 
 describe("Serve answering a miss from the durable store", () => {
