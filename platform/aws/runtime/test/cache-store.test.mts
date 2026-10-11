@@ -460,6 +460,15 @@ test("tags a page entry edge-readable when the edge reads the asset bucket with 
   expect(put.Tagging).toBe(edgeReadableTagging);
 });
 
+test("never tags an image entry edge-readable, since the edge serves no image from the store", async () => {
+  process.env.OCEL_ISR_EDGE_READABLE = "1";
+  const { store, sent } = await entryStore();
+
+  await store.writeEntry("_next/image/abc", { lastModified: 1, value: { kind: "IMAGE" } });
+
+  expect(putsOf(sent)[0].Tagging).toBeUndefined();
+});
+
 test("never tags a data-cache entry edge-readable, however the edge reads", async () => {
   process.env.OCEL_ISR_EDGE_READABLE = "1";
   const { store, sent } = await entryStore();

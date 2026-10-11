@@ -29,6 +29,8 @@ function openAdoptedEntryStore(isrPrefix: string): EntryStore {
   };
 }
 
+const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
+
 export function newAwsCacheStore(publish: PublishTag): CacheStore {
   const prefix = requireEnv("OCEL_ISR_PREFIX");
   const table = requireEnv("OCEL_STATE_TABLE");
@@ -76,13 +78,15 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
     );
   }
 
-  const pageTagging = edgeReadable() ? edgeReadableTagging : undefined;
+  const tagsPages = edgeReadable();
+  const taggingOf = (entry: CacheEntryFile) =>
+    tagsPages && EDGE_SERVED_KINDS.has(entry.value?.kind) ? edgeReadableTagging : undefined;
 
   const entries: EntryStore = entriesAdopted()
     ? openAdoptedEntryStore(prefix)
     : {
         read: async (key) => read(provider, objectKey(key)),
-        write: async (key, entry) => write(provider, objectKey(key), entry, pageTagging),
+        write: async (key, entry) => write(provider, objectKey(key), entry, taggingOf(entry)),
       };
 
   return {
