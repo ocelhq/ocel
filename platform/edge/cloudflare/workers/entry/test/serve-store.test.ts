@@ -9,7 +9,6 @@ import {
   RENDER_RELEASE_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
-import { dropTimesMemo } from "../src/store-read";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
 
 const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
@@ -134,7 +133,6 @@ async function seed(entry: object | null, key = entryKey): Promise<void> {
 type Used = Harness & { request: (path?: string) => Request };
 
 beforeEach(async () => {
-  dropTimesMemo();
   await seed(null);
   await seed(null, fallbackKey);
 });
