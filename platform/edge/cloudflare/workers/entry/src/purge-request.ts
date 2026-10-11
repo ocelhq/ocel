@@ -10,7 +10,7 @@ import type { Env } from "./env";
 import type { RaisedTag } from "./purge-backlog";
 import type { TagTimes } from "./purge-times";
 
-const PURGE_QUEUE_NAME = "purge";
+export const PURGE_QUEUE_NAME = "purge";
 
 const IN_BAND_QUEUE_NAME = "in-band";
 

@@ -201,6 +201,71 @@ describe("the queue an in-band purge falls back to", () => {
   });
 });
 
+describe("the in-band queue recording the purge times", () => {
+  it("records the time of a tag it purges in the purge queue the next read asks", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const tag = "rrecorded|a";
+      const exports = { PurgeQueue: env.PURGE_QUEUE };
+      const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
+      const durable = openPurgeQueue(exports) as DurableObjectStub<PurgeQueue>;
+      const purged: string[] = [];
+      await runInDurableObject(fallback, async (instance) => {
+        instance.serve = {
+          purgeTags: async (_mode, tags) => {
+            purged.push(...tags);
+            return { ok: true };
+          },
+        };
+      });
+
+      await fallback.raise("purge", [{ tag, raisedAt: Date.now() }]);
+      vi.setSystemTime(Date.now() + 2_000);
+      await runDurableObjectAlarm(fallback);
+
+      expect(purged).toContain(tag);
+      expect((await durable.readTimes([tag]))[tag]?.purgedAt).toBeGreaterThanOrEqual(
+        1_800_000_000_000,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("purges nothing, and keeps the tag pending, while the time cannot be recorded", async () => {
+    const tag = "runrecorded|a";
+    const exports = { PurgeQueue: env.PURGE_QUEUE };
+    const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
+    const purged: string[] = [];
+    await runInDurableObject(fallback, async (instance) => {
+      instance.serve = {
+        purgeTags: async (_mode, tags) => {
+          purged.push(...tags);
+          return { ok: true };
+        },
+      };
+      const recorder = instance.recorder;
+      instance.recorder = {
+        record: async (mode, tags) => {
+          if (tags.some((raised) => raised.tag === tag)) {
+            throw new Error("the purge queue is unreachable");
+          }
+          await recorder.record(mode, tags);
+        },
+      };
+    });
+
+    await fallback.raise("purge", [{ tag, raisedAt: Date.now() }]);
+    await runDurableObjectAlarm(fallback);
+
+    expect(purged).not.toContain(tag);
+    await runInDurableObject(fallback, async (_instance, state) => {
+      expect(newSqliteBacklogStore(state.storage).readBatch("purge", 100)).toContain(tag);
+    });
+  });
+});
+
 describe("the PurgeQueue's port to Serve", () => {
   it("purges through a Serve stub with the props every page is stored under", async () => {
     const asked: ServeProps[] = [];
