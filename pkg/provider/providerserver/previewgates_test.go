@@ -137,3 +137,71 @@ func TestUsePreviewWildcardHandsTheSharedEntryEveryRecordedGate(t *testing.T) {
 		t.Errorf("Secrets[%s] = %+v, want every recorded gate, %+v", edge.PreviewGatesVar, got, recordedGates)
 	}
 }
+
+func gatedDirectPreviewDeployed(t *testing.T, wildcard string, hostnames ...string) *fake.Provider {
+	t.Helper()
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	if wildcard != "" {
+		seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: wildcard, Edge: fake.KindDirect})
+	}
+	seedPreviewGates(t, vendor, recordedGates)
+	req := declaresPreview(previewDeployRequest(), hostnames...)
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	return vendor
+}
+
+func onlyDirectStack(t *testing.T, vendor *fake.Provider) edge.StackSpec {
+	t.Helper()
+	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect).Stacks()
+	if len(stacks) != 1 {
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
+	}
+	return stacks[0]
+}
+
+func TestAPreviewDeployOnAnEdgeThatRunsNoCodeHandsItsStackTheGateRecordedForItsProject(t *testing.T) {
+	vendor := gatedDirectPreviewDeployed(t, "", "*.preview.shop.example")
+
+	got := onlyDirectStack(t, vendor).PreviewGate
+	if got == nil || !reflect.DeepEqual(*got, shopGate) {
+		t.Errorf("PreviewGate = %+v, want the gate recorded for shop, %+v", got, shopGate)
+	}
+}
+
+func TestAPreviewDeployOnASharedWildcardOfAnEdgeThatRunsNoCodeHandsItsStackTheGateRecordedForItsProject(t *testing.T) {
+	vendor := gatedDirectPreviewDeployed(t, "preview.acme.com")
+
+	got := onlyDirectStack(t, vendor).PreviewGate
+	if got == nil || !reflect.DeepEqual(*got, shopGate) {
+		t.Errorf("PreviewGate = %+v, want the gate recorded for shop, %+v", got, shopGate)
+	}
+}
+
+func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsStackNone(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedPreviewGates(t, vendor, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	if got := onlyDirectStack(t, vendor).PreviewGate; got != nil {
+		t.Errorf("PreviewGate = %+v, want none: no gate is recorded for shop", got)
+	}
+}
+
+func TestAPreviewDeployOnAnEdgeThatRunsCodeLeavesTheGateToItsProgram(t *testing.T) {
+	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
+
+	if got := onlyStack(t, vendor).PreviewGate; got != nil {
+		t.Errorf("PreviewGate = %+v, want none: the worker secret carries the gate", got)
+	}
+}

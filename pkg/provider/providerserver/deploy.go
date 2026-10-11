@@ -628,12 +628,19 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	}
 	var base string
 	var gate *edge.PreviewGate
+	var err error
+	runsCode := r.front.Facts().RunsCode
 	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 		spec.GlobalPreview = r.globalPreview()
+		if !runsCode {
+			if gate, err = readPreviewGate(ctx, r.provider, r.spec.Slug); err != nil {
+				return err
+			}
+		}
 	default:
 		if len(r.spec.Apps) == 0 {
 			spec.PruneOnly = true
@@ -641,7 +648,6 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		}
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
-		var err error
 		if gate, err = readPreviewGate(ctx, r.provider, r.spec.Slug); err != nil {
 			return err
 		}
@@ -658,6 +664,9 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Program, spec.Values = program.Spec, program.Values
+	if !runsCode {
+		spec.PreviewGate = gate
+	}
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		return err

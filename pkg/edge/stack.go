@@ -33,6 +33,7 @@ type StackSpec struct {
 	GlobalPreview   string
 	PruneOnly       bool
 	PruneRoutes     bool
+	PreviewGate     *PreviewGate
 	Warn            func(string)
 	Program         *ProgramSpec
 }
