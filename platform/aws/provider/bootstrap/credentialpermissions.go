@@ -168,8 +168,6 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		named := "arn:aws:dynamodb:*:*:table/" + core + "-" + table + "-*"
 		a.BootstrapTables = append(a.BootstrapTables, named, named+"/*")
 	}
-	queue, deadLetters := n.revalidateQueueNames(tier)
-	a.bootstrapQueues = []string{"arn:aws:sqs:*:*:" + queue, "arn:aws:sqs:*:*:" + deadLetters}
 	stacks := []string{core, runtime}
 	for _, f := range featureRegistry {
 		stack := f.stackName(n, tier)

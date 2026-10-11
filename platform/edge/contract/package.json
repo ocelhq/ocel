@@ -13,9 +13,7 @@
     "./isr-writer": "./src/isr-writer.mts",
     "./preview-gate": "./src/preview-gate.mts",
     "./purge": "./src/purge.mts",
-    "./revalidation": "./src/revalidation.mts",
     "./hosting": "./src/hosting.mts",
-    "./revalidation/sample": "./src/revalidation-sample.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
     "./static": "./src/static.mts",
     "./fixtures/static-rules": "./fixtures/static-rules.json"

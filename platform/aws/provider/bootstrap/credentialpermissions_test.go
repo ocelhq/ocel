@@ -1749,8 +1749,7 @@ func TestACredentialReachesTheParametersOfOnlyItsOwnTier(t *testing.T) {
 func TestABootstrapCredentialReachesTheQueuesOfOnlyItsOwnTier(t *testing.T) {
 	const account = "arn:aws:sqs:us-east-1:111122223333:"
 	named := func(tier environment.Tier) []string {
-		queue, deadLetters := defaultNamespace.revalidateQueueNames(tier)
-		return []string{queue, deadLetters, defaultNamespace.featureStackName(FeatureISR, tier) + "-TagInvalidatorDeadLetterQueue-A1B2C3D4E5F6"}
+		return []string{defaultNamespace.featureStackName(FeatureISR, tier) + "-TagInvalidatorDeadLetterQueue-A1B2C3D4E5F6"}
 	}
 	for _, tier := range bothTiers {
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)

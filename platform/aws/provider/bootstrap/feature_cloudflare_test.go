@@ -61,15 +61,15 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var sqsSend, invoke, invokeTagged, invokeTiered, listBucket bool
+			var invoke, invokeTagged, invokeTiered, listBucket bool
 			for _, st := range stmts {
 				for _, action := range listPolicyActions(st.Action) {
 					if strings.HasPrefix(action, "dynamodb:") {
 						t.Errorf("the edge user is granted %s, but the edge writes no tag item", action)
 					}
-				}
-				if st.Resource == paramRevalidateQueueARN {
-					sqsSend = hasAction(st.Action, "sqs:SendMessage")
+					if strings.HasPrefix(action, "sqs:") || strings.HasPrefix(action, "kms:") {
+						t.Errorf("the edge user is granted %s, but the edge sends nothing to a queue", action)
+					}
 				}
 				if hasAction(st.Action, "s3:ListBucket") {
 					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(yamlStrings(st.Resource), []string{paramAssetBucketARN})
@@ -85,9 +85,6 @@ func TestEdgeUser(t *testing.T) {
 						}
 					}
 				}
-			}
-			if !sqsSend {
-				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature provisioned")
 			}
 			if !readsOnlyEdgeReadableObjects(stmts) {
 				t.Error("the edge user must read every object the deploy tags edge-readable in the asset bucket, and no other object in it")

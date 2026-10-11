@@ -33,7 +33,6 @@ type stackRefs struct {
 	stateTableStreamARN string
 	variablesTable      string
 	variablesTableARN   string
-	revalidateQueueARN  string
 	imageOptimizerARN   string
 }
 
@@ -196,7 +195,6 @@ const (
 	paramStateTableName      = "StateTableName"
 	paramStateTableARN       = "StateTableArn"
 	paramStateTableStreamARN = "StateTableStreamArn"
-	paramRevalidateQueueARN  = "RevalidateQueueArn"
 	paramImageOptimizerARN   = "ImageOptimizerArn"
 	paramVariablesTableName  = "VariablesTableName"
 	paramVariablesTableARN   = "VariablesTableArn"

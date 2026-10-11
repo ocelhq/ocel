@@ -18,10 +18,9 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		return provider.EdgeProgram{}, err
 	}
 	values := deploy.WorkerValues{
-		ImageOptimizerURL:  deployed.ImageOptimizerURL,
-		RevalidateQueueURL: deployed.RevalidateQueueURL,
-		AssetBucket:        deployed.AssetBucket,
-		Region:             p.aws.Region,
+		ImageOptimizerURL: deployed.ImageOptimizerURL,
+		AssetBucket:       deployed.AssetBucket,
+		Region:            p.aws.Region,
 	}
 	if params.EdgeCredentialsErr == nil {
 		values.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID

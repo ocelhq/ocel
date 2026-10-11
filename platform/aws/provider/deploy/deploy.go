@@ -65,8 +65,6 @@ type Config struct {
 
 	ImageOptimizerURL string
 
-	RevalidateQueueURL string
-
 	CacheStoreBucket  string
 	CacheStoreObjects payloads.ObjectStore
 	Env               string

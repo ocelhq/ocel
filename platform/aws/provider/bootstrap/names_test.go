@@ -42,8 +42,6 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 	if err != nil {
 		t.Fatalf("preview edge param prefix: %v", err)
 	}
-	queue, dlq := n.revalidateQueueNames(environment.TierProduction)
-	previewQueue, previewDLQ := n.revalidateQueueNames(environment.TierPreview)
 	return map[string]string{
 		"core stack":            production,
 		"preview core stack":    preview,
@@ -69,10 +67,6 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"cache policy":          n.edgeCachePolicyName(environment.TierProduction),
 		"headers policy":        n.edgeHeadersPolicyName(environment.TierProduction),
 		"asset access":          n.edgeAssetAccessName(environment.TierProduction),
-		"revalidate queue":      queue,
-		"revalidate dlq":        dlq,
-		"preview queue":         previewQueue,
-		"preview dlq":           previewDLQ,
 		"cache policy name":     n.PolicyName("edge-cache"),
 		"schedule group":        n.envSourceSyncScheduleGroupName(environment.TierProduction),
 		"preview schedules":     n.envSourceSyncScheduleGroupName(environment.TierPreview),
@@ -107,10 +101,6 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 		"cache policy":          "ocel-cache",
 		"headers policy":        "ocel-headers",
 		"asset access":          "ocel-assets",
-		"revalidate queue":      "ocel-revalidate.fifo",
-		"revalidate dlq":        "ocel-revalidate-dlq.fifo",
-		"preview queue":         "ocel-revalidate-preview.fifo",
-		"preview dlq":           "ocel-revalidate-preview-dlq.fifo",
 		"cache policy name":     "ocel-edge-cache",
 		"schedule group":        "ocel-bootstrap",
 		"preview schedules":     "ocel-bootstrap-preview",
@@ -161,10 +151,6 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"cache policy":          128,
 		"headers policy":        128,
 		"asset access":          64,
-		"revalidate queue":      80,
-		"revalidate dlq":        80,
-		"preview queue":         80,
-		"preview dlq":           80,
 		"cache policy name":     128,
 		"schedule group":        64,
 		"preview schedules":     64,

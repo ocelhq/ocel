@@ -795,25 +795,6 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
-  platform/aws/functions/revalidator:
-    dependencies:
-      '@platform/edge-contract':
-        specifier: workspace:*
-        version: link:../../../edge/contract
-      aws4fetch:
-        specifier: ^1.0.20
-        version: 1.0.20
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.13.2
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
   platform/aws/functions/tag-invalidator:
     dependencies:
       '@aws-sdk/client-cloudfront':
@@ -893,9 +874,6 @@ importers:
       '@platform/aws-image-optimizer':
         specifier: workspace:*
         version: link:../../functions/image-optimizer
-      '@platform/aws-revalidator':
-        specifier: workspace:*
-        version: link:../../functions/revalidator
       '@platform/aws-runtime':
         specifier: workspace:*
         version: link:../../runtime

@@ -440,9 +440,6 @@ func TestCheckDeployed(t *testing.T) {
 		if got.ImageOptimizerURL == "" {
 			t.Error("the optimizer URL its own stack outputs did not reach the flat field a deploy reads")
 		}
-		if got.RevalidateQueueURL != "" {
-			t.Errorf("RevalidateQueueURL = %q with no %s stack deployed, want empty", got.RevalidateQueueURL, FeatureISR)
-		}
 	})
 
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {

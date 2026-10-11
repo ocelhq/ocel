@@ -23,7 +23,6 @@ func TestPayloads(t *testing.T) {
 		{"env source sync", EnvSourceSync, "bootstrap"},
 		{"realtime authorizer", RealtimeAuthorizer, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
-		{"revalidator", Revalidator, "index.mjs"},
 		{"tag publisher", TagPublisher, "index.mjs"},
 		{"tag invalidator", TagInvalidator, "index.mjs"},
 	} {
@@ -85,7 +84,6 @@ func TestPayloadsDiffer(t *testing.T) {
 		"upload completer":     UploadCompleter(),
 		"env source sync":      EnvSourceSync(),
 		"image optimizer":      ImageOptimizer(),
-		"revalidator":          Revalidator(),
 		"tag publisher":        TagPublisher(),
 		"tag invalidator":      TagInvalidator(),
 	} {

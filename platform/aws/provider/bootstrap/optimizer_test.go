@@ -99,7 +99,6 @@ func bootstrapPayloads() map[string]payloads.Payload {
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
 		tagPublisherKeyPrefix:   payloads.TagPublisher(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
-		revalidatorKeyPrefix:    payloads.Revalidator(),
 		envSourceSyncKeyPrefix:  payloads.EnvSourceSync(),
 	}
 	byKey := map[string]payloads.Payload{}
