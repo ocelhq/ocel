@@ -67,3 +67,5 @@ func FrontOf(p *Proxy) host.Front { return p.front() }
 func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier environment.Tier) error {
 	return p.refuseServingPortsClosedFromOutside(ctx, tier)
 }
+
+var NewPreviewGateReader = newPreviewGateReader

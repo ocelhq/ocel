@@ -72,6 +72,12 @@ func TestTheCloudflareProxyRunsNoCodeAndProxiesTheRecordsItWrites(t *testing.T) 
 	}
 }
 
+func TestTheCloudflareProxyAloneDoesNotClaimToGatePreviews(t *testing.T) {
+	if proxyZoneMock().proxy(t).Facts().GatesPreviews {
+		t.Error("Facts().GatesPreviews = true, want false: the proxy runs no code, so only an origin behind it that gates previews can claim it")
+	}
+}
+
 func TestTheCloudflareProxyWritesOneProxiedRecordToTheOriginItForwardsTo(t *testing.T) {
 	m := proxyZoneMock()
 	_, stack := reconciledProxy(t, m)
