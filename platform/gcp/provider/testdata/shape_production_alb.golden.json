@@ -218,6 +218,28 @@
       }
     },
     {
+      "id": "project:shop/shared:production/google_compute_backend_bucket:ocel-alb-production-assets",
+      "scope": "project:shop/shared:production",
+      "vendor": "gcp",
+      "type": "google_compute_backend_bucket",
+      "name": "ocel-alb-production-assets",
+      "region": "europe-west1",
+      "properties": {
+        "enable_cdn": true
+      }
+    },
+    {
+      "id": "project:shop/shared:production/google_project_iam_member:ocel-alb-production-reader",
+      "scope": "project:shop/shared:production",
+      "vendor": "gcp",
+      "type": "google_project_iam_member",
+      "name": "ocel-alb-production-reader",
+      "region": "europe-west1",
+      "properties": {
+        "role": "roles/storage.objectViewer"
+      }
+    },
+    {
       "id": "project:shop/shared:production/google_certificate_manager_certificate_map:ocel-alb-production-certs",
       "scope": "project:shop/shared:production",
       "vendor": "gcp",

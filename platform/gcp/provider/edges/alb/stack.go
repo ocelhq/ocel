@@ -34,31 +34,46 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) released(ctx context.Context, records map[string]router.ReleaseRecord, progress progress.Log) error {
 	hosts := maps.Clone(s.recorded.Hosts)
-	var took []string
+	var took, moved []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
 		host := hosts[hostname]
-		if host.Service != "" || isWildcard(hostname) {
+		if isWildcard(hostname) || host.Pointer != "" {
 			continue
 		}
-		service := pin.ResolveService(records[host.App])
-		if service == "" {
+		record, found := records[host.App]
+		static := staticOf(record, s.recorded.LoadBalancer)
+		switch {
+		case host.Service == "":
+			service := pin.ResolveService(record)
+			if service == "" {
+				continue
+			}
+			host.Service, host.Static = service, static
+			took = append(took, hostname)
+		case found && host.Static != static:
+			host.Static = static
+			moved = append(moved, hostname)
+		default:
 			continue
 		}
-		host.Service = service
 		hosts[hostname] = host
-		took = append(took, hostname)
 	}
-	if len(took) == 0 {
+	if len(took) == 0 && len(moved) == 0 {
 		return nil
 	}
-	if err := s.raise(ctx, hosts); err != nil {
-		return err
+	if len(took) > 0 {
+		if err := s.raise(ctx, hosts); err != nil {
+			return err
+		}
 	}
-	for _, hostname := range took {
-		if progress != nil {
+	for _, hostname := range slices.Concat(took, moved) {
+		if progress != nil && slices.Contains(took, hostname) {
 			progress.Say("Routing " + hostname + " to " + hosts[hostname].App + "'s Cloud Run service " + hosts[hostname].Service)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
+			if len(took) == 0 {
+				return err
+			}
 			return errors.Join(err, s.raise(ctx, s.recorded.Hosts))
 		}
 	}
@@ -82,7 +97,7 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
 		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.LoadBalancer.URLMap, hostname)
 	}
-	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend, nil)
+	return s.e.deps.Routes.Route(ctx, s.recorded.LoadBalancer.URLMap, hostname, host.Backend, host.files())
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -94,12 +109,12 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
 			Kind, s.state.Tier, binding.Hostname)
 	}
-	service, err := s.serving(ctx, binding.App)
+	service, static, err := s.serving(ctx, binding.App)
 	if err != nil {
 		return err
 	}
 	if isWildcard(binding.Hostname) {
-		service = ""
+		service, static = "", ""
 	}
 	if !isWildcard(binding.Hostname) {
 		if err := s.refuseExhaustedLimits(ctx, []string{binding.Hostname}, nil); err != nil {
@@ -115,6 +130,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		Certificate: binding.Certificate,
 		Service:     service,
 		Backend:     backendName(s.state.Slug, s.state.Tier, binding.Hostname),
+		Static:      static,
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)
 	if err != nil {
@@ -186,23 +202,23 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	return err
 }
 
-func (s *stack) serving(ctx context.Context, app string) (string, error) {
+func (s *stack) serving(ctx context.Context, app string) (string, string, error) {
 	if app == "" {
-		return "", nil
+		return "", "", nil
 	}
 	active, found, err := s.openLedger().ReadActive(ctx, "")
 	if err != nil || !found {
-		return "", err
+		return "", "", err
 	}
 	release, released := active.Releases[app]
 	if !released {
-		return "", nil
+		return "", "", nil
 	}
 	record, staged, err := s.openLedger().Record(ctx, app, release)
 	if err != nil || !staged {
-		return "", err
+		return "", "", err
 	}
-	return pin.ResolveService(record), nil
+	return pin.ResolveService(record), staticOf(record, s.recorded.LoadBalancer), nil
 }
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {

@@ -31,6 +31,8 @@ type Deps struct {
 	Project   string
 	Region    string
 	Shielded  bool
+
+	ReadAssetsBucket func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
 }
 
 type Edge struct{ deps Deps }
@@ -75,6 +77,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 		outputCertificateMap: balancer.CertificateMap,
 		outputURLMap:         balancer.URLMap,
 		outputNotFound:       balancer.NotFound,
+		outputAssetsBackend:  balancer.AssetsBackend,
 	}}, nil
 }
 
@@ -93,10 +96,15 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 }
 
 func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Log) (LoadBalancer, error) {
+	assets, err := e.deps.ReadAssetsBucket(ctx, tier)
+	if err != nil {
+		return LoadBalancer{}, err
+	}
 	spec := loadBalancerSpec{
 		Region:  e.deps.Region,
 		Names:   loadBalancerNames(tier, e.deps.Shielded),
 		Tier:    tier,
+		Assets:  assets,
 		Preview: preview,
 	}
 	if e.deps.Shielded {
@@ -192,6 +200,7 @@ type Host struct {
 	Tag         string `json:"tag,omitempty"`
 	Backend     string `json:"backend,omitempty"`
 	Pointer     string `json:"pointer,omitempty"`
+	Static      string `json:"static,omitempty"`
 }
 
 func Surface(slug string, tier environment.Tier) string {

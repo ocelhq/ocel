@@ -39,6 +39,8 @@ const (
 	tfTargetHTTPSProxy     = "google_compute_target_https_proxy"
 	tfGlobalForwardingRule = "google_compute_global_forwarding_rule"
 	tfNetworkEndpointGroup = "google_compute_region_network_endpoint_group"
+	tfBackendBucket        = "google_compute_backend_bucket"
+	tfProjectIAMMember     = "google_project_iam_member"
 )
 
 func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
@@ -46,6 +48,8 @@ func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricin
 	shaped := []pricing.Shaped{
 		{Name: balancer.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: balancer.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
+		{Name: balancer.AssetsBackend, Type: tfBackendBucket, Properties: map[string]any{"enable_cdn": true}},
+		{Name: balancer.AssetsReader, Type: tfProjectIAMMember, Properties: map[string]any{"role": objectViewerRole}},
 		{Name: balancer.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
 		{Name: balancer.URLMap, Type: tfURLMap, Properties: map[string]any{}},
 		{Name: balancer.Proxy, Type: tfTargetHTTPSProxy, Properties: map[string]any{}},

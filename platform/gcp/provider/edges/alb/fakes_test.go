@@ -22,6 +22,8 @@ const loadBalancerAddress = "34.117.0.7"
 
 const notFoundBackend = "ocel-alb-production-notfound"
 
+const assetsBackend = "ocel-alb-production-assets"
+
 const backendToken = "gcp:compute/backendService:BackendService"
 
 type world struct {
@@ -30,6 +32,7 @@ type world struct {
 	ups      []string
 	destroys []string
 	routed   map[string]map[string]string
+	statics  map[string]map[string]*StaticRoutes
 	pinned   []string
 	backends map[string]map[string]bool
 	entries  map[string]map[string]bool
@@ -77,6 +80,7 @@ func newWorld() *world {
 			LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
 		routed:              map[string]map[string]string{},
+		statics:             map[string]map[string]*StaticRoutes{},
 		backends:            map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:             map[string]map[string]bool{},
 		declared:            map[string]map[string]declaration{},
@@ -93,6 +97,7 @@ func balancer() map[string]string {
 		"certificateMap": "ocel-alb-production-certs",
 		"urlMap":         "ocel-alb-production-routes",
 		"notFound":       notFoundBackend,
+		"assetsBackend":  assetsBackend,
 	}
 }
 
@@ -165,7 +170,7 @@ func (w *world) Outputs(_ context.Context, target Target) (map[string]string, er
 	return maps.Clone(w.outputs[target.Name()]), nil
 }
 
-func (w *world) Route(_ context.Context, urlMap, hostname, backend string, _ *StaticRoutes) error {
+func (w *world) Route(_ context.Context, urlMap, hostname, backend string, files *StaticRoutes) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.hasBackend(backend) {
@@ -184,7 +189,21 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string, _ *St
 		return fmt.Errorf("route %s onto a url map already holding %d host rules, the most Compute allows", hostname, len(hosts))
 	}
 	hosts[hostname] = backend
+	w.keepStatics(urlMap, hostname, files)
 	return nil
+}
+
+func (w *world) keepStatics(urlMap, hostname string, files *StaticRoutes) {
+	if w.statics[urlMap] == nil {
+		w.statics[urlMap] = map[string]*StaticRoutes{}
+	}
+	w.statics[urlMap][hostname] = files
+}
+
+func (w *world) staticsOf(urlMap, hostname string) *StaticRoutes {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.statics[urlMap][hostname]
 }
 
 func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error {
@@ -196,6 +215,7 @@ func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error 
 		w.routed[urlMap] = hosts
 	}
 	hosts[hostname] = notFoundBackend
+	w.keepStatics(urlMap, hostname, nil)
 	return nil
 }
 
@@ -240,6 +260,7 @@ func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 		return err
 	}
 	delete(w.routed[urlMap], hostname)
+	delete(w.statics[urlMap], hostname)
 	return w.unrouteAppliedFails[hostname]
 }
 

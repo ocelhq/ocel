@@ -34,6 +34,10 @@ func balancing(t *testing.T) (*Edge, *world) {
 		WarmURL:   w.warmThrough,
 		Project:   "acme-prod",
 		Region:    "europe-west1",
+
+		ReadAssetsBucket: func(context.Context, environment.Tier) (AssetsBucket, error) {
+			return AssetsBucket{Name: "ocel-acme-prod-production", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}, nil
+		},
 	}), w
 }
 
