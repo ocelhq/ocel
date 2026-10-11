@@ -1,5 +1,5 @@
 import type { Check } from "./checks/context";
-import { PREVIEW_TITLES, type PreviewCheck, previewChecksFor } from "./checks/previews";
+import { PREVIEW_CHECKS, PREVIEW_TITLES, type PreviewCheck } from "./checks/previews";
 import type { Cell, Fixture, Phase } from "./matrix/types";
 import type { CellRun } from "./run/cellRun";
 import type { StackPoint } from "./stacks";
@@ -193,7 +193,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     ...replaced("rollback", ROLLBACK),
     ...(has("preview")
       ? perApp((app) =>
-          previewChecksFor(cell).map((check) => ({
+          PREVIEW_CHECKS.map((check) => ({
             app,
             title: PREVIEW_TITLES[check],
             phase: "preview" as const,

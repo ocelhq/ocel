@@ -5,9 +5,8 @@ import {
   checkOwnReleases,
   checkPreviewGate,
   checkPruned,
-  checkRefusedWithoutIdentity,
+  PREVIEW_CHECKS,
   PREVIEW_TITLES,
-  previewChecksFor,
 } from "./previews";
 
 const page = (id: string) => `<html><p data-ocel="deployment">${id}</p></html>`;
@@ -34,13 +33,9 @@ const release = (id: string, over: Partial<PreviewRelease> = {}): PreviewRelease
 const serving = (id: string) => new Response(page(id));
 
 describe("the preview checks a cell walks", () => {
-  it("walks the hostname checks behind an edge and the Identity-Aware Proxy refusal on gcp with none", () => {
-    const edge = { name: "alb", offeredOn: ["gcp" as const], config: { edge: "alb" as const } };
-    const none = { name: "default", offeredOn: ["gcp" as const], config: {} };
-
-    expect(previewChecksFor({ target: "gcp", variant: edge })).toEqual(["own-release", "pruned"]);
-    expect(previewChecksFor({ target: "gcp", variant: none })).toEqual(["refused"]);
-    expect(Object.keys(PREVIEW_TITLES).sort()).toEqual(["own-release", "pruned", "refused"]);
+  it("walks the own-release and pruned checks, each with a title", () => {
+    expect(PREVIEW_CHECKS).toEqual(["own-release", "pruned"]);
+    expect(Object.keys(PREVIEW_TITLES).sort()).toEqual(["own-release", "pruned"]);
   });
 });
 
@@ -104,27 +99,6 @@ describe("checkPruned", () => {
     await expect(checkPruned(clock, "web", release("P"), release("K"))).rejects.toThrow(
       /K\.test.*K/s,
     );
-  });
-});
-
-describe("checkRefusedWithoutIdentity", () => {
-  it("passes the Identity-Aware Proxy check on 302, 401 and 403 and fails on a 200 that carries the app's marker", async () => {
-    const statuses = [302, 401, 403];
-    const refused = clockOf((url) => {
-      const status = statuses[Number(url.at(-1))] ?? 403;
-      return new Response("", { status });
-    });
-    const releases = [0, 1, 2].map((n) =>
-      release(`R${n}`, {
-        urls: [`https://alias.test/${n}`],
-        deploymentUrl: `https://dep.test/${n}`,
-      }),
-    );
-    const seen = await checkRefusedWithoutIdentity(refused, releases);
-    expect(Object.values(seen).sort()).toEqual([302, 302, 401, 401, 403, 403]);
-
-    const open = clockOf(() => serving("A"));
-    await expect(checkRefusedWithoutIdentity(open, [release("A")])).rejects.toThrow(/200/);
   });
 });
 

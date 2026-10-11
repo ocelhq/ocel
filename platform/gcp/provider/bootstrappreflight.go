@@ -152,17 +152,6 @@ func queueGrants(names Names, region string) []string {
 	return grants
 }
 
-const (
-	proxyAdminRole  = "roles/iap.admin"
-	proxiedService  = "iap.googleapis.com/WebService"
-	proxiedServices = "projects/%s/iap_web/cloud_run-%s/services/%s-"
-)
-
-func proxyViewersGrant(names Names, region string) string {
-	return fmt.Sprintf("%s, on the condition resource.type == %q && resource.name.startsWith(%q)",
-		proxyAdminRole, proxiedService, fmt.Sprintf(proxiedServices, projectNumberHole, region, names.Namespace()))
-}
-
 const untaggingRole = "roles/artifactregistry.repoAdmin"
 
 func untaggingGrants(names Names, region string) []string {

@@ -22,6 +22,6 @@ func TestAProviderNamesEveryOptionItTakesAsTextAndWhichItCannotDeployWithout(t *
 		named = append(named, fmt.Sprintf("%s required=%t", option.Name, option.Required))
 	}
 	if want := []string{"project required=false", "region required=true"}; !slices.Equal(named, want) {
-		t.Errorf("TextProviderOptions(gcp) = %v, want %v: previewViewers is a list, not text", named, want)
+		t.Errorf("TextProviderOptions(gcp) = %v, want %v", named, want)
 	}
 }

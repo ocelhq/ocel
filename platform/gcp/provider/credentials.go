@@ -161,7 +161,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 			return edge.CredentialDocument{}, err
 		}
 		names := Names{namespace: c.Namespace, project: project}
-		roles := slices.Concat(rolesFor(purpose), []string{proxyViewersGrant(names, c.Region)})
+		roles := slices.Clone(rolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
 			roles = append(roles, realtimeSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant())
 			roles = append(roles, queueGrants(names, c.Region)...)

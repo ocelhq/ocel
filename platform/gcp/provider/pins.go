@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/iamcredentials/v1"
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -60,9 +59,9 @@ func (p *Provider) Close(ctx context.Context, service string, stillActive router
 				return err
 			}
 		}
-		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled", "IapEnabled"}}
+		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled"}}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField + "," + proxyField).Context(ctx).Do(call...)
+			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField).Context(ctx).Do(call...)
 		})
 	})
 	if absent(err) {
@@ -178,10 +177,7 @@ func withoutRollback(current *run.GoogleCloudRunV2Service, revision string) (map
 	return annotations, true, err
 }
 
-const (
-	warmTimeout       = 20 * time.Second
-	warmTokenLifetime = 5 * time.Minute
-)
+const warmTimeout = 20 * time.Second
 
 var warmClient = &http.Client{Timeout: warmTimeout}
 
@@ -203,13 +199,6 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 	if err != nil {
 		return err
 	}
-	if current.IapEnabled {
-		token, err := p.signProxyToken(ctx, clients, runsAs(current), address)
-		if err != nil {
-			return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
-		}
-		asked.Header.Set("Authorization", "Bearer "+token)
-	}
 	answered, err := warmClient.Do(asked)
 	if err != nil {
 		return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
@@ -219,36 +208,6 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 		return fmt.Errorf("warm revision %s of %s: it answered %s", revision, service, answered.Status)
 	}
 	return nil
-}
-
-func (p *Provider) signProxyToken(ctx context.Context, c *clients, account, address string) (string, error) {
-	now := time.Now()
-	claims, err := json.Marshal(map[string]any{
-		"iss": account,
-		"sub": account,
-		"aud": address + "/*",
-		"iat": now.Unix(),
-		"exp": now.Add(warmTokenLifetime).Unix(),
-	})
-	if err != nil {
-		return "", err
-	}
-	signing, err := c.IAMCredentials()
-	if err != nil {
-		return "", err
-	}
-	signed, err := attempted(ctx, func(call ...googleapi.CallOption) (*iamcredentials.SignJwtResponse, error) {
-		return signing.Projects.ServiceAccounts.SignJwt("projects/-/serviceAccounts/"+account,
-			&iamcredentials.SignJwtRequest{Payload: string(claims)}).Context(ctx).Do(call...)
-	})
-	if answeredCode(err) == http.StatusForbidden {
-		return "", fmt.Errorf("the warm passes Identity-Aware Proxy with a token signed as %s, which this credential may not sign: "+
-			"the deploy grants its own credential that on the account, so promote with the credential that deployed", account)
-	}
-	if err != nil {
-		return "", fmt.Errorf("sign a token Identity-Aware Proxy admits as %s: %w", account, err)
-	}
-	return signed.SignedJwt, nil
 }
 
 func warmAddress(current *run.GoogleCloudRunV2Service, revision string) string {
@@ -346,11 +305,4 @@ func withoutTag(traffic []*run.GoogleCloudRunV2TrafficTarget, tag string) []*run
 		}
 	}
 	return kept
-}
-
-func runsAs(service *run.GoogleCloudRunV2Service) string {
-	if service.Template == nil {
-		return ""
-	}
-	return service.Template.ServiceAccount
 }

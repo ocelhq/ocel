@@ -140,7 +140,7 @@ export const deploy = {
       vps: [defaults],
       gcp: [defaults, container, albInFrontOfNext, cloudflareOnGoogleCloud],
     },
-    previews: { gcp: [defaults, albInFrontOfNext] },
+    previews: { gcp: [albInFrontOfNext] },
     configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
   }),
   sveltekit: fixture("deploy/sveltekit", {

@@ -37,11 +37,6 @@ type stamp struct {
 	Writer   string   `json:"writer"`
 	Digest   string   `json:"digest"`
 	Features []string `json:"features,omitempty"`
-	Agents   []string `json:"agents,omitempty"`
-}
-
-func (s stamp) hasAgent(api string) bool {
-	return s.State == stateComplete && slices.Contains(s.Agents, api)
 }
 
 type survey struct {
@@ -105,11 +100,6 @@ func (b bootstrap) survey(ctx context.Context, tier environment.Tier) (survey, e
 		return survey{}, err
 	}
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
-	for _, each := range bootstrapItems(read.Names, tier, read.Emulated) {
-		if each.Kind == KindServiceAgent {
-			read.present[each.ID()] = own.stamp.hasAgent(each.Name)
-		}
-	}
 
 	if read.stateOf, err = b.stateIn(ctx, read.Names.StateBucket(tier)); err != nil {
 		return survey{}, err
@@ -207,8 +197,6 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 		return b.servicePresence(ctx, tier, target.Name)
 	case KindSchedule:
 		return b.schedulePresence(ctx, tier, target.Name)
-	case KindServiceAgent:
-		return presence{}, nil
 	}
 	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 }

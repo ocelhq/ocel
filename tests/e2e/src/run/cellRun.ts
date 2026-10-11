@@ -11,7 +11,6 @@ import {
   type Clock,
   checkOwnReleases,
   checkPruned,
-  checkRefusedWithoutIdentity,
   PREVIEW_NAME,
   type PreviewCheck,
 } from "../checks/previews";
@@ -195,15 +194,6 @@ export class CellRun {
         await this.once("previewPrune", () => target.previewPrune(this, PREVIEW_NAME, 1));
         const seen = await checkPruned(this.clock, app, first, second);
         await this.evidence.write("preview", `pruned-${app}.json`, `${JSON.stringify({ seen })}\n`);
-        return;
-      }
-      case "refused": {
-        const seen = await checkRefusedWithoutIdentity(this.clock, [first, second]);
-        await this.evidence.write(
-          "preview",
-          `refused-${app}.json`,
-          `${JSON.stringify(seen, null, 2)}\n`,
-        );
         return;
       }
     }

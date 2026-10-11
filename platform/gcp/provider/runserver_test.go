@@ -15,7 +15,6 @@ import (
 	"sync"
 	"testing"
 
-	"google.golang.org/api/iamcredentials/v1"
 	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 )
@@ -60,34 +59,6 @@ type runServer struct {
 	untagEveryRelease bool
 
 	tagged map[string][]string
-
-	signed []signedJWT
-}
-
-type signedJWT struct {
-	account string
-	claims  map[string]any
-}
-
-func (s *runServer) signJWT(w http.ResponseWriter, r *http.Request) {
-	var asked iamcredentials.SignJwtRequest
-	if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	var claims map[string]any
-	if err := json.Unmarshal([]byte(asked.Payload), &claims); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	s.signed = append(s.signed, signedJWT{account: strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/"), ":signJwt"), claims: claims})
-	writeBody(w, &iamcredentials.SignJwtResponse{KeyId: "k1", SignedJwt: "signed-by-iam"})
-}
-
-func (s *runServer) signedJWTs() []signedJWT {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return slices.Clone(s.signed)
 }
 
 type upload struct {
@@ -127,8 +98,6 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 				s.secrets = newSecretServer()
 			}
 			s.secrets.serve(t, w, r)
-		case r.Method == http.MethodPost && strings.HasSuffix(path, ":signJwt"):
-			s.signJWT(w, r)
 		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"):
 			s.iam.rest(t)(w, r)
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):
@@ -194,7 +163,6 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		Traffic:            allocated(desired.Traffic),
 		Ingress:            desired.Ingress,
 		InvokerIamDisabled: desired.InvokerIamDisabled,
-		IapEnabled:         desired.IapEnabled,
 		Labels:             desired.Labels,
 		CustomAudiences:    desired.CustomAudiences,
 		Uri:                "https://" + name + ".run.app",
@@ -235,9 +203,6 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		if slices.Contains(fields, "invoker_iam_disabled") {
 			s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 		}
-		if slices.Contains(fields, "iap_enabled") {
-			s.service.IapEnabled = desired.IapEnabled
-		}
 		if slices.Contains(fields, "annotations") {
 			s.service.Annotations = desired.Annotations
 		}
@@ -259,7 +224,6 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.service.Traffic = allocated(desired.Traffic)
 	s.service.Ingress = desired.Ingress
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
-	s.service.IapEnabled = desired.IapEnabled
 	s.service.Labels = desired.Labels
 	s.service.CustomAudiences = desired.CustomAudiences
 	s.service.Annotations = desired.Annotations
