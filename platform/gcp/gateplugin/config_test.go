@@ -64,6 +64,11 @@ func TestAHostMatchesWhateverCapitalisationTheRequestArrivesIn(t *testing.T) {
 	if _, gated := parsed.FindGate("pr-1-shop.example.dev:443"); !gated {
 		t.Error("FindGate missed a host that arrives with its port")
 	}
+	for _, host := range []string{"pr-1-shop.example.dev.", "PR-1-Shop.Example.dev.:443"} {
+		if _, gated := parsed.FindGate(host); !gated {
+			t.Errorf("FindGate(%s) missed a host written as a fully qualified name, which reaches the same backend ungated", host)
+		}
+	}
 }
 
 func TestAnEmptyConfigGatesNothing(t *testing.T) {

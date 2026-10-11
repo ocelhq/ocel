@@ -81,12 +81,14 @@ func ParseConfig(text string) (Config, error) {
 func (c Config) ListHosts() []string { return slices.Sorted(maps.Keys(c.hosts)) }
 
 func (c Config) FindGate(host string) (previewgate.Gate, bool) {
-	host = strings.ToLower(host)
-	if name, _, found := strings.Cut(host, ":"); found {
-		host = name
-	}
-	gate, gated := c.gates[c.hosts[host]]
-	return gate, gated && c.hosts[host] != ""
+	slug, listed := c.hosts[normalizeHost(host)]
+	gate, gated := c.gates[slug]
+	return gate, listed && gated
+}
+
+func normalizeHost(host string) string {
+	host, _, _ = strings.Cut(strings.ToLower(host), ":")
+	return strings.TrimSuffix(host, ".")
 }
 
 func parseGate(fields []string) (previewgate.Gate, string, error) {
