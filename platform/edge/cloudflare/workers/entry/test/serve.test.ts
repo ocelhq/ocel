@@ -484,6 +484,46 @@ describe("Serve fetching from the origin", () => {
     expect(response.headers.get("x-ocel-vary")).toBe("rsc, next-router-state-tree");
   });
 
+  describe("a segment prefetch", () => {
+    const segmentRequest = () => {
+      const request = originRequest("blog/a");
+      request.headers.set("rsc", "1");
+      request.headers.set("next-router-segment-prefetch", "/_tree");
+      return request;
+    };
+
+    it("stores nothing the origin answers that is not a segment", async () => {
+      const wire = s3Answering(
+        () =>
+          new Response("<postponed shell>", {
+            headers: { "cache-control": "s-maxage=15", "x-nextjs-postponed": "1" },
+          }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(segmentRequest()),
+      );
+
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+    });
+
+    it("stores the segment the origin answers", async () => {
+      const wire = s3Answering(
+        () =>
+          new Response("segment", {
+            headers: { "cache-control": "s-maxage=15", "x-nextjs-postponed": "2" },
+          }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(segmentRequest()),
+      );
+
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=15");
+    });
+  });
+
   describe("an origin response announcing a purge", () => {
     function serveRaising(raised: { mode: string; tags: { tag: string }[] }[]): {
       serve: Serve;
@@ -645,6 +685,23 @@ describe("Serve rendering an edge-runtime prerender", () => {
     const response = await serve.fetch(edgeRequest("/blog"));
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("stores nothing it renders for a segment prefetch that is not a segment", async () => {
+    const { serve } = edgeServe(
+      () =>
+        new Response("<postponed shell>", {
+          headers: { "cache-control": "s-maxage=60", "x-nextjs-postponed": "1" },
+        }),
+    );
+    const request = edgeRequest("/blog");
+    request.headers.set("rsc", "1");
+    request.headers.set("next-router-segment-prefetch", "/_tree");
+
+    const response = await serve.fetch(request);
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
   });
 
   it("renders nothing for a release that is no longer served", async () => {
