@@ -367,6 +367,58 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("a worker bound to domains is still reachable on workers.dev, and its state names the purge URL there", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		spec := previewSpec(store.URL, "v2")
+
+		state, err := reconcileState(t, m.provider(t), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		if !m.subdomainOn[spec.Program.Name] {
+			t.Errorf("workers.dev subdomain of %s = off, want on: the origin purges through it", spec.Program.Name)
+		}
+		if want := "https://ocel-preview.acct-sub.workers.dev/.ocel/purge"; state.PurgeURL != want {
+			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
+		}
+	})
+
+	t.Run("a prune-only stack names no purge URL", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+
+		state, err := reconcileState(t, m.provider(t), pruneOnlySpec(store.URL, "v2"), testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		if state.PurgeURL != "" {
+			t.Errorf("PurgeURL = %q, want none: the worker is deleted", state.PurgeURL)
+		}
+	})
+
+	t.Run("a reconcile at the spec stamp keeps the purge URL the stack already had", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
+		first, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		second, err := reconcileState(t, p, spec, first)
+		if err != nil {
+			t.Fatalf("second Reconcile: %v", err)
+		}
+
+		if second.PurgeURL != first.PurgeURL || second.PurgeURL == "" {
+			t.Errorf("PurgeURL = %q, want the %q the first reconcile named", second.PurgeURL, first.PurgeURL)
+		}
+	})
+
 	t.Run("a second reconcile of the same spec with the checks skipped only reads the bootstrap workers", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()

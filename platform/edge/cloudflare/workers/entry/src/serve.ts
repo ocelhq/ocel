@@ -2,6 +2,8 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { AwsClient } from "aws4fetch";
 import type { Env } from "./env";
 import { originFetchFor } from "./origin-fetch";
+import type { PurgeMode, PurgeOutcome } from "./purge-backlog";
+import { outcomeOfPurge, type PurgeResult } from "./purge-outcome";
 import { BROWSER_REVALIDATES, forCache, NOT_STORED } from "./serve-headers";
 import { encodeKeyPath, parseKeyRelease, parseObjectKey, type ServeProps } from "./serve-key";
 
@@ -100,6 +102,11 @@ async function readStore(store: R2Bucket, key: string, release: string): Promise
   return respondStored({ body: object.body, etag: object.httpEtag }, release);
 }
 
+interface PurgeableCache {
+  purge(options: { tags?: string[]; purgeEverything?: boolean }): Promise<PurgeResult>;
+  invalidate(options: { tags: string[] }): Promise<PurgeResult>;
+}
+
 export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   async fetch(request: Request): Promise<Response> {
     const props = this.ctx.props;
@@ -136,5 +143,25 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       new Request(request.url, { method: request.method, headers, redirect: "manual" }),
     );
     return forCache(res, { release: props.release, pathname: new URL(request.url).pathname });
+  }
+
+  async purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
+    return this.clear((cache) =>
+      mode === "purge" ? cache.purge({ tags }) : cache.invalidate({ tags }),
+    );
+  }
+
+  async purgeEverything(): Promise<PurgeOutcome> {
+    return this.clear((cache) => cache.purge({ purgeEverything: true }));
+  }
+
+  private async clear(run: (cache: PurgeableCache) => Promise<PurgeResult>): Promise<PurgeOutcome> {
+    const cache = this.ctx.cache as PurgeableCache | undefined;
+    if (!cache) return { ok: false, codes: [], message: "this worker has no cache to purge" };
+    try {
+      return outcomeOfPurge(await run(cache));
+    } catch (error) {
+      return outcomeOfPurge(error);
+    }
   }
 }

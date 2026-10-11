@@ -72,7 +72,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 	}{
 		"a production project": {production, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--prod--root",
-			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
+			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}, Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
@@ -81,7 +81,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		"a preview project": {previewProject, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Name:                "ocel--proj--preview--root",
 			PruneWorkerStem:     "ocel--proj--preview",
-			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
+			Worker:              edge.Worker{CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}, Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
 			StoreScriptName:     "ocel-releases-store-preview",
 			StoreEndpoint:       "https://store.example",
 			BootstrapCredential: "store-cred",
@@ -90,6 +90,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 		"the shared preview entry": {sharedEntry, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
 			Worker: edge.Worker{
 				CachedEntrypoints: []string{"Serve"},
+				DurableObjects:    []string{"PurgeQueue"},
 				Main:              entry,
 				Variables:         with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_GLOBAL": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}),
 				Secrets:           map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key},

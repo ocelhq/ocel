@@ -99,6 +99,10 @@ const genericSlugBinding = "OCEL_SLUG"
 
 const genericDomainAppsBinding = "OCEL_DOMAIN_APPS"
 
+const genericServesWorkersDevBinding = "OCEL_SERVES_WORKERS_DEV"
+
+const purgePath = "/.ocel/purge"
+
 type private struct {
 	EntryWorkers []string `json:"entryWorkers,omitempty"`
 	EnvelopeKey  string   `json:"envelopeKey,omitempty"`
@@ -188,6 +192,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, fmt.Errorf("prune-only stack may not target the shared preview entry worker %q", program.Name)
 	}
 
+	var purgeURL string
 	genericUp := upload{accountID: accountID, scriptName: program.Name}
 	if !upToDate && !spec.PruneOnly {
 		genericUp.worker = generic
@@ -215,8 +220,12 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		if err := p.deleteScript(ctx, accountID, program.Name); err != nil {
 			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.Name, err)
 		}
-	} else if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains)+len(spec.ServedElsewhere) == 0); err != nil {
-		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
+	} else {
+		workersDev, err := p.setSubdomain(ctx, genericUp, true)
+		if err != nil {
+			return nil, fmt.Errorf("set generic worker subdomain: %w", err)
+		}
+		purgeURL = workersDev + purgePath
 	}
 	stamps[program.Name] = stamp
 	encoded, err := stamps.encode()
@@ -228,6 +237,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	next := prior
+	next.PurgeURL = purgeURL
 	next.Slug = slug
 	next.Endpoint = endpoint
 	next.Secret = id.secret
@@ -504,6 +514,9 @@ func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, 
 	}
 	if spec.Program.ISRWriterScriptName != "" {
 		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
+	}
+	if len(spec.Domains)+len(spec.ServedElsewhere) == 0 {
+		worker = withVar(worker, genericServesWorkersDevBinding, "1")
 	}
 	if len(spec.DomainApps) > 0 {
 		encoded, err := json.Marshal(spec.DomainApps)

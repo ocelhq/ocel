@@ -17,5 +17,9 @@
     "OCEL_SLUG": "dev"
   },
   "services": [{ "binding": "RELEASES", "service": "releases-store" }],
-  "worker_loaders": [{ "binding": "LOADER" }]
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "durable_objects": {
+    "bindings": [{ "name": "PURGE_QUEUE", "class_name": "PurgeQueue" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PurgeQueue"] }]
 }

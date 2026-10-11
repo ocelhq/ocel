@@ -134,7 +134,7 @@ export class CacheEntrypoint
       scope,
       entries: OCEL_CACHE_STORE,
       snapshots: OCEL_CACHE_STORE,
-      raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.isrWriteSecret),
+      raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.purgeSecret),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
       now: Date.now,
     });

@@ -19,6 +19,12 @@ import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
+import {
+  answerPurgeOnWorker,
+  controlHostResponse,
+  isControlHost,
+  isPurgeRequest,
+} from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
 import { ownRouteTableKey, readRouteTable } from "./route-table";
@@ -28,6 +34,7 @@ import { invalidateSnapshot } from "./tag-clock";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
+export { PurgeQueue } from "./purge-queue";
 export { Serve } from "./serve";
 
 const ROUTER_HEADER = "x-ocel-router";
@@ -234,7 +241,7 @@ function routedDeps(
             edgeRuntime.cacheEntrypoint
               ? {
                   rpc: edgeRuntime.cacheEntrypoint({
-                    props: { isrWriteSecret: record.isrWriteSecret, scope: record.isrPrefix },
+                    props: { purgeSecret: record.purgeSecret, scope: record.isrPrefix },
                   }),
                   scope: record.isrPrefix,
                 }
@@ -305,6 +312,10 @@ function unavailableResponse(): Response {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const host = new URL(request.url).host;
+    if (isControlHost(host)) {
+      if (isPurgeRequest(request)) return answerPurgeOnWorker(request, env, ctx);
+      if (env.OCEL_SERVES_WORKERS_DEV !== "1") return controlHostResponse();
+    }
     const store = env.OCEL_CACHE_STORE;
     const serve = ctx.exports?.Serve as ServeFactory | undefined;
     const objects = serve && readsObjects(env) ? serveObjects(serve, host) : store;

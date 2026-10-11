@@ -615,6 +615,48 @@ func TestCloudflareCachesResponses(t *testing.T) {
 	}
 }
 
+func TestCloudflareInvalidatesByCacheTag(t *testing.T) {
+	t.Parallel()
+
+	if !New("ocel", Options{}).Facts().InvalidatesByCacheTag {
+		t.Error("Facts().InvalidatesByCacheTag = false, but Serve purges what it cached by the tags its origin stamps")
+	}
+}
+
+func TestAWorkerUploadDeclaresTheDurableObjectsItNames(t *testing.T) {
+	t.Run("a durable object export keeps its state in SQLite", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), DurableObjects: []string{"PurgeQueue"}}, "")
+
+		exports, _ := meta["exports"].(map[string]any)
+		queue, _ := exports["PurgeQueue"].(map[string]any)
+		if queue["type"] != "durable-object" || queue["storage"] != "sqlite" || len(exports) != 1 {
+			t.Errorf("exports = %v, want only PurgeQueue, a durable object stored in SQLite", meta["exports"])
+		}
+	})
+
+	t.Run("beside a cached entrypoint it leaves that entrypoint as it was", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}}, "")
+
+		exports, _ := meta["exports"].(map[string]any)
+		serve, _ := exports["Serve"].(map[string]any)
+		if serve["type"] != "worker" || len(exports) != 2 {
+			t.Errorf("exports = %v, want Serve cached and PurgeQueue beside it", meta["exports"])
+		}
+		cache, _ := meta["cache_options"].(map[string]any)
+		if cache["enabled"] != false {
+			t.Errorf("cache_options = %v, want the worker itself uncached", meta["cache_options"])
+		}
+	})
+
+	t.Run("a worker with only a durable object does not turn caching off", func(t *testing.T) {
+		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), DurableObjects: []string{"PurgeQueue"}}, "")
+
+		if _, ok := meta["cache_options"]; ok {
+			t.Errorf("cache_options = %v, want none: nothing here caches", meta["cache_options"])
+		}
+	})
+}
+
 func TestAWorkerUploadCachesOnlyTheEntrypointsItNames(t *testing.T) {
 	t.Run("a worker naming a cached entrypoint turns the worker's cache off and that entrypoint's on", func(t *testing.T) {
 		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")

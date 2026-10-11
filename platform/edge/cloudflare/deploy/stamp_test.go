@@ -48,7 +48,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[edge.Worker](),
-			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "LoaderBinding", "Main", "Modules", "ObjectStore", "Queues", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "ObjectStore", "Queues", "Secrets", "Services", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[edge.WorkerModule](),
@@ -109,6 +109,34 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 
 		if on == off {
 			t.Errorf("stamp = %q either way, want %s to move it: the worker deploys with different observability settings", on, envObservability)
+		}
+	})
+
+	t.Run("a worker with no domain of its own serves the app on workers.dev, and says so", func(t *testing.T) {
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
+
+		worker, err := genericWorker(spec, spec.Slug, "")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
+
+		if worker.Variables[genericServesWorkersDevBinding] != "1" {
+			t.Errorf("variables = %v, want %s=1: no custom hostname reaches this app", worker.Variables, genericServesWorkersDevBinding)
+		}
+	})
+
+	t.Run("a worker bound to a domain keeps the app off workers.dev", func(t *testing.T) {
+		for name, spec := range map[string]edge.StackSpec{
+			"a domain":            {Slug: "acme-web", Domains: []string{"shop.example.com"}, Program: &edge.ProgramSpec{Name: "ocel-web"}},
+			"a domain served via": {Slug: "acme-web", ServedElsewhere: []string{"shop.example.com"}, Program: &edge.ProgramSpec{Name: "ocel-web"}},
+		} {
+			worker, err := genericWorker(spec, spec.Slug, "")
+			if err != nil {
+				t.Fatalf("%s: genericWorker: %v", name, err)
+			}
+			if _, set := worker.Variables[genericServesWorkersDevBinding]; set {
+				t.Errorf("%s: variables = %v, want no %s: the worker answers workers.dev only for purges", name, worker.Variables, genericServesWorkersDevBinding)
+			}
 		}
 	})
 

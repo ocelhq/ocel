@@ -620,7 +620,7 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	}
 	result.RouteTableKey = routeTableKey
 	if writer.IsConfigured() {
-		result.ISRWriteSecret = cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)
+		result.PurgeSecret = cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)
 	}
 	return result, nil
 }

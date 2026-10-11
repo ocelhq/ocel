@@ -423,7 +423,7 @@ func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (pr
 		Envelope:      work.delivery.Envelope,
 	}
 	if work.cache != nil {
-		result.ISRWriteSecret = work.cache.WriterSecret
+		result.PurgeSecret = work.cache.WriterSecret
 	}
 	for _, logical := range work.logical {
 		fields, err := requireOutputFields(outputs, logical)

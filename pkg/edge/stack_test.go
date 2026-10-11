@@ -53,6 +53,7 @@ func TestStackState(t *testing.T) {
 			OwnerToken:    "owner",
 			Address:       "d123.cloudfront.net",
 			GlobalPreview: "preview.acme.com",
+			PurgeURL:      "https://shop.acct.workers.dev/.ocel/purge",
 			Private:       Own(samplePrivateState{Distribution: "E123", Region: "eu-west-1"}),
 		}
 		state.Bind("shop.app.com")
@@ -70,6 +71,7 @@ func TestStackState(t *testing.T) {
 		for name, state := range map[string]StackState{
 			"a slug":          {Slug: "shop"},
 			"a front":         {Address: "d123.cloudfront.net"},
+			"a purge URL":     {PurgeURL: "https://web.acct.workers.dev/.ocel/purge"},
 			"a private state": {Private: Own(samplePrivateState{Distribution: "E123"})},
 		} {
 			if state.Empty() {
@@ -129,6 +131,7 @@ func TestStackState(t *testing.T) {
 			"a bound domain":   func(s *StackState) { s.Bind("www.app.com") },
 			"a written record": func(s *StackState) { s.RecordWrites(nil) },
 			"a global preview": func(s *StackState) { s.GlobalPreview = "" },
+			"a purge URL":      func(s *StackState) { s.PurgeURL = "" },
 			"the edge's own state": func(s *StackState) {
 				s.Private = Own(samplePrivateState{Distribution: "E456", Region: "eu-west-1"})
 			},

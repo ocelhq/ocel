@@ -107,7 +107,7 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 		result.EdgeBundleKey = r.deliveredEdgeBundle(spec)
 		result.RouteTableKey = r.deliverRouteTable(spec)
 		if spec.App.ISR != nil {
-			result.ISRWriteSecret = "isr-" + spec.Ref.Name.String()
+			result.PurgeSecret = "isr-" + spec.Ref.Name.String()
 		}
 	}
 	r.mu.Lock()

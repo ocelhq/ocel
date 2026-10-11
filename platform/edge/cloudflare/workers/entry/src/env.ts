@@ -5,7 +5,7 @@ export interface IsrWriterBinding {
 }
 
 export interface CacheEntrypointProps {
-  isrWriteSecret?: string;
+  purgeSecret?: string;
   scope?: string;
 }
 
@@ -13,6 +13,7 @@ export interface Env {
   RELEASES: ReleasesBinding;
   OCEL_SLUG: string;
   OCEL_APP?: string;
+  OCEL_SERVES_WORKERS_DEV?: string;
   OCEL_DOMAIN_APPS?: string;
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_GLOBAL?: string;

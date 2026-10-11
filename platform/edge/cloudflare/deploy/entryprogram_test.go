@@ -53,6 +53,27 @@ func TestEveryEntryWorkerCachesItsServeEntrypointAndNothingElse(t *testing.T) {
 	}
 }
 
+func TestEveryEntryWorkerQueuesItsPurgesInADurableObject(t *testing.T) {
+	shared := programmed("", environment.TierPreview)
+	shared.PreviewBaseDomain = "preview.acme.com"
+	shared.PreviewKey = previewKey
+	for name, entry := range map[string]EntryProgram{
+		"the shared preview entry": shared,
+		"a project's preview":      programmed("acme", environment.TierPreview),
+		"a project's production":   programmed("acme", environment.TierProduction),
+	} {
+		t.Run(name, func(t *testing.T) {
+			built, err := entry.Build()
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if got := built.Spec.Worker.DurableObjects; !slices.Equal(got, []string{"PurgeQueue"}) {
+				t.Errorf("DurableObjects = %v, want only PurgeQueue", got)
+			}
+		})
+	}
+}
+
 func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *testing.T) {
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
