@@ -163,6 +163,52 @@ func TestAGatedPreviewsKeysAndHostsReachThePluginBeforeAnyRequestIsRoutedToIt(t 
 	}
 }
 
+func TestAHostBoundToAGatedPreviewIsInThePluginBeforeItIsRoutedToTheApp(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	shared := reconcileGated(t, balancer, "shop", &shopGate)
+	const bound = "pr-7-web.preview.example.com"
+	if err := shared.BindDomain(ctx, edge.DomainBinding{Hostname: bound, App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+
+	if err := (routerStack{s: shared}).MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer = %v", err)
+	}
+
+	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); !slices.Contains(hosts, bound) {
+		t.Errorf("the plugin gates %v, want %s, which now routes to the preview", hosts, bound)
+	}
+	events := w.happened()
+	probedAt, routedAt := indexOf(events, "probe "+bound), indexOf(events, "route "+bound)
+	if routedAt < 0 || probedAt < 0 || probedAt > routedAt {
+		t.Errorf("events %v, want %s proven gated before it was routed", events, bound)
+	}
+}
+
+func TestAHostBoundToAGatedPreviewThatIsAlreadyReleasedIsProvenGatedBeforeItIsRouted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	shared := reconcileGated(t, balancer, "shop", &shopGate)
+	stage(t, shared, previewRecord("b1"))
+	promote(t, shared, "p1", "b1")
+	const bound = "pr-7-web.preview.example.com"
+
+	if err := shared.BindDomain(ctx, edge.DomainBinding{Hostname: bound, App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+
+	events := w.happened()
+	probedAt, routedAt := indexOf(events, "probe "+bound), indexOf(events, "route "+bound)
+	if routedAt < 0 || probedAt < 0 || probedAt > routedAt {
+		t.Errorf("events %v, want %s proven gated before it was routed", events, bound)
+	}
+}
+
 func TestAPreviewHostIsRoutedOnlyOnceTheGateAnswersItsUncredentialedRequest(t *testing.T) {
 	t.Parallel()
 
