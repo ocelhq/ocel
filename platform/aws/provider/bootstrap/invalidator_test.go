@@ -145,6 +145,49 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
+	t.Run("signs a Cloudflare purge with the seed of its own tier's ISR writer and no other", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			template  string
+			seedParam string
+			other     string
+		}{
+			{"production", featureTemplate(FeatureISR, environment.TierProduction), cloudflareNames(environment.TierProduction).isrWriterSeedParam, cloudflareNames(environment.TierPreview).isrWriterSeedParam},
+			{"preview", featureTemplate(FeatureISR, environment.TierPreview), cloudflareNames(environment.TierPreview).isrWriterSeedParam, cloudflareNames(environment.TierProduction).isrWriterSeedParam},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parsePublisherTemplate(t, tc.template)
+
+				env := tmpl.Resources["TagInvalidator"].Properties.Environment.Variables
+				if env[tagInvalidatorSeedParamEnvVar] != tc.seedParam {
+					t.Errorf("%s = %q, want %q", tagInvalidatorSeedParamEnvVar, env[tagInvalidatorSeedParamEnvVar], tc.seedParam)
+				}
+				if !strings.Contains(tc.template, "parameter"+tc.seedParam+"'") {
+					t.Errorf("role does not grant %s", tc.seedParam)
+				}
+				if strings.Contains(tc.template, "parameter"+tc.other+"'") {
+					t.Errorf("role reaches the other bootstrap's seed %s", tc.other)
+				}
+				var actions []string
+				for _, st := range tmpl.Resources["TagInvalidatorRole"].Properties.Policies[0].PolicyDocument.Statement {
+					switch a := st.Action.(type) {
+					case string:
+						actions = append(actions, a)
+					case []any:
+						for _, one := range a {
+							actions = append(actions, one.(string))
+						}
+					}
+				}
+				for _, want := range []string{"ssm:GetParameter", "kms:Decrypt"} {
+					if !slices.Contains(actions, want) {
+						t.Errorf("role grants %v, missing %s the seed is read with", actions, want)
+					}
+				}
+			})
+		}
+	})
+
 	t.Run("renders no alarms", func(t *testing.T) {
 		for name, res := range parsePublisherTemplate(t, featureTemplate(FeatureISR, environment.TierProduction)).Resources {
 			if res.Type == "AWS::CloudWatch::Alarm" {

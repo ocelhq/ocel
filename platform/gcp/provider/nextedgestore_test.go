@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -88,6 +89,31 @@ func TestANextServiceBehindTheWorkerIsToldItsISRWriterAndNoTagDatabase(t *testin
 		if env[name] == "" {
 			t.Errorf("the service is told no %s, and fetch entries still live in Cloud Storage", name)
 		}
+	}
+}
+
+func TestANextServiceBehindTheWorkerIsToldWhereTheWorkerPurges(t *testing.T) {
+	w := behindTheWorkerWithItsWriter(t)
+	w.spec.App.ISR.PurgeURL = "https://shop.acct.workers.dev/.ocel/purge"
+
+	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	if got := envOf(w.server.created[0].Template.Containers[0])[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/.ocel/purge" {
+		t.Errorf("%s = %q, want the URL the worker takes purges at", edge.PurgeURLVar, got)
+	}
+}
+
+func TestANextServiceBehindTheWorkerWhoseStackNamesNoPurgeURLIsToldNone(t *testing.T) {
+	w := behindTheWorkerWithItsWriter(t)
+
+	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	if got, told := envOf(w.server.created[0].Template.Containers[0])[edge.PurgeURLVar]; told {
+		t.Errorf("%s = %q, want none: nothing names where to purge", edge.PurgeURLVar, got)
 	}
 }
 

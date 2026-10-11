@@ -27,6 +27,8 @@ const StaticRulesVar = "OCEL_STATIC_RULES"
 
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
 
+const PurgeURLVar = "OCEL_PURGE_URL"
+
 const (
 	OriginSecretVar         = "OCEL_ORIGIN_SECRET"
 	OriginSecretPreviousVar = "OCEL_ORIGIN_SECRET_PREVIOUS"

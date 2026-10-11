@@ -11,6 +11,7 @@
     "./empty-body": "./src/empty-body.mts",
     "./isr-writer": "./src/isr-writer.mts",
     "./preview-gate": "./src/preview-gate.mts",
+    "./purge": "./src/purge.mts",
     "./revalidation": "./src/revalidation.mts",
     "./hosting": "./src/hosting.mts",
     "./revalidation/sample": "./src/revalidation-sample.mts",

@@ -4,6 +4,8 @@ export const targetsAttribute = "value";
 
 export const routerPartition = "routers#cloudfront";
 
+export const cloudflarePartition = "routers#cloudflare";
+
 export interface DynamoLike {
   send(command: any): Promise<any>;
 }
@@ -12,8 +14,16 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
+function escaped(project: string): string {
+  return project.replaceAll("%", "%25").replaceAll("#", "%23");
+}
+
 export function projectPartition(project: string): string {
-  return `${routerPartition}#${project.replaceAll("%", "%25").replaceAll("#", "%23")}`;
+  return `${routerPartition}#${escaped(project)}`;
+}
+
+export function cloudflareProjectPartition(project: string): string {
+  return `${cloudflarePartition}#${escaped(project)}`;
 }
 
 async function notedAt(
@@ -42,18 +52,22 @@ export async function targetsOf(
   dynamo: DynamoLike,
   commands: DynamoCommands,
   table: string,
-  bootstrapTier: string,
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
     notedAt(dynamo, commands, table, routerPartition),
     notedAt(dynamo, commands, table, projectPartition(project)),
   ]);
-  const targets = [...new Set([...wildcard, ...owned])].sort();
-  if (targets.length === 0) {
-    console.warn(
-      `ocel: the ${bootstrapTier} CloudFront router names no front to invalidate for ${project}, so its raised tags reach nothing`,
-    );
-  }
-  return targets;
+  return [...new Set([...wildcard, ...owned])].sort();
+}
+
+export function cloudflareTargetsOf(
+  dynamo: DynamoLike,
+  commands: DynamoCommands,
+  table: string,
+  project: string,
+): Promise<string[]> {
+  return notedAt(dynamo, commands, table, cloudflareProjectPartition(project)).then((urls) =>
+    [...new Set(urls)].sort(),
+  );
 }

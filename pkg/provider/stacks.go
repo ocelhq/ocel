@@ -121,6 +121,7 @@ type OriginGuard struct {
 type ISRSpec struct {
 	Prefix       string
 	TagNamespace string
+	PurgeURL     string
 }
 
 type BytecodeSpec struct {

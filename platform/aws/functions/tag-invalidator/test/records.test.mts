@@ -51,6 +51,43 @@ describe("raisesOf", () => {
     expect(raises.get(PREFIX)!.sequenceNumbers).toHaveLength(2);
   });
 
+  it("reads a tag expired at once as a purge raised when it was expired", () => {
+    const raises = raisesOf([tagRecord("cart", { expired: { N: "300" } })]);
+
+    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 300 }]);
+  });
+
+  it("reads a tag only marked stale as an invalidate raised when it went stale", () => {
+    const raises = raisesOf([tagRecord("home", { stale: { N: "200" } })]);
+
+    expect(raises.get(PREFIX)!.entries).toEqual([
+      { tag: "home", mode: "invalidate", raisedAt: 200 },
+    ]);
+  });
+
+  it("reads a tag stale now and expiring later as an invalidate, raised when it went stale", () => {
+    const raises = raisesOf([tagRecord("home", { stale: { N: "200" }, expired: { N: "60200" } })]);
+
+    expect(raises.get(PREFIX)!.entries).toEqual([
+      { tag: "home", mode: "invalidate", raisedAt: 200 },
+    ]);
+  });
+
+  it("reads a tag stale and expired together as a purge", () => {
+    const raises = raisesOf([tagRecord("home", { stale: { N: "200" }, expired: { N: "200" } })]);
+
+    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "home", mode: "purge", raisedAt: 200 }]);
+  });
+
+  it("keeps a tag raised twice once, as a purge if either raise purged, as late as the later", () => {
+    const raises = raisesOf([
+      tagRecord("cart", { stale: { N: "500" } }),
+      tagRecord("cart", { expired: { N: "300" } }),
+    ]);
+
+    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 500 }]);
+  });
+
   it("derives the build from gsi1pk, not from a pk a tag can forge", () => {
     const raises = raisesOf([
       tagRecord("evil#PROJECT#other#STACK#prod--app--r00000000#TAG#", { expired: { N: "1" } }),

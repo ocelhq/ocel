@@ -441,6 +441,46 @@ test("the GCP host keeps pages and tags in the edge's store when its service is 
   }
 });
 
+test("the GCP host told where the worker purges clears each tag it records at the worker, signed with the writer's secret", async () => {
+  const calls = stubFetch((url) =>
+    url.hostname === "shop.acct.workers.dev"
+      ? new Response(null, { status: 202 })
+      : new Response(null, { status: 204 }),
+  );
+  try {
+    const host = newGcpNextHost({
+      ...writerEnv,
+      OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
+      OCEL_CACHE_TAG_PURGE: "1",
+      OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
+    });
+    const store = await host.newCacheStore!();
+
+    await store.writeTags(["a", "b"], { expired: 5 });
+
+    const purges = calls.filter((call) => call.url.hostname === "shop.acct.workers.dev");
+    const bodies = purges.map((call) => JSON.parse(String(call.init?.body)));
+    expect(bodies.every((body) => body.release === "r1a2b3c4d" && body.mode === "purge")).toBe(
+      true,
+    );
+    expect(
+      bodies.flatMap((body) => body.tags.map((tag: { tag: string }) => tag.tag)).sort(),
+    ).toEqual(["a", "b"]);
+    const writes = calls.findIndex((call) => call.url.pathname.endsWith("/tags"));
+    const firstPurge = calls.findIndex((call) => call.url.hostname === "shop.acct.workers.dev");
+    expect(writes).toBeGreaterThanOrEqual(0);
+    expect(firstPurge).toBeGreaterThan(writes);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("the GCP host told where the worker purges and no release refuses to start", () => {
+  expect(() =>
+    newGcpNextHost({ ...writerEnv, OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge" }),
+  ).toThrow(/OCEL_PURGE_URL/);
+});
+
 test("the GCP host refuses an isr-writer url without its secret", () => {
   const { OCEL_ISR_WRITER_SECRET: _, ...env } = writerEnv;
 

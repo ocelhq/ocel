@@ -1278,7 +1278,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 }
 
 func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
-	return AppServingFor(AppServingInput{
+	facts, err := AppServingFor(AppServingInput{
 		Root:              r.artifactRoot,
 		Project:           naming.Sanitize(r.spec.Slug),
 		App:               entry.App,
@@ -1289,6 +1289,13 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		EdgeRunsCode:      r.front.Facts().RunsCode,
 		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
 	})
+	if err != nil {
+		return AppServing{}, err
+	}
+	if stack := r.edgeStack(); facts.ISR != nil && stack != nil {
+		facts.ISR.PurgeURL = stack.State().PurgeURL
+	}
+	return facts, nil
 }
 
 func (r *deployRun) ref(stack naming.StackName) provider.StackRef {

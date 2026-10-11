@@ -1,4 +1,6 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { createHmac } from "node:crypto";
+import { purgeSecret, purgeSignatureHeader } from "@platform/edge-contract/purge";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { invalidateAll } from "../src/invalidate.mjs";
 import type { Raises } from "../src/records.mjs";
@@ -55,8 +57,16 @@ function named(name: string): Error {
   return error;
 }
 
+function raiseOf(tags: string[], sequenceNumbers: string[], raisedAt = 1_000) {
+  return {
+    tags,
+    entries: tags.map((tag) => ({ tag, mode: "purge" as const, raisedAt })),
+    sequenceNumbers,
+  };
+}
+
 function raises(tags: string[], prefix = PREFIX): Raises {
-  return new Map([[prefix, { tags, sequenceNumbers: ["seq-1"] }]]);
+  return new Map([[prefix, raiseOf(tags, ["seq-1"])]]);
 }
 
 function invalidator(dynamo: FakeDynamo, cloudfront: FakeCloudFront) {
@@ -130,8 +140,8 @@ it("reaches the wildcard for a project that names no front of its own", async ()
 
 it("reads the targets once for a batch that raises the same project twice", async () => {
   const both: Raises = new Map([
-    [PREFIX, { tags: ["products"], sequenceNumbers: ["seq-1"] }],
-    ["prod/acme/api/r1111111a/isr", { tags: ["cart"], sequenceNumbers: ["seq-2"] }],
+    [PREFIX, raiseOf(["products"], ["seq-1"])],
+    ["prod/acme/api/r1111111a/isr", raiseOf(["cart"], ["seq-2"])],
   ]);
 
   await invalidateAll(invalidator(dynamo, cloudfront), both);
@@ -165,7 +175,7 @@ it("names a batch by what it contains, so a redrive re-sends nothing new", async
 });
 
 it("names a later raise of the same tag differently, so it is not swallowed", async () => {
-  const later: Raises = new Map([[PREFIX, { tags: ["products"], sequenceNumbers: ["seq-2"] }]]);
+  const later: Raises = new Map([[PREFIX, raiseOf(["products"], ["seq-2"])]]);
 
   await invalidateAll(invalidator(dynamo, cloudfront), raises(["products"]));
   const before = cloudfront.calls[0].InvalidationBatch.CallerReference;
@@ -293,4 +303,182 @@ it("says so, and invents no target, for a prefix it cannot read", async () => {
   expect(dynamo.reads).toEqual([]);
   expect(cloudfront.calls).toEqual([]);
   expect(warn.mock.calls.flat().join(" ")).toContain("nonsense");
+});
+
+describe("the Cloudflare target", () => {
+  const CLOUDFLARE_PROJECT = "routers#cloudflare#acme";
+  const PURGE_URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
+  const SEED = "seed-1";
+
+  class FakeWorkers {
+    sent: { url: string; body: any; signature: string | null }[] = [];
+    refuse: Response | Error | null = null;
+
+    fetch = (async (url: string, init: RequestInit) => {
+      this.sent.push({
+        url,
+        body: JSON.parse(String(init.body)),
+        signature: new Headers(init.headers).get(purgeSignatureHeader),
+      });
+      if (this.refuse instanceof Error) throw this.refuse;
+      return this.refuse?.clone() ?? new Response(null, { status: 202 });
+    }) as unknown as typeof fetch;
+  }
+
+  let workers: FakeWorkers;
+  let seedReads: number;
+
+  function cloudflareInvalidator(over: Partial<ReturnType<typeof invalidator>> = {}) {
+    return {
+      ...invalidator(dynamo, cloudfront),
+      ...over,
+      cloudflare: {
+        fetch: workers.fetch,
+        readSeed: async () => {
+          seedReads++;
+          return SEED;
+        },
+        sleep: async () => {},
+        random: () => 1,
+      },
+    };
+  }
+
+  beforeEach(() => {
+    workers = new FakeWorkers();
+    seedReads = 0;
+    dynamo = new FakeDynamo(new Map([[CLOUDFLARE_PROJECT, [PURGE_URL]]]));
+  });
+
+  it("posts the raise, signed with the release's secret, to the URL the project's edge named", async () => {
+    const failed = await invalidateAll(
+      cloudflareInvalidator(),
+      new Map([
+        [
+          PREFIX,
+          {
+            ...raiseOf([], ["seq-1"]),
+            entries: [{ tag: "_N_T_/blog/a", mode: "purge", raisedAt: 5_000 }],
+          },
+        ],
+      ]),
+    );
+
+    expect(failed).toEqual([]);
+    expect(workers.sent).toHaveLength(1);
+    const sent = workers.sent[0]!;
+    expect(sent.url).toBe(PURGE_URL);
+    expect(sent.body).toEqual({
+      release: RELEASE,
+      mode: "purge",
+      tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
+    });
+    const secret = purgeSecret(SEED, PREFIX);
+    expect(sent.signature).toBe(
+      createHmac("sha256", secret).update(JSON.stringify(sent.body)).digest("hex"),
+    );
+  });
+
+  it("reads the project's own Cloudflare partition and no CloudFront front", async () => {
+    await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(dynamo.reads.map((read) => read.Key.pk.S)).toEqual([
+      WILDCARD,
+      PROJECT,
+      CLOUDFLARE_PROJECT,
+    ]);
+    expect(cloudfront.calls).toEqual([]);
+  });
+
+  it("reaches every URL the project names, and reads the seed once for a batch", async () => {
+    dynamo = new FakeDynamo(
+      new Map([
+        [CLOUDFLARE_PROJECT, [PURGE_URL, "https://acme-staging.sub.workers.dev/.ocel/purge"]],
+      ]),
+    );
+    const both: Raises = new Map([
+      [PREFIX, raiseOf(["a"], ["seq-1"])],
+      ["prod/acme/api/r1111111a/isr", raiseOf(["b"], ["seq-2"])],
+    ]);
+
+    await invalidateAll(cloudflareInvalidator(), both);
+
+    expect(workers.sent.map((sent) => `${sent.body.release} ${sent.url}`).sort()).toEqual([
+      `r0a1b2c3d ${PURGE_URL}`,
+      "r0a1b2c3d https://acme-staging.sub.workers.dev/.ocel/purge",
+      `r1111111a ${PURGE_URL}`,
+      "r1111111a https://acme-staging.sub.workers.dev/.ocel/purge",
+    ]);
+    expect(seedReads).toBe(1);
+  });
+
+  it("reaches CloudFront and Cloudflare for a project that names both", async () => {
+    dynamo = new FakeDynamo(
+      new Map([
+        [PROJECT, ["E1PROD"]],
+        [CLOUDFLARE_PROJECT, [PURGE_URL]],
+      ]),
+    );
+
+    const failed = await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(failed).toEqual([]);
+    expect(cloudfront.calls.map((call) => call.DistributionId)).toEqual(["E1PROD"]);
+    expect(workers.sent).toHaveLength(1);
+  });
+
+  it("does not read the seed for a project that names no Cloudflare target", async () => {
+    dynamo = new FakeDynamo(new Map([[PROJECT, ["E1PROD"]]]));
+
+    await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(seedReads).toBe(0);
+    expect(workers.sent).toEqual([]);
+  });
+
+  it("works for an account with no Cloudflare support at all", async () => {
+    dynamo = new FakeDynamo(new Map([[PROJECT, ["E1PROD"]]]));
+
+    const failed = await invalidateAll(invalidator(dynamo, cloudfront), raises(["products"]));
+
+    expect(failed).toEqual([]);
+    expect(cloudfront.calls).toHaveLength(1);
+  });
+
+  it("fails the records of a build whose purge Cloudflare refused", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    workers.refuse = new Response(null, { status: 401 });
+
+    const failed = await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(failed).toEqual(["seq-1"]);
+  });
+
+  it("fails the records of a build whose seed cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const failed = await invalidateAll(
+      {
+        ...cloudflareInvalidator(),
+        cloudflare: {
+          fetch: workers.fetch,
+          readSeed: async () => {
+            throw new Error("ParameterNotFound");
+          },
+        },
+      },
+      raises(["products"]),
+    );
+
+    expect(failed).toEqual(["seq-1"]);
+    expect(workers.sent).toEqual([]);
+  });
+
+  it("does not warn that no front is named when only Cloudflare is", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await invalidateAll(cloudflareInvalidator(), raises(["products"]));
+
+    expect(warn).not.toHaveBeenCalled();
+  });
 });
