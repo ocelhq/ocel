@@ -635,7 +635,7 @@ func TestISREdgeReadable(t *testing.T) {
 		}
 	})
 
-	t.Run("lets the function tag an object only when the edge reads", func(t *testing.T) {
+	t.Run("lets the function tag only its page entries, and only when the edge reads", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		without, err := isrPolicy(cfg)
 		if err != nil {
@@ -650,8 +650,24 @@ func TestISREdgeReadable(t *testing.T) {
 		if strings.Contains(without, "s3:PutObjectTagging") {
 			t.Errorf("policy grants tagging with no edge reading: %s", without)
 		}
-		if !strings.Contains(with, "s3:PutObjectTagging") {
-			t.Errorf("policy does not grant tagging for an edge-readable cache: %s", with)
+		var doc struct {
+			Statement []struct {
+				Action   []string `json:"Action"`
+				Resource any      `json:"Resource"`
+			} `json:"Statement"`
+		}
+		if err := json.Unmarshal([]byte(with), &doc); err != nil {
+			t.Fatalf("parse policy: %v", err)
+		}
+		var tagged []any
+		for _, statement := range doc.Statement {
+			if slices.Contains(statement.Action, "s3:PutObjectTagging") {
+				tagged = append(tagged, statement.Resource)
+			}
+		}
+		want := fmt.Sprintf("arn:aws:s3:::%s/%s/cache/*", cfg.Bucket, cfg.Prefix)
+		if len(tagged) != 1 || tagged[0] != want {
+			t.Errorf("s3:PutObjectTagging is granted on %v, want only %s", tagged, want)
 		}
 	})
 }
