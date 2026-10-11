@@ -107,7 +107,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 	}
 }
 
-func TestTheBackendBucketReadsOnlyTheStaticFilesOfReleasesWithTheLoadBalancersServiceAgent(t *testing.T) {
+func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFilesOfReleases(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(loadBalancerProgram(frontSpec()))
@@ -124,9 +124,13 @@ func TestTheBackendBucketReadsOnlyTheStaticFilesOfReleasesWithTheLoadBalancersSe
 	}
 	condition, _ := grant.Args["condition"].(map[string]any)
 	expression, _ := condition["expression"].(string)
-	want := `resource.name.matches("^projects/_/buckets/ocel-acme-prod-production/objects/assets/[^/]+/[^/]+/[^/]+/[^/]+/assets/.+$")`
+	want := `resource.name == "projects/_/buckets/ocel-acme-prod-production" || ` +
+		`(resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/assets/") && ` +
+		`resource.name.extract("projects/_/buckets/ocel-acme-prod-production/objects/assets/{release}/assets/") != "")`
 	if expression != want {
-		t.Errorf("the grant is conditioned on %q, want %q: the bucket also holds function bundles, route tables and image config the public must not read", expression, want)
+		t.Errorf("the grant is conditioned on %q, want %q: the agent lists the bucket, so a missing file is a 404, "+
+			"and reads only the files under a release's assets/, not the function bundles, route tables and image config beside them, "+
+			"with only the functions IAM supports on resource.name", expression, want)
 	}
 }
 

@@ -92,8 +92,9 @@ Behind the `alb` edge, a request for a file under one of the build's immutable p
 `/_next/static/`, never reaches Cloud Run: the load balancer sends it to a backend bucket over the
 tier's bucket, with Cloud CDN caching it, and rewrites the path onto the release's storage prefix.
 A promotion or rollback moves that rewrite to the release it serves. The load balancer's service
-agent may read only the static files of releases in the bucket. A file missing under an immutable
-prefix is a 404 from the bucket, not a request to the service.
+agent may list the bucket's object names and read only the static files of releases in it; the
+listing is what makes a file missing under an immutable prefix a 404 from the bucket rather than a
+403, and never a request to the service.
 
 Each prerendered page renders on its first request after a deploy and is then served from the
 cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
