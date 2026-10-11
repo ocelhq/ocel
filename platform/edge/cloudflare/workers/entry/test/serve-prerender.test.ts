@@ -209,6 +209,31 @@ describe("a prerender served through Serve", () => {
     expect(res.headers.get("x-ocel-cache")).toBe(tier);
   });
 
+  it.each([
+    ["store", "HIT"],
+    ["stale-store", "STALE"],
+  ])(
+    "reports a miss Serve answered from the durable store (%s) as the %s tier, and keeps where it came from to itself",
+    async (source, tier) => {
+      const res = await get(
+        "/blog",
+        deps(fakeServing(cached("MISS", { "x-ocel-entry-source": source }))),
+      );
+
+      expect(res.headers.get("x-ocel-cache")).toBe(tier);
+      expect(res.headers.has("x-ocel-entry-source")).toBe(false);
+    },
+  );
+
+  it("reports a hit by Workers Cache's status, whatever source filled it", async () => {
+    const res = await get(
+      "/blog",
+      deps(fakeServing(cached("UPDATING", { "x-ocel-entry-source": "store" }))),
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("STALE");
+  });
+
   it("reports a Serve response with no cache status as a miss", async () => {
     const res = await get("/blog", deps(fakeServing(() => new Response("page"))));
 

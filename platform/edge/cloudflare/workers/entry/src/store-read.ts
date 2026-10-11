@@ -237,7 +237,6 @@ export async function readFromStore(
   );
   headers.set("etag", storeValidator(entry));
   headers.set(edgeCacheTagHeader, tags.join(","));
-  headers.set(ENTRY_SOURCE_HEADER, "store");
-  headers.set("x-ocel-entry-modified", String(entry.lastModified));
+  headers.set(ENTRY_SOURCE_HEADER, stale ? "stale-store" : "store");
   return { response: new Response(body, { status, headers }), stale };
 }
