@@ -154,6 +154,25 @@ describe("postPurge", () => {
     expect(worker.sent).toHaveLength(2);
   });
 
+  it("abandons an attempt the worker never answers and sends again", async () => {
+    let attempts = 0;
+    const stalling = {
+      ...sender(),
+      attemptTimeoutMs: 5,
+      fetch: (async (_url: string | URL | Request, init?: RequestInit) => {
+        attempts++;
+        if (attempts > 1) return new Response(null, { status: 202 });
+        return new Promise<Response>((_, refuse) =>
+          init?.signal?.addEventListener("abort", () => refuse(init.signal!.reason)),
+        );
+      }) as typeof fetch,
+    };
+
+    await postPurge(stalling, URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+
+    expect(attempts).toBe(2);
+  });
+
   it("backs off with a growing ceiling and jitter", async () => {
     for (let i = 0; i < 3; i++) worker.answers.push(new Response(null, { status: 503 }));
     const jittered = { ...sender(), random: () => 0.5 };
