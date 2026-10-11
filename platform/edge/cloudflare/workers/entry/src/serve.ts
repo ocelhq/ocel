@@ -37,14 +37,6 @@ import { type ServeFactory, serveObjects } from "./serve-objects";
 import { readFromStore } from "./store-read";
 import { openEntrySource } from "./store-source";
 
-const REFRESH_COOLDOWN_MS = 5_000;
-
-const refreshing = new Map<string, number>();
-
-export function dropRefreshes(): void {
-  refreshing.clear();
-}
-
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
 const MISSING_EDGE_CACHE = "max-age=60";
@@ -91,6 +83,10 @@ function askedOf(keyedUrl: string, render: RenderRelease): string {
     return keyedUrl;
   }
   return new URL(originPath, keyedUrl).toString();
+}
+
+function isRevalidation(request: Request): boolean {
+  return request.headers.has("if-none-match") || request.headers.has("if-modified-since");
 }
 
 function admitSegment(request: Request, response: Response): Response {
@@ -226,9 +222,9 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         keyedUrl,
         originUrl: askedOf(keyedUrl, found.render),
       });
+    if (isRevalidation(request)) return render();
     const stored = await this.readStored(request, found.render, release, keyedUrl);
     if (!stored) return render();
-    this.refreshBehind(request.url, render);
     return forCache(admitSegment(request, stored), {
       release,
       pathname: new URL(keyedUrl).pathname,
@@ -267,16 +263,6 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read; rendering at the origin", error);
       return undefined;
     }
-  }
-
-  private refreshBehind(key: string, render: () => Promise<Response>): void {
-    const now = Date.now();
-    if ((refreshing.get(key) ?? 0) > now) return;
-    refreshing.set(key, now + REFRESH_COOLDOWN_MS);
-    const run = render()
-      .then((res) => res.body?.cancel())
-      .catch((error) => console.error("ocel: the refresh behind a stored page failed", error));
-    this.ctx.waitUntil(run);
   }
 
   private async renderAtOrigin(

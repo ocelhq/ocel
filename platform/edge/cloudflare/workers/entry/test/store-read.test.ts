@@ -82,7 +82,10 @@ describe("reading a page from the durable store on a Serve miss", () => {
       "r1a2b3c4d|_N_T_/layout,r1a2b3c4d|_N_T_/blog/a,r1a2b3c4d|posts",
     );
     expect(answer?.response.headers.get("x-ocel-entry-source")).toBe("store");
-    expect(answer?.response.headers.get("cache-control")).toBe("s-maxage=60");
+    expect(answer?.response.headers.get("cache-control")).toBe(
+      "s-maxage=0, stale-while-revalidate=31536000",
+    );
+    expect(answer?.response.headers.get("etag")).toBe(`W/"ocel-store-${NOW - 10_000}"`);
     expect(answer?.response.headers.has("x-next-cache-tags")).toBe(false);
   });
 
@@ -215,7 +218,7 @@ describe("whether an entry in the store may still be served", () => {
     expect(await readFromStore(call(), deps)).toBeNull();
   });
 
-  it("serves an invalidated entry as stale, for a second, so the page moves on the next read", async () => {
+  it("serves an invalidated entry as stale", async () => {
     const { deps } = harness(
       { [key("blog/a")]: entry() },
       { "r1a2b3c4d|_N_T_/blog/a": { invalidatedAt: NOW - 2_000 } },
@@ -224,7 +227,6 @@ describe("whether an entry in the store may still be served", () => {
     const answer = await readFromStore(call(), deps);
 
     expect(answer?.stale).toBe(true);
-    expect(answer?.response.headers.get("cache-control")).toBe("s-maxage=1");
   });
 
   it("serves an entry past its revalidate time as stale", async () => {
@@ -235,12 +237,14 @@ describe("whether an entry in the store may still be served", () => {
     expect(answer?.stale).toBe(true);
   });
 
-  it("keeps a served entry no longer than the time it has left", async () => {
+  it("lets Workers Cache serve it while revalidating no longer than until the entry expires", async () => {
     const { deps } = harness({ [key("blog/a")]: entry() });
 
-    const answer = await readFromStore(call({ window: { revalidate: 25 } }), deps);
+    const answer = await readFromStore(call({ window: { revalidate: 5, expire: 25 } }), deps);
 
-    expect(answer?.response.headers.get("cache-control")).toBe("s-maxage=15");
+    expect(answer?.response.headers.get("cache-control")).toBe(
+      "s-maxage=0, stale-while-revalidate=15",
+    );
   });
 
   it("goes to the origin for an entry past its expiration", async () => {
