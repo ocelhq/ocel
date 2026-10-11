@@ -3,21 +3,23 @@ package gcp
 import (
 	"context"
 	"crypto/x509"
+	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
-func TestAProbeCountsTheGatesOwnRefusalAsEnforcedAndNothingElse(t *testing.T) {
+func TestAProbeCountsNoOtherAnswerAsEnforced(t *testing.T) {
 	for name, answer := range map[string]struct {
 		status   int
 		cache    string
 		robots   string
 		enforced bool
 	}{
-		"the gate's login form":               {http.StatusUnauthorized, previewgate.CacheControl, previewgate.RobotsTag, true},
 		"the app answering 200":               {http.StatusOK, "", "", false},
 		"the app's own 401":                   {http.StatusUnauthorized, "", "", false},
 		"a 401 that is cacheable":             {http.StatusUnauthorized, "public, max-age=60", previewgate.RobotsTag, false},
@@ -37,6 +39,48 @@ func TestAProbeCountsTheGatesOwnRefusalAsEnforcedAndNothingElse(t *testing.T) {
 				}
 				w.WriteHeader(answer.status)
 			}))
+			t.Cleanup(balancer.Close)
+			roots := x509.NewCertPool()
+			roots.AddCert(balancer.Certificate())
+
+			enforced, err := (&Provider{warmRoots: roots}).probeGate(context.Background(), "pr-7.example.com", balancer.Listener.Addr().String())
+
+			if err != nil {
+				t.Fatalf("probeGate = %v", err)
+			}
+			if enforced != answer.enforced {
+				t.Errorf("probeGate = %v, want %v", enforced, answer.enforced)
+			}
+		})
+	}
+}
+
+func TestAProbeCountsOnlyTheGatesLoginFormForItsOwnRequestAsEnforced(t *testing.T) {
+	for name, answer := range map[string]struct {
+		respond  func(w http.ResponseWriter, r *http.Request)
+		enforced bool
+	}{
+		"the gate's login form": {func(w http.ResponseWriter, r *http.Request) {
+			verdict := previewgate.Gate{Key: "k"}.Check(previewgate.Request{Method: r.Method, Host: r.Host, Target: r.URL.RequestURI(), Header: previewgate.Header(r.Header)}, time.Now())
+			maps.Copy(w.Header(), http.Header(verdict.Response.Header))
+			w.WriteHeader(verdict.Response.Status)
+			io.WriteString(w, verdict.Response.Body)
+		}, true},
+		"the app's own 401 marked private and the load balancer's noindex": {func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Cache-Control", previewgate.CacheControl)
+			w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
+			w.WriteHeader(http.StatusUnauthorized)
+			io.WriteString(w, "sign in to the app")
+		}, false},
+		"a login form for another request": {func(w http.ResponseWriter, _ *http.Request) {
+			verdict := previewgate.Gate{Key: "k"}.Check(previewgate.Request{Method: http.MethodGet, Target: "/"}, time.Now())
+			maps.Copy(w.Header(), http.Header(verdict.Response.Header))
+			w.WriteHeader(verdict.Response.Status)
+			io.WriteString(w, verdict.Response.Body)
+		}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			balancer := httptest.NewTLSServer(http.HandlerFunc(answer.respond))
 			t.Cleanup(balancer.Close)
 			roots := x509.NewCertPool()
 			roots.AddCert(balancer.Certificate())
