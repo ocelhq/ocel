@@ -1,10 +1,11 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { BacklogStore } from "./purge-backlog";
 
-const EVERYTHING_AT = "purgedEverythingAt";
 const RETRY_AT = "retryAt";
 const FAILURES = "failures";
 const COVERED_AT = "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0))";
+const TAG_RELEASE =
+  "CASE WHEN instr(tag, '|') > 0 THEN substr(tag, 1, instr(tag, '|') - 1) ELSE tag END";
 
 export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogStore {
   const { sql } = storage;
@@ -51,7 +52,6 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
         tag,
       );
     },
-    readPurgedEverythingAt: () => readMeta(EVERYTHING_AT),
     readRetryAt: () => readMeta(RETRY_AT),
     readFailures: () => readMeta(FAILURES) ?? 0,
     readOldestRaisedAt: () => readNumber(`SELECT MIN(raised_at) AS value FROM pending`),
@@ -67,6 +67,13 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
         )
         .toArray()
         .map((row) => row.tag),
+    readPendingReleases: () =>
+      sql
+        .exec<{ release: string }>(
+          `SELECT DISTINCT ${TAG_RELEASE} AS release FROM pending ORDER BY release`,
+        )
+        .toArray()
+        .map((row) => row.release),
     addPending(mode, tag, raisedAt) {
       sql.exec(
         `INSERT INTO pending (tag, mode, raised_at, latest_at) VALUES (?, ?, ?, ?)
@@ -106,11 +113,26 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
         }
       });
     },
-    settleEverything(startedAt) {
+    settleReleases(releases, startedAt) {
       storage.transactionSync(() => {
-        writeMeta(EVERYTHING_AT, startedAt);
-        sql.exec(`DELETE FROM pending WHERE latest_at <= ?`, startedAt);
-        sql.exec(`UPDATE pending SET raised_at = MAX(raised_at, ?)`, startedAt);
+        for (const release of releases) {
+          sql.exec(
+            `INSERT INTO purged (tag, purged_at) VALUES (?, ?)
+             ON CONFLICT(tag) DO UPDATE SET purged_at = MAX(COALESCE(purged.purged_at, 0), excluded.purged_at)`,
+            release,
+            startedAt,
+          );
+          sql.exec(
+            `DELETE FROM pending WHERE ${TAG_RELEASE} = ? AND latest_at <= ?`,
+            release,
+            startedAt,
+          );
+          sql.exec(
+            `UPDATE pending SET raised_at = MAX(raised_at, ?) WHERE ${TAG_RELEASE} = ?`,
+            startedAt,
+            release,
+          );
+        }
       });
     },
     writeBackoff(failures, retryAt) {

@@ -291,10 +291,6 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     );
   }
 
-  async purgeEverything(): Promise<PurgeOutcome> {
-    return this.clear((cache) => cache.purge({ purgeEverything: true }));
-  }
-
   private async clear(
     run: (cache: PurgeableCache) => Promise<CachePurgeResult>,
   ): Promise<PurgeOutcome> {

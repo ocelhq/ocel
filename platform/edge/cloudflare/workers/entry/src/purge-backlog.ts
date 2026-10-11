@@ -9,21 +9,20 @@ export type PurgeOutcome = { ok: true } | { ok: false; codes: number[]; message:
 
 export interface PurgePort {
   purgeTags(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
-  purgeEverything(): Promise<PurgeOutcome>;
 }
 
 export interface BacklogStore {
   readCoveredAt(tag: string, mode: PurgeMode): number | undefined;
-  readPurgedEverythingAt(): number | undefined;
   readRetryAt(): number | undefined;
   readFailures(): number;
   readOldestRaisedAt(): number | undefined;
   hasPending(mode: PurgeMode): boolean;
   hasAnyPending(): boolean;
   readBatch(mode: PurgeMode, limit: number): string[];
+  readPendingReleases(): string[];
   addPending(mode: PurgeMode, tag: string, raisedAt: number): void;
   settleBatch(mode: PurgeMode, tags: string[], startedAt: number): void;
-  settleEverything(startedAt: number): void;
+  settleReleases(releases: string[], startedAt: number): void;
   writeBackoff(failures: number, retryAt: number): void;
   clearBackoff(): void;
   forgetCoveredBefore(at: number): void;
@@ -46,6 +45,11 @@ export const RATE_LIMITED = 1134;
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_CEILING_MS = 30_000;
 
+export function readTagRelease(tag: string): string {
+  const separator = tag.indexOf("|");
+  return separator === -1 ? tag : tag.slice(0, separator);
+}
+
 export class PurgeBacklog {
   private flushing: Promise<number | undefined> | undefined;
 
@@ -53,11 +57,10 @@ export class PurgeBacklog {
 
   raise(mode: PurgeMode, tags: readonly RaisedTag[]): void {
     const { store } = this.options;
-    const everythingAt = store.readPurgedEverythingAt() ?? Number.NEGATIVE_INFINITY;
     for (const { tag, raisedAt } of tags) {
       const coveredAt = Math.max(
         store.readCoveredAt(tag, mode) ?? Number.NEGATIVE_INFINITY,
-        everythingAt,
+        store.readCoveredAt(readTagRelease(tag), "purge") ?? Number.NEGATIVE_INFINITY,
       );
       if (coveredAt >= raisedAt) continue;
       store.addPending(mode, tag, raisedAt);
@@ -89,13 +92,16 @@ export class PurgeBacklog {
     if (oldest === undefined) return undefined;
 
     if (startedAt - oldest > ESCALATE_AFTER_MS) {
-      const outcome = await serve.purgeEverything();
-      if (outcome.ok) {
-        store.settleEverything(startedAt);
-        store.clearBackoff();
-      } else {
-        this.backOff("purge everything", outcome);
+      const releases = store.readPendingReleases();
+      for (let i = 0; i < releases.length; i += TAGS_PER_CALL) {
+        const outcome = await serve.purgeTags("purge", releases.slice(i, i + TAGS_PER_CALL));
+        if (!outcome.ok) {
+          this.backOff(`purge ${releases.length} release(s)`, outcome);
+          return this.readNextFlushAt();
+        }
       }
+      store.settleReleases(releases, startedAt);
+      store.clearBackoff();
       return this.readNextFlushAt();
     }
 

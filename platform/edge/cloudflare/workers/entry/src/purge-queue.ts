@@ -10,7 +10,6 @@ const flushRetryCeilingMs = 60_000;
 
 export interface ServePurgeRpc {
   purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome>;
-  purgeEverything(): Promise<PurgeOutcome>;
 }
 
 async function settlePurgeCall(call: () => Promise<PurgeOutcome>): Promise<PurgeOutcome> {
@@ -31,7 +30,6 @@ export function newServePort(serve: ServePurgeFactory): PurgePort {
   const stub = () => serve({ props: ORIGIN_PURGE_SCOPE });
   return {
     purgeTags: (mode, tags) => settlePurgeCall(() => stub().purge(mode, tags)),
-    purgeEverything: () => settlePurgeCall(() => stub().purgeEverything()),
   };
 }
 
@@ -47,7 +45,6 @@ export class PurgeQueue extends DurableObject<Env> {
       store: newSqliteBacklogStore(ctx.storage),
       serve: {
         purgeTags: (mode, tags) => this.serve.purgeTags(mode, tags),
-        purgeEverything: () => this.serve.purgeEverything(),
       },
       now: () => Date.now(),
       random: Math.random,

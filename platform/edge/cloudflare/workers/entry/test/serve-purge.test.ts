@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { Serve } from "../src/serve";
 
-type PurgeOptions = { tags?: string[]; purgeEverything?: boolean };
+type PurgeOptions = { tags?: string[] };
 type PurgeResult = { success: boolean; errors: { code: number; message: string }[] };
 
 function serveWithCache(cache: object | undefined): Serve {
@@ -39,15 +39,6 @@ describe("Serve clearing what it cached", () => {
 
     expect(outcome).toEqual({ ok: true });
     expect(cache.calls).toEqual([{ method: "invalidate", options: { tags: ["r1|a"] } }]);
-  });
-
-  it("purges everything it cached", async () => {
-    const cache = recordingCache(() => done);
-
-    const outcome = await serveWithCache(cache).purgeEverything();
-
-    expect(outcome).toEqual({ ok: true });
-    expect(cache.calls).toEqual([{ method: "purge", options: { purgeEverything: true } }]);
   });
 
   it("reports the codes of a refusal Cloudflare answers with", async () => {

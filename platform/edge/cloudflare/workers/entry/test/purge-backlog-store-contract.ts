@@ -13,7 +13,7 @@ export function describeBacklogStore(
         expect(store.readBatch("purge", 10)).toEqual([]);
         expect(store.readFailures()).toBe(0);
         expect(store.readRetryAt()).toBeUndefined();
-        expect(store.readPurgedEverythingAt()).toBeUndefined();
+        expect(store.readPendingReleases()).toEqual([]);
       }));
 
     it("keeps the oldest raisedAt and lets a purge win over an invalidate of one tag", () =>
@@ -71,14 +71,24 @@ export function describeBacklogStore(
         expect(store.readOldestRaisedAt()).toBe(100);
       }));
 
-    it("dates a raise that outlives purging everything from when that began", () =>
+    it("dates a raise that outlives purging its release from when that began", () =>
       withStore((store) => {
-        store.addPending("purge", "a", 100);
-        store.addPending("purge", "a", 900);
+        store.addPending("purge", "r1|a", 100);
+        store.addPending("purge", "r1|a", 900);
 
-        store.settleEverything(500);
+        store.settleReleases(["r1"], 500);
 
         expect(store.readOldestRaisedAt()).toBe(500);
+      }));
+
+    it("reads each release a pending tag belongs to once", () =>
+      withStore((store) => {
+        store.addPending("purge", "r2|a", 100);
+        store.addPending("invalidate", "r1|b", 100);
+        store.addPending("purge", "r1|path:/c|d", 100);
+        store.addPending("purge", "r3", 100);
+
+        expect(store.readPendingReleases()).toEqual(["r1", "r2", "r3"]);
       }));
 
     it("keeps a pending purge when only an invalidate of its tag settles", () =>
@@ -110,17 +120,20 @@ export function describeBacklogStore(
         expect(store.readCoveredAt("a", "purge")).toBe(300);
       }));
 
-    it("settles everything: drops what was raised by then and remembers when", () =>
+    it("settles releases: drops their tags raised by then and records each release purged", () =>
       withStore((store) => {
-        store.addPending("purge", "old", 100);
-        store.addPending("invalidate", "older", 50);
-        store.addPending("purge", "late", 900);
+        store.addPending("purge", "r1|old", 100);
+        store.addPending("invalidate", "r1|older", 50);
+        store.addPending("purge", "r1|late", 900);
+        store.addPending("purge", "r10|other", 100);
+        store.addPending("purge", "r2|other", 100);
 
-        store.settleEverything(500);
+        store.settleReleases(["r1"], 500);
 
-        expect(store.readBatch("purge", 10)).toEqual(["late"]);
+        expect(store.readBatch("purge", 10)).toEqual(["r10|other", "r2|other", "r1|late"]);
         expect(store.hasPending("invalidate")).toBe(false);
-        expect(store.readPurgedEverythingAt()).toBe(500);
+        expect(store.readCoveredAt("r1", "purge")).toBe(500);
+        expect(store.readCoveredAt("r2", "purge")).toBeUndefined();
       }));
 
     it("remembers a backoff until it is cleared", () =>
