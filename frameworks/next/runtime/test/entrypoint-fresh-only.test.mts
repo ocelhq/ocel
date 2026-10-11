@@ -3,14 +3,11 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { installNextHost } from "../src/host.mjs";
-import type { Refresh } from "../src/refresh.mjs";
 import { writeNextProjectFixture } from "../test-support/next-project-fixture.mjs";
 
 const launcherModule = `module.exports = {
   async handler(req, res) {
-    req.headers[Symbol.for("ocel.next.stale-entry.v2")] = { key: "blog", lastModified: 1000 };
-    res.end(String(req.headers.purpose));
+    res.end(JSON.stringify(req.headers[Symbol.for("ocel.next.served-route")] ?? null));
   },
 };
 `;
@@ -21,7 +18,7 @@ let dir: string;
 let ready: Promise<number>;
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ocel-next-refresh-"));
+  dir = await mkdtemp(join(tmpdir(), "ocel-next-fresh-only-"));
 
   const sockPath = join(dir, "control.sock");
   ready = new Promise((resolve) => {
@@ -51,30 +48,23 @@ beforeAll(async () => {
   await writeFile(launcherPath, launcherModule);
 
   delete process.env.OCEL_ORIGIN_DISPATCH;
+  process.env.OCEL_ORIGIN_FRESH_ONLY = "1";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
 });
 
 afterAll(async () => {
+  delete process.env.OCEL_ORIGIN_FRESH_ONLY;
   for (const c of controlConns) c.end();
   await new Promise<void>((resolve) => controlServer.close(() => resolve()));
   await rm(dir, { recursive: true, force: true });
 });
 
-test("a host that refreshes by request has a stale hit served as it is and refreshed through it", async () => {
-  const scheduled: Refresh[] = [];
-  installNextHost({
-    scheduleRefresh: async (refresh) => {
-      scheduled.push(refresh);
-    },
-  });
-
+test("a fresh-only origin tells the cache handler the revalidate window of the route it serves", async () => {
   await import("../src/entrypoint.mjs");
   const port = await ready;
+
   const res = await fetch(`http://127.0.0.1:${port}/blog`);
 
-  expect(await res.text()).toBe("prefetch");
-  expect(scheduled.map(({ url, key, lastModified }) => ({ url, key, lastModified }))).toEqual([
-    { url: "/blog", key: "blog", lastModified: 1000 },
-  ]);
+  expect(JSON.parse(await res.text())).toEqual({ revalidate: 60 });
 });

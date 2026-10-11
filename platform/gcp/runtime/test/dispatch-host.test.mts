@@ -7,8 +7,6 @@ import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { newGcpDispatchInvoke, readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
-import { newRefreshEndpoint } from "../src/next/refresh-endpoint.mjs";
-import { refreshSignatureHeader, signRefreshTask } from "../src/next/refresh-signature.mjs";
 import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
@@ -40,7 +38,6 @@ let dir: string;
 let local: http.Server;
 let localOrigin: string;
 const served: string[] = [];
-const refreshed: string[] = [];
 const gzipped = gzipSync(Buffer.from("compressed by the app"));
 
 beforeAll(async () => {
@@ -63,7 +60,6 @@ beforeAll(async () => {
       return;
     }
     served.push(String(req.headers["x-ocel-entry"]));
-    if (req.headers["x-ocel-refresh"] !== undefined) refreshed.push(String(req.url));
     res.end("rendered here");
   });
   await new Promise<void>((resolve) => local.listen({ host: "127.0.0.1", port: 0 }, resolve));
@@ -129,81 +125,11 @@ test("a static asset is served from the bucket the service is told holds it", as
   expect(await response.text()).toBe("<svg/>");
 });
 
-async function serveInvoke(invoke: ReturnType<typeof newGcpDispatchInvoke>): Promise<http.Server> {
-  const server = http.createServer((req, res) => {
-    Promise.resolve(invoke(req, res, { waitUntil() {} })).catch(() => {
-      res.statusCode = 500;
-      res.end();
-    });
-  });
-  await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, resolve));
-  return server;
-}
-
-function urlOf(server: http.Server): string {
-  return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-}
-
-test("a refresh task reaches the endpoint before the router strips its control headers", async () => {
-  const endpoint = newRefreshEndpoint({
-    path: "/_ocel/refresh",
-    isrPrefix: "prod/shop/web/r1/isr",
-    secret: "s1",
-    localOrigin,
-    check: async () => true,
-    readEntry: async () => ({ lastModified: 10, value: {} }),
-  });
-  const server = await serveInvoke(
-    newGcpDispatchInvoke(
-      localOrigin,
-      { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
-      endpoint,
-    ),
-  );
-  try {
-    const body = JSON.stringify({
-      isrPrefix: "prod/shop/web/r1/isr",
-      refresh: { url: "/home", key: "home", lastModified: 5, headers: { host: "shop.example" } },
-    });
-    const response = await fetch(`${urlOf(server)}/_ocel/refresh`, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer any",
-        [refreshSignatureHeader]: signRefreshTask("s1", Buffer.from(body)),
-      },
-      body,
-    });
-
-    expect(response.status).toBe(204);
-    expect(refreshed).toEqual(["/home"]);
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-});
-
-test("a service told no refresh url routes the refresh path like any other", async () => {
-  const server = await serveInvoke(
-    newGcpDispatchInvoke(
-      localOrigin,
-      { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
-      undefined,
-    ),
-  );
-  try {
-    const response = await fetch(`${urlOf(server)}/_ocel/refresh`);
-
-    expect(response.status).not.toBe(405);
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-});
-
 test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
-  const invoke = newGcpDispatchInvoke(
-    localOrigin,
-    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"), ...assetEnv },
-    undefined,
-  );
+  const invoke = newGcpDispatchInvoke(localOrigin, {
+    OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+    ...assetEnv,
+  });
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {
@@ -221,15 +147,11 @@ test("a static flight response reaches Cloud CDN without the router state tree i
 });
 
 test("a page the GCP dispatch serves carries its release tag when its edge purges by tag", async () => {
-  const invoke = newGcpDispatchInvoke(
-    localOrigin,
-    {
-      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
-      OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
-    },
-    undefined,
-  );
+  const invoke = newGcpDispatchInvoke(localOrigin, {
+    OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+    OCEL_CACHE_TAG_PURGE: "1",
+    OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
+  });
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {

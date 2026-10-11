@@ -1,4 +1,3 @@
-import { refreshHeader } from "@framework/next-cache";
 import type {
   DispatchTarget,
   MiddlewareMatcher,
@@ -73,7 +72,7 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", refreshHeader, edgeCacheHeader];
+export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", edgeCacheHeader];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);

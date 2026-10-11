@@ -6,7 +6,6 @@ import { readAssetStorage } from "./asset-storage.mjs";
 import { cloudCdnRelease, newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
 import { newCloudStorageAssetBucket, newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
-import type { RefreshEndpoint } from "./refresh-endpoint.mjs";
 
 function listFunctionIds(manifest: NextRouteTable): string[] {
   const ids = new Set<string>([manifest.rootFunction]);
@@ -34,17 +33,6 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
   };
 }
 
-export function newGcpDispatchInvoke(
-  localOrigin: string,
-  env: NodeJS.ProcessEnv,
-  endpoint: RefreshEndpoint | undefined,
-): Invoke {
-  const dispatch = newCloudCdnDispatchInvoke(
-    readGcpDispatchHost(env, localOrigin),
-    cloudCdnRelease(env),
-  );
-  return async (req, res, ocel) => {
-    if (endpoint && (await endpoint(req, res))) return;
-    return dispatch(req, res, ocel);
-  };
+export function newGcpDispatchInvoke(localOrigin: string, env: NodeJS.ProcessEnv): Invoke {
+  return newCloudCdnDispatchInvoke(readGcpDispatchHost(env, localOrigin), cloudCdnRelease(env));
 }

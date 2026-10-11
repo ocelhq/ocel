@@ -12,11 +12,13 @@ import {
   serveEntry,
   serveInvoke,
   serveLocal,
+  servesOnlyFresh,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
 import { purgeHeader } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import {
+  findRouteWindow,
   originShaping,
   releaseOf,
   revalidatingRoutes,
@@ -24,11 +26,11 @@ import {
 } from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
-import { prerenderedRoutes } from "./prerendered-routes.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
 import { purgedSince, purgeHeaderFor, purgeMark } from "./purge-signal.mjs";
-import { routeStaleHitsToRefresh } from "./refresh.mjs";
+import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
+import { noteServedRoute } from "./served-route.mjs";
 import { loadTagsManifest, mirrorTagsInto } from "./tags-manifest.mjs";
 
 function isPprResume(req: http.IncomingMessage): boolean {
@@ -73,8 +75,8 @@ async function boot(): Promise<void> {
   const manifest = await loadProjectManifest(dirname(handlerPath));
   const newIncrementalCache = newIncrementalCacheFactory(manifest, CacheHandler);
   const routes = revalidatingRoutes(manifest);
-  const prerendered = prerenderedRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
+  const freshOnly = servesOnlyFresh(process.env);
   const purgeRelease =
     invalidatesByCacheTag(process.env) && !dispatchesAtOrigin(process.env)
       ? releaseOf(process.env.OCEL_ISR_PREFIX)
@@ -84,9 +86,10 @@ async function boot(): Promise<void> {
     noteRscRequest(req.headers);
     if (shaping) shapeOriginCache(req, res, shaping);
     if (purgeRelease !== null) announcePurges(res, purgeRelease);
-    const { scheduleRefresh } = getNextHost();
-    if (scheduleRefresh)
-      routeStaleHitsToRefresh(req, res, prerendered, scheduleRefresh, ocel.waitUntil);
+    if (freshOnly) {
+      const window = findRouteWindow(req.url, routes);
+      if (window) noteServedRoute(req.headers as RequestHeaders, window);
+    }
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
     }
