@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
 
@@ -516,7 +517,7 @@ func serveLoginFront(t *testing.T, up *upstream, login *previewlogin.Login) *htt
 
 func postLogin(t *testing.T, front *httptest.Server, secret string, body io.Reader) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, front.URL+edge.PreviewLoginPath, body)
+	req, err := http.NewRequest(http.MethodPost, front.URL+previewgate.LoginPath, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +537,7 @@ func postLogin(t *testing.T, front *httptest.Server, secret string, body io.Read
 
 func gatedLogin(t *testing.T) *previewlogin.Login {
 	t.Helper()
-	login, _ := previewlogin.FromEnv([]string{edge.PreviewGateVar + `={"key":"k","passwordMac":"` + edge.HashPreviewPassword("k", "pw") + `"}`})
+	login, _ := previewlogin.FromEnv([]string{edge.PreviewGateVar + `={"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`})
 	return login
 }
 
@@ -546,7 +547,7 @@ func TestAContainerAnswersThePreviewLoginWithoutTheApp(t *testing.T) {
 
 	resp := postLogin(t, front, "secret", strings.NewReader("password=pw"))
 
-	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), edge.PreviewCookieName+"=") {
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), previewgate.CookieName+"=") {
 		t.Errorf("answer = %d setting %q, want 303 with the session", resp.StatusCode, resp.Header.Get("Set-Cookie"))
 	}
 	if up.seen != 0 {

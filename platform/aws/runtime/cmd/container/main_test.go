@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
@@ -216,14 +217,14 @@ func TestRun(t *testing.T) {
 
 	t.Run("the front answers the preview login and the gate keys never reach the app", func(t *testing.T) {
 		const secret = "s3cr3t"
-		gate := `{"key":"k","passwordMac":"` + edge.HashPreviewPassword("k", "pw") + `"}`
+		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
 		r := launch(t, "serve", originguard.OriginSecretVar+"="+secret, edge.PreviewGateVar+"="+gate)
 		body := r.awaitFront(t, secret)
 
 		if body.Gate != "" {
 			t.Errorf("the app was handed %s=%q; the keys that gate its preview are not the app's", edge.PreviewGateVar, body.Gate)
 		}
-		req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:"+r.port+edge.PreviewLoginPath, strings.NewReader("password=pw"))
+		req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:"+r.port+previewgate.LoginPath, strings.NewReader("password=pw"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +235,7 @@ func TestRun(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), edge.PreviewCookieName+"=") {
+		if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), previewgate.CookieName+"=") {
 			t.Errorf("login = %d setting %q, want 303 with the session", resp.StatusCode, resp.Header.Get("Set-Cookie"))
 		}
 		if code := r.quit(t, secret); code != 0 {

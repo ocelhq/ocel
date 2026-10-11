@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -22,7 +22,7 @@ const (
 
 func previewGateKey(stack string) string { return previewGatePrefix + stack }
 
-func (s *stack) reconcilePreviewGate(ctx context.Context, c Clients, gate *edge.PreviewGate) error {
+func (s *stack) reconcilePreviewGate(ctx context.Context, c Clients, gate *previewgate.Gate) error {
 	if s.tier() != environment.TierPreview {
 		return nil
 	}
@@ -47,7 +47,7 @@ func (s *stack) reconcilePreviewGate(ctx context.Context, c Clients, gate *edge.
 	return routes.write(ctx, []kvstypes.PutKeyRequestListItem{{Key: aws.String(key), Value: aws.String(want)}}, nil)
 }
 
-func encodePreviewGate(slug string, gate *edge.PreviewGate) (string, error) {
+func encodePreviewGate(slug string, gate *previewgate.Gate) (string, error) {
 	if gate == nil {
 		return "", nil
 	}

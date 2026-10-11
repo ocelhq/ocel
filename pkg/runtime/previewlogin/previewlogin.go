@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
 type Login struct {
-	gate       *edge.PreviewGate
+	gate       *previewgate.Gate
 	unreadable bool
 }
 
@@ -24,7 +25,7 @@ func FromEnv(env []string) (*Login, []string) {
 			kept = append(kept, entry)
 			continue
 		}
-		var gate edge.PreviewGate
+		var gate previewgate.Gate
 		if err := json.Unmarshal([]byte(value), &gate); err != nil || gate.Key == "" {
 			login.gate, login.unreadable = nil, true
 			continue
@@ -35,14 +36,14 @@ func FromEnv(env []string) (*Login, []string) {
 }
 
 func IsLogin(method, path string) bool {
-	return method == http.MethodPost && path == edge.PreviewLoginPath
+	return method == http.MethodPost && path == previewgate.LoginPath
 }
 
 func ReadBody(body io.Reader) ([]byte, error) {
-	return io.ReadAll(io.LimitReader(body, edge.PreviewLoginBodyMaxBytes+1))
+	return io.ReadAll(io.LimitReader(body, previewgate.LoginBodyMaxBytes+1))
 }
 
-func (l *Login) Answer(req edge.PreviewRequest, now time.Time) edge.PreviewResponse {
+func (l *Login) Answer(req previewgate.Request, now time.Time) previewgate.Response {
 	switch {
 	case l != nil && l.unreadable:
 		return refuse(http.StatusServiceUnavailable, "this release could not read the keys that gate its preview")
@@ -55,10 +56,10 @@ func (l *Login) Answer(req edge.PreviewRequest, now time.Time) edge.PreviewRespo
 	return refuse(http.StatusForbidden, "the preview gate answered no login")
 }
 
-func refuse(status int, body string) edge.PreviewResponse {
-	return edge.PreviewResponse{
+func refuse(status int, body string) previewgate.Response {
+	return previewgate.Response{
 		Status: status,
-		Header: http.Header{
+		Header: previewgate.Header{
 			"Content-Type":  {"text/plain; charset=utf-8"},
 			"Cache-Control": {"private, no-store"},
 			"X-Robots-Tag":  {"noindex"},

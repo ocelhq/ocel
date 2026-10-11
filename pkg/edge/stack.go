@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
@@ -32,7 +33,7 @@ type StackSpec struct {
 	GlobalPreview   string
 	PruneOnly       bool
 	PruneRoutes     bool
-	PreviewGate     *PreviewGate
+	PreviewGate     *previewgate.Gate
 	Warn            func(string)
 	Program         *ProgramSpec
 }

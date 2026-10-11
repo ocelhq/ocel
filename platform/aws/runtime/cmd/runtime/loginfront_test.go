@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
@@ -42,7 +43,7 @@ func (e loginEvent) payload(t *testing.T) []byte {
 	}
 	encoded, err := json.Marshal(map[string]any{
 		"version":         "2.0",
-		"rawPath":         edge.PreviewLoginPath,
+		"rawPath":         previewgate.LoginPath,
 		"requestContext":  map[string]any{"http": map[string]string{"method": http.MethodPost}},
 		"headers":         headers,
 		"body":            body,
@@ -56,7 +57,7 @@ func (e loginEvent) payload(t *testing.T) []byte {
 
 func gatedFront(t *testing.T) loginFront {
 	t.Helper()
-	gate, err := json.Marshal(edge.PreviewGate{Key: loginGateKey, PasswordMAC: edge.HashPreviewPassword(loginGateKey, loginPassword)})
+	gate, err := json.Marshal(previewgate.Gate{Key: loginGateKey, PasswordMAC: previewgate.HashPassword(loginGateKey, loginPassword)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,8 +94,8 @@ func TestTheRootFunctionAnswersTheLoginItselfAndSetsTheSession(t *testing.T) {
 	if p.StatusCode != http.StatusSeeOther || p.Headers["Location"] != "/docs" {
 		t.Errorf("answer = %d to %q, want 303 to /docs", p.StatusCode, p.Headers["Location"])
 	}
-	if len(p.Cookies) != 1 || !strings.HasPrefix(p.Cookies[0], edge.PreviewCookieName+"=") {
-		t.Errorf("cookies = %q, want the %s session", p.Cookies, edge.PreviewCookieName)
+	if len(p.Cookies) != 1 || !strings.HasPrefix(p.Cookies[0], previewgate.CookieName+"=") {
+		t.Errorf("cookies = %q, want the %s session", p.Cookies, previewgate.CookieName)
 	}
 	if p.Headers["Cache-Control"] != "private, no-store" || p.Headers["X-Robots-Tag"] != "noindex" {
 		t.Errorf("headers = %v, want private, no-store and noindex", p.Headers)
@@ -111,7 +112,7 @@ func TestTheRootFunctionReadsABase64LoginBody(t *testing.T) {
 
 func TestTheRootFunctionRefusesALoginBodyPastTheCap(t *testing.T) {
 	for _, encoded := range []bool{false, true} {
-		body := "password=open+sesame&pad=" + strings.Repeat("a", edge.PreviewLoginBodyMaxBytes)
+		body := "password=open+sesame&pad=" + strings.Repeat("a", previewgate.LoginBodyMaxBytes)
 
 		p, _, reached := loginAnswered(t, gatedFront(t), loginEvent{body: body, base64: encoded, withSecret: true})
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
 func fieldNames(typ reflect.Type) []string {
@@ -142,7 +143,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
-		stampOf := func(gate *edge.PreviewGate) string {
+		stampOf := func(gate *previewgate.Gate) string {
 			spec.PreviewGate = gate
 			stamp, err := specStamp(spec, generic)
 			if err != nil {
@@ -152,9 +153,9 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 		}
 
 		ungated := stampOf(nil)
-		gated := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m1", BypassSecrets: []string{"b1"}})
-		rotated := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m2", BypassSecrets: []string{"b1"}})
-		revoked := stampOf(&edge.PreviewGate{Key: "k1", PasswordMAC: "m2"})
+		gated := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m1", BypassSecrets: []string{"b1"}})
+		rotated := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m2", BypassSecrets: []string{"b1"}})
+		revoked := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m2"})
 
 		if len(slices.Compact(slices.Sorted(slices.Values([]string{ungated, gated, rotated, revoked})))) != 4 {
 			t.Errorf("stamps = %q, %q, %q, %q, want each gate to stamp differently: a rotated password or a revoked bypass secret must never deploy as up to date", ungated, gated, rotated, revoked)

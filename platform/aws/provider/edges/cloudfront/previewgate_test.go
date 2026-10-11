@@ -9,18 +9,19 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-var shopGate = edge.PreviewGate{
+var shopGate = previewgate.Gate{
 	Key:           "gate-key",
 	PasswordMAC:   "password-mac",
 	BypassSecrets: []string{"bypass-one"},
 	AllowOptions:  []string{"/api/"},
 }
 
-func gatedPreviewSpec(gate *edge.PreviewGate) edge.StackSpec {
+func gatedPreviewSpec(gate *previewgate.Gate) edge.StackSpec {
 	spec := previewStackSpec()
 	spec.PreviewGate = gate
 	return spec
@@ -30,13 +31,13 @@ func previewStackName() string {
 	return distributionName(defaultNamespace, conformanceSlug, environment.TierPreview)
 }
 
-func recordedGate(t *testing.T, w *world) (edge.PreviewGate, bool) {
+func recordedGate(t *testing.T, w *world) (previewgate.Gate, bool) {
 	t.Helper()
 	value, recorded := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+previewStackName()]
 	if !recorded {
-		return edge.PreviewGate{}, false
+		return previewgate.Gate{}, false
 	}
-	var gate edge.PreviewGate
+	var gate previewgate.Gate
 	if err := json.Unmarshal([]byte(value), &gate); err != nil {
 		t.Fatalf("the gate recorded for %s is %q, want the JSON the resolver reads: %v", previewStackName(), value, err)
 	}
@@ -73,7 +74,7 @@ func TestAGateIsKeyedByTheStackUnderAPrefixNoHostnameCanHave(t *testing.T) {
 
 func TestAGateWithNoListsIsRecordedWithEmptyListsTheResolverCanIterate(t *testing.T) {
 	w := newWorld()
-	reconcilePreview(t, previewBootstrapped(t, w), gatedPreviewSpec(&edge.PreviewGate{Key: "k", PasswordMAC: "m"}))
+	reconcilePreview(t, previewBootstrapped(t, w), gatedPreviewSpec(&previewgate.Gate{Key: "k", PasswordMAC: "m"}))
 
 	value := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+previewStackName()]
 	if !strings.Contains(value, `"bypassSecrets":[]`) || !strings.Contains(value, `"allowOptions":[]`) {

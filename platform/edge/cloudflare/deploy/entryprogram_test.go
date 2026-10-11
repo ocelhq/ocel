@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -338,7 +339,7 @@ func TestAnEntryWorkerWithNoOriginClientCertificateCarriesNone(t *testing.T) {
 	}
 }
 
-var previewGate = edge.PreviewGate{
+var previewGate = previewgate.Gate{
 	Key:           "gate-key",
 	PasswordMAC:   "password-mac",
 	BypassSecrets: []string{"bypass-one", "bypass-two"},
@@ -354,7 +355,7 @@ func TestAProjectsPreviewWorkerReceivesItsGateKeysAsOneWorkerSecret(t *testing.T
 		t.Fatalf("Build: %v", err)
 	}
 	worker := built.Spec.Worker
-	var got edge.PreviewGate
+	var got previewgate.Gate
 	if err := json.Unmarshal([]byte(worker.Secrets[edge.PreviewGateVar]), &got); err != nil {
 		t.Fatalf("Secrets[%s] = %q, want the gate as JSON: %v", edge.PreviewGateVar, worker.Secrets[edge.PreviewGateVar], err)
 	}
@@ -370,17 +371,17 @@ func TestTheSharedPreviewEntryReceivesEveryProjectsGateKeysAsOneWorkerSecret(t *
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.PreviewKey = previewKey
-	entry.PreviewGates = map[string]edge.PreviewGate{"acme": previewGate, "shop": {Key: "other"}}
+	entry.PreviewGates = map[string]previewgate.Gate{"acme": previewGate, "shop": {Key: "other"}}
 
 	built, err := entry.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	var got map[string]edge.PreviewGate
+	var got map[string]previewgate.Gate
 	if err := json.Unmarshal([]byte(built.Spec.Worker.Secrets[edge.PreviewGatesVar]), &got); err != nil {
 		t.Fatalf("Secrets[%s]: %v", edge.PreviewGatesVar, err)
 	}
-	want := map[string]edge.PreviewGate{"acme": previewGate, "shop": {Key: "other", BypassSecrets: []string{}, AllowOptions: []string{}}}
+	want := map[string]previewgate.Gate{"acme": previewGate, "shop": {Key: "other", BypassSecrets: []string{}, AllowOptions: []string{}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("gates secret = %+v, want %+v", got, want)
 	}

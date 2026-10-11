@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -54,8 +55,8 @@ type EdgeProgramRequest struct {
 	Env               string
 	PreviewBaseDomain string
 	PreviewKey        edge.PreviewKey
-	PreviewGate       *edge.PreviewGate
-	PreviewGates      map[string]edge.PreviewGate
+	PreviewGate       *previewgate.Gate
+	PreviewGates      map[string]previewgate.Gate
 	Entry             edge.WorkerModule
 }
 

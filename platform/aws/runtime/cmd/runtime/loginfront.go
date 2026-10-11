@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
@@ -35,14 +36,14 @@ func (f loginFront) answer(ev *httpEvent, now time.Time) *http.Response {
 	if query := ev.query(); query != "" {
 		target += "?" + query
 	}
-	answer := f.login.Answer(edge.PreviewRequest{
+	answer := f.login.Answer(previewgate.Request{
 		Method: ev.method(),
 		Host:   publicHost(header),
 		Target: target,
-		Header: header,
+		Header: previewgate.Header(header),
 		Body:   body,
 	}, now)
-	return &http.Response{StatusCode: answer.Status, Header: answer.Header, Body: io.NopCloser(strings.NewReader(answer.Body))}
+	return &http.Response{StatusCode: answer.Status, Header: http.Header(answer.Header), Body: io.NopCloser(strings.NewReader(answer.Body))}
 }
 
 func (ev *httpEvent) bodyReader() io.Reader {
