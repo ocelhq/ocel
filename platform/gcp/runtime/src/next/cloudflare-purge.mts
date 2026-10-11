@@ -1,4 +1,4 @@
-import { type PurgeSender, postPurge } from "@platform/edge-contract/purge";
+import { type PurgeSender, postPurge, purgeEntryOf } from "@platform/edge-contract/purge";
 
 import type { PurgeTags } from "./cdn-purge.mjs";
 
@@ -6,7 +6,6 @@ export interface CloudflarePurgeOptions extends Partial<PurgeSender> {
   url: string;
   release: string;
   secret: string;
-  now?: () => number;
 }
 
 export function newCloudflarePurge(options: CloudflarePurgeOptions): PurgeTags {
@@ -16,15 +15,12 @@ export function newCloudflarePurge(options: CloudflarePurgeOptions): PurgeTags {
     sleep: options.sleep,
     random: options.random,
   };
-  const now = options.now ?? Date.now;
-  return (tags) => {
-    const raisedAt = now();
-    return postPurge(
+  return (tags) =>
+    postPurge(
       sender,
       url,
       secret,
       release,
-      tags.map((tag) => ({ tag, mode: "purge", raisedAt })),
+      [...tags].flatMap(([tag, record]) => purgeEntryOf(tag, record) ?? []),
     );
-  };
 }

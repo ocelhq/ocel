@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   postPurge,
+  purgeEntryOf,
   purgeSecret,
   purgeSignatureHeader,
   tagsPerPurgeRequest,
@@ -174,4 +175,42 @@ describe("postPurge", () => {
       expect(worker.sent).toHaveLength(1);
     },
   );
+});
+
+describe("purgeEntryOf", () => {
+  it("reads a tag expired when it was raised as a purge raised then", () => {
+    expect(purgeEntryOf("cart", { expired: 300 })).toEqual({
+      tag: "cart",
+      mode: "purge",
+      raisedAt: 300,
+    });
+  });
+
+  it("reads a tag stale now and expiring later as an invalidate raised when it went stale", () => {
+    expect(purgeEntryOf("home", { stale: 200, expired: 9_000 })).toEqual({
+      tag: "home",
+      mode: "invalidate",
+      raisedAt: 200,
+    });
+  });
+
+  it("reads a tag only marked stale as an invalidate", () => {
+    expect(purgeEntryOf("home", { stale: 200 })).toEqual({
+      tag: "home",
+      mode: "invalidate",
+      raisedAt: 200,
+    });
+  });
+
+  it("reads a tag stale and expired at once as a purge", () => {
+    expect(purgeEntryOf("home", { stale: 200, expired: 200 })).toEqual({
+      tag: "home",
+      mode: "purge",
+      raisedAt: 200,
+    });
+  });
+
+  it("reads a record with neither time as nothing to purge", () => {
+    expect(purgeEntryOf("home", {})).toBeUndefined();
+  });
 });

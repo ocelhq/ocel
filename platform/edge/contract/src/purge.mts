@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
 
+import type { TagRecord } from "@framework/next-cache";
+
 export const purgePath = "/.ocel/purge";
 
 export const purgeSignatureHeader = "x-ocel-signature";
@@ -22,6 +24,16 @@ export interface PurgeSender {
   fetch: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+}
+
+export function purgeEntryOf(tag: string, record: TagRecord): PurgeEntry | undefined {
+  const raisedAt = record.stale ?? record.expired;
+  if (raisedAt === undefined) return undefined;
+  return {
+    tag,
+    mode: record.expired !== undefined && record.expired <= raisedAt ? "purge" : "invalidate",
+    raisedAt,
+  };
 }
 
 export function purgeSecret(seed: string, isrPrefix: string): string {

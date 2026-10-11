@@ -1,6 +1,6 @@
 import { isrPrefixOf } from "@platform/aws-runtime/tag-index";
 
-import type { PurgeEntry } from "@platform/edge-contract/purge";
+import { type PurgeEntry, purgeEntryOf } from "@platform/edge-contract/purge";
 
 type Attribute = { S?: string; N?: string };
 
@@ -24,27 +24,13 @@ export interface Coordinate {
   release: string;
 }
 
-function watermark(attr: Attribute | undefined): number | undefined {
+function readTimestamp(attr: Attribute | undefined): number | undefined {
   if (attr?.N === undefined) return undefined;
   const value = Number(attr.N);
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-function entryOf(
-  tag: string,
-  stale: number | undefined,
-  expired: number | undefined,
-): PurgeEntry | undefined {
-  const raisedAt = stale ?? expired;
-  if (raisedAt === undefined) return undefined;
-  return {
-    tag,
-    mode: expired !== undefined && expired <= raisedAt ? "purge" : "invalidate",
-    raisedAt,
-  };
-}
-
-function merged(entries: PurgeEntry[], next: PurgeEntry): void {
+function mergeEntry(entries: PurgeEntry[], next: PurgeEntry): void {
   const i = entries.findIndex((entry) => entry.tag === next.tag);
   const known = entries[i];
   if (known === undefined) {
@@ -73,12 +59,15 @@ export function raisesOf(records: readonly StreamRecord[]): Raises {
     const isrPrefix = isrPrefixOf(image.gsi1pk?.S ?? "");
     const tag = image.tag?.S;
     if (isrPrefix === null || tag === undefined || tag === "") continue;
-    const entry = entryOf(tag, watermark(image.stale), watermark(image.expired));
+    const entry = purgeEntryOf(tag, {
+      stale: readTimestamp(image.stale),
+      expired: readTimestamp(image.expired),
+    });
     if (entry === undefined) continue;
 
     const raise: Raise = raises.get(isrPrefix) ?? { tags: [], entries: [], sequenceNumbers: [] };
     if (!raise.tags.includes(tag)) raise.tags.push(tag);
-    merged(raise.entries, entry);
+    mergeEntry(raise.entries, entry);
     if (record.dynamodb?.SequenceNumber !== undefined) {
       raise.sequenceNumbers.push(record.dynamodb.SequenceNumber);
     }
