@@ -17,6 +17,8 @@ var pulumiTokens = map[string]string{
 	"gcp:compute/targetHttpsProxy:TargetHttpsProxy":                     tfTargetHTTPSProxy,
 	"gcp:compute/globalForwardingRule:GlobalForwardingRule":             tfGlobalForwardingRule,
 	"gcp:compute/regionNetworkEndpointGroup:RegionNetworkEndpointGroup": tfNetworkEndpointGroup,
+	"gcp:compute/backendBucket:BackendBucket":                           tfBackendBucket,
+	"gcp:projects/iAMMember:IAMMember":                                  tfProjectIAMMember,
 }
 
 func declaredCounts(t *testing.T, program Program) map[string]int {

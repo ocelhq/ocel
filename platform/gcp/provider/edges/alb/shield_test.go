@@ -58,6 +58,7 @@ func shieldedLoadBalancer() map[string]string {
 		"certificateMap": "ocel-alb-shielded-production-certs",
 		"urlMap":         "ocel-alb-shielded-production-routes",
 		"notFound":       "ocel-alb-shielded-production-notfound",
+		"assetsBackend":  "ocel-alb-shielded-production-assets",
 	}
 }
 
@@ -370,6 +371,7 @@ func shieldedPreviewLoadBalancer() map[string]string {
 		"certificateMap": "ocel-alb-shielded-preview-certs",
 		"urlMap":         "ocel-alb-shielded-preview-routes",
 		"notFound":       "ocel-alb-shielded-preview-notfound",
+		"assetsBackend":  "ocel-alb-shielded-preview-assets",
 	}
 }
 

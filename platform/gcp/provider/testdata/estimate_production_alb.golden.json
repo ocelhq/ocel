@@ -300,6 +300,14 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_compute_backend_bucket:ocel-alb-production-assets",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_project_iam_member:ocel-alb-production-reader",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_certificate_manager_certificate_map:ocel-alb-production-certs",
       "status": "STATUS_FREE"
     },
@@ -495,13 +503,14 @@
   ],
   "coverage": {
     "supported": 14,
-    "free": 11,
+    "free": 13,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
       "google_certificate_manager_certificate_map_entry",
       "google_cloud_run_v2_service",
       "google_cloud_scheduler_job",
+      "google_compute_backend_bucket",
       "google_compute_backend_service",
       "google_compute_global_address",
       "google_compute_global_forwarding_rule",
@@ -512,6 +521,7 @@
       "google_kms_crypto_key",
       "google_kms_key_ring",
       "google_project_iam_custom_role",
+      "google_project_iam_member",
       "google_secret_manager_secret",
       "google_service_account",
       "google_storage_bucket"

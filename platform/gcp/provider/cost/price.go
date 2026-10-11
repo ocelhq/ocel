@@ -78,6 +78,8 @@ var formulas = pricing.Table{
 	"google_secret_manager_secret":                          secret,
 	"google_compute_global_address":                         free,
 	"google_compute_backend_service":                        backendService,
+	"google_compute_backend_bucket":                         free,
+	"google_project_iam_member":                             free,
 	"google_certificate_manager_certificate_map":            free,
 	"google_certificate_manager_certificate_map_entry":      free,
 	"google_compute_url_map":                                free,

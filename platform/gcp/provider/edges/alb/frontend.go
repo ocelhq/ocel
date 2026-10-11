@@ -33,6 +33,8 @@ var claimedRouting = []string{"hostRules", "pathMatchers"}
 type names struct {
 	Address        string
 	NotFound       string
+	AssetsBackend  string
+	AssetsReader   string
 	CertificateMap string
 	URLMap         string
 	Proxy          string
@@ -54,6 +56,8 @@ func loadBalancerNames(tier environment.Tier, shielded bool) names {
 	return names{
 		Address:        stem + "-address",
 		NotFound:       stem + "-notfound",
+		AssetsBackend:  stem + "-assets",
+		AssetsReader:   stem + "-reader",
 		CertificateMap: stem + "-certs",
 		URLMap:         stem + "-routes",
 		Proxy:          stem + "-https",
@@ -70,6 +74,7 @@ type loadBalancerSpec struct {
 	Region    string
 	Names     names
 	Tier      environment.Tier
+	Assets    AssetsBucket
 	Preview   previewEntry
 	Origin    originWildcardEntry
 	ClientCAs []string
@@ -242,6 +247,10 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		if err != nil {
 			return err
 		}
+		assets, err := declareAssetsBackend(ctx, spec, projectID)
+		if err != nil {
+			return err
+		}
 		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap,
 			&certificatemanager.CertificateMapResourceArgs{
 				Name:    pulumi.String(spec.Names.CertificateMap),
@@ -306,6 +315,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		ctx.Export(outputCertificateMap, certificates.Name)
 		ctx.Export(outputURLMap, routes.Name)
 		ctx.Export(outputNotFound, notFound.Name)
+		ctx.Export(outputAssetsBackend, assets.Name)
 		return nil
 	}
 }

@@ -84,13 +84,14 @@ type LoadBalancer struct {
 	CertificateMap string `json:"certificateMap,omitempty"`
 	URLMap         string `json:"urlMap,omitempty"`
 	NotFound       string `json:"notFound,omitempty"`
+	AssetsBackend  string `json:"assetsBackend,omitempty"`
 	Shielded       bool   `json:"shielded,omitempty"`
 
 	TrustedFingerprint string `json:"-"`
 }
 
 func (f LoadBalancer) provisioned() bool {
-	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != ""
+	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != "" && f.AssetsBackend != ""
 }
 
 const (
@@ -98,6 +99,7 @@ const (
 	outputCertificateMap = "certificateMap"
 	outputURLMap         = "urlMap"
 	outputNotFound       = "notFound"
+	outputAssetsBackend  = "assetsBackend"
 	outputTrusted        = "trustedFingerprint"
 )
 
@@ -107,6 +109,7 @@ func loadBalancerOf(outputs map[string]string) LoadBalancer {
 		CertificateMap: outputs[outputCertificateMap],
 		URLMap:         outputs[outputURLMap],
 		NotFound:       outputs[outputNotFound],
+		AssetsBackend:  outputs[outputAssetsBackend],
 
 		TrustedFingerprint: outputs[outputTrusted],
 	}

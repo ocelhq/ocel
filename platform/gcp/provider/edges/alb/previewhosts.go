@@ -114,6 +114,7 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 		Service: service,
 		Backend: backendName(s.state.Slug, s.state.Tier, host.Hostname),
 		Pointer: move.Pointer,
+		Static:  staticOf(record, s.recorded.LoadBalancer),
 	}
 	if !deployment {
 		return served, nil, nil

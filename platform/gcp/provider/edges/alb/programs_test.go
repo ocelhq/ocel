@@ -24,7 +24,7 @@ func shieldedBinding(hosts map[string]Host, shielded bool) Program {
 func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	seen, err := declared(loadBalancerProgram(frontSpec()))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -36,6 +36,8 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 		"ocel-alb-production-routes":   "gcp:compute/uRLMap:URLMap",
 		"ocel-alb-production-https":    "gcp:compute/targetHttpsProxy:TargetHttpsProxy",
 		"ocel-alb-production-forward":  "gcp:compute/globalForwardingRule:GlobalForwardingRule",
+		"ocel-alb-production-assets":   "gcp:compute/backendBucket:BackendBucket",
+		"ocel-alb-production-reader":   "gcp:projects/iAMMember:IAMMember",
 	} {
 		resource, declared := seen[name]
 		if !declared {
@@ -46,8 +48,8 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 			t.Errorf("%s is a %s, want a %s", name, resource.Token, token)
 		}
 	}
-	if len(seen) != 6 {
-		t.Errorf("the frontend declares %d resources, want the six one load balancer is: %v", len(seen), seen)
+	if len(seen) != 8 {
+		t.Errorf("the frontend declares %d resources, want the six one load balancer is and the backend bucket with the grant that lets it read: %v", len(seen), seen)
 	}
 
 	routes := seen["ocel-alb-production-routes"]
@@ -71,6 +73,68 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	proxy := seen["ocel-alb-production-https"]
 	if got := proxy.Args["certificateMap"]; got == nil {
 		t.Error("the https proxy names no certificate map, and every hostname's certificate is served through one")
+	}
+}
+
+func frontSpec() loadBalancerSpec {
+	return loadBalancerSpec{
+		Names:  loadBalancerNames(environment.TierProduction, false),
+		Assets: AssetsBucket{Name: "ocel-acme-prod-production", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"},
+	}
+}
+
+func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(loadBalancerProgram(frontSpec()))
+	if err != nil {
+		t.Fatalf("the frontend program = %v", err)
+	}
+
+	bucket := seen["ocel-alb-production-assets"]
+	if got := bucket.Args["bucketName"]; got != "ocel-acme-prod-production" {
+		t.Errorf("the backend bucket reads %v, want the tier's own bucket", got)
+	}
+	if got := bucket.Args["enableCdn"]; got != true {
+		t.Errorf("the backend bucket has cdn = %v, want it on: a file served from the bucket is cached at Google's edge", got)
+	}
+	policy, _ := bucket.Args["cdnPolicy"].(map[string]any)
+	if policy["cacheMode"] != "USE_ORIGIN_HEADERS" {
+		t.Errorf("the backend bucket caches by %v, want USE_ORIGIN_HEADERS: the objects carry the cache control the router answers them with", policy["cacheMode"])
+	}
+	if policy["negativeCaching"] != false {
+		t.Errorf("the backend bucket has negative caching = %v, want it off: a request that beats its release's upload must not be refused for minutes", policy["negativeCaching"])
+	}
+}
+
+func TestTheBackendBucketReadsOnlyTheStaticFilesOfReleasesWithTheLoadBalancersServiceAgent(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(loadBalancerProgram(frontSpec()))
+	if err != nil {
+		t.Fatalf("the frontend program = %v", err)
+	}
+
+	grant := seen["ocel-alb-production-reader"]
+	if got := grant.Args["member"]; got != "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com" {
+		t.Errorf("the grant goes to %v, want the load balancer's service agent of project number 4242", got)
+	}
+	if got := grant.Args["role"]; got != "roles/storage.objectViewer" {
+		t.Errorf("the grant is %v, want roles/storage.objectViewer and nothing that writes", got)
+	}
+	condition, _ := grant.Args["condition"].(map[string]any)
+	expression, _ := condition["expression"].(string)
+	want := `resource.name.matches("^projects/_/buckets/ocel-acme-prod-production/objects/assets/[^/]+/[^/]+/[^/]+/[^/]+/assets/.+$")`
+	if expression != want {
+		t.Errorf("the grant is conditioned on %q, want %q: the bucket also holds function bundles, route tables and image config the public must not read", expression, want)
+	}
+}
+
+func TestTheFrontendOfAShieldedLoadBalancerNamesTheSameBackendBucketOutput(t *testing.T) {
+	t.Parallel()
+
+	if got := loadBalancerNames(environment.TierProduction, true).AssetsBackend; got != "ocel-alb-shielded-production-assets" {
+		t.Errorf("the shielded load balancer names its backend bucket %q, want one beside its own url map", got)
 	}
 }
 
