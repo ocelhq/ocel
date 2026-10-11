@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import rawVectors from "../../../../pkg/edge/edgeconformance/previewgate.json" with {
   type: "json",
 };
-import { checkPreview, hashPreviewPassword, type PreviewGate } from "../src/preview-gate.mjs";
+import gateEncodings from "../fixtures/preview-gate.json" with { type: "json" };
+import {
+  checkPreview,
+  hashPreviewPassword,
+  type PreviewGate,
+  parsePreviewGate,
+} from "../src/preview-gate.mjs";
 
 interface Expectation {
   forward?: boolean;
@@ -92,4 +98,47 @@ it("hashes a password to the value the vectors store", async () => {
   expect(await hashPreviewPassword("test-preview-key", "JBSWY3DPEHPK3PXP2345")).toBe(
     "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3",
   );
+});
+
+describe("a gate's keys read back from the JSON Go encodes them as", () => {
+  for (const example of gateEncodings.gates) {
+    it(example.name, () => {
+      expect(parsePreviewGate(JSON.parse(example.encoded))).toEqual(example.gate);
+    });
+  }
+
+  it("the shared entry's record of a slug", () => {
+    const { slug, encoded } = gateEncodings.sharedEntry;
+    const recorded = JSON.parse(encoded) as Record<string, unknown>;
+    expect(parsePreviewGate(recorded[slug])).toEqual(gateEncodings.gates[0]?.gate);
+  });
+});
+
+describe("parsing a gate's keys", () => {
+  it("reads absent or null lists as empty", () => {
+    for (const lists of [{}, { bypassSecrets: null, allowOptions: null }]) {
+      expect(parsePreviewGate({ key: "k", passwordMac: "m", ...lists })).toEqual({
+        key: "k",
+        passwordMac: "m",
+        bypassSecrets: [],
+        allowOptions: [],
+      });
+    }
+  });
+
+  it("refuses keys it cannot gate with", () => {
+    for (const value of [
+      undefined,
+      null,
+      [],
+      "gate",
+      {},
+      { key: "", passwordMac: "m" },
+      { key: "k" },
+      { key: "k", passwordMac: "m", bypassSecrets: "one" },
+      { key: "k", passwordMac: "m", allowOptions: [1] },
+    ]) {
+      expect(parsePreviewGate(value), JSON.stringify(value)).toBeUndefined();
+    }
+  });
 });
