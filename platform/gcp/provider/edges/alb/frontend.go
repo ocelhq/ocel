@@ -74,7 +74,7 @@ type loadBalancerSpec struct {
 	Region    string
 	Names     names
 	Tier      environment.Tier
-	Assets    AssetsBucket
+	Assets    *AssetsBucket
 	Preview   previewEntry
 	Origin    originWildcardEntry
 	ClientCAs []string
@@ -247,9 +247,12 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		if err != nil {
 			return err
 		}
-		assets, err := declareAssetsBackend(ctx, spec, projectID)
-		if err != nil {
-			return err
+		if spec.Assets != nil {
+			assets, err := declareAssetsBackend(ctx, spec.Names, *spec.Assets, projectID)
+			if err != nil {
+				return err
+			}
+			ctx.Export(outputAssetsBackend, assets.Name)
 		}
 		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap,
 			&certificatemanager.CertificateMapResourceArgs{
@@ -315,7 +318,6 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		ctx.Export(outputCertificateMap, certificates.Name)
 		ctx.Export(outputURLMap, routes.Name)
 		ctx.Export(outputNotFound, notFound.Name)
-		ctx.Export(outputAssetsBackend, assets.Name)
 		return nil
 	}
 }

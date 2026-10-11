@@ -18,11 +18,11 @@ type AssetsBucket struct {
 	Agent string
 }
 
-func declareAssetsBackend(ctx *pulumi.Context, spec loadBalancerSpec, project pulumi.String) (*compute.BackendBucket, error) {
-	bucket, err := compute.NewBackendBucket(ctx, spec.Names.AssetsBackend, &compute.BackendBucketArgs{
-		Name:       pulumi.String(spec.Names.AssetsBackend),
+func declareAssetsBackend(ctx *pulumi.Context, names names, assets AssetsBucket, project pulumi.String) (*compute.BackendBucket, error) {
+	bucket, err := compute.NewBackendBucket(ctx, names.AssetsBackend, &compute.BackendBucketArgs{
+		Name:       pulumi.String(names.AssetsBackend),
 		Project:    project,
-		BucketName: pulumi.String(spec.Assets.Name),
+		BucketName: pulumi.String(assets.Name),
 		EnableCdn:  pulumi.Bool(true),
 		CdnPolicy: &compute.BackendBucketCdnPolicyArgs{
 			CacheMode:       pulumi.String(cacheOnOrigin),
@@ -32,14 +32,14 @@ func declareAssetsBackend(ctx *pulumi.Context, spec loadBalancerSpec, project pu
 	if err != nil {
 		return nil, err
 	}
-	_, err = projects.NewIAMMember(ctx, spec.Names.AssetsReader, &projects.IAMMemberArgs{
+	_, err = projects.NewIAMMember(ctx, names.AssetsReader, &projects.IAMMemberArgs{
 		Project: project,
 		Role:    pulumi.String(objectViewerRole),
-		Member:  pulumi.String(spec.Assets.Agent),
+		Member:  pulumi.String(assets.Agent),
 		Condition: &projects.IAMMemberConditionArgs{
-			Title:       pulumi.String(spec.Names.AssetsReader),
+			Title:       pulumi.String(names.AssetsReader),
 			Description: pulumi.String("lists the tier's bucket and reads the static files of its releases, and nothing else in it"),
-			Expression:  pulumi.String(releaseFilesCondition(spec.Assets.Name)),
+			Expression:  pulumi.String(releaseFilesCondition(assets.Name)),
 		},
 	}, pulumi.DependsOn([]pulumi.Resource{bucket}))
 	return bucket, err

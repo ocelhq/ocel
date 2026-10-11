@@ -170,12 +170,10 @@ func TestAnAliasMovedToANewReleaseRoutesThatReleasesFiles(t *testing.T) {
 	expectStatics(t, w, aliasHost, staticFilesOf("b2"), "the alias follows the pointer, and the objects follow the alias")
 }
 
-func TestABalancerWithNoBackendBucketIsNotProvisioned(t *testing.T) {
+func TestAShieldedBalancerWithNoBackendBucketIsProvisioned(t *testing.T) {
 	t.Parallel()
 
-	outputs := balancer()
-	delete(outputs, "assetsBackend")
-	if loadBalancerOf(outputs).provisioned() {
-		t.Error("a load balancer raised before it had a backend bucket counts as provisioned, and a bind would write a rule naming a bucket that is not there")
+	if !loadBalancerOf(shieldedLoadBalancer()).provisioned() {
+		t.Error("a shielded load balancer counts as unprovisioned without a backend bucket, so every claim re-raises it for a bucket it never routes to")
 	}
 }

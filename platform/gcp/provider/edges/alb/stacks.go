@@ -91,7 +91,7 @@ type LoadBalancer struct {
 }
 
 func (f LoadBalancer) provisioned() bool {
-	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != "" && f.AssetsBackend != ""
+	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != ""
 }
 
 const (
