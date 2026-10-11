@@ -135,3 +135,35 @@ func cacheKeyPolicy(backend declaration) map[string]any {
 	key, _ := policy["cacheKeyPolicy"].(map[string]any)
 	return key
 }
+
+func TestABindingsBackendCollapsesConcurrentMissesIntoOneOriginRequest(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(cdnBinding())
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	policy, _ := seen[cdnBackend].Args["cdnPolicy"].(map[string]any)
+	if got, _ := policy["requestCoalescing"].(bool); !got {
+		t.Errorf("cdnPolicy.requestCoalescing = %v, want true: a stale page refresh reaches Cloud Run once, not once per visitor", policy["requestCoalescing"])
+	}
+}
+
+func TestABindingsBackendServesStaleOnlyWhereTheOriginsStaleWhileRevalidateAllowsIt(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(cdnBinding())
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	policy, _ := seen[cdnBackend].Args["cdnPolicy"].(map[string]any)
+	got, present := policy["serveWhileStale"]
+	if !present {
+		t.Fatalf("cdnPolicy.serveWhileStale is unset, and Cloud CDN then serves a response without stale-while-revalidate stale for a day past its expiry")
+	}
+	if n, _ := got.(float64); n != 0 {
+		t.Errorf("cdnPolicy.serveWhileStale = %v, want 0", got)
+	}
+}

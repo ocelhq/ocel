@@ -20,7 +20,9 @@ func newCDNPolicy(shielded bool) *compute.BackendServiceCdnPolicyArgs {
 		key.IncludeNamedCookies = pulumi.StringArray{pulumi.String(draftModeCookie)}
 	}
 	return &compute.BackendServiceCdnPolicyArgs{
-		CacheMode:      pulumi.String(cacheOnOrigin),
-		CacheKeyPolicy: key,
+		CacheMode:         pulumi.String(cacheOnOrigin),
+		RequestCoalescing: pulumi.Bool(true),
+		ServeWhileStale:   pulumi.Int(0),
+		CacheKeyPolicy:    key,
 	}
 }
