@@ -28,10 +28,11 @@ func (s *stack) shareImmutableFiles(ctx context.Context, move router.PointerMove
 }
 
 func (s *stack) listImmutableSwitches(move router.PointerMove) ([]immutableSwitch, error) {
+	_, _, deployment := router.ParseDeploymentPointer(move.Pointer)
 	var switches []immutableSwitch
 	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
 		host := s.recorded.Hosts[hostname]
-		if isWildcard(hostname) || host.Pointer != "" && host.Pointer != move.Pointer {
+		if isWildcard(hostname) || host.Pointer != move.Pointer && (host.Pointer != "" || deployment) {
 			continue
 		}
 		record, found := move.Records[host.App]
