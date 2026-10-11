@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
 
@@ -137,14 +138,14 @@ func answerPreviewLogin(w http.ResponseWriter, r *http.Request, opts Options) {
 		http.Error(w, "the login body could not be read", http.StatusBadRequest)
 		return
 	}
-	answer := opts.PreviewLogin.Answer(edge.PreviewRequest{
+	answer := opts.PreviewLogin.Answer(previewgate.Request{
 		Method: r.Method,
 		Host:   r.Host,
 		Target: r.URL.RequestURI(),
-		Header: r.Header,
+		Header: previewgate.Header(r.Header),
 		Body:   body,
 	}, time.Now())
-	maps.Copy(w.Header(), answer.Header)
+	maps.Copy(w.Header(), http.Header(answer.Header))
 	w.WriteHeader(answer.Status)
 	_, _ = io.WriteString(w, answer.Body)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -16,7 +17,7 @@ import (
 
 var previewGatesAssociatedData = seal.AssociatedData{{Name: "record", Value: "preview-gates"}}
 
-func readPreviewGates(ctx context.Context, p provider.Provider) (map[string]edge.PreviewGate, error) {
+func readPreviewGates(ctx context.Context, p provider.Provider) (map[string]previewgate.Gate, error) {
 	recorded, err := keyvalue.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.NewPreviewGatesRecordKey())
 	if err != nil {
 		return nil, fmt.Errorf("read the keys that gate previews: %w", err)
@@ -32,14 +33,14 @@ func readPreviewGates(ctx context.Context, p provider.Provider) (map[string]edge
 	if err != nil {
 		return nil, fmt.Errorf("open the keys that gate previews: %w", err)
 	}
-	var gates map[string]edge.PreviewGate
+	var gates map[string]previewgate.Gate
 	if err := json.Unmarshal(plaintext, &gates); err != nil {
 		return nil, fmt.Errorf("read the keys that gate previews: %w", err)
 	}
 	return gates, nil
 }
 
-func readPreviewGate(ctx context.Context, p provider.Provider, slug string) (*edge.PreviewGate, error) {
+func readPreviewGate(ctx context.Context, p provider.Provider, slug string) (*previewgate.Gate, error) {
 	gates, err := readPreviewGates(ctx, p)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,7 @@ func (r *deployRun) readProjectPreviewGate(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) appPreviewGate() *edge.PreviewGate {
+func (r *deployRun) appPreviewGate() *previewgate.Gate {
 	if r.front.Facts().RunsCode {
 		return nil
 	}

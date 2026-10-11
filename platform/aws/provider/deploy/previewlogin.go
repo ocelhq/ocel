@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
-func encodePreviewGate(gate *edge.PreviewGate) (string, error) {
+func encodePreviewGate(gate *previewgate.Gate) (string, error) {
 	if gate == nil {
 		return "", nil
 	}
@@ -18,7 +18,7 @@ func encodePreviewGate(gate *edge.PreviewGate) (string, error) {
 	return string(encoded), nil
 }
 
-func listPreviewGateSecrets(gate *edge.PreviewGate) []string {
+func listPreviewGateSecrets(gate *previewgate.Gate) []string {
 	if gate == nil {
 		return nil
 	}

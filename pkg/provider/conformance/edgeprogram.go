@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -15,7 +16,7 @@ type EdgeProgramFunc func(ctx context.Context, req provider.EdgeProgramRequest) 
 
 const edgeProgramPreviewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
-var edgeProgramGate = edge.PreviewGate{
+var edgeProgramGate = previewgate.Gate{
 	Key:           "gate-key",
 	PasswordMAC:   "password-mac",
 	BypassSecrets: []string{"bypass-one"},
@@ -43,7 +44,7 @@ func RunEdgeProgram(t *testing.T, program EdgeProgramFunc) {
 		gate := edgeProgramGate
 		req.PreviewGate = &gate
 		worker := buildEdgeWorker(t, program, req)
-		var got edge.PreviewGate
+		var got previewgate.Gate
 		readEncodedSecret(t, worker, edge.PreviewGateVar, &got)
 		if !reflect.DeepEqual(got, edgeProgramGate) {
 			t.Errorf("Secrets[%s] = %+v, want the gate the request carried, %+v", edge.PreviewGateVar, got, edgeProgramGate)
@@ -52,9 +53,9 @@ func RunEdgeProgram(t *testing.T, program EdgeProgramFunc) {
 
 	t.Run("the shared preview entry's program carries every project's gate keys as a worker secret", func(t *testing.T) {
 		req := sharedEntry
-		req.PreviewGates = map[string]edge.PreviewGate{"shop": edgeProgramGate}
+		req.PreviewGates = map[string]previewgate.Gate{"shop": edgeProgramGate}
 		worker := buildEdgeWorker(t, program, req)
-		var got map[string]edge.PreviewGate
+		var got map[string]previewgate.Gate
 		readEncodedSecret(t, worker, edge.PreviewGatesVar, &got)
 		if !reflect.DeepEqual(got, req.PreviewGates) {
 			t.Errorf("Secrets[%s] = %+v, want the gates the request carried, %+v", edge.PreviewGatesVar, got, req.PreviewGates)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
 type stampedSpec struct {
@@ -23,7 +24,7 @@ type stampedSpec struct {
 	CompatDate      string
 	CompatFlags     []string
 	Observability   map[string]any
-	PreviewGate     *edge.PreviewGate
+	PreviewGate     *previewgate.Gate
 }
 
 func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {

@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -18,19 +19,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var shopGate = edge.PreviewGate{
+var shopGate = previewgate.Gate{
 	Key:           "shop-gate-key",
 	PasswordMAC:   "shop-password-mac",
 	BypassSecrets: []string{"shop-bypass"},
 	AllowOptions:  []string{"/api/"},
 }
 
-var recordedGates = map[string]edge.PreviewGate{
+var recordedGates = map[string]previewgate.Gate{
 	"shop":  shopGate,
 	"other": {Key: "other-gate-key", PasswordMAC: "other-password-mac", BypassSecrets: []string{}, AllowOptions: []string{}},
 }
 
-func seedPreviewGates(t *testing.T, vendor *fake.Provider, gates map[string]edge.PreviewGate) {
+func seedPreviewGates(t *testing.T, vendor *fake.Provider, gates map[string]previewgate.Gate) {
 	t.Helper()
 	plaintext, err := json.Marshal(gates)
 	if err != nil {
@@ -81,7 +82,7 @@ func readGateSecret(t *testing.T, worker edge.Worker, name string, into any) {
 func TestAPreviewDeployOnItsOwnWildcardHandsItsWorkerTheGateRecordedForItsProject(t *testing.T) {
 	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
 
-	var got edge.PreviewGate
+	var got previewgate.Gate
 	readGateSecret(t, onlyStack(t, vendor).Program.Worker, edge.PreviewGateVar, &got)
 	if !reflect.DeepEqual(got, shopGate) {
 		t.Errorf("Secrets[%s] = %+v, want the gate recorded for shop, %+v", edge.PreviewGateVar, got, shopGate)
@@ -93,7 +94,7 @@ func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsWorkerNone(t *testing
 	client, vendor := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
 	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
-	seedPreviewGates(t, vendor, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+	seedPreviewGates(t, vendor, map[string]previewgate.Gate{"other": recordedGates["other"]})
 	if result, _ := deploy(t, client, declaresPreview(previewDeployRequest(), "*.preview.shop.example")); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -134,7 +135,7 @@ func TestUsePreviewWildcardHandsTheSharedEntryEveryRecordedGate(t *testing.T) {
 	if len(specs) != 1 {
 		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
 	}
-	var got map[string]edge.PreviewGate
+	var got map[string]previewgate.Gate
 	readGateSecret(t, specs[0].Program.Worker, edge.PreviewGatesVar, &got)
 	if !reflect.DeepEqual(got, recordedGates) {
 		t.Errorf("Secrets[%s] = %+v, want every recorded gate, %+v", edge.PreviewGatesVar, got, recordedGates)
@@ -189,7 +190,7 @@ func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsStackNone(t *testing.
 	builtProject(t)
 	client, vendor := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
-	seedPreviewGates(t, vendor, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+	seedPreviewGates(t, vendor, map[string]previewgate.Gate{"other": recordedGates["other"]})
 	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
@@ -256,7 +257,7 @@ func TestAPreviewDeployWithARecordedGateIsRefusedWhenTheOriginCannotAnswerTheLog
 	}
 }
 
-func directPreviewServed(t *testing.T, gates map[string]edge.PreviewGate) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
+func directPreviewServed(t *testing.T, gates map[string]previewgate.Gate) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
 	t.Helper()
 	builtProject(t)
 	client, vendor := contractServed(t, "1.0.0")
@@ -285,7 +286,7 @@ func TestAPreviewDeployWithARecordedGateIsRefusedOnAnEdgeThatCannotGateIt(t *tes
 }
 
 func TestAPreviewDeployWithNoRecordedGateGoesAheadOnAnEdgeThatCannotGate(t *testing.T) {
-	client, _, req := directPreviewServed(t, map[string]edge.PreviewGate{"other": recordedGates["other"]})
+	client, _, req := directPreviewServed(t, map[string]previewgate.Gate{"other": recordedGates["other"]})
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed: no gate is recorded for shop", result.GetError())

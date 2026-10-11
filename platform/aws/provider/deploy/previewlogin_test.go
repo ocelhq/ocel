@@ -7,23 +7,24 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-var loginGate = edge.PreviewGate{
+var loginGate = previewgate.Gate{
 	Key:           "gate-key",
 	PasswordMAC:   "password-mac",
 	BypassSecrets: []string{"bypass-one"},
 	AllowOptions:  []string{"/api/"},
 }
 
-func decodedGate(t *testing.T, env map[string]string) edge.PreviewGate {
+func decodedGate(t *testing.T, env map[string]string) previewgate.Gate {
 	t.Helper()
 	encoded, handed := env[edge.PreviewGateVar]
 	if !handed {
 		t.Fatalf("env has no %s, want the gate the login is checked against", edge.PreviewGateVar)
 	}
-	var gate edge.PreviewGate
+	var gate previewgate.Gate
 	if err := json.Unmarshal([]byte(encoded), &gate); err != nil {
 		t.Fatalf("%s = %q: %v", edge.PreviewGateVar, encoded, err)
 	}

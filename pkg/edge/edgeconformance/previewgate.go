@@ -3,13 +3,12 @@ package edgeconformance
 import (
 	_ "embed"
 	"encoding/json"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
 //go:embed previewgate.json
@@ -17,7 +16,7 @@ var previewGateVectors []byte
 
 type previewGateVector struct {
 	NowSeconds int64             `json:"nowSeconds"`
-	Gate       edge.PreviewGate  `json:"gate"`
+	Gate       previewgate.Gate  `json:"gate"`
 	Cases      []previewGateCase `json:"cases"`
 }
 
@@ -74,13 +73,13 @@ func RunPreviewGate(t *testing.T) {
 					t.Fatalf("the case's gate does not parse: %v", err)
 				}
 			}
-			header := http.Header{}
+			header := previewgate.Header{}
 			for name, values := range example.Request.Headers {
 				for _, value := range values {
 					header.Add(name, value)
 				}
 			}
-			verdict := gate.Check(edge.PreviewRequest{
+			verdict := gate.Check(previewgate.Request{
 				Method: example.Request.Method,
 				Host:   example.Request.Host,
 				Target: example.Request.Target,

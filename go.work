@@ -9,6 +9,7 @@ use (
 	./platform/aws/runtime
 	./platform/edge/cloudflare/deploy
 	./platform/gcp/connector
+	./platform/gcp/gateplugin
 	./platform/gcp/provider
 	./platform/gcp/runtime
 	./platform/pgmq

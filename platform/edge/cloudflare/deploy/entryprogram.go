@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -37,8 +38,8 @@ type EntryProgram struct {
 	Env               string
 	PreviewBaseDomain string
 	PreviewKey        edge.PreviewKey
-	PreviewGate       *edge.PreviewGate
-	PreviewGates      map[string]edge.PreviewGate
+	PreviewGate       *previewgate.Gate
+	PreviewGates      map[string]previewgate.Gate
 	Origin            OriginBindings
 
 	StoreScriptName          string

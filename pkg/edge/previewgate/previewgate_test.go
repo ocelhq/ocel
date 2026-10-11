@@ -1,4 +1,4 @@
-package edge_test
+package previewgate_test
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 )
 
 func TestThePreviewGateAnswersEveryConformanceVector(t *testing.T) {
@@ -20,22 +20,22 @@ func TestAPreviewPasswordHashesToTheValueTheVectorsStore(t *testing.T) {
 	t.Parallel()
 
 	const want = "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3"
-	if got := edge.HashPreviewPassword("test-preview-key", "JBSWY3DPEHPK3PXP2345"); got != want {
-		t.Errorf("HashPreviewPassword = %q, want %q", got, want)
+	if got := previewgate.HashPassword("test-preview-key", "JBSWY3DPEHPK3PXP2345"); got != want {
+		t.Errorf("HashPassword = %q, want %q", got, want)
 	}
 }
 
 func TestAPreviewGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "platform", "edge", "contract", "fixtures", "preview-gate.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "platform", "edge", "contract", "fixtures", "preview-gate.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var fixture struct {
 		Gates []struct {
 			Name    string           `json:"name"`
-			Gate    edge.PreviewGate `json:"gate"`
+			Gate    previewgate.Gate `json:"gate"`
 			Encoded string           `json:"encoded"`
 		} `json:"gates"`
 		SharedEntry struct {
@@ -46,7 +46,7 @@ func TestAPreviewGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T)
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	unlisted := func(gate edge.PreviewGate) edge.PreviewGate {
+	unlisted := func(gate previewgate.Gate) previewgate.Gate {
 		if len(gate.BypassSecrets) == 0 {
 			gate.BypassSecrets = nil
 		}
@@ -66,7 +66,7 @@ func TestAPreviewGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T)
 			}
 		})
 	}
-	encoded, err := json.Marshal(map[string]edge.PreviewGate{fixture.SharedEntry.Slug: unlisted(fixture.Gates[0].Gate)})
+	encoded, err := json.Marshal(map[string]previewgate.Gate{fixture.SharedEntry.Slug: unlisted(fixture.Gates[0].Gate)})
 	if err != nil {
 		t.Fatal(err)
 	}

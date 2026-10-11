@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -91,7 +92,7 @@ func TestAPreviewWhoseServiceRunsThePreviewGateIsNotSaidToBeOpenAndIsHandedTheKe
 	p := server.open(t)
 	progress := &fake.Log{}
 	spec := previewSpec()
-	gate := edge.PreviewGate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
+	gate := previewgate.Gate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
 	spec.App.PreviewGate = &gate
 
 	if _, err := p.ProvisionContainers(context.Background(), spec, progress); err != nil {

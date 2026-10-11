@@ -22,6 +22,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -181,7 +182,7 @@ type deployRun struct {
 	previewOn   string
 	previewKey  edge.PreviewKey
 	previewKeys *openedPreviewKeys
-	previewGate *edge.PreviewGate
+	previewGate *previewgate.Gate
 	builtAlias  string
 	aliasToken  string
 	aliases     []edge.PreviewHost
@@ -631,7 +632,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		Warn:        progress.Warn,
 	}
 	var base string
-	var gate *edge.PreviewGate
+	var gate *previewgate.Gate
 	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
