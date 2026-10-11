@@ -68,33 +68,16 @@ describe("evaluate", () => {
     ...over,
   });
 
-  it("is fresh before revalidate with no tag staleness", () => {
-    expect(evaluate(at(0, { revalidate: 60, expiration: 600 }), 30_000, false)).toBe("fresh");
+  it("is fresh before revalidate", () => {
+    expect(evaluate(at(0, { revalidate: 60 }), 30_000)).toBe("fresh");
   });
 
-  it("is stale after revalidate but before expiration", () => {
-    expect(evaluate(at(0, { revalidate: 60, expiration: 600 }), 120_000, false)).toBe("stale");
+  it("is stale once the revalidate window has passed", () => {
+    expect(evaluate(at(0, { revalidate: 60 }), 120_000)).toBe("stale");
   });
 
-  it("is expired at or past expiration once stale", () => {
-    expect(evaluate(at(0, { revalidate: 60, expiration: 600 }), 600_000, false)).toBe("expired");
-  });
-
-  it("treats a tag-stale entry as stale even when time-fresh", () => {
-    expect(evaluate(at(0, { revalidate: 60, expiration: 600 }), 10_000, true)).toBe("stale");
-  });
-
-  it("expires a tag-stale entry that is also past expiration", () => {
-    expect(evaluate(at(0, { revalidate: 60, expiration: 600 }), 700_000, true)).toBe("expired");
-  });
-
-  it("keeps a static entry (no revalidate) fresh until a tag invalidates it", () => {
-    expect(evaluate(at(0, {}), 31_000_000_000, false)).toBe("fresh");
-    expect(evaluate(at(0, {}), 10_000, true)).toBe("stale");
-  });
-
-  it("never expires a static, tag-stale entry with no expiration window", () => {
-    expect(evaluate(at(0, {}), 31_000_000_000, true)).toBe("stale");
+  it("keeps an entry with no revalidate window fresh", () => {
+    expect(evaluate(at(0, {}), 31_000_000_000)).toBe("fresh");
   });
 });
 

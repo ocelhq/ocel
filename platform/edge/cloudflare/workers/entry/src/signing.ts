@@ -87,30 +87,3 @@ export function edgeOriginFetch(
     );
   }) as typeof fetch;
 }
-
-export function sqsRegion(queueUrl: string): string | undefined {
-  let host: string;
-  try {
-    host = new URL(queueUrl).host;
-  } catch {
-    return undefined;
-  }
-  const labels = host.split(".");
-  return labels[0] === "sqs" && labels.length > 2 ? labels[1] : undefined;
-}
-
-export function sqsFetch(
-  accessKeyId: string | undefined,
-  secretAccessKey: string | undefined,
-  region: string | undefined,
-): typeof fetch | undefined {
-  if (!accessKeyId || !secretAccessKey || !region) return undefined;
-  const client = new AwsClient({
-    accessKeyId,
-    secretAccessKey,
-    region,
-    service: "sqs",
-    retries: 0,
-  });
-  return ((input, init) => client.fetch(input as RequestInfo, init)) as typeof fetch;
-}
