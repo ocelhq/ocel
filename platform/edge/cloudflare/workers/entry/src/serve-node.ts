@@ -36,6 +36,7 @@ function isCacheable(request: Request, rules: readonly CacheRule[]): boolean {
   return (
     request.method === "GET" &&
     !request.headers.has("authorization") &&
+    !request.headers.has("cookie") &&
     !needsSlashNormalization(rawPath(request)) &&
     findCacheRule(rules, new URL(request.url).pathname) !== undefined
   );

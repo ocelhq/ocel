@@ -260,6 +260,35 @@ describe("an origin behind CloudFront or the load balancer", () => {
   });
 });
 
+describe("a request that carries a cookie or credentials", () => {
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront, {}],
+    ["behind the Cloudflare gateway", behindCloudflare, asked],
+  ])("gets no shared lifetime from a rule %s", async (_edge, env, headers) => {
+    const get = await serve(env, page);
+
+    for (const personal of [{ cookie: "session=1" }, { authorization: "Bearer a" }]) {
+      const res = await get("/blog/a", { headers: { ...headers, ...personal } });
+
+      expect(res.headers.has("cache-control")).toBe(false);
+      expect(res.headers.has("cache-tag")).toBe(false);
+      expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
+    }
+  });
+
+  test("keeps the s-maxage its handler set itself, and tags it", async () => {
+    const get = await serve(behindCloudFront, (req, res) => {
+      res.writeHead(200, { "cache-control": "public, s-maxage=5" });
+      res.end("page");
+    });
+
+    const res = await get("/blog/a", { headers: { cookie: "session=1" } });
+
+    expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/blog/a");
+  });
+});
+
 describe("an origin behind no caching edge", () => {
   test("shapes nothing, and exposes no cache host for the SDK to call", async () => {
     const get = await serve({ OCEL_CACHE_RULES: rules }, page);

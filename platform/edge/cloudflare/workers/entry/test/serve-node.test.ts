@@ -75,19 +75,6 @@ describe("a request a cache rule names", () => {
     });
   });
 
-  it("hands Serve none of the visitor's cookies or credentials", async () => {
-    const { serve, calls } = setup();
-
-    await serve(
-      new Request("https://shop.example.com/blog/a", {
-        headers: { cookie: "session=1", "accept-language": "fr" },
-      }),
-    );
-
-    expect(calls[0]!.request.headers.get("cookie")).toBeNull();
-    expect(calls[0]!.request.headers.get("accept-language")).toBe("fr");
-  });
-
   it("keys the entry by every query parameter, in sorted order", async () => {
     const { serve, calls } = setup();
 
@@ -143,6 +130,11 @@ describe("a request no cache rule lets the edge cache", () => {
     ["a path no rule names", "https://shop.example.com/about", {}],
     ["a write", "https://shop.example.com/blog/a", { method: "POST", body: "x" }],
     ["a HEAD", "https://shop.example.com/blog/a", { method: "HEAD" }],
+    [
+      "a request with a cookie",
+      "https://shop.example.com/blog/a",
+      { headers: { cookie: "session=1" } },
+    ],
     [
       "a request with credentials",
       "https://shop.example.com/blog/a",
