@@ -32,6 +32,7 @@ type Deps struct {
 	Region    string
 	Shielded  bool
 
+	WaitBeforeRetry  func(ctx context.Context, attempt int) bool
 	ReadAssetsBucket func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
 }
 
@@ -123,7 +124,7 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		}
 		spec.ClientCAs = trusted
 	}
-	outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(tier), loadBalancerProgram(spec), progress)
+	outputs, err := e.raiseFront(ctx, spec, progress)
 	if err != nil {
 		return LoadBalancer{}, err
 	}

@@ -1,17 +1,22 @@
 package alb
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/projects"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const objectViewerRole = "roles/storage.objectViewer"
+
+const agentAppearsAttempts = 20
 
 type AssetsBucket struct {
 	Name  string
@@ -50,4 +55,24 @@ func releaseFilesCondition(bucket string) string {
 	objects := name + "/objects/" + provider.StoreAssets + "/"
 	return fmt.Sprintf(`resource.name == %q || (resource.name.startsWith(%q) && resource.name.extract(%q) != "")`,
 		name, objects, objects+"{release}/"+naming.AssetsSegment+"/")
+}
+
+func (e *Edge) raiseFront(ctx context.Context, spec loadBalancerSpec, progress progress.Log) (map[string]string, error) {
+	for attempt := 1; ; attempt++ {
+		outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(spec.Tier), loadBalancerProgram(spec), progress)
+		if err == nil || !isUnseenAgent(err, spec.Assets) || attempt == agentAppearsAttempts {
+			return outputs, err
+		}
+		if !e.deps.WaitBeforeRetry(ctx, attempt) {
+			return nil, err
+		}
+	}
+}
+
+func isUnseenAgent(err error, assets *AssetsBucket) bool {
+	if assets == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, strings.TrimPrefix(assets.Agent, "serviceAccount:")) && strings.Contains(message, "does not exist")
 }
