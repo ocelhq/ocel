@@ -83,7 +83,7 @@ func apiRetryable(res *http.Response, err error) bool {
 		return err != nil
 	}
 	switch res.StatusCode {
-	case http.StatusRequestTimeout, http.StatusConflict, http.StatusTooManyRequests:
+	case http.StatusRequestTimeout, http.StatusTooManyRequests:
 		return true
 	}
 	return res.StatusCode >= http.StatusInternalServerError
