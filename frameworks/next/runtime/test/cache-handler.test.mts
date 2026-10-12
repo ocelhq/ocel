@@ -952,3 +952,29 @@ test("behind a caching edge, a fetch with no window of its own is judged by the 
 
   expect(entry).toBeNull();
 });
+
+test.each([
+  ["trails", -5_000],
+  ["leads", 5_000],
+])(
+  "an entry written after a revalidation is served when the wall clock %s the monotonic one",
+  async (_direction, skew) => {
+    const wallClock = Date.now.bind(Date);
+    vi.spyOn(Date, "now").mockImplementation(() => wallClock() + skew);
+    const store = fakeStore();
+    const handler = new OcelCacheHandler();
+
+    await handler.revalidateTag("products");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await handler.set(
+      "abc",
+      { kind: "FETCH", data: { body: "fresh" }, revalidate: 60, tags: ["products"] },
+      { fetchCache: true, tags: ["products"] },
+    );
+    await vi.waitFor(() => expect(store.fetches.has("abc")).toBe(true));
+
+    const entry = await handler.get("abc", { kind: "FETCH", tags: ["products"], revalidate: 60 });
+
+    expect(entry?.value.data.body).toBe("fresh");
+  },
+);
