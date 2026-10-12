@@ -208,7 +208,7 @@ function shape(
       return;
     }
     res.setHeader("cache-control", [...browser, formatCacheControl(routed.cacheRule)].join(", "));
-  } else if (!declaredNames.includes("s-maxage")) {
+  } else if (!declaresEdgeLifetime(res)) {
     return;
   }
 
@@ -230,6 +230,18 @@ function shape(
 }
 
 const sharedDirectiveNames = ["s-maxage", "stale-while-revalidate"];
+
+function declaresEdgeLifetime(res: http.ServerResponse): boolean {
+  return ["cache-control", "cdn-cache-control"].some((name) =>
+    String(res.getHeader(name) ?? "")
+      .toLowerCase()
+      .split(",")
+      .some((directive) => {
+        const [key, value] = directive.trim().split("=");
+        return (key === "s-maxage" || key === "max-age") && Number(value) > 0;
+      }),
+  );
+}
 
 function listBrowserDirectives(declared: string): string[] {
   return declared

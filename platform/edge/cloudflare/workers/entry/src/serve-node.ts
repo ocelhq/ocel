@@ -22,9 +22,11 @@ import {
   buildServeRequest,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
+  SERVE_LOOKUP_ONLY_HEADER,
+  SERVE_MISS_HEADER,
   SERVE_REFUSED_HEADER,
 } from "./serve-key";
-import { buildVisitorResponse, type Serving } from "./serve-prerender";
+import { buildVisitorResponse, hasDraftCookie, type Serving } from "./serve-prerender";
 
 export interface ServeNodePorts {
   serving: Serving;
@@ -78,9 +80,13 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     return answered;
   }
 
-  async function serveCached(request: Request, rule: CacheRule): Promise<Response> {
+  async function serveCached(
+    request: Request,
+    rule: CacheRule | undefined,
+    onlyLooksUp: boolean,
+  ): Promise<Response> {
     const url = new URL(request.url);
-    const canonical = new URL(buildCanonicalUrl(url, rule.allowQuery));
+    const canonical = new URL(buildCanonicalUrl(url, rule?.allowQuery));
     const target = new URL(canonical.pathname + encodeForwardedSearch(canonical.search), origin);
     const call = buildOriginCall(target.toString(), {
       host: serving.host,
@@ -89,15 +95,17 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     });
     const served = buildServeRequest(call.url, request);
     served.headers.set(edgeCacheHeader, "1");
+    if (onlyLooksUp) served.headers.set(SERVE_LOOKUP_ONLY_HEADER, "1");
     const release: RenderRelease = {
       slug: serving.slug,
       isrPrefix: serving.isrPrefix,
       tags: [],
+      nodeApp: true,
     };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
 
     const response = await serving.serve({ props: call.props }).fetch(served);
-    if (response.headers.has(SERVE_REFUSED_HEADER)) {
+    if (response.headers.has(SERVE_REFUSED_HEADER) || response.headers.has(SERVE_MISS_HEADER)) {
       await response.body?.cancel();
       return forwardUncached(request);
     }
@@ -120,7 +128,11 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     if (redirect) return answerRedirect(routes, url, redirect);
 
     const rule = findRoute(routes, url.pathname)?.route.cache;
-    if (!rule) return forwardUncached(request);
+    if (!rule) {
+      return canBeCached(request) && !hasDraftCookie(request)
+        ? serveCached(request, undefined, request.headers.has("cookie"))
+        : forwardUncached(request);
+    }
     switch (
       readBypass({
         token: rule.bypassToken,
@@ -134,7 +146,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       case "revalidate":
         return revalidate(request);
       default:
-        return canBeCached(request) ? serveCached(request, rule) : forwardUncached(request);
+        return canBeCached(request) ? serveCached(request, rule, false) : forwardUncached(request);
     }
   };
 }

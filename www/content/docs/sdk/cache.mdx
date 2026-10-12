@@ -128,11 +128,19 @@ A cache rule governs only its own route. Only a route with a rule gets the rule'
 has its request's cookies stripped. A route with no rule, and a path that falls through to
 `fallback`, keeps the cache headers your handler and your header rules set, as plain HTTP
 does, and an edge stores the response whoever asked for it: CloudFront for as long as its
-`Cache-Control` or `Expires` allows, and the load balancer for as long as its
-`CDN-Cache-Control` allows or, without one, its `Cache-Control` or `Expires`. Both take a
-`max-age` as the shared lifetime when there is no `s-maxage`, so mark a personalised response
-`private` on such a route. On Cloudflare a route with no rule is not stored, whatever its
-headers say.
+`Cache-Control` or `Expires` allows, the load balancer for as long as its `CDN-Cache-Control`
+allows or, without one, its `Cache-Control` or `Expires`, and Cloudflare for as long as its
+`s-maxage`, `max-age` or `CDN-Cache-Control` allows. All three take a `max-age` as the shared
+lifetime when there is no `s-maxage`, so mark a personalised response `private` on such a
+route. Your handler's `Cache-Control` still reaches the browser as you set it, stored or not.
+
+On such a route Cloudflare asks for the response of a `GET` that carries no cookie and no
+`Authorization`, keyed by every query parameter, and stores it if its headers allow. A `GET`
+with a cookie is answered from the stored entry, if one exists, as CloudFront does, since
+CloudFront ignores cookies; if there is none it reaches your app with its cookies and the
+response is never stored. A request with `Authorization`, a request that is not a `GET`, a
+path with repeated slashes, and a request carrying a `__prerender_bypass` cookie reach your app
+and are never stored.
 
 Behind an edge that caches, a cached route answers everyone the same, so your handler never
 sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every
@@ -156,7 +164,7 @@ Vercel's, and the token is compared in constant time.
 
 | Edge | Caches | A revalidation |
 | --- | --- | --- |
-| Cloudflare | the cached routes of the table, for `GET` requests without `Authorization`, keyed by host, release and the allowed query | reaches the edge from the response that made it, and is awaited before a write is answered; it is also recorded for the origin's cloud, which clears its own cache |
+| Cloudflare | `GET` requests without `Authorization`: the cached routes of the table, keyed by host, release and the allowed query, and every other route that sends a lifetime, keyed by every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered; it is also recorded for the origin's cloud, which clears its own cache |
 | CloudFront | every response that allows it, keyed by every query parameter | recorded in the app's tag table and cleared by the tag invalidator within moments; CloudFront cannot mark an entry stale, so both kinds clear it |
 | Google Cloud load balancer | every response that allows it, keyed by every query parameter | cleared from Cloud CDN by the service itself; both kinds clear the entry |
 | No edge | nothing | nothing |
