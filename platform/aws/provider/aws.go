@@ -89,20 +89,21 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:     p.PreflightDeploy,
-		VerifyGrants:        p.VerifyGrants,
-		CheckBucket:         s3store.Check,
-		InspectStack:        p.InspectStack,
-		PackApp:             p.PackApp,
-		EmbedCode:           p.EmbedCode,
-		WarmFunctions:       p.WarmFunctions,
-		ProgramEdge:         p.ProgramEdge,
-		EnsureImageRegistry: p.EnsureImageRegistry,
-		OpenRegistryImages:  p.OpenRegistryImages,
-		ProveIdentity:       p.ProveIdentity,
-		ForwardPorts:        p.ForwardPorts,
-		ServeBindingProxy:   p.ServeBindingProxy,
-		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		PreflightDeploy:       p.PreflightDeploy,
+		VerifyGrants:          p.VerifyGrants,
+		CheckBucket:           s3store.Check,
+		InspectStack:          p.InspectStack,
+		PackApp:               p.PackApp,
+		EmbedCode:             p.EmbedCode,
+		WarmFunctions:         p.WarmFunctions,
+		ProgramEdge:           p.ProgramEdge,
+		EnsureImageRegistry:   p.EnsureImageRegistry,
+		OpenRegistryImages:    p.OpenRegistryImages,
+		ProveIdentity:         p.ProveIdentity,
+		ForwardPorts:          p.ForwardPorts,
+		ServeBindingProxy:     p.ServeBindingProxy,
+		ReadNextServerRuntime: p.ReadNextServerRuntime,
+		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 }
 

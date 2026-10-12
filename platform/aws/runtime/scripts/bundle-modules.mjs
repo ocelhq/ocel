@@ -11,6 +11,8 @@ const distNode = join(dist, "node");
 
 const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
+const containerPreload = join(dist, "container", "server-preload.mjs");
+
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
 const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store"];
@@ -58,6 +60,13 @@ await bundle(join(pkgDir, "src/node/entrypoint.mts"), nodeEntrypoint, {
   format: "esm",
 });
 
+await bundle(join(pkgDir, "src/container/server-preload.mts"), containerPreload, {
+  format: "esm",
+  minify: true,
+  banner: cjsInterop,
+  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
+});
+
 await Promise.all([
   ...bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
   ...bundledCacheModules.map((name) => rm(join(dist, "cache", `${name}.mjs`), { force: true })),
@@ -81,6 +90,7 @@ const looseImports = {
 const bundledOutputs = new Set([
   ...bundledModules.map((name) => join(distNext, `${name}.mjs`)),
   nodeEntrypoint,
+  containerPreload,
 ]);
 const loose = (await readdir(dist, { recursive: true, withFileTypes: true }))
   .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,6 +21,7 @@ import (
 
 const (
 	roleVar    = "OCEL_TEST_CONTAINER_ROLE"
+	reportVar  = "OCEL_TEST_CONTAINER_REPORT"
 	healthPath = "/_ocel/health"
 )
 
@@ -37,6 +40,13 @@ func TestContainerHelper(t *testing.T) {
 		time.Sleep(60 * time.Second)
 		os.Exit(99)
 	}()
+
+	if role == "report" {
+		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv(containerimage.NodeOptionsEnvVar)), 0o600); err != nil {
+			os.Exit(96)
+		}
+		os.Exit(0)
+	}
 
 	if strings.HasPrefix(role, "exit:") {
 		code, err := strconv.Atoi(strings.TrimPrefix(role, "exit:"))
@@ -99,12 +109,17 @@ type running struct {
 
 func launch(t *testing.T, role string, environ ...string) *running {
 	t.Helper()
+	return launchOn(t, fileExists, role, environ...)
+}
+
+func launchOn(t *testing.T, present func(string) bool, role string, environ ...string) *running {
+	t.Helper()
 	port := exposedPort(t)
 	command := appCommand(t)
 	environ = append([]string{containerimage.PortEnvVar + "=" + port}, environ...)
 
 	out := &running{port: port, code: make(chan int, 1)}
-	go func() { out.code <- run(context.Background(), command, append(environ, roleVar+"="+role)) }()
+	go func() { out.code <- run(context.Background(), command, append(environ, roleVar+"="+role), present) }()
 	return out
 }
 
@@ -188,7 +203,7 @@ func (r *running) await(t *testing.T) int {
 
 func TestRun(t *testing.T) {
 	t.Run("refuses an image that names no command", func(t *testing.T) {
-		if code := run(context.Background(), nil, nil); code != 1 {
+		if code := run(context.Background(), nil, nil, fileExists); code != 1 {
 			t.Errorf("run = %d, want 1 for an image with no entrypoint", code)
 		}
 	})
@@ -269,4 +284,40 @@ func TestRun(t *testing.T) {
 			t.Errorf("run = %d, want 0: the app was asked to stop and finished on its own terms", code)
 		}
 	})
+}
+
+func imageWith(files ...string) func(string) bool {
+	return func(path string) bool { return slices.Contains(files, path) }
+}
+
+func reportedNodeOptions(t *testing.T, present func(string) bool, environ ...string) string {
+	t.Helper()
+	report := filepath.Join(t.TempDir(), "node-options")
+	r := launchOn(t, present, "report", append(environ, reportVar+"="+report)...)
+	if code := r.await(t); code != 0 {
+		t.Fatalf("run = %d, want 0 from an app that reported its node options", code)
+	}
+	got, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("the app reported nothing: %v", err)
+	}
+	return string(got)
+}
+
+func TestTheRuntimeRunsANextContainersAppWithTheServerPreloadAfterTheNodeOptionsItIsGiven(t *testing.T) {
+	preload := "--import " + containerimage.NextServerPreloadPath
+	next := imageWith(containerimage.NextServerPreloadPath)
+
+	if got := reportedNodeOptions(t, next); got != preload {
+		t.Errorf("NODE_OPTIONS = %q with none given, want %q", got, preload)
+	}
+	if got, want := reportedNodeOptions(t, next, containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"), "--max-old-space-size=512 "+preload; got != want {
+		t.Errorf("NODE_OPTIONS = %q, want %q: the image's or the deploy's node options are kept and the preload follows them", got, want)
+	}
+}
+
+func TestTheRuntimeLeavesTheNodeOptionsOfAContainerWithoutTheNextServerPreload(t *testing.T) {
+	if got := reportedNodeOptions(t, imageWith(), containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
+		t.Errorf("NODE_OPTIONS = %q, want the image's own %q", got, "--max-old-space-size=512")
+	}
 }
