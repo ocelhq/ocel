@@ -1,5 +1,5 @@
 import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { dispatchResult, type RouteDeps } from "../src/index";
 import {
   buildEdgeUrl,
@@ -292,6 +292,37 @@ describe("a prerender served through Serve", () => {
 
     expect(origin.requests).toHaveLength(1);
     expect(origin.requests[0].method).toBe("HEAD");
+  });
+});
+
+describe("a prerender whose Serve call answers a redirect or fails", () => {
+  for (const status of [307, 308]) {
+    it(`returns the ${status} and its Location to the visitor`, async () => {
+      const served = fakeServing(
+        () => new Response(null, { status, headers: { location: "/elsewhere" } }),
+      );
+
+      const res = await get("/blog", deps(served));
+
+      expect(res.status).toBe(status);
+      expect(res.headers.get("location")).toBe("/elsewhere");
+    });
+  }
+
+  it("is forwarded to the origin uncached, and logged, when the Serve call throws", async () => {
+    const served = fakeServing(() => {
+      throw new Error("serve exploded");
+    });
+    const origin = recorder();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await get("/blog", deps(served, { origin }));
+
+    expect(await res.text()).toBe("from-origin");
+    expect(origin.requests).toHaveLength(1);
+    expect(origin.requests[0].headers.has("x-ocel-edge-cache")).toBe(false);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });
 

@@ -188,7 +188,7 @@ export function buildServeRequest(url: string, visitor?: Request): Request {
   ]) {
     headers.delete(name);
   }
-  return new Request(url, { method: "GET", headers });
+  return new Request(url, { method: "GET", headers, redirect: "manual" });
 }
 
 export function isRead(request: Request): boolean {

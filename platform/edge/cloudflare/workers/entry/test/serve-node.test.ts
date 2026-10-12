@@ -3,7 +3,7 @@ import {
   type OcelRouteTable,
   readOcelRouteTable,
 } from "@platform/edge-contract/ocel-route-table";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import {
   RENDER_RELEASE_HEADER,
@@ -219,6 +219,33 @@ describe("a request a cached route names", () => {
 
     expect(await res.text()).toBe("uncached");
     expect(forwarded).toHaveLength(1);
+  });
+
+  for (const status of [307, 308]) {
+    it(`returns the ${status} its route answers with, and its Location, to the visitor`, async () => {
+      const { serve } = setup(
+        () => new Response(null, { status, headers: { location: "/elsewhere" } }),
+      );
+
+      const res = await serve(new Request("https://shop.example.com/blog/a"));
+
+      expect(res.status).toBe(status);
+      expect(res.headers.get("location")).toBe("/elsewhere");
+    });
+  }
+
+  it("is rendered at the origin uncached, and logged, when the Serve call throws", async () => {
+    const { serve, forwarded } = setup(() => {
+      throw new Error("serve exploded");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await serve(new Request("https://shop.example.com/blog/a"));
+
+    expect(await res.text()).toBe("uncached");
+    expect(forwarded).toHaveLength(1);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 
   it("is looked up under its path inside the base path", async () => {
