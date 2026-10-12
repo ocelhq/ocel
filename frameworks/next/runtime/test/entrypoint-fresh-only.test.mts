@@ -21,6 +21,10 @@ const launcherModule = `module.exports = {
       res.end("purged");
       return;
     }
+    if (req.url === "/dynamic") {
+      res.end(JSON.stringify(req.headers[Symbol.for("ocel.next.uncached-render")] ?? false));
+      return;
+    }
     res.end(JSON.stringify(req.headers[Symbol.for("ocel.next.served-route")] ?? null));
   },
 };
@@ -102,6 +106,15 @@ test("a fresh-only origin tells the cache handler the revalidate window of the r
   const res = await fetch(`http://127.0.0.1:${port}/blog`);
 
   expect(JSON.parse(await res.text())).toEqual({ revalidate: 60 });
+});
+
+test("an origin behind a cache that stores every response never calls a render uncached", async () => {
+  await import("../src/entrypoint.mjs");
+  const port = await ready;
+
+  const res = await fetch(`http://127.0.0.1:${port}/dynamic`);
+
+  expect(JSON.parse(await res.text())).toBe(false);
 });
 
 test("a function that dispatches no path itself tags its responses for a cache that stores every one", async () => {
