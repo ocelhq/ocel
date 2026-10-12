@@ -72,6 +72,7 @@ var (
 	bypassTokenCharacters = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	groupRead             = regexp.MustCompile(`\$(\d+)`)
 	repeatBound           = regexp.MustCompile(`^\{(\d+)(?:,(\d*))?\}`)
+	absoluteLocation      = regexp.MustCompile(`(?i)^https?://`)
 )
 
 func ReadOcelRouteTable(raw []byte) (OcelRouteTable, error) {
@@ -175,12 +176,19 @@ func (r RedirectRule) refuse() error {
 	if r.Location == "" {
 		return errors.New("a redirect names a location")
 	}
+	if !absoluteLocation.MatchString(r.Location) && !isSameSiteLocation(r.Location) {
+		return errors.New("a location is a path that begins with one slash, or an http or https URL")
+	}
 	for _, read := range groupRead.FindAllStringSubmatch(r.Location, -1) {
 		if group, _ := strconv.Atoi(read[1]); group < 1 || group > compiled.NumSubexp() {
 			return fmt.Errorf("the location reads $%s, and the pattern has %d groups", read[1], compiled.NumSubexp())
 		}
 	}
 	return nil
+}
+
+func isSameSiteLocation(location string) bool {
+	return strings.HasPrefix(location, "/") && !strings.HasPrefix(location, "//") && !strings.HasPrefix(location, `/\`)
 }
 
 func (r Route) refuse() error {

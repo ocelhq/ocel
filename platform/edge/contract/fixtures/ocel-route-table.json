@@ -27,6 +27,16 @@
         "src": "/gone",
         "location": "/",
         "status": 301
+      },
+      {
+        "src": "/to/(.*)",
+        "location": "/$1",
+        "status": 307
+      },
+      {
+        "src": "/out",
+        "location": "https://example.com/elsewhere",
+        "status": 302
       }
     ],
     "routes": [
@@ -127,6 +137,31 @@
     {
       "path": "/old/a",
       "location": null
+    },
+    {
+      "path": "/docs/to/a",
+      "status": 307,
+      "location": "/a"
+    },
+    {
+      "path": "/docs/to//evil.com",
+      "status": 307,
+      "location": "/evil.com"
+    },
+    {
+      "path": "/docs/to/\\evil.com",
+      "status": 307,
+      "location": "/evil.com"
+    },
+    {
+      "path": "/docs/to/\\/evil.com",
+      "status": 307,
+      "location": "/evil.com"
+    },
+    {
+      "path": "/docs/out",
+      "status": 302,
+      "location": "https://example.com/elsewhere"
     }
   ],
   "headers": [
@@ -226,6 +261,24 @@
       "basePath": "",
       "path": "/a",
       "redirectTo": null
+    },
+    {
+      "mode": "never",
+      "basePath": "",
+      "path": "//evil.com/",
+      "redirectTo": "/evil.com"
+    },
+    {
+      "mode": "never",
+      "basePath": "",
+      "path": "/\\evil.com/",
+      "redirectTo": "/evil.com"
+    },
+    {
+      "mode": "always",
+      "basePath": "",
+      "path": "//evil",
+      "redirectTo": "/evil/"
     }
   ],
   "patterns": [
@@ -1076,6 +1129,106 @@
               "revalidate": 10,
               "bypassToken": "1123456789abcdef0123456789abcdef"
             }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect location that is relative",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "b",
+            "status": 301
+          }
+        ],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect location that is protocol-relative",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "//evil.com",
+            "status": 301
+          }
+        ],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect location that begins with a slash and a backslash",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "/\\evil.com",
+            "status": 301
+          }
+        ],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect location with a scheme other than http or https",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "javascript:alert(1)",
+            "status": 301
+          }
+        ],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
           }
         ],
         "fallback": {
