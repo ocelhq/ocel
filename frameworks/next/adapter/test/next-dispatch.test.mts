@@ -226,6 +226,7 @@ test("fails closed on a request with no entry header and no route for its path",
 const ROUTES = {
   exact: { "/server": "/server", "/header": "/header" },
   dynamic: [["^/blog/([^/]+?)(?:\\.rsc)?$", "/blog/[slug]"]] as [string, string][],
+  segmented: [] as string[],
 };
 
 const ROUTED = {
@@ -275,6 +276,7 @@ test("an exact route wins over a dynamic one that also matches", async () => {
     routes: {
       exact: { "/blog/featured": "/header" },
       dynamic: ROUTES.dynamic,
+      segmented: [],
     },
     load,
   });
@@ -308,6 +310,7 @@ test("a basePath route is served under the path the build gave it", async () => 
     routes: {
       exact: { "/docs/header": "/docs/header" },
       dynamic: [["^/docs[/]?/blog/(?<nxtPslug>[^/]+?)(?:/)?$", "/docs/blog/[slug]"]],
+      segmented: [],
     },
     load,
   });
@@ -326,6 +329,7 @@ test("a pathname another bundle owns fails by name, not by a local catch-all", a
     routes: {
       exact: { "/elsewhere": "/elsewhere" },
       dynamic: [["^[/]?/(?<nxtPpath>.+?)(?:/)?$", "/files/[...path]"]],
+      segmented: [],
     },
     load,
   });
@@ -1378,4 +1382,77 @@ test("warm() picks up the middleware entry for free", () => {
   expect(loads).toContain("./middleware.js");
   expect(report.entries).toBe(4);
   expect(report.loaded).toBe(4);
+});
+
+const SEGMENT_PREFETCH_HEADERS = {
+  rsc: "1",
+  "next-router-prefetch": "1",
+  "next-router-segment-prefetch": "/_tree",
+};
+
+async function urlSeenByEntry(
+  url: string,
+  headers: Record<string, string>,
+  segmented: string[],
+  routes = ROUTES,
+): Promise<string | undefined> {
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
+    primary: null,
+    routes: { ...routes, segmented },
+    load: () => ({
+      handler: (req: { url: string }) => req.url,
+    }),
+  });
+  return dispatch.handler({ url, headers }, fakeRes(), {});
+}
+
+test("a segment prefetch of a route with segment outputs is served from its .segments path", async () => {
+  const seen = await urlSeenByEntry("/blog/[slug]?nxtPslug=hello", SEGMENT_PREFETCH_HEADERS, [
+    "/blog/[slug]",
+  ]);
+
+  expect(seen).toBe("/blog/[slug].segments/_tree.segment.rsc?nxtPslug=hello");
+});
+
+test("a segment prefetch of the root is served from index's .segments path", async () => {
+  const seen = await urlSeenByEntry("/", SEGMENT_PREFETCH_HEADERS, ["app/page"], {
+    exact: { "/": "app/page" },
+    dynamic: [],
+    segmented: [],
+  });
+
+  expect(seen).toBe("/index.segments/_tree.segment.rsc");
+});
+
+test("a segment prefetch of a route without segment outputs keeps its plain path", async () => {
+  const seen = await urlSeenByEntry("/header", SEGMENT_PREFETCH_HEADERS, ["/blog/[slug]"]);
+
+  expect(seen).toBe("/header");
+});
+
+test("a request that is no segment prefetch keeps its plain path", async () => {
+  const seen = await urlSeenByEntry("/blog/[slug]", { rsc: "1" }, ["/blog/[slug]"]);
+
+  expect(seen).toBe("/blog/[slug]");
+});
+
+test("a request already on a .segments path keeps it", async () => {
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
+    primary: null,
+    routes: {
+      exact: {},
+      dynamic: [["^/blog/\\[slug\\]\\.segments/.+$", "/blog/[slug]"]],
+      segmented: ["/blog/[slug]"],
+    },
+    load: () => ({ handler: (req: { url: string }) => req.url }),
+  });
+  const url = "/blog/[slug].segments/_tree.segment.rsc";
+
+  const seen = await dispatch.handler({ url, headers: SEGMENT_PREFETCH_HEADERS }, fakeRes(), {});
+
+  expect(seen).toBe(url);
 });

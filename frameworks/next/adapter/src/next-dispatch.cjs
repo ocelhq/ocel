@@ -173,7 +173,7 @@ function measureStride(headroom, maxDelta) {
 module.exports = function createDispatch({
   entries,
   primary,
-  routes = { exact: {}, dynamic: [] },
+  routes = { exact: {}, dynamic: [], segmented: [] },
   nextConfig,
   load,
 }) {
@@ -189,6 +189,19 @@ module.exports = function createDispatch({
     }
     for (const [re, key] of dynamic) if (re.test(pathname)) return key;
     return undefined;
+  };
+
+  const segmented = new Set(routes.segmented);
+
+  const rewriteSegmentPrefetchUrl = (req, pathname, key) => {
+    const segment = req.headers["next-router-segment-prefetch"];
+    if (req.headers.rsc === undefined || typeof segment !== "string") return;
+    if (!segmented.has(key) || pathname.includes(".segments/")) return;
+    const search = (req.url || "").slice(pathname.length);
+    const basePath = nextConfig.basePath || "";
+    const isRoot = pathname === "/" || pathname === basePath;
+    const route = isRoot ? `${basePath}/index` : pathname.replace(/\/$/, "");
+    req.url = `${route}.segments${segment}.segment.rsc${search}`;
   };
 
   let warnedMissingGetter = false;
@@ -261,6 +274,7 @@ module.exports = function createDispatch({
       if (!Object.hasOwn(entries, key)) {
         return fail(res, `bundle has no entry ${key}`);
       }
+      rewriteSegmentPrefetchUrl(req, pathname, key);
       const entry = loadEntry(key);
       if (entry.error) {
         return fail(res, `entry ${key} failed to load: ${entry.error?.message ?? entry.error}`);
