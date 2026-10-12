@@ -521,8 +521,14 @@ test("a dynamic route reaches the launcher as the pattern that spans it", async 
   await adapter.onBuildComplete(args as never);
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"]]);
-  expect(new RegExp(routes.dynamic[0][0], "i").test("/api/todos/7")).toBe(true);
+  expect(routes.dynamic).toEqual([
+    {
+      source: "^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$",
+      entryKey: "/api/todos/[id]",
+      route: "/api/todos/[id]",
+    },
+  ]);
+  expect(new RegExp(routes.dynamic[0].source, "i").test("/api/todos/7")).toBe(true);
 });
 
 test("primes the largest entry at INIT", async () => {
@@ -2591,7 +2597,13 @@ test("keeps a dynamic pages/index/[...slug] route addressable by its own name", 
   expect(manifest.pathnames).toContain("/index/[...slug]");
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([["^[/]?/index/(?<nxtPslug>.+?)(?:/)?$", "/index/[...slug]"]]);
+  expect(routes.dynamic).toEqual([
+    {
+      source: "^[/]?/index/(?<nxtPslug>.+?)(?:/)?$",
+      entryKey: "/index/[...slug]",
+      route: "/index/[...slug]",
+    },
+  ]);
   await expectManifestJoinsLaunchers(projectDir);
 });
 
@@ -2822,7 +2834,7 @@ test("never lets /_middleware enter the launcher's route table", async () => {
   const { entries, routes } = await readLauncher(projectDir);
   expect(entries).toHaveProperty("/_middleware");
   expect(routes.exact).not.toHaveProperty("/_middleware");
-  expect(routes.dynamic.some(([, key]) => key === "/_middleware")).toBe(false);
+  expect(routes.dynamic.some(({ entryKey }) => entryKey === "/_middleware")).toBe(false);
 });
 
 test("warns once when node middleware's matcher covers part of the build's cached surface", async () => {

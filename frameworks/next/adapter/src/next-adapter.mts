@@ -167,6 +167,7 @@ const adapter = {
 
     const entryKeyByPathname = new Map<string, string>();
     const entryKeyByRouteId = new Map<string, string>();
+    const routeKeyByRouteId = new Map<string, string>();
     const entryRoutes: typeof functionRoutes = [];
     for (const members of groups.values()) {
       members.sort(
@@ -175,8 +176,10 @@ const adapter = {
       const entry = members[0]!;
       entryRoutes.push(entry);
       for (const m of members) {
-        entryKeyByPathname.set(routeKeyOf(m, basePath), entry.id);
+        const routeKey = routeKeyOf(m, basePath);
+        entryKeyByPathname.set(routeKey, entry.id);
         entryKeyByRouteId.set(m.id, entry.id);
+        routeKeyByRouteId.set(m.id, routeKey);
       }
     }
 
@@ -230,9 +233,11 @@ const adapter = {
 
     for (const route of originEdgeRoutes) {
       const entryKey = edgeEntryOf(route).entryKey;
+      const routeKey = routeKeyOf(route, basePath);
       bundleNameByEntryKey.set(entryKey, seededBundleId!);
-      entryKeyByPathname.set(routeKeyOf(route, basePath), entryKey);
+      entryKeyByPathname.set(routeKey, entryKey);
       entryKeyByRouteId.set(route.id, entryKey);
+      routeKeyByRouteId.set(route.id, routeKey);
     }
 
     const rootPathname = basePath || "/";
@@ -248,14 +253,14 @@ const adapter = {
 
     const variantHeaders = JSON.stringify(variantHeaderProjection(prerenderGroups));
 
-    const segmentedEntryKeys = prerenderGroups
+    const segmentedRouteKeys = prerenderGroups
       .flatMap((group) => group.segments)
-      .map((segment) => entryKeyByRouteId.get(segment.parentOutputId))
-      .filter((entryKey): entryKey is string => entryKey !== undefined);
+      .map((segment) => routeKeyByRouteId.get(segment.parentOutputId))
+      .filter((routeKey): routeKey is string => routeKey !== undefined);
     const routes = launcherRoutes(
       entryKeyByPathname,
       routing.dynamicRoutes ?? [],
-      segmentedEntryKeys,
+      segmentedRouteKeys,
     );
 
     const nextConfigProjection = {
@@ -1183,28 +1188,34 @@ async function emitFetchEntries(outputRoot: string, distDir: string): Promise<vo
   );
 }
 
+export interface DynamicLauncherRoute {
+  source: string;
+  entryKey: string;
+  route: string;
+}
+
 export interface LauncherRoutes {
   exact: Record<string, string>;
-  dynamic: [string, string][];
+  dynamic: DynamicLauncherRoute[];
   segmented: string[];
 }
 
 function launcherRoutes(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
-  segmentedEntryKeys: readonly string[],
+  segmentedRouteKeys: readonly string[],
 ): LauncherRoutes {
   const exact = Object.fromEntries(entryKeyByPathname);
 
-  const dynamic: [string, string][] = [];
-  for (const route of dynamicRoutes) {
-    const page = route.destination?.split("?")[0];
-    if (!page || page.includes("$")) continue;
-    const entryKey = entryKeyByPathname.get(page);
-    if (entryKey !== undefined) dynamic.push([route.sourceRegex, entryKey]);
+  const dynamic: DynamicLauncherRoute[] = [];
+  for (const { sourceRegex, destination } of dynamicRoutes) {
+    const route = destination?.split("?")[0];
+    if (!route || route.includes("$")) continue;
+    const entryKey = entryKeyByPathname.get(route);
+    if (entryKey !== undefined) dynamic.push({ source: sourceRegex, entryKey, route });
   }
 
-  return { exact, dynamic, segmented: [...new Set(segmentedEntryKeys)] };
+  return { exact, dynamic, segmented: [...new Set(segmentedRouteKeys)] };
 }
 
 interface NextConfigProjection {

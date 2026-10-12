@@ -2191,8 +2191,10 @@ describe("the origin URL under a config rewrite", () => {
   function capturingDeps(overrides: Partial<RouteDeps["manifest"]> = {}): {
     deps: RouteDeps;
     invoked: () => URL;
+    invokedHeaders: () => Headers;
   } {
     let captured: URL | undefined;
+    let capturedHeaders: Headers | undefined;
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -2223,10 +2225,11 @@ describe("the origin URL under a config rewrite", () => {
       },
       fetch: (async (req: Request) => {
         captured = new URL(req.url);
+        capturedHeaders = req.headers;
         return new Response("ok", { status: 200 });
       }) as unknown as typeof fetch,
     });
-    return { deps, invoked: () => captured! };
+    return { deps, invoked: () => captured!, invokedHeaders: () => capturedHeaders! };
   }
 
   it("forwards the rewrite's source pathname and query, not the destination", async () => {
@@ -2282,6 +2285,31 @@ describe("the origin URL under a config rewrite", () => {
 
     expect(invoked().pathname).toBe("/rewrite-source/foo");
     expect(invoked().searchParams.has("path")).toBe(false);
+  });
+
+  it("names the route a rewrite resolved to, not a visitor-supplied one, to the origin", async () => {
+    const { deps, invokedHeaders } = capturingDeps({
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [{ sourceRegex: "^/blog-post-1$", destination: "/blog/post-1" }],
+        dynamicRoutes: [
+          {
+            sourceRegex: "^/blog/(?<nxtPpost>[^/]+?)(?:/)?$",
+            destination: "/blog/[post]?nxtPpost=$nxtPpost",
+          },
+        ],
+        onMatch: [],
+        fallback: [],
+      } as unknown as RouteDeps["manifest"]["routes"],
+    });
+
+    await serve(
+      new Request("https://app.example/blog-post-1", { headers: { "x-ocel-route": "/forged" } }),
+      deps,
+    );
+
+    expect(invokedHeaders().get("x-ocel-route")).toBe("/blog/[post]");
   });
 });
 

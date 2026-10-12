@@ -170,6 +170,9 @@ function measureStride(headroom, maxDelta) {
   return Math.max(1, Math.min(MAX_MEASURE_STRIDE, Math.floor(headroom / (2 * maxDelta))));
 }
 
+const withoutTrailingSlash = (pathname) =>
+  pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+
 module.exports = function createDispatch({
   entries,
   primary,
@@ -181,27 +184,33 @@ module.exports = function createDispatch({
 
   const loaded = new Map();
 
-  const dynamic = routes.dynamic.map(([source, key]) => [new RegExp(source, "i"), key]);
+  const dynamic = routes.dynamic.map(({ source, entryKey, route }) => ({
+    pattern: new RegExp(source, "i"),
+    entryKey,
+    route,
+  }));
 
-  const entryForPathname = (pathname) => {
-    if (Object.hasOwn(routes.exact, pathname)) {
-      return routes.exact[pathname];
+  const routeOf = (pathname) => {
+    const exact = withoutTrailingSlash(pathname);
+    if (Object.hasOwn(routes.exact, exact)) return { entryKey: routes.exact[exact], route: exact };
+    for (const { pattern, entryKey, route } of dynamic) {
+      if (pattern.test(pathname)) return { entryKey, route };
     }
-    for (const [re, key] of dynamic) if (re.test(pathname)) return key;
     return undefined;
   };
 
   const segmented = new Set(routes.segmented);
 
-  const rewriteSegmentPrefetchUrl = (req, pathname, key) => {
+  const rewriteSegmentPrefetchUrl = (req, pathname, route) => {
     const segment = req.headers["next-router-segment-prefetch"];
     if (req.headers.rsc === undefined || typeof segment !== "string") return;
-    if (!segmented.has(key) || pathname.includes(".segments/")) return;
+    if (!segmented.has(route) || pathname.includes(".segments/")) return;
     const search = (req.url || "").slice(pathname.length);
     const basePath = nextConfig.basePath || "";
-    const isRoot = pathname === "/" || pathname === basePath;
-    const route = isRoot ? `${basePath}/index` : pathname.replace(/\/$/, "");
-    req.url = `${route}.segments${segment}.segment.rsc${search}`;
+    const path = withoutTrailingSlash(pathname);
+    const isRoot = path === "/" || path === basePath;
+    const outputPath = isRoot ? `${basePath}/index` : path;
+    req.url = `${outputPath}.segments${segment}.segment.rsc${search}`;
   };
 
   let warnedMissingGetter = false;
@@ -264,17 +273,19 @@ module.exports = function createDispatch({
   return {
     handler(req, res, ctx) {
       const pathname = (req.url || "/").split("?")[0];
+      const routeHeader = req.headers["x-ocel-route"];
+      const matched = routeOf(typeof routeHeader === "string" ? routeHeader : pathname);
       const key =
         typeof req.headers["x-ocel-entry"] === "string"
           ? req.headers["x-ocel-entry"]
-          : entryForPathname(pathname);
+          : matched?.entryKey;
       if (typeof key !== "string") {
         return fail(res, `no entry serves ${pathname} in this bundle`);
       }
       if (!Object.hasOwn(entries, key)) {
         return fail(res, `bundle has no entry ${key}`);
       }
-      rewriteSegmentPrefetchUrl(req, pathname, key);
+      rewriteSegmentPrefetchUrl(req, pathname, matched?.route);
       const entry = loadEntry(key);
       if (entry.error) {
         return fail(res, `entry ${key} failed to load: ${entry.error?.message ?? entry.error}`);

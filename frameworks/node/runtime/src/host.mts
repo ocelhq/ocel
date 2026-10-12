@@ -191,6 +191,8 @@ const originSignedVar = "OCEL_ORIGIN_SIGNED";
 
 const originSecretHeader = "x-ocel-origin-secret";
 
+const originTargetHeaders = ["x-ocel-entry", "x-ocel-route"];
+
 type OriginGuard = (headers: http.IncomingHttpHeaders) => boolean;
 
 function digest(value: string): Buffer {
@@ -248,7 +250,7 @@ function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trus
     delete headers["x-forwarded-proto"];
   }
   if (!trust.entry && headers["x-ocel-request-id"] === undefined) {
-    delete headers["x-ocel-entry"];
+    for (const name of originTargetHeaders) delete headers[name];
   }
   delete headers["x-ocel-request-id"];
   delete headers["x-ocel-trace-id"];

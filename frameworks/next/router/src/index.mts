@@ -78,7 +78,9 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", edgeCacheHeader];
+const ROUTE_HEADER = "x-ocel-route";
+
+export const CONTROL_HEADERS = [ENTRY_HEADER, ROUTE_HEADER, "next-resume", edgeCacheHeader];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);
@@ -807,9 +809,10 @@ async function renderDispatchTarget(
       if (!fnUrl) return noFunctionUrl(target.id);
       return withStatus(
         await doOrigin(
-          withEntry(
+          withOriginTarget(
             forward(originUrl(fnUrl, url, result, manifest), request, headers),
             target.entryKey,
+            result.resolvedPathname,
           ),
         ),
         "MISS",
@@ -980,7 +983,7 @@ async function prerenderResponse(
   const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
   const render = (rendered: Request) => {
-    const entried = withEntry(rendered, target.entryKey);
+    const entried = withOriginTarget(rendered, target.entryKey, result.resolvedPathname);
     return edgeEntryKey ? edgeResponse(deps, edgeEntryKey, entried) : doFetch(entried);
   };
 
@@ -1095,10 +1098,16 @@ export function forward(
   return new Request(url, init);
 }
 
-function withEntry(request: Request, entryKey: string | undefined): Request {
+function withOriginTarget(
+  request: Request,
+  entryKey: string | undefined,
+  route: string | null | undefined,
+): Request {
   const headers = new Headers(request.headers);
   if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
   else headers.delete(ENTRY_HEADER);
+  if (route) headers.set(ROUTE_HEADER, route);
+  else headers.delete(ROUTE_HEADER);
   return new Request(request, { headers });
 }
 
@@ -1144,9 +1153,10 @@ function invokeMiddleware(
       const url = new URL(request.url);
       const forwardUrl = new URL(url.pathname + encodeForwardedSearch(url.search), fnUrl);
       return doOrigin(
-        withEntry(
+        withOriginTarget(
           forward(forwardUrl, request, withoutControlHeaders(request.headers)),
           middleware.entryKey,
+          undefined,
         ),
       );
     }).then(originAuthoredResponse);
