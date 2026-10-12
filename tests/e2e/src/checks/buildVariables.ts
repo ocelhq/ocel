@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { type Check, json } from "./context";
 
@@ -15,6 +15,7 @@ export const BUILD_VARIABLES: Record<string, string> = {
 const LIVE_DIR_PREFIX = "ocel-live-";
 const OUTPUT_DIR = path.join(".ocel", "output");
 const NEXT_DIR = ".next";
+const IMAGE_REF = path.join(OUTPUT_DIR, "apps", "web", "image-ref");
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -25,6 +26,13 @@ async function filesUnder(dir: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isFile())
     .map((entry) => path.join(entry.parentPath, entry.name));
+}
+
+async function builtInAnImage(projectDir: string): Promise<boolean> {
+  return access(path.join(projectDir, IMAGE_REF)).then(
+    () => true,
+    () => false,
+  );
 }
 
 function removed(error: unknown): boolean {
@@ -79,6 +87,7 @@ export const buildVariablesChecks: Check[] = [
   },
   {
     title: "no file under .ocel/output holds the sensitive or secret value the build read",
+    assertsDeployment: true,
     run: async (ctx) => {
       const output = path.join(ctx.projectDir, OUTPUT_DIR);
       const files = await filesUnder(output).catch((error: unknown) =>
@@ -95,7 +104,11 @@ export const buildVariablesChecks: Check[] = [
   },
   {
     title: "no file under the app's .next holds the sensitive or secret value the build read",
+    assertsDeployment: true,
     run: async (ctx) => {
+      if (await builtInAnImage(ctx.projectDir)) {
+        return;
+      }
       const next = path.join(ctx.projectDir, NEXT_DIR);
       const files = await filesUnder(next).catch((error: unknown) =>
         assert.fail(`next build left no ${NEXT_DIR} to look through: ${String(error)}`),
@@ -110,6 +123,7 @@ export const buildVariablesChecks: Check[] = [
   },
   {
     title: "no ocel-live-* dir in the temp dir still holds a value the build read",
+    assertsDeployment: true,
     run: async (ctx) => {
       const liveDirs = (await readdir(ctx.tempDir, { withFileTypes: true }))
         .filter((entry) => entry.isDirectory() && entry.name.startsWith(LIVE_DIR_PREFIX))

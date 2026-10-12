@@ -40,7 +40,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { buildVariables, clientEnv, deploy, lifecycle, prerender, sdk } from "./fixtures";
+import { deploy, lifecycle, prerender, sdk } from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
@@ -54,6 +54,7 @@ import {
   cloudfrontShielded,
   container,
   defaults,
+  dockerfile,
   registry,
 } from "./variants";
 
@@ -177,7 +178,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [lifecycle.next, sdk.next],
-        variants: [defaults],
+        variants: [defaults, dockerfile],
         fails: [check(nextOriginDataCacheChecks)],
       },
     ],
@@ -316,13 +317,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [
-          ...EVERY_NEXT_BEARING,
-          buildVariables.next,
-          clientEnv.next,
-          prerender.nextBucket,
-          prerender.nextPpr,
-        ],
+        fixtures: [...EVERY_NEXT_BEARING, prerender.nextPpr],
         variants: [defaults, cloudfrontShielded],
         fails: [step.deploy],
         skipsCell: true,
@@ -433,7 +428,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp", "gcp.floci"],
-        fixtures: Object.values(clientEnv),
+        fixtures: [sdk.next, sdk.sveltekit],
         variants: [defaults],
         fails: [check(clientEnvDeploymentUrlCheck)],
       },

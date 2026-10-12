@@ -27,6 +27,7 @@ import {
   cloudflareTunnel,
   container,
   defaults,
+  dockerfile,
   registry,
 } from "./matrix/variants";
 import type { CellUnderTest } from "./run/cellRun";
@@ -453,6 +454,35 @@ describe("a container cell", () => {
     ) as { apps: Record<string, unknown>[] };
     expect(written.apps[0]).toMatchObject({ compute: "container" });
     expect(written.apps[0]).not.toHaveProperty("arch");
+  });
+
+  it("builds a box cell's container from the Dockerfile its variant names, still answering on /health", () => {
+    expect(
+      renderConfig(TS_BASE, {
+        target: "vps",
+        slug: "j-1-sdk-next",
+        image: { dockerfile: "prerender.Dockerfile" },
+      }),
+    ).toContain(
+      `    compute: { container: { health: { path: "/health" }, image: {"dockerfile":"prerender.Dockerfile"} } },`,
+    );
+    const written = JSON.parse(
+      renderJsonConfig(ARCHED_JSON_BASE, {
+        target: "vps",
+        slug: "j-1-sdk-next",
+        image: { dockerfile: "prerender.Dockerfile" },
+      }),
+    ) as { apps: Record<string, unknown>[] };
+    expect(written.apps[0]?.compute).toEqual({
+      container: { health: { path: "/health" }, image: { dockerfile: "prerender.Dockerfile" } },
+    });
+  });
+
+  it("hands the dockerfile variant's image to a box cell's overlay", () => {
+    expect(overlayFor(cell(sdk.next, dockerfile), "vps", {}).image).toEqual({
+      dockerfile: "prerender.Dockerfile",
+    });
+    expect(overlayFor(cell(sdk.next), "vps", {}).image).toBeUndefined();
   });
 
   it("keeps the serverless options the fixture declares where the cell runs serverless", () => {

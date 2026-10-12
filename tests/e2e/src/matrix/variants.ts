@@ -5,6 +5,7 @@ import {
   forwardedAppChecks,
   SHIELDED_ORIGIN_CHECKS,
 } from "../checks/originShield";
+import { imageShowsNoBindingCheck } from "../checks/prerender";
 import { TUNNELED_ORIGIN_CHECKS } from "../checks/tunnel";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
@@ -69,4 +70,10 @@ export const albInFrontOfNext = { ...alb, checks: backendBucketChecks };
 export const registry = variant("registry", {
   offeredOn: ["vps"],
   config: { registry: { server: JOURNEY_REGISTRY, password: `\${${REGISTRY_TOKEN_ENV}}` } },
+});
+
+export const dockerfile = variant("dockerfile", {
+  offeredOn: ["vps"],
+  config: { image: { dockerfile: "prerender.Dockerfile" } },
+  checks: [imageShowsNoBindingCheck],
 });

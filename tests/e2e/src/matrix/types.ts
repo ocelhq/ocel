@@ -89,12 +89,15 @@ export type Phase =
 
 export const DEFAULT_VARIANT = "default";
 
+export type ContainerImage = { dockerfile: string };
+
 export type ConfigDelta = {
   compute?: Compute;
   computes?: Record<string, Compute>;
   edge?: Edge;
   tunnel?: boolean;
   registry?: RegistryConfig;
+  image?: ContainerImage;
 };
 
 export type TargetConfigDelta = {

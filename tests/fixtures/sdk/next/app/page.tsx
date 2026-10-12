@@ -1,11 +1,24 @@
-export default function Home() {
+import { createHash } from "node:crypto";
+import { env } from "../infra/variables";
+import { BrowserGreeting } from "./browser-greeting";
+
+export const dynamic = "force-dynamic";
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export default function Page() {
   return (
     <main>
-      <h1>Ocel Todos</h1>
-      <p>
-        A todos CRUD API backed by <code>postgres(&quot;main&quot;)</code>. See{" "}
-        <code>/api/todos</code>.
+      <p
+        data-public-value={env.NEXT_PUBLIC_GREETING}
+        data-deployment-url={process.env.NEXT_PUBLIC_OCEL_URL ?? ""}
+        data-sensitive-digest={sha256(env.SENSITIVE_TOKEN)}
+      >
+        rendered on the server
       </p>
+      <BrowserGreeting />
     </main>
   );
 }

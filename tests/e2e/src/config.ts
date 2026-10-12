@@ -7,6 +7,7 @@ import { appHostname } from "./identity";
 import type {
   Cell,
   Compute,
+  ContainerImage,
   Edge,
   RegistryConfig,
   TargetConfigDelta,
@@ -50,6 +51,7 @@ export type Overlay = TargetConfigDelta & {
   previewDomain?: string;
   variablesKey?: string;
   registry?: RegistryConfig;
+  image?: ContainerImage;
   proxy?: unknown;
   preBuild?: string;
 };
@@ -141,11 +143,12 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
     }
     case "vps": {
       const front = frontNamed(env);
-      const { edge, tunnel } = cell.variant.config;
+      const { edge, tunnel, image } = cell.variant.config;
       return {
         target,
         slug: cell.slug,
         ...cell.fixture.configOn?.vps,
+        ...(image ? { image } : {}),
         hostnames: hostnamesOf(cell, vpsZoneOf(cell, env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
@@ -190,13 +193,15 @@ function frontOf(overlay: Overlay): string[] {
   return front;
 }
 
-function computeExpressionOf(compute: Compute, target: TargetName): string {
+function computeExpressionOf(compute: Compute, target: TargetName, image?: ContainerImage): string {
   if (compute === "serverless") {
     return `{ serverless: { ...(typeof app.compute === "object" ? app.compute.serverless : {}) } }`;
   }
-  return target === "vps"
-    ? `{ container: { health: { path: ${JSON.stringify(CONTAINER_HEALTH.path)} } } }`
-    : `"container"`;
+  const built = image ? `, image: ${JSON.stringify(image)}` : "";
+  if (target === "vps") {
+    return `{ container: { health: { path: ${JSON.stringify(CONTAINER_HEALTH.path)} }${built} } }`;
+  }
+  return image ? `{ container: { image: ${JSON.stringify(image)} } }` : `"container"`;
 }
 
 function expressionOf(fields: Record<string, unknown>): string {
@@ -209,13 +214,15 @@ function expressionOf(fields: Record<string, unknown>): string {
 function appOverlay(overlay: Overlay): string {
   const lines: string[] = [];
   if (overlay.target === "vps" && !overlay.compute) {
-    lines.push(`    compute: ${computeExpressionOf("container", overlay.target)},`);
+    lines.push(`    compute: ${computeExpressionOf("container", overlay.target, overlay.image)},`);
   }
   for (const [app, fields] of Object.entries(overlay.apps ?? {})) {
     lines.push(`    ...(app.name === ${JSON.stringify(app)} ? ${expressionOf(fields)} : {}),`);
   }
   if (overlay.compute) {
-    lines.push(`    compute: ${computeExpressionOf(overlay.compute, overlay.target)},`);
+    lines.push(
+      `    compute: ${computeExpressionOf(overlay.compute, overlay.target, overlay.image)},`,
+    );
   }
   if (overlay.compute === "container") {
     lines.push(`    arch: undefined,`);
@@ -320,9 +327,18 @@ type Document = Record<string, unknown> & {
   apps?: App[];
 };
 
-function computeDocumentOf(compute: Compute, target: TargetName, declared: unknown): unknown {
+function computeDocumentOf(
+  compute: Compute,
+  target: TargetName,
+  declared: unknown,
+  image?: ContainerImage,
+): unknown {
   if (compute === "container") {
-    return target === "vps" ? { container: { health: CONTAINER_HEALTH } } : compute;
+    const built = image ? { image } : {};
+    if (target === "vps") {
+      return { container: { health: CONTAINER_HEALTH, ...built } };
+    }
+    return image ? { container: built } : compute;
   }
   const serverless =
     declared !== null && typeof declared === "object"
@@ -335,14 +351,14 @@ function appDocument(app: App, overlay: Overlay): App {
   const written: App = {
     ...app,
     ...(overlay.target === "vps"
-      ? { compute: computeDocumentOf("container", overlay.target, app.compute) }
+      ? { compute: computeDocumentOf("container", overlay.target, app.compute, overlay.image) }
       : {}),
     ...(app.name === undefined ? {} : overlay.apps?.[app.name]),
   };
   const compute =
     (app.name === undefined ? undefined : overlay.computes?.[app.name]) ?? overlay.compute;
   if (compute) {
-    written.compute = computeDocumentOf(compute, overlay.target, app.compute);
+    written.compute = computeDocumentOf(compute, overlay.target, app.compute, overlay.image);
   }
   if (compute === "container") {
     delete written.arch;

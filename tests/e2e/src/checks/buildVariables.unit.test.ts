@@ -64,6 +64,16 @@ function context(fetch: Fetch = async () => new Response(null, { status: 404 }))
 }
 
 describe("the build-variables checks", () => {
+  it("look only at a deployment's build, which ocel dev never runs", () => {
+    for (const prefix of [
+      "no file under .ocel/output",
+      "no file under the app's .next",
+      "no ocel-live-*",
+    ]) {
+      expect(checkTitled(prefix).assertsDeployment).toBe(true);
+    }
+  });
+
   it("are what makes a target set the sensitive and the secret value before it deploys", () => {
     expect(setsBuildVariables(buildVariablesChecks)).toBe(true);
     expect(setsBuildVariables(envChecks)).toBe(false);
@@ -128,6 +138,15 @@ describe("the build-variables checks", () => {
         BUILD_SENSITIVE_VALUE,
       );
       await expect(check().run(context())).rejects.toThrow(/server\/app\/values\.body/);
+    });
+
+    it("passes when next build ran in an image, which leaves no .next on the runner", async () => {
+      await mkdir(path.join(projectDir, ".ocel", "output", "apps", "web"), { recursive: true });
+      await writeFile(
+        path.join(projectDir, ".ocel", "output", "apps", "web", "image-ref"),
+        "ocel/j-1/web@sha256:abc\n",
+      );
+      await check().run(context());
     });
 
     it("fails when next build left no .next to look through", async () => {
