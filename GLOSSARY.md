@@ -3,7 +3,7 @@
 The words every part of Ocel shares, one meaning each. An entry is a concept that crosses
 vendors, frameworks or packages and has been, or could be, confused; a vendor's internal
 names never belong here. Agents never edit this file: a term that seems to need an entry
-goes under **Found, not fixed** in the PR, and a maintainer decides.
+goes under **Needs a ruling** in the PR, and a maintainer decides.
 
 | Term | Means | Never |
 | --- | --- | --- |
