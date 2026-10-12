@@ -248,7 +248,15 @@ const adapter = {
 
     const variantHeaders = JSON.stringify(variantHeaderProjection(prerenderGroups));
 
-    const routes = launcherRoutes(entryKeyByPathname, routing.dynamicRoutes ?? []);
+    const segmentedEntryKeys = prerenderGroups
+      .flatMap((group) => group.segments)
+      .map((segment) => entryKeyByRouteId.get(segment.parentOutputId))
+      .filter((entryKey): entryKey is string => entryKey !== undefined);
+    const routes = launcherRoutes(
+      entryKeyByPathname,
+      routing.dynamicRoutes ?? [],
+      segmentedEntryKeys,
+    );
 
     const nextConfigProjection = {
       basePath: config.basePath || "",
@@ -1178,11 +1186,13 @@ async function emitFetchEntries(outputRoot: string, distDir: string): Promise<vo
 export interface LauncherRoutes {
   exact: Record<string, string>;
   dynamic: [string, string][];
+  segmented: string[];
 }
 
 function launcherRoutes(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
+  segmentedEntryKeys: readonly string[],
 ): LauncherRoutes {
   const exact = Object.fromEntries(entryKeyByPathname);
 
@@ -1194,7 +1204,7 @@ function launcherRoutes(
     if (entryKey !== undefined) dynamic.push([route.sourceRegex, entryKey]);
   }
 
-  return { exact, dynamic };
+  return { exact, dynamic, segmented: [...new Set(segmentedEntryKeys)] };
 }
 
 interface NextConfigProjection {

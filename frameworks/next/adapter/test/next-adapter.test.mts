@@ -1239,6 +1239,27 @@ test("lists every prerender pathname (including .segment.rsc) so resolveRoutes c
   }
 });
 
+test("the launcher names the entries whose prerenders have segment outputs", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await readLauncher(projectDir)).routes.segmented).toEqual(["/"]);
+});
+
+test("the launcher names no entry for prerenders without segment outputs", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders = args.outputs.prerenders.filter(
+    (p) => !p.pathname.includes(".segments/"),
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await readLauncher(projectDir)).routes.segmented).toEqual([]);
+});
+
 test("projects a prerender's fallback down to its freshness windows and pprChain", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const root = args.outputs.prerenders[0] as Record<string, any>;
