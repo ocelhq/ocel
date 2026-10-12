@@ -128,8 +128,14 @@ describe("overlayFor", () => {
     });
   });
 
-  it("migrates an aws cell whose checks need a migration in its pre-build, against the deployed database", () => {
+  it("declares the migration as the pre-build of an aws cell whose checks need one", () => {
     expect(overlayFor(cell(sdk.node), "aws", {}).preBuild).toBe("pnpm run migrate");
+  });
+
+  it("gives an aws cell on floci no pre-build, since floci serves no Session Manager to forward its bindings over", () => {
+    expect(
+      overlayFor(cell(sdk.node), "aws", { AWS_ENDPOINT_URL: "http://localhost:4566" }).preBuild,
+    ).toBeUndefined();
   });
 
   it("gives an aws cell whose checks need no migration no pre-build", () => {

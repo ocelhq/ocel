@@ -18,6 +18,7 @@ import { migrateCommand } from "./workspace";
 
 type PlannedCell = Pick<CellUnderTest, "name" | "slug" | "fixture" | "variant">;
 
+import { emulatorEndpoint } from "./targets/aws/world";
 import { frontNamed } from "./targets/front";
 import { gcpSlug } from "./targets/gcp/names";
 
@@ -113,7 +114,9 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         slug: cell.slug,
         ...cell.fixture.configOn?.aws,
         ...cell.variant.config,
-        ...(migrates(cell.fixture.checks) ? { preBuild: migrateCommand().join(" ") } : {}),
+        ...(migrates(cell.fixture.checks) && !emulatorEndpoint(env)
+          ? { preBuild: migrateCommand().join(" ") }
+          : {}),
         ...dnsOf(env),
         ...(forwarded && zone ? { dns: "cloudflare" as const } : {}),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),

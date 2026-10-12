@@ -193,6 +193,20 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "floci-serves-no-session-manager",
+    reason:
+      "aws forwards a deploy's bindings over Session Manager, which floci does not serve, so lifecycle.preBuild cannot migrate the deployed database and the tables the todo and document checks write are never created",
+    issue: 1878,
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [sdk.node],
+        variants: [apiGateway],
+        fails: [check(todoAndDocumentChecks)],
+      },
+    ],
+  },
+  {
     id: "destroy-keeps-a-full-bucket",
     reason:
       "ocel destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",
