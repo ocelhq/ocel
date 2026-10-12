@@ -1,12 +1,8 @@
-import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
+import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import type { CloudStorage } from "./cloud-storage.mjs";
 
-export function newGcpCacheStore(
-  storage: CloudStorage,
-  objectPrefix: string,
-  publish: PublishTag,
-): CacheStore {
+export function newGcpCacheStore(storage: CloudStorage, objectPrefix: string): CacheStore {
   const entryName = (key: string) => {
     const name = entryObjectKey(objectPrefix, key);
     if (name === null) {
@@ -32,10 +28,5 @@ export function newGcpCacheStore(
     writeEntry: async (key, entry) => write(entryName(key), entry),
     readFetch: (hash) => read(fetchName(hash)),
     writeFetch: (hash, entry) => write(fetchName(hash), entry),
-
-    async writeTags(tags, record) {
-      if (record.stale === undefined && record.expired === undefined) return;
-      await Promise.all(tags.map((tag) => publish(tag, record)));
-    },
   };
 }

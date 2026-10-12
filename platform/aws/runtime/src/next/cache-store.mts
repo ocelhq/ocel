@@ -1,9 +1,6 @@
-import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
+import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
-import { newDynamoDBClient } from "../cache/sdk-clients.mjs";
-import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
 import {
   edgeReadable,
   edgeReadableTagging,
@@ -16,14 +13,10 @@ import {
 
 const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
 
-export function newAwsCacheStore(publish: PublishTag): CacheStore {
+export function newAwsCacheStore(): CacheStore {
   const prefix = requireEnv("OCEL_ISR_PREFIX");
-  const table = requireEnv("OCEL_STATE_TABLE");
-  const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
 
   const provider = providerObjectStore();
-
-  const ddb = newDynamoDBClient();
 
   const objectKey = (key: string) => {
     const addressed = entryObjectKey(prefix, key);
@@ -72,24 +65,5 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
     writeEntry: async (key, entry) => write(provider, objectKey(key), entry, taggingOf(entry)),
     readFetch: (hash) => read(provider, fetchKey(hash)),
     writeFetch: (hash, entry) => write(provider, fetchKey(hash), entry),
-
-    async writeTags(tags, record) {
-      if (record.stale === undefined && record.expired === undefined) return;
-      const writtenAt = Date.now();
-
-      const indexed = async (tag: string) => {
-        try {
-          await ddb.send(
-            new UpdateItemCommand(
-              tagRecordUpdate(table, tagNamespace, tag, { ...record, writtenAt }),
-            ),
-          );
-        } catch (err) {
-          if (!isGuardRejection(err)) throw err;
-        }
-      };
-
-      await Promise.all(tags.flatMap((tag) => [indexed(tag), publish(tag, record)]));
-    },
   };
 }

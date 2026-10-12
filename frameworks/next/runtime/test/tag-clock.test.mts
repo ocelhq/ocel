@@ -104,7 +104,7 @@ async function load(store: UseCacheStore | null, env: Record<string, string> = {
 
 type FakeIsrStore = CacheStore & { entries: Map<string, CacheEntryFile> };
 
-function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): FakeIsrStore {
+function fakeIsrStore(): FakeIsrStore {
   const entries = new Map<string, CacheEntryFile>();
   return {
     entries,
@@ -118,10 +118,6 @@ function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): FakeIsrSt
       return null;
     },
     async writeFetch() {},
-    async writeTags(tags, record) {
-      const writtenAt = Date.now();
-      for (const tag of tags) published?.seed(tag, { ...record, writtenAt });
-    },
   };
 }
 
@@ -137,13 +133,13 @@ function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
   });
 }
 
-async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
+async function loadBoth(store: ReturnType<typeof fakeStore>) {
   vi.resetModules();
   const clock = await import("../src/tag-clock.mjs");
   const handler = (await import("../src/use-cache-default.mjs")).default;
   const CacheHandler = (await import("../src/cache-handler.mjs")).default;
   clock.setTagClockStore(store);
-  const entries = fakeIsrStore(published ? store : null);
+  const entries = fakeIsrStore();
   CacheHandler.store = Promise.resolve(entries);
   return { tagClock: clock.tagClock, handler, isr: new CacheHandler(), entries };
 }

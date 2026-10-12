@@ -7,17 +7,15 @@ import {
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
-import { background, keptUntilSettled } from "@framework/node-runtime/background";
+import { background } from "@framework/node-runtime/background";
 import { servesOnlyFresh } from "@platform/edge-contract/edge-cache";
-import type { TagRecord } from "@platform/edge-contract/purge";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
-import { notePurge } from "./purge-signal.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
 import { readServedRoute } from "./served-route.mjs";
-import { recordTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
+import { revalidateTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
   if (typeof html === "string") return html;
@@ -200,21 +198,8 @@ export default class OcelCacheHandler {
     } catch {}
   }
 
-  async revalidateTag(tags: string | string[], durations?: { expire?: number }): Promise<void> {
-    const list = typeof tags === "string" ? [tags] : tags;
-    if (list.length === 0) return;
-
-    const now = Date.now();
-    const record: TagRecord = durations
-      ? {
-          stale: now,
-          ...(durations.expire !== undefined ? { expired: now + durations.expire * 1000 } : {}),
-        }
-      : { expired: now };
-
-    for (const tag of list) notePurge(tag, record, now);
-    recordTags(list, record);
-    await keptUntilSettled(this.openStore().then((store) => store.writeTags(list, record)));
+  revalidateTag(tags: string | string[], durations?: { expire?: number }): Promise<void> {
+    return revalidateTags(tags, durations);
   }
 
   private noteOriginTags(tags: string[]): void {

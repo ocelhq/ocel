@@ -29,7 +29,6 @@ export function newInstanceCacheStore(cache: InstanceCache): CacheStore {
     async writeFetch(hash, entry) {
       writeEntry(cache, `fetch:${hash}`, entry);
     },
-    async writeTags() {},
   };
 }
 

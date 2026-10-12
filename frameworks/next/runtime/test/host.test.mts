@@ -18,7 +18,6 @@ function storeHolding(key: string, entry: CacheEntryFile): CacheStore {
       return null;
     },
     async writeFetch() {},
-    async writeTags() {},
   };
 }
 
