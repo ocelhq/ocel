@@ -2,7 +2,7 @@ import type { DeployResult, Phase, Report } from "./report";
 
 export const MARKER = "<!-- ocel-preview -->";
 
-export type DeploymentState = "in_progress" | "success" | "failure" | "inactive";
+export type DeploymentState = "in_progress" | "success" | "failure";
 
 export interface PreviewDeployment {
   id: number;
@@ -32,7 +32,7 @@ export interface PreviewClient {
     description: string;
   }): Promise<PreviewDeployment>;
   createDeploymentStatus(input: DeploymentStatusInput): Promise<void>;
-  deleteDeployment(input: { deploymentId: number }): Promise<void>;
+  removeEnvironment(input: { environment: string }): Promise<void>;
   listComments(input: { pr: number }): Promise<PreviewComment[]>;
   createComment(input: { pr: number; body: string }): Promise<void>;
   updateComment(input: { commentId: number; body: string }): Promise<void>;
@@ -70,11 +70,7 @@ export async function reconcile(client: PreviewClient, input: PreviewInput): Pro
   const environment = environmentName(input.pr);
 
   if (input.phase === "removed") {
-    const deployments = await client.listDeployments({ environment });
-    for (const deployment of deployments) {
-      await client.createDeploymentStatus({ deploymentId: deployment.id, state: "inactive" });
-      await client.deleteDeployment({ deploymentId: deployment.id });
-    }
+    await client.removeEnvironment({ environment });
   } else {
     const deployment = await ensureDeployment(client, environment, input.sha);
     await client.createDeploymentStatus(statusFor(input, deployment.id));
