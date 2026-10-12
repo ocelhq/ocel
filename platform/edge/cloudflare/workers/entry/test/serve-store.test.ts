@@ -384,6 +384,58 @@ describe("Serve answering the fallback shell every param of a route shares", () 
   });
 });
 
+describe("Serve answering a pages router path the build did not prerender", () => {
+  const lazyFallback = () => ({
+    lastModified: Date.now() - 10_000,
+    value: {
+      kind: "PAGES",
+      status: 200,
+      html: "<html>fallback page</html>",
+      pageData: {},
+      headers: { "content-type": "text/html; charset=utf-8" },
+    },
+  });
+  const lazy = () =>
+    harness({ call: { entry: { path: "/blog/9", fallbackPath: "/blog/[id]" } } }) as Used;
+
+  it("answers the fallback page to the browser as revalidating, and tells Workers Cache not to store it", async () => {
+    await seed(lazyFallback(), fallbackKey);
+    const h = lazy();
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/9")));
+
+    expect(await response.text()).toBe("<html>fallback page</html>");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+    expect(response.headers.has("cache-tag")).toBe(false);
+    expect(response.headers.has("etag")).toBe(false);
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers the generated page, not the fallback, once the build's store holds it", async () => {
+    await seed(lazyFallback(), fallbackKey);
+    await seed(storedEntry(), `${isrPrefix}/cache/blog/9.cache.json`);
+    const h = lazy();
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/9")));
+
+    expect(await response.text()).toBe("<html>from the store</html>");
+    objects.delete(`${isrPrefix}/cache/blog/9.cache.json`);
+  });
+
+  it("renders the page's data request at the origin, which generates the page", async () => {
+    await seed(lazyFallback(), fallbackKey);
+    const h = lazy();
+
+    const response = await h.fetchOrigin(() =>
+      h.serve.fetch(h.request("_next/data/build-1/blog/9.json")),
+    );
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
+  });
+});
+
 describe("Serve answering the shell of a PPR document", () => {
   const shellEntry = () => ({
     lastModified: Date.now() - 10_000,
