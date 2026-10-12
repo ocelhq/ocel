@@ -78,7 +78,7 @@ bind.postgres("orders", {
 | Option        | Default              | Meaning                                                     |
 | ------------- | -------------------- | ----------------------------------------------------------- |
 | `tier`        | `"production"`       | The ocel tier the binding is published to.                     |
-| `environment` | none                 | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview. |
+| `environment` | none                 | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview that names it under `bindings`. |
 | `project`     | the SST config root  | The directory containing `ocel.config.ts` or `ocel.json`.                      |
 
 One call is one resource. Remove the call and the published binding goes with it.
