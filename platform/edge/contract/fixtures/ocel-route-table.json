@@ -15,6 +15,14 @@
         "headers": {
           "x-section": "blog"
         }
+      },
+      {
+        "src": "/api/(.*)",
+        "headers": {
+          "Cache-Control": "public, s-maxage=300",
+          "CDN-Cache-Control": "max-age=300",
+          "Surrogate-Control": "max-age=300"
+        }
       }
     ],
     "redirects": [
@@ -181,6 +189,15 @@
     {
       "path": "/blog/hello",
       "headers": {}
+    },
+    {
+      "path": "/docs/api/v1",
+      "headers": {
+        "x-frame-options": "DENY",
+        "cache-control": "public, s-maxage=300",
+        "cdn-cache-control": "max-age=300",
+        "surrogate-control": "max-age=300"
+      }
     }
   ],
   "trailingSlash": [
@@ -1404,84 +1421,6 @@
         "routes": [
           {
             "src": "/(?:a{1,3})+",
-            "function": "index"
-          }
-        ],
-        "fallback": {
-          "function": "index"
-        }
-      }
-    },
-    {
-      "reason": "a header rule setting cache-control",
-      "table": {
-        "version": 1,
-        "basePath": "",
-        "trailingSlash": "ignore",
-        "headers": [
-          {
-            "src": "/(.*)",
-            "headers": {
-              "Cache-Control": "public, s-maxage=60"
-            }
-          }
-        ],
-        "redirects": [],
-        "routes": [
-          {
-            "src": "/(.*)",
-            "function": "index"
-          }
-        ],
-        "fallback": {
-          "function": "index"
-        }
-      }
-    },
-    {
-      "reason": "a header rule setting cdn-cache-control",
-      "table": {
-        "version": 1,
-        "basePath": "",
-        "trailingSlash": "ignore",
-        "headers": [
-          {
-            "src": "/(.*)",
-            "headers": {
-              "cdn-cache-control": "public, s-maxage=60"
-            }
-          }
-        ],
-        "redirects": [],
-        "routes": [
-          {
-            "src": "/(.*)",
-            "function": "index"
-          }
-        ],
-        "fallback": {
-          "function": "index"
-        }
-      }
-    },
-    {
-      "reason": "a header rule setting surrogate-control",
-      "table": {
-        "version": 1,
-        "basePath": "",
-        "trailingSlash": "ignore",
-        "headers": [
-          {
-            "src": "/(.*)",
-            "headers": {
-              "Surrogate-Control": "public, s-maxage=60"
-            }
-          }
-        ],
-        "redirects": [],
-        "routes": [
-          {
-            "src": "/(.*)",
             "function": "index"
           }
         ],
