@@ -15,6 +15,18 @@ test("stores a path tag with its percent escapes as it is", () => {
   });
 });
 
+test("stores the tag of a path with a comma, written either way", () => {
+  expect(buildPathCacheTag("/a,b")).toBe("path:/a%2Cb");
+  expect(buildPathCacheTag("/a%2Cb")).toBe("path:/a%2Cb");
+  expect(storedCacheTags("r0a1b2c3d", [buildPathCacheTag("/a,b")]).tags).toEqual([
+    "r0a1b2c3d|path:/a%2Cb",
+  ]);
+});
+
+test("names a path that starts with two slashes by that path, not by a host", () => {
+  expect(buildPathCacheTag("//evil.example/x")).toBe("path://evil.example/x");
+});
+
 test("refuses to store a tag that names a percent escape but no path", () => {
   expect(storedCacheTags("r0a1b2c3d", ["a%20b", "a b"]).unstorable).toEqual(["a%20b", "a b"]);
 });

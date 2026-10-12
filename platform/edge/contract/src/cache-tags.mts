@@ -68,7 +68,7 @@ export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
 }
 
 export function buildPathCacheTag(pathname: string): string {
-  return pathTagPrefix + new URL(pathname, pathBase).pathname;
+  return pathTagPrefix + new URL(pathBase + pathname).pathname.replaceAll(",", "%2C");
 }
 
 function isStorable(tag: string): boolean {
