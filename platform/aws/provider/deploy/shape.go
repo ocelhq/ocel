@@ -236,7 +236,7 @@ func (s costShape) containerWorkers(environment string, app provider.AppEntry, t
 			"cpu": containerCPU, "memory": containerMemory, "requires_compatibilities": []any{"FARGATE"}, "runtime_platform": platform,
 		})
 		s.plain(scope, tfECSService, name, map[string]any{
-			"desired_count": 0, "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
+			"desired_count": workerFloor(app.App, app.Instances, app.Workers), "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
 		})
 		var queueNames []string
 		for _, queue := range hosted.served(worker.Name) {
@@ -271,19 +271,21 @@ func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (f
 }
 
 func (s costShape) container(scope string, app provider.AppEntry) {
-	s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
-		"cpu":                      containerCPU,
-		"memory":                   containerMemory,
-		"requires_compatibilities": []any{"FARGATE"},
-		"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
-	})
-	s.plain(scope, tfECSService, app.App, map[string]any{
-		"desired_count":    app.Instances.Min,
-		"launch_type":      "FARGATE",
-		"cpu":              containerCPU,
-		"memory":           containerMemory,
-		"runtime_platform": map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
-	})
+	if !provider.IsWorkerApp(app.App, app.Workers) {
+		s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
+			"cpu":                      containerCPU,
+			"memory":                   containerMemory,
+			"requires_compatibilities": []any{"FARGATE"},
+			"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
+		})
+		s.plain(scope, tfECSService, app.App, map[string]any{
+			"desired_count":    app.Instances.Min,
+			"launch_type":      "FARGATE",
+			"cpu":              containerCPU,
+			"memory":           containerMemory,
+			"runtime_platform": map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
+		})
+	}
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 

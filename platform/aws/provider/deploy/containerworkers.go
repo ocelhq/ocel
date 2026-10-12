@@ -108,7 +108,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 	account := accountOfARN(r.cfg.StateTableARN)
 	topics := topicsOf(project, env, app.Topics)
 	served := containerWorkers(r.cfg.Tier, project, env, app.DeploymentWorkers)
-	floor := workerFloor(app)
+	floor := workerFloor(app.App, app.Instances, app.Workers)
 	for _, worker := range app.Workers {
 		if hosted, found := served[worker.Name]; found {
 			hosted.Service.Floor = floor
@@ -156,9 +156,9 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 	}, nil
 }
 
-func workerFloor(app *provider.AppSpec) int {
-	if provider.IsWorkerApp(app.App, app.Workers) {
-		return app.Instances.Min
+func workerFloor(app string, instances provider.Instances, workers []provider.WorkerSpec) int {
+	if provider.IsWorkerApp(app, workers) {
+		return instances.Min
 	}
 	return 0
 }
