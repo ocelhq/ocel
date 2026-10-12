@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "exports": {
     "./bypass": "./src/bypass.mts",
+    "./cache-control": "./src/cache-control.mts",
     "./cache-tags": "./src/cache-tags.mts",
     "./client-address": "./src/client-address.mts",
     "./client-authorization": "./src/client-authorization.mts",
