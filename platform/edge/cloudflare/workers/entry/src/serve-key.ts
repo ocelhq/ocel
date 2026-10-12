@@ -205,10 +205,16 @@ export function buildVariantPath(
   return renderingMode === "PARTIALLY_STATIC" ? null : `${base}.rsc`;
 }
 
+export function buildNextCanonicalUrl(url: URL, allowQuery?: string[]): string {
+  const withoutRsc = new URL(url);
+  withoutRsc.searchParams.delete("_rsc");
+  return buildCanonicalUrl(withoutRsc, allowQuery);
+}
+
 export function buildCanonicalUrl(url: URL, allowQuery?: string[]): string {
   const canonical = new URL(url);
   canonical.search = "";
-  const names = (allowQuery ?? [...url.searchParams.keys()]).filter((name) => name !== "_rsc");
+  const names = allowQuery ?? [...url.searchParams.keys()];
   for (const name of [...new Set(names)].sort()) {
     for (const value of url.searchParams.getAll(name)) canonical.searchParams.append(name, value);
   }

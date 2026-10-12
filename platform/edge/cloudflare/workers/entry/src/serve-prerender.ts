@@ -18,8 +18,8 @@ import type { PurgeGroup } from "@platform/edge-contract/purge";
 import { buildResumeRequest, composePpr, PPR_SHELL_VARIANT, readPostponedShell } from "./ppr";
 import { buildPathTag, ORIGIN_VARY } from "./serve-headers";
 import {
-  buildCanonicalUrl,
   buildEdgeCall,
+  buildNextCanonicalUrl,
   buildOriginCall,
   buildServeRequest,
   buildVariantPath,
@@ -214,7 +214,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   safeHeaders.set(edgeCacheHeader, "1");
   const pprDocument = isPprDocument(request, target);
   const forwarded = forward(request, safeHeaders);
-  const concreteUrl = new URL(buildCanonicalUrl(new URL(forwarded.url), target.allowQuery));
+  const concreteUrl = new URL(buildNextCanonicalUrl(new URL(forwarded.url), target.allowQuery));
   const coordinates = {
     host: serving.host,
     app: deps.app,

@@ -2,6 +2,7 @@ import cacheKeyFixture from "@platform/edge-contract/fixtures/cache-key" with { 
 import { describe, expect, it } from "vitest";
 import {
   buildCanonicalUrl,
+  buildNextCanonicalUrl,
   buildObjectCall,
   buildOriginCall,
   buildOriginUrl,
@@ -284,8 +285,10 @@ describe("the canonical URL of an origin call", () => {
     );
   });
 
-  it("strips _rsc even when the route allows all query", () => {
-    expect(buildCanonicalUrl(url("?_rsc=abc123"), undefined)).toBe("https://fn.example.com/blog");
+  it("strips Next's _rsc even when the route allows all query", () => {
+    expect(buildNextCanonicalUrl(url("?_rsc=abc123"), undefined)).toBe(
+      "https://fn.example.com/blog",
+    );
   });
 
   it("names a param twice in the allow list once", () => {

@@ -116,6 +116,14 @@ describe("a request a cached route names", () => {
     expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/feed?a=1&b=2");
   });
 
+  it("keys the entry by a parameter named _rsc and passes it on, as it does any other", async () => {
+    const { serve, calls } = setup();
+
+    await serve(new Request("https://shop.example.com/feed?_rsc=1&a=2"));
+
+    expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/feed?_rsc=1&a=2");
+  });
+
   it("keys the entry by no query parameter when its route allows an empty list", async () => {
     const routes = newRouteTable({
       routes: [{ src: "/feed", function: "api", cache: { revalidate: 10, allowQuery: [] } }],
