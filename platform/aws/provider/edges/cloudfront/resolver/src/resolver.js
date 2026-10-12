@@ -16,6 +16,7 @@ var CLIENT_AUTHORIZATION_HEADER = 'x-ocel-client-authorization';
 var CLIENT_ADDRESS_HEADER = 'x-ocel-client-address';
 var CONTROL_HEADERS = [
   'x-ocel-entry',
+  'x-ocel-route',
   'next-resume',
   ORIGIN_SECRET_HEADER,
   CONTAINER_HEADER,
