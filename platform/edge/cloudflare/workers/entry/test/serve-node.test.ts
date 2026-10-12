@@ -91,7 +91,7 @@ describe("a request a cached route names", () => {
     expect(calls[0]!.props).toEqual({ kind: "origin" });
   });
 
-  it("asks the origin to shape its response for the edge and names no stored entry", async () => {
+  it("asks the origin to shape its response for the edge, names no stored entry, and lets Serve set the browser's Cache-Control as for a prerender", async () => {
     const { serve, calls } = setup();
 
     await serve(new Request("https://shop.example.com/blog/a"));
@@ -103,7 +103,6 @@ describe("a request a cached route names", () => {
       slug: "p1",
       isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
       tags: [],
-      nodeApp: true,
     });
   });
 
@@ -276,7 +275,7 @@ describe("a request on a route no cache rule governs", () => {
     });
   }
 
-  it("asks the origin to shape its response for the edge, and tells Serve it is a node app's", async () => {
+  it("asks the origin to shape its response for the edge, and tells Serve to honour the app's own cache headers", async () => {
     const { serve, calls } = setup();
 
     await serve(new Request("https://shop.example.com/account"));
@@ -288,7 +287,7 @@ describe("a request on a route no cache rule governs", () => {
       slug: "p1",
       isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
       tags: [],
-      nodeApp: true,
+      honoursAppCacheHeaders: true,
     });
   });
 

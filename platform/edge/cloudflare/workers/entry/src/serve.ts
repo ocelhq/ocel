@@ -121,7 +121,7 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
       isrPrefix: parsed.isrPrefix,
       tags,
       ...(parsed.sharesFallbackShell === true && { sharesFallbackShell: true }),
-      ...(parsed.nodeApp === true && { nodeApp: true }),
+      ...(parsed.honoursAppCacheHeaders === true && { honoursAppCacheHeaders: true }),
       entry: readStoredEntryCall(parsed.entry),
     };
   } catch {
@@ -319,11 +319,16 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (found.render.sharesFallbackShell) {
       return this.fromFallbackShell(request, found.render, release, cached);
     }
-    const nodeApp = found.render.nodeApp === true;
-    if (nodeApp && request.headers.has(SERVE_LOOKUP_ONLY_HEADER) && !isRevalidation(request)) {
+    const honoursAppCacheHeaders = found.render.honoursAppCacheHeaders === true;
+    if (
+      honoursAppCacheHeaders &&
+      request.headers.has(SERVE_LOOKUP_ONLY_HEADER) &&
+      !isRevalidation(request)
+    ) {
       return respondMiss();
     }
-    const render = () => this.renderAtOrigin(request, { host, release, keyedUrl, nodeApp });
+    const render = () =>
+      this.renderAtOrigin(request, { host, release, keyedUrl, honoursAppCacheHeaders });
     if (variant === PPR_SHELL_VARIANT) {
       const regenerate = () =>
         this.renderAtOrigin(request, { host, release, keyedUrl, unconditional: true });
@@ -427,7 +432,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       release: string;
       keyedUrl: string;
       unconditional?: boolean;
-      nodeApp?: boolean;
+      honoursAppCacheHeaders?: boolean;
     },
   ): Promise<Response> {
     const { host, release, keyedUrl } = call;
@@ -461,7 +466,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     return forCache(
       admitSegment(request, res),
       { release, pathname: new URL(keyedUrl).pathname },
-      { nodeApp: call.nodeApp === true },
+      { honoursAppCacheHeaders: call.honoursAppCacheHeaders === true },
     );
   }
 

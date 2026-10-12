@@ -215,7 +215,11 @@ describe("the headers a cached response leaves Serve with", () => {
 describe("the headers a node app's response leaves Serve with", () => {
   function fromNodeApp(init: ResponseInit & { body?: string | null }): Response {
     const { body = "page", ...rest } = init;
-    return forCache(new Response(body, rest), { release, pathname }, { nodeApp: true });
+    return forCache(
+      new Response(body, rest),
+      { release, pathname },
+      { honoursAppCacheHeaders: true },
+    );
   }
 
   it("takes a max-age with no s-maxage as the edge lifetime, as CloudFront and Cloud CDN do", () => {
