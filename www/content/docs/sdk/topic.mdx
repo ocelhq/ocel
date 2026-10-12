@@ -1,0 +1,90 @@
+---
+title: Topic
+description: Messages every consumer of the topic receives.
+---
+
+A topic is where your app sends messages. Each consumer is declared on the topic with a name and
+the function that handles a message, and every consumer receives every message sent.
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts title="resources/index.ts"
+import { topic } from "ocel/topic";
+
+type Order = { id: string };
+
+export const orders = topic<Order>("orders");
+
+export const audit = orders.consumer("audit", async (order) => {
+  console.log("order placed", order.id);
+});
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go title="resources/resources.go"
+package resources
+
+import (
+	"context"
+	"log"
+
+	"ocel.dev"
+)
+
+type Order struct {
+	ID string `json:"id"`
+}
+
+var Orders = ocel.Topic[Order]("orders")
+
+var Audit = Orders.Consumer("audit", func(ctx context.Context, order Order) error {
+	log.Println("order placed", order.ID)
+	return nil
+})
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+import ocel
+
+orders = ocel.topic("orders")
+
+
+@orders.consumer("audit")
+async def audit(order: dict, ctx: ocel.RunContext) -> None:
+    print("order placed", order["id"])
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+#[derive(Clone, serde::Deserialize)]
+struct Order {
+    id: String,
+}
+
+#[derive(ocel::Resources)]
+pub struct Infra {
+    pub orders: ocel::Topic<Order>,
+}
+
+#[ocel::consumer(topic = Infra::ORDERS)]
+async fn audit(order: Order, _run: &ocel::Run) -> Result<(), ocel::RunError> {
+    println!("order placed {}", order.id);
+    Ok(())
+}
+```
+
+</Tab>
+
+</Tabs>
