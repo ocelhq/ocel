@@ -138,6 +138,8 @@ func manifestFunctions(functions []build.Function, named map[string]string) (map
 			EntryFile:    f.EntryFile,
 			ArtifactPath: f.ArtifactPath,
 			RouteId:      f.RouteID,
+
+			HasWorkerEntry: f.HasWorkerEntry,
 		})
 	}
 	for _, appFunctions := range byApp {

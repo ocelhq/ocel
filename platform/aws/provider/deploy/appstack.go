@@ -13,6 +13,8 @@ import (
 type appFunction struct {
 	Logical string
 	RouteID string
+
+	HasWorkerEntry bool
 }
 
 func (f appFunction) route() string {
@@ -25,7 +27,7 @@ func (f appFunction) route() string {
 func manifestAppFunctions(functions []*contractv1.ManifestFunction) []appFunction {
 	out := make([]appFunction, 0, len(functions))
 	for _, fn := range functions {
-		out = append(out, appFunction{Logical: fn.GetLogicalName(), RouteID: fn.GetRouteId()})
+		out = append(out, appFunction{Logical: fn.GetLogicalName(), RouteID: fn.GetRouteId(), HasWorkerEntry: fn.GetHasWorkerEntry()})
 	}
 	return out
 }

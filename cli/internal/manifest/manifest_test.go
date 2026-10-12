@@ -368,6 +368,28 @@ func TestTheManifestAssemblesTheProjectsAppsResourcesAndFunctions(t *testing.T) 
 		}
 	})
 
+	t.Run("names the function whose artifact carries the worker entry", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := assembleBuiltApps("proj-1", "serverless", nil, nil, []build.Function{
+			{Route: "a", App: "web", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "a"},
+			{Route: "b", App: "web", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "h.js", ArtifactPath: "b", HasWorkerEntry: true},
+		}, nil)
+		if err != nil {
+			t.Fatalf("assemble: %v", err)
+		}
+
+		var hosting []string
+		for _, fn := range functionsOf(manifest) {
+			if fn.GetHasWorkerEntry() {
+				hosting = append(hosting, fn.GetArtifactPath())
+			}
+		}
+		if !slices.Equal(hosting, []string{"b"}) {
+			t.Fatalf("functions with a worker entry = %v, want [b], the one artifact that carries it", hosting)
+		}
+	})
+
 	t.Run("names both routes when two of them collide", func(t *testing.T) {
 		t.Parallel()
 

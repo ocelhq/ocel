@@ -76,12 +76,7 @@ func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.Functi
 	specs := make(map[string][]provider.FunctionSpec, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		for _, fn := range app.GetServerless().GetFunctions() {
-			specs[app.GetName()] = append(specs[app.GetName()], provider.FunctionSpec{
-				Name:      fn.GetLogicalName(),
-				Route:     fn.GetRouteId(),
-				EntryFile: fn.GetEntryFile(),
-				Framework: frameworkOf(fn),
-			})
+			specs[app.GetName()] = append(specs[app.GetName()], functionSpecOf(fn))
 		}
 	}
 	return specs

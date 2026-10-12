@@ -23,6 +23,8 @@ type Function struct {
 	Framework    buildoutput.Framework
 	EntryFile    string
 	ArtifactPath string
+
+	HasWorkerEntry bool
 }
 
 func ReadFunctions(projectDir string) ([]Function, error) {
@@ -181,5 +183,7 @@ func readFunction(outputDir, functionsDir, functionDir string) (Function, error)
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		RouteID:      fc.ID,
 		App:          fc.App,
+
+		HasWorkerEntry: len(fc.Worker) > 0,
 	}, nil
 }
