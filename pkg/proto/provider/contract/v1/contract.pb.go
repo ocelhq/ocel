@@ -7478,10 +7478,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x1bGetPreviewProtectionRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12'\n" +
 	"\x0freveal_password\x18\x02 \x01(\bR\x0erevealPassword\x127\n" +
-	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xde\x01\n" +
+	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xe3\x01\n" +
 	"\x1cGetPreviewProtectionResponse\x12\x1a\n" +
-	"\brecorded\x18\x01 \x01(\bR\brecorded\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\x12*\n" +
+	"\brecorded\x18\x01 \x01(\bR\brecorded\x12\x1f\n" +
+	"\bpassword\x18\x02 \x01(\tB\x03\x80\x01\x01R\bpassword\x12*\n" +
 	"\x11bypass_secret_ids\x18\x03 \x03(\tR\x0fbypassSecretIds\x12@\n" +
 	"\x05edges\x18\x04 \x03(\v2*.common.progress.v1.PreviewEdgePublicationR\x05edges\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\"\x92\x04\n" +

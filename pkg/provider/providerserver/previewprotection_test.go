@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
@@ -118,7 +120,8 @@ func TestAProjectWithNoRecordedGateReportsNoneAndRevealsNothing(t *testing.T) {
 	resp := getProtection(t, client, true)
 
 	if resp.GetRecorded() || resp.GetPassword() != "" || len(resp.GetBypassSecretIds()) != 0 || len(resp.GetEdges()) != 0 {
-		t.Errorf("GetPreviewProtection() = %+v, want an empty answer: nothing is recorded for shop", resp)
+		t.Errorf("GetPreviewProtection() = recorded %t, password revealed %t, bypass ids %v, edges %v, want an empty answer: nothing is recorded for shop",
+			resp.GetRecorded(), resp.GetPassword() != "", resp.GetBypassSecretIds(), resp.GetEdges())
 	}
 }
 
@@ -130,7 +133,7 @@ func TestTheStatusOfAProtectedPreviewNamesItsEdgeAndHidesThePasswordUnlessAskedF
 	revealed := getProtection(t, client, true)
 
 	if !hidden.GetRecorded() || hidden.GetPassword() != "" {
-		t.Errorf("status = %+v, want the gate recorded and the password left out", hidden)
+		t.Errorf("status = recorded %t, password revealed %t, want the gate recorded and the password left out", hidden.GetRecorded(), hidden.GetPassword() != "")
 	}
 	if revealed.GetPassword() != record.Password {
 		t.Errorf("revealed password = %q, want the recorded one", revealed.GetPassword())
@@ -452,5 +455,15 @@ func TestPublishingThroughAnEdgeThatRunsNoGateFailsSayingThePreviewsAnswerAnyone
 	}
 	if edges := getProtection(t, client, false).GetEdges(); len(edges) != 1 || edges[0].GetPublished() || !strings.Contains(edges[0].GetError(), "runs no preview gate") {
 		t.Errorf("status edges = %v, want the relay edge, saying it runs no preview gate", edges)
+	}
+}
+
+func TestEveryResponseCarryingThePreviewPasswordMarksItDebugRedactSoRedactvetRefusesToPrintTheResponse(t *testing.T) {
+	for _, message := range []proto.Message{&contractv1.GetPreviewProtectionResponse{}, &contractv1.ChangePreviewProtectionResponse{}} {
+		descriptor := message.ProtoReflect().Descriptor()
+		field := descriptor.Fields().ByName("password")
+		if options, _ := field.Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
+			t.Errorf("%s.password is not marked debug_redact, want it marked so redactvet refuses to print the response", descriptor.Name())
+		}
 	}
 }
