@@ -158,6 +158,15 @@ async function seed(entry: object | null, key = entryKey): Promise<void> {
 
 type Used = Harness & { request: (path?: string) => Request };
 
+const validatorOf = (key: string) =>
+  `W/"ocel-store-${(JSON.parse(objects.get(key)!) as { lastModified: number }).lastModified}"`;
+
+const revalidate = (h: Used, validator: string, path = "blog/a") => {
+  const revalidation = h.request(path);
+  revalidation.headers.set("if-none-match", validator);
+  return h.fetchOrigin(() => h.serve.fetch(revalidation));
+};
+
 const realFetch = globalThis.fetch;
 
 beforeEach(async () => {
@@ -190,18 +199,72 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toEqual([]);
   });
 
-  it("answers Workers Cache's revalidation of a stored page from the origin, which then keeps the origin's own lifetime", async () => {
+  it("answers Workers Cache's revalidation of a fresh stored page 304 from the store, with the headers that keep it", async () => {
     await seed(storedEntry());
     const h = harness() as Used;
     const stored = await h.fetchOrigin(() => h.serve.fetch(h.request()));
-    const revalidation = h.request();
-    revalidation.headers.set("if-none-match", stored.headers.get("etag")!);
 
-    const response = await h.fetchOrigin(() => h.serve.fetch(revalidation));
+    const response = await revalidate(h, stored.headers.get("etag")!);
+
+    expect(response.status).toBe(304);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("etag")).toBe(stored.headers.get("etag"));
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      stored.headers.get("cloudflare-cdn-cache-control"),
+    );
+    expect(response.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.get("cache-tag")).toContain("r1a2b3c4d|posts");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers Workers Cache's revalidation from the origin when its validator is not the stored entry's", async () => {
+    await seed(storedEntry());
+    const h = harness() as Used;
+
+    const response = await revalidate(h, 'W/"ocel-store-1"');
 
     expect(await response.text()).toBe("<html>from the origin</html>");
     expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(/^max-age=300\b/);
     expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
+  });
+
+  it("answers Workers Cache's revalidation from the origin once the stored entry is past its revalidate window", async () => {
+    await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
+    const h = harness({ call: { entry: { path: "/blog/a", revalidate: 5 } } }) as Used;
+
+    const response = await revalidate(h, validatorOf(entryKey));
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
+  });
+
+  it("answers Workers Cache's revalidation from the origin once a tag of the stored entry was invalidated", async () => {
+    await seed(storedEntry());
+    const h = harness({ times: { "r1a2b3c4d|posts": { invalidatedAt: Date.now() } } }) as Used;
+
+    const response = await revalidate(h, validatorOf(entryKey));
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
+  });
+
+  it("answers Workers Cache's revalidation from the origin when the purge queue cannot be read", async () => {
+    await seed(storedEntry());
+    const h = harness({ times: new Error("queue unreachable") }) as Used;
+
+    const response = await revalidate(h, validatorOf(entryKey));
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
+  });
+
+  it("answers Workers Cache's revalidation from the origin when the store has no entry", async () => {
+    const h = harness() as Used;
+
+    const response = await revalidate(h, 'W/"ocel-store-1"');
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
   });
 
   it("goes to the origin, and only there, once a tag of the entry was purged after it was written", async () => {
@@ -219,14 +282,14 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toHaveLength(1);
   });
 
-  it("serves a tag whose purge it never heard of, and Workers Cache's next revalidation replaces it with the origin's render", async () => {
+  it("answers a revalidation from the origin once its tag was purged, whatever happened to the edge's own purge", async () => {
     await seed(storedEntry());
-    const h = harness({ times: {} }) as Used;
+    const times: TagTimes = {};
+    const h = harness({ times }) as Used;
 
     const served = await h.fetchOrigin(() => h.serve.fetch(h.request()));
-    const revalidation = h.request();
-    revalidation.headers.set("if-none-match", served.headers.get("etag")!);
-    const corrected = await h.fetchOrigin(() => h.serve.fetch(revalidation));
+    times["r1a2b3c4d|posts"] = { purgedAt: Date.now() };
+    const corrected = await revalidate(h, served.headers.get("etag")!);
 
     expect(await served.text()).toBe("<html>from the store</html>");
     expect(await corrected.text()).toBe("<html>from the origin</html>");
@@ -410,6 +473,16 @@ describe("Serve answering a pages router path the build did not prerender", () =
     expect(response.headers.has("cache-tag")).toBe(false);
     expect(response.headers.has("etag")).toBe(false);
     expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers a revalidation of the fallback page with the page again, never 304", async () => {
+    await seed(lazyFallback(), fallbackKey);
+    const h = lazy();
+
+    const response = await revalidate(h, validatorOf(fallbackKey), "blog/9");
+
+    expect(response.status).not.toBe(304);
+    expect(h.originCalls).toHaveLength(1);
   });
 
   it("answers the generated page, not the fallback, once the build's store holds it", async () => {
@@ -666,5 +739,17 @@ describe("Serve answering the shell of a PPR page the store has only the route's
     expect(await response.text()).toBe("FALLBACK<html>fallback shell</html>");
     expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
     expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
+  });
+  it("renders the revalidation of a page it answered from the route's fallback at the origin, never 304", async () => {
+    await seed(fallbackShell(), fallbackKey);
+    const h = harness(call) as Used;
+    const served = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+
+    const response = await revalidate(h, served.headers.get("etag")!);
+
+    expect(await served.text()).toBe("<html>fallback shell</html>");
+    expect(response.status).not.toBe(304);
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
   });
 });

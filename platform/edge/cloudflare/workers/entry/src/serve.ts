@@ -158,6 +158,25 @@ function isRevalidation(request: Request): boolean {
   return request.headers.has("if-none-match") || request.headers.has("if-modified-since");
 }
 
+function mayRespondNotModified(
+  request: Request,
+  stored: StoreAnswer,
+  cacheable: Response,
+): boolean {
+  if (stored.stale || stored.from !== "own") return false;
+  if (!cacheable.headers.has("cloudflare-cdn-cache-control")) return false;
+  const validator = cacheable.headers.get("etag");
+  const requestValidators = request.headers.get("if-none-match");
+  if (validator === null || requestValidators === null) return false;
+  const stripWeak = (tag: string) => tag.trim().replace(/^W\//, "");
+  return requestValidators.split(",").some((tag) => stripWeak(tag) === stripWeak(validator));
+}
+
+function respondNotModified(cacheable: Response): Response {
+  void cacheable.body?.cancel();
+  return new Response(null, { status: 304, headers: cacheable.headers });
+}
+
 function admitSegment(request: Request, response: Response): Response {
   return isSegmentPrefetch(request.headers) ? asSegmentPayload(response) : response;
 }
@@ -368,7 +387,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         found.render,
       );
     }
-    if (isRevalidation(request) || !isKeyedByPath(found.render, keyedUrl)) return render();
+    if (!isKeyedByPath(found.render, keyedUrl)) return render();
     let stored: StoreAnswer | null = null;
     try {
       stored = await this.askStore(request, found.render, release);
@@ -376,8 +395,14 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read; rendering at the origin", error);
     }
     if (!stored) return render();
-    if (stored.from === "lazy-fallback") return withholdFromEdge(stored.response);
-    return forCache(admitSegment(request, stored.response), cached);
+    if (stored.from === "lazy-fallback" && !isRevalidation(request)) {
+      return withholdFromEdge(stored.response);
+    }
+    const cacheable = forCache(admitSegment(request, stored.response), cached);
+    if (!isRevalidation(request)) return cacheable;
+    if (mayRespondNotModified(request, stored, cacheable)) return respondNotModified(cacheable);
+    void cacheable.body?.cancel();
+    return render();
   }
 
   private async fromStoredShell(
