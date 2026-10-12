@@ -98,7 +98,7 @@ func (b *Bootstrap) Catalogue() []provider.Feature {
 		{
 			Name:    FeatureCache,
 			Summary: "the reference provider's response cache",
-			Serves:  buildoutput.Uses{ISR: true},
+			Serves:  buildoutput.Uses{Revalidation: true},
 		},
 		{
 			Name:      FeatureImages,

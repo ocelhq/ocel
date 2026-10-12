@@ -6,10 +6,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-func TestANextAppIsPresumedBeforeItsBuildToUseISRAndImageOptimization(t *testing.T) {
+func TestANextAppIsPresumedBeforeItsBuildToUseRevalidationAndImageOptimization(t *testing.T) {
 	t.Parallel()
 
-	want := buildoutput.Uses{ISR: true, ImageOptimization: true}
+	want := buildoutput.Uses{Revalidation: true, ImageOptimization: true}
 	if got := buildoutput.PresumeUses(buildoutput.FrameworkNext); got != want {
 		t.Errorf("PresumeUses(next) = %+v, want %+v", got, want)
 	}
@@ -31,16 +31,16 @@ func TestEveryOtherFrameworkIsPresumedBeforeItsBuildToUseNothing(t *testing.T) {
 func TestUsesHasAnyOfAnotherOnlyWhenTheyShareOne(t *testing.T) {
 	t.Parallel()
 
-	isr := buildoutput.Uses{ISR: true}
+	revalidation := buildoutput.Uses{Revalidation: true}
 	images := buildoutput.Uses{ImageOptimization: true}
-	both := buildoutput.Uses{ISR: true, ImageOptimization: true}
+	both := buildoutput.Uses{Revalidation: true, ImageOptimization: true}
 	for _, tc := range []struct {
 		uses, other buildoutput.Uses
 		want        bool
 	}{
-		{isr, both, true},
+		{revalidation, both, true},
 		{both, images, true},
-		{isr, images, false},
+		{revalidation, images, false},
 		{buildoutput.Uses{}, both, false},
 	} {
 		if got := tc.uses.HasAnyOf(tc.other); got != tc.want {
