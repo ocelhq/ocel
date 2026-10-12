@@ -32,7 +32,7 @@ function PaneBody({ pane }: { pane: RenderedPane }) {
       <div className="flex items-center justify-between gap-3 border-b border-(--hairline) px-4 py-3">
         <span className={`${LABEL} text-(--steel)`}>{pane.owner}</span>
         {pane.filename ? (
-          <span className="truncate font-mono text-[0.75rem] leading-none text-(--steel)">
+          <span className="truncate font-mono text-[0.75rem] leading-normal text-(--steel)">
             {pane.filename}
           </span>
         ) : null}
@@ -131,46 +131,48 @@ export function Picker({
           The same questions, asked of each tool. Ocel&apos;s answer is always your own account.
         </p>
 
-        <div className="mt-8 flex flex-wrap gap-x-6 gap-y-4">
-          <div className="flex w-full flex-col gap-2 sm:w-auto">
-            <label htmlFor="compare-category" className={`${LABEL} text-(--steel)`}>
-              Category
-            </label>
-            <select
-              id="compare-category"
-              className={SELECT}
-              value={family.slug}
-              onChange={(event) => {
-                const next = families.find((each) => each.slug === event.target.value);
-                if (next) select(next.tools[0].slug);
-              }}
-            >
-              {families.map((each) => (
-                <option key={each.slug} value={each.slug}>
-                  {each.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {Object.keys(names).length > 1 ? (
+          <div className="mt-8 flex flex-wrap gap-x-6 gap-y-4">
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <label htmlFor="compare-category" className={`${LABEL} text-(--steel)`}>
+                Category
+              </label>
+              <select
+                id="compare-category"
+                className={SELECT}
+                value={family.slug}
+                onChange={(event) => {
+                  const next = families.find((each) => each.slug === event.target.value);
+                  if (next) select(next.tools[0].slug);
+                }}
+              >
+                {families.map((each) => (
+                  <option key={each.slug} value={each.slug}>
+                    {each.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="flex w-full flex-col gap-2 sm:w-auto">
-            <label htmlFor="compare-tool" className={`${LABEL} text-(--steel)`}>
-              Tool
-            </label>
-            <select
-              id="compare-tool"
-              className={SELECT}
-              value={selected}
-              onChange={(event) => select(event.target.value)}
-            >
-              {family.tools.map((tool) => (
-                <option key={tool.slug} value={tool.slug}>
-                  {tool.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <label htmlFor="compare-tool" className={`${LABEL} text-(--steel)`}>
+                Tool
+              </label>
+              <select
+                id="compare-tool"
+                className={SELECT}
+                value={selected}
+                onChange={(event) => select(event.target.value)}
+              >
+                {family.tools.map((tool) => (
+                  <option key={tool.slug} value={tool.slug}>
+                    {tool.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        ) : null}
       </header>
 
       <section className="mt-10">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ACTIVE } from "./data";
 
 const CHIPS = [
   { slug: "vercel", name: "Vercel" },
@@ -18,14 +19,16 @@ export function CompareChips() {
   return (
     <div className="not-prose my-6 flex flex-wrap items-center gap-2 text-(--body)">
       <span className="me-1 text-base leading-none">How is this different from</span>
-      {CHIPS.map((chip) => (
+      {CHIPS.filter((chip) => ACTIVE.includes(chip.slug)).map((chip) => (
         <Link key={chip.slug} href={`/docs/compare?vs=${chip.slug}`} className={CHIP}>
           {chip.name}
         </Link>
       ))}
-      <Link href="/docs/compare" className={CHIP}>
-        More →
-      </Link>
+      {ACTIVE.length > CHIPS.filter((chip) => ACTIVE.includes(chip.slug)).length ? (
+        <Link href="/docs/compare" className={CHIP}>
+          More →
+        </Link>
+      ) : null}
     </div>
   );
 }

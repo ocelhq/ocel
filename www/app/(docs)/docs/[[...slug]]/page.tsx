@@ -1,4 +1,11 @@
-import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import {
+  DocsBody,
+  DocsDescription,
+  DocsPage,
+  DocsTitle,
+  MarkdownCopyButton,
+  ViewOptionsPopover,
+} from "fumadocs-ui/layouts/docs/page";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -39,6 +46,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         className="max-w-none"
         tableOfContent={{ enabled: false }}
         tableOfContentPopover={{ enabled: false }}
+        footer={{ className: "mx-auto w-full max-w-4xl" }}
       >
         <DocsBody className="mx-auto w-full max-w-4xl pb-12">
           <MDX
@@ -55,7 +63,14 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   return (
     <DocsPage toc={page.data.toc} full={page.data.full} tableOfContent={{ style: "clerk" }}>
       <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
+      <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+      <div className="flex items-center gap-2">
+        <MarkdownCopyButton markdownUrl={`${page.url}.md`} />
+        <ViewOptionsPopover
+          markdownUrl={`${page.url}.md`}
+          githubUrl={`https://github.com/ocelhq/ocel/blob/main/www/content/docs/${page.path}`}
+        />
+      </div>
       <DocsBody>
         <MDX components={components} />
       </DocsBody>

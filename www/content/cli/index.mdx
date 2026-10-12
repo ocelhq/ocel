@@ -1,13 +1,9 @@
----
-title: Install
-description: Three ways to put the ocel binary on your machine.
-icon: ArrowDownTrayIcon
----
+## Install
 
 `ocel` is a single static binary. Pick whichever of the three suits the machine — they
 install the same build, and each one replaces an earlier install in place.
 
-## Installer
+### Installer
 
 ```bash
 curl -fsSL https://ocel.dev/install.sh | sh
@@ -30,7 +26,7 @@ curl -fsSL https://ocel.dev/install.sh | OCEL_CHANNEL=next sh
 
 macOS and Linux, on x86-64 and arm64.
 
-## Homebrew
+### Homebrew
 
 ```bash
 brew install --cask ocelhq/tap/ocel
@@ -39,7 +35,7 @@ brew install --cask ocelhq/tap/ocel
 `brew upgrade --cask ocel` moves to the newest stable release; the tap publishes no release
 candidates or nightlies.
 
-## npm
+### npm
 
 ```bash
 npm install -g @ocel/cli
@@ -62,7 +58,7 @@ types — is a separate install and contains no binary:
 npm install ocel
 ```
 
-## Check it
+### Check it
 
 ```bash
 ocel --version

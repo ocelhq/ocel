@@ -2,9 +2,9 @@
   "title": "Deploy",
   "pages": [
     "index",
-    "install",
     "quick-start",
     "compare",
+    "status",
     "agents",
     "---Deploy---",
     "configuration",
