@@ -16,7 +16,7 @@ import {
 } from "@platform/edge-contract/purge";
 import type { OcelContext } from "./host.mjs";
 import type { RoutedRequest } from "./origin-route-table.mjs";
-import { findTagRecordWriter, type WriteTagRecords } from "./tag-records.mjs";
+import { findTagRecordWriter, type TagRecordWriter } from "./tag-records.mjs";
 
 const cacheHostKey = Symbol.for("ocel.cache.host");
 
@@ -59,7 +59,7 @@ function readRequestCache(call: string): RequestCache {
   return store;
 }
 
-function writeRaisedAfterResponse(write: WriteTagRecords, store: RequestCache): void {
+function writeRaisedAfterResponse(write: TagRecordWriter, store: RequestCache): void {
   store.writing = true;
   const settled = new Promise<void>((resolve) => store.res.once("close", resolve)).then(
     async () => {
