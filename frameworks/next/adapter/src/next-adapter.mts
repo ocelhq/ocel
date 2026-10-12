@@ -1215,12 +1215,23 @@ interface NextConfigProjection {
   clientAssetSuffix: string;
 }
 
-function clientAssetSuffix(config: {
+interface ClientAssetConfig {
   deploymentId?: string;
-  experimental?: { immutableAssetToken?: string };
-}): string {
-  const token = config.experimental?.immutableAssetToken || config.deploymentId;
-  return token ? `?dpl=${token}` : "";
+  supportsImmutableAssets?: boolean;
+  experimental?: object;
+}
+
+function clientAssetSuffix(config: ClientAssetConfig): string {
+  const token = immutableAssetTokenOf(config.experimental);
+  if (token) return `?dpl=${token}`;
+  if (config.supportsImmutableAssets || !config.deploymentId) return "";
+  return `?dpl=${config.deploymentId}`;
+}
+
+function immutableAssetTokenOf(experimental: object | undefined): string | undefined {
+  if (experimental === undefined || !("immutableAssetToken" in experimental)) return undefined;
+  const token = experimental.immutableAssetToken;
+  return typeof token === "string" ? token : undefined;
 }
 
 function renderLauncher(

@@ -202,6 +202,8 @@ async function synthEdgeProject() {
       basePath: string;
       images: unknown;
       deploymentId?: string;
+      supportsImmutableAssets?: boolean;
+      experimental?: { immutableAssetToken?: string };
     },
     nextVersion: "16.2.10",
     buildId: "test-build",
@@ -268,6 +270,28 @@ test("gives the edge runtime the client asset suffix Next's sandbox would have s
 
   const bundle = await readBundle(projectDir);
   expect(bundle.shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=3f7c1b9a5e2d4c8f"');
+});
+
+test("suffixes client assets with Next 16.2's immutable asset token in place of the deployment id", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  args.config.deploymentId = "3f7c1b9a5e2d4c8f";
+  args.config.experimental = { immutableAssetToken: "a91d07e3" };
+
+  await adapter.onBuildComplete!(args as never);
+
+  expect((await readBundle(projectDir)).shim).toContain(
+    'globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=a91d07e3"',
+  );
+});
+
+test("leaves the client asset suffix empty when the build supports immutable assets, deployment id or not", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  args.config.deploymentId = "3f7c1b9a5e2d4c8f";
+  args.config.supportsImmutableAssets = true;
+
+  await adapter.onBuildComplete!(args as never);
+
+  expect((await readBundle(projectDir)).shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = ""');
 });
 
 test("leaves the client asset suffix empty when no deployment id was stamped", async () => {
