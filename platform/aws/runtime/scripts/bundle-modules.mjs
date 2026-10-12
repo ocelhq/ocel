@@ -13,13 +13,9 @@ const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
-const bundledInternals = [
-  "dispatch-assets",
-  "dispatch-signing",
-  "object-store",
-  "sdk-clients",
-  "tag-index",
-];
+const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store"];
+
+const bundledCacheModules = ["sdk-clients", "tag-index"];
 
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',
@@ -64,6 +60,7 @@ await bundle(join(pkgDir, "src/node/entrypoint.mts"), nodeEntrypoint, {
 
 await Promise.all([
   ...bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
+  ...bundledCacheModules.map((name) => rm(join(dist, "cache", `${name}.mjs`), { force: true })),
   rm(join(distNode, "tag-records.mjs"), { force: true }),
 ]);
 

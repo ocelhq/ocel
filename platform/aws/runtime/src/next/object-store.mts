@@ -1,5 +1,5 @@
 import type { S3Client } from "@aws-sdk/client-s3";
-import { newS3Client } from "./sdk-clients.mjs";
+import { newS3Client } from "../cache/sdk-clients.mjs";
 
 export interface ObjectStore {
   client: S3Client;

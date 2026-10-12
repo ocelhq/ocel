@@ -2,6 +2,8 @@ import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
+import { newDynamoDBClient } from "../cache/sdk-clients.mjs";
+import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
 import {
   edgeReadable,
   edgeReadableTagging,
@@ -11,8 +13,6 @@ import {
   readBodyText,
   requireEnv,
 } from "./object-store.mjs";
-import { newDynamoDBClient } from "./sdk-clients.mjs";
-import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
 

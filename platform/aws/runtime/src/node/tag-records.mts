@@ -1,8 +1,8 @@
 import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import type { WriteTagRecords } from "@framework/node-runtime/tag-records";
 import type { PurgeEntry } from "@platform/edge-contract/purge";
-import { newDynamoDBClient } from "../next/sdk-clients.mjs";
-import { isGuardRejection, tagRecordUpdate } from "../next/tag-index.mjs";
+import { newDynamoDBClient } from "../cache/sdk-clients.mjs";
+import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
 
 function recordOf({ mode, raisedAt }: PurgeEntry) {
   return mode === "purge"

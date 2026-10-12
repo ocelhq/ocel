@@ -3,8 +3,8 @@ import contract from "@framework/next-cache/fixtures/edge-contract.json" with { 
 import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
+import { isrPrefixOf, tagNamespace } from "../src/cache/tag-index.mjs";
 import { edgeReadableTagging } from "../src/next/object-store.mjs";
-import { isrPrefixOf, tagNamespace } from "../src/next/tag-index.mjs";
 
 test("the snapshot is keyed at the suffix the deploy seeds it under", () => {
   const prefix = contract.tagNamespace.isrPrefix;
