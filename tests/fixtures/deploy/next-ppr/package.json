@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-fixtures/prerender-next-store",
+  "name": "@ocel-fixtures/deploy-next-ppr",
   "version": "0.0.0",
   "private": true,
   "type": "module",

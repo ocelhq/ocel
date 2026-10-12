@@ -1,6 +1,6 @@
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "prerender-store",
+  "slug": "next-ppr",
   "provider": "aws",
   "apps": [
     {

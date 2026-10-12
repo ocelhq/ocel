@@ -13,6 +13,8 @@ import {
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
+  nextPprChecks,
+  nextStoreReadChecks,
   orderedKeysInParallelCheck,
   prerenderBucketChecks,
   prerenderChecks,
@@ -758,21 +760,16 @@ describe("the fixtures a lane deploys", () => {
   });
 });
 
-describe("the partial prerendering cells", () => {
-  const cellNames = (lane: Lane, fixture: string) =>
+describe("deploy/next-ppr", () => {
+  const cellNames = (lane: Lane) =>
     planOn(lane)
       .cells.map((cell) => cell.name)
-      .filter((name) => name === fixture || name.startsWith(`${fixture}-`));
+      .filter((name) => name === "deploy/next-ppr" || name.startsWith("deploy/next-ppr-"));
 
-  it("deploys the PPR app behind CloudFront and behind Cloudflare on aws", () => {
-    expect(cellNames("aws", "prerender/next-ppr").sort()).toEqual([
-      "prerender/next-ppr",
-      "prerender/next-ppr-cloudflare",
-    ]);
-  });
-
-  it("deploys the store-read app behind Cloudflare alone, the one edge that reads the durable store", () => {
-    expect(cellNames("aws", "prerender/next-store")).toEqual(["prerender/next-store-cloudflare"]);
+  it("deploys the cacheComponents app behind CloudFront and behind Cloudflare on aws, checking its shells and its store reads", () => {
+    expect(cellNames("aws").sort()).toEqual(["deploy/next-ppr", "deploy/next-ppr-cloudflare"]);
+    const checks = fixtures.find((one) => one.name === "deploy/next-ppr")?.checks ?? [];
+    expect(checks).toEqual(expect.arrayContaining([...nextPprChecks, ...nextStoreReadChecks]));
   });
 
   it("gives no two variants of a fixture the same name", () => {
@@ -784,11 +781,9 @@ describe("the partial prerendering cells", () => {
     }
   });
 
-  it("skips them on floci's aws, which serves neither CloudFront nor the Cloudflare API", () => {
+  it("is skipped on floci's aws, which serves neither CloudFront nor the Cloudflare API", () => {
     const skipped = planOn("aws.floci").skipped;
-
-    expect(skipped["prerender/next-ppr"]?.map((gap) => gap.issue)).toEqual([852]);
-    expect(skipped["prerender/next-ppr-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
-    expect(skipped["prerender/next-store-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
+    expect(skipped["deploy/next-ppr"]?.map((gap) => gap.issue)).toEqual([852]);
+    expect(skipped["deploy/next-ppr-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
   });
 });
