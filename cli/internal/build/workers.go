@@ -53,10 +53,18 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 		if err := toolchain.CompileGo(ctx, app.Name, moduleRoot, pkg, filepath.Join(files, buildoutput.GoWorkerBinary), inspection.Architecture); err != nil {
 			return image.Image{}, err
 		}
+	case language.Python:
+		entry, err := discovery.PythonArtifactWorkerEntry(cfg.Dir, roots, served)
+		if err != nil {
+			return image.Image{}, fmt.Errorf("app %q: %w", app.Name, err)
+		}
+		if err := os.WriteFile(filepath.Join(files, containerimage.PythonWorkerEntry), []byte(entry), 0o644); err != nil {
+			return image.Image{}, err
+		}
 	case language.Rust:
 		return built, nil
 	default:
-		return image.Image{}, fmt.Errorf("app %q runs in an image and the workers joining it serve what %s declares in %s, and ocel builds no %s worker into an image yet: run the workers on a node, go or rust app", app.Name, served.Dir, served.Language, served.Language)
+		return image.Image{}, fmt.Errorf("app %q runs in an image and the workers joining it serve what %s declares in %s, and a worker is not built into an image for %s", app.Name, served.Dir, served.Language, served.Language)
 	}
 	return t.addFiles(ctx, built, cfg.Slug, app.Name, files, containerimage.WorkerDir, arch, log)
 }

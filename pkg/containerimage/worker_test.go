@@ -22,8 +22,10 @@ func TestAWorkerRunsTheEntryItsImageOrArtifactCarries(t *testing.T) {
 	}{
 		{name: "a go entry", image: imageWith("/ocel/worker/ocel-worker"), want: []string{"/ocel/worker/ocel-worker"}},
 		{name: "a node entry", image: imageWith("/ocel/worker/worker.mjs"), want: []string{"node", "/ocel/worker/worker.mjs"}},
+		{name: "a python entry", image: imageWith("/ocel/worker/worker.py"), want: []string{"python3", "/ocel/worker/worker.py"}},
 		{name: "a go function artifact", image: imageWith("./ocel-worker"), want: []string{"./ocel-worker"}},
 		{name: "a node function artifact", image: imageWith("ocel-worker.mjs"), want: []string{"node", "ocel-worker.mjs"}},
+		{name: "a python function artifact", image: imageWith("ocel-worker.py"), want: []string{"python3", "ocel-worker.py"}},
 		{name: "an image entry beside an artifact's", image: imageWith("ocel-worker.mjs", "/ocel/worker/worker.mjs"), want: []string{"node", "/ocel/worker/worker.mjs"}},
 		{name: "no entry, as a rust binary that serves as a worker itself", image: imageWith(), want: served},
 	} {
