@@ -3,7 +3,6 @@ import { setTimeout as pause } from "node:timers/promises";
 import {
   BUILD_VARIABLES,
   clientEnvValuesOf,
-  migrates,
   setsBuildVariables,
   setsEnv,
   setsSecret,
@@ -20,7 +19,6 @@ import { sanitize } from "../../naming";
 import { configTree, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
-import { migrateCommand } from "../../workspace";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../types";
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
@@ -122,10 +120,6 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
 
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "deploy", deployed);
-
-    if (migrates(cell.fixture.checks)) {
-      await this.run(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
-    }
 
     await cell.evidence.write(
       "deploy",
