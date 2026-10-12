@@ -20,7 +20,6 @@ import (
 const (
 	pythonEntryFile        = "main.py"
 	pythonRequirementsFile = "requirements.txt"
-	pythonRuntimeCommand   = "python3"
 	pythonBytecodeDir      = "__pycache__"
 	pythonVirtualenvDir    = "venv"
 )
@@ -43,7 +42,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := copySourceTree(c.Source, c.FunctionDir); err != nil {
 		return fmt.Errorf("copy app %q into its artifact: %w", c.App, err)
 	}
-	if err := c.copyDiscoveryRoots(); err != nil {
+	if err := c.copyPythonPackages(); err != nil {
 		return err
 	}
 	if err := c.installRequirements(ctx, platform); err != nil {
@@ -53,37 +52,27 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, worker, c.FunctionDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{containerimage.PythonWorkerEntry.Interpreter, pythonEntryFile}, worker, c.FunctionDir, c.AppDir)
 }
 
 func (c Compilation) writePythonWorkerEntry() ([]string, error) {
-	var packages []string
-	for _, root := range c.DiscoveryRoots {
-		rel, err := filepath.Rel(c.Source, root)
-		switch {
-		case err != nil || rel == ".." || strings.HasPrefix(rel, "../"):
-			packages = append(packages, filepath.Base(root))
-		case rel != ".":
-			packages = append(packages, strings.ReplaceAll(filepath.ToSlash(rel), "/", "."))
-		}
-	}
-	if len(packages) == 0 {
+	if len(c.PythonPackages) == 0 {
 		return nil, nil
 	}
-	entry := discovery.PythonWorkerSource(discovery.PythonArtifactRoot, packages)
-	if err := os.WriteFile(filepath.Join(c.FunctionDir, containerimage.PythonArtifactEntry), []byte(entry), 0o644); err != nil {
+	entry := discovery.RenderPythonWorkerEntry(c.PythonPackages)
+	if err := os.WriteFile(filepath.Join(c.FunctionDir, containerimage.PythonWorkerEntry.ArtifactFile), []byte(entry), 0o644); err != nil {
 		return nil, fmt.Errorf("write app %q's worker entry: %w", c.App, err)
 	}
-	return []string{pythonRuntimeCommand, containerimage.PythonArtifactEntry}, nil
+	return containerimage.PythonWorkerEntry.ArtifactCommand(), nil
 }
 
-func (c Compilation) copyDiscoveryRoots() error {
-	for _, root := range c.DiscoveryRoots {
-		if rel, err := filepath.Rel(c.Source, root); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+func (c Compilation) copyPythonPackages() error {
+	for _, pkg := range c.PythonPackages {
+		if rel, err := filepath.Rel(c.Source, pkg.Dir); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, "../") {
 			continue
 		}
-		if err := copySourceTree(root, filepath.Join(c.FunctionDir, filepath.Base(root))); err != nil {
-			return fmt.Errorf("copy the %s app %q imports into its artifact: %w", filepath.Base(root), c.App, err)
+		if err := copySourceTree(pkg.Dir, filepath.Join(c.FunctionDir, pkg.Name)); err != nil {
+			return fmt.Errorf("copy the %s app %q imports into its artifact: %w", pkg.Name, c.App, err)
 		}
 	}
 	return nil

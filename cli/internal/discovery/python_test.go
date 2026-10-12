@@ -176,3 +176,73 @@ func TestPythonInterpreterPrefersTheVirtualenvBesideTheRunRoot(t *testing.T) {
 		t.Errorf("PythonInterpreter = %q, want %q", got, venv)
 	}
 }
+
+func twoPythonApps(t *testing.T) (string, []Root) {
+	t.Helper()
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "a", "pyproject.toml"), "")
+	write(t, filepath.Join(configDir, "a", "jobs", "__init__.py"), "")
+	write(t, filepath.Join(configDir, "b", "pyproject.toml"), "")
+	write(t, filepath.Join(configDir, "b", "tasks", "__init__.py"), "")
+	write(t, filepath.Join(configDir, DefaultRootDirName, "__init__.py"), "")
+	return configDir, []Root{
+		{Dir: filepath.Join(configDir, "a", "jobs"), Language: language.Python},
+		{Dir: filepath.Join(configDir, "b", "tasks"), Language: language.Python},
+		{Dir: filepath.Join(configDir, DefaultRootDirName), Language: language.Python},
+		{Dir: filepath.Join(configDir, "web"), Language: language.JS},
+	}
+}
+
+func TestAPythonAppImportsTheFoldersOfItsOwnProjectAndThoseOfNoProjectButNeverAnotherAppsFolders(t *testing.T) {
+	configDir, roots := twoPythonApps(t)
+
+	packages, err := ListPythonPackages(configDir, roots, filepath.Join(configDir, "a"))
+	if err != nil {
+		t.Fatalf("ListPythonPackages: %v", err)
+	}
+	want := []PythonPackage{
+		{Name: "jobs", Dir: filepath.Join(configDir, "a", "jobs")},
+		{Name: DefaultRootDirName, Dir: filepath.Join(configDir, DefaultRootDirName)},
+	}
+	if !slices.Equal(packages, want) {
+		t.Errorf("packages = %+v, want %+v: b/tasks belongs to b's pyproject and is nowhere app a runs", packages, want)
+	}
+}
+
+func TestListingPythonPackagesRefusesAFolderTooDeepToNameAPackage(t *testing.T) {
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "server", "pyproject.toml"), "")
+	nested := filepath.Join(configDir, "server", "lib", "jobs")
+	write(t, filepath.Join(nested, "__init__.py"), "")
+
+	_, err := ListPythonPackages(configDir, []Root{{Dir: nested, Language: language.Python}}, filepath.Join(configDir, "server"))
+	if err == nil || !strings.Contains(err.Error(), nested) {
+		t.Fatalf("ListPythonPackages = %v, want a refusal naming %s", err, nested)
+	}
+}
+
+func TestListingPythonPackagesRefusesTwoFoldersImportedByOneName(t *testing.T) {
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "server", "pyproject.toml"), "")
+	own := filepath.Join(configDir, "server", DefaultRootDirName)
+	shared := filepath.Join(configDir, DefaultRootDirName)
+	write(t, filepath.Join(own, "__init__.py"), "")
+	write(t, filepath.Join(shared, "__init__.py"), "")
+
+	_, err := ListPythonPackages(configDir, []Root{{Dir: own, Language: language.Python}, {Dir: shared, Language: language.Python}}, filepath.Join(configDir, "server"))
+	if err == nil || !strings.Contains(err.Error(), own) || !strings.Contains(err.Error(), shared) {
+		t.Fatalf("ListPythonPackages = %v, want a refusal naming both folders imported as %q", err, DefaultRootDirName)
+	}
+}
+
+func TestListingPythonPackagesRefusesAFolderThatIsItsProjectsOwnDirectory(t *testing.T) {
+	configDir := t.TempDir()
+	server := filepath.Join(configDir, "server")
+	write(t, filepath.Join(server, "pyproject.toml"), "")
+	write(t, filepath.Join(server, "main.py"), "")
+
+	_, err := ListPythonPackages(configDir, []Root{{Dir: server, Language: language.Python}}, server)
+	if err == nil || !strings.Contains(err.Error(), server) {
+		t.Fatalf("ListPythonPackages = %v, want a refusal naming %s, which no import names", err, server)
+	}
+}

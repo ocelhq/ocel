@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -244,17 +245,18 @@ func TestTheGeneratedPythonWorkerServesATaskAndAConsumerWithItsWorkersOnStartAnd
 	wantAudited(t, url)
 }
 
-func TestThePythonWorkerEntryOfAnArtifactImportsFromWhereItRuns(t *testing.T) {
+func TestTheRenderedPythonWorkerEntryImportsFromTheDirectoryItRunsIn(t *testing.T) {
 	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	configDir := repoFixture(t, filepath.Join("worker", "python"))
 	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
 	if err != nil {
 		t.Fatalf("RootsOf: %v", err)
 	}
-	entry, err := PythonArtifactWorkerEntry(configDir, roots, roots[0])
+	packages, err := ListPythonPackages(configDir, roots, configDir)
 	if err != nil {
-		t.Fatalf("PythonArtifactWorkerEntry: %v", err)
+		t.Fatalf("ListPythonPackages: %v", err)
 	}
+	entry := RenderPythonWorkerEntry(packages)
 	if strings.Contains(entry, configDir) {
 		t.Errorf("the entry names the build host's %s, which is nowhere the artifact runs", configDir)
 	}
@@ -272,4 +274,35 @@ func TestThePythonWorkerEntryOfAnArtifactImportsFromWhereItRuns(t *testing.T) {
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 
 	wantGreeted(t, deliverTo(t, startWorker(t, cmd, "worker"), greetEnvelope), 1)
+}
+
+func TestAPythonWorkerInDevImportsTheFoldersItsProjectSharesAndNoOtherApps(t *testing.T) {
+	t.Parallel()
+	configDir, roots := twoPythonApps(t)
+
+	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0])
+	if err != nil {
+		t.Fatalf("WorkerCommand: %v", err)
+	}
+	entry, err := os.ReadFile(filepath.Join(configDir, "a", filepath.FromSlash(pythonWorkerEntryFile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`import_module("jobs")`, `import_module("` + DefaultRootDirName + `")`} {
+		if !strings.Contains(string(entry), want) {
+			t.Errorf("the dev worker entry lacks %s:\n%s", want, entry)
+		}
+	}
+	if strings.Contains(string(entry), `"tasks"`) {
+		t.Errorf("the dev worker entry imports b's tasks:\n%s", entry)
+	}
+	var pythonPath []string
+	for _, entry := range cmd.Env {
+		if value, found := strings.CutPrefix(entry, "PYTHONPATH="); found {
+			pythonPath = filepath.SplitList(value)
+		}
+	}
+	if !slices.Contains(pythonPath, configDir) {
+		t.Errorf("the dev worker's PYTHONPATH = %q, want it to hold %s, where %s is imported from", pythonPath, configDir, DefaultRootDirName)
+	}
 }

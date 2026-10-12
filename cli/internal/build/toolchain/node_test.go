@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func elfAddon(architecture, tag string) string {
@@ -178,13 +179,13 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		if want := []string{"node", workerFile}; !reflect.DeepEqual(cfg.Worker, want) {
+		if want := []string{"node", "ocel-worker.mjs"}; !reflect.DeepEqual(cfg.Worker, want) {
 			t.Errorf("%s worker = %v, want %v", buildoutput.FunctionConfigFile, cfg.Worker, want)
 		}
 		if _, err := exec.LookPath("node"); err != nil {
 			t.Skip("node not on PATH")
 		}
-		out, err := exec.Command("node", filepath.Join(l.functionDir, workerFile)).CombinedOutput()
+		out, err := exec.Command("node", filepath.Join(l.functionDir, containerimage.NodeWorkerEntry.ArtifactFile)).CombinedOutput()
 		if err != nil || !strings.Contains(string(out), "worker:string") {
 			t.Errorf("the worker entry printed %q (%v), want the bundled declarations to run", out, err)
 		}
@@ -505,14 +506,14 @@ func TestBundleWorkerAddsTheWorkerEntryToAFunctionAnotherBuildWrote(t *testing.T
 	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	written.Worker = []string{"node", workerFile}
+	written.Worker = []string{"node", "ocel-worker.mjs"}
 	if !reflect.DeepEqual(cfg, written) {
 		t.Errorf("%s = %+v, want the function's own config plus its worker: %+v", buildoutput.FunctionConfigFile, cfg, written)
 	}
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not on PATH")
 	}
-	out, err := exec.Command("node", filepath.Join(l.functionDir, workerFile)).CombinedOutput()
+	out, err := exec.Command("node", filepath.Join(l.functionDir, containerimage.NodeWorkerEntry.ArtifactFile)).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "worker:string") {
 		t.Errorf("the worker entry printed %q (%v), want the bundled declarations to run", out, err)
 	}

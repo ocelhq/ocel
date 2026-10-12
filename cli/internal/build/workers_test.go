@@ -69,8 +69,8 @@ func TestAContainerAppHostingANodeWorkerIsBuiltIntoAnImageCarryingTheWorkerEntry
 	if added == nil {
 		t.Fatal("the image gained no worker entry, so every worker container would run the app instead")
 	}
-	if added.dst != containerimage.WorkerDir || len(added.entries[containerimage.NodeWorkerEntry]) == 0 {
-		t.Errorf("the image gained %v at %s, want %s at %s", keysOf(added.entries), added.dst, containerimage.NodeWorkerEntry, containerimage.WorkerDir)
+	if added.dst != containerimage.WorkerDir || len(added.entries[containerimage.NodeWorkerEntry.ImageFile]) == 0 {
+		t.Errorf("the image gained %v at %s, want %s at %s", keysOf(added.entries), added.dst, containerimage.NodeWorkerEntry.ImageFile, containerimage.WorkerDir)
 	}
 	if want := "ocel/worker-node/web@sha256:" + strings.Repeat("b", 64); built.Images["web"] != want {
 		t.Errorf("the build reported %q for web, want the image that carries the worker entry", built.Images["web"])
@@ -122,7 +122,7 @@ func TestAContainerAppHostingAPythonWorkerIsBuiltIntoAnImageCarryingTheWorkerEnt
 	if added == nil || added.dst != containerimage.WorkerDir {
 		t.Fatalf("the image gained files at %+v, want %s", added, containerimage.WorkerDir)
 	}
-	entry := string(added.entries[containerimage.PythonWorkerEntry])
+	entry := string(added.entries[containerimage.PythonWorkerEntry.ImageFile])
 	if !strings.Contains(entry, `import_module("`+discovery.DefaultRootDirName+`")`) || strings.Contains(entry, cfg.Dir) {
 		t.Errorf("the image gained %v with %q, want an entry importing the discovery folder and naming no build host path", keysOf(added.entries), entry)
 	}
@@ -157,7 +157,7 @@ func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testi
 	}
 
 	first := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-0"+buildoutput.FunctionDirSuffix)
-	if _, err := os.Stat(filepath.Join(first, containerimage.NodeArtifactEntry)); err != nil {
+	if _, err := os.Stat(filepath.Join(first, containerimage.NodeWorkerEntry.ArtifactFile)); err != nil {
 		t.Errorf("the first function carries no worker entry: %v", err)
 	}
 	raw, err := os.ReadFile(filepath.Join(first, buildoutput.FunctionConfigFile))
@@ -165,7 +165,7 @@ func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testi
 		t.Errorf("the first function's config = %s (%v), want it to name the worker command", raw, err)
 	}
 	other := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-1"+buildoutput.FunctionDirSuffix)
-	if _, err := os.Stat(filepath.Join(other, containerimage.NodeArtifactEntry)); err == nil {
+	if _, err := os.Stat(filepath.Join(other, containerimage.NodeWorkerEntry.ArtifactFile)); err == nil {
 		t.Error("a function a worker never runs from carries the worker entry")
 	}
 }

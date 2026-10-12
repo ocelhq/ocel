@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
@@ -382,5 +383,59 @@ func TestACancelledRustBuildReturnsOnceEveryProcessCargoStartedIsGone(t *testing
 		if time.Now().After(deadline) {
 			t.Fatalf("the build script %d still runs after the cancelled build returned", pid)
 		}
+	}
+}
+
+func TestAPythonAppsWorkerEntryImportsNeitherTheFoldersNorTheCodeOfAnotherPythonApp(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	for name, body := range map[string]string{
+		"a/pyproject.toml":    "",
+		"a/main.py":           "print('a')\n",
+		"a/jobs/__init__.py":  "",
+		"b/pyproject.toml":    "",
+		"b/main.py":           "print('b')\n",
+		"b/tasks/__init__.py": "",
+		discovery.DefaultRootDirName + "/__init__.py": "",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	python := &project.Serverless{Framework: buildoutput.FrameworkPython}
+	cfg := &project.Project{
+		Dir:            root,
+		DiscoveryPaths: []string{"a/jobs", "b/tasks", discovery.DefaultRootDirName},
+		Apps: []project.App{
+			{Name: "a", Path: "a", Compute: provider.ComputeServerless, Serverless: python},
+			{Name: "b", Path: "b", Compute: provider.ComputeServerless, Serverless: python},
+		},
+	}
+
+	if err := (nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}).Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	artifact := filepath.Join(root, statedir.Name, "output", "apps", "a", "functions", "index.func")
+	entry, err := os.ReadFile(filepath.Join(artifact, containerimage.PythonWorkerEntry.ArtifactFile))
+	if err != nil {
+		t.Fatalf("app a's artifact carries no worker entry: %v", err)
+	}
+	for _, want := range []string{`import_module("jobs")`, `import_module("` + discovery.DefaultRootDirName + `")`} {
+		if !strings.Contains(string(entry), want) {
+			t.Errorf("app a's worker entry lacks %s:\n%s", want, entry)
+		}
+	}
+	if strings.Contains(string(entry), `"tasks"`) {
+		t.Errorf("app a's worker entry imports b's tasks, which app a's function never carries:\n%s", entry)
+	}
+	if _, err := os.Stat(filepath.Join(artifact, "tasks")); err == nil {
+		t.Error("app a's artifact carries b's tasks folder")
 	}
 }

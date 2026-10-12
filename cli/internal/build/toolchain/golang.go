@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 const goModuleFile = "go.mod"
@@ -37,7 +38,7 @@ func (c Compilation) compileGo(ctx context.Context) error {
 		if err := c.buildGo(ctx, goarch, c.Source, c.WorkerPackage, buildoutput.GoWorkerBinary); err != nil {
 			return err
 		}
-		worker = []string{"./" + buildoutput.GoWorkerBinary}
+		worker = containerimage.GoWorkerEntry.ArtifactCommand()
 	}
 	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, worker, c.FunctionDir, c.AppDir)
 }

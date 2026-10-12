@@ -13,10 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
-const (
-	handlerFile = "index.mjs"
-	workerFile  = containerimage.NodeArtifactEntry
-)
+const handlerFile = "index.mjs"
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
 
@@ -115,7 +112,7 @@ func Bundle(ctx context.Context, t Target) error {
 		if err := t.bundleWorkerEntry(install, native); err != nil {
 			return err
 		}
-		worker = []string{"node", workerFile}
+		worker = containerimage.NodeWorkerEntry.ArtifactCommand()
 	}
 
 	if err := native.verify(); err != nil {
@@ -131,7 +128,7 @@ func Bundle(ctx context.Context, t Target) error {
 }
 
 func (t Target) bundleWorkerEntry(install *crossInstall, native *addons) error {
-	options := bundleOptions(t.WorkerResolveDir, filepath.Join(t.FunctionDir, workerFile), install, native)
+	options := bundleOptions(t.WorkerResolveDir, filepath.Join(t.FunctionDir, containerimage.NodeWorkerEntry.ArtifactFile), install, native)
 	options.Stdin = &api.StdinOptions{Contents: t.WorkerSource, ResolveDir: t.WorkerResolveDir, Sourcefile: "ocel-worker-entry.ts", Loader: api.LoaderTS}
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
@@ -168,7 +165,7 @@ func BundleWorker(ctx context.Context, t Target) error {
 	if err := install.installInto(ctx, t.App, t.Source, t.FunctionDir); err != nil {
 		return err
 	}
-	return nameWorker(t.FunctionDir, []string{"node", workerFile})
+	return nameWorker(t.FunctionDir, containerimage.NodeWorkerEntry.ArtifactCommand())
 }
 
 func bundleOptions(workingDir, outfile string, install *crossInstall, native *addons) api.BuildOptions {
