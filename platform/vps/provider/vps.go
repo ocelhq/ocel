@@ -104,6 +104,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		CheckBucket:        s3store.Check,
 		ForwardPorts:       p.ForwardPorts,
 		ServeBindingProxy:  p.ServeBindingProxy,
+		RemovedApps:        &provider.RemovedAppHooks{Plan: p.PlanRemovedApps, Retire: p.RetireRemovedApps},
 	}
 }
 
