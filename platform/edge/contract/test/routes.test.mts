@@ -9,7 +9,6 @@ import {
   findRoute,
   findSlashRedirect,
   formatCacheControl,
-  isStaticFirst,
   parseRoutes,
   readRoutes,
 } from "../src/routes.mjs";
@@ -43,12 +42,6 @@ it("redirects as the fixture says, substituting the groups of the pattern", () =
 it("applies every header rule that matches, in order", () => {
   for (const { path, headers } of fixture.headers) {
     expect(findHeaders(compiled, path), path).toEqual(headers);
-  }
-});
-
-it("names the paths a prerendered file beats a function for", () => {
-  for (const { path, matches } of fixture.staticFirst) {
-    expect(isStaticFirst(compiled, path), path).toBe(matches);
   }
 });
 

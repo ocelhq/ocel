@@ -19,7 +19,6 @@ function newRoutes(over: Partial<OcelRoutes> = {}): OcelRoutes {
     trailingSlash: "ignore",
     headers: [],
     redirects: [],
-    staticFirst: [],
     routes: [
       {
         src: "/blog/([^/]+)",

@@ -29,9 +29,6 @@
         "status": 301
       }
     ],
-    "staticFirst": [
-      "/blog/([^/]+)"
-    ],
     "routes": [
       {
         "src": "/",
@@ -149,20 +146,6 @@
     {
       "path": "/blog/hello",
       "headers": {}
-    }
-  ],
-  "staticFirst": [
-    {
-      "path": "/docs/blog/hello",
-      "matches": true
-    },
-    {
-      "path": "/docs/blog/a/b",
-      "matches": false
-    },
-    {
-      "path": "/docs/account",
-      "matches": false
     }
   ],
   "trailingSlash": [
@@ -340,7 +323,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -360,7 +342,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -380,7 +361,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -400,7 +380,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -420,7 +399,6 @@
         "trailingSlash": "maybe",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -440,7 +418,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(?=a)",
@@ -460,7 +437,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(a)\\1",
@@ -480,7 +456,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(",
@@ -500,7 +475,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(?P<x>a)",
@@ -520,7 +494,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(?<x>a)",
@@ -540,7 +513,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(?i)a",
@@ -560,7 +532,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a\\sb",
@@ -580,7 +551,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "\\A/a",
@@ -600,7 +570,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/\\pL",
@@ -620,7 +589,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/[[:alpha:]]",
@@ -640,7 +608,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a{1,1001}",
@@ -660,7 +627,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "",
@@ -680,7 +646,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a\\",
@@ -706,7 +671,6 @@
             "status": 200
           }
         ],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -732,7 +696,6 @@
             "status": 301
           }
         ],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -758,7 +721,6 @@
             "status": 301
           }
         ],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -785,7 +747,6 @@
           }
         ],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -812,7 +773,6 @@
           }
         ],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -837,29 +797,6 @@
           }
         ],
         "redirects": [],
-        "staticFirst": [],
-        "routes": [
-          {
-            "src": "/(.*)",
-            "function": "index"
-          }
-        ],
-        "fallback": {
-          "function": "index"
-        }
-      }
-    },
-    {
-      "reason": "a static-first pattern that does not compile",
-      "table": {
-        "version": 1,
-        "basePath": "",
-        "trailingSlash": "ignore",
-        "headers": [],
-        "redirects": [],
-        "staticFirst": [
-          "/("
-        ],
         "routes": [
           {
             "src": "/(.*)",
@@ -879,7 +816,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -899,7 +835,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -919,7 +854,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/(.*)",
@@ -940,7 +874,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -963,7 +896,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -986,7 +918,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1010,7 +941,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1034,7 +964,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1060,7 +989,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1086,7 +1014,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1110,7 +1037,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",
@@ -1134,7 +1060,6 @@
         "trailingSlash": "ignore",
         "headers": [],
         "redirects": [],
-        "staticFirst": [],
         "routes": [
           {
             "src": "/a",

@@ -60,7 +60,6 @@ own route table and does not use this one.
   "trailingSlash": "never",
   "headers": [{ "src": "/(.*)", "headers": { "x-frame-options": "DENY" } }],
   "redirects": [{ "src": "/old/(.*)", "location": "/new/$1", "status": 308 }],
-  "staticFirst": [],
   "routes": [
     {
       "src": "/blog/([^/]+)",
@@ -145,7 +144,5 @@ Some of the route table is applied only where the edge can do it:
 - The bypass cookie and the revalidate header are honoured before the cache on Cloudflare only.
   Behind CloudFront or the load balancer they take effect when the request reaches your app, so
   a bypass cookie previews fresh content only when the page is not already cached.
-- `staticFirst` and `basePath` are validated and carried, and your app applies `basePath` when
-  it matches patterns. No edge serves a prerendered file ahead of a function from `staticFirst`
-  yet.
+- `basePath` is applied by your app when it matches patterns.
 - A container app is given no route table.

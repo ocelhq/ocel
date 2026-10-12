@@ -13,7 +13,6 @@ export function newRoutes(overrides: Partial<OcelRoutes> = {}): OcelRoutes {
     trailingSlash: "ignore",
     headers: [],
     redirects: [],
-    staticFirst: [],
     routes: [
       {
         src: "/blog/.*",
