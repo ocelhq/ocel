@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -23,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/realtime"
 	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
-	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -130,12 +128,7 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 		}), values, s3store.HTTPPoster{})
 	}
 	if bindsAny(bindings, bindingsv1.BindingType_BINDING_TYPE_REALTIME) {
-		services.Realtime = realtimeproxy.NewService(values, realtime.NewAppSyncTransport(realtime.Config{
-			Client:      http.DefaultClient,
-			Credentials: aws.Credentials,
-			Retryer:     sdkconfig.WorkloadRetryer(),
-			Region:      aws.Region,
-		}))
+		services.Realtime = realtime.NewAppSyncService(values, aws)
 	}
 	var engine *tasks.Engine
 	if servesTasks {

@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -89,5 +91,27 @@ func TestAContainerAppBoundToABucketIsServedTheProxyAndNeverHandedTheStoresKey(t
 		if strings.Contains(entry, "r2-secret") {
 			t.Errorf("the app is handed %q: the store's key is the proxy's alone", entry)
 		}
+	}
+}
+
+func TestAContainerAppBoundToARealtimeChannelPublishesThroughTheProxy(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	values := fixedRecords{bindings: []live.Binding{{Name: "chat", Type: bindingsv1.BindingType_BINDING_TYPE_REALTIME}}}
+
+	served, err := serveBindings(context.Background(), values, "127.0.0.1:1", "")
+	if err != nil {
+		t.Fatalf("serveBindings: %v", err)
+	}
+	t.Cleanup(func() { _ = served.Close() })
+	address := envValue(served.Env, processenv.RuntimeAddressEnvVar)
+	if address == "" {
+		t.Fatal("the app is handed no proxy, and it publishes to a realtime channel only through one")
+	}
+	client := realtimev1connect.NewRealtimeServiceClient(&http.Client{Transport: bearerToken(envValue(served.Env, localrpc.SessionTokenEnvVar))}, address)
+	_, err = client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "chat", Channel: "/chat/room", Event: `{}`})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("a publish to a channel whose record never arrived = %v, want FailedPrecondition from the realtime service behind the proxy", err)
 	}
 }
