@@ -26,7 +26,7 @@ const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 const StaticRulesVar = "OCEL_STATIC_RULES"
 
 const (
-	RoutesVar          = "OCEL_ROUTES"
+	OcelRouteTableVar  = "OCEL_ROUTE_TABLE"
 	ReleaseTokenVar    = "OCEL_RELEASE_TOKEN"
 	EdgeAsksToCacheVar = "OCEL_EDGE_ASKS_TO_CACHE"
 )

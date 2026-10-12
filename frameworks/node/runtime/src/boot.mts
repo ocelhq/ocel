@@ -1,6 +1,6 @@
 import { type Bind, reportFatalBoot, serveInvoke, serveServer } from "./host.mjs";
 import { awaitLiveValues } from "./live-values.mjs";
-import { useOriginRoutes } from "./origin-routes.mjs";
+import { useOriginRouteTable } from "./origin-route-table.mjs";
 import { invokeFor, loadUserApp, resolveHandler } from "./user-app.mjs";
 
 export interface BootOptions {
@@ -20,7 +20,7 @@ function handler(env: NodeJS.ProcessEnv): string {
 
 async function serve(options: BootOptions): Promise<void> {
   options.hooks?.();
-  useOriginRoutes(process.env);
+  useOriginRouteTable(process.env);
   const address = options.bind?.();
   const entrypoint = handler(process.env);
 

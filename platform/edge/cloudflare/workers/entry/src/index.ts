@@ -12,8 +12,8 @@ import {
   functionUrlImageOrigin,
   originImagePath,
 } from "@framework/next-router/image";
+import type { CompiledRouteTable } from "@platform/edge-contract/ocel-route-table";
 import { readReleaseToken } from "@platform/edge-contract/purge";
-import type { CompiledRoutes } from "@platform/edge-contract/routes";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -43,7 +43,7 @@ import {
   respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
-import { ownRouteTableKey, readOcelRoutes, readRouteTable } from "./route-table";
+import { ownRouteTableKey, readRouteTable, readStoredOcelRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
 import { serveNodeOrigin } from "./serve-node";
 import { type ServeFactory, serveObjects } from "./serve-objects";
@@ -117,7 +117,7 @@ export type ServeFetch = (request: Request) => Promise<Response>;
 interface ServedRelease {
   record: ReleaseRecord;
   routeTable?: NextRouteTable;
-  routes?: CompiledRoutes;
+  routes?: CompiledRouteTable;
 }
 
 interface ServeRuntime {
@@ -176,7 +176,7 @@ async function resolveServedRelease(
   }
   try {
     return record.routeTable.format === "ocel"
-      ? { record, routes: await readOcelRoutes(base.routeTableStore, key) }
+      ? { record, routes: await readStoredOcelRouteTable(base.routeTableStore, key) }
       : { record, routeTable: await readRouteTable(base.routeTableStore, key) };
   } catch (error) {
     return refuse(error);

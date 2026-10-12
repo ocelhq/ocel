@@ -36,7 +36,7 @@ type AppServingInput struct {
 type AppServing struct {
 	RootFunction   string
 	OriginDispatch *provider.RoutingSpec
-	OcelRoutes     *provider.RoutingSpec
+	OcelRouteTable *provider.RoutingSpec
 	EdgeRouteTable *provider.EdgeRouteTable
 	Guard          *provider.OriginGuard
 	ISR            *provider.ISRSpec
@@ -47,8 +47,8 @@ type AppServing struct {
 }
 
 func (s AppServing) OriginTable() *provider.RoutingSpec {
-	if s.OcelRoutes != nil {
-		return s.OcelRoutes
+	if s.OcelRouteTable != nil {
+		return s.OcelRouteTable
 	}
 	return s.OriginDispatch
 }
@@ -89,7 +89,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		}
 		switch {
 		case routing != nil && routing.RouteTable.Format == edge.RouteTableOcel:
-			facts.OcelRoutes = routing
+			facts.OcelRouteTable = routing
 		case !q.EdgeRunsCode:
 			facts.OriginDispatch = routing
 		}
@@ -131,7 +131,7 @@ func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*
 		return nil, fmt.Errorf("read the route table %s routes by: %w", q.App, err)
 	}
 	if hosting.RouteTable == edge.RouteTableOcel {
-		if err := refuseOcelRoutes(q.App, hosting, raw); err != nil {
+		if err := refuseOcelRouteTable(q.App, hosting, raw); err != nil {
 			return nil, err
 		}
 	}
@@ -143,23 +143,23 @@ func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*
 
 var routeTableFiles = map[edge.RouteTableFormat]string{
 	edge.RouteTableNext: edge.NextRouteTableFile,
-	edge.RouteTableOcel: edge.OcelRoutesFile,
+	edge.RouteTableOcel: edge.OcelRouteTableFile,
 }
 
-func refuseOcelRoutes(app string, hosting buildoutput.Hosting, raw []byte) error {
-	routes, err := edge.ReadOcelRoutes(raw)
+func refuseOcelRouteTable(app string, hosting buildoutput.Hosting, raw []byte) error {
+	routes, err := edge.ReadOcelRouteTable(raw)
 	if err != nil {
-		return refusal.Refuse(refusal.CodeInvalid, "the %s of app %s cannot be read: %v; rebuild the app", edge.OcelRoutesFile, app, err)
+		return refusal.Refuse(refusal.CodeInvalid, "the %s of app %s cannot be read: %v; rebuild the app", edge.OcelRouteTableFile, app, err)
 	}
 	if functions := routes.Functions(); !slices.Equal(functions, []string{hosting.RootFunction}) {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s of app %s sends requests to the functions %q, and this CLI serves a node build from its root function %q alone; rebuild the app",
-			edge.OcelRoutesFile, app, functions, hosting.RootFunction)
+			edge.OcelRouteTableFile, app, functions, hosting.RootFunction)
 	}
 	if _, declared := hosting.Needs[edge.NeedRevalidation]; routes.HasCachedRoute() && !declared {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s of app %s caches a route, and its %s does not declare the %s need that purges it; rebuild the app",
-			edge.OcelRoutesFile, app, buildoutput.HostingFile, edge.NeedRevalidation)
+			edge.OcelRouteTableFile, app, buildoutput.HostingFile, edge.NeedRevalidation)
 	}
 	return nil
 }

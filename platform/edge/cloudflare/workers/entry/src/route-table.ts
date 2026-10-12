@@ -1,5 +1,9 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
-import { type CompiledRoutes, compileRoutes, readRoutes } from "@platform/edge-contract/routes";
+import {
+  type CompiledRouteTable,
+  compileOcelRouteTable,
+  readOcelRouteTable,
+} from "@platform/edge-contract/ocel-route-table";
 import type { EdgeObjectStore } from "./edge";
 import { lruSet } from "./lru";
 
@@ -45,10 +49,13 @@ export function readRouteTable(store: EdgeObjectStore, key: string): Promise<Nex
   return readStoredTable(store, key, (table) => table as NextRouteTable);
 }
 
-export function readOcelRoutes(store: EdgeObjectStore, key: string): Promise<CompiledRoutes> {
+export function readStoredOcelRouteTable(
+  store: EdgeObjectStore,
+  key: string,
+): Promise<CompiledRouteTable> {
   return readStoredTable(store, key, (table, at) => {
     try {
-      return compileRoutes(readRoutes(table));
+      return compileOcelRouteTable(readOcelRouteTable(table));
     } catch (error) {
       throw new Error(
         `the route table at ${at} is refused: ${error instanceof Error ? error.message : String(error)}`,

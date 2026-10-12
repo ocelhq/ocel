@@ -7,15 +7,15 @@ import {
   edgeCacheTagHeader,
   releaseTokenVar,
 } from "@platform/edge-contract/edge-cache";
+import { formatCacheControl } from "@platform/edge-contract/ocel-route-table";
 import {
   type PurgeEntry,
   type PurgeMode,
   purgeHeader,
   purgeHeaderFor,
 } from "@platform/edge-contract/purge";
-import { formatCacheControl } from "@platform/edge-contract/routes";
 import type { OcelContext } from "./host.mjs";
-import type { RoutedRequest } from "./origin-routes.mjs";
+import type { RoutedRequest } from "./origin-route-table.mjs";
 import { findTagRecordWriter, type WriteTagRecords } from "./tag-records.mjs";
 
 const cacheHostKey = Symbol.for("ocel.cache.host");

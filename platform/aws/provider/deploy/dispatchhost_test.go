@@ -316,15 +316,15 @@ func TestAnAppWithAnOcelRouteTableIsToldWhereItsFunctionsFindIt(t *testing.T) {
 	env := release.appEnv(provider.StackSpec{
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
-		App:  &provider.AppSpec{App: "web", OcelRoutes: &provider.RoutingSpec{RootFunction: "index"}},
+		App:  &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}, appBundle{}, sessionScope{})
 
-	if want := "/var/task/" + edge.OcelRoutesFile; env[edge.RoutesVar] != want {
-		t.Errorf("%s = %q, want %q: the route table is bundled at the root of each function", edge.RoutesVar, env[edge.RoutesVar], want)
+	if want := "/var/task/" + edge.OcelRouteTableFile; env[edge.OcelRouteTableVar] != want {
+		t.Errorf("%s = %q, want %q: the route table is bundled at the root of each function", edge.OcelRouteTableVar, env[edge.OcelRouteTableVar], want)
 	}
 	plain := release.appEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, appBundle{}, sessionScope{})
-	if _, told := plain[edge.RoutesVar]; told {
-		t.Errorf("%s is set for an app with no route table", edge.RoutesVar)
+	if _, told := plain[edge.OcelRouteTableVar]; told {
+		t.Errorf("%s is set for an app with no route table", edge.OcelRouteTableVar)
 	}
 }
 
@@ -333,7 +333,7 @@ func TestADispatchHostIsMadeOfANextRouteTableAlone(t *testing.T) {
 
 	spec := provider.StackSpec{
 		Kind: provider.StackApp,
-		App:  &provider.AppSpec{App: "web", OcelRoutes: &provider.RoutingSpec{RootFunction: "index"}},
+		App:  &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}
 	host, err := releasing(t, routedConfig(t, cloudfront.Kind)).newDispatchHost(spec)
 	if err != nil || host != nil {

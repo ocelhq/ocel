@@ -9,5 +9,5 @@ const (
 
 const (
 	NextRouteTableFile = "next-route-table.json"
-	OcelRoutesFile     = "routes.json"
+	OcelRouteTableFile = "ocel-route-table.json"
 )

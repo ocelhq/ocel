@@ -277,7 +277,7 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 	}
 	file := edge.NextRouteTableFile
 	if hosting.RouteTable == edge.RouteTableOcel {
-		file = edge.OcelRoutesFile
+		file = edge.OcelRouteTableFile
 	}
 	if manifest != nil {
 		if err := os.WriteFile(filepath.Join(dir, file), manifest, 0o644); err != nil {

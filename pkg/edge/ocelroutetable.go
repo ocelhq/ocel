@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const OcelRoutesVersion = 1
+const OcelRouteTableVersion = 1
 
 type TrailingSlash string
 
@@ -23,7 +23,7 @@ const (
 	TrailingSlashIgnore TrailingSlash = "ignore"
 )
 
-type OcelRoutes struct {
+type OcelRouteTable struct {
 	Version       int            `json:"version"`
 	BasePath      string         `json:"basePath"`
 	TrailingSlash TrailingSlash  `json:"trailingSlash"`
@@ -74,27 +74,27 @@ var (
 	repeatBound           = regexp.MustCompile(`^\{(\d+)(?:,(\d*))?\}`)
 )
 
-func ReadOcelRoutes(raw []byte) (OcelRoutes, error) {
-	var routes OcelRoutes
+func ReadOcelRouteTable(raw []byte) (OcelRouteTable, error) {
+	var routes OcelRouteTable
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&routes); err != nil {
-		return OcelRoutes{}, fmt.Errorf("parse the route table: %w", err)
+		return OcelRouteTable{}, fmt.Errorf("parse the route table: %w", err)
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return OcelRoutes{}, errors.New("parse the route table: it holds more than one JSON document")
+		return OcelRouteTable{}, errors.New("parse the route table: it holds more than one JSON document")
 	}
 	if err := routes.refuse(); err != nil {
-		return OcelRoutes{}, err
+		return OcelRouteTable{}, err
 	}
 	return routes, nil
 }
 
-func (r OcelRoutes) HasCachedRoute() bool {
+func (r OcelRouteTable) HasCachedRoute() bool {
 	return slices.ContainsFunc(r.Routes, func(route Route) bool { return route.Cache != nil })
 }
 
-func (r OcelRoutes) Functions() []string {
+func (r OcelRouteTable) Functions() []string {
 	functions := []string{r.Fallback.Function}
 	for _, route := range r.Routes {
 		functions = append(functions, route.Function)
@@ -103,10 +103,10 @@ func (r OcelRoutes) Functions() []string {
 	return slices.Compact(functions)
 }
 
-func (r OcelRoutes) refuse() error {
+func (r OcelRouteTable) refuse() error {
 	switch {
-	case r.Version != OcelRoutesVersion:
-		return fmt.Errorf("the route table is version %d, and this CLI reads version %d", r.Version, OcelRoutesVersion)
+	case r.Version != OcelRouteTableVersion:
+		return fmt.Errorf("the route table is version %d, and this CLI reads version %d", r.Version, OcelRouteTableVersion)
 	case r.BasePath != "" && (!strings.HasPrefix(r.BasePath, "/") || strings.HasSuffix(r.BasePath, "/") || strings.ContainsAny(r.BasePath, "?#")):
 		return fmt.Errorf("the route table's basePath %q is empty, or starts with a slash, ends in none and names no query or fragment", r.BasePath)
 	case !slices.Contains([]TrailingSlash{TrailingSlashNever, TrailingSlashAlways, TrailingSlashIgnore}, r.TrailingSlash):
@@ -129,7 +129,7 @@ func (r OcelRoutes) refuse() error {
 	return r.refuseRoutes()
 }
 
-func (r OcelRoutes) refuseRoutes() error {
+func (r OcelRouteTable) refuseRoutes() error {
 	var token string
 	for i, route := range r.Routes {
 		if err := route.refuse(); err != nil {

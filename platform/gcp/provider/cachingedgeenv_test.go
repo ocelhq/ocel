@@ -128,13 +128,13 @@ func TestANodeServiceWithAnOcelRouteTableIsToldWhereItsImageHoldsIt(t *testing.T
 	spec := nextSpec()
 	spec.App.Framework = buildoutput.FrameworkNode
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
-	spec.App.OcelRoutes = &provider.RoutingSpec{RootFunction: "index"}
+	spec.App.OcelRouteTable = &provider.RoutingSpec{RootFunction: "index"}
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got, want := envOf(server.created[0].Template.Containers[0])[edge.RoutesVar], "/ocel/app/"+edge.OcelRoutesFile; got != want {
-		t.Errorf("the service reads %s=%q, want %q", edge.RoutesVar, got, want)
+	if got, want := envOf(server.created[0].Template.Containers[0])[edge.OcelRouteTableVar], "/ocel/app/"+edge.OcelRouteTableFile; got != want {
+		t.Errorf("the service reads %s=%q, want %q", edge.OcelRouteTableVar, got, want)
 	}
 }

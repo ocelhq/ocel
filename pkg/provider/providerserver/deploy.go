@@ -1201,7 +1201,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Values:                    values,
 					Grants:                    grants,
 					Routing:                   facts.OriginDispatch,
-					OcelRoutes:                facts.OcelRoutes,
+					OcelRouteTable:            facts.OcelRouteTable,
 					EdgeRouteTable:            facts.EdgeRouteTable,
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,

@@ -1,19 +1,19 @@
 import { expect, it } from "vitest";
 
-import fixture from "../fixtures/routes.json" with { type: "json" };
+import fixture from "../fixtures/ocel-route-table.json" with { type: "json" };
 import {
-  compileRoutes,
+  compileOcelRouteTable,
   findCacheRule,
   findHeaders,
   findRedirect,
   findRoute,
   findSlashRedirect,
   formatCacheControl,
-  parseRoutes,
-  readRoutes,
-} from "../src/routes.mjs";
+  parseOcelRouteTable,
+  readOcelRouteTable,
+} from "../src/ocel-route-table.mjs";
 
-const compiled = compileRoutes(readRoutes(fixture.table));
+const compiled = compileOcelRouteTable(readOcelRouteTable(fixture.table));
 
 it("finds the first route that matches each path after the base path, as the fixture says", () => {
   for (const { path, route, groups, cacheControl } of fixture.routes) {
@@ -47,8 +47,8 @@ it("applies every header rule that matches, in order", () => {
 
 it("redirects a path to the form its trailing slash mode serves", () => {
   for (const { mode, basePath, path, redirectTo } of fixture.trailingSlash) {
-    const table = compileRoutes(
-      readRoutes({ ...fixture.table, trailingSlash: mode, basePath, redirects: [] }),
+    const table = compileOcelRouteTable(
+      readOcelRouteTable({ ...fixture.table, trailingSlash: mode, basePath, redirects: [] }),
     );
     expect(findSlashRedirect(table, path) ?? null, `${mode} ${basePath} ${path}`).toBe(redirectTo);
   }
@@ -56,8 +56,8 @@ it("redirects a path to the form its trailing slash mode serves", () => {
 
 it("matches the patterns of the fixture with the groups the Go reader's engine gives them", () => {
   for (const { src, path, groups } of fixture.patterns) {
-    const table = compileRoutes(
-      readRoutes({
+    const table = compileOcelRouteTable(
+      readOcelRouteTable({
         ...fixture.table,
         basePath: "",
         routes: [{ src, function: "index" }],
@@ -71,17 +71,17 @@ it("matches the patterns of the fixture with the groups the Go reader's engine g
 
 it("refuses every invalid table of the fixture", () => {
   for (const { reason, table } of fixture.invalid) {
-    expect(() => readRoutes(table), reason).toThrow(/route table/);
+    expect(() => readOcelRouteTable(table), reason).toThrow(/route table/);
   }
 });
 
 it("refuses a table that is not JSON, and one that is not an object", () => {
-  expect(() => parseRoutes("{")).toThrow(/route table/);
-  expect(() => parseRoutes("[]")).toThrow(/route table/);
+  expect(() => parseOcelRouteTable("{")).toThrow(/route table/);
+  expect(() => parseOcelRouteTable("[]")).toThrow(/route table/);
 });
 
 it("reads a table from its JSON text", () => {
-  expect(parseRoutes(JSON.stringify(fixture.table))).toEqual(fixture.table);
+  expect(parseOcelRouteTable(JSON.stringify(fixture.table))).toEqual(fixture.table);
 });
 
 it("matches no route for a path too long to match safely", () => {
@@ -89,8 +89,8 @@ it("matches no route for a path too long to match safely", () => {
 });
 
 it("sends a redirect to the group it names as empty when the group took no part in the match", () => {
-  const table = compileRoutes(
-    readRoutes({
+  const table = compileOcelRouteTable(
+    readOcelRouteTable({
       ...fixture.table,
       basePath: "",
       redirects: [{ src: "/a(/b)?", location: "/c$1", status: 307 }],

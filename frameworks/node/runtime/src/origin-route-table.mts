@@ -3,15 +3,15 @@ import type http from "node:http";
 import { type Bypass, readBypass, revalidateHeader } from "@platform/edge-contract/bypass";
 import {
   type CacheRule,
-  type CompiledRoutes,
-  compileRoutes,
+  type CompiledRouteTable,
+  compileOcelRouteTable,
   findHeaders,
   findRedirect,
   findRoute,
   findSlashRedirect,
-  parseRoutes,
-  routesVar,
-} from "@platform/edge-contract/routes";
+  ocelRouteTableVar,
+  parseOcelRouteTable,
+} from "@platform/edge-contract/ocel-route-table";
 import { type OcelContext, setRequestScope } from "./host.mjs";
 import {
   installCacheHost,
@@ -25,7 +25,7 @@ import {
 } from "./origin-cache.mjs";
 
 interface Origin {
-  routes: CompiledRoutes | undefined;
+  routes: CompiledRouteTable | undefined;
   cache: OriginCache | null;
 }
 
@@ -37,22 +37,22 @@ export interface RoutedRequest {
   redirect: { status: number; location: string } | undefined;
 }
 
-function readOriginRoutes(env: NodeJS.ProcessEnv): CompiledRoutes | undefined {
-  const file = env[routesVar];
+function readOriginRouteTable(env: NodeJS.ProcessEnv): CompiledRouteTable | undefined {
+  const file = env[ocelRouteTableVar];
   if (!file) return undefined;
   let text: string;
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
     throw new Error(
-      `ocel: ${routesVar} names ${file}, which cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+      `ocel: ${ocelRouteTableVar} names ${file}, which cannot be read: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return compileRoutes(parseRoutes(text));
+  return compileOcelRouteTable(parseOcelRouteTable(text));
 }
 
-export function useOriginRoutes(env: NodeJS.ProcessEnv): void {
-  const origin: Origin = { routes: readOriginRoutes(env), cache: readOriginCache(env) };
+export function useOriginRouteTable(env: NodeJS.ProcessEnv): void {
+  const origin: Origin = { routes: readOriginRouteTable(env), cache: readOriginCache(env) };
   if (origin.cache) installCacheHost(origin.cache);
   else removeCacheHost();
   setRequestScope(

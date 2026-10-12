@@ -22,7 +22,7 @@ func ocelRoutesRoot(t *testing.T, hosting buildoutput.Hosting, routes string) st
 	hosting.RootFunction = "index"
 	root := servingRoot(t, "web", hosting, nil)
 	if routes != "" {
-		if err := os.WriteFile(filepath.Join(buildoutput.AppRoot(root, "web"), edge.OcelRoutesFile), []byte(routes), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(buildoutput.AppRoot(root, "web"), edge.OcelRouteTableFile), []byte(routes), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -43,9 +43,9 @@ func TestAnAppWithAnOcelRouteTableHandsItToItsOriginWhateverTheEdge(t *testing.T
 			if err != nil {
 				t.Fatalf("AppServingFor() = %v", err)
 			}
-			routes := facts.OcelRoutes
+			routes := facts.OcelRouteTable
 			if routes == nil || routes.RootFunction != "index" || routes.RouteTable.Format != edge.RouteTableOcel || !bytes.Equal(routes.RouteTable.Table, []byte(cachedRoutes)) {
-				t.Errorf("OcelRoutes = %+v, want the table the build wrote, bound to its root function", routes)
+				t.Errorf("OcelRouteTable = %+v, want the table the build wrote, bound to its root function", routes)
 			}
 			if facts.OriginDispatch != nil {
 				t.Errorf("OriginDispatch = %+v, want none: an ocel table does not dispatch between functions", facts.OriginDispatch)
@@ -84,8 +84,8 @@ func TestAContainerAppIsNotHandedAnOcelRouteTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if facts.OcelRoutes != nil || facts.EdgeRouteTable != nil {
-		t.Errorf("OcelRoutes = %+v, EdgeRouteTable = %+v, want neither: a container is one service with no function to bundle a table into", facts.OcelRoutes, facts.EdgeRouteTable)
+	if facts.OcelRouteTable != nil || facts.EdgeRouteTable != nil {
+		t.Errorf("OcelRouteTable = %+v, EdgeRouteTable = %+v, want neither: a container is one service with no function to bundle a table into", facts.OcelRouteTable, facts.EdgeRouteTable)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestAnOcelRouteTableTheBuildDidNotWriteOrNoEdgeCanReadIsRefused(t *testing.
 	}{
 		"a build that wrote no table": {
 			hosting: buildoutput.Hosting{Needs: revalidating},
-			want:    edge.OcelRoutesFile,
+			want:    edge.OcelRouteTableFile,
 		},
 		"a table that is not valid": {
 			hosting: buildoutput.Hosting{Needs: revalidating},

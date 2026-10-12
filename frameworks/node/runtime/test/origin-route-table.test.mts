@@ -1,22 +1,22 @@
 import type http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 import { serveInvoke, setRequestScope } from "../src/host.mjs";
-import { useOriginRoutes } from "../src/origin-routes.mjs";
-import { newRoutes, writeRoutes } from "./routes-file.mjs";
+import { useOriginRouteTable } from "../src/origin-route-table.mjs";
+import { newRouteTable, writeRouteTable } from "./route-table-file.mjs";
 
 afterEach(() => {
-  useOriginRoutes({});
+  useOriginRouteTable({});
   setRequestScope(undefined);
 });
 
 type Handler = (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>;
 
 async function serve(
-  routes: ReturnType<typeof newRoutes> | string,
+  routes: ReturnType<typeof newRouteTable> | string,
   handler: Handler,
   env: Record<string, string> = {},
 ): Promise<(path: string, init?: RequestInit) => Promise<Response>> {
-  useOriginRoutes({ OCEL_ROUTES: writeRoutes(routes), ...env });
+  useOriginRouteTable({ OCEL_ROUTE_TABLE: writeRouteTable(routes), ...env });
   let port = 0;
   await serveInvoke(handler, (listening) => {
     port = listening;
@@ -32,7 +32,7 @@ function page(req: http.IncomingMessage, res: http.ServerResponse): void {
 describe("an origin handed a route table", () => {
   test("sets the headers of every rule that matches, a later rule over an earlier one", async () => {
     const get = await serve(
-      newRoutes({
+      newRouteTable({
         headers: [
           { src: "/(.*)", headers: { "x-frame-options": "DENY", "x-section": "site" } },
           { src: "/account", headers: { "x-section": "account" } },
@@ -51,7 +51,7 @@ describe("an origin handed a route table", () => {
 
   test("sets a header over the one its handler set, and on a response that is not a 200", async () => {
     const get = await serve(
-      newRoutes({ headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }] }),
+      newRouteTable({ headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }] }),
       (req, res) => {
         res.writeHead(404, { "x-frame-options": "ALLOWALL" });
         res.end();
@@ -66,7 +66,7 @@ describe("an origin handed a route table", () => {
 
   test("leaves cache-control to the cache rule of a cached route, and sets it on a route that caches nothing", async () => {
     const get = await serve(
-      newRoutes({
+      newRouteTable({
         headers: [{ src: "/(.*)", headers: { "cache-control": "public, max-age=3" } }],
       }),
       page,
@@ -83,7 +83,7 @@ describe("an origin handed a route table", () => {
   test("redirects the first rule that matches, with the groups of its pattern", async () => {
     let reached = false;
     const get = await serve(
-      newRoutes({
+      newRouteTable({
         redirects: [
           { src: "/old/(.*)", location: "/new/$1", status: 308 },
           { src: "/old/(.*)", location: "/never/$1", status: 301 },
@@ -104,7 +104,7 @@ describe("an origin handed a route table", () => {
 
   test("carries the query of the request over to the location it redirects to", async () => {
     const get = await serve(
-      newRoutes({ redirects: [{ src: "/old", location: "/new", status: 307 }] }),
+      newRouteTable({ redirects: [{ src: "/old", location: "/new", status: 307 }] }),
       page,
     );
 
@@ -115,7 +115,7 @@ describe("an origin handed a route table", () => {
 
   test("keeps the query a location states of its own", async () => {
     const get = await serve(
-      newRoutes({ redirects: [{ src: "/old", location: "/new?from=old", status: 307 }] }),
+      newRouteTable({ redirects: [{ src: "/old", location: "/new?from=old", status: 307 }] }),
       page,
     );
 
@@ -126,7 +126,7 @@ describe("an origin handed a route table", () => {
 
   test("sets the header rules on a redirect it answers", async () => {
     const get = await serve(
-      newRoutes({
+      newRouteTable({
         headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }],
         redirects: [{ src: "/old", location: "/new", status: 301 }],
       }),
@@ -140,7 +140,7 @@ describe("an origin handed a route table", () => {
 
   test("redirects only the paths inside its base path", async () => {
     const get = await serve(
-      newRoutes({
+      newRouteTable({
         basePath: "/docs",
         redirects: [{ src: "/old", location: "/docs/new", status: 308 }],
       }),
@@ -152,14 +152,14 @@ describe("an origin handed a route table", () => {
   });
 
   test("redirects a path to the form its trailing slash mode serves, keeping its query", async () => {
-    const never = await serve(newRoutes({ trailingSlash: "never" }), page);
+    const never = await serve(newRouteTable({ trailingSlash: "never" }), page);
     const removed = await never("/blog/a/?x=1");
     expect(removed.status).toBe(308);
     expect(removed.headers.get("location")).toBe("/blog/a?x=1");
     expect((await never("/blog/a")).status).toBe(200);
     expect((await never("/")).status).toBe(200);
 
-    const always = await serve(newRoutes({ trailingSlash: "always" }), page);
+    const always = await serve(newRouteTable({ trailingSlash: "always" }), page);
     const added = await always("/blog/a");
     expect(added.status).toBe(308);
     expect(added.headers.get("location")).toBe("/blog/a/");
@@ -168,7 +168,7 @@ describe("an origin handed a route table", () => {
   });
 
   test("redirects no write for its trailing slash, which would drop the body", async () => {
-    const get = await serve(newRoutes({ trailingSlash: "never" }), page);
+    const get = await serve(newRouteTable({ trailingSlash: "never" }), page);
 
     const res = await get("/blog/a/", { method: "POST" });
 
@@ -176,7 +176,7 @@ describe("an origin handed a route table", () => {
   });
 
   test("hands a request no rule names to the handler untouched", async () => {
-    const get = await serve(newRoutes(), page);
+    const get = await serve(newRouteTable(), page);
 
     const res = await get("/anything");
 
@@ -185,7 +185,11 @@ describe("an origin handed a route table", () => {
   });
 
   test("refuses to boot when the table cannot be read", () => {
-    expect(() => useOriginRoutes({ OCEL_ROUTES: writeRoutes("{") })).toThrow(/route table/);
-    expect(() => useOriginRoutes({ OCEL_ROUTES: "/nowhere/routes.json" })).toThrow(/OCEL_ROUTES/);
+    expect(() => useOriginRouteTable({ OCEL_ROUTE_TABLE: writeRouteTable("{") })).toThrow(
+      /route table/,
+    );
+    expect(() =>
+      useOriginRouteTable({ OCEL_ROUTE_TABLE: "/nowhere/ocel-route-table.json" }),
+    ).toThrow(/OCEL_ROUTE_TABLE/);
   });
 });
