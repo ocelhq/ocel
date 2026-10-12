@@ -41,7 +41,6 @@ const maxRepeat = 1000;
 const minBypassToken = 16;
 const longestMatchedPath = 4096;
 
-const lifetimeHeaders = ["cache-control", "cdn-cache-control", "surrogate-control"];
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const bypassTokenCharacters = /^[A-Za-z0-9_-]+$/;
 const groupReference = /\$(\d+)/g;
@@ -238,9 +237,6 @@ function refuseHeaderRule(rule: unknown): Refusal {
   }
   for (const [name, value] of Object.entries(rule.headers)) {
     if (!headerName.test(name)) return `${JSON.stringify(name)} is not a header name`;
-    if (lifetimeHeaders.includes(name.toLowerCase())) {
-      return `a header rule sets no ${name}: a route's cache rule gives its lifetime`;
-    }
     if (typeof value !== "string" || /[\r\n\0]/.test(value)) {
       return `the value of ${name} is a string with no line break`;
     }

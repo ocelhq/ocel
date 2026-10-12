@@ -88,9 +88,9 @@ own route table and does not use this one.
   `(?:/([^/]+))?`, may hold either.
 - `routes` are tried in order, and the first match wins. A path no route names goes to
   `fallback`.
-- `headers` rules all apply, in order, over the headers your handler set. A rule may not set
-  `Cache-Control`, `CDN-Cache-Control` or `Surrogate-Control`: a route's cache rule is the only
-  lifetime the table gives.
+- `headers` rules all apply, in order, over the headers your handler set. On a route with a
+  cache rule, a rule's `Cache-Control`, `CDN-Cache-Control` and `Surrogate-Control` are left
+  out: the cache rule sets the lifetime there.
 - `redirects` are tried in order, and the first match is answered without reaching your
   handler. `location` is a path that begins with one slash, or an `http` or `https` URL, and may
   read the groups of `src` as `$1`. A path stays on your site: slashes a group puts at its start
@@ -118,10 +118,10 @@ when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `pr
 
 A cache rule governs only its own route. Only a route with a rule gets the rule's lifetime and
 has its request's cookies stripped. A route with no rule, and a path that falls through to
-`fallback`, keeps the cache headers your app sends, as plain HTTP does: an edge stores the
-response for as long as its `Cache-Control`, `CDN-Cache-Control` or `Surrogate-Control` allows,
-whoever asked for it. Never mark a personalised response `public` or give it an `s-maxage` on
-such a route. On Cloudflare a route with no rule is not stored, whatever its headers say.
+`fallback`, keeps the cache headers your handler and your header rules set, as plain HTTP
+does: an edge stores the response for as long as its `Cache-Control`, `CDN-Cache-Control` or
+`Surrogate-Control` allows, whoever asked for it. Never mark a personalised response `public`
+or give it an `s-maxage` on such a route. On Cloudflare a route with no rule is not stored, whatever its headers say.
 
 Behind an edge that caches, a cached route answers everyone the same, so your handler never
 sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every

@@ -101,8 +101,11 @@ function routeRequest(origin: Origin, req: http.IncomingMessage, pathname: strin
   };
 }
 
+const lifetimeHeaders = ["cache-control", "cdn-cache-control", "surrogate-control"];
+
 function applyHeaderRules(res: http.ServerResponse, routed: RoutedRequest): void {
   for (const [name, value] of Object.entries(routed.headers)) {
+    if (routed.cacheRule && lifetimeHeaders.includes(name)) continue;
     res.setHeader(name, value);
   }
 }

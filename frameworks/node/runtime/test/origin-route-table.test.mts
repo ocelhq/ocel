@@ -64,14 +64,40 @@ describe("an origin handed a route table", () => {
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
 
-  test("refuses to boot with a header rule that sets a cache lifetime, which only a cache rule gives", () => {
-    for (const name of ["cache-control", "CDN-Cache-Control", "surrogate-control"]) {
-      const table = newRouteTable({
-        headers: [{ src: "/(.*)", headers: { [name]: "s-maxage=60" } }],
-      });
-      expect(() => useOriginRouteTable({ OCEL_ROUTE_TABLE: writeRouteTable(table) }), name).toThrow(
-        /route table/,
-      );
+  test("sets the cache headers of a rule on a route that caches nothing, and leaves a cached route to its cache rule", async () => {
+    const get = await serve(
+      newRouteTable({
+        headers: [
+          {
+            src: "/(.*)",
+            headers: {
+              "Cache-Control": "public, s-maxage=3",
+              "CDN-Cache-Control": "max-age=3",
+              "Surrogate-Control": "max-age=3",
+            },
+          },
+        ],
+      }),
+      (req, res) => {
+        res.writeHead(200, { "cache-control": "public, max-age=10" });
+        res.end("page");
+      },
+      { OCEL_RELEASE_TOKEN: "r0a1b2c3d" },
+    );
+
+    const cached = await get("/blog/a");
+    const uncached = await get("/account");
+    const fallback = await get("/about");
+
+    expect(cached.headers.get("cache-control")).toBe(
+      "public, max-age=10, s-maxage=60, stale-while-revalidate=540",
+    );
+    expect(cached.headers.has("cdn-cache-control")).toBe(false);
+    expect(cached.headers.has("surrogate-control")).toBe(false);
+    for (const res of [uncached, fallback]) {
+      expect(res.headers.get("cache-control")).toBe("public, s-maxage=3");
+      expect(res.headers.get("cdn-cache-control")).toBe("max-age=3");
+      expect(res.headers.get("surrogate-control")).toBe("max-age=3");
     }
   });
 
