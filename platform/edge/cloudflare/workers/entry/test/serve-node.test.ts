@@ -1,17 +1,39 @@
+import { compileRoutes, type OcelRoutes, readRoutes } from "@platform/edge-contract/routes";
 import { describe, expect, it } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import { RENDER_RELEASE_HEADER, type RenderRelease, SERVE_REFUSED_HEADER } from "../src/serve-key";
 import { serveNodeOrigin } from "../src/serve-node";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith, capturing, FN_URL, makeRecord } from "./origin-deps";
+import { objectStoreHolding, routeTableKey } from "./route-table-store";
 import { fakeServing } from "./serving-deps";
 
 const ORIGIN = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
-const rules = [
-  { path: "/blog/*", revalidate: 60, expire: 600 },
-  { path: "/", revalidate: 30 },
-];
+const token = "0123456789abcdef0123456789abcdef";
+
+function newRoutes(over: Partial<OcelRoutes> = {}): OcelRoutes {
+  return {
+    version: 1,
+    basePath: "",
+    trailingSlash: "ignore",
+    headers: [],
+    redirects: [],
+    staticFirst: [],
+    routes: [
+      {
+        src: "/blog/([^/]+)",
+        function: "api",
+        cache: { revalidate: 60, expire: 600, allowQuery: ["page"], bypassToken: token },
+      },
+      { src: "/", function: "api", cache: { revalidate: 30, bypassToken: token } },
+      { src: "/feed", function: "api", cache: { revalidate: 10 } },
+      { src: "/account", function: "api" },
+    ],
+    fallback: { function: "api" },
+    ...over,
+  };
+}
 
 function forwardTo(answer: () => Response = () => new Response("uncached")) {
   const forwarded: Request[] = [];
@@ -27,7 +49,7 @@ function forwardTo(answer: () => Response = () => new Response("uncached")) {
 function setup(
   answer?: Parameters<typeof fakeServing>[0],
   uncached?: () => Response,
-  over: { rules?: typeof rules } = {},
+  routes: OcelRoutes | null = newRoutes(),
 ) {
   const fake = fakeServing(answer);
   const origin = forwardTo(uncached);
@@ -35,13 +57,13 @@ function setup(
     serving: fake.serving,
     app: "web",
     origin: ORIGIN,
-    rules: over.rules ?? rules,
+    routes: routes ? compileRoutes(readRoutes(routes)) : undefined,
     forward: origin.forward,
   });
   return { ...fake, ...origin, serve };
 }
 
-describe("a request a cache rule names", () => {
+describe("a request a cached route names", () => {
   it("is answered by Serve under the app's own function URL, never by a direct fetch", async () => {
     const { serve, calls, forwarded } = setup();
 
@@ -75,12 +97,43 @@ describe("a request a cache rule names", () => {
     });
   });
 
-  it("keys the entry by every query parameter, in sorted order", async () => {
+  it("keys the entry by the query parameters its route allows, in sorted order, and passes no other on", async () => {
     const { serve, calls } = setup();
 
-    await serve(new Request("https://shop.example.com/blog/a?b=2&a=1"));
+    await serve(new Request("https://shop.example.com/blog/a?utm=x&page=2"));
 
-    expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/blog/a?a=1&b=2");
+    expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/blog/a?page=2");
+  });
+
+  it("keys the entry by every query parameter, sorted, when its route lists none to allow", async () => {
+    const { serve, calls } = setup();
+
+    await serve(new Request("https://shop.example.com/feed?b=2&a=1"));
+
+    expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/feed?a=1&b=2");
+  });
+
+  it("keys the entry by no query parameter when its route allows an empty list", async () => {
+    const routes = newRoutes({
+      routes: [{ src: "/feed", function: "api", cache: { revalidate: 10, allowQuery: [] } }],
+    });
+    const { serve, calls } = setup(undefined, undefined, routes);
+
+    await serve(new Request("https://shop.example.com/feed?b=2&a=1"));
+
+    expect(calls[0]!.originUrl).toBe("https://abc123.lambda-url.eu-west-2.on.aws/feed");
+  });
+
+  it("is answered from the shared entry when the visitor carries a cookie, which never reaches Serve", async () => {
+    const { serve, calls, forwarded } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/blog/a", { headers: { cookie: "session=1" } }),
+    );
+
+    expect(forwarded).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.request.headers.has("cookie")).toBe(false);
   });
 
   it("tells the visitor how the cache answered, and hides what is for the edge alone", async () => {
@@ -123,18 +176,24 @@ describe("a request a cache rule names", () => {
     expect(await res.text()).toBe("uncached");
     expect(forwarded).toHaveLength(1);
   });
+
+  it("is looked up under its path inside the base path", async () => {
+    const routes = newRoutes({ basePath: "/docs" });
+    const { serve, calls } = setup(undefined, undefined, routes);
+
+    await serve(new Request("https://shop.example.com/docs/blog/a"));
+    await serve(new Request("https://shop.example.com/blog/a"));
+
+    expect(calls.map(({ originUrl }) => new URL(originUrl).pathname)).toEqual(["/docs/blog/a"]);
+  });
 });
 
-describe("a request no cache rule lets the edge cache", () => {
+describe("a request no cached route lets the edge cache", () => {
   const uncached = [
-    ["a path no rule names", "https://shop.example.com/about", {}],
+    ["a route that caches nothing", "https://shop.example.com/account", {}],
+    ["a path no route names", "https://shop.example.com/about", {}],
     ["a write", "https://shop.example.com/blog/a", { method: "POST", body: "x" }],
     ["a HEAD", "https://shop.example.com/blog/a", { method: "HEAD" }],
-    [
-      "a request with a cookie",
-      "https://shop.example.com/blog/a",
-      { headers: { cookie: "session=1" } },
-    ],
     [
       "a request with credentials",
       "https://shop.example.com/blog/a",
@@ -154,12 +213,133 @@ describe("a request no cache rule lets the edge cache", () => {
     });
   }
 
-  it("goes to the origin uncached when the build states no rules", async () => {
-    const { serve, calls, forwarded } = setup(undefined, undefined, { rules: [] });
+  it("goes to the origin uncached when the build states no route table", async () => {
+    const { serve, calls, forwarded } = setup(undefined, undefined, null);
 
     await serve(new Request("https://shop.example.com/blog/a"));
 
     expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(1);
+  });
+});
+
+describe("a request bypassing the cache", () => {
+  it("goes to the origin with its cookie, never touching Serve", async () => {
+    const { serve, calls, forwarded } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/blog/a", {
+        headers: { cookie: `a=b; __prerender_bypass=${token}` },
+      }),
+    );
+
+    expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.headers.get("cookie")).toBe(`a=b; __prerender_bypass=${token}`);
+  });
+
+  it("is a request for the cache when its cookie holds another token", async () => {
+    const { serve, calls } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/blog/a", {
+        headers: { cookie: "__prerender_bypass=wrong" },
+      }),
+    );
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("is a request for the cache on a route that states no token", async () => {
+    const { serve, calls } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/feed", {
+        headers: { cookie: `__prerender_bypass=${token}` },
+      }),
+    );
+
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("a request carrying the revalidate token", () => {
+  const revalidating = { headers: { "x-prerender-revalidate": token } };
+
+  it("is rendered fresh at the origin, then clears the path's entry before it is answered", async () => {
+    const { serve, calls, forwarded, purges } = setup();
+
+    const res = await serve(new Request("https://shop.example.com/blog/a", revalidating));
+
+    expect(await res.text()).toBe("uncached");
+    expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.headers.get("x-prerender-revalidate")).toBe(token);
+    expect(purges).toEqual([
+      { groups: [{ mode: "purge", tags: ["r0a1b2c3d|path:/blog/a"] }], awaited: true },
+    ]);
+  });
+
+  it("clears nothing when the origin could not render", async () => {
+    const { serve, purges } = setup(undefined, () => new Response("broken", { status: 500 }));
+
+    const res = await serve(new Request("https://shop.example.com/blog/a", revalidating));
+
+    expect(res.status).toBe(500);
+    expect(purges).toEqual([]);
+  });
+
+  it("is a plain request for the cache when its token is wrong, or it is a write", async () => {
+    const { serve, calls, purges } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/blog/a", {
+        headers: { "x-prerender-revalidate": "wrong" },
+      }),
+    );
+    await serve(
+      new Request("https://shop.example.com/blog/b", {
+        method: "POST",
+        body: "x",
+        ...revalidating,
+      }),
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(purges).toEqual([]);
+  });
+});
+
+describe("a redirect the route table states", () => {
+  const redirecting = newRoutes({
+    trailingSlash: "never",
+    redirects: [{ src: "/old/(.*)", location: "/new/$1", status: 308 }],
+    headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }],
+  });
+
+  it("is answered by the gateway itself, with the header rules, and the query carried over", async () => {
+    const { serve, calls, forwarded } = setup(undefined, undefined, redirecting);
+
+    const res = await serve(new Request("https://shop.example.com/old/a?x=1"));
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/new/a?x=1");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("includes the trailing slash its mode removes from a read, and not from a write", async () => {
+    const { serve, forwarded } = setup(undefined, undefined, redirecting);
+
+    const read = await serve(new Request("https://shop.example.com/blog/a/"));
+    const write = await serve(
+      new Request("https://shop.example.com/blog/a/", { method: "POST", body: "x" }),
+    );
+
+    expect(read.status).toBe(308);
+    expect(read.headers.get("location")).toBe("/blog/a");
+    expect(write.status).toBe(200);
     expect(forwarded).toHaveLength(1);
   });
 });
@@ -213,7 +393,11 @@ describe("a node release resolved by the gateway", () => {
     waitUntil: () => {},
   });
 
-  async function resolved(over: Parameters<typeof makeRecord>[0], serving?: ServingPorts) {
+  async function resolved(
+    over: Parameters<typeof makeRecord>[0],
+    routes: OcelRoutes | string | undefined,
+    serving?: ServingPorts,
+  ) {
     const record = makeRecord({ isrPrefix: "prod/p1/api/r0a1b2c3d/isr", ...over });
     const wire = capturing();
     const base: ResolveBase = {
@@ -222,9 +406,13 @@ describe("a node release resolved by the gateway", () => {
         waitUntil: () => {},
       },
       originFetch: wire.fetch,
+      routeTableStore:
+        routes === undefined
+          ? undefined
+          : objectStoreHolding({ [routeTableKey()]: routes as never }),
       serving,
     };
-    const serve = (await resolveServe(
+    const serve = await resolveServe(
       {
         binding: answerEveryRecordWith(async () => ({
           kind: "record",
@@ -236,19 +424,18 @@ describe("a node release resolved by the gateway", () => {
         app: record.app,
       },
       base,
-    )) as ServeFetch;
+    );
     return { serve, wire };
   }
 
-  it("answers a path the release's cache rules name from Serve, and reaches the origin for the rest", async () => {
-    const served: Request[] = [];
-    const { serve, wire } = await resolved(
-      { cache: [{ path: "/blog/*", revalidate: 60 }] },
-      ports(served),
-    );
+  const located = { routeTable: { format: "ocel" as const, key: routeTableKey() } };
 
-    const cached = await serve(new Request("https://api.example.com/blog/a"));
-    const direct = await serve(new Request("https://api.example.com/about"));
+  it("answers a route the stored table caches from Serve, and reaches the origin for the rest", async () => {
+    const served: Request[] = [];
+    const { serve, wire } = await resolved(located, newRoutes(), ports(served));
+
+    const cached = await (serve as ServeFetch)(new Request("https://api.example.com/blog/a"));
+    const direct = await (serve as ServeFetch)(new Request("https://api.example.com/about"));
 
     expect(await cached.text()).toBe("cached page");
     expect(served).toHaveLength(1);
@@ -256,13 +443,22 @@ describe("a node release resolved by the gateway", () => {
     expect(wire.calls.map(({ url }) => url)).toEqual([`${FN_URL}about`]);
   });
 
-  it("reaches the origin for every path when the release has no rules", async () => {
+  it("reaches the origin for every path when the release has no route table", async () => {
     const served: Request[] = [];
-    const { serve, wire } = await resolved({}, ports(served));
+    const { serve, wire } = await resolved({}, undefined, ports(served));
 
-    await serve(new Request("https://api.example.com/blog/a"));
+    await (serve as ServeFetch)(new Request("https://api.example.com/blog/a"));
 
     expect(served).toHaveLength(0);
     expect(wire.calls).toHaveLength(1);
+  });
+
+  it("answers 503 when the stored table cannot be read or is not a valid table", async () => {
+    for (const stored of ["{", undefined]) {
+      const { serve } = await resolved(located, stored, ports([]));
+
+      const res = serve as Response;
+      expect(res.status, String(stored)).toBe(503);
+    }
   });
 });
