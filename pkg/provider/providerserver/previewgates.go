@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
@@ -62,22 +63,37 @@ func (r *deployRun) enforcePreviewProtection(ctx context.Context, progress progr
 	return nil
 }
 
-func (r *deployRun) settlePreviewGate(ctx context.Context) error {
+func (r *deployRun) readPreviewGateInForce(ctx context.Context) error {
+	if r.spec.Tier != environment.TierPreview || r.dry || !r.protectPreviews {
+		return nil
+	}
+	gate, err := stackrecords.ReadPreviewGate(ctx, r.provider.KeyValues(), r.provider.Cipher(), r.spec.Slug)
+	if err != nil {
+		return err
+	}
+	r.previewGate = gate
+	return nil
+}
+
+func (r *deployRun) settlePreviewGate(ctx context.Context, progress progress.Log) error {
 	if r.spec.Tier != environment.TierPreview || r.dry {
 		return nil
 	}
 	if !r.protectPreviews {
-		return r.disablePreviewGate(ctx)
-	}
-	written := r.previewGate
-	return stackrecords.ChangePreviewGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), func(records map[string]stackrecords.PreviewGateRecord) error {
-		record, recorded := records[r.spec.Slug]
-		if recorded && samePreviewGate(record.GateInForce(), written) {
-			record.Pending = false
-			records[r.spec.Slug] = record
+		if err := r.disablePreviewGate(ctx); err != nil {
+			return err
 		}
+	}
+	publish := previewGatePublisher(ctx, r.front, r.edgeStack().State(), progress)
+	err := settlePreviewGate(ctx, r.provider, r.spec.Slug, r.previewGate, publish)
+	if errors.Is(err, errPreviewGateUnpublished) {
+		note := "The preview credentials of " + r.spec.Slug + " changed while this deploy wrote them to " + describeFront(r.front.Kind()) +
+			", and it may still hold the older ones: run `ocel preview protection sync` to publish the recorded credentials"
+		progress.Warn(note)
+		r.pending = append(r.pending, note)
 		return nil
-	})
+	}
+	return err
 }
 
 func (r *deployRun) disablePreviewGate(ctx context.Context) error {

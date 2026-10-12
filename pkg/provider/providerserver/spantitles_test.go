@@ -126,6 +126,9 @@ func TestEverySpanALifecycleCallOpensNamesWhichThingItWorksOnAndWhatItDoes(t *te
 		{"a global preview domain release", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return c.RemovePreviewWildcard(t.Context(), &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 		}, openedSpan{"preview", "Releasing the global preview domain"}},
+		{"a preview protection publication", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+			return c.PublishPreviewProtection(t.Context(), &contractv1.PublishPreviewProtectionRequest{Slug: "shop"})
+		}, openedSpan{"shop", "Updating the preview protection of shop"}},
 		{"a production destroy", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return c.RemoveProject(t.Context(), &contractv1.ProjectRequest{Slug: "shop", Environment: production})
 		}, openedSpan{"shop", "Destroying the production footprint"}},

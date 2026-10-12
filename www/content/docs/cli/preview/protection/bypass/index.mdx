@@ -1,0 +1,18 @@
+---
+title: "ocel preview protection bypass"
+description: "Manage the secrets that let a request past this project's preview protection."
+---
+
+```bash
+ocel preview protection bypass
+```
+
+A bypass secret is for a machine, such as a CI job or a monitor, that can't enter a password. A request that sends it in the x-ocel-preview-bypass header is let through. A project holds at most eight. A secret is shown once, when it is created; after that it is named by an id.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel preview protection bypass create`](/docs/cli/preview/protection/bypass/create) | Create a bypass secret for this project's previews, and print it once |
+| [`ocel preview protection bypass ls`](/docs/cli/preview/protection/bypass/ls) | List the ids of this project's bypass secrets, without revealing them |
+| [`ocel preview protection bypass revoke`](/docs/cli/preview/protection/bypass/revoke) | Revoke one of this project's bypass secrets |

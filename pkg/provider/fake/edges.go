@@ -194,6 +194,8 @@ type edgeAccount struct {
 	forwards        map[string]edge.Origin
 	addressesItself bool
 	gatesPreviews   *bool
+	publications    []edge.PreviewGatePublication
+	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
 
 	routerServes *[]edge.Need
@@ -631,6 +633,31 @@ func (e *Edge) GatesPreviews(gates bool) {
 	e.gatesPreviews = &gates
 }
 
+func (e *Edge) Publications() []edge.PreviewGatePublication {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.publications)
+}
+
+func (e *Edge) RefusePublication(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.publishRefusal = err
+}
+
+func (e *Edge) publishPreviewGate(_ context.Context, publication edge.PreviewGatePublication) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.publishRefusal != nil {
+		return e.publishRefusal
+	}
+	e.publications = append(e.publications, publication)
+	if publication.Say != nil {
+		publication.Say("The fake edge published the preview gate")
+	}
+	return nil
+}
+
 func (e *Edge) AddressesItself(addresses bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -646,6 +673,9 @@ func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
+	if e.gatesPreviews == nil || *e.gatesPreviews {
+		hooks.PublishPreviewGate = e.publishPreviewGate
+	}
 	if e.proxies {
 		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge

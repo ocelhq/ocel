@@ -1,0 +1,15 @@
+---
+title: "ocel preview protection password rotate"
+description: "Replace this project's preview password with a generated one, and print it."
+---
+
+```bash
+ocel preview protection password rotate
+```
+
+The old password stops working, and so does every login session it opened: a visitor enters the new password. Bypass secrets keep working, and every login session ends with the old password, including those a bypass secret opened. The change is published to the edge that serves the project's previews without a deploy. Only the password is printed on stdout.
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema preview protection password rotate` prints.

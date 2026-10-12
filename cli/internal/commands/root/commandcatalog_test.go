@@ -221,6 +221,11 @@ func TestHelpJSONSaysWhichCommandsPrintData(t *testing.T) {
 		"preview ls":  true,
 		"env set":     true,
 		"bindings ls": true,
+
+		"preview protection password rotate": true,
+		"preview protection password set":    false,
+		"preview protection bypass revoke":   false,
+		"preview protection sync":            false,
 	} {
 		if got := described[path].GetPrintsData(); got != want {
 			t.Errorf("%s prints_data = %v, want %v", path, got, want)

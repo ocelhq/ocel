@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/hex"
 	"fmt"
@@ -43,10 +44,19 @@ func newPreviewGateRecord() (stackrecords.PreviewGateRecord, error) {
 	}, nil
 }
 
+func deriveBypassSecretID(secret string) string {
+	digest := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(digest[:])[:bypassSecretIDHexDigits]
+}
+
 func newPreviewPassword() (string, error) {
 	return newRandomText(generatedPasswordBytes, func(raw []byte) string {
 		return strings.ToLower(passwordEncoding.EncodeToString(raw))
 	}, "a preview password")
+}
+
+func newBypassSecret() (string, error) {
+	return newRandomText(generatedBypassSecretBytes, hex.EncodeToString, "a preview bypass secret")
 }
 
 func newPreviewGateKey() (string, error) {

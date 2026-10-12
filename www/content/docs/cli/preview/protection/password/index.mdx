@@ -1,0 +1,22 @@
+---
+title: "ocel preview protection password"
+description: "Show the password that protects this project's previews."
+---
+
+```bash
+ocel preview protection password
+```
+
+The password is created by the first preview deploy of a project whose config turns previews.protection on, and it is kept so it can be shown again. Only the password is printed on stdout, so it can be piped. `ocel preview protection password rotate` replaces it with a generated one, and `ocel preview protection password set` with one you choose.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel preview protection password rotate`](/docs/cli/preview/protection/password/rotate) | Replace this project's preview password with a generated one, and print it |
+| [`ocel preview protection password set`](/docs/cli/preview/protection/password/set) | Replace this project's preview password with one read from stdin |
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema preview protection password` prints.

@@ -68,7 +68,7 @@ func (e *Edge) refuseOversizedConfig(config string) error {
 	if total := len(e.deps.GatePlugin) + len(config); total > gateplugin.PackageLimitBytes {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the keys that gate previews take %d bytes, and Google allows a load balancer plugin and its config %d together, of which the plugin takes %d. "+
-				"Revoke bypass secrets or shorten the allowed OPTIONS prefixes, or destroy the previews of projects that no longer need a gate",
+				"Revoke bypass secrets with `ocel preview protection bypass revoke`, or destroy the previews of projects that no longer need a gate",
 			len(config), gateplugin.PackageLimitBytes, len(e.deps.GatePlugin))
 	}
 	return nil

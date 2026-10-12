@@ -1,0 +1,29 @@
+---
+title: "ocel preview protection"
+description: "Show, and manage the credentials of, the password that protects this project's previews."
+---
+
+```bash
+ocel preview protection
+```
+
+Whether previews are protected is one switch in the project's config, `previews.protection`, and every preview deploy enforces it: turning it on makes the first deploy create a password, turning it off opens the previews again. These commands never turn protection on or off. They show the password, replace it, and create and revoke the bypass secrets a machine can send instead.
+
+A protected preview asks for the password with a login page, or takes it as HTTP Basic credentials, or lets through a request that sends a bypass secret in the x-ocel-preview-bypass header. A request that fails never reaches the app, and the password never does either.
+
+A change is recorded and then published to the edge that serves the project's previews, so it takes effect without a deploy. Where an edge cannot be reached the command fails, still prints any secret it generated, and `ocel preview protection sync` publishes the recorded credentials again.
+
+Run on its own, it says whether protection is on and why, whether a password is set, which bypass secrets exist by id, and whether each edge holds the current credentials.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel preview protection bypass`](/docs/cli/preview/protection/bypass) | Manage the secrets that let a request past this project's preview protection |
+| [`ocel preview protection password`](/docs/cli/preview/protection/password) | Show the password that protects this project's previews |
+| [`ocel preview protection sync`](/docs/cli/preview/protection/sync) | Publish this project's recorded preview credentials to its edge again |
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema preview protection` prints.

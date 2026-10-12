@@ -156,6 +156,20 @@ message OperationResult {
   ConnectorInstalled connector = 11;
 
   int64 promoted_at_seconds = 12;
+
+  PreviewProtectionPublished protection = 13;
+}
+
+message PreviewProtectionPublished {
+  repeated PreviewEdgePublication edges = 1;
+}
+
+message PreviewEdgePublication {
+  string kind = 1;
+
+  bool published = 2;
+
+  string error = 3;
 }
 
 message ConnectorInstalled {

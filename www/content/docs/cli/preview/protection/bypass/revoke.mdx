@@ -1,0 +1,21 @@
+---
+title: "ocel preview protection bypass revoke"
+description: "Revoke one of this project's bypass secrets."
+---
+
+```bash
+ocel preview protection bypass revoke <id>
+```
+
+`ocel preview protection bypass ls` lists the ids. The secret stops working, and so does every login session opened on this project's previews, by password or by bypass: visitors enter the password again. The previews stay protected by the password, so nothing is asked first.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<id>` | Required |
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints one result envelope on stdout, whose JSON Schema `ocel schema preview protection bypass revoke` prints.
