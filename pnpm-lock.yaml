@@ -415,6 +415,10 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
   frameworks/next/cache:
+    dependencies:
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../platform/edge/contract
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -978,10 +982,6 @@ importers:
         version: 4.110.0
 
   platform/edge/contract:
-    dependencies:
-      '@framework/next-cache':
-        specifier: workspace:*
-        version: link:../../../frameworks/next/cache
     devDependencies:
       '@types/node':
         specifier: ^24

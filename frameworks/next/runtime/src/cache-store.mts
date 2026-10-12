@@ -1,4 +1,5 @@
-import type { CacheEntryFile, TagRecord } from "@framework/next-cache";
+import type { CacheEntryFile } from "@framework/next-cache";
+import type { TagRecord } from "@platform/edge-contract/purge";
 
 export interface CacheStore {
   readEntry(key: string): Promise<CacheEntryFile | null>;

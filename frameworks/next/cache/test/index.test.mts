@@ -1,3 +1,4 @@
+import type { TagRecord } from "@platform/edge-contract/purge";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,7 +8,6 @@ import {
   cacheKey,
   deserialize,
   entryObjectKey,
-  type TagRecord,
   tagFreshness,
   tagsOf,
 } from "../src/index.mjs";

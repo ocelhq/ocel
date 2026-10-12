@@ -1,5 +1,4 @@
-import type { TagRecord } from "@framework/next-cache";
-import { type PurgeEntry, readPurgeEntry } from "@platform/edge-contract/purge";
+import { type PurgeEntry, readPurgeEntry, type TagRecord } from "@platform/edge-contract/purge";
 
 const rememberedPurges = 2_000;
 

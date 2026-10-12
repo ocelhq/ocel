@@ -4,12 +4,12 @@ import {
   type CacheEntryFile,
   cacheKey,
   deserialize as deserializeBytes,
-  type TagRecord,
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background, keptUntilSettled } from "@framework/node-runtime/background";
 import { servesOnlyFresh } from "@framework/node-runtime/host";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";

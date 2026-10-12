@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
+import { areTagsExpired, mergeRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import { getNextHost } from "./host.mjs";
 import { notePurge } from "./purge-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";

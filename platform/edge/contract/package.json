@@ -26,9 +26,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@framework/next-cache": "workspace:*"
-  },
   "devDependencies": {
     "@types/node": "^24",
     "typescript": "^5.9.3",

@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type CacheEntryFile, type TagRecord, variantHeadersFile } from "@framework/next-cache";
+import { type CacheEntryFile, variantHeadersFile } from "@framework/next-cache";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";

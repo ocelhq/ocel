@@ -1,7 +1,6 @@
 import { createHmac } from "node:crypto";
 
-import type { TagRecord } from "@framework/next-cache";
-import { purgeSignatureHeader } from "@platform/edge-contract/purge";
+import { purgeSignatureHeader, type TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
 import { withCdnPurge } from "../src/next/cdn-purge.mjs";
