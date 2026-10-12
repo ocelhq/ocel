@@ -48,13 +48,13 @@ beforeAll(async () => {
   await writeFile(launcherPath, launcherModule);
 
   delete process.env.OCEL_ORIGIN_DISPATCH;
-  process.env.OCEL_ORIGIN_FRESH_ONLY = "1";
+  process.env.OCEL_EDGE_CACHE = "all";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
 });
 
 afterAll(async () => {
-  delete process.env.OCEL_ORIGIN_FRESH_ONLY;
+  delete process.env.OCEL_EDGE_CACHE;
   for (const c of controlConns) c.end();
   await new Promise<void>((resolve) => controlServer.close(() => resolve()));
   await rm(dir, { recursive: true, force: true });

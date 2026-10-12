@@ -20,15 +20,14 @@ function cacheHost(): CacheHost {
 const routes = writeRouteTable(newRouteTable());
 
 const behindCloudflare = {
-  OCEL_ORIGIN_FRESH_ONLY: "1",
+  OCEL_EDGE_CACHE: "marked",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
-  OCEL_EDGE_ASKS_TO_CACHE: "1",
   OCEL_ROUTE_TABLE: routes,
 };
 
 const behindCloudFront = {
-  OCEL_ORIGIN_FRESH_ONLY: "1",
+  OCEL_EDGE_CACHE: "all",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
   OCEL_ROUTE_TABLE: routes,

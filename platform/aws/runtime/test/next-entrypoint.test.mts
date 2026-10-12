@@ -156,6 +156,7 @@ beforeAll(async () => {
 
   (globalThis as any).__ocelTestRevalidate = notePurge;
   process.env.OCEL_CACHE_TAG_PURGE = "1";
+  process.env.OCEL_EDGE_CACHE = "marked";
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
   process.env.OCEL_CONTROL_SOCKET = sockPath;

@@ -273,18 +273,18 @@ func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
 	}
 }
 
-func TestAnOriginBehindACachingEdgeIsToldToServeOnlyFreshPages(t *testing.T) {
+func TestAnOriginIsToldWhichResponsesItsEdgeStores(t *testing.T) {
 	t.Parallel()
 
-	for _, kind := range []edge.Kind{cloudfront.Kind, cloudflare.Kind} {
+	for kind, want := range map[edge.Kind]edge.EdgeCacheMode{cloudfront.Kind: edge.EdgeCacheAll, cloudflare.Kind: edge.EdgeCacheMarked} {
 		env := plannedEnv(t, routedConfig(t, kind), routedApp(), fakeEdgeOf(kind))
-		if env[edge.OriginFreshOnlyVar] != "1" {
-			t.Errorf("%s = %q behind %s, want \"1\": the edge revalidates stale pages itself", edge.OriginFreshOnlyVar, env[edge.OriginFreshOnlyVar], kind)
+		if got := edge.EdgeCacheMode(env[edge.EdgeCacheVar]); got != want {
+			t.Errorf("%s = %q behind %s, want %q", edge.EdgeCacheVar, got, kind, want)
 		}
 	}
 
-	if _, told := plannedEnv(t, Config{}, routedApp(), nil)[edge.OriginFreshOnlyVar]; told {
-		t.Errorf("%s is set with no edge, want it unset: nothing in front revalidates a stale page", edge.OriginFreshOnlyVar)
+	if _, told := plannedEnv(t, Config{}, routedApp(), nil)[edge.EdgeCacheVar]; told {
+		t.Errorf("%s is set with no edge, want it unset: nothing in front stores a response", edge.EdgeCacheVar)
 	}
 }
 
@@ -292,7 +292,7 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 	t.Parallel()
 
 	token := naming.NewReleaseToken("b1", "f1")
-	for kind, asks := range map[edge.Kind]bool{cloudfront.Kind: false, cloudflare.Kind: true} {
+	for _, kind := range []edge.Kind{cloudfront.Kind, cloudflare.Kind} {
 		env := releasing(t, routedConfig(t, kind)).appEnv(provider.StackSpec{
 			Kind: provider.StackApp,
 			Ref:  provider.StackRef{Name: naming.AppStack("production", "web", token)},
@@ -302,9 +302,6 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
-		}
-		if _, asked := env[edge.EdgeAsksToCacheVar]; asked != asks {
-			t.Errorf("%s set = %v behind %s, want %v: only an edge that runs code asks for the responses it caches", edge.EdgeAsksToCacheVar, asked, kind, asks)
 		}
 	}
 }

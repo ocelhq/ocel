@@ -8,7 +8,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background, keptUntilSettled } from "@framework/node-runtime/background";
-import { servesOnlyFresh } from "@framework/node-runtime/host";
+import { servesOnlyFresh } from "@platform/edge-contract/edge-cache";
 import type { TagRecord } from "@platform/edge-contract/purge";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";

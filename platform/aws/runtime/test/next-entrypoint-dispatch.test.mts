@@ -156,6 +156,7 @@ beforeAll(async () => {
   process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";
   process.env.OCEL_CACHE_TAG_PURGE = "1";
+  process.env.OCEL_EDGE_CACHE = "all";
   process.env.OCEL_ORIGIN_SECRET = originSecret;
   process.env.OCEL_NEXT_ROUTE_TABLE = manifestPath;
   process.env.OCEL_CONTROL_SOCKET = sockPath;

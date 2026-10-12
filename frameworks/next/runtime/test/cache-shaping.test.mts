@@ -1,8 +1,5 @@
-import {
-  dispatchesAtOrigin,
-  invalidatesByCacheTag,
-  servesOnlyFresh,
-} from "@framework/node-runtime/host";
+import { invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { servesOnlyFresh } from "@platform/edge-contract/edge-cache";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,
@@ -69,33 +66,52 @@ function shaping(
   env: Record<string, string> = {},
   config: Record<string, unknown> = {},
   tagsPerObject?: number,
+  extra: Record<string, string> = {},
 ) {
   return originShaping(
     revalidatingRoutes(manifest(isrRoutes, config)),
     {
-      OCEL_ORIGIN_DISPATCH: "1",
+      OCEL_EDGE_CACHE: "all",
       OCEL_CACHE_TAG_PURGE: "1",
       OCEL_ISR_PREFIX: prefix,
       ...env,
+      ...extra,
     } as NodeJS.ProcessEnv,
     tagsPerObject,
   )!;
 }
 
-test("the gate stays shut when the deploy declared no origin dispatch", () => {
-  expect(dispatchesAtOrigin({} as NodeJS.ProcessEnv)).toBe(false);
-  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "" } as NodeJS.ProcessEnv)).toBe(false);
-  expect(originShaping(revalidatingRoutes(manifest(isrRoutes)), {} as any)).toBeNull();
+test("the gate stays shut when no edge in front caches responses", () => {
+  const routes = revalidatingRoutes(manifest(isrRoutes));
+  expect(originShaping(routes, {} as any)).toBeNull();
+  expect(originShaping(routes, { OCEL_EDGE_CACHE: "" } as any)).toBeNull();
 });
 
-test("the gate opens for a deploy whose front caches and purges by tag but does not dispatch", () => {
+test("shapes nothing on a host that dispatches paths but has no cache in front", () => {
+  const routes = revalidatingRoutes(manifest(isrRoutes));
   expect(
-    originShaping(revalidatingRoutes(manifest(isrRoutes)), { OCEL_CACHE_TAG_PURGE: "1" } as any),
-  ).not.toBeNull();
+    originShaping(routes, { OCEL_ORIGIN_DISPATCH: "1", OCEL_CACHE_TAG_PURGE: "1" } as any),
+  ).toBeNull();
 });
 
-test("behind an edge that does not dispatch, shapes only a request that asked for the edge cache", () => {
-  const edgeShaping = shaping({ OCEL_ORIGIN_DISPATCH: "" });
+test("the gate opens for a function behind a cache that dispatches no path itself", () => {
+  const routes = revalidatingRoutes(manifest(isrRoutes));
+  expect(originShaping(routes, { OCEL_EDGE_CACHE: "all" } as any)).not.toBeNull();
+  expect(originShaping(routes, { OCEL_EDGE_CACHE: "marked" } as any)).not.toBeNull();
+});
+
+test("tags and shapes every response of a non-root function behind a cache that stores them all", () => {
+  const html = { "content-type": "text/html; charset=utf-8" };
+  const nonRoot = shaping({}, {}, undefined, { OCEL_ORIGIN_DISPATCH: "" });
+
+  const headers = serve(nonRoot, "/isr", fakeRes(html), { tags: ["products"] });
+
+  expect(headers["cache-tag"]).toBe("r0a1b2c3d|products");
+  expect(headers["cache-control"]).toBe("s-maxage=60, stale-while-revalidate=600");
+});
+
+test("behind an edge that stores only what it marks, shapes only a request that asked for the edge cache", () => {
+  const edgeShaping = shaping({ OCEL_EDGE_CACHE: "marked" });
   const html = { "content-type": "text/html; charset=utf-8" };
 
   const plain = serve(edgeShaping, "/isr", fakeRes(html), { tags: ["products"] });
@@ -113,7 +129,7 @@ test("behind an edge that does not dispatch, shapes only a request that asked fo
 test("names the tags of a request that asked for the edge cache in x-ocel-cache-tag, since Cloudflare strips cache-tag from what a worker fetches", () => {
   const html = { "content-type": "text/html; charset=utf-8" };
 
-  const asked = serve(shaping({ OCEL_ORIGIN_DISPATCH: "" }), "/isr", fakeRes(html), {
+  const asked = serve(shaping({ OCEL_EDGE_CACHE: "marked" }), "/isr", fakeRes(html), {
     tags: ["products"],
     headers: { "x-ocel-edge-cache": "1" },
   });
@@ -122,23 +138,17 @@ test("names the tags of a request that asked for the edge cache in x-ocel-cache-
   expect(asked["cache-tag"]).toBeUndefined();
 });
 
-test("the gate opens when the deploy declared the origin hosts dispatch", () => {
-  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "1" } as NodeJS.ProcessEnv)).toBe(true);
-  expect(
-    originShaping(revalidatingRoutes(manifest(isrRoutes)), { OCEL_ORIGIN_DISPATCH: "1" } as any),
-  ).not.toBeNull();
-});
-
 test("only a front the deploy declared tag-purging is given cache tags", () => {
   expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "1" } as NodeJS.ProcessEnv)).toBe(true);
   expect(invalidatesByCacheTag({} as NodeJS.ProcessEnv)).toBe(false);
   expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "" } as NodeJS.ProcessEnv)).toBe(false);
 });
 
-test("only an origin the deploy declared fresh-only serves nothing stale", () => {
-  expect(servesOnlyFresh({ OCEL_ORIGIN_FRESH_ONLY: "1" } as NodeJS.ProcessEnv)).toBe(true);
+test("only an origin behind an edge cache serves nothing stale", () => {
+  expect(servesOnlyFresh({ OCEL_EDGE_CACHE: "all" } as NodeJS.ProcessEnv)).toBe(true);
+  expect(servesOnlyFresh({ OCEL_EDGE_CACHE: "marked" } as NodeJS.ProcessEnv)).toBe(true);
   expect(servesOnlyFresh({} as NodeJS.ProcessEnv)).toBe(false);
-  expect(servesOnlyFresh({ OCEL_ORIGIN_FRESH_ONLY: "" } as NodeJS.ProcessEnv)).toBe(false);
+  expect(servesOnlyFresh({ OCEL_EDGE_CACHE: "" } as NodeJS.ProcessEnv)).toBe(false);
 });
 
 test("leaves the tag header off a front that invalidates by nothing", () => {

@@ -10,21 +10,34 @@ func TestAnOriginBehindACachingEdgeIsToldWhatItNeedsToShapeItsResponses(t *testi
 
 	got := NewCachingOriginEnv(Facts{CachesResponses: true, InvalidatesByCacheTag: true}, "r0a1b2c3d")
 	want := map[string]string{
-		CacheTagPurgeVar:   "1",
-		OriginFreshOnlyVar: "1",
-		ReleaseTokenVar:    "r0a1b2c3d",
+		CacheTagPurgeVar: "1",
+		EdgeCacheVar:     string(EdgeCacheAll),
+		ReleaseTokenVar:  "r0a1b2c3d",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("env = %v, want %v", got, want)
 	}
 }
 
-func TestAnOriginBehindAnEdgeThatRunsCodeIsToldTheEdgeAsksForCaching(t *testing.T) {
+func TestAnOriginIsToldWhichResponsesItsEdgeCaches(t *testing.T) {
 	t.Parallel()
 
-	got := NewCachingOriginEnv(Facts{CachesResponses: true, RunsCode: true}, "r0a1b2c3d")
-	if got[EdgeAsksToCacheVar] != "1" {
-		t.Errorf("%s = %q, want 1: only the gateway's own requests are to be shaped for its cache", EdgeAsksToCacheVar, got[EdgeAsksToCacheVar])
+	for name, test := range map[string]struct {
+		facts Facts
+		want  EdgeCacheMode
+	}{
+		"an edge that stores what the response headers allow":     {Facts{CachesResponses: true}, EdgeCacheAll},
+		"an edge that runs code and stores only what it asks for": {Facts{CachesResponses: true, RunsCode: true}, EdgeCacheMarked},
+		"an edge that runs code and stores nothing":               {Facts{RunsCode: true}, EdgeCacheNone},
+		"no edge": {Facts{}, EdgeCacheNone},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := NewEdgeCacheMode(test.facts); got != test.want {
+				t.Errorf("NewEdgeCacheMode(%+v) = %q, want %q", test.facts, got, test.want)
+			}
+		})
 	}
 }
 
