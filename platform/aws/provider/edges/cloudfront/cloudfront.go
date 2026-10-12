@@ -119,7 +119,7 @@ func (p *cloudFront) Kind() edge.Kind { return Kind }
 
 func (p *cloudFront) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
+		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
 		GatesPreviews:         true,

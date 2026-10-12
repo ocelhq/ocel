@@ -119,7 +119,7 @@ func TestRemovingAProjectForgetsItsInvalidationTarget(t *testing.T) {
 
 func TestAnISRAppIsToldWhereItsEdgePurges(t *testing.T) {
 	builtProject(t)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", ISR: true}, []byte(`{"routes":[{"id":"index"}]}`))
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, []byte(`{"routes":[{"id":"index"}]}`))
 	client, vendor := deployServed(t)
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).PurgesAt("https://shop.acct.workers.dev/purge")
 

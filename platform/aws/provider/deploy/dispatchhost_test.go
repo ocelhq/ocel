@@ -288,28 +288,56 @@ func TestAnOriginBehindACachingEdgeIsToldToServeOnlyFreshPages(t *testing.T) {
 	}
 }
 
-func TestAnOriginBehindACachingEdgeIsToldItsReleaseAndItsCacheRules(t *testing.T) {
+func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 	t.Parallel()
 
-	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
 	token := naming.NewReleaseToken("b1", "f1")
 	for kind, asks := range map[edge.Kind]bool{cloudfront.Kind: false, cloudflare.Kind: true} {
 		env := releasing(t, routedConfig(t, kind)).appEnv(provider.StackSpec{
 			Kind: provider.StackApp,
 			Ref:  provider.StackRef{Name: naming.AppStack("production", "web", token)},
 			Edge: fakeEdgeOf(kind),
-			App:  &provider.AppSpec{App: "web", Cache: rules},
+			App:  &provider.AppSpec{App: "web"},
 		}, appBundle{}, sessionScope{})
 
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
 		}
-		if want := edge.EncodeCacheRules(rules); env[edge.CacheRulesVar] != want {
-			t.Errorf("%s = %q behind %s, want %q", edge.CacheRulesVar, env[edge.CacheRulesVar], kind, want)
-		}
 		if _, asked := env[edge.EdgeAsksToCacheVar]; asked != asks {
 			t.Errorf("%s set = %v behind %s, want %v: only an edge that runs code asks for the responses it caches", edge.EdgeAsksToCacheVar, asked, kind, asks)
 		}
+	}
+}
+
+func TestAnAppWithAnOcelRouteTableIsToldWhereItsFunctionsFindIt(t *testing.T) {
+	t.Parallel()
+
+	release := releasing(t, routedConfig(t, cloudfront.Kind))
+	env := release.appEnv(provider.StackSpec{
+		Kind: provider.StackApp,
+		Edge: fakeEdgeOf(cloudfront.Kind),
+		App:  &provider.AppSpec{App: "web", OcelRoutes: &provider.RoutingSpec{RootFunction: "index"}},
+	}, appBundle{}, sessionScope{})
+
+	if want := "/var/task/" + edge.OcelRoutesFile; env[edge.RoutesVar] != want {
+		t.Errorf("%s = %q, want %q: the route table is bundled at the root of each function", edge.RoutesVar, env[edge.RoutesVar], want)
+	}
+	plain := release.appEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, appBundle{}, sessionScope{})
+	if _, told := plain[edge.RoutesVar]; told {
+		t.Errorf("%s is set for an app with no route table", edge.RoutesVar)
+	}
+}
+
+func TestADispatchHostIsMadeOfANextRouteTableAlone(t *testing.T) {
+	t.Parallel()
+
+	spec := provider.StackSpec{
+		Kind: provider.StackApp,
+		App:  &provider.AppSpec{App: "web", OcelRoutes: &provider.RoutingSpec{RootFunction: "index"}},
+	}
+	host, err := releasing(t, routedConfig(t, cloudfront.Kind)).newDispatchHost(spec)
+	if err != nil || host != nil {
+		t.Errorf("newDispatchHost = %+v, %v, want none: an ocel route table dispatches between no functions", host, err)
 	}
 }
 

@@ -1,7 +1,6 @@
 package buildoutput_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -47,28 +46,5 @@ func TestUsesHasAnyOfAnotherOnlyWhenTheyShareOne(t *testing.T) {
 		if got := tc.uses.HasAnyOf(tc.other); got != tc.want {
 			t.Errorf("%+v.HasAnyOf(%+v) = %v, want %v", tc.uses, tc.other, got, tc.want)
 		}
-	}
-}
-
-func TestHostingDeclaresISROnlyForABuildThatUsesIt(t *testing.T) {
-	t.Parallel()
-
-	var declared buildoutput.Hosting
-	if err := json.Unmarshal([]byte(`{"version":1,"framework":"sveltekit","isr":true,"needs":{}}`), &declared); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !declared.ISR {
-		t.Errorf("hosting = %+v, want the ISR it declares", declared)
-	}
-	encoded, err := json.Marshal(buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: "node"})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var keys map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &keys); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if _, ok := keys["isr"]; ok {
-		t.Errorf("hosting.json = %s, want no isr key for a build that does not use it", encoded)
 	}
 }

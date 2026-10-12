@@ -224,7 +224,7 @@ func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
 }
 
 func TestAVariableTheEdgeSetsOverAValueAlreadySetIsRefusedNamingTheEdge(t *testing.T) {
-	_, err := mergeValues("fn", cachingEdgeValues, map[string]string{"OCEL_CACHE_RULES": "[]"}, map[string]string{"OCEL_CACHE_RULES": "[]"})
+	_, err := mergeValues("fn", cachingEdgeValues, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"}, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"})
 	if err == nil {
 		t.Fatal("mergeValues() let the edge's value take the place of one already set")
 	}

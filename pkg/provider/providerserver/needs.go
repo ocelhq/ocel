@@ -19,6 +19,7 @@ var degradeOf = map[edge.Need]string{
 	edge.NeedEdgeRuntime:    "routes declaring the edge runtime run in the origin's Node server the way `next start` runs them, so they answer from one region instead of near the reader",
 	edge.NeedPPRResume:      "the prerendered shell and the resumed stream both come from the origin the way `next start` serves them, so the shell no longer arrives before the origin is reached",
 	edge.NeedEdgeCache:      "responses are cached at the origin only the way `next start` caches them, so every hit crosses the network to the origin",
+	edge.NeedRevalidation:   "a revalidation clears what the origin kept and reaches no cache in front of it, so what it names lapses with its cache lifetime",
 	edge.NeedStreaming:      "responses are buffered before they leave the origin the way `next start` answers without an edge in front, so the first byte waits on the last",
 }
 

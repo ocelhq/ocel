@@ -9,6 +9,7 @@ export interface OcelConfig {
     | "ppr-resume"
     | "edge-cache"
     | "streaming"
+    | "revalidation"
   )[];
   /** The apps this project deploys. Left off, ocel detects one at the project root. */
   apps?: AppConfig[];

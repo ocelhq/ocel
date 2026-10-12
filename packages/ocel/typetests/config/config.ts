@@ -11,9 +11,9 @@ import vpsProvider from "ocel/providers/vps";
 
 type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
-export const needsAreTheFive: Exactly<
+export const needsAreTheSix: Exactly<
   Need,
-  "edge-middleware" | "edge-runtime" | "ppr-resume" | "edge-cache" | "streaming"
+  "edge-middleware" | "edge-runtime" | "ppr-resume" | "edge-cache" | "streaming" | "revalidation"
 > = true;
 
 export const cloudflareEdge = defineConfig({
@@ -118,7 +118,14 @@ export const zoneAsDns = awsProvider({
 
 export const everyNeed = defineConfig({
   slug: "test-app",
-  allowDegraded: ["edge-middleware", "edge-runtime", "ppr-resume", "edge-cache", "streaming"],
+  allowDegraded: [
+    "edge-middleware",
+    "edge-runtime",
+    "ppr-resume",
+    "edge-cache",
+    "streaming",
+    "revalidation",
+  ],
 });
 
 export const unknownNeed = defineConfig({

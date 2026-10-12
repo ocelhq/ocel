@@ -14,7 +14,7 @@ func (x *Proxy) Kind() edge.Kind { return Kind }
 
 func (x *Proxy) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:          []edge.Need{edge.NeedStreaming},
+		Supported:          []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
 		ProxiesRecords:     true,
 		ProxiedRecordNote:  "Turn the Cloudflare proxy (orange cloud) on for these records: Cloudflare forwards each hostname to the value it points at.",
 		ShieldsOrigin:      true,

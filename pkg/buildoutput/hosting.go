@@ -28,8 +28,6 @@ type Hosting struct {
 	RootFunction     string                   `json:"rootFunction"`
 	RouteTable       edge.RouteTableFormat    `json:"routeTable,omitempty"`
 	Static           *edge.Static             `json:"static,omitempty"`
-	ISR              bool                     `json:"isr,omitempty"`
-	Cache            []edge.CacheRule         `json:"cache,omitempty"`
 	Needs            map[edge.Need]NeedDetail `json:"needs"`
 }
 
@@ -47,9 +45,6 @@ func ReadHosting(root, app string) (Hosting, bool, error) {
 	}
 	if hosting.Version != HostingVersion {
 		return Hosting{}, false, fmt.Errorf("the hosting.json of %s is version %d, and this CLI reads version %d; build the app with an adapter and CLI of the same release", app, hosting.Version, HostingVersion)
-	}
-	if err := edge.RefuseCacheRules(hosting.Cache); err != nil {
-		return Hosting{}, false, fmt.Errorf("the hosting.json of %s states a cache rule no edge can read: %w", app, err)
 	}
 	return hosting, true, nil
 }

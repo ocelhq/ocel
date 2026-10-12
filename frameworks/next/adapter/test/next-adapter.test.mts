@@ -1892,9 +1892,9 @@ test("states the runtime and next's own build id in hosting.json", async () => {
     rootFunction: manifest.rootFunction,
     routeTable: "next",
     static: expect.objectContaining({ immutablePrefixes: expect.any(Array) }),
-    isr: true,
-    needs: {},
+    needs: { revalidation: { count: 0 } },
   });
+  expect(hosting).not.toHaveProperty("isr");
   expect(hosting.frameworkBuildId).toBe(manifest.buildId);
 });
 
@@ -2009,6 +2009,7 @@ test("declares the edge-middleware need with the matchers behind it", async () =
       count: 1,
       matchers: ["^/dashboard(?:/(.*))?$"],
     },
+    revalidation: { count: 0 },
   });
 });
 
@@ -2019,7 +2020,7 @@ test("a nodejs middleware declares no edge-middleware need", async () => {
 
   await adapter.onBuildComplete(args as never);
 
-  expect(await readServeNeeds(projectDir)).toEqual({});
+  expect(await readServeNeeds(projectDir)).toEqual({ revalidation: { count: 0 } });
 });
 
 test("declares the edge-runtime need with the routes that render at the edge", async () => {
@@ -2055,11 +2056,12 @@ test("declares the edge-runtime need with the routes that render at the edge", a
 
   expect(await readServeNeeds(projectDir)).toEqual({
     "edge-runtime": { count: 1, routes: ["/edgy"] },
+    revalidation: { count: 0 },
     streaming: { count: 1 },
   });
 });
 
-test("declares ppr-resume, edge-cache and streaming from an app router's prerenders", async () => {
+test("declares ppr-resume, edge-cache, revalidation and streaming from an app router's prerenders", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   for (const prerender of args.outputs.prerenders) {
     (prerender as Record<string, unknown>).pprChain = {
@@ -2075,6 +2077,7 @@ test("declares ppr-resume, edge-cache and streaming from an app router's prerend
   expect(await readServeNeeds(projectDir)).toEqual({
     "ppr-resume": { count: 1, routes: ["/"] },
     "edge-cache": { count: 1 },
+    revalidation: { count: 1 },
     streaming: { count: 1 },
   });
 });

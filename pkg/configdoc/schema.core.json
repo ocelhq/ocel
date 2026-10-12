@@ -14,7 +14,8 @@
           "edge-runtime",
           "ppr-resume",
           "edge-cache",
-          "streaming"
+          "streaming",
+          "revalidation"
         ],
         "type": "string"
       },

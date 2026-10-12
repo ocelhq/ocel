@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
+
+var revalidating = map[edge.Need]buildoutput.NeedDetail{edge.NeedRevalidation: {Count: 1}}
 
 func servingRoot(t *testing.T, app string, hosting buildoutput.Hosting, manifest []byte) string {
 	t.Helper()
@@ -78,10 +79,11 @@ func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T)
 	t.Parallel()
 
 	needs := map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Count: 1}}
+	revalidatingNeeds := map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Count: 1}, edge.NeedRevalidation: {Count: 1}}
 
-	t.Run("a build that declares ISR, whose only cached route is dynamic, with no page prerendered at build time", func(t *testing.T) {
+	t.Run("a build that declares revalidation, whose only cached route is dynamic, with no page prerendered at build time", func(t *testing.T) {
 		t.Parallel()
-		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{ISR: true, Needs: needs}, nil), "web", buildoutput.FrameworkNext))
+		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{Needs: revalidatingNeeds}, nil), "web", buildoutput.FrameworkNext))
 		if err != nil {
 			t.Fatalf("AppServingFor() = %v", err)
 		}
@@ -90,9 +92,9 @@ func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T)
 		}
 	})
 
-	t.Run("a build that declares ISR and caches no route", func(t *testing.T) {
+	t.Run("a build that declares revalidation and caches no route", func(t *testing.T) {
 		t.Parallel()
-		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{ISR: true}, nil), "web", buildoutput.FrameworkNext))
+		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{Needs: revalidating}, nil), "web", buildoutput.FrameworkNext))
 		if err != nil {
 			t.Fatalf("AppServingFor() = %v", err)
 		}
@@ -101,7 +103,7 @@ func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T)
 		}
 	})
 
-	t.Run("a build that caches routes but declares no ISR", func(t *testing.T) {
+	t.Run("a build that caches routes but declares no revalidation", func(t *testing.T) {
 		t.Parallel()
 		facts, err := providerserver.AppServingFor(servingQuery(servingRoot(t, "web", buildoutput.Hosting{Needs: needs}, nil), "web", buildoutput.FrameworkNext))
 		if err != nil {
@@ -113,22 +115,8 @@ func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T)
 	})
 }
 
-func TestAnAppServesTheCacheRulesItsBuildStates(t *testing.T) {
-	t.Parallel()
-
-	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
-	root := servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkSvelteKit, Cache: rules}, nil)
-	facts, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkSvelteKit))
-	if err != nil {
-		t.Fatalf("AppServingFor() = %v", err)
-	}
-	if !reflect.DeepEqual(facts.Cache, rules) {
-		t.Errorf("Cache = %+v, want %+v", facts.Cache, rules)
-	}
-}
-
-func TestABuildThatDeclaresISRAsksForAnISRLedgerWhateverItsFramework(t *testing.T) {
-	root := servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkSvelteKit, ISR: true}, nil)
+func TestABuildThatDeclaresRevalidationAsksForAnISRLedgerWhateverItsFramework(t *testing.T) {
+	root := servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkSvelteKit, Needs: revalidating}, nil)
 	declared, err := providerserver.AppServingFor(servingQuery(root, "web", buildoutput.FrameworkSvelteKit))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
@@ -287,8 +275,12 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 	if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	file := edge.NextRouteTableFile
+	if hosting.RouteTable == edge.RouteTableOcel {
+		file = edge.OcelRoutesFile
+	}
 	if manifest != nil {
-		if err := os.WriteFile(filepath.Join(dir, edge.NextRouteTableFile), manifest, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, file), manifest, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -297,7 +289,7 @@ func builtRoutingApp(t *testing.T, app string, hosting buildoutput.Hosting, mani
 func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", ISR: true}, routing)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, routing)
 
 	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)

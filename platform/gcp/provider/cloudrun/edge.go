@@ -23,7 +23,7 @@ func (e *Edge) Kind() edge.Kind { return edge.None }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		Supported: []edge.Need{edge.NeedStreaming},
+		Supported: []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
 	}
 }
 

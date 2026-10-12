@@ -330,6 +330,38 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	}
 }
 
+func TestDeployPacksTheOcelRouteTableIntoEveryFunctionOfTheApp(t *testing.T) {
+	builtProject(t)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableOcel, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, []byte(cachedRoutes))
+
+	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
+	bootstrappedOverRPC(t, client)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	web := webFunctions(req)
+	web.Functions[0].RouteId = "index"
+	web.Functions = append(web.Functions, &contractv1.ManifestFunction{
+		LogicalName:  "feed",
+		RouteId:      "feed",
+		Framework:    &contractv1.Framework{Name: "next"},
+		EntryFile:    "index.handler",
+		ArtifactPath: adminArtifactPath,
+	})
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	spec := vendor.FakeStacks().Provisioned()[1]
+	for _, fn := range spec.App.Functions {
+		if got := packagedFiles(t, vendor, fn.Artifact)[edge.OcelRoutesFile]; got != cachedRoutes {
+			t.Errorf("%s's package contains %s = %q, want the table every function of the app reads", fn.Name, edge.OcelRoutesFile, got)
+		}
+	}
+}
+
 func previewRequest() *contractv1.DeployRequest {
 	req := deployRequest()
 	req.Manifest.Domains = []*contractv1.TierDomains{{

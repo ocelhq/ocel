@@ -6,5 +6,5 @@ import (
 )
 
 func newCachingEdgeEnv(spec provider.StackSpec) map[string]string {
-	return edge.NewCachingOriginEnv(factsOf(spec.Edge), spec.Ref.Name.Release.String(), spec.App.Cache)
+	return edge.NewCachingOriginEnv(factsOf(spec.Edge), spec.Ref.Name.Release.String())
 }

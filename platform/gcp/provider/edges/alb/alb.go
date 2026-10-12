@@ -55,7 +55,7 @@ func (e *Edge) Kind() edge.Kind { return Kind }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
+		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
 		GatesPreviews:         true,

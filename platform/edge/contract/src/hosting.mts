@@ -1,4 +1,10 @@
-export type Need = "edge-middleware" | "edge-runtime" | "ppr-resume" | "edge-cache" | "streaming";
+export type Need =
+  | "edge-middleware"
+  | "edge-runtime"
+  | "ppr-resume"
+  | "edge-cache"
+  | "streaming"
+  | "revalidation";
 
 export type NeedDetail = {
   count: number;
@@ -6,7 +12,7 @@ export type NeedDetail = {
   matchers?: string[];
 };
 
-export type RouteTableFormat = "next";
+export type RouteTableFormat = "next" | "ocel";
 
 export type Static = {
   immutablePrefixes: string[];
@@ -26,7 +32,5 @@ export type Hosting = {
   rootFunction: string;
   routeTable?: RouteTableFormat;
   static?: Static;
-  isr?: boolean;
-  cache?: CacheRule[];
   needs: Partial<Record<Need, NeedDetail>>;
 };

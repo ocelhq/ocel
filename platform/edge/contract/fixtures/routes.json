@@ -1,0 +1,1162 @@
+{
+  "table": {
+    "version": 1,
+    "basePath": "/docs",
+    "trailingSlash": "never",
+    "headers": [
+      {
+        "src": "/(.*)",
+        "headers": {
+          "x-frame-options": "DENY"
+        }
+      },
+      {
+        "src": "/blog/(.*)",
+        "headers": {
+          "x-section": "blog"
+        }
+      }
+    ],
+    "redirects": [
+      {
+        "src": "/old/(.*)",
+        "location": "/docs/new/$1",
+        "status": 308
+      },
+      {
+        "src": "/gone",
+        "location": "/",
+        "status": 301
+      }
+    ],
+    "staticFirst": [
+      "/blog/([^/]+)"
+    ],
+    "routes": [
+      {
+        "src": "/",
+        "function": "index",
+        "cache": {
+          "revalidate": 30,
+          "bypassToken": "0123456789abcdef0123456789abcdef"
+        }
+      },
+      {
+        "src": "/blog/([^/]+)",
+        "function": "index",
+        "cache": {
+          "revalidate": 60,
+          "expire": 600,
+          "allowQuery": [
+            "page"
+          ],
+          "tags": [
+            "posts"
+          ],
+          "bypassToken": "0123456789abcdef0123456789abcdef"
+        }
+      },
+      {
+        "src": "/account(?:/.*)?",
+        "function": "index"
+      },
+      {
+        "src": "/api/.*",
+        "function": "index"
+      }
+    ],
+    "fallback": {
+      "function": "index"
+    }
+  },
+  "routes": [
+    {
+      "path": "/docs",
+      "route": 0,
+      "cacheControl": "s-maxage=30"
+    },
+    {
+      "path": "/docs/blog/hello",
+      "route": 1,
+      "groups": [
+        "hello"
+      ],
+      "cacheControl": "s-maxage=60, stale-while-revalidate=540"
+    },
+    {
+      "path": "/docs/blog/a/b",
+      "route": null
+    },
+    {
+      "path": "/docs/account",
+      "route": 2
+    },
+    {
+      "path": "/docs/account/settings",
+      "route": 2
+    },
+    {
+      "path": "/docs/accounts",
+      "route": null
+    },
+    {
+      "path": "/docs/api/users",
+      "route": 3
+    },
+    {
+      "path": "/blog/hello",
+      "route": null
+    },
+    {
+      "path": "/documents",
+      "route": null
+    }
+  ],
+  "redirects": [
+    {
+      "path": "/docs/old/a/b",
+      "status": 308,
+      "location": "/docs/new/a/b"
+    },
+    {
+      "path": "/docs/gone",
+      "status": 301,
+      "location": "/"
+    },
+    {
+      "path": "/docs/old",
+      "location": null
+    },
+    {
+      "path": "/old/a",
+      "location": null
+    }
+  ],
+  "headers": [
+    {
+      "path": "/docs/blog/hello",
+      "headers": {
+        "x-frame-options": "DENY",
+        "x-section": "blog"
+      }
+    },
+    {
+      "path": "/docs",
+      "headers": {
+        "x-frame-options": "DENY"
+      }
+    },
+    {
+      "path": "/blog/hello",
+      "headers": {}
+    }
+  ],
+  "staticFirst": [
+    {
+      "path": "/docs/blog/hello",
+      "matches": true
+    },
+    {
+      "path": "/docs/blog/a/b",
+      "matches": false
+    },
+    {
+      "path": "/docs/account",
+      "matches": false
+    }
+  ],
+  "trailingSlash": [
+    {
+      "mode": "never",
+      "basePath": "",
+      "path": "/a/",
+      "redirectTo": "/a"
+    },
+    {
+      "mode": "never",
+      "basePath": "",
+      "path": "/",
+      "redirectTo": null
+    },
+    {
+      "mode": "never",
+      "basePath": "",
+      "path": "/a",
+      "redirectTo": null
+    },
+    {
+      "mode": "never",
+      "basePath": "/docs",
+      "path": "/docs/",
+      "redirectTo": "/docs"
+    },
+    {
+      "mode": "never",
+      "basePath": "/docs",
+      "path": "/docs/blog/",
+      "redirectTo": "/docs/blog"
+    },
+    {
+      "mode": "never",
+      "basePath": "/docs",
+      "path": "/other/",
+      "redirectTo": null
+    },
+    {
+      "mode": "always",
+      "basePath": "",
+      "path": "/a",
+      "redirectTo": "/a/"
+    },
+    {
+      "mode": "always",
+      "basePath": "",
+      "path": "/a/",
+      "redirectTo": null
+    },
+    {
+      "mode": "always",
+      "basePath": "",
+      "path": "/",
+      "redirectTo": null
+    },
+    {
+      "mode": "always",
+      "basePath": "",
+      "path": "/logo.svg",
+      "redirectTo": null
+    },
+    {
+      "mode": "always",
+      "basePath": "/docs",
+      "path": "/docs",
+      "redirectTo": "/docs/"
+    },
+    {
+      "mode": "ignore",
+      "basePath": "",
+      "path": "/a/",
+      "redirectTo": null
+    },
+    {
+      "mode": "ignore",
+      "basePath": "",
+      "path": "/a",
+      "redirectTo": null
+    }
+  ],
+  "patterns": [
+    {
+      "src": "/blog/([^/]+)",
+      "path": "/blog/hello",
+      "groups": [
+        "hello"
+      ]
+    },
+    {
+      "src": "/blog/([^/]+)",
+      "path": "/blog/a/b",
+      "groups": null
+    },
+    {
+      "src": "/blog/([^/]+)",
+      "path": "/Blog/hello",
+      "groups": null
+    },
+    {
+      "src": "/(.*)",
+      "path": "/",
+      "groups": [
+        ""
+      ]
+    },
+    {
+      "src": "/a|/b",
+      "path": "/b",
+      "groups": []
+    },
+    {
+      "src": "/a|/b",
+      "path": "/ab",
+      "groups": null
+    },
+    {
+      "src": "/files/(\\d+)\\.json",
+      "path": "/files/12.json",
+      "groups": [
+        "12"
+      ]
+    },
+    {
+      "src": "/files/(\\d+)\\.json",
+      "path": "/files/12xjson",
+      "groups": null
+    },
+    {
+      "src": "/(a)?b",
+      "path": "/b",
+      "groups": [
+        ""
+      ]
+    },
+    {
+      "src": "/caf%C3%A9/(.*)",
+      "path": "/caf%C3%A9/menu",
+      "groups": [
+        "menu"
+      ]
+    },
+    {
+      "src": "/(?:a|b)/(c+?)",
+      "path": "/b/ccc",
+      "groups": [
+        "ccc"
+      ]
+    },
+    {
+      "src": "/x{2,3}",
+      "path": "/xxx",
+      "groups": []
+    },
+    {
+      "src": "/x{2,3}",
+      "path": "/xxxx",
+      "groups": null
+    },
+    {
+      "src": "/[a-c]+/(\\w+)",
+      "path": "/abc/d_1",
+      "groups": [
+        "d_1"
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "reason": "a version no reader knows",
+      "table": {
+        "version": 2,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a base path without a leading slash",
+      "table": {
+        "version": 1,
+        "basePath": "docs",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a base path with a trailing slash",
+      "table": {
+        "version": 1,
+        "basePath": "/docs/",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a base path naming a query",
+      "table": {
+        "version": 1,
+        "basePath": "/docs?x=1",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a trailing slash mode no reader knows",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "maybe",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a lookahead",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(?=a)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a backreference",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(a)\\1",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern that does not compile",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a Go-only named group",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(?P<x>a)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a JS-only named group",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(?<x>a)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a flag group",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(?i)a",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a whitespace class",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a\\sb",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a Go-only start anchor",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "\\A/a",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a Unicode class",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/\\pL",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a POSIX class",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/[[:alpha:]]",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a repeat past 1000",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a{1,1001}",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern that is empty",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern that ends in a backslash",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a\\",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect status no edge sends",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "/b",
+            "status": 200
+          }
+        ],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect without a location",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a",
+            "location": "",
+            "status": 301
+          }
+        ],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a redirect location reading a group the pattern lacks",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [
+          {
+            "src": "/a/(.*)",
+            "location": "/b/$2",
+            "status": 301
+          }
+        ],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header named with a space",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/a",
+            "headers": {
+              "bad name": "x"
+            }
+          }
+        ],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header value with a line break",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/a",
+            "headers": {
+              "x-a": "b\r\nx-c: d"
+            }
+          }
+        ],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header rule with no header",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/a",
+            "headers": {}
+          }
+        ],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a static-first pattern that does not compile",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [
+          "/("
+        ],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a route naming no function",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": ""
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a fallback naming no function",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": ""
+        }
+      }
+    },
+    {
+      "reason": "a field no reader knows",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        },
+        "cache": []
+      }
+    },
+    {
+      "reason": "a cache revalidate that is not positive",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 0
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache revalidate that is not a whole number",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 1.5
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache expire that does not outlast revalidate",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "expire": 10
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache expire that is not a whole number",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "expire": 20.5
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache allow-list naming an empty parameter",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "allowQuery": [
+                ""
+              ]
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache tag that is empty",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "tags": [
+                ""
+              ]
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a bypass token that is short enough to guess",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "bypassToken": "short"
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a bypass token with characters a cookie cannot carry",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "bypassToken": "0123456789abcdef;0123456789abcdef"
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "two different bypass tokens in one table",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "staticFirst": [],
+        "routes": [
+          {
+            "src": "/a",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "bypassToken": "0123456789abcdef0123456789abcdef"
+            }
+          },
+          {
+            "src": "/b",
+            "function": "index",
+            "cache": {
+              "revalidate": 10,
+              "bypassToken": "1123456789abcdef0123456789abcdef"
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    }
+  ]
+}

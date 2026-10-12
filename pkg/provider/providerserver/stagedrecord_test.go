@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -370,29 +369,32 @@ func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordCarriesTheCacheRulesTheBuildStates(t *testing.T) {
+func TestTheStagedRecordLocatesTheOcelRouteTableAnEdgeThatRunsCodeReads(t *testing.T) {
 	builtProject(t)
-	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
-	declaresHosting(t, "web", buildoutput.Hosting{Cache: rules})
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableOcel, RootFunction: "index", Needs: revalidating}, []byte(cachedRoutes))
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	webFunctions(req).Functions[0].RouteId = "index"
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
+
 	staged := stager.records()
-	if len(staged) != 1 || !reflect.DeepEqual(staged[0].Cache, rules) {
-		t.Errorf("records %+v, want one carrying the cache rules the gateway reads to decide which paths to cache", staged)
+	if len(staged) != 1 || staged[0].RouteTable == nil || staged[0].RouteTable.Format != edge.RouteTableOcel || staged[0].RouteTable.Key == "" {
+		t.Errorf("records %+v, want one locating the ocel route table the gateway reads to decide which paths to cache", staged)
 	}
 }
 
 func declaresPrerenders(t *testing.T, app string) {
 	t.Helper()
 	declaresHosting(t, app, buildoutput.Hosting{
-		ISR:   true,
-		Needs: map[edge.Need]buildoutput.NeedDetail{edge.NeedEdgeCache: {Routes: []string{"/feed"}}},
+		Needs: map[edge.Need]buildoutput.NeedDetail{
+			edge.NeedEdgeCache:    {Routes: []string{"/feed"}},
+			edge.NeedRevalidation: {Count: 1},
+		},
 	})
 }
 

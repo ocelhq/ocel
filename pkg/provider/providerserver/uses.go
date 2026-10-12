@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -47,5 +48,6 @@ func buildUses(root, app, framework string, hosting buildoutput.Hosting, present
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app, err)
 	}
-	return buildoutput.Uses{ISR: hosting.ISR, ImageOptimization: err == nil}, nil
+	_, revalidates := hosting.Needs[edge.NeedRevalidation]
+	return buildoutput.Uses{ISR: revalidates, ImageOptimization: err == nil}, nil
 }

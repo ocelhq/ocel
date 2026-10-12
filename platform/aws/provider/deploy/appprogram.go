@@ -361,7 +361,10 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
-		maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String(), app.Cache))
+		maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
+	}
+	if app.OcelRoutes != nil {
+		env[edge.RoutesVar] = ocelRoutesInTask
 	}
 	if app.Proxied {
 		env[envStateTable] = r.cfg.StateTable

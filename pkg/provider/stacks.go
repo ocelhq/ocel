@@ -90,6 +90,7 @@ type AppSpec struct {
 	Grants []Binding
 
 	Routing        *RoutingSpec
+	OcelRoutes     *RoutingSpec
 	EdgeRouteTable *EdgeRouteTable
 	Guard          *OriginGuard
 	ISR            *ISRSpec
@@ -98,7 +99,6 @@ type AppSpec struct {
 
 	AssetPrefix string
 	Static      *edge.Static
-	Cache       []edge.CacheRule
 
 	VendorState any
 

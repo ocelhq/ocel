@@ -21,6 +21,7 @@ const (
 	appNameEnv       = "OCEL_APP"
 	buildIDEnv       = "OCEL_BUILD_ID"
 	routeTableInTask = "/var/task/" + edge.NextRouteTableFile
+	ocelRoutesInTask = "/var/task/" + edge.OcelRoutesFile
 
 	functionURLBudgetBytes = 80
 )
