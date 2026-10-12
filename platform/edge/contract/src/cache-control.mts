@@ -1,5 +1,9 @@
 export type CacheDirectives = ReadonlyMap<string, string | true>;
 
+export interface HeaderLookup {
+  get(name: string): string | null;
+}
+
 export const sharedPolicyHeaders = [
   "cloudflare-cdn-cache-control",
   "cdn-cache-control",
@@ -36,9 +40,45 @@ export function isStoredLifetime(lifetime: number | undefined, staleSeconds?: nu
   return lifetime !== undefined && (lifetime > 0 || (staleSeconds ?? 0) > 0);
 }
 
-export function isStoredBySomeEdge(directives: CacheDirectives): boolean {
+const httpDatePattern =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+function readHttpDate(value: string | null): number | undefined {
+  return value !== null && httpDatePattern.test(value.trim()) ? Date.parse(value) : undefined;
+}
+
+export function readExpiresSeconds(headers: HeaderLookup, now: number): number | undefined {
+  const expires = readHttpDate(headers.get("expires"));
+  if (expires === undefined) return undefined;
+  const seconds = Math.floor((expires - (readHttpDate(headers.get("date")) ?? now)) / 1000);
+  return seconds > 0 ? seconds : undefined;
+}
+
+export function readSharedLifetime(
+  directives: CacheDirectives,
+  expiresSeconds?: number,
+): number | undefined {
+  return (
+    readDirectiveSeconds(directives, "s-maxage") ??
+    readDirectiveSeconds(directives, "max-age") ??
+    expiresSeconds
+  );
+}
+
+function isStoredUnder(directives: CacheDirectives, expiresSeconds?: number): boolean {
   if (refusesSharedStore(directives)) return false;
-  const lifetime =
-    readDirectiveSeconds(directives, "s-maxage") ?? readDirectiveSeconds(directives, "max-age");
-  return isStoredLifetime(lifetime, readDirectiveSeconds(directives, "stale-while-revalidate"));
+  return isStoredLifetime(
+    readSharedLifetime(directives, expiresSeconds),
+    readDirectiveSeconds(directives, "stale-while-revalidate"),
+  );
+}
+
+export function isStoredBySomeEdge(headers: HeaderLookup, now: number): boolean {
+  return sharedPolicyHeaders.some((name) => {
+    const header = headers.get(name);
+    if (name === "cache-control") {
+      return isStoredUnder(readCacheDirectives(header), readExpiresSeconds(headers, now));
+    }
+    return header !== null && isStoredUnder(readCacheDirectives(header));
+  });
 }

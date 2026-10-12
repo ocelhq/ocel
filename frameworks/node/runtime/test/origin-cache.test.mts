@@ -676,6 +676,34 @@ describe("a response of a route that caches nothing, which names a lifetime the 
   });
 
   test.each([
+    ["no Cache-Control", {}],
+    ["a Cache-Control that names no lifetime", { "cache-control": "public" }],
+  ])(
+    "is tagged for a future Expires under %s, which CloudFront and Cloud CDN take as a lifetime",
+    async (_name, headers) => {
+      const get = await serve(behindCloudFront, (_req, res) => {
+        res.writeHead(200, { ...headers, expires: new Date(Date.now() + 60_000).toUTCString() });
+        res.end("page");
+      });
+
+      const res = await get("/account");
+
+      expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
+    },
+  );
+
+  test("is not tagged for an Expires in the past", async () => {
+    const get = await serve(behindCloudFront, (_req, res) => {
+      res.writeHead(200, { expires: new Date(Date.now() - 60_000).toUTCString() });
+      res.end("page");
+    });
+
+    const res = await get("/account");
+
+    expect(res.headers.has("cache-tag")).toBe(false);
+  });
+
+  test.each([
     ["a max-age of zero", "public, max-age=0"],
     ["an s-maxage of zero, which wins over a max-age", "s-maxage=0, max-age=60"],
     ["a response that is private", "private, max-age=60"],

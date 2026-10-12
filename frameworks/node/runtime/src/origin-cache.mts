@@ -4,7 +4,6 @@ import {
   isStoredBySomeEdge,
   readCacheDirectives,
   refusesSharedStore,
-  sharedPolicyHeaders,
 } from "@platform/edge-contract/cache-control";
 import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
@@ -238,10 +237,13 @@ function shape(
 const sharedDirectiveNames = ["s-maxage", "stale-while-revalidate"];
 
 function isStoredBySomeEdgeOf(res: http.ServerResponse): boolean {
-  return sharedPolicyHeaders.some((name) => {
-    const header = res.getHeader(name);
-    return header !== undefined && isStoredBySomeEdge(readCacheDirectives(String(header)));
-  });
+  const headers = {
+    get(name: string): string | null {
+      const value = res.getHeader(name);
+      return value === undefined ? null : String(value);
+    },
+  };
+  return isStoredBySomeEdge(headers, Date.now());
 }
 
 function listBrowserDirectives(declared: string): string[] {
