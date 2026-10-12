@@ -98,7 +98,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		}
 		args[spec.Name] = declared
 		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name) || declared.Network != nil
-		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route})
+		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route, HasWorkerEntry: spec.HasWorkerEntry})
 		artifact, err := r.artifactAt(spec.Artifact)
 		if err != nil {
 			return nil, fmt.Errorf("place %s's code: %w", spec.Name, err)

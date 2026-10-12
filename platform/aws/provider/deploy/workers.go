@@ -69,10 +69,11 @@ func workersAt(ref provider.StackRef) keyvalue.Key {
 func (r *release) workersWork(spec provider.StackSpec, work *appWork) (*workersWork, error) {
 	app := spec.App
 	project := naming.Sanitize(spec.Ref.Project)
-	if len(work.functions.Functions) == 0 {
-		return nil, fmt.Errorf("app %s hosts workers %v and ships no function to run them from", app.App, workerNames(app.Workers))
+	at := slices.IndexFunc(work.functions.Functions, func(fn appFunction) bool { return fn.HasWorkerEntry })
+	if at < 0 {
+		return nil, fmt.Errorf("app %s hosts workers %v and ships no function carrying a worker entry to start them from", app.App, workerNames(app.Workers))
 	}
-	entry := work.functions.Functions[0]
+	entry := work.functions.Functions[at]
 	args := work.functions.Args(entry)
 	return &workersWork{
 		project:  project,

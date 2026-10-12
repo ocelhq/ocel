@@ -187,6 +187,8 @@ type FunctionSpec struct {
 	Image     string
 	Env       map[string]string
 	Memory    int
+
+	HasWorkerEntry bool
 }
 
 type StackResult struct {

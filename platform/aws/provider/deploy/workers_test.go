@@ -41,6 +41,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	for _, worker := range workers {
 		spec.App.Workers = append(spec.App.Workers, provider.WorkerSpec{Name: worker})
 	}
+	spec.App.Functions[0].HasWorkerEntry = true
 	engine := &mockedEngine{}
 	release := releasingOn(t, cfg, engine)
 	work, err := release.appWork(spec, nil, nil)
@@ -493,5 +494,44 @@ func TestRetiringWorkersTakesDownTheWorkersStackOfALiveAppWhosePromotedReleaseNe
 				t.Errorf("the deploy said %q, want a line naming the workers stack it removed and why", log.Lines())
 			}
 		})
+	}
+}
+
+func TestAppWorkersRunFromTheFunctionWhoseArtifactCarriesTheWorkerEntry(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := appStackSpec(t)
+	cfg.Region = "us-east-1"
+	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	spec.App.Functions[1].HasWorkerEntry = true
+	release := releasingOn(t, cfg, &mockedEngine{})
+	work, err := release.appWork(spec, nil, nil)
+	if err != nil {
+		t.Fatalf("appWork() = %v", err)
+	}
+
+	hosted, err := release.workersWork(spec, work)
+	if err != nil {
+		t.Fatalf("workersWork() = %v", err)
+	}
+	if want := spec.App.Functions[1].Artifact.Key; hosted.artifact.Key != want {
+		t.Errorf("the workers run from %s, want %s, the one artifact that carries the worker entry", hosted.artifact.Key, want)
+	}
+}
+
+func TestAppWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := appStackSpec(t)
+	cfg.Region = "us-east-1"
+	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	release := releasingOn(t, cfg, &mockedEngine{})
+	work, err := release.appWork(spec, nil, nil)
+	if err != nil {
+		t.Fatalf("appWork() = %v", err)
+	}
+
+	if _, err := release.workersWork(spec, work); err == nil || !strings.Contains(err.Error(), "media") {
+		t.Fatalf("workersWork() = %v, want a refusal naming the worker no function can start", err)
 	}
 }

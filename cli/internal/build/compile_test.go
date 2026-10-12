@@ -233,6 +233,8 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",
+
+		HasWorkerEntry: true,
 	}})
 
 	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")

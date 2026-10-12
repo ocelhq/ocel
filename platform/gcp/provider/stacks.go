@@ -188,21 +188,25 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	workers, err := p.provisionWorkers(ctx, c, spec, workerImageOf(app), account, values, declared, progress)
+	image, err := workerImageOf(app)
+	if err != nil {
+		return nil, err
+	}
+	workers, err := p.provisionWorkers(ctx, c, spec, image, account, values, declared, progress)
 	if err != nil {
 		return nil, err
 	}
 	return append(deployed, workerFunctions(workers)...), nil
 }
 
-func workerImageOf(app *provider.AppSpec) string {
-	if at := slices.IndexFunc(app.Functions, func(fn provider.FunctionSpec) bool { return fn.Name == app.App }); at >= 0 {
-		return app.Functions[at].Image
+func workerImageOf(app *provider.AppSpec) (string, error) {
+	if at := slices.IndexFunc(app.Functions, func(fn provider.FunctionSpec) bool { return fn.HasWorkerEntry || fn.Name == app.App }); at >= 0 {
+		return app.Functions[at].Image, nil
 	}
-	if len(app.Functions) > 0 {
-		return app.Functions[0].Image
+	if app.Image == "" {
+		return "", refusal.Refuse(refusal.CodeInvalid, "app %s hosts workers and ships neither an image nor a function carrying a worker entry to start them from", app.App)
 	}
-	return app.Image
+	return app.Image, nil
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) error {

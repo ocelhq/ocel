@@ -9,8 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
@@ -24,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type Log struct {
@@ -324,9 +321,7 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	if len(functions) == 0 {
 		return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework())
 	}
-	hosting := slices.MinFunc(functions, func(x, y Function) int {
-		return strings.Compare(naming.Join(naming.FieldSeparator, string(naming.KindFunction), x.App, x.Route), naming.Join(naming.FieldSeparator, string(naming.KindFunction), y.App, y.Route))
-	})
+	hosting := functions[0]
 	return toolchain.BundleWorker(ctx, toolchain.Target{
 		App:              a.Name,
 		Framework:        buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},

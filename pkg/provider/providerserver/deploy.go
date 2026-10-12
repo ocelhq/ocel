@@ -1452,15 +1452,10 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 func (r *deployRun) functionSpecs(entry provider.AppEntry) []provider.FunctionSpec {
 	var specs []provider.FunctionSpec
 	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
-		artifact, _ := r.artifact(fn.GetLogicalName())
-		specs = append(specs, provider.FunctionSpec{
-			Name:      fn.GetLogicalName(),
-			Route:     fn.GetRouteId(),
-			EntryFile: fn.GetEntryFile(),
-			Framework: frameworkOf(fn),
-			Artifact:  artifact,
-			Image:     r.functionImage(fn.GetLogicalName()),
-		})
+		spec := functionSpecOf(fn)
+		spec.Artifact, _ = r.artifact(fn.GetLogicalName())
+		spec.Image = r.functionImage(fn.GetLogicalName())
+		specs = append(specs, spec)
 	}
 	return specs
 }

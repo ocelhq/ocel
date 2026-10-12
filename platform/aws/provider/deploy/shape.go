@@ -229,8 +229,8 @@ func batchSize(consumer provider.ConsumerSpec) int {
 func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (functionArgs, error) {
 	framework := app.Manifest.GetFramework().GetName()
 	spec := provider.FunctionSpec{Name: app.App}
-	if len(specs) > 0 {
-		spec = specs[0]
+	if at := slices.IndexFunc(specs, func(fn provider.FunctionSpec) bool { return fn.HasWorkerEntry }); at >= 0 {
+		spec = specs[at]
 	}
 	if spec.Framework.Name == "" {
 		spec.Framework.Name = framework

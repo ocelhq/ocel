@@ -89,3 +89,24 @@ func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t 
 		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, the app's own account and Pub/Sub's own url", tasks)
 	}
 }
+
+func TestAServerlessAppsWorkersRunFromTheImageOfTheFunctionThatCarriesTheWorkerEntry(t *testing.T) {
+	t.Parallel()
+
+	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{
+		{Name: "fn--web--a", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa"},
+		{Name: "fn--web--b", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-b@sha256:bbb", HasWorkerEntry: true},
+	}}
+	if got, err := workerImageOf(app); err != nil || got != app.Functions[1].Image {
+		t.Errorf("workerImageOf = %s, %v, want %s, the image of the function that carries the worker entry", got, err, app.Functions[1].Image)
+	}
+}
+
+func TestAServerlessAppsWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
+	t.Parallel()
+
+	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{{Name: "fn--web--a", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa"}}}
+	if got, err := workerImageOf(app); err == nil || !strings.Contains(err.Error(), "web") {
+		t.Errorf("workerImageOf = %s, %v, want a refusal naming the app", got, err)
+	}
+}

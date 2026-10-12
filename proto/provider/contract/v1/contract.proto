@@ -311,6 +311,7 @@ message ManifestFunction {
   string entry_file = 3;
   string artifact_path = 4;
   string route_id = 6;
+  bool has_worker_entry = 7;
 }
 
 message ManifestResource {

@@ -156,8 +156,7 @@ func TestWorkersThatNoLongerNeedTheFunctionNetworkLeaveItBeforeItGoes(t *testing
 
 	ctx := context.Background()
 	stacks, engine, _ := functionNetworkStacks(t, "web")
-	web := usingPostgres(t, "web")
-	web.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	web := usingPostgresWithWorkers(t)
 	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
 		t.Fatalf("Provision(web) = %v", err)
 	}
@@ -248,6 +247,7 @@ func usingPostgresWithWorkers(t *testing.T) provider.StackSpec {
 	t.Helper()
 	web := usingPostgres(t, "web")
 	web.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	web.App.Functions[0].HasWorkerEntry = true
 	return web
 }
 
@@ -444,8 +444,7 @@ func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOf
 	if _, present, err := ReadFunctionNetworkPart(ctx, store, "us-east-1", tier); err != nil || present {
 		t.Fatalf("ReadFunctionNetworkPart() before any app reached a postgres = %v, %v, want none", present, err)
 	}
-	web := usingPostgres(t, "web")
-	web.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	web := usingPostgresWithWorkers(t)
 	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
 		t.Fatalf("Provision(web) = %v", err)
 	}

@@ -164,6 +164,15 @@ func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testi
 	if err != nil || !strings.Contains(string(raw), `"worker": [`) {
 		t.Errorf("the first function's config = %s (%v), want it to name the worker command", raw, err)
 	}
+	functions, err := readAppFunctions(outputDir, appDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fn := range functions {
+		if want := fn.Route == "bundle-0"; fn.HasWorkerEntry != want {
+			t.Errorf("function %s reads as having a worker entry: %v, want %v", fn.Route, fn.HasWorkerEntry, want)
+		}
+	}
 	other := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-1"+buildoutput.FunctionDirSuffix)
 	if _, err := os.Stat(filepath.Join(other, containerimage.NodeWorkerEntry.ArtifactFile)); err == nil {
 		t.Error("a function a worker never runs from carries the worker entry")
