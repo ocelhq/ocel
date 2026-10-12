@@ -18,6 +18,8 @@ const (
 	nodeWorkerEntryFile   = "worker.mjs"
 	pythonWorkerEntryFile = statedir.Name + "/worker.py"
 	goWorkerEntryDir      = statedir.Name + "/worker"
+
+	PythonArtifactRoot = "os.getcwd()"
 )
 
 const goWorkerMain = `package main
@@ -246,34 +248,15 @@ func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (bool
 }
 
 func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
-	runRoot, err := pythonRunRoot(configDir, served.Dir)
+	runRoot, packages, err := pythonWorkerPackages(configDir, roots, served)
 	if err != nil {
 		return nil, err
 	}
-	var imports strings.Builder
-	for _, root := range roots {
-		if root.Language != language.Python {
-			continue
-		}
-		rootRunRoot, err := pythonRunRoot(configDir, root.Dir)
-		if err != nil {
-			return nil, err
-		}
-		if rootRunRoot != runRoot {
-			continue
-		}
-		pkg, err := pythonPackage(runRoot, root.Dir)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Fprintf(&imports, "import_module(%s)\n", strconv.Quote(pkg))
-	}
-
 	entry := filepath.Join(runRoot, filepath.FromSlash(pythonWorkerEntryFile))
 	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
-	if err := os.WriteFile(entry, []byte(fmt.Sprintf(pythonWorkerServer, strconv.Quote(runRoot), imports.String())), 0o644); err != nil {
+	if err := os.WriteFile(entry, []byte(PythonWorkerSource(strconv.Quote(runRoot), packages)), 0o644); err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
 
@@ -281,6 +264,48 @@ func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, se
 	cmd.Dir = runRoot
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	return cmd, nil
+}
+
+func PythonArtifactWorkerEntry(configDir string, roots []Root, served Root) (string, error) {
+	_, packages, err := pythonWorkerPackages(configDir, roots, served)
+	if err != nil {
+		return "", err
+	}
+	return PythonWorkerSource(PythonArtifactRoot, packages), nil
+}
+
+func PythonWorkerSource(root string, packages []string) string {
+	var imports strings.Builder
+	for _, pkg := range packages {
+		fmt.Fprintf(&imports, "import_module(%s)\n", strconv.Quote(pkg))
+	}
+	return fmt.Sprintf(pythonWorkerServer, root, imports.String())
+}
+
+func pythonWorkerPackages(configDir string, roots []Root, served Root) (string, []string, error) {
+	runRoot, err := pythonRunRoot(configDir, served.Dir)
+	if err != nil {
+		return "", nil, err
+	}
+	var packages []string
+	for _, root := range roots {
+		if root.Language != language.Python {
+			continue
+		}
+		rootRunRoot, err := pythonRunRoot(configDir, root.Dir)
+		if err != nil {
+			return "", nil, err
+		}
+		if rootRunRoot != runRoot {
+			continue
+		}
+		pkg, err := pythonPackage(runRoot, root.Dir)
+		if err != nil {
+			return "", nil, err
+		}
+		packages = append(packages, pkg)
+	}
+	return runRoot, packages, nil
 }
 
 func WorkerRoot(configDir string, roots []Root, worker string, sources []string) (Root, error) {

@@ -243,3 +243,33 @@ func TestTheGeneratedPythonWorkerServesATaskAndAConsumerWithItsWorkersOnStartAnd
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantAudited(t, url)
 }
+
+func TestThePythonWorkerEntryOfAnArtifactImportsFromWhereItRuns(t *testing.T) {
+	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	configDir := repoFixture(t, filepath.Join("worker", "python"))
+	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
+	if err != nil {
+		t.Fatalf("RootsOf: %v", err)
+	}
+	entry, err := PythonArtifactWorkerEntry(configDir, roots, roots[0])
+	if err != nil {
+		t.Fatalf("PythonArtifactWorkerEntry: %v", err)
+	}
+	if strings.Contains(entry, configDir) {
+		t.Errorf("the entry names the build host's %s, which is nowhere the artifact runs", configDir)
+	}
+
+	artifact := t.TempDir()
+	if err := os.CopyFS(artifact, os.DirFS(configDir)); err != nil {
+		t.Fatalf("copy the app into the artifact: %v", err)
+	}
+	entryFile := filepath.Join(t.TempDir(), "worker.py")
+	if err := os.WriteFile(entryFile, []byte(entry), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("python3", entryFile)
+	cmd.Dir = artifact
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+
+	wantGreeted(t, deliverTo(t, startWorker(t, cmd, "worker"), greetEnvelope), 1)
+}

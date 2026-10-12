@@ -112,11 +112,18 @@ func TestAContainerAppHostingNoWorkerGainsNothing(t *testing.T) {
 	}
 }
 
-func TestAContainerAppHostingAPythonWorkerIsRefusedByName(t *testing.T) {
+func TestAContainerAppHostingAPythonWorkerIsBuiltIntoAnImageCarryingTheWorkerEntry(t *testing.T) {
 	cfg := workerFixture(t, "python")
-	_, _, err := buildingWithWorkers(t, cfg, HostedWorkers{"web": {discovery.DefaultRootDirName + "/__init__.py:1"}})
-	if err == nil || !strings.Contains(err.Error(), "web") || !strings.Contains(err.Error(), "python") {
-		t.Fatalf("apps() = %v, want the python worker refused naming the app", err)
+	_, added, err := buildingWithWorkers(t, cfg, HostedWorkers{"web": {discovery.DefaultRootDirName + "/__init__.py:1"}})
+	if err != nil {
+		t.Fatalf("apps() = %v, want the python worker built into the image", err)
+	}
+	if added == nil || added.dst != containerimage.WorkerDir {
+		t.Fatalf("the image gained files at %+v, want %s", added, containerimage.WorkerDir)
+	}
+	entry := string(added.entries[containerimage.PythonWorkerEntry])
+	if !strings.Contains(entry, `import_module("`+discovery.DefaultRootDirName+`")`) || strings.Contains(entry, cfg.Dir) {
+		t.Errorf("the image gained %v with %q, want an entry importing the discovery folder and naming no build host path", keysOf(added.entries), entry)
 	}
 }
 
