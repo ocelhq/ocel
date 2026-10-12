@@ -113,19 +113,21 @@ function storeLosing(
 ) {
   const calls = { reads: 0, writes: 0 };
   let written: TagSnapshot | null = null;
+  const priors: (StoredTagSnapshot | null)[] = [];
   const store: TagSnapshotStore = {
     async read() {
       calls.reads++;
       return stored;
     },
-    async write(snapshot) {
+    async write(snapshot, prior) {
       calls.writes++;
+      priors.push(prior);
       if (calls.writes <= losses) return false;
       written = snapshot;
       return true;
     },
   };
-  return { store, calls, written: () => written };
+  return { store, calls, written: () => written, priors: () => priors };
 }
 
 describe("publishTagSnapshot", () => {
@@ -156,12 +158,28 @@ describe("publishTagSnapshot", () => {
     expect(calls.writes).toBe(0);
   });
 
-  it("publishes nothing where no snapshot was seeded", async () => {
-    const { store, calls } = storeLosing(0, null);
+  it("creates the snapshot, conditioned on there being none, where it is missing", async () => {
+    const { store, calls, written, priors } = storeLosing(0, null);
 
     await publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10);
 
-    expect(calls.writes).toBe(0);
+    expect(calls.writes).toBe(1);
+    expect(priors()).toEqual([null]);
+    expect(written()).toEqual({
+      version: 1,
+      deployedAt: 0,
+      generatedAt: 10,
+      records: { cart: { stale: undefined, expired: 5 } },
+    });
+  });
+
+  it("reads again after losing the creation to another writer", async () => {
+    const { store, calls, priors } = storeLosing(1, null);
+
+    await publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10);
+
+    expect(calls).toEqual({ reads: 2, writes: 2 });
+    expect(priors()).toEqual([null, null]);
   });
 });
 
