@@ -2,6 +2,7 @@ package box
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -81,7 +82,9 @@ func (e *Edge) Facts() edge.Facts {
 	}
 }
 
-func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
+func (e *Edge) Hooks() edge.Hooks {
+	return edge.Hooks{PublishPreviewGate: e.publishPreviewGate}
+}
 
 func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
@@ -102,6 +105,11 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	next.PreviewBase = declaredPreviewBase(spec)
+	if spec.Tier == environment.TierPreview {
+		if err := e.machine.PutPreviewGate(ctx, Surface(spec.Slug, spec.Tier), spec.PreviewGate); err != nil {
+			return nil, fmt.Errorf("hand the switchboard the preview gate of %s: %w", spec.Slug, err)
+		}
+	}
 	return &stack{e: e, state: next}, nil
 }
 

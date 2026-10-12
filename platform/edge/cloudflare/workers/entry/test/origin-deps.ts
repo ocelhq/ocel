@@ -24,6 +24,7 @@ export function answerEveryRecordWith(
     readPointerRecord: answer,
     readLabelRecord: answer,
     readServedRecord: async () => ({ kind: "not-served" }),
+    readPreviewGate: async () => undefined,
   };
 }
 

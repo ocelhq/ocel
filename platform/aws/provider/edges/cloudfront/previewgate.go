@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -20,7 +21,19 @@ const (
 	keyValueStoreValueMaxBytes = 1024
 )
 
-func previewGateKey(stack string) string { return previewGatePrefix + stack }
+func previewGateKey(slug string) string { return previewGatePrefix + slug }
+
+func (p *cloudFront) publishPreviewGate(ctx context.Context, publication edge.PreviewGatePublication) error {
+	s := &stack{p: p, state: publication.State}
+	if err := publication.State.Private.Into(&s.own); err != nil {
+		return err
+	}
+	c, err := p.clientsFor(ctx)
+	if err != nil {
+		return err
+	}
+	return s.reconcilePreviewGate(ctx, c, publication.Gate)
+}
 
 func (s *stack) reconcilePreviewGate(ctx context.Context, c Clients, gate *previewgate.Gate) error {
 	if s.tier() != environment.TierPreview {
@@ -31,7 +44,7 @@ func (s *stack) reconcilePreviewGate(ctx context.Context, c Clients, gate *previ
 		return err
 	}
 	routes := s.routes(c)
-	key := previewGateKey(s.spec().name)
+	key := previewGateKey(s.slug())
 	have, recorded, err := routes.read(ctx, key)
 	if err != nil {
 		return err

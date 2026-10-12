@@ -208,6 +208,42 @@ describe("authenticated endpoints", () => {
     expect(await after.json()).toEqual({ version: "v1" });
   });
 
+  it("keeps the project's preview gate for the entry worker to read, and removes it on request", async () => {
+    await initialize();
+    const gate = { key: "k", passwordMac: "m", bypassSecrets: [], allowOptions: [] };
+
+    const before = await SELF.fetch(authedReq("/preview-gate"));
+    expect(await before.json()).toEqual({ gate: null });
+
+    const put = await SELF.fetch(
+      authedReq("/preview-gate", { method: "PUT", body: JSON.stringify(gate) }),
+    );
+    expect(put.status).toBe(204);
+    expect(await (await SELF.fetch(authedReq("/preview-gate"))).json()).toEqual({ gate });
+    expect(await env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG)).readPreviewGate()).toEqual(
+      JSON.stringify(gate),
+    );
+
+    const removed = await SELF.fetch(authedReq("/preview-gate", { method: "DELETE" }));
+    expect(removed.status).toBe(204);
+    expect(await (await SELF.fetch(authedReq("/preview-gate"))).json()).toEqual({ gate: null });
+  });
+
+  it("refuses a preview gate that is not a JSON object, and one asked for without the project secret", async () => {
+    await initialize();
+
+    const malformed = await SELF.fetch(
+      authedReq("/preview-gate", { method: "PUT", body: "not json" }),
+    );
+    expect(malformed.status).toBe(400);
+    const list = await SELF.fetch(
+      authedReq("/preview-gate", { method: "PUT", body: JSON.stringify(["gate"]) }),
+    );
+    expect(list.status).toBe(400);
+    const unauthorized = await SELF.fetch(bearerReq(`/${SLUG}/preview-gate`, "wrong"));
+    expect(unauthorized.status).toBe(401);
+  });
+
   it("destroys the instance, freeing the slug", async () => {
     await initialize();
     await movePointer();

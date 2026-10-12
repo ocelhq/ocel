@@ -222,8 +222,8 @@ function gateUnreadable() {
 
 // biome-ignore lint/correctness/noUnusedVariables: the resolver calls it on every routed request of the preview tier
 async function gatePreview(request, route, host) {
-  if (!route.stack) return null;
-  var read = await readKey(GATE_KEY_PREFIX + route.stack);
+  if (!route.slug) return null;
+  var read = await readKey(GATE_KEY_PREFIX + route.slug);
   if (read.unreadable || (read.value && !isGate(read.value))) return gateUnreadable();
   var gate = read.value;
   if (!gate) return null;

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -31,6 +32,7 @@ type fakeStore struct {
 	labels   map[string]labelTarget
 	moves    []pointerMoveBody
 	version  *string
+	gate     *previewgate.Gate
 	owner    string
 	live     string
 }
@@ -195,12 +197,29 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.version = &body.Version
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	mux.HandleFunc("GET /{slug}/preview-gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]*previewgate.Gate{"gate": f.gate})
+	}))
+	mux.HandleFunc("PUT /{slug}/preview-gate", authed(func(w http.ResponseWriter, r *http.Request) {
+		var gate previewgate.Gate
+		if err := json.NewDecoder(r.Body).Decode(&gate); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.gate = &gate
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	mux.HandleFunc("DELETE /{slug}/preview-gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+		f.gate = nil
+		w.WriteHeader(http.StatusNoContent)
+	}))
 	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, _ *http.Request) {
 		f.pointers = map[string]string{}
 		f.served = map[string]map[string]router.ReleaseRecord{}
 		f.apps = map[string]bool{}
 		f.labels = map[string]labelTarget{}
 		f.version = nil
+		f.gate = nil
 		f.owner, f.live = "", ""
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -484,4 +503,10 @@ func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
 	if served := store.findServedBuild("pr-42-aaaaaaaaaaaaaaaabbbbbbbb"); served != "" {
 		t.Errorf("the preview label serves %q after its pointer was removed, want nothing", served)
 	}
+}
+
+func (f *fakeStore) heldGate() *previewgate.Gate {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gate
 }

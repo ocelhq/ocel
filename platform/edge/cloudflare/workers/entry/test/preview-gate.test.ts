@@ -2,8 +2,11 @@ import { createExecutionContext } from "cloudflare:test";
 import gateEncodings from "@platform/edge-contract/fixtures/preview-gate" with { type: "json" };
 import { hashPreviewPassword } from "@platform/edge-contract/preview-gate";
 import { describe, expect, it } from "vitest";
+import vectors from "../../../../../../pkg/edge/edgeconformance/previewgate.json" with {
+  type: "json",
+};
 import worker, { type Env } from "../src/index";
-import { readPreviewGate } from "../src/preview-gate";
+import { gatePreview, readPreviewGate } from "../src/preview-gate";
 import type { ReleasesBinding } from "../src/releases";
 import { answerEveryRecordWith, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
 
@@ -14,11 +17,18 @@ const BYPASS = "bypass-secret-one";
 const PROJECT_HOST = "pr-12-web-abcdefghijklmnopp3347l26.myapp.com";
 const GLOBAL_HOST = "shop-abcdefghijklmnoproheemcq.preview.ocel.app";
 
-const binding: ReleasesBinding = answerEveryRecordWith(async () => ({
-  kind: "record",
-  release: "deploy-1",
-  record: makeRecord(),
-}));
+const answer = async () => ({ kind: "record" as const, release: "deploy-1", record: makeRecord() });
+
+function bindingHolding(gates: Record<string, string | Error>): ReleasesBinding {
+  return {
+    ...answerEveryRecordWith(answer),
+    readPreviewGate: async ({ slug }) => {
+      const held = gates[slug];
+      if (held instanceof Error) throw held;
+      return held;
+    },
+  };
+}
 
 async function gateRecord(over: Record<string, unknown> = {}) {
   return {
@@ -32,21 +42,20 @@ async function gateRecord(over: Record<string, unknown> = {}) {
 
 async function projectEnv(over: Partial<Env> = {}): Promise<Env> {
   return {
-    RELEASES: binding,
+    RELEASES: bindingHolding({ p1: JSON.stringify(await gateRecord()) }),
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
     OCEL_SLUG: "p1",
     OCEL_PREVIEW: "1",
     OCEL_PREVIEW_BASE_DOMAIN: "myapp.com",
     OCEL_PREVIEW_KEY: PREVIEW_KEY,
-    OCEL_PREVIEW_GATE: JSON.stringify(await gateRecord()),
     ...over,
   };
 }
 
 async function globalEnv(over: Partial<Env> = {}): Promise<Env> {
   return {
-    RELEASES: binding,
+    RELEASES: bindingHolding({ shop: JSON.stringify(await gateRecord()) }),
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
     OCEL_SLUG: "",
@@ -54,7 +63,6 @@ async function globalEnv(over: Partial<Env> = {}): Promise<Env> {
     OCEL_PREVIEW_GLOBAL: "1",
     OCEL_PREVIEW_BASE_DOMAIN: "preview.ocel.app",
     OCEL_PREVIEW_KEY: PREVIEW_KEY,
-    OCEL_PREVIEW_GATES: JSON.stringify({ shop: await gateRecord() }),
     ...over,
   };
 }
@@ -224,7 +232,7 @@ describe("the preview gate on a project's preview worker", () => {
       new Request(`https://${PROJECT_HOST}/users`, {
         headers: { "x-ocel-preview-bypass": BYPASS },
       }),
-      await projectEnv({ OCEL_PREVIEW_GATE: "{not json" }),
+      await projectEnv({ RELEASES: bindingHolding({ p1: "{not json" }) }),
     );
 
     expect(response.status).toBe(503);
@@ -234,7 +242,7 @@ describe("the preview gate on a project's preview worker", () => {
   it("serves a preview with no gate configured", async () => {
     const { response } = await visit(
       new Request(`https://${PROJECT_HOST}/users`),
-      await projectEnv({ OCEL_PREVIEW_GATE: undefined }),
+      await projectEnv({ RELEASES: bindingHolding({}) }),
     );
 
     expect(response.status).toBe(200);
@@ -282,7 +290,7 @@ describe("the preview gate on the shared preview entry", () => {
       key: "other-key",
       passwordMac: await hashPreviewPassword("other-key", "x"),
     });
-    const env = await globalEnv({ OCEL_PREVIEW_GATES: JSON.stringify({ shop: other }) });
+    const env = await globalEnv({ RELEASES: bindingHolding({ shop: JSON.stringify(other) }) });
 
     const { response } = await visit(
       new Request(`https://${GLOBAL_HOST}/users`, { headers: { authorization: basic(PASSWORD) } }),
@@ -295,46 +303,174 @@ describe("the preview gate on the shared preview entry", () => {
   it("serves a project that has no recorded keys", async () => {
     const { response } = await visit(
       new Request(`https://${GLOBAL_HOST}/users`),
-      await globalEnv({ OCEL_PREVIEW_GATES: JSON.stringify({ other: {} }) }),
+      await globalEnv({ RELEASES: bindingHolding({ other: "{}" }) }),
     );
 
     expect(response.status).toBe(200);
   });
 
-  it("refuses every request when the recorded keys cannot be read", async () => {
-    const { response } = await visit(
+  it("refuses every request when the releases store cannot be asked for the keys", async () => {
+    const { response, wire } = await visit(
       new Request(`https://${GLOBAL_HOST}/users`),
-      await globalEnv({ OCEL_PREVIEW_GATES: "[]" }),
+      await globalEnv({ RELEASES: bindingHolding({ shop: new Error("store down") }) }),
     );
 
     expect(response.status).toBe(503);
+    expect(wire.calls).toHaveLength(0);
   });
 });
 
 describe("the gate keys as the Go side encodes them", () => {
   for (const example of gateEncodings.gates) {
-    it(`reads ${example.name} from a project's worker secret`, () => {
-      expect(readPreviewGate({ OCEL_PREVIEW_GATE: example.encoded }, "p1")).toEqual({
-        kind: "gated",
-        gate: example.gate,
-      });
+    it(`reads ${example.name} from the releases store`, async () => {
+      expect(await readPreviewGate(bindingHolding({ p1: example.encoded }), "p1", () => 0)).toEqual(
+        { kind: "gated", gate: example.gate },
+      );
     });
   }
-
-  it("reads a project's keys from the shared entry's worker secret", () => {
-    const { slug, encoded } = gateEncodings.sharedEntry;
-    expect(readPreviewGate({ OCEL_PREVIEW_GATES: encoded }, slug)).toEqual({
-      kind: "gated",
-      gate: gateEncodings.gates[0]?.gate,
-    });
-  });
 
   it("refuses a request without credentials rather than answering 503", async () => {
     const { response } = await visit(
       new Request(`https://${PROJECT_HOST}/users`),
-      await projectEnv({ OCEL_PREVIEW_GATE: gateEncodings.gates[0]?.encoded }),
+      await projectEnv({
+        RELEASES: bindingHolding({ p1: gateEncodings.gates[0]?.encoded ?? "" }),
+      }),
     );
 
     expect(response.status).toBe(401);
   });
+});
+
+describe("a gate published to the releases store takes effect while the worker runs", () => {
+  it("reads a rotated key once the cached read lapses", async () => {
+    let held = JSON.stringify(await gateRecord());
+    const releases: ReleasesBinding = {
+      ...answerEveryRecordWith(answer),
+      readPreviewGate: async () => held,
+    };
+    const before = await readPreviewGate(releases, "p1", () => 0);
+    held = JSON.stringify(
+      await gateRecord({
+        key: "rotated",
+        passwordMac: await hashPreviewPassword("rotated", PASSWORD),
+      }),
+    );
+
+    const cached = await readPreviewGate(releases, "p1", () => 1_000);
+    const lapsed = await readPreviewGate(releases, "p1", () => 6_000);
+
+    expect(before.kind === "gated" && before.gate.key).toBe(GATE_KEY);
+    expect(cached).toEqual(before);
+    expect(lapsed.kind === "gated" && lapsed.gate.key).toBe("rotated");
+  });
+
+  it("asks the store once for the reads inside the cache window", async () => {
+    let asked = 0;
+    const releases: ReleasesBinding = {
+      ...answerEveryRecordWith(answer),
+      readPreviewGate: async () => {
+        asked++;
+        return undefined;
+      },
+    };
+
+    await readPreviewGate(releases, "p1", () => 1_000);
+    await readPreviewGate(releases, "p1", () => 2_000);
+    await readPreviewGate(releases, "p1", () => 7_000);
+
+    expect(asked).toBe(2);
+  });
+
+  it("does not cache a read that failed", async () => {
+    let asked = 0;
+    const releases: ReleasesBinding = {
+      ...answerEveryRecordWith(answer),
+      readPreviewGate: async () => {
+        asked++;
+        throw new Error("store down");
+      },
+    };
+
+    expect((await readPreviewGate(releases, "p1", () => 1_000)).kind).toBe("unreadable");
+    expect((await readPreviewGate(releases, "p1", () => 1_001)).kind).toBe("unreadable");
+    expect(asked).toBe(2);
+  });
+});
+
+type VectorRequest = {
+  method: string;
+  host: string;
+  target: string;
+  headers: Record<string, string | string[]>;
+};
+
+function requestOf({ method, host, target, headers }: VectorRequest): Request {
+  const sent = new Headers();
+  for (const [name, raw] of Object.entries(headers)) {
+    for (const value of [raw].flat()) sent.append(name, value);
+  }
+  return new Request(`https://${host}${target}`, { method, headers: sent, redirect: "manual" });
+}
+
+function fetchCannotCarry(request: VectorRequest): string {
+  const carried = requestOf(request);
+  const url = new URL(carried.url);
+  if (carried.method !== request.method) return "Fetch normalises the method";
+  if (url.pathname + url.search !== request.target) return "Fetch percent-encodes the target";
+  if ([request.headers.cookie ?? []].flat().length > 1)
+    return "Fetch joins cookie headers with a comma";
+  return "";
+}
+
+describe("the entry worker's gate answers the gate's conformance vectors", () => {
+  for (const example of vectors.cases) {
+    const uncarried = fetchCannotCarry(example.request);
+    it.skipIf(uncarried !== "")(
+      `${example.name}${uncarried && ` (skipped: ${uncarried})`}`,
+      async () => {
+        const gate = { ...vectors.gate, ...("gate" in example ? example.gate : {}) };
+        const expected = example.expect as {
+          forward?: boolean;
+          forwardHeaders?: Record<string, string>;
+          forwardHeadersAbsent?: string[];
+          responseHeaders?: Record<string, string>;
+          status?: number;
+          headers?: Record<string, string>;
+          headersAbsent?: string[];
+          bodyContains?: string[];
+          bodyExcludes?: string[];
+        };
+
+        const outcome = await gatePreview(requestOf(example.request), gate, vectors.nowSeconds);
+
+        if (expected.forward) {
+          if (outcome.kind !== "forward")
+            throw new Error(`answered ${outcome.response.status}, want the request forwarded`);
+          for (const [name, want] of Object.entries(expected.forwardHeaders ?? {})) {
+            expect(outcome.request.headers.get(name), name).toBe(want);
+          }
+          for (const name of expected.forwardHeadersAbsent ?? []) {
+            expect(outcome.request.headers.get(name), name).toBeNull();
+          }
+          for (const [name, want] of Object.entries(expected.responseHeaders ?? {})) {
+            expect(outcome.responseHeaders.get(name), name).toBe(want);
+          }
+          return;
+        }
+
+        if (outcome.kind !== "respond")
+          throw new Error(`forwarded the request, want ${expected.status}`);
+        expect(outcome.response.status).toBe(expected.status);
+        for (const [name, want] of Object.entries(expected.headers ?? {})) {
+          expect(outcome.response.headers.get(name), name).toBe(want);
+        }
+        for (const name of expected.headersAbsent ?? []) {
+          expect(outcome.response.headers.get(name), name).toBeNull();
+        }
+        const body = await outcome.response.text();
+        for (const want of expected.bodyContains ?? []) expect(body).toContain(want);
+        for (const unwanted of expected.bodyExcludes ?? []) expect(body).not.toContain(unwanted);
+      },
+    );
+  }
 });

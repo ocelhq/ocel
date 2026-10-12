@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -27,19 +28,15 @@ func gatedPreviewSpec(gate *previewgate.Gate) edge.StackSpec {
 	return spec
 }
 
-func previewStackName() string {
-	return distributionName(defaultNamespace, conformanceSlug, environment.TierPreview)
-}
-
 func recordedGate(t *testing.T, w *world) (previewgate.Gate, bool) {
 	t.Helper()
-	value, recorded := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+previewStackName()]
+	value, recorded := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+conformanceSlug]
 	if !recorded {
 		return previewgate.Gate{}, false
 	}
 	var gate previewgate.Gate
 	if err := json.Unmarshal([]byte(value), &gate); err != nil {
-		t.Fatalf("the gate recorded for %s is %q, want the JSON the resolver reads: %v", previewStackName(), value, err)
+		t.Fatalf("the gate recorded for %s is %q, want the JSON the resolver reads: %v", conformanceSlug, value, err)
 	}
 	return gate, true
 }
@@ -59,15 +56,15 @@ func TestAPreviewReconcileRecordsTheGateInTheRoutesStoreForTheResolverToRead(t *
 
 	got, recorded := recordedGate(t, w)
 	if !recorded {
-		t.Fatalf("the preview routes store holds %v, want the gate under gate/%s", w.store.itemsOf(fakeRoutesARN(environment.TierPreview)), previewStackName())
+		t.Fatalf("the preview routes store holds %v, want the gate under gate/%s", w.store.itemsOf(fakeRoutesARN(environment.TierPreview)), conformanceSlug)
 	}
 	if !reflect.DeepEqual(got, shopGate) {
 		t.Errorf("recorded gate = %+v, want %+v", got, shopGate)
 	}
 }
 
-func TestAGateIsKeyedByTheStackUnderAPrefixNoHostnameCanHave(t *testing.T) {
-	if got, want := previewGateKey("ocel.shop.preview"), "gate/ocel.shop.preview"; got != want {
+func TestAGateIsKeyedByTheProjectSlugUnderAPrefixNoHostnameCanHave(t *testing.T) {
+	if got, want := previewGateKey("shop"), "gate/shop"; got != want {
 		t.Errorf("previewGateKey = %q, want %q: the preview resolver reads this key", got, want)
 	}
 }
@@ -76,7 +73,7 @@ func TestAGateWithNoListsIsRecordedWithEmptyListsTheResolverCanIterate(t *testin
 	w := newWorld()
 	reconcilePreview(t, previewBootstrapped(t, w), gatedPreviewSpec(&previewgate.Gate{Key: "k", PasswordMAC: "m"}))
 
-	value := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+previewStackName()]
+	value := w.store.itemsOf(fakeRoutesARN(environment.TierPreview))["gate/"+conformanceSlug]
 	if !strings.Contains(value, `"bypassSecrets":[]`) || !strings.Contains(value, `"allowOptions":[]`) {
 		t.Errorf("recorded gate = %s, want empty lists rather than null", value)
 	}
@@ -194,14 +191,66 @@ func TestADestroyThatLeavesARouteBehindKeepsTheGateUntilARetryRemovesIt(t *testi
 	}
 }
 
-func TestAPromotedPreviewRouteNamesTheStackTheResolverReadsItsGateUnder(t *testing.T) {
+func TestAPromotedPreviewRouteNamesTheSlugTheResolverReadsItsGateUnder(t *testing.T) {
 	w := newWorld()
 	_, stack := previewing(t, w)
 	promotePreview(t, stack, previewPointer)
 
 	published := previewRoutes(t, w)[previewHostname()]
 
-	if published.Stack != previewStackName() {
-		t.Errorf("route stack = %q, want %q: the resolver reads gate/<stack>", published.Stack, previewStackName())
+	if published.Slug != conformanceSlug {
+		t.Errorf("route slug = %q, want %q: the resolver reads gate/<slug>", published.Slug, conformanceSlug)
 	}
+}
+
+func TestAGateWithEightGeneratedBypassSecretsFitsAKeyValueStoreValue(t *testing.T) {
+	full := previewgate.Gate{Key: strings.Repeat("k", 64), PasswordMAC: strings.Repeat("m", 64)}
+	for range 8 {
+		full.BypassSecrets = append(full.BypassSecrets, strings.Repeat("s", 64))
+	}
+
+	encoded, err := encodePreviewGate("shop", &full)
+
+	if err != nil {
+		t.Fatalf("encodePreviewGate = %v, want the largest gate a project can hold to fit in %d bytes", err, keyValueStoreValueMaxBytes)
+	}
+	if len(encoded) > keyValueStoreValueMaxBytes {
+		t.Errorf("encoded gate = %d bytes, want at most %d", len(encoded), keyValueStoreValueMaxBytes)
+	}
+}
+
+func TestPublishingAGateWritesItWithoutReconcilingTheStack(t *testing.T) {
+	w := newWorld()
+	e := previewBootstrapped(t, w)
+	stack := reconcilePreview(t, e, gatedPreviewSpec(nil))
+	publish := e.Hooks().PublishPreviewGate
+	if publish == nil {
+		t.Fatal("Hooks().PublishPreviewGate = nil, want the edge to publish a gate to the key value store the resolver reads")
+	}
+
+	if err := publish(context.Background(), edge.PreviewGatePublication{State: stack.State(), Gate: &shopGate}); err != nil {
+		t.Fatalf("PublishPreviewGate = %v", err)
+	}
+
+	if got, recorded := recordedGate(t, w); !recorded || !reflect.DeepEqual(got, shopGate) {
+		t.Errorf("recorded gate = %+v, %t, want %+v", got, recorded, shopGate)
+	}
+}
+
+func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
+	w := newWorld()
+	e := previewBootstrapped(t, w)
+	state := reconcilePreview(t, e, gatedPreviewSpec(nil)).State()
+
+	edgeconformance.RunPublishedPreviewGate(t, edgeconformance.PublishedPreviewGate{
+		Publish: func(ctx context.Context, gate *previewgate.Gate) error {
+			return e.Hooks().PublishPreviewGate(ctx, edge.PreviewGatePublication{State: state, Gate: gate})
+		},
+		Read: func(context.Context) (*previewgate.Gate, error) {
+			if gate, recorded := recordedGate(t, w); recorded {
+				return &gate, nil
+			}
+			return nil, nil
+		},
+	})
 }

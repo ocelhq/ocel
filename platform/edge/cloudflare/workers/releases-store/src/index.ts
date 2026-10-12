@@ -91,6 +91,25 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
+    if (request.method === "GET" && sub === "/preview-gate") {
+      const gate = await store.readPreviewGate();
+      return Response.json({ gate: gate === undefined ? null : JSON.parse(gate) });
+    }
+
+    if (request.method === "PUT" && sub === "/preview-gate") {
+      const body = await readJson<unknown>(request);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      await store.setPreviewGate(JSON.stringify(body));
+      return new Response(null, { status: 204 });
+    }
+
+    if (request.method === "DELETE" && sub === "/preview-gate") {
+      await store.setPreviewGate(undefined);
+      return new Response(null, { status: 204 });
+    }
+
     if (request.method === "POST" && sub === "/remove-pointer") {
       const body = await readJson<{ pointer?: string }>(request);
       if (!body?.pointer) return new Response("Bad Request", { status: 400 });
@@ -124,5 +143,9 @@ export default class extends WorkerEntrypoint<Env> {
 
   async readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult> {
     return stub(this.env, args.slug).readServedRecord(args.isrPrefix);
+  }
+
+  async readPreviewGate(args: { slug: string }): Promise<string | undefined> {
+    return stub(this.env, args.slug).readPreviewGate();
   }
 }

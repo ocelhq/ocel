@@ -126,7 +126,9 @@ func (p *cloudFront) Facts() edge.Facts {
 	}
 }
 
-func (p *cloudFront) Hooks() edge.Hooks { return edge.Hooks{} }
+func (p *cloudFront) Hooks() edge.Hooks {
+	return edge.Hooks{PublishPreviewGate: p.publishPreviewGate}
+}
 
 func CertificateRegion(string) string { return certs.CloudFrontRegion }
 

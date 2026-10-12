@@ -211,7 +211,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 	if err != nil {
 		return route{}, err
 	}
-	published := route{Stack: s.spec().name, Release: release, Secret: secret.Presented(record.CreatedAt)}
+	published := route{Stack: s.spec().name, Slug: s.slug(), Release: release, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
 		front, err := s.serveContainers(ctx, c, promotionID, app, release)
 		if err != nil {

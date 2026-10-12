@@ -43,7 +43,7 @@ func TestSpecStampShape(t *testing.T) {
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
 				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName",
-				"Observability", "PreviewGate", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
+				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
 				"StoreEndpoint", "StoreScriptName",
 			},
 		},
@@ -137,7 +137,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("a changed preview gate restamps the spec", func(t *testing.T) {
+	t.Run("a preview gate does not restamp the spec: it is published to the releases store, not deployed in the script", func(t *testing.T) {
 		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
 		generic, err := genericWorker(spec, spec.Slug, "")
 		if err != nil {
@@ -152,13 +152,8 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 			return stamp
 		}
 
-		ungated := stampOf(nil)
-		gated := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m1", BypassSecrets: []string{"b1"}})
-		rotated := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m2", BypassSecrets: []string{"b1"}})
-		revoked := stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m2"})
-
-		if len(slices.Compact(slices.Sorted(slices.Values([]string{ungated, gated, rotated, revoked})))) != 4 {
-			t.Errorf("stamps = %q, %q, %q, %q, want each gate to stamp differently: a rotated password or a revoked bypass secret must never deploy as up to date", ungated, gated, rotated, revoked)
+		if ungated, gated := stampOf(nil), stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m1"}); ungated != gated {
+			t.Errorf("stamps = %q, %q, want one: a rotated gate must not redeploy the worker, and one that never reaches the script cannot leave it stale", ungated, gated)
 		}
 	})
 

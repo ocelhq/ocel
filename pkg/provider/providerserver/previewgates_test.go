@@ -66,28 +66,16 @@ func gatedPreviewDeployed(t *testing.T, req *contractv1.DeployRequest) *fake.Pro
 	return vendor
 }
 
-func readGateSecret(t *testing.T, worker edge.Worker, name string, into any) {
-	t.Helper()
-	encoded, carried := worker.Secrets[name]
-	if !carried {
-		t.Fatalf("Secrets has no %s, want the recorded gate keys", name)
-	}
-	if err := json.Unmarshal([]byte(encoded), into); err != nil {
-		t.Fatalf("Secrets[%s] = %q: %v", name, encoded, err)
-	}
-}
-
-func TestAPreviewDeployOnItsOwnWildcardHandsItsWorkerTheGateRecordedForItsProject(t *testing.T) {
+func TestAPreviewDeployOnItsOwnWildcardHandsItsStackTheGateRecordedForItsProject(t *testing.T) {
 	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
 
-	var got previewgate.Gate
-	readGateSecret(t, onlyStack(t, vendor).Program.Worker, edge.PreviewGateVar, &got)
-	if !reflect.DeepEqual(got, shopGate) {
-		t.Errorf("Secrets[%s] = %+v, want the gate recorded for shop, %+v", edge.PreviewGateVar, got, shopGate)
+	got := onlyStack(t, vendor).PreviewGate
+	if got == nil || !reflect.DeepEqual(*got, shopGate) {
+		t.Errorf("PreviewGate = %+v, want the gate recorded for shop, %+v: the edge publishes it to where its worker reads it", got, shopGate)
 	}
 }
 
-func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsWorkerNone(t *testing.T) {
+func TestAPreviewDeployOnItsOwnWildcardOfAProjectWithNoRecordedGateHandsItsStackNone(t *testing.T) {
 	builtProject(t)
 	client, vendor := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
@@ -97,12 +85,12 @@ func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsWorkerNone(t *testing
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if encoded, carried := onlyStack(t, vendor).Program.Worker.Secrets[edge.PreviewGateVar]; carried {
-		t.Errorf("Secrets[%s] = %q, want none: no gate is recorded for shop", edge.PreviewGateVar, encoded)
+	if got := onlyStack(t, vendor).PreviewGate; got != nil {
+		t.Errorf("PreviewGate = %+v, want none: no gate is recorded for shop", got)
 	}
 }
 
-func TestAProductionDeployNeverHandsItsWorkerAGate(t *testing.T) {
+func TestAProductionDeployHandsItsStackNoGate(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 	seedPreviewGates(t, vendor, recordedGates)
@@ -114,13 +102,13 @@ func TestAProductionDeployNeverHandsItsWorkerAGate(t *testing.T) {
 	}
 
 	for _, stack := range vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks() {
-		if encoded, carried := stack.Program.Worker.Secrets[edge.PreviewGateVar]; carried {
-			t.Errorf("Secrets[%s] = %q, want none: production serves no preview", edge.PreviewGateVar, encoded)
+		if stack.PreviewGate != nil {
+			t.Errorf("PreviewGate = %+v, want none: production serves no preview", stack.PreviewGate)
 		}
 	}
 }
 
-func TestUsePreviewWildcardHandsTheSharedEntryEveryRecordedGate(t *testing.T) {
+func TestUsePreviewWildcardHandsTheSharedEntryNoGate(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	seedPreviewGates(t, vendor, recordedGates)
@@ -129,14 +117,12 @@ func TestUsePreviewWildcardHandsTheSharedEntryEveryRecordedGate(t *testing.T) {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
-	if len(specs) != 1 {
-		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
-	}
-	var got map[string]previewgate.Gate
-	readGateSecret(t, specs[0].Program.Worker, edge.PreviewGatesVar, &got)
-	if !reflect.DeepEqual(got, recordedGates) {
-		t.Errorf("Secrets[%s] = %+v, want every recorded gate, %+v", edge.PreviewGatesVar, got, recordedGates)
+	for _, spec := range vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs() {
+		for name := range spec.Program.Worker.Secrets {
+			if strings.Contains(strings.ToUpper(name), "GATE") {
+				t.Errorf("the shared entry carries Secrets[%s], want no gate: each project's gate is published to where its worker reads it", name)
+			}
+		}
 	}
 }
 
@@ -197,14 +183,6 @@ func TestAPreviewDeployOfAProjectWithNoRecordedGateHandsItsStackNone(t *testing.
 
 	if got := onlyDirectStack(t, vendor).PreviewGate; got != nil {
 		t.Errorf("PreviewGate = %+v, want none: no gate is recorded for shop", got)
-	}
-}
-
-func TestAPreviewDeployOnAnEdgeThatRunsCodeLeavesTheGateToItsProgram(t *testing.T) {
-	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
-
-	if got := onlyStack(t, vendor).PreviewGate; got != nil {
-		t.Errorf("PreviewGate = %+v, want none: the worker secret carries the gate", got)
 	}
 }
 

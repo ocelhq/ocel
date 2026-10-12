@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -692,4 +693,49 @@ func lastIndex(events []string, prefix string) int {
 		}
 	}
 	return -1
+}
+
+func TestPublishingAGateSendsItToThePluginWithoutAnotherDeploy(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	state := reconcileGated(t, balancer, "shop", nil).State()
+	var said []string
+
+	err := balancer.Hooks().PublishPreviewGate(ctx, edge.PreviewGatePublication{State: state, Gate: &shopGate, Say: func(line string) { said = append(said, line) }})
+
+	if err != nil {
+		t.Fatalf("PublishPreviewGate = %v", err)
+	}
+	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+		t.Errorf("the plugin runs %q, want a config holding the published gate's key", config)
+	}
+	if recorded, found, err := balancer.readGateRecord(ctx, "shop"); err != nil || !found || recorded.Gate.Key != shopGate.Key {
+		t.Errorf("recorded gate = %+v, %t, %v, want the published one", recorded.Gate, found, err)
+	}
+	if len(said) == 0 {
+		t.Error("publishing said nothing, and a plugin rollout takes minutes")
+	}
+}
+
+func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, _ := gatedEdge(t)
+	state := reconcileGated(t, balancer, "shop", nil).State()
+
+	edgeconformance.RunPublishedPreviewGate(t, edgeconformance.PublishedPreviewGate{
+		Publish: func(ctx context.Context, gate *previewgate.Gate) error {
+			return balancer.Hooks().PublishPreviewGate(ctx, edge.PreviewGatePublication{State: state, Gate: gate})
+		},
+		Read: func(context.Context) (*previewgate.Gate, error) {
+			recorded, found, err := balancer.readGateRecord(ctx, "shop")
+			if err != nil || !found {
+				return nil, err
+			}
+			return &recorded.Gate, nil
+		},
+	})
 }

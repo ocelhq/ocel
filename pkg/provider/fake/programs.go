@@ -2,7 +2,6 @@ package fake
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -25,20 +24,6 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 	secrets := map[string]string{}
 	if req.PreviewKey != "" {
 		secrets[edge.PreviewKeyVar] = string(req.PreviewKey)
-	}
-	if req.PreviewGate != nil {
-		encoded, err := json.Marshal(req.PreviewGate)
-		if err != nil {
-			return provider.EdgeProgram{}, err
-		}
-		secrets[edge.PreviewGateVar] = string(encoded)
-	}
-	if len(req.PreviewGates) > 0 {
-		encoded, err := json.Marshal(req.PreviewGates)
-		if err != nil {
-			return provider.EdgeProgram{}, err
-		}
-		secrets[edge.PreviewGatesVar] = string(encoded)
 	}
 	worker := edge.Worker{Main: req.Entry, Variables: variables}
 	if len(secrets) > 0 {

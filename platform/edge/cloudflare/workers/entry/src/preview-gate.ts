@@ -5,7 +5,7 @@ import {
   type PreviewGate,
   parsePreviewGate,
 } from "@platform/edge-contract/preview-gate";
-import type { Env } from "./env";
+import type { ReleasesBinding } from "./releases";
 
 export type PreviewGateRead =
   | { kind: "open" }
@@ -16,18 +16,40 @@ export type PreviewGateOutcome =
   | { kind: "respond"; response: Response }
   | { kind: "forward"; request: Request; responseHeaders: Headers };
 
-export function readPreviewGate(
-  env: Pick<Env, "OCEL_PREVIEW_GATE" | "OCEL_PREVIEW_GATES">,
+const GATE_TTL_MS = 5_000;
+
+interface CachedRead {
+  read: PreviewGateRead;
+  at: number;
+}
+
+const gateCache = new WeakMap<ReleasesBinding, Map<string, CachedRead>>();
+
+export async function readPreviewGate(
+  binding: ReleasesBinding,
   slug: string,
-): PreviewGateRead {
-  const own = env.OCEL_PREVIEW_GATE;
-  if (own !== undefined) return toRead(parsePreviewGate(parseJson(own)));
-  const shared = env.OCEL_PREVIEW_GATES;
-  if (shared === undefined) return { kind: "open" };
-  const recorded = parseJson(shared);
-  if (!isRecord(recorded)) return { kind: "unreadable" };
-  if (!Object.hasOwn(recorded, slug)) return { kind: "open" };
-  return toRead(parsePreviewGate(recorded[slug]));
+  now: () => number = Date.now,
+): Promise<PreviewGateRead> {
+  let reads = gateCache.get(binding);
+  if (!reads) gateCache.set(binding, (reads = new Map()));
+  const cached = reads.get(slug);
+  if (cached && now() - cached.at < GATE_TTL_MS) return cached.read;
+  const read = await fetchPreviewGate(binding, slug);
+  if (read.kind === "unreadable") reads.delete(slug);
+  else reads.set(slug, { read, at: now() });
+  return read;
+}
+
+async function fetchPreviewGate(binding: ReleasesBinding, slug: string): Promise<PreviewGateRead> {
+  let stored: string | undefined;
+  try {
+    stored = await binding.readPreviewGate({ slug });
+  } catch {
+    return { kind: "unreadable" };
+  }
+  if (stored === undefined) return { kind: "open" };
+  const gate = parsePreviewGate(parseJson(stored));
+  return gate ? { kind: "gated", gate } : { kind: "unreadable" };
 }
 
 export async function gatePreview(
@@ -74,18 +96,10 @@ export function previewGateUnreadableResponse(): Response {
   });
 }
 
-function toRead(gate: PreviewGate | undefined): PreviewGateRead {
-  return gate ? { kind: "gated", gate } : { kind: "unreadable" };
-}
-
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
