@@ -87,7 +87,7 @@ func (c *Consumption) Run(ctx context.Context) error {
 		running.Add(1)
 		go func() {
 			defer running.Done()
-			c.sleepWhenIdle(ctx, urls)
+			c.scaleToNoneWhenIdle(ctx, urls)
 		}()
 	}
 	running.Wait()
@@ -107,7 +107,7 @@ func (c *Consumption) idleSince() (time.Time, bool) {
 	return c.lastBusy, c.working == 0
 }
 
-func (c *Consumption) sleepWhenIdle(ctx context.Context, urls []string) {
+func (c *Consumption) scaleToNoneWhenIdle(ctx context.Context, urls []string) {
 	ticker := time.NewTicker(c.idleEvery)
 	defer ticker.Stop()
 	for {

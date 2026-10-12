@@ -488,7 +488,7 @@ func TestAWorkerStaysUpWhileAnyOfItsQueuesHoldsAMessageVisibleOrInFlightAnywhere
 	}
 }
 
-func TestAWorkerDoesNotSleepWhileItIsWorkingAMessage(t *testing.T) {
+func TestAWorkerKeepsItsServiceUpWhileItIsWorkingAMessage(t *testing.T) {
 	t.Parallel()
 
 	queue := &scriptedQueue{waiting: []sqstypes.Message{message("a")}, counts: map[string]string{"ApproximateNumberOfMessages": "0", "ApproximateNumberOfMessagesNotVisible": "0"}}
