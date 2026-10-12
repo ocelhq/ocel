@@ -46,6 +46,9 @@ type Engine struct {
 	woken map[string]time.Time
 	holds map[string]time.Time
 
+	runLeases  map[string]runLease
+	slotLeases map[string]slotLease
+
 	pollsItsQueues bool
 }
 
@@ -65,6 +68,9 @@ func New(cfg Config) *Engine {
 		urls:  map[string]string{},
 		woken: map[string]time.Time{},
 		holds: map[string]time.Time{},
+
+		runLeases:  map[string]runLease{},
+		slotLeases: map[string]slotLease{},
 	}
 }
 

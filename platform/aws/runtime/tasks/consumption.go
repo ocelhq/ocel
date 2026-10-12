@@ -78,6 +78,11 @@ func (c *Consumption) Run(ctx context.Context) error {
 			}()
 		}
 	}
+	running.Add(1)
+	go func() {
+		defer running.Done()
+		c.keepLeases(ctx)
+	}()
 	if c.engine.canScaleToNone() {
 		running.Add(1)
 		go func() {
