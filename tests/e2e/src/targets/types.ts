@@ -1,4 +1,5 @@
 import type { Fetch } from "../checks/context";
+import type { PreviewGateCredentials } from "../checks/previews";
 import type { Lane, TargetName } from "../matrix/types";
 import type { Plan } from "../plan";
 import type { PrepareFailures } from "../prepare";
@@ -49,6 +50,7 @@ export interface Previews {
   previewUp(cell: CellUnderTest, name: string): Promise<PreviewRelease[]>;
   previewPrune(cell: CellUnderTest, name: string, keep: number): Promise<void>;
   previewRemove(cell: CellUnderTest, name: string): Promise<void>;
+  previewGate?(cell: CellUnderTest, name: string): Promise<PreviewGateCredentials>;
 }
 
 export function hasPreviews<T extends object>(target: T): target is T & Previews {
@@ -58,6 +60,12 @@ export function hasPreviews<T extends object>(target: T): target is T & Previews
     typeof previewing.previewPrune === "function" &&
     typeof previewing.previewRemove === "function"
   );
+}
+
+export function hasPreviewGate<T extends object>(
+  target: T,
+): target is T & Required<Pick<Previews, "previewGate">> {
+  return hasPreviews(target) && typeof target.previewGate === "function";
 }
 
 export function previewsOn(target: object, lane: Lane): boolean {

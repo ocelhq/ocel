@@ -303,10 +303,11 @@ export function plan(input: {
   lane: Lane;
   releaseCycle: boolean;
   previews: boolean;
+  gatesPreviews: boolean;
   filter: RunFilter;
   env: NodeJS.ProcessEnv;
 }): Plan {
-  const { fixtures, gaps, lane, releaseCycle, previews, filter, env } = input;
+  const { fixtures, gaps, lane, releaseCycle, previews, gatesPreviews, filter, env } = input;
   checkMatrix(fixtures);
   checkGaps(gaps);
   checkVariantsAsked(fixtures, filter.variants);
@@ -316,15 +317,17 @@ export function plan(input: {
 
   const laneTests: LaneTest[] = offered.flatMap((one) =>
     cellsOn(one, target).flatMap((cell) =>
-      stepsOf(cell, phasesOf(one, false, releaseCycle, walksPreviews(cell, previews))).map(
-        (step) => ({
-          cell: cell.name,
-          app: step.app,
-          fixture: one.name,
-          variant: cell.variant.name,
-          title: step.title,
-        }),
-      ),
+      stepsOf(
+        cell,
+        phasesOf(one, false, releaseCycle, walksPreviews(cell, previews)),
+        gatesPreviews,
+      ).map((step) => ({
+        cell: cell.name,
+        app: step.app,
+        fixture: one.name,
+        variant: cell.variant.name,
+        title: step.title,
+      })),
     ),
   );
   const resolved = resolveGaps(gaps, lane, env, laneTests);
@@ -360,7 +363,7 @@ export function plan(input: {
       fixture: cell.fixture.name,
       variant: cell.variant.name,
       phases,
-      steps: stepsOf(cell, phases).map(({ app, title, phase }) =>
+      steps: stepsOf(cell, phases, gatesPreviews).map(({ app, title, phase }) =>
         phase === undefined ? { app, title } : { app, title, phase },
       ),
     };

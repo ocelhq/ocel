@@ -5,8 +5,8 @@ import {
   checkOwnReleases,
   checkPreviewGate,
   checkPruned,
-  PREVIEW_CHECKS,
   PREVIEW_TITLES,
+  previewChecks,
 } from "./previews";
 
 const page = (id: string) => `<html><p data-ocel="deployment">${id}</p></html>`;
@@ -33,9 +33,10 @@ const release = (id: string, over: Partial<PreviewRelease> = {}): PreviewRelease
 const serving = (id: string) => new Response(page(id));
 
 describe("the preview checks a cell walks", () => {
-  it("walks the own-release and pruned checks, each with a title", () => {
-    expect(PREVIEW_CHECKS).toEqual(["own-release", "pruned"]);
-    expect(Object.keys(PREVIEW_TITLES).sort()).toEqual(["own-release", "pruned"]);
+  it("walks the own-release and pruned checks, and the gate after them only when the target hands credentials", () => {
+    expect(previewChecks(false)).toEqual(["own-release", "pruned"]);
+    expect(previewChecks(true)).toEqual(["own-release", "pruned", "gated"]);
+    expect(Object.keys(PREVIEW_TITLES).sort()).toEqual(["gated", "own-release", "pruned"]);
   });
 });
 

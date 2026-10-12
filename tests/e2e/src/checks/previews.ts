@@ -9,13 +9,15 @@ const PRUNE_POLL_MS = 15_000;
 const DEPLOYMENT_PATH = "/cache/deployment";
 const DEPLOYMENT_MARKER = "deployment";
 
-export type PreviewCheck = "own-release" | "pruned";
+export type PreviewCheck = "own-release" | "pruned" | "gated";
 
 export const PREVIEW_NAME = "journey";
 
 export const PREVIEW_TITLES: Record<PreviewCheck, string> = {
   "own-release": "preview · each deployment's own hostname serves its own release",
   pruned: "preview · a pruned deployment's own hostname stops serving",
+  gated:
+    "preview · a gated preview refuses a request without credentials and serves cookie, Basic and bypass credentials",
 };
 
 export type Clock = {
@@ -24,7 +26,9 @@ export type Clock = {
   now: () => number;
 };
 
-export const PREVIEW_CHECKS: PreviewCheck[] = ["own-release", "pruned"];
+export function previewChecks(gatesPreviews: boolean): PreviewCheck[] {
+  return gatesPreviews ? ["own-release", "pruned", "gated"] : ["own-release", "pruned"];
+}
 
 type Seen = { served: boolean; said: string };
 

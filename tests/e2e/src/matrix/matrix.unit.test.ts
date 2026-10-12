@@ -21,7 +21,7 @@ import { JSON_BASE } from "../config";
 import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
-import { hasReleaseCycle, previewsOn, targetNamed } from "../targets";
+import { hasPreviewGate, hasReleaseCycle, previewsOn, targetNamed } from "../targets";
 import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
 import { type Concern, LANES, type Lane, targetOfLane } from "./types";
@@ -40,6 +40,7 @@ function planOn(lane: Lane, env: NodeJS.ProcessEnv = {}, filter: RunFilter = NO_
     lane,
     releaseCycle,
     previews: previewsOn(target, lane),
+    gatesPreviews: hasPreviewGate(target),
     filter,
     env,
   });

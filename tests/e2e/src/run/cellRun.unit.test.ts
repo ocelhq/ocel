@@ -350,6 +350,61 @@ describe("a cell run", () => {
       };
     };
 
+    it("presents the credentials its target hands the newest preview's deployment url", async () => {
+      const called: Called = [];
+      const target: Target & Previews = {
+        ...previewingTarget(called),
+        previewGate: async (_cell: unknown, name: string) => {
+          called.push(`previewGate ${name}`);
+          return { password: "pw", bypassSecret: "bp" };
+        },
+      };
+      const asked: string[] = [];
+      const gate = (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        asked.push(url);
+        const credentialed =
+          headers.get("x-ocel-preview-bypass") === "bp" ||
+          headers.get("authorization") === `Basic ${btoa("ocel:pw")}` ||
+          headers.get("cookie") === "__Host-ocel-preview=session";
+        if (new URL(url).pathname === "/.ocel/preview/login") {
+          return new Response(null, {
+            status: 303,
+            headers: { "set-cookie": "__Host-ocel-preview=session; Path=/" },
+          });
+        }
+        return credentialed
+          ? new Response('<p data-ocel="deployment">R2</p>', {
+              headers: { "x-robots-tag": "noindex" },
+            })
+          : new Response("", {
+              status: 401,
+              headers: { "cache-control": "private, no-store", "x-robots-tag": "noindex" },
+            });
+      };
+      const run = runOf(called, {
+        target,
+        clock: {
+          fetch: (async (input: string | URL | Request, init?: RequestInit) =>
+            gate(String(input), init)) as unknown as typeof fetch,
+          sleep: async () => {},
+          now: () => 0,
+        },
+      });
+
+      await run.preview("web", "gated");
+
+      expect(called).toContain("previewGate journey");
+      expect(asked.every((url) => url.startsWith("https://R2.test"))).toBe(true);
+    });
+
+    it("fails a gated check on a target that hands a gated preview no credentials", async () => {
+      const called: Called = [];
+      const run = runOf(called, { target: previewingTarget(called), clock: serving() });
+
+      await expect(run.preview("web", "gated")).rejects.toThrow(/no credentials to present/);
+    });
+
     it("deploys the preview twice once, however many preview steps run", async () => {
       const called: Called = [];
       const run = runOf(called, {

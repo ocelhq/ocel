@@ -41,6 +41,7 @@ type Input = {
   gaps?: Gap[];
   releaseCycle?: boolean;
   previews?: boolean;
+  gatesPreviews?: boolean;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -51,6 +52,7 @@ function planOf(fixtures: Fixture[], input: Input = {}): Plan {
     lane: input.lane ?? "aws",
     releaseCycle: input.releaseCycle ?? true,
     previews: input.previews ?? false,
+    gatesPreviews: input.gatesPreviews ?? false,
     filter: { ...NO_FILTER, ...input.filter },
     env: input.env ?? {},
   });

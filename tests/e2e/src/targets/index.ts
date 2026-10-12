@@ -5,7 +5,7 @@ import { GcpTarget } from "./gcp";
 import type { Target } from "./types";
 import { VpsTarget } from "./vps";
 
-export { hasPreviews, hasReleaseCycle, previewsOn } from "./types";
+export { hasPreviewGate, hasPreviews, hasReleaseCycle, previewsOn } from "./types";
 
 const TARGETS: Record<TargetName, () => Target> = {
   aws: () => new AwsTarget(),

@@ -40,7 +40,7 @@ const serving = {
 
 describe("the steps a cell process runs", () => {
   it("runs the steps the plan printed, in its order", () => {
-    expect(stepsPlanned(cell, serving).map((step) => step.title)).toEqual([
+    expect(stepsPlanned(cell, serving, false).map((step) => step.title)).toEqual([
       "deploy",
       "ping",
       "destroy",
@@ -56,7 +56,7 @@ describe("the steps a cell process runs", () => {
         { app: "web", title: "destroy", phase: "destroy" as const },
       ],
     };
-    expect(() => stepsPlanned(cell, drifted)).toThrow(
+    expect(() => stepsPlanned(cell, drifted, false)).toThrow(
       /lifecycle\/next walks web · deploy, web · ping, web · destroy, not the planned web · deploy, web · pong, web · destroy/,
     );
   });
@@ -118,6 +118,39 @@ describe("the preview phase", () => {
     expect(titlesOf(front).slice(-3)).toEqual([
       PREVIEW_TITLES["own-release"],
       PREVIEW_TITLES.pruned,
+      "destroy",
+    ]);
+  });
+
+  it("walks the gated step after the hostname steps on a box whose target hands credentials", () => {
+    const boxed = fixture("lifecycle/next", {
+      apps: ["web"],
+      redeploys: true,
+      checks: [ping],
+      on: { vps: [defaults] },
+      previews: { vps: [defaults] },
+    });
+    const cell: Cell = {
+      name: "lifecycle/next",
+      fixture: boxed,
+      variant: defaults,
+      cacheLayer: "edge",
+      target: "vps",
+    };
+
+    const phases = phasesOf(boxed, false, true, walksPreviews(cell, true));
+    const titles = (gatesPreviews: boolean) =>
+      stepsOf(cell, phases, gatesPreviews).map((step) => step.title);
+
+    expect(titles(false).slice(-3)).toEqual([
+      PREVIEW_TITLES["own-release"],
+      PREVIEW_TITLES.pruned,
+      "destroy",
+    ]);
+    expect(titles(true).slice(-4)).toEqual([
+      PREVIEW_TITLES["own-release"],
+      PREVIEW_TITLES.pruned,
+      PREVIEW_TITLES.gated,
       "destroy",
     ]);
   });

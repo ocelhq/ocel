@@ -1,5 +1,5 @@
 import type { Check } from "./checks/context";
-import { PREVIEW_CHECKS, PREVIEW_TITLES, type PreviewCheck } from "./checks/previews";
+import { PREVIEW_TITLES, type PreviewCheck, previewChecks } from "./checks/previews";
 import type { Cell, Fixture, Phase } from "./matrix/types";
 import type { CellRun } from "./run/cellRun";
 import type { StackPoint } from "./stacks";
@@ -107,7 +107,7 @@ function newDestroyStep(app: string): Step {
   return { app, title: DESTROY, phase: "destroy", run: (run) => run.destroy() };
 }
 
-export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
+export function stepsOf(cell: Cell, phases: Phase[], gatesPreviews = false): Step[] {
   const { apps, stack, refusal } = cell.fixture;
   if (refusal) {
     return apps.flatMap((app) => [
@@ -193,7 +193,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     ...replaced("rollback", ROLLBACK),
     ...(has("preview")
       ? perApp((app) =>
-          PREVIEW_CHECKS.map((check) => ({
+          previewChecks(gatesPreviews).map((check) => ({
             app,
             title: PREVIEW_TITLES[check],
             phase: "preview" as const,
@@ -230,8 +230,8 @@ function said(steps: PlannedSteps["steps"]): string {
   return steps.map((one) => `${one.app} · ${one.title}`).join(", ");
 }
 
-export function stepsPlanned(cell: Cell, planned: PlannedSteps): Step[] {
-  const steps = stepsOf(cell, planned.phases);
+export function stepsPlanned(cell: Cell, planned: PlannedSteps, gatesPreviews: boolean): Step[] {
+  const steps = stepsOf(cell, planned.phases, gatesPreviews);
   const same =
     steps.length === planned.steps.length &&
     steps.every((one, index) => {
