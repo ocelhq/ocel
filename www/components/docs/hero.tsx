@@ -43,7 +43,7 @@ export async function Hero() {
             apps
           </Link>{" "}
           to your own{" "}
-          <Link href="/docs/providers/aws" className={inline}>
+          <Link href="/docs/providers" className={inline}>
             cloud
           </Link>{" "}
           or servers with one command.

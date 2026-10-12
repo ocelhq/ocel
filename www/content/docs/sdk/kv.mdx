@@ -3,8 +3,7 @@ title: KV
 description: A key-value store of its own, typed by key pattern.
 ---
 
-Declaring a KV store provisions one Valkey instance for it. Its entries name the key patterns
-your app reads and writes, and the kind of value each holds.
+Each KV store is its own Valkey instance. Entries name the key patterns the app uses and the shape of each value: `text`, `counter`, `json`, `list` or `set`.
 
 <Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
@@ -43,8 +42,6 @@ cache = ocel.kv("cache")
 session = cache.text("session", "session/:id")
 ```
 
-Install `ocel[kv]` to read and write it.
-
 </Tab>
 
 <Tab value="Rust">
@@ -63,8 +60,61 @@ pub struct Infra {
 }
 ```
 
-Enable the `kv` feature to read and write it.
+</Tab>
+
+</Tabs>
+
+Store options: `version` (`"8"` or `"9"`), `eviction` (default `noeviction`) and `memory`, such as `"256mb"`; in Go, `ocel.KVVersion`, `ocel.KVEviction` and `ocel.KVMemory`. An entry can declare a `ttl`.
+
+## Reading and writing
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts
+await cache.session.set({ id: "abc" }, token, { ttl: "1h" });
+
+const token = await cache.session.get({ id: "abc" }); // undefined when missing
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go
+err := resources.Session.Set(ctx, "abc", token, ocel.KVTTL(time.Hour))
+
+token, err := resources.Session.Get(ctx, "abc") // ocel.ErrKVMiss when missing
+```
+
+</Tab>
+
+<Tab value="Python">
+
+Install `ocel[kv]`. Every method has an `_async` twin.
+
+```python
+session.set(token, id="abc", ttl="1h")
+
+token = session.get(id="abc")  # None when missing
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+Enable the `kv` feature.
+
+```rust
+let entry = resources.cache.entry(Session { id: "abc".into() });
+entry.set(token).ttl(Duration::from_secs(3600)).await?;
+
+let token = entry.get().await?; // None when missing
+```
 
 </Tab>
 
 </Tabs>
+
+A write without `ttl` uses the entry's own. `"keep"` keeps the key's current TTL and `null` clears it (Go `ocel.KVKeepTTL()` / `ocel.KVNoTTL()`, Rust `.keep_ttl()` / `.clear_ttl()`).

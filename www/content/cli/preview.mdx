@@ -1,32 +1,25 @@
 ```bash
-ocel preview
+ocel preview                          # deploy the current branch's preview
 ocel preview up pr-12
 ocel preview up staging --persistent
 ocel preview ls
 ocel preview rm pr-12
 ```
 
-A preview is a full deployment beside production, on its own hostname, that you tear down
-without touching anything else. It needs the preview bootstrap (`ocel bootstrap preview`) and a
-preview domain.
+A preview is a full deployment beside production, on its own hostname, torn down without touching
+anything else. It needs `ocel bootstrap preview` and a preview domain.
 
-`ocel preview` alone is `ocel preview up` with no name: it deploys the current branch's preview.
-`rm` asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it
-stops unless you pass `--yes`. `prune` keeps the newest `--keep` deployments (3 by default) and
-whatever is live. `ls` lists each preview's name, lifecycle, label, alias URL and when it was
-created.
+- `ls` lists each preview's name, lifecycle, label, alias URL and creation time.
+- `prune` keeps the newest `--keep` deployments (3 by default) and whatever is live.
+- `rm` asks first for a persistent preview. Without a terminal it stops unless you pass `--yes`.
 
 ## Naming a preview
 
-Without a name, a command addresses the current branch's preview. In CI, a pull request
-checks out a detached HEAD, so the branch comes from `GITHUB_HEAD_REF`; with neither a branch
-nor that variable, the command stops and asks for a name. [`ocel logs --preview`](/docs/cli/logs)
-finds the preview the same way.
-
-A name addresses one preview from any branch or machine. It is a DNS label (lowercase letters,
-digits and hyphens, starting with a letter) with no `--`. It always follows a subcommand, so
-`ocel preview` alone takes none. `ocel preview ls` lists every preview by the name the other
-commands take.
+With no name, a command addresses the current branch's preview, taking the branch from
+`GITHUB_HEAD_REF` on CI's detached HEAD, and stops when it has neither.
+[`ocel logs --preview`](/docs/cli/logs) does the same. A name works from any branch or machine: a DNS
+label (lowercase letters, digits and hyphens, starting with a letter) with no `--`, after a
+subcommand.
 
 ```yaml title=".github/workflows/preview.yml"
 - run: ocel preview up pr-${{ github.event.number }}
@@ -35,28 +28,21 @@ commands take.
 
 ## Hostnames
 
-A preview is served on two kinds of hostname, and the name is in neither's control:
-
 | Hostname | Serves | Until |
 | --- | --- | --- |
-| The alias | The newest deployment of the preview | `ocel preview rm` |
-| A deployment's own | That deployment, and nothing newer | `prune` or `rm` drops it |
+| The alias | The preview's newest deployment | `ocel preview rm` |
+| A deployment's own | That deployment only | `prune` or `rm` drops it |
 
-`up` prints both. The alias's token is chosen when the preview is created and kept, so a
-build already knows the alias. The alias changes only when the preview domain changes
-(`domains.preview`, or the global preview domain) or the project goes from one app to
-several or back. The deploy that changes it stops serving the old alias, and `rm` stops
-serving every alias the preview had.
+`up` prints both. The alias is fixed at creation, so a build already knows it, and changes only
+with the preview domain or when the project goes from one app to several or back.
 
-Each hostname ends in a random token, so nobody can work out a preview's URL from its name
-or the branch. On Cloudflare the token is signed, and the edge turns away a made-up one
-without looking it up. The other edges answer only on hostnames a deploy published.
+| Preview domain | Hostname |
+| --- | --- |
+| The project's `domains.preview` | `pr-12-web-<token>.preview.example.com`: name, then the app when there are several |
+| The global preview domain | `shop-<token>.preview.example.com`: the project's slug |
 
-On the project's own `domains.preview` a hostname starts with the preview's name (and the app,
-when there is more than one): `pr-12-web-<token>.preview.example.com`. On the global preview
-domain it starts with the project's slug: `shop-<token>.preview.example.com`.
-
-A hostname nobody can guess is not access control. A preview URL still leaks through pull
+The random token keeps URLs unguessable from the name or branch (on Cloudflare it is signed, and
+the edge turns a made-up one away at once). That is not access control: URLs leak through pull
 request comments, chat previews and `Referer` headers, so keep secrets out of previews, or
 [protect them](#protecting-previews).
 
@@ -118,16 +104,13 @@ exits with an error naming those functions, until those previews are destroyed.
 
 ## Ephemeral and persistent
 
-A preview is ephemeral unless you pass `--persistent` when it is created.
+A preview is ephemeral unless created with `--persistent`, and keeps that lifecycle: deploying the
+other one to the same name is refused, so remove it first or use another name.
 
 | | Ephemeral | Persistent |
 | --- | --- | --- |
 | Infrastructure | None of its own, only what [bindings](/docs/cli/bindings) share | Its own database, bucket and the rest |
 | Teardown | `rm` tears it down straight away | `rm` asks first, and needs `--yes` in CI |
 
-An ephemeral preview deploys fast and costs little. If the app declares a resource that no
-binding covers, the deploy stops and names the two ways out: `--persistent`, or a binding
-for previews with `ocel bindings set --preview`.
-
-A preview keeps the lifecycle it was created with. Deploying the other one to the same name is
-refused; remove the preview first or deploy under another name.
+If an ephemeral preview's app declares a resource no binding covers, the deploy stops: pass
+`--persistent`, or add a binding with `ocel bindings set --preview`.

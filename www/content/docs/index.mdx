@@ -8,7 +8,7 @@ icon: BookOpenIcon
 
 ## Zero infrastructure code
 
-You write minimal config naming the platform to deploy to via a provider, never infra code for deploying your app. Swapping providers is easy:
+You write minimal config naming the platform to deploy to via a provider, never infrastructure code for deploying your app. Swapping providers is easy:
 
 <Compare>
 <div>
@@ -239,9 +239,9 @@ struct Infra {
 #[ocel::main]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let infra = Infra::load()?;
+    let resources = Infra::load()?;
     let rows = sqlx::query("select * from documents")
-        .fetch_all(infra.main.pool().await?)
+        .fetch_all(resources.main.pool().await?)
         .await?;
     // ...
     Ok(())

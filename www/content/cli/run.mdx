@@ -1,24 +1,25 @@
-Runs the command with your resources' connections. They reach it as files under `OCEL_LIVE_DIR`, the
-way they reach an app, so `postgres("main").connectionString` works in the command's code. The exit
-code is the command's own.
-
-Without `--env`, the connections are the dev resources `ocel dev` runs.
-
-## --env
-
-`--env production` runs the command against the resources of the deployed production environment, and
-`--env preview` against the current branch's preview. `ocel run` opens a port forward to each of the
-project's resources through the provider, as `ocel deploy` does for
-[`lifecycle.preBuild`](/docs/configuration#lifecycle), runs the command, and closes the forwards when it
-exits.
-
 ```bash
+ocel run -- pnpm test
 ocel run --env production -- pnpm drizzle-kit migrate
 ```
 
-What the bindings keep secret, such as a database password, is hidden wherever the command prints
-it, so its output reaches `ocel run` through pipes rather than straight to your terminal.
+Runs the command with your resources' connections, as files under `OCEL_LIVE_DIR` the way an app
+gets them, so `postgres("main").connectionString` works in its code. The exit code is the
+command's own.
 
-The command receives the bindings alone: the project's variables are resolved by a deploy. It stops
-before the command starts when nothing is deployed to the environment yet, or when the provider
-forwards no port.
+## --env
+
+| `--env` | Connects to |
+| --- | --- |
+| none | the dev resources `ocel dev` runs |
+| `production` | the deployed production resources |
+| `preview` | the current branch's preview |
+
+With `--env`, `ocel run` opens a port forward to each resource through the provider, as
+`ocel deploy` does for [`lifecycle.preBuild`](/docs/configuration#lifecycle), and closes them when
+the command exits. It stops before the command starts when nothing is deployed there yet, or the
+provider forwards no port.
+
+The command gets the bindings only, not the project's variables. Secrets in them, such as a
+database password, are hidden wherever the command prints them, so its output reaches your
+terminal through `ocel run`'s pipes.

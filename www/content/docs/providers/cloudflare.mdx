@@ -1,86 +1,10 @@
 ---
 title: Cloudflare edge
-description: Put an edge in front of any origin.
+description: Put Cloudflare in front of any origin.
 ---
 
-Cloudflare is an edge, not an origin: it fronts whichever provider runs your app, and is
-named in that provider's options.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import { cloudflare } from "ocel/edge";
-import awsProvider from "ocel/providers/aws";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: awsProvider({ edge: cloudflare() }),
-  apps: [{ name: "web", path: "." }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": { "aws": { "edge": "cloudflare" } },
-  "apps": [{ "name": "web", "path": "." }]
-}
-```
-
-The token and the account id come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, not from the config.
-
-On a [VPS](/docs/providers/vps), Cloudflare runs no worker: it forwards each hostname to the
-origin through a proxied record. On [Google Cloud](/docs/providers/gcp) it runs a worker in
-front of serverless apps and forwards container apps the same way (see
-[Serverless apps on Google Cloud](#serverless-apps-on-google-cloud)). The origin answers
-only what arrives with the certificate your zone presents to origins (zone-level
-authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
-one). Every origin trusts the CA of every client certificate the zone holds. If the zone
-holds none, ocel mints a CA and a client certificate it signs, both good for ten years,
-uploads the client certificate, has the origin trust the CA, then turns zone-level pulls on.
-The client certificate carries its CA in its CA Issuers access (a `data:` URI), which is how
-a later deploy reads the CA back from the zone. Two deploys that find the zone holding none
-at once each upload one, and the one that uploaded second deletes its own, so the zone keeps
-one. Past that, ocel never replaces or deletes a zone's client certificate: it is shared by
-every origin the zone forwards to. A load balancer on AWS or Google Cloud refuses the
-certificate once it or its CA lapses; the origins on a VPS box accept it past its expiry,
-except behind your own Traefik. A zone that already presents Cloudflare's shared
-certificate (global pulls on, or zone-level pulls on with no certificate of the zone's own)
-is refused, since another origin in it may trust only that one: upload a certificate of
-your own first.
-
-To rotate the certificate, or retire a leaked key, upload the new one to the zone
-(**SSL/TLS > Origin Server > Authenticated Origin Pulls**). ocel must be able to read the CA
-it chains to: upload a self-signed certificate, or one that names its CA's certificate as a
-`data:application/pkix-cert;base64,` URI in its CA Issuers access, as ocel's own does. A
-load balancer on AWS trusts only a CA, so behind one only the second kind works; a deploy
-refuses a zone holding a certificate whose CA ocel cannot read. Cloudflare presents the
-certificate uploaded last at once, so until the next step origins refuse it. Deploy one
-project on each VPS box, on each Google Cloud tier and on each AWS tier with container apps
-the zone forwards to: each origin then trusts both. Delete the old certificate from the
-zone, then deploy every project with a hostname in the zone once more: an origin stops
-trusting the old CA for a hostname once that hostname's own project deploys, since another
-zone may still present it.
-
-Cloudflare reaches the origin over plain http when the visitor used it, and the origin
-answers that with a redirect to https without forwarding it, so ocel changes neither Always
-Use HTTPS nor any redirect rule in your zone.
-
-A promote purges what Cloudflare cached for the hostnames it moved to the new release. Unless
-the edge sets `tunnel`, the zone's SSL mode must be Full (strict). The token needs Zone Read,
-Zone Settings Read, DNS Edit, SSL and Certificates Edit and Cache Purge on the zone, and
-Account Settings Read on the account; with `tunnel`, it also needs Cloudflare Tunnel Edit on
-the account.
-
-`tunnel` is an option of the Cloudflare edge, and no other edge takes it. On a VPS box,
-`"edge": { "cloudflare": { "tunnel": true } }`, or `cloudflare({ tunnel: true })` in a
-TypeScript config, reaches the box through a Cloudflare Tunnel instead of at its address,
-with no certificates and no SSL mode to set; see
-[through a Cloudflare Tunnel](/docs/providers/vps#through-a-cloudflare-tunnel). Other
-providers refuse `tunnel`.
-
-Hostname records go into the origin provider's own DNS unless you say otherwise. Write
-them into Cloudflare instead:
+Cloudflare is an edge, not a [provider](/docs/providers): it fronts whichever provider runs
+your app, and is named in that provider's options.
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -104,18 +28,48 @@ export default defineConfig({
 }
 ```
 
-`"dns": "cloudflare"` works without the Cloudflare edge too. The token then needs only Zone
-Read and DNS Edit on the zone. A deploy checks `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN` before the build, and stops there if either is unset or Cloudflare
+`dns: "cloudflare"` writes the hostname records into Cloudflare rather than the origin
+provider's own DNS. It works without the Cloudflare edge too. On AWS a Cloudflare edge requires
+it: Route 53 cannot write the records the edge answers on.
+
+## Setup
+
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment; the config never
+holds them. A deploy checks both before the build, and stops if either is unset or Cloudflare
 will not list the account's zones for the token.
 
-Dev mode starts the resources the app declares on your machine, linked or not, and reads its values from `.env`, or from the env source the config names for dev, with `.env.local` on top.
+| The token needs | When |
+| --- | --- |
+| Zone Read, DNS Edit on the zone | always; this is all `dns: "cloudflare"` alone needs |
+| Zone Settings Read, SSL and Certificates Edit, Cache Purge on the zone; Account Settings Read on the account | with the Cloudflare edge |
+| Cloudflare Tunnel Edit on the account | with `tunnel` |
+| Account SSL and Certificates Edit on the account; DNS Edit on the zone holding `originDomain` | on Google Cloud, for serverless apps |
+
+Unless the edge sets `tunnel`, the zone's SSL mode must be **Full (strict)**.
+
+## What runs where
+
+| Origin | Serverless apps | Container apps |
+| --- | --- | --- |
+| [AWS](/docs/providers/aws) | a worker | forwarded to a load balancer ([below](#container-apps-on-aws)) |
+| [Google Cloud](/docs/providers/gcp) | a worker ([below](#serverless-apps-on-google-cloud)) | forwarded to the tier's load balancer |
+| [VPS](/docs/providers/vps) | — | forwarded to the box, or through a tunnel |
+
+Forwarded means a proxied record per hostname and no worker. A promote purges what Cloudflare
+cached for the hostnames it moved to the new release.
+
+`cloudflare({ tunnel: true })` (`{ "cloudflare": { "tunnel": true } }` in JSON) reaches a VPS
+box through a Cloudflare Tunnel instead of at its address, with no certificates and no SSL mode
+to set; other providers refuse it. See
+[through a Cloudflare Tunnel](/docs/providers/vps#through-a-cloudflare-tunnel).
+
+ocel changes neither Always Use HTTPS nor any redirect rule in your zone: when a visitor uses
+plain http, the origin answers with a redirect to https.
 
 ## Serverless apps on Google Cloud
 
-On [Google Cloud](/docs/providers/gcp), Cloudflare runs a worker in front of serverless apps.
-The worker routes each request, caches pages at the edge, and reaches every deployment
-of an app on its own hostname under an origin domain you name:
+The worker routes each request, caches pages at the edge and reaches every deployment of an app
+on its own hostname under an `originDomain` you name:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -148,71 +102,83 @@ export default defineConfig({
 }
 ```
 
-`originDomain` is a domain in a Cloudflare zone of your account, and nothing else may use it.
-Production deployments answer at `<release>-<service>.origin.example.com` and previews at
-`<release>-<service>.preview.origin.example.com`. A Workers mutual TLS binding cannot reach a
-proxied hostname, so these records are DNS-only and point at the tier's load balancer, which
-checks the client certificate the worker presents and refuses everything else. Each tier gets
-one wildcard certificate and one wildcard record under the domain, and a tier has one origin
-domain: a deploy that names another is refused. The first deploy of a tier asks you to deploy
-again while Google is still issuing the wildcard certificate. AWS refuses `originDomain`.
+- `originDomain` is a domain in a Cloudflare zone of your account that nothing else uses.
+  Production answers at `<release>-<service>.origin.example.com`, previews at
+  `<release>-<service>.preview.origin.example.com`.
+- A tier has one origin domain; a deploy naming another is refused. AWS refuses `originDomain`.
+- The first deploy of a tier asks you to deploy again while Google issues the wildcard
+  certificate.
+- A project deployed through the proxy before this existed is refused until `ocel destroy` has
+  taken its deployments down.
 
-Bootstrapping the edge on Google Cloud keeps, per tier, a client certificate for the worker
-(renewed beside the old one, which stays trusted until it expires) and the worker that stores
-each deployment's records. The edge caches pages itself and serves a stale one while the app
-renders a fresh one; revalidating a tag records it in the tier's tag database and purges the
-tag at the edge. The app keeps its pages in the tier's Cloud Storage bucket, out of the
-worker's reach: a page the edge does not hold is rendered at the origin. An app's static
-files and route table stay in the tier's Cloud Storage bucket as well: the worker reads them
-from there over Cloud Storage's S3-compatible API and caches them at the edge, signing each
-read with an HMAC key of a service account that bootstrapping keeps for the tier and that may
-read the bucket's static files and route tables and nothing else. Removing the bootstrap
-deletes the key and the account. Container apps are not served by the worker: they are forwarded through
-the tier's load balancer as a proxied record, as a VPS is.
-
-Besides the permissions above, the token needs Account SSL and Certificates Edit on the
-account (the worker's client certificate) and DNS Edit on the zone that holds `originDomain`.
-A project deployed before this existed through the proxy is refused on its next deploy until
-`ocel destroy` has taken its deployments down: its routing sat in the load balancer's own
-stack, and the edge now forwards to that router.
+Under the hood, these records are DNS-only (a Workers mutual TLS binding cannot reach a proxied
+hostname) and point at the tier's load balancer, which admits only the worker's client
+certificate. The edge serves a stale page while the app renders a fresh one, and purges a
+revalidated tag. The worker reads static files and route tables from the tier's bucket over
+its S3-compatible API, with an HMAC key that may read only those.
 
 ## Container apps on AWS
 
-On [AWS](/docs/providers/aws), Cloudflare runs a worker in front of serverless apps and no
-worker in front of container apps, and one project can have both. A container app's
-hostname gets a proxied record pointing at a public load balancer, one per tier, which the
-first such app raises (about $16 a month plus traffic). The load balancer admits only
-Cloudflare's addresses and checks the client certificate your zone presents, as a VPS box
-does. It redirects plain http to https with a 301, since an AWS load balancer cannot send a 308. Each hostname gets an ACM certificate, validated through the DNS writer. A preview
-of a container app gets a proxied record of its own and a route that runs no worker. The
-record wins over the wildcard record and the route over the wildcard route. Removing the
-preview removes both.
-
-The load balancer holds at most 25 certificates besides its default, one per production
-hostname and one per preview wildcard, at most 100 rules, one per hostname and live preview,
-and a trust store of at most 25 CAs, one per zone that forwards to it. These limits cover
-every project in the tier, and AWS raises each on request: a deploy that reaches one is
-refused naming the Service Quotas entry to raise (Elastic Load Balancing, L-9365A611 for
-certificates, L-7EED9B64 for rules, L-43FE5A42 for CAs). It reaches at most 100 target
-groups, which AWS does not raise: one per release of a container app, kept ones included.
-The trust store holds only the CAs a hostname behind it still trusts: removing a hostname
-drops a CA no other hostname trusts. A certificate ocel did not request for the hostname,
-such as one it found in ACM and reused or the one `ocel domain use --preview` wildcard every
-project's previews share, stays on the load balancer once the hostname is removed, since
-another project's hostname may answer with it.
+A container app's hostname gets a proxied record pointing at a public load balancer, one per
+tier, which the first such app raises (about $16 a month plus traffic). It admits only
+Cloudflare's addresses presenting your zone's client certificate, and redirects plain http to
+https with a 301 (an AWS load balancer cannot send a 308). Each hostname gets an ACM
+certificate, validated through the DNS writer. A container preview gets a proxied record of its own and
+runs no worker.
 
 Middleware, the edge runtime and edge caching need the worker, so a container app behind
-Cloudflare is served streaming alone. A deploy of one that needs more is refused unless
+Cloudflare is served streaming alone. A deploy that needs more is refused unless
 `allowDegraded` names the need.
+
+Limits across every project in the tier. AWS raises the first three on request, and a deploy
+that reaches one is refused naming the Service Quotas entry (Elastic Load Balancing):
+
+| Limit | Counts | Quota |
+| --- | --- | --- |
+| 25 certificates besides the default | each production hostname and preview wildcard | L-9365A611 |
+| 100 rules | each hostname and live preview | L-7EED9B64 |
+| 25 trust-store CAs | each zone forwarding to it | L-43FE5A42 |
+| 100 target groups (not raised) | each release of a container app, kept ones included | — |
+
+A certificate ocel did not request for a hostname (one reused from ACM, or the shared
+`--preview` wildcard) stays on the load balancer after the hostname goes.
 
 ## Previews behind Cloudflare
 
-A preview wildcard is forwarded to the origin through one proxied `*.<base>` record, and
-the origin answers each preview under it only to Cloudflare. Cloudflare's Universal SSL
-covers the zone apex and the names one label below it, so a preview domain at a zone apex
-(`*.acme-previews.com`, with `acme-previews.com` a zone of its own) needs nothing more.
-Deeper than that (`*.preview.acme.com` in the `acme.com` zone), Cloudflare answers a preview
-only with an advanced certificate: ocel orders one and stops, and running the same command
-again once Cloudflare has issued it, usually within minutes, finishes. Ordering one needs [Advanced Certificate
-Manager](https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/),
-a paid add-on to the zone; without it ocel refuses the wildcard and says so.
+A preview wildcard is forwarded through one proxied `*.<base>` record, and the origin answers
+each preview under it only to Cloudflare. Universal SSL covers the zone apex and one label
+below, so `*.acme-previews.com` (a zone of its own) needs nothing more. Deeper, such as
+`*.preview.acme.com` in `acme.com`, needs an advanced certificate: ocel orders one and stops,
+and running the same command again once Cloudflare issues it, usually within minutes, finishes.
+Ordering one needs
+[Advanced Certificate Manager](https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/),
+a paid add-on; without it ocel refuses the wildcard.
+
+## Origin certificate
+
+The origin answers only requests that arrive with the certificate your zone presents to origins
+(zone-level authenticated origin pulls, with a certificate of your own). Every origin trusts the
+CA of every client certificate the zone holds.
+
+- **Zone holds none:** ocel mints a CA and a client certificate, both good for ten years,
+  uploads the certificate, has the origin trust the CA, and turns zone-level pulls on.
+- **Zone presents Cloudflare's shared certificate** (global pulls on, or zone-level pulls with
+  no certificate of its own): refused, since another origin may trust only that one. Upload a
+  certificate of your own first.
+- ocel never otherwise replaces or deletes a zone's client certificate: every origin the zone
+  forwards to shares it.
+- A load balancer on AWS or Google Cloud refuses the certificate once it or its CA lapses. VPS
+  origins accept it past expiry, except behind your own Traefik.
+
+**Rotating it** (or retiring a leaked key):
+
+1. Upload the new certificate under **SSL/TLS > Origin Server > Authenticated Origin Pulls**.
+   ocel must be able to read its CA: upload a self-signed certificate, or one naming its CA's
+   certificate as a `data:application/pkix-cert;base64,` URI in its CA Issuers access, as ocel's
+   own does. An AWS load balancer trusts only a CA, so behind one only the second kind works. A
+   deploy refuses a zone holding a certificate whose CA it cannot read.
+2. Cloudflare presents it at once, and origins refuse it until you deploy one project on each
+   VPS box, each Google Cloud tier and each AWS tier with container apps the zone forwards to.
+   Each origin then trusts both.
+3. Delete the old certificate from the zone, then deploy every project with a hostname in the
+   zone again. Each hostname's origin stops trusting the old CA when its project deploys.

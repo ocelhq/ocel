@@ -1,0 +1,114 @@
+---
+title: Overview
+description: Where your app runs, and what answers in front of it.
+---
+
+A deploy has two halves:
+
+- **The provider** is the origin: where the app runs and its resources are provisioned. It is
+  [AWS](/docs/providers/aws), [Google Cloud](/docs/providers/gcp) or a [VPS](/docs/providers/vps)
+  reached over SSH, and a project names exactly one.
+- **The edge** serves the project's hostnames in front of that origin. A cloud's own edge comes
+  with it: CloudFront and API Gateway on AWS, the load balancer on Google Cloud.
+  [Cloudflare](/docs/providers/cloudflare) is bought independently and sits in front of any of
+  the three.
+
+The edge is an option of the provider, so changing it is one line and the app does not change.
+
+## Within one cloud
+
+On AWS, leave `edge` out and CloudFront fronts the deployment:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ region: "eu-west-1" }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "aws": { "region": "eu-west-1" } },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+On Google Cloud, name `alb` to serve hostnames of your own. Without it, each service answers on
+the URL Cloud Run gives it:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+import { alb } from "ocel/providers/gcp/edge";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1", edge: alb() }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": { "project": "my-project", "region": "europe-west1", "edge": "alb" }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+## Cloudflare in front of any origin
+
+Name `cloudflare` as the provider's edge, and write the hostname records into Cloudflare as
+well. Route 53 cannot write the records a Cloudflare edge answers on, so a deploy that pairs
+them is refused.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ region: "eu-west-1", edge: cloudflare(), dns: cloudflareDns() }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "aws": { "region": "eu-west-1", "edge": "cloudflare", "dns": "cloudflare" }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+The token and account id come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, not
+from the config. Cloudflare runs a worker in front of a serverless app. A container app, which
+is every app on a VPS, is forwarded to the origin. The [Cloudflare page](/docs/providers/cloudflare)
+lists the token's permissions and the zone setup.
+
+## Compared
+
+| | AWS | Google Cloud | VPS |
+| --- | --- | --- | --- |
+| Credentials | your shell's AWS credentials | Application Default Credentials | SSH |
+| `compute` | `serverless` (default), `container` | `serverless` (default), `container` | `container` |
+| `edge` | `cloudfront` (default), `api-gateway`, `cloudflare` | none (default), `alb`, `cloudflare` | none (default), `cloudflare` |
+| `dns` | `route53`, `cloudflare` | `cloudflare` | `cloudflare` |
+| Start with | `ocel init --provider aws` | `ocel init --provider gcp --option region=…` | `ocel init --provider vps --option ssh=…` |
+
+`api-gateway` fronts serverless apps only; every other edge fronts both kinds of compute. Every
+provider runs every [SDK resource](/docs/sdk), and each provider's page lists where it differs.

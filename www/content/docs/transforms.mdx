@@ -3,11 +3,9 @@ title: Transforms
 description: Patch the cloud resources ocel provisions.
 ---
 
-A transform is a module ocel runs before it provisions anything. It returns patches for the
-underlying cloud resources ocel is about to create, keyed by the provider that creates them.
-
-List the modules at the root of the config, in the order they apply — a later module wins
-where two patch the same field:
+A transform is a module that patches the cloud resources ocel is about to provision, keyed by
+the provider that creates them. List the modules at the root of the config; a later module
+wins where two patch the same field.
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -31,8 +29,6 @@ export default defineConfig({
 }
 ```
 
-Add the package the modules import:
-
 ```bash
 pnpm add -D @ocel/transforms
 ```
@@ -49,17 +45,8 @@ export default defineTransform({
 });
 ```
 
-`aws` is the provider. `function` is the ocel resource. `lambda` is the Pulumi resource the
-AWS provider creates for it, and what you write under it is `aws.lambda.Function`'s own args,
-typed from `@pulumi/aws`. A field ocel fills from what the deploy built — the role it created,
-the code it uploaded, the environment it sealed — is not on the type, and naming one anyway
-refuses the deploy.
-
-A module with no branch for the provider the project deploys to refuses the deploy, rather
-than quietly doing nothing, and so does a patch that reaches no resource the deploy provisions.
-
-`role` is the execution role every function in an app shares, so two functions patching it
-differently refuses rather than letting one win.
+`aws` is the provider, `function` the ocel resource, and `lambda` the Pulumi resource created
+for it. Under it go `aws.lambda.Function`'s own args, typed from `@pulumi/aws`.
 
 | ocel resource | Pulumi resources |
 | --- | --- |
@@ -68,16 +55,24 @@ differently refuses rather than letting one win.
 | `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
 | `kv` | `securityGroup`, `subnetGroup`, `parameterGroup`, `replicationGroup` |
 
-A kv store's token, port, TLS, engine version and parameters stay ocel's, because its binding is
-made from them. Its node type stays ocel's too: `memory` picks it, and the store's reserved memory
-is sized for that node. Its node count is yours: [one node](/docs/providers/aws#kv-stores) halves
-the cost and loses the data when ElastiCache replaces the node, and a deploy refuses it unless the
-same patch turns `automaticFailoverEnabled` and `multiAzEnabled` off.
+The deploy is refused when:
+
+- a patch names a field ocel fills from the build (the role it created, the code it uploaded,
+  the environment it sealed). Those fields are not on the type.
+- a module has no branch for the project's provider, or a patch reaches no resource the
+  deploy provisions.
+- two functions in an app patch `role`, which they share, differently.
+- a kv patch runs [one node](/docs/providers/aws#kv-stores) without also turning
+  `automaticFailoverEnabled` and `multiAzEnabled` off.
+
+A kv store's token, port, TLS, engine version, parameters and node type (picked by `memory`)
+stay ocel's. Its node count is yours: one node halves the cost and loses the data when
+ElastiCache replaces the node.
 
 ## On a VPS
 
-A box has no Pulumi resources, so the `vps` branch patches what the box runs instead: the
-container and the volume a `postgres`, a `bucket` or a `kv` store runs as.
+A box has no Pulumi resources, so the `vps` branch patches the container and volume a
+`postgres`, `bucket` or `kv` store runs as.
 
 ```ts title="transforms/stack.transform.ts"
 import { defineTransform } from "@ocel/transforms";
@@ -99,35 +94,35 @@ export default defineTransform({
 });
 ```
 
-| ocel resource | what the box runs | you can set |
-| --- | --- | --- |
-| `postgres` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
-| `postgres` | `volume` | `driver`, `driverOpts` |
-| `bucket` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
-| `bucket` | `volume` | `driver`, `driverOpts` |
-| `kv` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
-| `kv` | `volume` | `driver`, `driverOpts` |
+| Part | You can set |
+| --- | --- |
+| `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
+| `volume` | `driver`, `driverOpts` |
 
-One store contains every bucket the project declares, so the `bucket` branch shapes that single
-container and volume rather than one per declaration. Gate the rule on the environment, not on
-which bucket it reaches.
+- `image` must be pinned by digest.
+- The container's name, network, labels, published ports and mounts stay ocel's, and so do the
+  variables a binding depends on:
 
-An `image` has to be pinned by digest. The container's name, network, labels, published ports
-and mounts stay ocel's, and so do the variables an app's binding depends on: `POSTGRES_USER`,
-`POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_AUTH_METHOD` and `PGDATA` on a postgres,
-`RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `RUSTFS_ADDRESS`, `RUSTFS_REGION` and
-`RUSTFS_VOLUMES` on a store, and `VALKEY_EXTRA_FLAGS` on a kv store. A kv store's `args` come
-after the settings ocel renders, and a deploy refuses one that sets any of them: the user and
-password, `maxmemory` and its policy, persistence, the data directory and the listener. `memory`
-caps the whole container. Give it well over twice the store's own `memory`, because a background
-save forks the server and the copy can grow to the size of the data. `tags` become labels on the container and the volume. Every value
-is written down; a box has no binding outputs to fill one from.
+  | Resource | Reserved variables |
+  | --- | --- |
+  | `postgres` | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_AUTH_METHOD`, `PGDATA` |
+  | `bucket` | `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `RUSTFS_ADDRESS`, `RUSTFS_REGION`, `RUSTFS_VOLUMES` |
+  | `kv` | `VALKEY_EXTRA_FLAGS` |
+
+- One store holds every bucket the project declares, so `bucket` shapes that one container
+  and volume. Gate a rule on the environment, not on a bucket.
+- A kv store's `args` come after ocel's settings, and one that sets any of them is refused: the
+  user and password, `maxmemory` and its policy, persistence, the data directory, the listener.
+- `memory` caps the whole container. For kv, give it well over twice the store's own `memory`:
+  a background save forks the server, and the copy can grow to the size of the data.
+- `tags` become labels on the container and volume. Every value is literal; a box has no
+  binding outputs to fill one from.
 
 ## Gates and tags
 
-A rule can have an `if` gate, decided from the environment being deployed and the app the
-candidate resource belongs to, and `tags` to union into every resource it reaches. Write a
-list of rules where one is not enough:
+A rule can take an `if` gate, decided from the environment being deployed and the resource's
+app, and `tags` to union into every resource it reaches. Write a list where one rule is not
+enough:
 
 ```ts title="transforms/defaults.transform.ts"
 import { defineTransform } from "@ocel/transforms";
@@ -147,8 +142,7 @@ export default defineTransform([
 
 ## Reading what your own infrastructure published
 
-A transform fills a field from a record your own infrastructure published, through the
-callback form:
+The callback form fills a field from a record your own infrastructure published:
 
 ```ts title="transforms/network.transform.ts"
 import { defineTransform } from "@ocel/transforms";
@@ -167,14 +161,11 @@ export default defineTransform(({ bindings }) => ({
 }));
 ```
 
-`bindings.<type>.<name>` reads the record bound to a resource your config declares —
-`<type>.<name>` is the key under `bindings` in the config — and `bindings.custom.<name>`
-reads a record nothing declared, published by [`@ocel/sst`](/docs/sdk) or
-[`@ocel/pulumi`](/docs/sdk) with `bind.custom`.
+| Reads | The record |
+| --- | --- |
+| `bindings.<type>.<name>` | Bound to a resource under `bindings` in your config. |
+| `bindings.custom.<name>` | Published with `bind.custom` by [`@ocel/sst`](/docs/sdk) or [`@ocel/pulumi`](/docs/sdk), for nothing declared. |
 
-Nothing is resolved in the module: the deploy reads the record published to the coordinate
-it targets. A resource ocel provisions itself cannot be read this way — ocel publishes what
-it provisions long after the transforms have run.
-
-Run `ocel bindings generate` to write the names and their types down, and the module is
-checked where it is written instead of at the deploy.
+The deploy resolves the record, not the module. A resource ocel provisions itself cannot be
+read this way: ocel publishes it after the transforms run. `ocel bindings generate` writes the
+names and types down, so the module is checked as you write it.

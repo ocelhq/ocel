@@ -3,7 +3,7 @@ title: provider.unavailable
 description: The provider process did not start.
 ---
 
-Ocel runs each cloud provider as a separate process that ships with the CLI. This one could not be started, exited before it was ready, did not become ready in time, or failed while it was starting. The message carries the cause, and the provider's own stderr when it printed any.
+Each provider runs as a separate process that ships with the CLI. This one failed to start, exited before it was ready, or did not become ready in time. The message carries the cause, and the provider's stderr when it printed any.
 
 ## Fix
 

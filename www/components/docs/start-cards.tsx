@@ -13,7 +13,7 @@ export function StartCards() {
       <Card
         icon={<ServerStackIcon />}
         title="Providers"
-        href="/docs/providers/aws"
+        href="/docs/providers"
         description="Explore targets you can deploy your apps to"
       />
       <Card

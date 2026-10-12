@@ -3,6 +3,79 @@ title: Hono
 description: Deploy a Hono app.
 ---
 
-Dummy content.
+```ts title="src/server.ts"
+import { Hono } from "hono";
 
-The app does not know where it runs. Point the config at [AWS](/docs/providers/aws) or a [VPS](/docs/providers/vps).
+const app = new Hono();
+
+app.get("/", (c) => c.text("Hello"));
+
+export default app;
+```
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws"
+}
+```
+
+```bash
+ocel deploy
+```
+
+A `package.json` with no `next` or `@sveltejs/kit` in it makes the app a `node` app. On
+serverless compute, ocel serves the default export through its `fetch` method.
+
+## Entrypoint
+
+On serverless, ocel serves the first of these that exists: `src/server`, `src/index`, `src/app`,
+`index`, `server`, `app`, each as `.ts` or `.js`. Any other file, name it with
+[`entrypoint`](/docs/configuration#entrypoint).
+
+## Containers
+
+On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, the
+image runs your `start` script. Nothing serves the default export there, so the script starts a
+server on `PORT`, which the container sets:
+
+```ts title="src/start.ts"
+import { serve } from "@hono/node-server";
+import app from "./server";
+
+serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 3000) });
+```
+
+```json title="package.json"
+{
+  "scripts": { "start": "tsx src/start.ts" }
+}
+```
+
+## Uploads and realtime
+
+`ocel/bucket/hono` and `ocel/realtime/hono` shape the [bucket](/docs/sdk/bucket) and
+[realtime](/docs/sdk/realtime) route handlers for Hono:
+
+```ts
+import { createRealtimeHandler } from "ocel/realtime/hono";
+
+app.all("/api/realtime", createRealtimeHandler(rt));
+```
+
+## Limitations
+
+On serverless, the build bundles the entrypoint, so the function gets only what it imports. Files
+read at run time get left behind. The build lists the sources that read them. Copy them in
+yourself, or build with `OCEL_BUILD_PREFER_TRACING=1`, which copies the dependency tree instead.

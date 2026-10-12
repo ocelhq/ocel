@@ -7,8 +7,7 @@ description: Deploy to any Linux box.
 ocel init --provider vps --option ssh=my-box
 ```
 
-Name the machine ocel deploys onto — a `Host` alias from your `ssh_config`, or the
-destination spelled out:
+`ssh` is a `Host` alias from your `ssh_config`, or the destination spelled out:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -32,299 +31,169 @@ export default defineConfig({
 }
 ```
 
-Then:
-
 ```bash
 ocel deploy
 ```
 
-In a terminal, a first deploy that finds no Ocel infrastructure in the account offers to run
-`ocel bootstrap production`, and carries on once it has. A VPS serves apps on a hostname you
-own, so a project that declares none is shown the line to add to its config and the deploy
-waits while you save it:
+In a terminal, the first deploy offers to run `ocel bootstrap production`, and, if the project
+declares no hostname, shows the line to add and waits while you save it:
 
 ```json
 "domains": { "production": "my-app.example.com" }
 ```
 
-Nothing is asked in a script or in CI, so run the bootstrap and declare the hostname there first:
+In a script or CI nothing is asked, so bootstrap and declare the hostname first:
 
 ```bash
 ocel bootstrap production
 ocel deploy
 ```
 
-Bootstrap creates the `ocel-deploy` login every later deploy acts as. Point `ssh.user` at it
-and deploys need no sudo. Deploy as the login you bootstrapped with and Ocel uses its sudo
-to run everything under `/var/lib/ocel` as `ocel-deploy`, not as root.
+## What the box needs
+
+| Need | Why |
+| --- | --- |
+| SSH as root or a login with passwordless sudo | Bootstrap writes under `/etc`, `/var/lib` and `/usr/local`. |
+| systemd | Ocel's host services are systemd units. |
+| `install`, `stat`, `sha256sum`, `flock`, `timeout`, `getent`, `groupadd`, `useradd`, `usermod`, `userdel` | Bootstrap runs them as root. |
+| No Docker, or Docker 28.0+ under `docker.service` | Bootstrap installs it if missing. Snap and rootless Docker are refused. |
+| Ports 80 and 443 free, and open to the internet | Ocel's proxy serves on them and gets certificates over port 80. Docker's iptables rules bypass ufw, so open them in your cloud firewall. Port taken? Go [behind your own proxy](#behind-your-own-proxy). |
+| A DNS record per hostname pointing at the box | `ocel domain add` prints it, or writes it with `dns: "cloudflare"`. |
+
+An unknown host key is shown and you are asked to record it; check it against the machine.
 
 ## Bootstrap
 
-`ocel bootstrap <tier>` prepares the machine once per tier (`production`, `preview`).
-Running it again changes only what has drifted, and `ocel destroy` removes it all.
-If something else already listens on port 80 or 443, bootstrap names it and stops before it
-changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
+`ocel bootstrap <tier>` (`production` or `preview`) prepares the box once per tier. Running
+it again changes only what drifted. `ocel destroy` removes it all, except Docker and its
+containers.
 
-| What | Why |
+Deploys act as the `ocel-deploy` login bootstrap creates, with the bootstrapping login's keys
+or `deployKey`. Set `ssh.user` to `ocel-deploy` and deploys need no sudo.
+
+What lands on the box:
+
+| What | For |
 | --- | --- |
-| `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy acts as this account, which alone can open `/var/lib/ocel`. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
-| `/etc/ocel/<tier>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
-| `/var/lib/ocel/<tier>/keyvalues`, `/usr/local/lib/ocel/keyvalues` | What is deployed, per tier. |
-| `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
-| Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
-| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused, and only bootstrap [moves the box](#moving-a-box-to-another-proxy). |
-| `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It gets a certificate for a hostname the box serves the first time a client connects to it. Left out [behind your own proxy](#behind-your-own-proxy). |
-| `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`, or joins the docker network your proxy is on. If a prune removes it, or its `ocel` network, while it is stopped, the next deploy recreates both, and `ocel doctor` says when. |
-| `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
-| `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. A certificate for a hostname the box stopped serving stays until it has been expired for 14 days, when Caddy removes it. If Caddy still has that certificate in memory when it removes it, the next TLS connection for the hostname can get a new certificate without the switchboard's confirmation. A restart of `ocel-proxy` clears that memory. Left out behind your own proxy. |
-| `/etc/ocel/certs` | Certificates you pin yourself. The proxy serves a pinned certificate for every hostname it covers, ahead of any certificate it got itself, and gets none of its own for those hostnames. Left out behind your own proxy. `ocel destroy` removes the directory only if it is empty. |
-| `/etc/sudoers.d/ocel-caddy-reload` | Only [behind your Caddy](#behind-your-caddy) when it runs as `caddy.service`: lets `ocel-deploy` run `systemctl reload caddy.service` and nothing else. |
-| `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
-| `ocel-envsourcesync@<tier>.service` | Once a minute, copies each env source a deploy registered into the tier's values. It runs as root, and may write `/var/lib/ocel/<tier>/keyvalues` and nothing else. |
-| `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
+| Docker | When missing; pinned by sha256. Upgrading it is yours. |
+| `ocel-proxy` (Caddy) | Ports 80 and 443; gets each certificate on first connection. Not behind your own proxy. |
+| `ocel-switchboard`, `ocel` network | Routes each hostname to its app. Recreated by the next deploy if pruned. |
+| `/etc/ocel/<tier>/seal.key` | Seals secret values on the box. Lose it and they can't be opened. |
+| `ocel-live.socket` | Serves app containers their secret values. |
+| `ocel-envsourcesync@<tier>.service` | Syncs [env sources](/docs/env-sources) into the tier's values each minute. |
+| `ocel-backups.timer` | Backs up every resource daily. |
+| `/var/lib/ocel/`, `/etc/ocel/certs` | Deploy state, routing, certificates, and the certificates you pin. |
+
+## Domains and certificates
+
+Ocel's proxy gets a certificate the first time a client connects to a hostname, and drops it
+14 days after expiry once the hostname is gone. `ocel doctor` checks DNS and port 80.
+
+To serve your own certificate, pin it by hostname:
+
+```json
+"provider": { "vps": { "ssh": "my-box", "certificates": { "shop.example.com": "/etc/ocel/certs/shop.pem" } } }
+```
+
+A pinned certificate wins for every hostname it covers.
+
+## Previews
+
+```bash
+ocel bootstrap preview
+```
+
+Point `*.<preview base>` (from `domains.preview`) at the box. A certificate per preview
+hostname would be published in Certificate Transparency logs within minutes, revealing it, so a
+preview deploy is refused until you pick one:
+
+- pin a certificate for `*.<preview base>` under `certificates`;
+- front the box [with Cloudflare](#behind-cloudflare);
+- behind Traefik, set `previewResolver`; behind your Caddy, serve a wildcard certificate;
+- or set `perHostnamePreviewCertificates: true` to accept that the hostnames are published.
+
+An ephemeral preview can't declare topics, tasks or realtime; use `ocel preview up --persistent`.
 
 ## Behind Cloudflare
 
-Name the `cloudflare` edge and `cloudflare` DNS and each hostname is forwarded to the box
-through Cloudflare: ocel writes a proxied record pointing at the box, and a deploy changes which release answers it on
-the box, with no DNS change. The proxy on the box answers that hostname only to a client
-presenting the certificate your Cloudflare zone presents to origins, so a request that
-skips Cloudflare is refused on port 443. On port 80 it answers that hostname with a redirect
-to https and forwards nothing, so a visitor who opens `http://` lands on https through
-Cloudflare, which reaches the box over plain http whenever the visitor did.
-It answers with a certificate from Cloudflare's origin CA, which ocel issues for the hostname and renews half way through its year, rather than one ordered
-from a public CA through Cloudflare. Set the zone's SSL mode to Full (strict). Previews are
-forwarded the same way, on a project's own `domains.preview` wildcard or the one
-`ocel domain use --preview` names; see [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import { cloudflareDns } from "ocel/dns";
-import { cloudflare } from "ocel/edge";
-import vpsProvider from "ocel/providers/vps";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: vpsProvider({ ssh: "my-box", edge: cloudflare(), dns: cloudflareDns() }),
-  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
-});
+```json
+"provider": { "vps": { "ssh": "my-box", "edge": "cloudflare", "dns": "cloudflare" } }
 ```
 
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": { "vps": { "ssh": "my-box", "edge": "cloudflare", "dns": "cloudflare" } },
-  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
-}
-```
+In TypeScript, `edge: cloudflare()` and `dns: cloudflareDns()`. Set the zone's SSL mode to
+**Full (strict)**.
 
-`ocel doctor` checks a hostname Cloudflare forwards by requesting it through Cloudflare and
-checking this box answers, since it resolves to Cloudflare rather than to the box.
+- Ocel writes a proxied record for each hostname and serves it with a Cloudflare origin CA
+  certificate it issues and renews.
+- Port 443 refuses a request that skips Cloudflare; port 80 only redirects to https.
+- Previews are forwarded the same way; see
+  [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
+- `ocel doctor` checks the hostname by requesting it through Cloudflare.
 
-Behind [your own proxy](#behind-your-own-proxy), ocel cannot make it refuse a request that
-skips Cloudflare. Configure it to require a client certificate for each hostname Cloudflare
-forwards that chains to one of the CAs listed for that hostname under `shields` in
-`/var/lib/ocel/routing/table.json` (`clientCAs`), trusting no other CA, and serve it with the
-origin certificate listed beside them. On port 80 a request carries no client certificate, so answer those hostnames there
-with a redirect to https and forward them nowhere; refusing them instead leaves a visitor
-who opens `http://` with an error. A deploy refuses to forward a hostname your proxy answers to a
-client with no certificate or forwards over plain http, and `ocel doctor` fails it.
-
-[Behind your Caddy](#behind-your-caddy), `ocel.caddy` carries the shield itself: each
-hostname Cloudflare forwards gets a site of its own that requires the zone's client certificate
-and serves the origin certificate, and its `http://` is redirected to https.
-[Behind your Traefik](#behind-your-traefik), `ocel.yml` carries it too: the router of each
-hostname Cloudflare forwards names TLS options of its own that require the zone's client
-certificate, the origin certificate is listed under `tls.certificates`, and its http router
-only redirects to https.
+With `traefik` or `caddy`, ocel configures this in your proxy. With `manual`, you do: for each
+hostname, require a client certificate chaining only to its `clientCAs` under `shields` in
+`/var/lib/ocel/routing/table.json`, serve the origin certificate listed there, and redirect
+port 80 to https. A deploy refuses a hostname your proxy leaves open.
 
 ### Through a Cloudflare Tunnel
 
-Set `tunnel`, an option of the Cloudflare edge alone, and Cloudflare reaches the box through
-a tunnel the box opens to it, instead of at the box's address:
+Set `tunnel` and Cloudflare reaches the box through a tunnel the box opens, instead of at its
+address:
 
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import { cloudflareDns } from "ocel/dns";
-import { cloudflare } from "ocel/edge";
-import vpsProvider from "ocel/providers/vps";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: vpsProvider({
-    ssh: "my-box",
-    edge: cloudflare({ tunnel: true }),
-    dns: cloudflareDns(),
-  }),
-  apps: [{ name: "web", path: ".", domains: { production: "shop.example.com" } }],
-});
+```json
+"edge": { "cloudflare": { "tunnel": true } }
 ```
 
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": {
-    "vps": {
-      "ssh": "my-box",
-      "edge": { "cloudflare": { "tunnel": true } },
-      "dns": "cloudflare"
-    }
-  },
-  "apps": [{ "name": "web", "path": ".", "domains": { "production": "shop.example.com" } }]
-}
-```
+In TypeScript, `edge: cloudflare({ tunnel: true })`.
 
-The box runs one tunnel, shared by every project on it that sets `tunnel`, as the
-`ocel-tunnel` container: `cloudflared` pinned by digest, with updates off, reading its token
-from a file only root can read. ocel opens the tunnel when the first project claims a
-hostname through it, configures it in Cloudflare to send every hostname to the switchboard,
-and deletes it when the last one leaves. Each hostname gets a proxied record to the tunnel,
-and previews a proxied wildcard record, as with any other hostname Cloudflare forwards
-([previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare)).
-
-`cloudflared` hands traffic to the switchboard itself, never to the proxy on ports 80 and
-443, so a tunnel works whatever fronts the box: ocel's Caddy, your own proxy, or another
-platform's. The switchboard answers a tunneled hostname only on the listener `cloudflared`
-reaches, on the `ocel-tunnel-network` network that only the switchboard and `ocel-tunnel`
-join, published nowhere, and refuses it when it arrives through
-the proxy, so a request that reaches the box's address for it is refused with nothing to
-configure. There are no client or origin certificates, and the zone's SSL mode is not
-checked. A visitor who opens `http://` is redirected to https.
-
-Projects with and without `tunnel` share a box. The Cloudflare token also needs
-Account · Cloudflare Tunnel · Edit.
+- The Cloudflare token also needs **Account · Cloudflare Tunnel · Edit**.
+- It works whatever fronts the box, with no origin certificates, and requests that reach the
+  box's address for a tunneled hostname are refused.
+- One `ocel-tunnel` container (`cloudflared`, pinned, updates off) serves every project on the
+  box that sets `tunnel`.
 
 ## Behind your own proxy
 
-If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of
-running its own:
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import vpsProvider from "ocel/providers/vps";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: vpsProvider({ ssh: "prod", proxy: "manual" }),
-  apps: [{ name: "web", path: ".", compute: "container" }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": {
-    "vps": { "ssh": "prod", "proxy": "manual" }
-  },
-  "apps": [{ "name": "web", "path": ".", "compute": "container" }]
-}
-```
-
-Bootstrap then runs no `ocel-proxy`. The switchboard, which routes each hostname to its
-app, listens on `127.0.0.1:8480`. Name another port with
-`"proxy": { "manual": { "port": 9000 } }`. Ocel never writes to your proxy. You route each
-hostname yourself, and `ocel domain add` prints the route it needs:
-
-```
-Route shop.example.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)
-```
-
-A catch-all works too. In nginx:
-
-```nginx
-client_max_body_size 0;
-
-location / {
-    proxy_pass http://127.0.0.1:8480;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
-
-A proxy running in a container can't reach the host's loopback. Name the docker network it
-runs on, and the switchboard joins it:
+If the box already runs a proxy on ports 80 and 443, name it with `proxy` and ocel runs no
+`ocel-proxy`:
 
 ```json
-"proxy": { "manual": { "network": "web" } }
+"provider": { "vps": { "ssh": "prod", "proxy": "manual" } }
 ```
 
-Your proxy then forwards to `http://ocel-switchboard:8080`. The switchboard stays on that network
-when your proxy is recreated, by `docker compose up` after its definition changes or by the tool
-that runs it, so nothing has to be reconnected. Bootstrap refuses a network the machine doesn't
-have, so start your proxy, or `docker network create web`, first. The switchboard is still
-published on the loopback port as well.
-
-After printing the route, `ocel domain add` waits until the box proves it: a request to
-`127.0.0.1:443` for the hostname must come back from ocel, with a certificate that covers the
-name, `X-Forwarded-Proto: https`, and the hostname in `Host` and in `X-Forwarded-Host` if your
-proxy sets it. A preview base asks for `*.<base>` and is proved on `ocel-edge-probe.<base>`.
-
-The switchboard keeps `X-Forwarded-Proto` and `X-Forwarded-Host` from your proxy, because apps
-build their URLs from them. It hears them only from the `ocel` network, which the loopback
-port arrives on, and from the network `network` names, and never from your apps' own networks.
-Every container on that network can set them, so name one only your proxy and what you trust
-sit on. It never takes `X-Forwarded-For` from
-your proxy: every process on the machine reaches the same port, so any of them could claim to
-be any client. Apps see your proxy's address as the client. No other `X-Forwarded-*` header,
-no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelled with `_` for
-`-`, reaches an app from anyone.
-
-Your proxy manages the certificates, so `certificates` and `proxy` can't be set together. One
-proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
-doesn't is refused with the value to write. Bootstrap [moves a box](#moving-a-box-to-another-proxy)
-from one proxy to another.
-
-| | Ocel's own proxy | `manual` | `traefik` | `caddy` |
+| | Ocel's own | `manual` | `traefik` | `caddy` |
 | --- | --- | --- | --- | --- |
-| Listens on ports 80 and 443 | ocel | you | your Traefik | your Caddy |
-| Routes each hostname to ocel | ocel | you | ocel writes the routers | ocel writes `ocel.caddy` |
-| Issues and renews certificates | ocel, over http-01 | your proxy | your Traefik, through `resolver` | your Caddy |
-| Serves the certificates you pin | yes | no, configure them in your proxy | no, configure them in your Traefik | no, configure them in your Caddy |
-| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it | no, Traefik keeps it | yes, 14 days after it expires |
-| Reports a Let's Encrypt rate limit | yes | no | no | no |
-| Answers every preview hostname under a base | yes | once you route `*.<base>` | each claimed preview hostname | each preview hostname as it is claimed |
-| Switches releases without dropping requests | yes | yes, the switchboard does it | yes, the switchboard does it | yes, the switchboard does it |
+| Routes each hostname to ocel | ocel | you | ocel writes `ocel.yml` | ocel writes `ocel.caddy` |
+| Issues certificates | ocel, over http-01 | your proxy | your Traefik, through `resolver` | your Caddy |
+| Preview hostnames | every one under the base | once you route `*.<base>` | each claimed one | each claimed one |
+
+Every project on a box must name the same `proxy`; a deploy that doesn't is refused with the
+value to write. `certificates` can't be set beside `proxy`.
 
 ### The `proxy` option
 
-`proxy` names the proxy on ports 80 and 443. Coolify and Dokploy aren't proxies: each runs a
-Traefik, or for Coolify a Caddy, and a `preset` fills in how it runs it. A field written beside a
-preset overrides it, for a proxy whose configuration you have edited.
-
 ```json
 "proxy": "manual"
-"proxy": { "manual": { "port": 8480, "network": "coolify" } }
 "proxy": { "traefik": { "preset": "coolify" } }
-"proxy": { "traefik": { "preset": "coolify", "resolver": "le-dns" } }
-"proxy": { "traefik": { "directory": "/etc/traefik/dynamic", "resolver": "letsencrypt",
-                        "previewResolver": "cloudflare",
-                        "entrypoints": { "http": "web", "https": "websecure" },
-                        "network": "traefik" } }
-"proxy": { "caddy": { "preset": "coolify" } }
-"proxy": { "caddy": { "directory": "/etc/caddy/ocel.d", "container": "caddy",
-                      "config": "/etc/caddy/Caddyfile", "network": "web" } }
+"proxy": { "traefik": { "directory": "/etc/traefik/dynamic", "resolver": "letsencrypt" } }
+"proxy": { "caddy": { "directory": "/etc/caddy/ocel.d", "container": "caddy" } }
 ```
 
-| Field | On | What it is | Left out |
+| Field | On | Meaning | Default |
 | --- | --- | --- | --- |
-| `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | The tool that runs the proxy. Fills every other field. | |
-| `directory` | `traefik`, `caddy` | The directory on the box that the proxy reads ocel's file from. Ocel writes it there from a short-lived container that mounts only that directory. | Required, unless `preset` |
-| `containerDirectory` | `traefik`, `caddy` | Where `directory` is mounted in the container the proxy runs in: Traefik's `providers.file.directory`, or the directory Caddy imports. Ocel's file names the origin certificates it places in `directory` by this path. | `directory` |
-| `resolver` | `traefik` | The `certResolver` every hostname's router names. | Required, unless `preset` |
-| `previewResolver` | `traefik` | A resolver that can issue `*.<preview base>` over DNS-01. Set, previews share one wildcard certificate. | Each preview hostname gets its own from `resolver` |
-| `entrypoints.https` | `traefik` | The entry point ocel's hostname routers attach to. | `websecure` |
-| `entrypoints.http` | `traefik` | The entry point ocel's http-to-https redirects attach to. | `web` |
+| `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | Fills every other field. A field written beside it overrides. | |
+| `directory` | `traefik`, `caddy` | Where your proxy reads ocel's file from. | Required without `preset` |
+| `containerDirectory` | `traefik`, `caddy` | Where `directory` is mounted inside the proxy's container. | `directory` |
+| `resolver` | `traefik` | The `certResolver` ocel's routers name. | Required without `preset` |
+| `previewResolver` | `traefik` | A DNS-01 resolver for one `*.<preview base>` wildcard. | One certificate per preview hostname |
+| `entrypoints.https` / `.http` | `traefik` | Entry points ocel's routers and redirects attach to. | `websecure` / `web` |
 | `container` | `caddy` | The container Caddy runs in. | Caddy runs as `caddy.service` |
-| `config` | `caddy` | The config file `caddy reload --config` names inside `container`. | `/etc/caddy/Caddyfile` |
+| `config` | `caddy` | The file `caddy reload --config` names in `container`. | `/etc/caddy/Caddyfile` |
 | `network` | all | A docker network the switchboard joins, so the proxy reaches it by name. | |
 | `port` | all | The loopback port the switchboard is published on. | `8480` |
 
-A Traefik or Caddy reaches the switchboard over `network` or over `port`, so they can't both be
-written. A `port` written beside a preset replaces the `network` it fills. On `manual`, `port` is
-always published and `network` is joined as well.
+`network` and `port` are exclusive on `traefik` and `caddy`; on `manual`, `port` is always
+published and `network` joined too. The presets fill in:
 
 | | `traefik` + `coolify` | `traefik` + `dokploy` | `caddy` + `coolify` |
 | --- | --- | --- | --- |
@@ -336,441 +205,192 @@ always published and `network` is joined as well.
 | `container` | | | `coolify-proxy` |
 | `config` | | | `/config/caddy/Caddyfile.autosave` |
 
-A preset and the same fields written out are the same proxy, so projects on one box can name it
-either way.
+### Behind nginx or any proxy (`manual`)
+
+Ocel never writes to your proxy. `ocel domain add` prints each route, then waits until the
+hostname answers through ocel on `127.0.0.1:443`:
+
+```
+Route shop.example.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)
+```
+
+A catch-all works too:
+
+```nginx
+client_max_body_size 0;
+
+location / {
+    proxy_pass http://127.0.0.1:8480;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+A proxy in a container can't reach the host's loopback: name its docker network (it must
+exist at bootstrap) and forward to `http://ocel-switchboard:8080`.
+
+```json
+"proxy": { "manual": { "network": "web" } }
+```
+
+Apps trust `X-Forwarded-Proto` and `X-Forwarded-Host` only from the loopback port and that
+network, so put only trusted containers on it. `X-Forwarded-For` is never passed; apps see your
+proxy as the client.
 
 ### Behind your Traefik
 
-With `"proxy": { "traefik": … }` ocel writes the routers itself, into one file,
-`ocel.yml`, in the directory your Traefik's file provider watches. For `shop.example.com` it
-writes a router on your https entry point that names `resolver` and forwards to the
-switchboard, and one on your http entry point that redirects to https. Your Traefik orders the
-certificate the first time it reads the router. Every router is named
-`ocel-<hostname with dashes>-<hash>` and carries priority 1000000, so it wins over any router
-of yours that Traefik would otherwise sort against it. Ocel writes no catch-all, so a hostname
-it hasn't claimed stays with whatever your Traefik does with it now.
+Ocel writes `ocel.yml` into the directory your Traefik's file provider watches: an https router
+per hostname naming `resolver`, plus an http redirect, at priority 1000000 and with no catch-all.
 
-The switchboard sits behind your Traefik one of two ways:
-
-- With `network`, the switchboard joins that network and your Traefik forwards to
-  `http://ocel-switchboard:8443`. Both presets work this way.
-- Without it, the switchboard is published on `127.0.0.1:<port>`. Only a Traefik in the host's
-  network namespace can dial that: a host process, or a container with `network_mode: host`.
-  Bootstrap refuses a Traefik container that publishes 443 from a docker network, and names
-  `network` as the fix.
-
-The directory is often not writable by `ocel-deploy` (Coolify's is `0700` and owned by
-another user), so ocel writes `ocel.yml` from a short-lived container that mounts only that
-directory, under a temporary name, and renames it into place. Bootstrap refuses a `directory`
-the box doesn't have and names the option. Before each write ocel
-decodes what it is about to write, and refuses it if it doesn't decode or contains `{{`, which
-Traefik reads as a template. One file Traefik can't parse stops it from taking up a change to
-any file in that directory, and after a restart it serves none of them. If
-someone deletes `ocel.yml` or rewrites it, from a host tool's editor for instance, the next
-deploy writes it back.
-
-After each change, ocel waits up to 30 seconds for each hostname the change adds, or whose
-router it changes, to answer on `127.0.0.1:443` through the switchboard, whatever certificate
-Traefik has for it yet. A hostname the change leaves as it was isn't waited on, so one Traefik
-can't route for reasons of its own doesn't hold up the rest. If one doesn't answer, the change is put back and the refusal says what the probe met. When a file of yours
-in the directory fails to parse, it names that file. When Coolify has been switched to Caddy,
-it says so and gives `{ "caddy": { "preset": "coolify" } }` as the value to write.
-
-**Your routes stay yours.** Before ocel claims a hostname (a binding, a preview, the connector),
-it reads the rules of every router your Traefik has: every `.yml`, `.yaml` and `.toml` file in
-the directory besides `ocel.yml`, the `traefik.http.routers.<name>.rule` labels of every
-running container, and the same labels on swarm services when the box manages a swarm. A
-`Host()` equal to the hostname, or a `HostRegexp` that matches it, refuses the claim and names
-the router and where it is defined. A `HostRegexp` that matches any hostname at all is a
-catch-all and claims nothing. Ocel reads each file the way Traefik does, through the same
-template functions. If it can't read a file, a router in it could already route the hostname,
-so the claim is refused and the refusal names the file. A template that calls `env`,
-`expandenv` or `getHostByName` counts as unreadable too, because it reads what only your
-Traefik can see. `ocel doctor` runs the same check, so a router you add after the
-bind, which ocel's priority now wins over, is named too. Routers from Traefik's other
-providers, such as Consul or Kubernetes, are invisible to ocel, so it can't check them.
-
-**Previews.** Set `previewResolver` to a resolver that can issue a wildcard over DNS-01, and
-your Traefik orders one certificate for `*.<preview base>`, through a router on
-`ocel-edge-probe.<preview base>` that ocel writes as soon as the preview base is set. Each preview
-hostname is then served that certificate. Without `previewResolver`, each preview hostname
-would get a certificate of its own from `resolver`, which Certificate Transparency logs publish,
-so a preview deploy is refused unless you set `perHostnamePreviewCertificates`.
-
-**Behind Cloudflare.** For a hostname Cloudflare forwards, the https router names no
-`resolver`. It names TLS options `ocel-shield-<hostname with dashes>-<hash>`, which set
-`clientAuth.clientAuthType: RequireAndVerifyClientCert` with the zone's client certificates
-inline under `caFiles`, and `sniStrict: true`. Your Traefik picks TLS options by the name the
-client asks for, so a handshake for the hostname without the zone's certificate is refused, and a
-request that asks for another name, or none, and sends the hostname as `Host` is answered 421.
-The hostname is served its origin certificate, which ocel places beside `ocel.yml` as
-`ocel-origin-<hostname>-<digest>.pem`, readable only by the directory's group, and which
-`ocel.yml` lists under `tls.certificates` by its path in `containerDirectory`. Its http router
-redirects to https and forwards nothing: Traefik's permanent redirect answers 301 to a `GET`
-or `HEAD` and 308 to any other method. Traefik checks a client certificate's expiry, so it
-refuses the zone's certificate once it lapses: rotate it before then. After a change, ocel waits
-for your Traefik to refuse the hostname to a client with no certificate, and `ocel doctor` fails
-a hostname your Traefik answers without one.
-
-**Semicolons in the query.** Your Traefik rewrites every `;` in a query to `&` before any router
-sees the request, so `?x=1;2` reaches your app as `?x=1&2`. Ocel's routers can't change that,
-because it happens on the entry point. Set `http.encodeQuerySemicolons: true` on each entry point
-in Traefik's static configuration and the `;` reaches your app encoded as `%3B`, which a query
-parser reads back as `x=1;2`.
-
-**Certificate lifetimes.** Your Traefik renews every certificate it stores, for as long as its
-`acme.json` holds it, and it deletes none. A certificate for a hostname ocel no longer serves
-stays in `acme.json` and keeps being renewed until you remove it there. If Traefik fails to
-get a certificate, usually because the hostname's DNS doesn't point at the box yet, it tries
-again only the next time its configuration changes, with no backoff. `ocel doctor` flags a
-hostname Traefik holds no certificate for: fix the DNS, then restart Traefik or change any route
-it serves.
-
-**Coolify and Dokploy.** Both keep running their Traefik as they do now. A prune one of them
-runs can remove the switchboard and its `ocel` network while it is stopped; the next deploy
-recreates both. `ocel destroy` removes `ocel.yml`, then the switchboard, which takes it off
-their network.
-
-A Traefik ocel writes to reaches a switchboard listener that takes every request as https for
-the `Host` it asked for, and hears no `X-Forwarded-*` header at all. With `network`, every
-other container on that network, which on Coolify and Dokploy means their apps and databases,
-can reach that listener too. Without it, the listener sits on the `ocel` network and is
-published on `127.0.0.1:<port>`, so every process on the machine and every container on the
-`ocel` network can reach it. Any of them can make a plaintext request your apps take as https, for a `Host` it
-could send anyway. None of them can choose `X-Forwarded-Host` or `X-Forwarded-For`. This is
-the same kind of concession `manual` makes to every process on the machine.
+- Traefik reaches the switchboard at `http://ocel-switchboard:8443` on `network`, or on
+  `127.0.0.1:<port>` only from the host network.
+- Ocel refuses a hostname one of your routers (files or container labels) already matches.
+  Consul, Kubernetes and other providers aren't checked.
+- Traefik never deletes a certificate from `acme.json`. If it fails to get one (usually DNS),
+  it retries only on its next config change: fix DNS, then restart Traefik.
+- Traefik turns `;` in a query into `&` unless each entry point sets
+  `http.encodeQuerySemicolons: true`.
+- Behind Cloudflare, rotate the zone's client certificate before it expires.
 
 ### Behind your Caddy
 
-With `{ "caddy": … }`, ocel writes one file into a directory your Caddy imports, and reloads
-your Caddy when the hostnames in it change. Add the import to your Caddyfile once:
+Import ocel's directory in your Caddyfile once, and name it:
 
 ```txt title="/etc/caddy/Caddyfile"
 import /etc/caddy/ocel.d/*.caddy
 ```
 
-and name the directory:
-
 ```json
 "proxy": { "caddy": { "directory": "/etc/caddy/ocel.d" } }
 ```
 
-Coolify's Caddy already imports `/dynamic/*.caddy`, so `"proxy": { "caddy": { "preset": "coolify" } }`
-needs no line of yours.
+Coolify's Caddy already imports `/dynamic/*.caddy`, so the `coolify` preset needs no line.
 
-Ocel writes `ocel.caddy` there, and beside it the origin certificate of each hostname
-[Cloudflare forwards](#behind-cloudflare). `ocel.caddy` holds one site block over exactly the
-hostnames the box serves, the connector's and `ocel-edge-probe.<base>` among them, and never a
-bare port:
-
-```txt title="ocel.caddy"
-shop.example.com, ocel-edge-probe.preview.example.com, pr-12-web-q7m2x5k8c3v9n4b6p2z7w5r3.preview.example.com {
-	reverse_proxy ocel-switchboard:8443 {
-		stream_close_delay 30s
-	}
-}
-```
-
-`stream_close_delay` keeps a WebSocket or other stream open for 30s across a reload. It needs
-Caddy 2.7 or later, which the official image and Coolify's Caddy are. A Caddy that runs as
-`caddy.service` gets the block without it, because the Debian and Ubuntu package is 2.6.2 on
-noble and refuses it.
-
-A hostname Cloudflare forwards leaves that block for a site of its own. The site requires the
-zone's client certificate and serves the origin certificate from
-`ocel-origin-<hostname>-<digest>.pem`. That file holds the certificate and its key and is mode
-0640 in the directory's group, so give the directory to the group your Caddy runs as (`chgrp
-caddy /etc/caddy/ocel.d` for `caddy.service`) or your Caddy refuses the reload. Caddy also turns on
-`strict_sni_host`, so a request can't reach the site under another hostname's handshake:
-
-```txt title="ocel.caddy"
-https://shop.example.com {
-	tls /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem /etc/caddy/ocel.d/ocel-origin-shop.example.com-1f2e3d4c5b6a.pem {
-		client_auth {
-			mode require_and_verify
-			trusted_ca_cert MIIC…
-		}
-	}
-	reverse_proxy ocel-switchboard:8443 {
-		stream_close_delay 30s
-	}
-}
-http://shop.example.com {
-	redir https://{host}{uri} 308
-}
-```
-
-Your Caddy reaches the switchboard by name on `network`, or on `127.0.0.1:<port>` without one. A
-Caddy in a container with no `network` must run with `network_mode: host`, because the loopback of
-any other container is its own, and bootstrap refuses one that doesn't. Because ocel's block names
-each hostname, your Caddy gets a certificate for each, preview hostnames included, as they are
-claimed; there is no wildcard.
-
-Before placing the file, ocel runs `caddy adapt` on it alone, inside `container` or as
-`/usr/bin/caddy`, and refuses a claim whose file your Caddy can't read. It is placed from a
-short-lived container that mounts only that directory. Then ocel reloads
-your Caddy in its own environment, where `{$VAR}` placeholders in your Caddyfile resolve:
-
-| Caddy runs | Reload |
-| --- | --- |
-| in `container` | `docker exec <container> caddy reload --config <config> --adapter caddyfile` |
-| in Coolify's `coolify-proxy` | `docker exec coolify-proxy caddy reload --config /config/caddy/Caddyfile.autosave`, Coolify's own |
-| as `caddy.service` | `sudo -n /usr/bin/systemctl reload caddy.service`, through the one line bootstrap writes to `/etc/sudoers.d/ocel-caddy-reload` |
-
-A reload your Caddy refuses leaves its old config running. Ocel puts the previous `ocel.caddy`
-back and refuses the claim with Caddy's error, which can come from your own Caddyfile. Ocel
-reloads only when `ocel.caddy` changes, never on a release. A renewed origin certificate gets a
-new file name, so it changes `ocel.caddy` too. A reload can drop about one request
-under load, and as `caddy.service` it also closes the WebSocket and other streaming connections
-your Caddy is proxying.
-
-`caddy reload` needs the admin endpoint, so bootstrap refuses a Caddy run with `admin off`.
-Ocel also reads what your Caddy serves from it (`GET /config/apps/http/servers` on
-`localhost:2019`, with `wget` inside `container`, or with the box's `curl` for `caddy.service`,
-so bootstrap refuses a box without `curl` there) and never takes a hostname your Caddy already serves: a bind is refused when a
-host matcher outside ocel's block equals the hostname or is a wildcard that covers it, naming the
-server and route. Two sites for one hostname would otherwise either fail your whole config or
-shadow one another by file order. `ocel doctor` runs the same read, and also checks that your
-Caddy serves ocel's hostnames, that `ocel.caddy` is what ocel renders, and that each hostname
-answers through the switchboard.
-
-A hostname that leaves `ocel.caddy` is no longer renewed after the next reload, and your Caddy
-deletes its certificate 14 days after it expires. An origin certificate no site names any more
-is removed when `ocel.caddy` is placed. `ocel destroy` removes `ocel.caddy`, reloads your Caddy,
-removes the origin certificates, and removes the sudoers line. Your Caddyfile is never written.
-
-The switchboard hears your Caddy on a listener of its own, which takes every request as https,
-sets `X-Forwarded-Host` to `Host`, and drops every `X-Forwarded-*` header it is sent. Any
-container on `network`, which on Coolify is every app it runs, can send a plaintext request
-there that your apps take as https, for a `Host` it could send anyway. None can choose
-`X-Forwarded-Host` or `X-Forwarded-For`.
+- Ocel reloads Caddy only when `ocel.caddy` changes, never on a release. A refused reload puts
+  the old file back and shows Caddy's error. A reload can drop about one request under load;
+  under `caddy.service` it also closes WebSockets.
+- `caddy.service` reloads through `/etc/sudoers.d/ocel-caddy-reload`, and needs `curl` on the
+  box. A containerised Caddy with no `network` needs `network_mode: host`.
+- The admin endpoint must be on.
+- Ocel refuses a hostname your Caddy already serves, and never writes your Caddyfile.
+- Behind Cloudflare, give the directory to Caddy's group (`chgrp caddy /etc/caddy/ocel.d`).
 
 ### Moving a box to another proxy
 
-Change `proxy` and run `ocel bootstrap <tier>`. Only bootstrap moves a box. A deploy whose
-`proxy` disagrees with the box is still refused with the value to write, so every other project
-on the box learns of the move on its next deploy. The record then names the project that ran the
-move.
+Change `proxy` and run `ocel bootstrap <tier>`. Its plan shows what changes, how many
+hostnames need new certificates (Let's Encrypt allows 50 per registered domain per week), and
+the downtime. Ocel never stops or starts a proxy it doesn't run:
 
-The move is one group in the plan bootstrap shows before it asks to go ahead (`--yes` skips
-the question). The group lists what ocel removes, what it sets up for the new proxy, how many
-hostnames get new certificates from it, and how long the box doesn't serve. Each hostname new to
-your Let's Encrypt account counts toward its limit of 50 new certificates per registered domain
-per week.
+| From → to | You |
+| --- | --- |
+| Ocel's own → yours | Start your proxy when told. Bootstrap waits up to 10 minutes for every hostname. |
+| Yours → ocel's own | Stop your proxy first. |
+| Same proxy, new `directory` or `resolver` | Nothing; no downtime. |
+| Same proxy, new `network` or `port` | With `manual`, forward where bootstrap prints. |
 
-Ocel never stops or starts a proxy it doesn't run. Only one process can hold port 443, so
-stopping the old proxy and starting the new one is up to you.
-
-| From → to | What bootstrap does | The box doesn't serve |
-| --- | --- | --- |
-| Ocel's own proxy → yours | Removes `ocel-proxy` and `/var/lib/ocel/proxy`, and keeps `/etc/ocel/certs` if it isn't empty. Publishes the switchboard or puts it on your proxy's network, places ocel's file, and rewrites the record. Then it prints `Start your proxy on 80 and 443 now`, and waits up to 10 minutes until every hostname the box serves answers through ocel, as `ocel domain add` does. | From `ocel-proxy` stopping until your proxy holds 443 and has its certificates |
-| Yours → ocel's own proxy | Refuses while anything holds port 80 or 443, and names it. Then removes ocel's file from your proxy's directory without reloading your proxy, takes the switchboard off your proxy's network, and starts `ocel-proxy`, which gets each certificate on the first connection for its hostname. | From your proxy stopping until `ocel-proxy` answers |
-| Yours → yours, same proxy: a new `directory` or `resolver` | Leaves the switchboard running. For a Traefik, places ocel's file in the new directory, touches the old one so your Traefik reads its directory again (it watches no directory beneath the one it is given), waits until it routes through ocel the one name only the new file routes, and removes the old file. For a Caddy, removes the old file and places the new one before one reload, since a Caddy refuses two sites for one hostname. Then it waits until every hostname answers through ocel. | Never |
-| Yours → yours, same proxy: a new `network` or `port` | Starts the switchboard again where the new option says, moves ocel's file as for a new `directory`, and waits until every hostname answers through ocel. With `manual` it prints where to forward, as in `Forward your proxy to 127.0.0.1:8481 now`. | From the switchboard starting again until your proxy forwards to it there |
-| Yours → another of yours | As yours → ocel's own proxy for the old one, then as ocel's own proxy → yours for the new one. | From the old proxy stopping until the new one serves |
-
-Ocel counts two proxies as the same when both are `manual`, both are `traefik`, or both are
-`caddy` running as the same `container` or both as `caddy.service`. Only a new `resolver` or
-`previewResolver` makes the same Traefik order certificates again.
-
-The routes ocel places in your Traefik or Caddy try the switchboard again for about 10 seconds
-when it doesn't accept a connection. A Traefik tries again only a request it couldn't send, and
-a Caddy only one it couldn't connect for, so a request already sent to a switchboard that is
-stopping can still fail. Ocel's Traefik file also routes `<tag>.placement.ocel.invalid`, where `<tag>` names the
-file's path, so that ocel can tell which of two placed files your Traefik reads. Nothing orders
-a certificate for that name. A proxy you route yourself retries as you configure it.
-
-If the new proxy doesn't serve every hostname within the 10 minutes, bootstrap stops and names
-the hostnames it didn't serve. The box already routes through the new proxy by then. Start it,
-fix its routes, and run `ocel bootstrap <tier>` again to finish. If your Traefik doesn't read
-the new `directory` within the 10 minutes, bootstrap stops before it removes the old file, which
-goes on serving.
-
-Until a move finishes, every deploy onto the box is refused, whichever `proxy` it sets, and told
-to run `ocel bootstrap <tier>`. That holds however bootstrap stopped, so no deploy writes routes
-a proxy doesn't read yet. Running bootstrap again with the same `proxy` finishes the move. With
-another `proxy` it moves the box there instead, and removes what the stopped move left of the
-proxy it started from.
+Deploys are refused until the move finishes. If it stops, fix what it names and run bootstrap
+again.
 
 ## Health checks
 
-Before a deploy switches the proxy to a new container, the container has to answer 2xx on
-its health path. Set the path with [`health.path`](/docs/configuration#health) in the app's
-`compute.container` and that path is the one checked.
+A deploy switches traffic to a new container only once it answers 2xx on its health path. Set
+it with [`health.path`](/docs/configuration#health) in the app's `compute.container`.
 
-With no `health.path`, the first deploy of an app finds one. Once the container starts, and
-before the proxy sends it any traffic, the deploy waits for the app to answer HTTP and then asks
-it for these paths in turn:
-
-1. `/up`
-2. `/health`
-3. `/healthz`
-4. `/`
-
-A 404 or 405 means the app has no such path, and the deploy asks for the next one. Any
-other answer means the path exists, and it becomes the health path, even when the answer
-is an error. An app whose `/health` answers 503 has a health check that says it is
-unhealthy, so the deploy waits for a 2xx there and fails if none comes; it never falls
-through to `/`. The deploy says which path it chose:
+Without one, the first deploy asks for `/up`, `/health`, `/healthz`, then `/`. The first that
+doesn't answer 404 or 405 becomes the health path, even if it answers an error, and later deploys
+keep it:
 
 ```
 api answers its health check on /health (found by probing /up, /health)
 ```
 
-If every path answers 404 or 405, the deploy fails, lists what each one answered, and asks
-you to set `health.path`.
-
-The path found is kept with the release. Later deploys of the app check that path without
-probing again, so adding an `/up` route later does not change it. To use a different
-path, set `health.path`.
+If every path answers 404 or 405, the deploy fails and asks you to set `health.path`.
 
 ## Images
 
-With no `registry` in the config, a deploy sends each app's image straight to the box over
-SSH. That needs nothing else to run, but it sends the whole image every time the app
-changes, base layers included. When a transfer is slow or large, the deploy warns and
-links here.
+With no `registry`, each deploy sends the app's whole image to the box over SSH, and warns when
+that is slow or large. Name a registry and the box pulls by digest, moving only changed layers:
 
-Name a registry and the deploy pushes the image there instead, and the box pulls it by
-digest. The push and the pull each skip the layers already there, so a deploy moves only
-what changed:
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  registry: { server: "ghcr.io/acme", username: "acme-bot", password: "${REGISTRY_TOKEN}" },
-});
+```json
+"registry": { "server": "ghcr.io/acme", "username": "acme-bot", "password": "${REGISTRY_TOKEN}" }
 ```
 
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "registry": {
-    "server": "ghcr.io/acme",
-    "username": "acme-bot",
-    "password": "${REGISTRY_TOKEN}"
-  }
-}
-```
+`password` names an environment variable ([Configuration](/docs/configuration)). The box logs
+out after each pull.
 
-The box needs `username` beside `password` to log in. It logs in for the pull and logs out
-in the same session, so no credential is left on the machine. `password` names an
-environment variable, never the token itself: see [Configuration](/docs/configuration).
+## Resources on the box
 
-## Caching
+Each runs in a container on the project's own network, publishes no port, and gets a password
+generated on the first deploy and sealed on the box. A [transform](/docs/transforms#on-a-vps)
+changes the image, arguments, memory or volume.
 
-Nothing ocel runs on a box caches your app's responses. Its proxy and the switchboard forward
-every request to the app's container and keep no copy, so a box has no edge cache.
+| Resource | Runs as | Notes |
+| --- | --- | --- |
+| `postgres` | One Postgres container, data on a docker volume | A newer major `version` dumps, starts the new version on a fresh volume and restores, with the database down meanwhile. On failure the old version starts again. |
+| `kv` | One Valkey container per store | A crash loses about the last second of writes. Apps connect as `ocel`. 8 → 9 works; 9 → 8 fails. |
+| Topics, tasks | One Postgres with pgmq for the environment; each worker in its own container, from its app's image | Workers have no `maxDuration` ceiling. Python workers are refused at build. |
+| Realtime | The Ocel gateway in a container | See [Realtime](/docs/sdk/realtime). |
+| `bucket` | A store the box keeps for the project, or one you bind | See [Bucket](/docs/sdk/bucket#on-a-vps). |
 
-A Next app on a box runs as a plain Next server, such as `next start`, with no ocel router in
-front of it, and Next's own server cache inside the container is the only cache. It serves
-prerendered and ISR pages and honours `revalidatePath`, `revalidateTag` and draft mode, and its
-responses carry Next's own `Cache-Control` and `x-nextjs-cache` headers. The cache lives in the
-container, and a deploy that replaces the container starts it over from what the build
-prerendered. Its pages outlast a restart, but its record of what `revalidatePath` and
-`revalidateTag` marked does not: a page revalidated and not rendered again before a restart
-comes back as its old copy.
+Bootstrap warns when `vm.overcommit_memory` isn't `1` or transparent huge pages are `always`:
+Valkey's background save can fail without overcommit.
 
-[Behind Cloudflare](#behind-cloudflare), no page is cached either. Cloudflare forwards each
-hostname to the box with no worker and no cache rule, and caches only what it caches for any
-site by default, such as static files by their extension.
-
-## Postgres
-
-`postgres("main")` runs as one container on the box, on your project's own network. It
-publishes no port on the machine, so only your project's apps reach it. Its data lives on a
-docker volume, and its password is generated on the first deploy and kept sealed on the box.
-
-A [transform](/docs/transforms#on-a-vps) changes what runs: the image, its arguments, its
-memory, where the volume lives.
-
-**Backups.** The box dumps every postgres once a day and keeps the newest seven under
-`/var/lib/ocel/<tier>/backups/<container>/`. Take one now, or read one back, on the box:
+**Backups.** Each resource is backed up once a day, keeping the newest seven under
+`/var/lib/ocel/<tier>/backups/<container>/`. They sit on the same disk, so copy them off the box
+if losing it must not lose the data. For a postgres, on the box (`docker ps --filter
+label=ocel.resource` names the container):
 
 ```bash
 sudo /usr/local/lib/ocel/backups production dump <container> main
 sudo /usr/local/lib/ocel/backups production restore <container> main <file>
 ```
 
-`docker ps --filter label=ocel.resource` names the container. The dumps are on the same disk
-as the database, so copy them somewhere else if losing the machine must not lose the data.
+`ocel destroy` removes each resource with its volume, password and backups.
 
-**Changing the version.** Moving `version` to a newer major dumps the running database,
-starts the new version on a fresh volume, and restores into it. The database is down while
-that runs. If any step fails, the old version is started again on the data it had.
+## Logs and caching
 
-**Removing it.** `ocel destroy` takes the container, its volume, its password and its dumps.
+Containers log with Docker's `local` driver, at most 100 MiB each. Read them with
+[`ocel logs`](/docs/cli/logs).
 
-## KV stores
+Nothing ocel runs on the box caches responses. A Next app runs as a plain Next server, so Next's
+own cache inside the container is the only one, and a deploy that replaces the container starts it
+over from what the build prerendered.
 
-`kv("cache")` runs as one Valkey container per store on your project's own network. It
-publishes no port on the machine, so only your project's apps reach it. Its data lives on a
-docker volume, written to an append-only file synced every second plus snapshots. A crash
-loses about the last second of writes. The default user is off. Apps connect as `ocel` with a
-password generated on the first deploy and kept sealed on the box. The container is handed
-only that password's hash. TLS is off, because the store never leaves the project's network.
+## Upgrades
 
-A [transform](/docs/transforms#on-a-vps) can change the image, add arguments, cap the
-container's memory, or move the volume.
+After upgrading ocel, a deploy that needs a newer box agent tells you to run `ocel bootstrap
+<tier>`. Docker upgrades are yours.
 
-**Backups.** Once a day the box pauses the store, copies its volume and keeps the newest seven
-copies under `/var/lib/ocel/<tier>/backups/<container>/`.
+## Errors
 
-**Changing the version.** Moving `version` from 8 to 9 stops the store, copies its files to a
-fresh volume and starts 9 on them. Valkey 8 cannot read data that 9 wrote, so a move back from
-9 to 8 fails and starts 9 again on its data.
+| You see | Fix |
+| --- | --- |
+| `… is neither root nor has passwordless sudo` | Grant the login passwordless sudo, or connect as root. |
+| `… is missing <tools>` | Install them. |
+| `the host key for … is in none of …` | Check the fingerprint against the machine, then accept, or in CI run the `ssh-keyscan` line it prints. |
+| `the host key for … changed` | If the machine was rebuilt, run the `ssh-keygen -R` line it prints. |
+| `docker … is older than 28.0`, `… is the snap package`, `… runs rootless` | Install Docker 28.0 or later from Docker's own packages as the system daemon, then bootstrap. |
+| Bootstrap names what holds port 80 or 443 | Stop it, or deploy [behind it](#behind-your-own-proxy). |
+| `ports 80 and 443 on … are unreachable from this machine` | Allow inbound TCP 80 and 443 in your cloud firewall, or the box's own. |
+| `… has … free on …; this deploy needs …` | Free space on Docker's data root. |
+| `app … asks for instances.min …` | A box runs one container per app: set both to 1 or leave them off. |
+| `… orders a publicly trusted certificate for each preview hostname …` | See [Previews](#previews). |
+| `this ephemeral preview declares …` | Deploy a persistent preview. |
+| `this box's agent … predates this ocel` | Run `ocel bootstrap <tier>`. |
+| `no ocel-switchboard container on …` | Run `ocel bootstrap <tier>`. |
+| A deploy refused with a `proxy` value to write | Every project on a box must name the same `proxy`. |
+| `Sending …'s image to … took …` | Name a [`registry`](#images). |
+| Every health path answered 404 or 405 | Set [`health.path`](#health-checks). |
 
-**Removing it.** `ocel destroy` takes the container, its volume, its password and its backups.
-
-**Kernel settings.** Bootstrap warns if `vm.overcommit_memory` is not `1` or transparent huge
-pages are `always`. Valkey logs a warning about both, and a background save can fail without
-overcommit.
-
-## Topics, tasks and workers
-
-Every topic and task of an environment runs on one Postgres container with pgmq, on your
-project's own network, in a database of its own. It publishes no port on the machine. Its
-password is generated on the first deploy and kept sealed on the box. The box dumps it once a
-day like a [postgres](#postgres), and `ocel destroy` takes it when the last topic or task goes.
-
-Each worker runs as a container of its own, started from the image of the app it joins: the
-build adds the worker's entry to that image, and the worker container runs it instead of your
-app. A worker gets the app's values and bindings, publishes no port, and is never routed.
-Other containers on your project's network can reach it, but its runtime refuses any request
-that lacks the environment's delivery secret, which the box's agent sends with every delivery.
-Your apps never see it. Like the database password, it is generated on the first deploy and
-kept sealed on the box. A worker
-runs for as long as a run takes, so `maxDuration` has no ceiling here. A worker serves what is
-declared in a node, go or rust folder; a python one is refused at build.
-
-The box's agent runs the queues and delivers each run to its worker. An app sends and
-triggers through the runtime in its own container, which only that app's process can call.
-A deploy that declares a topic or task is refused when the box's agent predates the ocel you
-deploy with: run `ocel bootstrap` again. An ephemeral preview has no queue of its own, so one
-that declares a topic or task is refused too. Deploy it as a persistent preview instead.
-
-A deploy replaces the workers with the new release's and stops the old ones. Promoting an
-older release puts its app back, and leaves the workers on the newest code.
-
-## Buckets
-
-A bucket runs in a store the box keeps for the project. Bind it to a store you already run and
-the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
-
-## Logs
-
-Containers log to the box, in Docker's `local` log driver: at most 100 MB a container, and a
-release's logs go when its container is pruned. Read them with [`ocel logs`](/docs/cli/logs).
+`ocel doctor` checks DNS, ports, the proxy and the switchboard.
 
 ## Options
 
-| Option | What it does |
+| Option | Meaning |
 | --- | --- |
-| `ssh` | The machine to deploy onto: a `Host` alias, or an object of `host`, `user`, `port` and `identityFile`. |
-| `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
-| `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. Refused alongside `proxy`. |
-| `proxy` | What fronts the machine on ports 80 and 443. Omit it and ocel runs its own. `"manual"` puts ocel [behind your own proxy](#behind-your-own-proxy); [the `proxy` option](#the-proxy-option) lists every form. |
-| `perHostnamePreviewCertificates` | Deploy previews even where the proxy gets a certificate of its own for each preview hostname. Certificate Transparency logs publish every such certificate within minutes, and with it the preview's random hostname. Omit it and that preview deploy is refused: set `previewResolver`, pin a certificate for `*.<preview base>`, or front the box with Cloudflare. |
+| `ssh` | The box: a `Host` alias, or `{ host, user, port, identityFile }`. |
+| `deployKey` | Path to the public key `ocel-deploy` accepts. Default: the bootstrapping login's keys. |
+| `certificates` | Certificate paths on the box, keyed by hostname. Not with `proxy`. |
+| `proxy` | What fronts ports 80 and 443. Default: ocel's own. See [the `proxy` option](#the-proxy-option). |
+| `perHostnamePreviewCertificates` | Deploy previews even though each preview hostname gets a public, logged certificate. See [Previews](#previews). |
+| `edge`, `dns` | `cloudflare`. See [Behind Cloudflare](#behind-cloudflare). |

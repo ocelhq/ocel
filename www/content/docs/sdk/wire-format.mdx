@@ -3,4 +3,40 @@ title: Wire format
 description: The proto behind every resource.
 ---
 
-Dummy content.
+Every SDK speaks the same [Connect](https://connectrpc.com) services, defined in [`proto/`](https://github.com/ocelhq/ocel/tree/main/proto). That is what keeps the four SDKs in step.
+
+## Discovery
+
+The CLI runs a discovery folder with:
+
+| Variable | Value |
+| --- | --- |
+| `OCEL_PHASE` | `discovery` |
+| `OCEL_DEV_SERVER` | the URL of the CLI's local RPC server |
+| `OCEL_DEV_SERVER_TOKEN` | a bearer token for it |
+
+Each declaration calls `app.resources.v1.ResourceService/Declare` with the resource's type, name, config and source location ([`resources.proto`](https://github.com/ocelhq/ocel/blob/main/proto/app/resources/v1/resources.proto)). Env declarations call `DeclareEnv`. Outside discovery, a declaration only returns its handle.
+
+During discovery every accessor fails with an unprovisioned error, which is why [discovery folders define and never read](/docs/sdk#define-dont-read).
+
+## Bindings
+
+A binding is a JSON `common.bindings.v1.Binding` record named `OCEL_RESOURCE_<KIND>_<name>`, such as `OCEL_RESOURCE_POSTGRES_main`. The SDK reads it from the environment, or from a file of that name under `OCEL_LIVE_DIR`. With neither, an accessor fails with a missing binding error naming the key.
+
+- **Database, KV**: the record carries the connection, and the SDK connects directly.
+- **Bucket, topic, task, realtime**: calls go to the Ocel runtime at `OCEL_RUNTIME_ADDRESS`, authorized by `OCEL_SESSION_TOKEN`. `ocel dev` serves the same services locally.
+
+Both runtime variables are delivered by `ocel dev` and `ocel deploy`; never set them by hand.
+
+## Versions
+
+Each discovery call names the SDK in an `Ocel-Sdk-Version` header. The CLI refuses an SDK from another release with [`sdk.version_mismatch`](/docs/errors/sdk.version_mismatch), which names the upgrade command:
+
+| SDK | Upgrade |
+| --- | --- |
+| TypeScript | `npm i ocel@<cli version>` |
+| Go | `go get ocel.dev@v<cli version>` |
+| Python | `uv add ocel==<cli version>` |
+| Rust | `cargo add ocel-sdk@<cli version>` |
+
+Compatible means the same major, the same minor while the major is `0`, and the exact version while both are `0`.

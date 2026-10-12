@@ -1,9 +1,9 @@
 ---
 title: sdk.version_mismatch
-description: The SDK in your project is not the release of this CLI.
+description: The SDK in your project is not a release this CLI works with.
 ---
 
-An SDK works with the CLI of its own release. The SDK your project depends on is a different one from the CLI you ran, so Ocel refuses to build against it.
+An SDK works with a CLI of the same major release; before 1.0, of the same minor; and in 0.0.x, of the same release exactly. The SDK your project depends on is outside that range for the CLI you ran, so Ocel refuses to build against it.
 
 ## Fix
 
