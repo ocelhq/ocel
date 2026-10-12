@@ -66,10 +66,6 @@ func refuseInfraRequest(req *contractv1.ProvisionInfraRequest) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"this manifest declares apps, and ProvisionInfra provisions the infra stack alone: the apps ship through Deploy once they are built")
 	}
-	if ephemeral(req.GetEnvironment()) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"an ephemeral preview has no infra stack of its own, only the bindings its tier publishes, so there is no infra to provision before its build")
-	}
 	return refuseInvalidWorkers(req.GetManifest())
 }
 
@@ -87,10 +83,6 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 	if req.GetDry() {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"a dry deploy plans its infra stack with its apps, so it cannot also say its infra was provisioned already")
-	}
-	if ephemeral(req.GetEnvironment()) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"an ephemeral preview has no infra stack of its own, so no infra was provisioned for this deploy")
 	}
 	if req.GetLeaseToken() == "" {
 		return refusal.Refuse(refusal.CodeInvalid,

@@ -275,22 +275,25 @@ func TestADryDeployRefusesInfraProvisioned(t *testing.T) {
 	}
 }
 
-func TestProvisionInfraRefusesAnEphemeralPreview(t *testing.T) {
+func TestProvisionInfraRecordsAnEphemeralPreviewWithTheLifecycleItWasCreatedWith(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
 
-	req := infraRequest(deployRequest())
-	req.Environment = &environmentv1.Environment{
-		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Identity:  "pr-1",
-		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+	req := infraRequest(previewRequest())
+	req.Environment.Lifecycle = environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
+	provisionedInfra(t, client, req)
+
+	specs := vendor.FakeStacks().Provisioned()
+	if len(specs) != 1 || specs[0].Kind != provider.StackInfra {
+		t.Errorf("ProvisionInfra() provisioned %d stacks, want the infra stack alone", len(specs))
 	}
-	_, err := provisionInfraStream(t, client, req)
-	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid {
-		t.Fatalf("ProvisionInfra() = %v, want it refused as invalid: an ephemeral preview has no infra stack", err)
+	meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), vendor.KeyValues(), environment.TierPreview, "shop", "pr-7")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
-		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(specs))
+	if meta.Lifecycle != stackrecords.LifecycleEphemeral {
+		t.Errorf("after ProvisionInfra() pr-7 records lifecycle %q, want ephemeral: its infra stack is the preview's own to reclaim", meta.Lifecycle)
 	}
 }
 

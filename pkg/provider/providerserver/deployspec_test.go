@@ -52,7 +52,7 @@ func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	}
 }
 
-func TestBuildDeploySpecLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T) {
+func TestBuildDeploySpecGivesAnEphemeralPreviewAnInfraStackOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	spec, err := buildDeploySpec(&contractv1.DeployRequest{
@@ -66,8 +66,8 @@ func TestBuildDeploySpecLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T
 	if err != nil {
 		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
-	if !spec.Infra.IsZero() {
-		t.Errorf("an ephemeral preview specifies infra stack %s, want none: nothing persists past the pointer", spec.Infra)
+	if spec.Infra != naming.InfraStack("pr-7") {
+		t.Errorf("an ephemeral preview specifies infra stack %s, want %s", spec.Infra, naming.InfraStack("pr-7"))
 	}
 	if spec.Pointer != "pr-7" {
 		t.Errorf("a preview spec points at %q, want the environment's identity", spec.Pointer)

@@ -102,7 +102,7 @@ func countShapedTypes(set *costv1.ResourceSet) map[string]int {
 	return types
 }
 
-func TestShapeOfAnEphemeralPreviewPricesNoResourceItNeverProvisions(t *testing.T) {
+func TestShapeOfAnEphemeralPreviewPricesTheResourcesItProvisions(t *testing.T) {
 	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 	req := shapeRequest()
 	req.Environment = &environmentv1.Environment{
@@ -116,8 +116,8 @@ func TestShapeOfAnEphemeralPreviewPricesNoResourceItNeverProvisions(t *testing.T
 		t.Fatalf("Shape() error = %v", err)
 	}
 	types := countShapedTypes(set)
-	if types[fake.TypePostgres] != 0 || types[fake.TypeBucket] != 0 {
-		t.Errorf("shaped types = %v, want no postgres or bucket: an ephemeral preview has no infra stack of its own", types)
+	if types[fake.TypePostgres] == 0 || types[fake.TypeBucket] == 0 {
+		t.Errorf("shaped types = %v, want the postgres and bucket an ephemeral preview provisions", types)
 	}
 	if types[fake.TypeFunction] != 2 {
 		t.Errorf("shaped types = %v, want both apps' functions still priced", types)
