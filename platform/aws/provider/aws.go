@@ -83,8 +83,7 @@ func (p *Provider) Facts() provider.Facts {
 		StoresArtifacts:   true,
 		WorkerCeilings:    deploy.WorkerCeilings,
 
-		MaxFunctionBytes:    deploy.MaxFunctionBytes,
-		AnswersPreviewLogin: true,
+		MaxFunctionBytes: deploy.MaxFunctionBytes,
 	}
 }
 

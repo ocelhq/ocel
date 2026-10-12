@@ -75,9 +75,6 @@ func TestABoxEdgeAndTheCloudflareProxyInFrontOfItBothGateTheirPreviews(t *testin
 	t.Setenv(provider.NamespaceEnvVar, "staging")
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
 
-	if !p.Facts().AnswersPreviewLogin {
-		t.Error("Facts().AnswersPreviewLogin = false, want true: the switchboard answers the login for a preview the box serves")
-	}
 	for _, kind := range []edge.Kind{edge.None, cloudflare.Kind} {
 		front, err := p.Edges().Open(kind, nil)
 		if err != nil {

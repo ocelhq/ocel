@@ -91,7 +91,6 @@ func (p *Provider) Facts() provider.Facts {
 		RendersTransforms:        true,
 		RunsTunnels:              true,
 		RetainsContainerReleases: true,
-		AnswersPreviewLogin:      true,
 		WorkerCeilings:           []provider.WorkerCeiling{{Compute: provider.ComputeContainer, Unbounded: true}},
 	}
 }

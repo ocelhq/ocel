@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -209,53 +208,6 @@ func TestAPreviewDeployOnAnEdgeThatRunsCodeLeavesTheGateToItsProgram(t *testing.
 	}
 }
 
-func provisionedApp(t *testing.T, vendor *fake.Provider) *provider.AppSpec {
-	t.Helper()
-	for _, spec := range vendor.FakeStacks().Provisioned() {
-		if spec.App != nil {
-			return spec.App
-		}
-	}
-	t.Fatal("the deploy provisioned no app")
-	return nil
-}
-
-func TestAPreviewDeployOnAnEdgeThatRunsNoCodeHandsTheAppTheGateItsLoginIsCheckedAgainst(t *testing.T) {
-	vendor := gatedDirectPreviewDeployed(t, "", "*.preview.shop.example")
-
-	got := provisionedApp(t, vendor).PreviewGate
-	if got == nil || !reflect.DeepEqual(*got, shopGate) {
-		t.Errorf("AppSpec.PreviewGate = %+v, want the gate recorded for shop, %+v: the edge hands the login to the origin", got, shopGate)
-	}
-}
-
-func TestAPreviewDeployOnAnEdgeThatRunsCodeHandsTheAppNoGate(t *testing.T) {
-	vendor := gatedPreviewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
-
-	if got := provisionedApp(t, vendor).PreviewGate; got != nil {
-		t.Errorf("AppSpec.PreviewGate = %+v, want none: the edge answers the login itself", got)
-	}
-}
-
-func TestAPreviewDeployWithARecordedGateIsRefusedWhenTheOriginCannotAnswerTheLoginTheEdgeHandsIt(t *testing.T) {
-	builtProject(t)
-	client, vendor := contractServed(t, "1.0.0")
-	vendor.WithFacts(func(facts *provider.Facts) { facts.AnswersPreviewLogin = false })
-	previewBootstrapped(t, client)
-	seedPreviewGates(t, vendor, recordedGates)
-	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
-	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
-
-	result, _ := deploy(t, client, req)
-
-	if result.GetSuccess() {
-		t.Fatal("Deploy() succeeded, want it refused: the login would reach the app")
-	}
-	if got := result.GetError(); !strings.Contains(got, "login") {
-		t.Errorf("Deploy() error = %q, want it to name the login the origin cannot answer", got)
-	}
-}
-
 func directPreviewServed(t *testing.T, gates map[string]previewgate.Gate) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
 	t.Helper()
 	builtProject(t)
@@ -289,42 +241,5 @@ func TestAPreviewDeployWithNoRecordedGateGoesAheadOnAnEdgeThatCannotGate(t *test
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed: no gate is recorded for shop", result.GetError())
-	}
-}
-
-func directPreviewGatedAtOrigin(t *testing.T, shape func(*fake.Edge)) (contractv1connect.ProviderServiceClient, *fake.Provider, *contractv1.DeployRequest) {
-	t.Helper()
-	client, vendor, req := directPreviewServed(t, recordedGates)
-	vendor.WithFacts(func(facts *provider.Facts) { facts.GatesPreviewsAtOrigin = true })
-	shape(vendor.Edges().(*fake.Edges).Edge(fake.KindDirect))
-	return client, vendor, req
-}
-
-func TestAPreviewDeployBehindAnEdgeThatCachesNothingHandsTheAppTheGateToRunAtTheOrigin(t *testing.T) {
-	client, vendor, req := directPreviewGatedAtOrigin(t, func(*fake.Edge) {})
-
-	if result, _ := deploy(t, client, req); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed: nothing in front of the origin caches, so the origin gates", result.GetError())
-	}
-
-	got := provisionedApp(t, vendor).PreviewGate
-	if got == nil || !reflect.DeepEqual(*got, shopGate) {
-		t.Errorf("AppSpec.PreviewGate = %+v, want the gate recorded for shop, %+v", got, shopGate)
-	}
-}
-
-func TestAPreviewDeployBehindAnEdgeThatCachesResponsesIsRefusedEvenWhereTheOriginGates(t *testing.T) {
-	client, _, req := directPreviewGatedAtOrigin(t, func(e *fake.Edge) { e.CachesResponses() })
-
-	if result, _ := deploy(t, client, req); result.GetSuccess() {
-		t.Fatal("Deploy() succeeded, want it refused: the edge would cache an admitted response and serve it to anyone")
-	}
-}
-
-func TestAPreviewDeployBehindAProxiedEdgeIsRefusedEvenWhereTheOriginGates(t *testing.T) {
-	client, _, req := directPreviewGatedAtOrigin(t, func(e *fake.Edge) { e.ProxiesRecords() })
-
-	if result, _ := deploy(t, client, req); result.GetSuccess() {
-		t.Fatal("Deploy() succeeded, want it refused: the proxy would cache an admitted response and serve it to anyone")
 	}
 }

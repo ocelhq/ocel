@@ -3,21 +3,18 @@ export const PREVIEW_LOGIN_PATH = "/.ocel/preview/login";
 export const PREVIEW_BYPASS_HEADER = "x-ocel-preview-bypass";
 export const PREVIEW_SET_BYPASS_COOKIE_HEADER = "x-ocel-set-bypass-cookie";
 export const PREVIEW_SESSION_SECONDS = 7 * 24 * 60 * 60;
-export const PREVIEW_LOGIN_BODY_MAX_BYTES = 1024;
 
 export const PREVIEW_GATE_CACHE_CONTROL = "private, no-store";
 export const PREVIEW_ROBOTS_TAG = "noindex";
-const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
+const LOGIN_REALM = 'Basic realm="Ocel preview", charset="UTF-8"';
+const LOGIN_SCRIPT =
+  'var p=document.getElementById("password");async function go(){var r=await fetch("' +
+  PREVIEW_LOGIN_PATH +
+  '",{method:"POST",headers:{Authorization:"Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(":"+p.value)))}});r.ok?location.assign(document.querySelector("main").dataset.next):document.getElementById("incorrect").hidden=!1}';
 const SIGNATURE_HEX_LENGTH = 64;
 const COOKIE_PURPOSE = "cookie";
 const PASSWORD_PURPOSE = "password";
 const BYPASS_PURPOSE = "bypass";
-const AMPERSAND = 0x26;
-const EQUALS_SIGN = 0x3d;
-const PLUS_SIGN = 0x2b;
-const PERCENT_SIGN = 0x25;
-const SPACE = 0x20;
-
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 export interface PreviewGate {
@@ -46,7 +43,6 @@ export interface PreviewRequest {
   host: string;
   target: string;
   headers: Headers;
-  body?: string | Uint8Array;
 }
 
 export interface PreviewResponse {
@@ -71,7 +67,7 @@ export async function checkPreview(
   const sign = await signer(gate.key);
   const path = request.target.split("?", 1)[0] ?? "";
 
-  if (request.method === "POST" && path === PREVIEW_LOGIN_PATH) {
+  if (path === PREVIEW_LOGIN_PATH && ["GET", "HEAD", "POST"].includes(request.method)) {
     return checkLogin(gate, sign, request, nowSeconds);
   }
 
@@ -88,7 +84,7 @@ export async function checkPreview(
   }
 
   if (!(hasPassword || hasBypass || hasSession || allowsOptions(gate, request.method, path))) {
-    return answerLoginForm(401, sanitizeNext(request.target), false);
+    return answerLoginPage(sanitizeNext(request.target), false);
   }
 
   const headers = new Headers(request.headers);
@@ -143,21 +139,12 @@ async function checkLogin(
   request: PreviewRequest,
   nowSeconds: number,
 ): Promise<PreviewVerdict> {
-  const body =
-    typeof request.body === "string"
-      ? new TextEncoder().encode(request.body)
-      : (request.body ?? new Uint8Array());
-  if (body.length > PREVIEW_LOGIN_BODY_MAX_BYTES) return answerStatus(413);
-  const mediaType = (request.headers.get("content-type") ?? "").split(";", 1)[0] ?? "";
-  if (toLowerAscii(trimHttpWhitespace(mediaType)) !== FORM_CONTENT_TYPE) return answerStatus(415);
-
-  const form = parseForm(body);
-  const next = sanitizeNext(form.get("next") ?? "");
-  const password = form.get("password");
-  if (!(await isPassword(gate, sign, password === undefined ? "" : password))) {
-    return answerLoginForm(401, next, true);
+  if (await isBasicPassword(gate, sign, request.headers.get("authorization"))) {
+    if (request.method === "POST") return sessionStarted(sign, request.host, nowSeconds);
+    return redirect(sign, "/", request.host, nowSeconds);
   }
-  return redirect(sign, next, request.host, nowSeconds);
+  if (request.method === "POST") return answerStatus(401);
+  return answerLoginPage("/", true);
 }
 
 async function isPassword(
@@ -258,43 +245,6 @@ function dropSessionCookie(headers: Headers): void {
   else headers.set("cookie", kept.join("; "));
 }
 
-function parseForm(body: Uint8Array): Map<string, string | null> {
-  const form = new Map<string, string | null>();
-  let start = 0;
-  for (let end = 0; end <= body.length; end++) {
-    if (end < body.length && body[end] !== AMPERSAND) continue;
-    const pair = body.subarray(start, end);
-    start = end + 1;
-    if (pair.length === 0) continue;
-    const equals = pair.indexOf(EQUALS_SIGN);
-    const name = decodeFormComponent(equals < 0 ? pair : pair.subarray(0, equals));
-    const value = equals < 0 ? "" : decodeFormComponent(pair.subarray(equals + 1));
-    if (name !== null && !form.has(name)) form.set(name, value);
-  }
-  return form;
-}
-
-function decodeFormComponent(component: Uint8Array): string | null {
-  const decoded: number[] = [];
-  for (let i = 0; i < component.length; i++) {
-    const byte = component[i]!;
-    if (byte === PLUS_SIGN) {
-      decoded.push(SPACE);
-      continue;
-    }
-    if (byte === PERCENT_SIGN && i + 2 < component.length) {
-      const digits = String.fromCharCode(...component.subarray(i + 1, i + 3));
-      if (/^[0-9A-Fa-f]{2}$/.test(digits)) {
-        decoded.push(Number.parseInt(digits, 16));
-        i += 2;
-        continue;
-      }
-    }
-    decoded.push(byte);
-  }
-  return decodeUtf8(Uint8Array.from(decoded));
-}
-
 function decodeUtf8(bytes: Uint8Array): string | null {
   try {
     return strictUtf8.decode(bytes);
@@ -338,19 +288,33 @@ function answerStatus(status: number): PreviewVerdict {
   return { kind: "respond", response: { status, headers: createGateResponseHeaders(), body: "" } };
 }
 
-function answerLoginForm(status: number, next: string, incorrect: boolean): PreviewVerdict {
+function answerLoginPage(next: string, prompt: boolean): PreviewVerdict {
   const headers = createGateResponseHeaders();
   headers.set("content-type", "text/html; charset=utf-8");
-  const notice = incorrect ? '<p role="alert">Incorrect password.</p>' : "";
+  if (prompt) headers.set("www-authenticate", LOGIN_REALM);
   const body =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">' +
-    `<title>Preview protected</title></head><body>${notice}` +
-    `<form method="post" action="${PREVIEW_LOGIN_PATH}">` +
-    '<label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>' +
-    `<input type="hidden" name="next" value="${escapeHtml(next)}">` +
-    '<button type="submit">Continue</button></form></body></html>';
-  return { kind: "respond", response: { status, headers, body } };
+    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview protected</title>' +
+    `<main data-next="${escapeHtml(next)}"><p id="incorrect" role="alert" hidden>Incorrect password.</p>` +
+    `<label>Password <input id="password" type="password" autocomplete="current-password" autofocus onkeydown="event.key==='Enter'&&go()"></label>` +
+    '<button onclick="go()">Continue</button>' +
+    `<noscript><p><a href="${PREVIEW_LOGIN_PATH}">Sign in with the browser prompt</a></p></noscript></main>` +
+    `<script>${LOGIN_SCRIPT}</script>`;
+  return { kind: "respond", response: { status: 401, headers, body } };
+}
+
+function sessionCookie(signature: string, expiry: string): string {
+  return `${PREVIEW_COOKIE_NAME}=${expiry}.${signature}; Max-Age=${PREVIEW_SESSION_SECONDS}; Path=/; Secure; HttpOnly; SameSite=Lax`;
+}
+
+async function sessionStarted(
+  sign: Sign,
+  host: string,
+  nowSeconds: number,
+): Promise<PreviewVerdict> {
+  const expiry = String(nowSeconds + PREVIEW_SESSION_SECONDS);
+  const headers = createGateResponseHeaders();
+  headers.set("set-cookie", sessionCookie(await signSession(sign, host, expiry), expiry));
+  return { kind: "respond", response: { status: 204, headers, body: "" } };
 }
 
 async function redirect(
@@ -363,9 +327,6 @@ async function redirect(
   const signature = await signSession(sign, host, expiry);
   const headers = createGateResponseHeaders();
   headers.set("location", location);
-  headers.set(
-    "set-cookie",
-    `${PREVIEW_COOKIE_NAME}=${expiry}.${signature}; Max-Age=${PREVIEW_SESSION_SECONDS}; Path=/; Secure; HttpOnly; SameSite=Lax`,
-  );
+  headers.set("set-cookie", sessionCookie(signature, expiry));
   return { kind: "respond", response: { status: 303, headers, body: "" } };
 }

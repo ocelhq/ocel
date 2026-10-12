@@ -31,7 +31,6 @@ interface Case {
     host: string;
     target: string;
     headers: Record<string, string | string[]>;
-    body?: string;
   };
   expect: Expectation;
 }
@@ -59,7 +58,6 @@ describe("the preview gate answers every conformance vector", () => {
           host: example.request.host,
           target: example.request.target,
           headers: encodeWireHeaders(example.request.headers),
-          body: example.request.body,
         },
         vectors.nowSeconds,
       );

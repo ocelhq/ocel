@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -87,14 +88,16 @@ func basic(password string) string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:"+password))
 }
 
-func postLogin(t *testing.T, at, host, body string) *http.Response {
+func postLogin(t *testing.T, at, host, authorization string) *http.Response {
 	t.Helper()
-	request, err := http.NewRequest(http.MethodPost, "http://"+at+previewgate.LoginPath, strings.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, "http://"+at+previewgate.LoginPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Host = host
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if authorization != "" {
+		request.Header.Set("Authorization", authorization)
+	}
 	response, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +121,7 @@ func TestAPreviewHostRefusesARequestWithoutCredentialsAndNeverReachesTheApp(t *t
 	if got := said.header.Get("X-Robots-Tag"); got != "noindex" {
 		t.Errorf("the refusal carries X-Robots-Tag %q, want noindex", got)
 	}
-	if !strings.Contains(said.body, `action="`+previewgate.LoginPath+`"`) || strings.Contains(said.body, "the page") {
+	if !strings.Contains(said.body, `fetch("`+previewgate.LoginPath+`"`) || strings.Contains(said.body, "the page") {
 		t.Errorf("the refusal body = %q, want the login form and none of the page", said.body)
 	}
 	if seen.reached != 0 {
@@ -186,10 +189,10 @@ func TestALoginPostAnswersTheCookieThatOpensThePreviewAndTheAppNeverSeesIt(t *te
 	t.Parallel()
 	at, seen := previewGatedBoard(t, nil)
 
-	response := postLogin(t, at, previewHost, "password="+previewPass+"&next=%2Fcart%3Fa%3D1")
+	response := postLogin(t, at, previewHost, basic(previewPass))
 
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/cart?a=1" {
-		t.Fatalf("the login answered %d to %q, want 303 back to /cart?a=1", response.StatusCode, response.Header.Get("Location"))
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("the login answered %d, want 204", response.StatusCode)
 	}
 	if got := response.Header.Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("the login answer carries Cache-Control %q, want %q", got, "private, no-store")
@@ -207,17 +210,14 @@ func TestALoginPostAnswersTheCookieThatOpensThePreviewAndTheAppNeverSeesIt(t *te
 	}
 }
 
-func TestALoginPostWithAWrongPasswordOrAnOversizedBodyOpensNothing(t *testing.T) {
+func TestALoginPostWithAWrongOrMissingPasswordOpensNothing(t *testing.T) {
 	t.Parallel()
 	at, seen := previewGatedBoard(t, nil)
 
-	for body, want := range map[string]int{
-		"password=wrong":                        http.StatusUnauthorized,
-		"password=" + strings.Repeat("a", 2048): http.StatusRequestEntityTooLarge,
-	} {
-		response := postLogin(t, at, previewHost, body)
-		if response.StatusCode != want || response.Header.Get("Set-Cookie") != "" {
-			t.Errorf("a login of %d bytes answered %d with cookie %q, want %d and none", len(body), response.StatusCode, response.Header.Get("Set-Cookie"), want)
+	for name, authorization := range map[string]string{"wrong": basic("wrong"), "missing": ""} {
+		response := postLogin(t, at, previewHost, authorization)
+		if response.StatusCode != http.StatusUnauthorized || response.Header.Get("Set-Cookie") != "" {
+			t.Errorf("a %s password answered %d with cookie %q, want 401 and none", name, response.StatusCode, response.Header.Get("Set-Cookie"))
 		}
 	}
 	if seen.reached != 0 {
@@ -337,4 +337,8 @@ func TestAnOptionsRequestToAnAllowedPrefixPassesThePreviewGateWithoutCredentials
 	if response.StatusCode != http.StatusOK || seen.reached != 1 {
 		t.Errorf("OPTIONS /api/x answered %d with the app reached %d times, want 200 and once", response.StatusCode, seen.reached)
 	}
+}
+
+func TestTheSwitchboardsGateAnswersTheGatesConformanceVectorsOverHTTP(t *testing.T) {
+	edgeconformance.RunPreviewGateWith(t, switchboard.CheckPreviewGateOverHTTP)
 }

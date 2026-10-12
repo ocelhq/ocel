@@ -228,7 +228,7 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer hangUp()
-	keepPreviewPrivate, passed := answerPreviewGate(w, r, forward.PreviewGate, named)
+	keepPreviewPrivate, passed := answerPreviewGate(w, r, forward.PreviewGate, named, time.Now())
 	if !passed {
 		return
 	}

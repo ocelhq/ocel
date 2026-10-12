@@ -54,6 +54,6 @@ func (p *Provider) probeGate(ctx context.Context, hostname, address string) (boo
 	if err != nil {
 		return false, fmt.Errorf("read %s's answer to whether its preview gate is enforced: %w", hostname, err)
 	}
-	return strings.Contains(string(body), `action="`+previewgate.LoginPath+`"`) &&
-		strings.Contains(string(body), `value="`+target+`"`), nil
+	return strings.Contains(string(body), `fetch("`+previewgate.LoginPath+`"`) &&
+		strings.Contains(string(body), `data-next="`+target+`"`), nil
 }

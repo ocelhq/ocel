@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -95,7 +94,6 @@ type AppSpec struct {
 	Guard          *OriginGuard
 	ISR            *ISRSpec
 	Bytecode       *BytecodeSpec
-	PreviewGate    *previewgate.Gate
 
 	AssetPrefix string
 	Static      *edge.Static

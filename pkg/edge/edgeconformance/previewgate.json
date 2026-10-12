@@ -23,13 +23,15 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\"",
-          "value=\"/dashboard\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">",
+          "data-next=\"/dashboard\"",
+          "data-next=\"/dashboard\"",
+          "fetch(\"/.ocel/preview/login\""
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -47,34 +49,9 @@
           "x-robots-tag": "noindex",
           "content-type": "text/html; charset=utf-8"
         },
-        "bodyContains": ["value=\"/p?q=&quot;&gt;&lt;script&gt;&amp;x=&#39;1&#39;\""],
-        "bodyExcludes": ["<script>"],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a refused request to the login path itself returns to the root",
-      "request": {
-        "method": "GET",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {}
-      },
-      "expect": {
-        "status": 401,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\"",
-          "value=\"/\""
-        ],
+        "bodyContains": ["data-next=\"/p?q=&quot;&gt;&lt;script&gt;&amp;x=&#39;1&#39;\""],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -93,13 +70,13 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\"",
-          "value=\"/\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">",
+          "data-next=\"/\""
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -160,12 +137,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -186,12 +163,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -231,12 +208,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -257,12 +234,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -283,12 +260,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -309,12 +286,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -335,12 +312,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -361,12 +338,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -387,12 +364,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -413,12 +390,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -439,12 +416,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -465,12 +442,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -491,12 +468,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -517,12 +494,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -543,12 +520,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -569,12 +546,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -714,12 +691,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -740,12 +717,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -766,12 +743,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -792,12 +769,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -818,12 +795,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -844,12 +821,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -937,12 +914,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -966,12 +943,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -992,12 +969,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1018,12 +995,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1044,12 +1021,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1073,12 +1050,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1140,12 +1117,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1166,12 +1143,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1192,12 +1169,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1218,12 +1195,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1247,12 +1224,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1276,12 +1253,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1305,12 +1282,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1354,7 +1331,7 @@
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": []
+        "headersAbsent": ["www-authenticate"]
       }
     },
     {
@@ -1376,12 +1353,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1402,12 +1379,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1439,8 +1416,7 @@
         "headers": {
           "x-ocel-preview-bypass": "bypass-secret-one",
           "x-ocel-set-bypass-cookie": "true"
-        },
-        "body": "a=1"
+        }
       },
       "expect": {
         "forward": true,
@@ -1555,12 +1531,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1579,12 +1555,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1603,12 +1579,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1627,12 +1603,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1651,12 +1627,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1675,12 +1651,12 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -1702,321 +1678,23 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a correct login password answers a redirect to the next path with the session cookie",
+      "name": "a POST to a path that only starts with the login path is not a login",
       "request": {
         "method": "POST",
         "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
+        "target": "/.ocel/preview/login/extra",
         "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2Fdocs%3Fpage%3D2"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/docs?page=2",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login without next returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is an absolute URL returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=https%3A%2F%2Fevil.example%2F"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is a protocol-relative URL returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%2Fevil.example%2F"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is a backslash path returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%5Cevil.example"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is a relative path returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=docs"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is a path with a newline returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2Fa%0D%0ASet-Cookie%3Ax%3D1"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next has a non-ASCII character returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%E4%B8%AD"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login whose next is not UTF-8 returns to the root",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F%FF"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a semicolon in a login field is part of the value",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=/a;b"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/a;b",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login password containing a semicolon is compared whole",
-      "gate": {
-        "passwordMac": "686e4d1dcd53df495d5f0e7f929066385356a0ad7f40d7486f780f602406234e"
-      },
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=ab;cd"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a malformed percent escape in a login field is kept literally",
-      "gate": {
-        "passwordMac": "1c72f3016fbe5ac6aa7980df693f36cf1cf0e2641b8980e0ae7ee0f8c3b172bc"
-      },
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=a%zzb&next=/x%zz"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/x%zz",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a login password that is not UTF-8 is never the password",
-      "gate": {
-        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
-      },
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=%FF"
+          "authorization": "Basic YW55b25lOndyb25n"
+        }
       },
       "expect": {
         "status": 401,
@@ -2026,196 +1704,160 @@
           "content-type": "text/html; charset=utf-8"
         },
         "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/preview/login\">"
         ],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a login password keeps a leading byte order mark",
+      "name": "matching Basic credentials posted to the login path answer no content with the session cookie",
       "request": {
         "method": "POST",
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
         "headers": {
-          "content-type": "application/x-www-form-urlencoded"
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 204,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
         },
-        "body": "password=%EF%BB%BFJBSWY3DPEHPK3PXP2345"
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "matching Basic credentials with an empty user name log in",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "authorization": "Basic OkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 204,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "matching Basic credentials posted to the login path with a query string log in",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login?next=%2Fdocs",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 204,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "a login with the wrong Basic password is refused with no prompt and no cookie",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "authorization": "Basic YW55b25lOndyb25n"
+        }
       },
       "expect": {
         "status": 401,
         "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "empty pairs in a login body are skipped",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "&&password=JBSWY3DPEHPK3PXP2345&"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
           "cache-control": "private, no-store",
           "x-robots-tag": "noindex"
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": []
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a login field name is percent-decoded",
+      "name": "a login with no credentials is refused with no prompt and no cookie",
       "request": {
         "method": "POST",
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "pass%77ord=JBSWY3DPEHPK3PXP2345"
+        "headers": {}
       },
       "expect": {
-        "status": 303,
+        "status": 401,
         "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
           "cache-control": "private, no-store",
           "x-robots-tag": "noindex"
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": []
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a login with the wrong password is refused with the form and no cookie",
+      "name": "a login with a valid session cookie but no Basic credentials is refused",
       "request": {
         "method": "POST",
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
         "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=wrong&next=%2Fdocs"
+          "cookie": "__Host-ocel-preview=1700000001.aed5ecf4ae6426b40f285ddd31970e6c93917d185e28fd63bfb5a83a8c04b96b"
+        }
       },
       "expect": {
         "status": 401,
         "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\"",
-          "value=\"/docs\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a login with no password field is refused",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "next=%2F"
-      },
-      "expect": {
-        "status": 401,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a login with an empty password is refused",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password="
-      },
-      "expect": {
-        "status": 401,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a login password with plus-encoded spaces is decoded before it is compared",
-      "gate": {
-        "passwordMac": "5f15b90f69ffd9c8abdef44efc7651afa5c1f422ac33974f2318167df98e2ca8"
-      },
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=a+b"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
           "cache-control": "private, no-store",
           "x-robots-tag": "noindex"
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": []
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "a login with a valid bypass secret but no Basic credentials is refused",
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "x-ocel-preview-bypass": "bypass-secret-one"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
@@ -2228,239 +1870,143 @@
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
         "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password="
+          "authorization": "Basic dTo="
+        }
       },
       "expect": {
         "status": 401,
         "headers": {
           "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a login body of exactly 1024 bytes is read",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F&pad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
           "x-robots-tag": "noindex"
         },
         "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": []
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a login body over 1024 bytes is refused as too large",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345&next=%2F&pad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      "name": "a login whose Basic credentials are not UTF-8 is refused",
+      "gate": {
+        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
       },
-      "expect": {
-        "status": 413,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie"]
-      }
-    },
-    {
-      "name": "a login that is not form-encoded is refused as unsupported",
       "request": {
         "method": "POST",
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
         "headers": {
-          "content-type": "application/json"
-        },
-        "body": "{\"password\":\"JBSWY3DPEHPK3PXP2345\"}"
-      },
-      "expect": {
-        "status": 415,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie"]
-      }
-    },
-    {
-      "name": "a login with no content type is refused as unsupported",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {},
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 415,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie"]
-      }
-    },
-    {
-      "name": "a form content type with a charset parameter is accepted",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "Application/X-WWW-Form-Urlencoded; charset=UTF-8"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a form content type with a parameter that has no value is accepted",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded; charset"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 303,
-        "headers": {
-          "location": "/",
-          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax",
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": []
-      }
-    },
-    {
-      "name": "a repeated content type is refused as unsupported",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": ["application/x-www-form-urlencoded", "application/x-www-form-urlencoded"]
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 415,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie"]
-      }
-    },
-    {
-      "name": "a content type with a non-ASCII letter that lowercases to the form type is refused",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "applİcation/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 415,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex"
-        },
-        "bodyContains": [],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie"]
-      }
-    },
-    {
-      "name": "the first of two password fields is the one compared",
-      "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=wrong&password=JBSWY3DPEHPK3PXP2345"
+          "authorization": "Basic dTr/"
+        }
       },
       "expect": {
         "status": 401,
         "headers": {
           "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
+          "x-robots-tag": "noindex"
         },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
+        "bodyContains": [],
         "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
       }
     },
     {
-      "name": "a GET of the login path is not a login",
+      "name": "a login with Basic credentials hashed under another key is refused",
+      "gate": {
+        "key": "another-preview-key"
+      },
+      "request": {
+        "method": "POST",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "matching Basic credentials on a GET of the login path redirect to the root with the session cookie",
       "request": {
         "method": "GET",
         "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login?password=JBSWY3DPEHPK3PXP2345",
+        "target": "/.ocel/preview/login?next=%2Fdocs%3Fpage%3D2",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["www-authenticate"]
+      }
+    },
+    {
+      "name": "a HEAD of the login path with matching Basic credentials redirects too",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login?next=%2Fdocs%3Fpage%3D2",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["www-authenticate"]
+      }
+    },
+    {
+      "name": "a login query string does not choose where the redirect goes",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login?next=https%3A%2F%2Fevil.example%2F",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "status": 303,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "location": "/",
+          "set-cookie": "__Host-ocel-preview=1700604800.41960d2f85aad272446d642722decc28baed501531b85f8d2fe0290152228e4a; Max-Age=604800; Path=/; Secure; HttpOnly; SameSite=Lax"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["www-authenticate"]
+      }
+    },
+    {
+      "name": "a GET of the login path without credentials prompts for Basic credentials and offers the form",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
         "headers": {}
       },
       "expect": {
@@ -2468,70 +2014,94 @@
         "headers": {
           "cache-control": "private, no-store",
           "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
+          "content-type": "text/html; charset=utf-8",
+          "www-authenticate": "Basic realm=\"Ocel preview\", charset=\"UTF-8\""
         },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
+        "bodyContains": ["data-next=\"/\"", "id=\"password\"", "<noscript>"],
         "bodyExcludes": [],
         "headersAbsent": ["set-cookie", "location"]
       }
     },
     {
-      "name": "a POST to a path that only starts with the login path is not a login",
+      "name": "a GET of the login path with the wrong Basic password prompts again",
       "request": {
-        "method": "POST",
-        "host": "app-abc.preview.example.com",
-        "target": "/.ocel/preview/login/extra",
-        "headers": {
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        "body": "password=JBSWY3DPEHPK3PXP2345"
-      },
-      "expect": {
-        "status": 401,
-        "headers": {
-          "cache-control": "private, no-store",
-          "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
-        },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
-        "bodyExcludes": [],
-        "headersAbsent": ["set-cookie", "location"]
-      }
-    },
-    {
-      "name": "a login with a valid session cookie but the wrong password is still refused",
-      "request": {
-        "method": "POST",
+        "method": "GET",
         "host": "app-abc.preview.example.com",
         "target": "/.ocel/preview/login",
         "headers": {
-          "content-type": "application/x-www-form-urlencoded",
-          "cookie": "__Host-ocel-preview=1700003600.2c6b66013748751e730fec544d34d3da9f86445039d4bb7bdff5b9dc241c4df3"
-        },
-        "body": "password=wrong"
+          "authorization": "Basic YW55b25lOndyb25n"
+        }
       },
       "expect": {
         "status": 401,
         "headers": {
           "cache-control": "private, no-store",
           "x-robots-tag": "noindex",
-          "content-type": "text/html; charset=utf-8"
+          "content-type": "text/html; charset=utf-8",
+          "www-authenticate": "Basic realm=\"Ocel preview\", charset=\"UTF-8\""
         },
-        "bodyContains": [
-          "<form method=\"post\" action=\"/.ocel/preview/login\">",
-          "name=\"password\"",
-          "name=\"next\""
-        ],
+        "bodyContains": ["data-next=\"/\"", "id=\"password\"", "<noscript>"],
         "bodyExcludes": [],
         "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a HEAD of the login path without credentials prompts for Basic credentials",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {}
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8",
+          "www-authenticate": "Basic realm=\"Ocel preview\", charset=\"UTF-8\""
+        },
+        "bodyContains": ["data-next=\"/\"", "id=\"password\"", "<noscript>"],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a PUT to the login path with matching Basic credentials is an ordinary request",
+      "request": {
+        "method": "PUT",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {},
+        "forwardHeadersAbsent": ["authorization"],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
+      }
+    },
+    {
+      "name": "matching Basic credentials on a path that only starts with the login path are an ordinary request",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/.ocel/preview/login/extra",
+        "headers": {
+          "authorization": "Basic YW55b25lOkpCU1dZM0RQRUhQSzNQWFAyMzQ1"
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {},
+        "forwardHeadersAbsent": ["authorization"],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
       }
     }
   ]

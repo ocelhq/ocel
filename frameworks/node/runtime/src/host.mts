@@ -216,23 +216,10 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   };
 }
 
-const previewGateVar = "OCEL_PREVIEW_GATE";
-const previewGateAtEdgeVar = "OCEL_PREVIEW_GATE_AT_EDGE";
-
-function takeOriginGate(env: NodeJS.ProcessEnv): Pick<Trust, "gate" | "gateAtEdge"> {
-  const gate = env[previewGateVar];
-  const gateAtEdge = env[previewGateAtEdgeVar] === "true";
-  delete env[previewGateVar];
-  delete env[previewGateAtEdgeVar];
-  return { gate, gateAtEdge };
-}
-
 interface Trust {
   entry?: boolean;
   forwarded?: boolean;
   guard?: OriginGuard;
-  gate?: string;
-  gateAtEdge?: boolean;
 }
 
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
@@ -284,7 +271,6 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
     const admitted = !trust.guard || trust.guard(req.headers);
-    const reachedHost = req.headers.host ?? "";
     normalizeLoopbackHeaders(req.headers, trust);
     const start = performance.now();
 
@@ -327,10 +313,6 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
           res.end();
           return;
         }
-        if (trust.gate !== undefined) {
-          const { admitPreview } = await import("./preview-gate.mjs");
-          if (!(await admitPreview(trust.gate, req, reachedHost, res, trust.gateAtEdge))) return;
-        }
         const ocel: OcelContext = { waitUntil };
         const run = () => invoke(req, res, ocel);
         return scope ? scope(req, res, ocel, run) : run();
@@ -344,7 +326,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
 }
 
 function originTrust(env: NodeJS.ProcessEnv, forwarded: boolean): Trust {
-  return { forwarded, guard: originGuard(env), ...takeOriginGate(env) };
+  return { forwarded, guard: originGuard(env) };
 }
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
@@ -382,18 +364,12 @@ const forbiddenUpgradeAnswer =
 function wrapUpgrade(server: http.Server, lifted: Listener[], trust: Trust): UpgradeListener {
   return (req, socket, head) => {
     const admitted = !trust.guard || trust.guard(req.headers);
-    const reachedHost = req.headers.host ?? "";
     normalizeLoopbackHeaders(req.headers, trust);
     Promise.resolve()
       .then(async () => {
         if (!admitted) {
           socket.end(forbiddenUpgradeAnswer);
           return;
-        }
-        if (trust.gate !== undefined) {
-          const { admitPreviewUpgrade } = await import("./preview-gate.mjs");
-          if (!(await admitPreviewUpgrade(trust.gate, req, reachedHost, socket, trust.gateAtEdge)))
-            return;
         }
         for (const listener of [...lifted]) listener.call(server, req, socket, head);
       })

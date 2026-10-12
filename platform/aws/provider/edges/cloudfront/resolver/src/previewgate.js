@@ -3,7 +3,11 @@ var LOGIN_PATH = '/.ocel/preview/login';
 var BYPASS_HEADER = 'x-ocel-preview-bypass';
 var SET_BYPASS_COOKIE_HEADER = 'x-ocel-set-bypass-cookie';
 var SESSION_SECONDS = 604800;
-var LOGIN_BODY_MAX_BYTES = 1024;
+var LOGIN_REALM = 'Basic realm="Ocel preview", charset="UTF-8"';
+var LOGIN_SCRIPT =
+  'var p=document.getElementById("password");async function go(){var r=await fetch("' +
+  LOGIN_PATH +
+  '",{method:"POST",headers:{Authorization:"Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(":"+p.value)))}});r.ok?location.assign(document.querySelector("main").dataset.next):document.getElementById("incorrect").hidden=!1}';
 var GATE_KEY_PREFIX = 'gate/';
 var HEX_DIGITS = '0123456789abcdef';
 
@@ -140,38 +144,58 @@ function gateAnswer(statusCode, statusDescription, headers, body) {
   };
 }
 
-function loginFormAnswer(next, incorrect) {
+function loginPageAnswer(next, prompt) {
   var escaped = next.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   escaped = escaped.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   var body =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">' +
-    '<title>Preview protected</title></head><body>' +
-    (incorrect ? '<p role="alert">Incorrect password.</p>' : '') +
-    '<form method="post" action="' +
-    LOGIN_PATH +
-    '">' +
-    '<label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>' +
-    '<input type="hidden" name="next" value="' +
+    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview protected</title>' +
+    '<main data-next="' +
     escaped +
-    '">' +
-    '<button type="submit">Continue</button></form></body></html>';
-  return gateAnswer(
-    401,
-    'Unauthorized',
-    { 'content-type': { value: 'text/html; charset=utf-8' } },
-    body,
-  );
+    '"><p id="incorrect" role="alert" hidden>Incorrect password.</p>' +
+    '<label>Password <input id="password" type="password" autocomplete="current-password" autofocus onkeydown="event.key==\'Enter\'&&go()"></label>' +
+    '<button onclick="go()">Continue</button>' +
+    '<noscript><p><a href="' +
+    LOGIN_PATH +
+    '">Sign in with the browser prompt</a></p></noscript></main>' +
+    '<script>' +
+    LOGIN_SCRIPT +
+    '</script>';
+  var headers = { 'content-type': { value: 'text/html; charset=utf-8' } };
+  if (prompt) headers['www-authenticate'] = { value: LOGIN_REALM };
+  return gateAnswer(401, 'Unauthorized', headers, body);
 }
 
-function sessionRedirect(gate, location, host) {
+function sessionCookie(gate, host) {
   var expiry = Math.floor(Date.now() / 1000) + SESSION_SECONDS + '';
-  var answer = gateAnswer(303, 'See Other', { location: { value: location } }, '');
-  answer.cookies = {};
-  answer.cookies[PREVIEW_COOKIE] = {
+  return {
     value: expiry + '.' + signSession(gate, host, expiry),
     attributes: 'Max-Age=' + SESSION_SECONDS + '; Path=/; Secure; HttpOnly; SameSite=Lax',
   };
+}
+
+function sessionStarted(gate, host) {
+  var answer = gateAnswer(204, 'No Content', {}, '');
+  answer.cookies = {};
+  answer.cookies[PREVIEW_COOKIE] = sessionCookie(gate, host);
+  return answer;
+}
+
+function answerLogin(gate, request, host) {
+  var password = hasBasicPassword(gate, joinedHeader(request.headers, 'authorization'));
+  if (password) {
+    return request.method === 'POST'
+      ? sessionStarted(gate, host)
+      : sessionRedirect(gate, '/', host);
+  }
+  return request.method === 'POST'
+    ? gateAnswer(401, 'Unauthorized', {}, '')
+    : loginPageAnswer('/', true);
+}
+
+function sessionRedirect(gate, location, host) {
+  var answer = gateAnswer(303, 'See Other', { location: { value: location } }, '');
+  answer.cookies = {};
+  answer.cookies[PREVIEW_COOKIE] = sessionCookie(gate, host);
   return answer;
 }
 
@@ -205,11 +229,11 @@ async function gatePreview(request, route, host) {
   if (!gate) return null;
 
   var path = request.uri;
-  if (request.method === 'POST' && path === LOGIN_PATH) {
-    const length = joinedHeader(request.headers, 'content-length');
-    return length !== null && Number(length) > LOGIN_BODY_MAX_BYTES
-      ? gateAnswer(413, 'Payload Too Large', {}, '')
-      : null;
+  if (
+    path === LOGIN_PATH &&
+    (request.method === 'POST' || request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    return answerLogin(gate, request, host);
   }
 
   var hasPassword = hasBasicPassword(gate, joinedHeader(request.headers, 'authorization'));
@@ -225,7 +249,7 @@ async function gatePreview(request, route, host) {
     return sessionRedirect(gate, nextOf(targetOf(request)), host);
   }
   if (!(admitted || allowsOptions(gate, request.method, path))) {
-    return loginFormAnswer(nextOf(targetOf(request)), false);
+    return loginPageAnswer(nextOf(targetOf(request)), false);
   }
 
   delete request.headers[BYPASS_HEADER];

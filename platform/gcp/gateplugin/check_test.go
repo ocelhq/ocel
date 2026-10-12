@@ -1,6 +1,7 @@
 package gateplugin_test
 
 import (
+	"encoding/base64"
 	"slices"
 	"strings"
 	"testing"
@@ -11,10 +12,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
-func TestThePluginAnswersEveryConformanceVectorThatNeedsNoBody(t *testing.T) {
+func TestThePluginAnswersEveryConformanceVector(t *testing.T) {
 	t.Parallel()
 
-	edgeconformance.RunPreviewGateWith(t, func(gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict {
+	edgeconformance.RunPreviewGateWith(t, func(t *testing.T, gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict {
 		config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 			map[string]string{req.Host: "shop"},
 			map[string]previewgate.Gate{"shop": gate},
@@ -23,7 +24,7 @@ func TestThePluginAnswersEveryConformanceVectorThatNeedsNoBody(t *testing.T) {
 			t.Fatalf("ParseConfig = %v", err)
 		}
 		return config.Check(requestAsEnvoySendsIt(req), now)
-	}, true)
+	})
 }
 
 func requestAsEnvoySendsIt(req previewgate.Request) previewgate.Request {
@@ -58,25 +59,30 @@ func TestARequestForAHostNoGateNamesPassesUnchanged(t *testing.T) {
 	}
 }
 
-func TestTheLoginPostPassesToTheOriginBecauseNoBodyReachesThePlugin(t *testing.T) {
+func TestTheLoginPostIsAnsweredByThePluginWithTheSessionCookie(t *testing.T) {
 	t.Parallel()
 
+	gate := previewgate.Gate{Key: "k"}
+	gate.PasswordMAC = previewgate.HashPassword(gate.Key, "pw")
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
-		map[string]previewgate.Gate{"shop": {Key: "k"}},
+		map[string]previewgate.Gate{"shop": gate},
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := gateplugin.ReadRequest([][2]string{
 		{":method", "POST"}, {":path", previewgate.LoginPath}, {":authority", "gated.example.dev"},
-		{"content-type", "application/x-www-form-urlencoded"},
+		{"authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte(":pw"))},
 	})
 
 	verdict := config.Check(req, time.Unix(1700000000, 0))
 
-	if verdict.Response != nil {
-		t.Fatalf("Check answered %d, want the login forwarded: the origin holds the keys and reads the body", verdict.Response.Status)
+	if verdict.Response == nil || verdict.Response.Status != 204 {
+		t.Fatalf("Check = %+v, want the plugin to answer 204 itself: the password never reaches the service", verdict)
+	}
+	if !strings.HasPrefix(verdict.Response.Header.Get("Set-Cookie"), previewgate.CookieName+"=") {
+		t.Errorf("Set-Cookie = %q, want the session cookie", verdict.Response.Header.Get("Set-Cookie"))
 	}
 }
 
@@ -139,8 +145,7 @@ func TestACookieTheGateDoesNotReadIsForwardedByteForByte(t *testing.T) {
 func sessionCookie(gate previewgate.Gate, host string, now time.Time) string {
 	login := previewgate.Request{
 		Method: "POST", Host: host, Target: previewgate.LoginPath,
-		Header: previewgate.Header{"Content-Type": {"application/x-www-form-urlencoded"}},
-		Body:   []byte("password=pw"),
+		Header: previewgate.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(":pw"))}},
 	}
 	gate.PasswordMAC = previewgate.HashPassword(gate.Key, "pw")
 	cookie := gate.Check(login, now).Response.Header.Get("Set-Cookie")

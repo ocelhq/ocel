@@ -123,7 +123,7 @@ describe("checkPreviewGate", () => {
         const headers = new Headers(init?.headers);
         if (init?.method === "POST") {
           return new Response(null, {
-            status: 303,
+            status: 204,
             headers: { location: "/", "set-cookie": "__Host-ocel-preview=1.ab; Path=/" },
           });
         }

@@ -164,17 +164,11 @@ describe.each(PREVIEWS)("the %s preview resolver", (_name, program) => {
   describe("the preview resolver answers the gate's conformance vectors", () => {
     for (const example of vectors.cases) {
       const request = { host: HOST, ...example.request };
-      const loginPost = request.method === "POST" && request.target === "/.ocel/preview/login";
 
       it(example.name, async () => {
         const gate = { ...vectors.gate, ...example.gate };
         const event = eventFor(request);
         const { answered } = await admit(program, event, gate);
-
-        if (loginPost) {
-          expect(answered, "the login goes on to the root function untouched").toBe(event.request);
-          return;
-        }
 
         if (example.expect.forward) {
           expect(answered, "forwarded to the origin").toBe(event.request);
@@ -256,20 +250,6 @@ describe.each(PREVIEWS)("the %s preview resolver", (_name, program) => {
 
       expect(answered.statusCode).toBe(401);
       expect(answered.headers["x-ocel-cache-key"]).toBeUndefined();
-    });
-
-    it("answers an oversized login before it reaches the root function", async () => {
-      const event = eventFor({
-        method: "POST",
-        host: HOST,
-        target: "/.ocel/preview/login",
-        headers: { "content-type": "application/x-www-form-urlencoded", "content-length": "1025" },
-      });
-
-      const { answered } = await admit(program, event, vectors.gate);
-
-      expect(answered.statusCode).toBe(413);
-      expect(answered.headers["cache-control"].value).toBe("private, no-store");
     });
 
     it("strips the client's control headers before it reads the gate's verdict", async () => {

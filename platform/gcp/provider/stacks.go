@@ -2,13 +2,11 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -33,11 +31,11 @@ func (p *Provider) revisionTag(spec provider.StackSpec) string {
 	return spec.Ref.Name.Release.String()
 }
 
-const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it and no preview gate is recorded for it. " +
+const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, and Ocel runs no preview gate on Cloud Run itself. " +
 	"Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
-	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin || spec.App.PreviewGate != nil {
+	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
@@ -473,16 +471,6 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *varia
 	}
 	if len(manifest) > 0 {
 		env[variables.EnvVar] = string(manifest)
-	}
-	if app.PreviewGate != nil {
-		gate, err := json.Marshal(app.PreviewGate)
-		if err != nil {
-			return nil, fmt.Errorf("encode the keys that gate %s's preview: %w", app.App, err)
-		}
-		env[edge.PreviewGateVar] = string(gate)
-		if facts := factsOf(spec.Edge); facts.GatesPreviews && !facts.RunsCode {
-			env[edge.PreviewGateAtEdgeVar] = "true"
-		}
 	}
 	return env, nil
 }
