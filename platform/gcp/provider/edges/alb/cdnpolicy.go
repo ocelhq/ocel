@@ -9,6 +9,8 @@ var cacheKeyHeaders = []string{"RSC", "Next-Router-Prefetch", "Next-Router-Segme
 
 const draftModeCookie = "__prerender_bypass"
 
+const revalidateHeader = "x-prerender-revalidate"
+
 func newCDNPolicy(shielded bool) *compute.BackendServiceCdnPolicyArgs {
 	key := &compute.BackendServiceCdnPolicyCacheKeyPolicyArgs{
 		IncludeHost:        pulumi.Bool(true),
@@ -24,5 +26,8 @@ func newCDNPolicy(shielded bool) *compute.BackendServiceCdnPolicyArgs {
 		RequestCoalescing: pulumi.Bool(true),
 		ServeWhileStale:   pulumi.Int(0),
 		CacheKeyPolicy:    key,
+		BypassCacheOnRequestHeaders: compute.BackendServiceCdnPolicyBypassCacheOnRequestHeaderArray{
+			compute.BackendServiceCdnPolicyBypassCacheOnRequestHeaderArgs{HeaderName: pulumi.String(revalidateHeader)},
+		},
 	}
 }
