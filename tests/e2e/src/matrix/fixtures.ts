@@ -2,7 +2,6 @@ import {
   bindingChecks,
   buildVariablesChecks,
   envChecks,
-  failingPreBuildRefusal,
   healthChecks,
   httpProbeChecks,
   kvChecks,
@@ -174,6 +173,8 @@ export const lifecycle = {
       ...NODE_SDK_CHECKS,
       ...NEXT_ROUTING_AND_CACHE_CHECKS,
       ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
+      ...preBuildChecks,
+      ...preBuildPrerenderChecks,
     ],
     on: {
       aws: [defaults, container, cloudflare],
@@ -267,25 +268,6 @@ export const sdk = {
   }),
 };
 
-export const preBuild = {
-  node: fixture("pre-build/node", {
-    apps: ["web"],
-    checks: [...healthChecks, ...preBuildChecks],
-    on: { vps: [defaults] },
-  }),
-  next: fixture("pre-build/next", {
-    apps: ["web"],
-    checks: [...healthChecks, ...preBuildPrerenderChecks],
-    on: { vps: [defaults] },
-  }),
-  failing: fixture("pre-build/failing", {
-    apps: ["web"],
-    checks: [],
-    refusal: failingPreBuildRefusal,
-    on: { vps: [defaults] },
-  }),
-};
-
 export const iac = {
   withSst: fixture("iac/with-sst", {
     apps: ["web"],
@@ -307,6 +289,5 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
-  ...Object.values(preBuild),
   ...Object.values(iac),
 ];

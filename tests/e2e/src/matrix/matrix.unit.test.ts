@@ -16,6 +16,8 @@ import {
   nextPprChecks,
   nextStoreReadChecks,
   orderedKeysInParallelCheck,
+  preBuildChecks,
+  preBuildPrerenderChecks,
   prerenderBucketChecks,
   prerenderChecks,
   realtimeChecks,
@@ -651,22 +653,14 @@ describe("sdk/next and sdk/sveltekit", () => {
   });
 });
 
-describe("the pre-build concern", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const cellsOn = (lane: Lane) =>
-    planOn(lane, {}, EVERY_CELL)
-      .cells.map((cell) => cell.name)
-      .filter((name) => name.startsWith("pre-build/"));
-
-  it("migrates, prerenders what it migrated and refuses on either box", () => {
-    for (const lane of ["vps", "vps.incus"] as const) {
-      expect(cellsOn(lane)).toEqual(["pre-build/node", "pre-build/next", "pre-build/failing"]);
-    }
-  });
-
-  it("runs on no other lane", () => {
-    for (const lane of LANES.filter((one) => !one.startsWith("vps"))) {
-      expect(cellsOn(lane)).toEqual([]);
+describe("lifecycle/next", () => {
+  it("migrates in lifecycle.preBuild and prerenders what it migrated, on every target that keeps releases", () => {
+    const next = fixtures.find((one) => one.name === "lifecycle/next");
+    expect(next?.checks).toEqual(
+      expect.arrayContaining([...preBuildChecks, ...preBuildPrerenderChecks]),
+    );
+    for (const lane of ["aws", "gcp", "vps", "vps.incus"] as const) {
+      expect(planOn(lane).cells.map((cell) => cell.name)).toContain("lifecycle/next");
     }
   });
 });

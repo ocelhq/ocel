@@ -1,9 +1,9 @@
-import { db } from "../infra/db";
+import { pg } from "../../infra/index";
 
 export const dynamic = "force-static";
 
-export default async function Home() {
-  const { rows } = await db.query<{ title: string; at: string }>(
+export default async function Notes() {
+  const { rows } = await pg.query<{ title: string; at: string }>(
     "SELECT title, now()::text AS at FROM notes ORDER BY id",
   );
   return (

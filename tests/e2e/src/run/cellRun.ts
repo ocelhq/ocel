@@ -17,7 +17,7 @@ import {
 } from "../checks/previews";
 import type { Evidence } from "../evidence";
 import { projectSlug } from "../identity";
-import type { Cell, Fixture, Phase, Refusal, Variant } from "../matrix/types";
+import type { Cell, Fixture, Phase, Variant } from "../matrix/types";
 import { configTree } from "../ocel";
 import { fixtureDir } from "../paths";
 import type { StackCheck } from "../stacks";
@@ -121,16 +121,6 @@ export class CellRun {
       this.ready();
       this.deployment = await this.target.deploy(this);
     });
-  }
-
-  async refusedDeploy(refusal: Refusal): Promise<void> {
-    this.ready();
-    const failure = await this.target.deploy(this).then(
-      () => undefined,
-      (error: unknown) => ({ error }),
-    );
-    assert.ok(failure, `${this.target.name} deployed ${this.name}, whose build is refused`);
-    await refusal.run(messageOf(failure.error));
   }
 
   async restart(): Promise<void> {

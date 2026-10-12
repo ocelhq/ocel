@@ -512,18 +512,11 @@ describe("a gap that reaches nothing", () => {
   });
 
   it("refuses a skipping scope that reaches a cell walking none of the tests named", () => {
-    const refused = one("kv/overlap", {
-      checks: [],
-      refusal: { title: "the build is refused", run: async () => undefined },
-      on: { aws: [edge] },
-    });
     expect(() =>
-      planOf([node, refused], {
-        gaps: [
-          gap("one", [{ on: ["aws"], variants: [edge], fails: [step.deploy], skipsCell: true }]),
-        ],
+      planOf([node, living], {
+        gaps: [gap("one", [{ on: ["aws"], fails: [step.redeploy], skipsCell: true }])],
       }),
-    ).toThrow(/one on aws skips kv\/overlap-edge, which walks none of the tests named/);
+    ).toThrow(/one on aws skips deploy\/node-edge, which walks none of the tests named/);
   });
 
   it("refuses two gaps of one id, and a gap that applies nowhere", () => {

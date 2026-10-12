@@ -125,11 +125,6 @@ export function sampleGroupOf(fixture: Pick<Fixture, "concern" | "sample">): str
   return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
 }
 
-export type Refusal = {
-  title: string;
-  run: (said: string) => Promise<void>;
-};
-
 export type Fixture = {
   name: string;
   concern: Concern;
@@ -138,7 +133,6 @@ export type Fixture = {
   restarts?: true;
   redeploys?: true | "where-releases-are-kept";
   checks: Check[];
-  refusal?: Refusal;
   stack?: ExternalStack;
   on: Partial<Record<TargetName, Variant[]>>;
   previews?: Partial<Record<TargetName, Variant[]>>;

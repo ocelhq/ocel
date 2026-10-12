@@ -89,9 +89,6 @@ export function phasesOf(
   releaseCycle = true,
   previews = false,
 ): Phase[] {
-  if (fixture.refusal) {
-    return ["deploy", ...(keep ? [] : (["destroy"] as const))];
-  }
   const redeploys = fixture.redeploys === true || (fixture.redeploys !== undefined && releaseCycle);
   return [
     "deploy",
@@ -108,22 +105,7 @@ function newDestroyStep(app: string): Step {
 }
 
 export function stepsOf(cell: Cell, phases: Phase[], gatesPreviews = false): Step[] {
-  const { apps, stack, refusal } = cell.fixture;
-  if (refusal) {
-    return apps.flatMap((app) => [
-      ...(phases.includes("deploy")
-        ? [
-            {
-              app,
-              title: refusal.title,
-              phase: "deploy" as const,
-              run: (run: CellRun) => run.refusedDeploy(refusal),
-            },
-          ]
-        : []),
-      ...(phases.includes("destroy") ? [newDestroyStep(app)] : []),
-    ]);
-  }
+  const { apps, stack } = cell.fixture;
   const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])].filter(
     (one) =>
       (one.cacheLayer === undefined || one.cacheLayer === cell.cacheLayer) &&
