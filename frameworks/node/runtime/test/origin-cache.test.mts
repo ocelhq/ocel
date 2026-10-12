@@ -100,15 +100,23 @@ describe("an origin behind the Cloudflare gateway", () => {
     );
   });
 
-  test("leaves a response that sets its own s-maxage as it set it", async () => {
+  test("gives a response the shared lifetime of its route's rule over the one its handler set", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
-      res.writeHead(200, { "cache-control": "public, s-maxage=5" });
+      res.writeHead(200, {
+        "cache-control": "public, max-age=10, s-maxage=5, stale-while-revalidate=5",
+        "cdn-cache-control": "max-age=600",
+        "surrogate-control": "max-age=600",
+      });
       res.end("page");
     });
 
     const res = await get("/blog/a", { headers: asked });
 
-    expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=10, s-maxage=60, stale-while-revalidate=540",
+    );
+    expect(res.headers.has("cdn-cache-control")).toBe(false);
+    expect(res.headers.has("surrogate-control")).toBe(false);
     expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
   });
 
@@ -436,15 +444,35 @@ describe("a request for a cached route", () => {
     },
   );
 
-  test("keeps the s-maxage its handler set itself, and tags it", async () => {
+  test("drops the s-maxage its handler set when it carries credentials", async () => {
     const get = await serve(behindCloudFront, (req, res) => {
-      res.writeHead(200, { "cache-control": "public, s-maxage=5" });
+      res.writeHead(200, { "cache-control": "public, max-age=10, s-maxage=5" });
+      res.end("page");
+    });
+
+    const res = await get("/blog/a", { headers: { authorization: "Bearer a" } });
+
+    expect(res.headers.get("cache-control")).toBe("public, max-age=10");
+    expect(res.headers.has("cache-tag")).toBe(false);
+  });
+
+  test("replaces the s-maxage its handler set with its route's rule, and tags it", async () => {
+    const get = await serve(behindCloudFront, (req, res) => {
+      res.writeHead(200, {
+        "cache-control": "public, s-maxage=5",
+        "cdn-cache-control": "max-age=600",
+        "surrogate-control": "max-age=600",
+      });
       res.end("page");
     });
 
     const res = await get("/blog/a", { headers: { cookie: "session=1" } });
 
-    expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, s-maxage=60, stale-while-revalidate=540",
+    );
+    expect(res.headers.has("cdn-cache-control")).toBe(false);
+    expect(res.headers.has("surrogate-control")).toBe(false);
     expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
   });
 });

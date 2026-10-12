@@ -113,8 +113,11 @@ function, or that caches a route without declaring `revalidation` refuses the de
 
 An edge caches a response when it asks to and the response allows it. A response is cacheable
 when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `private`,
-`no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
-(`s-maxage` and `stale-while-revalidate`) or from the cache rule of its route.
+`no-store` or `no-cache`. On a route with a cache rule, the rule alone sets the shared
+lifetime: the `s-maxage` and `stale-while-revalidate` your handler sets are replaced by the
+rule's, and its `CDN-Cache-Control` and `Surrogate-Control` are dropped. Its `max-age` still
+reaches the browser. On a route with no rule, the lifetime comes from the response's own
+headers.
 
 A cache rule governs only its own route. Only a route with a rule gets the rule's lifetime and
 has its request's cookies stripped. A route with no rule, and a path that falls through to
