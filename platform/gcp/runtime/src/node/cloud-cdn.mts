@@ -1,10 +1,11 @@
 import type http from "node:http";
-import { cacheTagsForCloudCdn, uncacheable } from "../cache/cloud-cdn-tags.mjs";
 import {
   newWriteHeadLookup,
   readWriteHeadHeaders,
   withoutWriteHeadHeaders,
-} from "../cache/write-head.mjs";
+} from "@framework/node-runtime/write-head";
+import { uncacheableCacheControl } from "@platform/edge-contract/cache-control";
+import { cacheTagsForCloudCdn } from "../cache/cloud-cdn-tags.mjs";
 
 export function withholdOverTaggedResponsesFromCloudCdn(prototype: http.ServerResponse): void {
   const writeHead = prototype.writeHead;
@@ -18,7 +19,7 @@ export function withholdOverTaggedResponsesFromCloudCdn(prototype: http.ServerRe
           console.warn(
             `ocel: ${this.req?.url ?? "a response"} carries ${dropped.length} cache tags past Cloud CDN's limits, so Cloud CDN does not store it and revalidating ${dropped.join(", ")} cannot miss it`,
           );
-          this.setHeader("cache-control", uncacheable);
+          this.setHeader("cache-control", uncacheableCacheControl);
           this.removeHeader("cache-tag");
           if (passed !== undefined) {
             args[at] = withoutWriteHeadHeaders(passed, ["cache-control", "cache-tag"]);

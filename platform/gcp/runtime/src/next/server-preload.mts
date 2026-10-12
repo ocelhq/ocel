@@ -1,7 +1,7 @@
 import http from "node:http";
 import { installServerPreload } from "@framework/next-runtime/server-preload";
-import { withholdResponsesFromCloudCdn } from "./cloud-cdn.mjs";
+import { withholdResponsesFromSharedCache } from "@framework/next-runtime/withhold-responses";
 import { newGcpNextHost } from "./next-host.mjs";
 
-withholdResponsesFromCloudCdn(http.ServerResponse.prototype);
+withholdResponsesFromSharedCache(http.ServerResponse.prototype);
 installServerPreload(() => newGcpNextHost(process.env));

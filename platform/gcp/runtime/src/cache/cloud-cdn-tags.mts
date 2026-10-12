@@ -1,17 +1,10 @@
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { isImmutableCacheControl } from "@platform/edge-contract/cache-control";
 import { readReleaseToken } from "@platform/edge-contract/purge";
 
 const releasePattern = /^r[0-9a-f]{8}$/;
 
 export const cloudCdnTagLimits = { perObject: 50, bytesPerTag: 120, bytesPerObject: 4096 } as const;
-
-export const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
-
-export function isImmutable(cacheControl: string | null): boolean {
-  return (cacheControl ?? "")
-    .split(",")
-    .some((directive) => directive.trim().toLowerCase() === "immutable");
-}
 
 export function cacheTagsForCloudCdn(
   release: string | null,
@@ -23,7 +16,7 @@ export function cacheTagsForCloudCdn(
     const tag = token.trim();
     if (tag !== "") own.add(tag);
   }
-  const tagged = release !== null && !isImmutable(cacheControl);
+  const tagged = release !== null && !isImmutableCacheControl(cacheControl);
   if (tagged) own.delete(release);
   const kept: string[] = [];
   const dropped: string[] = [];
