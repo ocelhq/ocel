@@ -111,7 +111,7 @@ func (r OcelRouteTable) refuse() error {
 	case r.Version != OcelRouteTableVersion:
 		return fmt.Errorf("the route table is version %d, and this CLI reads version %d", r.Version, OcelRouteTableVersion)
 	case r.BasePath != "" && (!strings.HasPrefix(r.BasePath, "/") || strings.HasSuffix(r.BasePath, "/") || strings.ContainsAny(r.BasePath, "?#")):
-		return fmt.Errorf("the route table's basePath %q is empty, or starts with a slash, ends in none and names no query or fragment", r.BasePath)
+		return fmt.Errorf("the route table's basePath %q is neither empty nor a path that starts with a slash, does not end with one and names no query or fragment", r.BasePath)
 	case !slices.Contains([]TrailingSlash{TrailingSlashNever, TrailingSlashAlways, TrailingSlashIgnore}, r.TrailingSlash):
 		return fmt.Errorf("the route table's trailingSlash is %q, and it is never, always or ignore", r.TrailingSlash)
 	case r.Headers == nil || r.Redirects == nil || r.Routes == nil:
