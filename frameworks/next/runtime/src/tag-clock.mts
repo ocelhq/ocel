@@ -163,7 +163,13 @@ export function revalidateTags(
   }
 
   const written = keptUntilSettled(writeRevalidation(list, record, at));
-  if (typeof tags !== "string") revalidations.set(tags, written);
+  if (typeof tags !== "string") {
+    revalidations.set(tags, written);
+    const forget = () => {
+      if (revalidations.get(tags) === written) revalidations.delete(tags);
+    };
+    written.then(forget, forget);
+  }
   return written;
 }
 
