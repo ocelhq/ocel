@@ -252,6 +252,21 @@ func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
 	})
 }
 
+func TestAProductionResourceNamedLikeAnotherPublishersRecordIsRefusedBeforeAnythingIsProvisioned(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	publishRecord(t, vendor, environment.TierProduction, "terraform", postgresRecord("orders", "terraform"))
+
+	said := expectDeployRefused(t, client, externalBindingRequest("orders", "", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
+
+	if !strings.Contains(said, "publisher terraform") {
+		t.Errorf("Deploy() said %q, want it to name the publisher that holds orders", said)
+	}
+	if got := len(vendor.FakeStacks().Provisioned()); got != 0 {
+		t.Errorf("the refused deploy provisioned %d stacks, want none: publishing orders afterwards is refused, so its infra would be left behind", got)
+	}
+}
+
 func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 	warnings := func(t *testing.T, record *bindingsv1.Binding, kind bindingsv1.BindingType) []string {
 		t.Helper()

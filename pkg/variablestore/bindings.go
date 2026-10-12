@@ -1,6 +1,7 @@
 package variablestore
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -149,13 +150,13 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 		return nil, nil
 	}
 
-	claimed, err := s.claims(ctx, scope)
+	held, err := s.FindClaimsByOthers(ctx, scope, owner, names)
 	if err != nil {
 		return nil, err
 	}
 	for _, name := range names {
-		if by, taken := otherOwner(claimed[name], owner); taken {
-			return nil, s.claimRefusal(scope, name, by, owner)
+		if by, taken := held[name]; taken {
+			return nil, s.claimRefusal(scope, name, by.Owner, owner)
 		}
 	}
 	if err := s.claim(ctx, scope, owner, environment, names...); err != nil {
@@ -612,21 +613,45 @@ func (s Store) claims(ctx context.Context, scope Scope) (map[string][]claim, err
 	return out, nil
 }
 
-func otherOwner(claims []claim, owner string) (string, bool) {
-	others := make([]string, 0, len(claims))
+type Claim struct {
+	Owner       string
+	Environment string
+}
+
+func (s Store) FindClaimsByOthers(ctx context.Context, scope Scope, owner string, names []string) (map[string]Claim, error) {
+	claimed, err := s.claims(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	found := map[string]Claim{}
+	for _, name := range names {
+		if by, taken := otherOwner(claimed[name], owner); taken {
+			found[name] = by
+		}
+	}
+	return found, nil
+}
+
+func otherOwner(claims []claim, owner string) (Claim, bool) {
+	others := make([]claim, 0, len(claims))
 	for _, c := range claims {
 		if c.owner != owner {
-			others = append(others, c.owner)
+			others = append(others, c)
 		}
 	}
 	if len(others) == 0 {
-		return "", false
+		return Claim{}, false
 	}
-	if slices.Contains(others, OwnerOcel) {
-		return OwnerOcel, true
-	}
-	slices.Sort(others)
-	return others[0], true
+	slices.SortFunc(others, func(a, b claim) int {
+		if (a.owner == OwnerOcel) != (b.owner == OwnerOcel) {
+			if a.owner == OwnerOcel {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Or(strings.Compare(a.owner, b.owner), strings.Compare(a.environment, b.environment))
+	})
+	return Claim{Owner: others[0].owner, Environment: plainEnvironment(others[0].environment)}, true
 }
 
 func (s Store) claim(ctx context.Context, scope Scope, owner, environment string, taking ...string) error {
