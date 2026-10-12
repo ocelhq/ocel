@@ -302,7 +302,7 @@ function refuseTable(table: Record<string, unknown>): Refusal {
     (basePath !== "" &&
       (!basePath.startsWith("/") || basePath.endsWith("/") || /[?#]/.test(basePath)))
   ) {
-    return `basePath ${JSON.stringify(basePath)} is empty, or starts with a slash, ends in none and names no query or fragment`;
+    return `basePath ${JSON.stringify(basePath)} is neither empty nor a path that starts with a slash, does not end with one and names no query or fragment`;
   }
   if (!trailingSlashModes.includes(trailingSlash as string)) {
     return `trailingSlash is ${JSON.stringify(trailingSlash)}, and it is never, always or ignore`;
