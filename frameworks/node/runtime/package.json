@@ -16,6 +16,7 @@
     "./live-values": "./src/live-values.mts",
     "./preview-gate": "./src/preview-gate.mts",
     "./serve": "./src/serve.mts",
+    "./tag-records": "./src/tag-records.mts",
     "./user-app": "./src/user-app.mts"
   },
   "scripts": {
