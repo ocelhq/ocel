@@ -52,7 +52,7 @@ export interface RenderRelease {
   isrPrefix: string;
   tags: string[];
   sharesFallbackShell?: boolean;
-  nodeApp?: boolean;
+  honoursAppCacheHeaders?: boolean;
   entry?: StoredEntryCall;
 }
 

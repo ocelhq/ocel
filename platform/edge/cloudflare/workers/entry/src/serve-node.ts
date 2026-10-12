@@ -105,7 +105,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       slug: serving.slug,
       isrPrefix: serving.isrPrefix,
       tags: [],
-      nodeApp: true,
+      ...(!rule && { honoursAppCacheHeaders: true }),
     };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
 

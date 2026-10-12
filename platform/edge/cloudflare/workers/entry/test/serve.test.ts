@@ -41,13 +41,17 @@ function get(forKey = key, host = props.host): Request {
   return new Request(buildObjectCall(host, forKey).url);
 }
 
-function s3Answering(answer: () => Response): { calls: Request[]; fetch: typeof fetch } {
+function s3Answering(answer: (request: Request) => Response): {
+  calls: Request[];
+  fetch: typeof fetch;
+} {
   const calls: Request[] = [];
   return {
     calls,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push(new Request(input as RequestInfo, init));
-      return answer();
+      const request = new Request(input as RequestInfo, init);
+      calls.push(request);
+      return answer(request);
     }) as typeof fetch,
   };
 }
@@ -452,7 +456,12 @@ describe("Serve fetching from the origin", () => {
 
   describe("for a node app", () => {
     const nodeRelease = {
-      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags: [], nodeApp: true }),
+      [RENDER_RELEASE_HEADER]: JSON.stringify({
+        slug: "p1",
+        isrPrefix,
+        tags: [],
+        honoursAppCacheHeaders: true,
+      }),
     };
     const nodeRequest = (path: string, headers: Record<string, string> = {}) =>
       new Request(buildOriginCall(`${FN_URL}${path}`, coordinates).url, {
@@ -523,6 +532,27 @@ describe("Serve fetching from the origin", () => {
         "max-age=30, stale-if-error=86400",
       );
     });
+  });
+
+  it("tells the browser to revalidate a response its cache rule shaped, and keeps one it does not store out of every cache", async () => {
+    const wire = s3Answering((request) =>
+      request.url.endsWith("/stored")
+        ? new Response("page", { headers: { "cache-control": "public, s-maxage=60, max-age=5" } })
+        : new Response("page", { headers: { "cache-control": "public, max-age=5" } }),
+    );
+
+    const stored = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(originRequest("stored")),
+    );
+    const unstored = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(originRequest("unstored")),
+    );
+
+    expect(stored.headers.get("cloudflare-cdn-cache-control")).toBe(
+      "max-age=60, stale-if-error=86400",
+    );
+    expect(stored.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+    expect(unstored.headers.get("cache-control")).toBe("private, no-store");
   });
 
   it("does not take a max-age as the lifetime of a prerender that is not a node app's", async () => {

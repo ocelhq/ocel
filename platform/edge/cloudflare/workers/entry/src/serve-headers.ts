@@ -31,7 +31,7 @@ export interface CachedResponse {
 }
 
 export interface CacheOptions {
-  nodeApp?: boolean;
+  honoursAppCacheHeaders?: boolean;
 }
 
 type Directives = Map<string, string | true>;
@@ -66,7 +66,7 @@ function variesOffKey(headers: Headers): boolean {
 function notStored(response: Response, options: CacheOptions): Response {
   const headers = new Headers(response.headers);
   for (const name of EDGE_POLICY_HEADERS) headers.delete(name);
-  if (options.nodeApp) headers.set("cloudflare-cdn-cache-control", "no-store");
+  if (options.honoursAppCacheHeaders) headers.set("cloudflare-cdn-cache-control", "no-store");
   else headers.set("cache-control", NOT_STORED);
   headers.delete("cache-tag");
   headers.delete(edgeCacheTagHeader);
@@ -119,7 +119,7 @@ export function forCache(
 
   const lifetime =
     seconds(directives, "s-maxage") ??
-    (policy.source === "cache-control" && !options.nodeApp
+    (policy.source === "cache-control" && !options.honoursAppCacheHeaders
       ? undefined
       : seconds(directives, "max-age"));
   const staleWhileRevalidate = seconds(directives, "stale-while-revalidate");
@@ -137,7 +137,10 @@ export function forCache(
     ].join(", "),
   );
   headers.delete("cdn-cache-control");
-  if (!options.nodeApp && (policy.source === "cache-control" || !headers.has("cache-control"))) {
+  if (
+    !options.honoursAppCacheHeaders &&
+    (policy.source === "cache-control" || !headers.has("cache-control"))
+  ) {
     headers.set("cache-control", BROWSER_REVALIDATES);
   }
   headers.set("cache-tag", releaseTags(headers, cached));
