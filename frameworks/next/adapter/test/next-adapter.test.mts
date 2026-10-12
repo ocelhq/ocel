@@ -521,8 +521,14 @@ test("a dynamic route reaches the launcher as the pattern that spans it", async 
   await adapter.onBuildComplete(args as never);
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"]]);
-  expect(new RegExp(routes.dynamic[0][0], "i").test("/api/todos/7")).toBe(true);
+  expect(routes.dynamic).toEqual([
+    {
+      source: "^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$",
+      entryKey: "/api/todos/[id]",
+      route: "/api/todos/[id]",
+    },
+  ]);
+  expect(new RegExp(routes.dynamic[0].source, "i").test("/api/todos/7")).toBe(true);
 });
 
 test("primes the largest entry at INIT", async () => {
@@ -1224,6 +1230,52 @@ test("separates a node prerender's entryKey from an edge prerender's edgeEntryKe
   expect(manifest.dispatch["/edgy"].edgeEntryKey).toBe("app/edgy/page");
   expect(manifest.dispatch["/edgy"].entryKey).toBeUndefined();
   await expectManifestJoinsLaunchers(projectDir);
+});
+
+test("names the route that renders each prerender, node or edge", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  for (const [dir, runtime] of [
+    ["blog/[post]", "nodejs"],
+    ["edgy/[slug]", "edge"],
+  ] as const) {
+    const handler = join(projectDir, `.next/server/app/${dir}/page.js`);
+    await mkdir(dirname(handler), { recursive: true });
+    await writeFile(handler, "module.exports = () => {}");
+    args.outputs.appPages.push({
+      pathname: `/${dir}`,
+      id: `/${dir}`,
+      assets: {},
+      runtime,
+      filePath: handler,
+      config: {},
+      type: "APP_PAGE",
+      ...(runtime === "edge" && {
+        edgeRuntime: { entryKey: `app/${dir}/page`, handlerExport: "default" },
+      }),
+    } as never);
+  }
+  for (const [pathname, parent] of [
+    ["/blog/post-1", "/blog/[post]"],
+    ["/edgy/one", "/edgy/[slug]"],
+  ]) {
+    args.outputs.prerenders.push({
+      pathname,
+      id: pathname,
+      type: "PRERENDER",
+      parentOutputId: parent,
+      groupId: 9,
+      fallback: { filePath: join(projectDir, `.next/server/app${pathname}.html`) },
+      config: {},
+    } as never);
+  }
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].parent).toBe("/");
+  expect(manifest.dispatch["/blog/post-1"].parent).toBe("/blog/[post]");
+  expect(manifest.dispatch["/edgy/one"].parent).toBe("/edgy/[slug]");
 });
 
 test("lists every prerender pathname (including .segment.rsc) so resolveRoutes can match it", async () => {
@@ -2591,7 +2643,13 @@ test("keeps a dynamic pages/index/[...slug] route addressable by its own name", 
   expect(manifest.pathnames).toContain("/index/[...slug]");
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([["^[/]?/index/(?<nxtPslug>.+?)(?:/)?$", "/index/[...slug]"]]);
+  expect(routes.dynamic).toEqual([
+    {
+      source: "^[/]?/index/(?<nxtPslug>.+?)(?:/)?$",
+      entryKey: "/index/[...slug]",
+      route: "/index/[...slug]",
+    },
+  ]);
   await expectManifestJoinsLaunchers(projectDir);
 });
 
@@ -2822,7 +2880,7 @@ test("never lets /_middleware enter the launcher's route table", async () => {
   const { entries, routes } = await readLauncher(projectDir);
   expect(entries).toHaveProperty("/_middleware");
   expect(routes.exact).not.toHaveProperty("/_middleware");
-  expect(routes.dynamic.some(([, key]) => key === "/_middleware")).toBe(false);
+  expect(routes.dynamic.some(({ entryKey }) => entryKey === "/_middleware")).toBe(false);
 });
 
 test("warns once when node middleware's matcher covers part of the build's cached surface", async () => {

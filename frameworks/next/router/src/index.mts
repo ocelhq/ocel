@@ -78,7 +78,9 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", edgeCacheHeader];
+const ROUTE_HEADER = "x-ocel-route";
+
+export const CONTROL_HEADERS = [ENTRY_HEADER, ROUTE_HEADER, "next-resume", edgeCacheHeader];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);
@@ -432,7 +434,10 @@ async function serveRequest(request: Request, deps: RouteDeps): Promise<Response
   return dispatchResult(
     {
       ...withSourceInvocationTarget(
-        dropShadowedDynamicParams(preferExactPathname(result, deps.manifest), deps.manifest),
+        dropShadowedDynamicParams(
+          preferExactPathname(withoutForgedRouteParams(result), deps.manifest),
+          deps.manifest,
+        ),
         routingUrl,
         deps.manifest,
       ),
@@ -478,6 +483,16 @@ function preferExactPathname(result: RouteResult, manifest: NextRouteTable): Rou
     }
   }
   return result;
+}
+
+function withoutForgedRouteParams(result: RouteResult): RouteResult {
+  const target = result.invocationTarget;
+  if (!target?.query || !result.routeMatches) return result;
+  const matched = Object.keys(result.routeMatches);
+  return {
+    ...result,
+    invocationTarget: { ...target, query: withoutParamsNamedBy(target.query, matched, matched) },
+  };
 }
 
 function dropShadowedDynamicParams(result: RouteResult, manifest: NextRouteTable): RouteResult {
@@ -533,30 +548,76 @@ export function ruleDestinationPathname(
   return out;
 }
 
-function matchesConfigRewrite(
+type DynamicRoute = RoutingTable["dynamicRoutes"][number];
+
+interface ConfigRewriteTarget {
+  dynamicRoute?: DynamicRoute;
+}
+
+function pathnameOf(destination: string): string {
+  const { pathname } = new URL(destination, "http://n");
+  return decodedPathname(pathname) ?? pathname;
+}
+
+function renderingRoute(resolvedPathname: string, manifest: NextRouteTable): string {
+  const target = manifest.dispatch[resolvedPathname];
+  return target?.kind === "prerender" ? target.parent : resolvedPathname;
+}
+
+function configRewriteTarget(
   pathname: string,
   resolvedPathname: string,
-  routes: RoutingTable,
-): boolean {
+  manifest: NextRouteTable,
+): ConfigRewriteTarget | undefined {
+  const routes = manifest.routes as RoutingTable;
   const rules = [
     ...(routes.beforeFiles ?? []),
     ...(routes.afterFiles ?? []),
     ...(routes.fallback ?? []),
   ];
   const dynamicRoutes = routes.dynamicRoutes ?? [];
+  const route = renderingRoute(resolvedPathname, manifest);
   for (const rule of rules) {
     if (!rule.destination) continue;
     const destination = ruleDestinationPathname(rule.sourceRegex, rule.destination, pathname);
     if (destination === undefined) continue;
-    if (destination === resolvedPathname) return true;
-    for (const dynamic of dynamicRoutes) {
-      if (dynamic.destination?.split("?")[0] !== resolvedPathname) continue;
+    if (destination === resolvedPathname && route === resolvedPathname) return {};
+    for (const dynamicRoute of dynamicRoutes) {
+      if (!dynamicRoute.destination) continue;
+      if (pathnameOf(dynamicRoute.destination) !== route) continue;
       try {
-        if (new RegExp(dynamic.sourceRegex).test(destination)) return true;
+        if (new RegExp(dynamicRoute.sourceRegex).test(destination)) return { dynamicRoute };
       } catch {}
     }
+    if (destination === resolvedPathname) return {};
   }
-  return false;
+  return undefined;
+}
+
+const ROUTE_PARAM_PREFIXES = ["nxtP", "nxtI"];
+
+function routeParamName(key: string): string | undefined {
+  const prefix = ROUTE_PARAM_PREFIXES.find((p) => key !== p && key.startsWith(p));
+  return prefix === undefined ? undefined : key.slice(prefix.length);
+}
+
+function withoutParamsNamedBy(
+  query: Record<string, string | string[]>,
+  paramKeys: readonly string[],
+  keptKeys: readonly string[] = [],
+): Record<string, string | string[]> {
+  const names = new Set(paramKeys.map(routeParamName));
+  return Object.fromEntries(
+    Object.entries(query).filter(([key]) => {
+      const name = routeParamName(key);
+      return name === undefined || !names.has(name) || keptKeys.includes(key);
+    }),
+  );
+}
+
+function paramKeysOf(dynamicRoute: DynamicRoute | undefined): string[] {
+  if (!dynamicRoute?.destination) return [];
+  return [...new URL(dynamicRoute.destination, "http://n").searchParams.keys()];
 }
 
 function withSourceInvocationTarget(
@@ -568,21 +629,14 @@ function withSourceInvocationTarget(
   const routePath = target?.pathname ?? result.resolvedPathname;
   if (!target || !result.resolvedPathname) return { ...result, routePath };
   if (target.pathname === routingUrl.pathname) return { ...result, routePath };
-  if (
-    !matchesConfigRewrite(
-      routingUrl.pathname,
-      result.resolvedPathname,
-      manifest.routes as RoutingTable,
-    )
-  ) {
-    return { ...result, routePath };
-  }
+  const rewrite = configRewriteTarget(routingUrl.pathname, result.resolvedPathname, manifest);
+  if (!rewrite) return { ...result, routePath };
   return {
     ...result,
     routePath,
     invocationTarget: {
       pathname: routingUrl.pathname,
-      query: queryFromUrl(routingUrl),
+      query: withoutParamsNamedBy(queryFromUrl(routingUrl), paramKeysOf(rewrite.dynamicRoute)),
     },
   };
 }
@@ -807,9 +861,10 @@ async function renderDispatchTarget(
       if (!fnUrl) return noFunctionUrl(target.id);
       return withStatus(
         await doOrigin(
-          withEntry(
+          withOriginTarget(
             forward(originUrl(fnUrl, url, result, manifest), request, headers),
             target.entryKey,
+            result.resolvedPathname,
           ),
         ),
         "MISS",
@@ -980,7 +1035,7 @@ async function prerenderResponse(
   const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
   const render = (rendered: Request) => {
-    const entried = withEntry(rendered, target.entryKey);
+    const entried = withOriginTarget(rendered, target.entryKey, result.resolvedPathname);
     return edgeEntryKey ? edgeResponse(deps, edgeEntryKey, entried) : doFetch(entried);
   };
 
@@ -1095,10 +1150,16 @@ export function forward(
   return new Request(url, init);
 }
 
-function withEntry(request: Request, entryKey: string | undefined): Request {
+function withOriginTarget(
+  request: Request,
+  entryKey: string | undefined,
+  route: string | null | undefined,
+): Request {
   const headers = new Headers(request.headers);
   if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
   else headers.delete(ENTRY_HEADER);
+  if (route) headers.set(ROUTE_HEADER, route);
+  else headers.delete(ROUTE_HEADER);
   return new Request(request, { headers });
 }
 
@@ -1144,9 +1205,10 @@ function invokeMiddleware(
       const url = new URL(request.url);
       const forwardUrl = new URL(url.pathname + encodeForwardedSearch(url.search), fnUrl);
       return doOrigin(
-        withEntry(
+        withOriginTarget(
           forward(forwardUrl, request, withoutControlHeaders(request.headers)),
           middleware.entryKey,
+          undefined,
         ),
       );
     }).then(originAuthoredResponse);

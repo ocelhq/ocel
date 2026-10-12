@@ -225,7 +225,9 @@ test("fails closed on a request with no entry header and no route for its path",
 
 const ROUTES = {
   exact: { "/server": "/server", "/header": "/header" },
-  dynamic: [["^/blog/([^/]+?)(?:\\.rsc)?$", "/blog/[slug]"]] as [string, string][],
+  dynamic: [
+    { source: "^/blog/([^/]+?)(?:\\.rsc)?$", entryKey: "/blog/[slug]", route: "/blog/[slug]" },
+  ],
   segmented: [] as string[],
 };
 
@@ -309,7 +311,13 @@ test("a basePath route is served under the path the build gave it", async () => 
     primary: null,
     routes: {
       exact: { "/docs/header": "/docs/header" },
-      dynamic: [["^/docs[/]?/blog/(?<nxtPslug>[^/]+?)(?:/)?$", "/docs/blog/[slug]"]],
+      dynamic: [
+        {
+          source: "^/docs[/]?/blog/(?<nxtPslug>[^/]+?)(?:/)?$",
+          entryKey: "/docs/blog/[slug]",
+          route: "/docs/blog/[slug]",
+        },
+      ],
       segmented: [],
     },
     load,
@@ -328,7 +336,13 @@ test("a pathname another bundle owns fails by name, not by a local catch-all", a
     primary: null,
     routes: {
       exact: { "/elsewhere": "/elsewhere" },
-      dynamic: [["^[/]?/(?<nxtPpath>.+?)(?:/)?$", "/files/[...path]"]],
+      dynamic: [
+        {
+          source: "^[/]?/(?<nxtPpath>.+?)(?:/)?$",
+          entryKey: "/files/[...path]",
+          route: "/files/[...path]",
+        },
+      ],
       segmented: [],
     },
     load,
@@ -1417,7 +1431,7 @@ test("a segment prefetch of a route with segment outputs is served from its .seg
 });
 
 test("a segment prefetch of the root is served from index's .segments path", async () => {
-  const seen = await urlSeenByEntry("/", SEGMENT_PREFETCH_HEADERS, ["app/page"], {
+  const seen = await urlSeenByEntry("/", SEGMENT_PREFETCH_HEADERS, ["/"], {
     exact: { "/": "app/page" },
     dynamic: [],
     segmented: [],
@@ -1430,6 +1444,56 @@ test("a segment prefetch of a route without segment outputs keeps its plain path
   const seen = await urlSeenByEntry("/header", SEGMENT_PREFETCH_HEADERS, ["/blog/[slug]"]);
 
   expect(seen).toBe("/header");
+});
+
+test("a segment prefetch of a route sharing the entry of a segmented route keeps its plain path", async () => {
+  const shared = {
+    exact: { "/a": "/shared", "/b": "/shared" },
+    dynamic: [],
+    segmented: ["/a"],
+  };
+  const entries = { ...ENTRIES, "/shared": "./.next/server/app/shared/page.js" };
+  const seen = async (url: string) =>
+    createDispatch({
+      nextConfig: projectedConfig(),
+      entries,
+      primary: null,
+      routes: shared,
+      load: () => ({ handler: (req: { url: string }) => req.url }),
+    }).handler({ url, headers: SEGMENT_PREFETCH_HEADERS }, fakeRes(), {});
+
+  expect(await seen("/a")).toBe("/a.segments/_tree.segment.rsc");
+  expect(await seen("/b")).toBe("/b");
+});
+
+test("a segment prefetch through a rewrite to a segmented route is served from the source's .segments path", async () => {
+  const seen = await urlSeenByEntry(
+    "/rewritten",
+    { ...SEGMENT_PREFETCH_HEADERS, "x-ocel-entry": "/blog/[slug]", "x-ocel-route": "/blog/[slug]" },
+    ["/blog/[slug]"],
+  );
+
+  expect(seen).toBe("/rewritten.segments/_tree.segment.rsc");
+});
+
+test("a segment prefetch through a rewrite to a route sharing the entry of a segmented route keeps its plain path", async () => {
+  const seen = await urlSeenByEntry(
+    "/rewritten",
+    { ...SEGMENT_PREFETCH_HEADERS, "x-ocel-entry": "/server", "x-ocel-route": "/header" },
+    ["/server"],
+  );
+
+  expect(seen).toBe("/rewritten");
+});
+
+test("a segment prefetch of a trailing-slash path is served from its route's .segments path", async () => {
+  const seen = await urlSeenByEntry("/header/", SEGMENT_PREFETCH_HEADERS, ["/header"], {
+    exact: { "/header": "/header" },
+    dynamic: [],
+    segmented: [],
+  });
+
+  expect(seen).toBe("/header.segments/_tree.segment.rsc");
 });
 
 test("a request that is no segment prefetch keeps its plain path", async () => {
@@ -1445,7 +1509,13 @@ test("a request already on a .segments path keeps it", async () => {
     primary: null,
     routes: {
       exact: {},
-      dynamic: [["^/blog/\\[slug\\]\\.segments/.+$", "/blog/[slug]"]],
+      dynamic: [
+        {
+          source: "^/blog/\\[slug\\]\\.segments/.+$",
+          entryKey: "/blog/[slug]",
+          route: "/blog/[slug]",
+        },
+      ],
       segmented: ["/blog/[slug]"],
     },
     load: () => ({ handler: (req: { url: string }) => req.url }),

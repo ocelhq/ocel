@@ -302,6 +302,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
     const { answered } = await resolve(
       request("/blog", {
         "x-ocel-entry": "1",
+        "x-ocel-route": "/forged",
         "next-resume": "1",
         "x-ocel-origin-secret": "forged",
         "x-middleware-skip": "1",
@@ -312,6 +313,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
 
     for (const name of [
       "x-ocel-entry",
+      "x-ocel-route",
       "next-resume",
       "x-ocel-origin-secret",
       "x-middleware-skip",

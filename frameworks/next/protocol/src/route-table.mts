@@ -57,6 +57,7 @@ export type DispatchTarget =
   | {
       kind: "prerender";
       id?: string;
+      parent: string;
       entryKey?: string;
       tags?: string[];
       allowQuery?: string[];

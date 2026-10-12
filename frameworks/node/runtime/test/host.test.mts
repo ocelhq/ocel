@@ -143,10 +143,21 @@ describe("the loopback header boundary", () => {
     expect(seen["x-ocel-entry"]).toBeUndefined();
   });
 
-  test("a request the bootstrap forwarded keeps its entry key", async () => {
-    const seen = await observe({ "x-ocel-entry": "/server", "x-ocel-request-id": "abc" });
+  test("a self-fetch loses the route it inherited", async () => {
+    const seen = await observe({ "x-ocel-route": "/blog/[slug]" });
+
+    expect(seen["x-ocel-route"]).toBeUndefined();
+  });
+
+  test("a request the bootstrap forwarded keeps its entry key and route", async () => {
+    const seen = await observe({
+      "x-ocel-entry": "/server",
+      "x-ocel-route": "/blog/[slug]",
+      "x-ocel-request-id": "abc",
+    });
 
     expect(seen["x-ocel-entry"]).toBe("/server");
+    expect(seen["x-ocel-route"]).toBe("/blog/[slug]");
     expect(seen["x-ocel-request-id"]).toBeUndefined();
   });
 });

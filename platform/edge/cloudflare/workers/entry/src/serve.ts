@@ -158,6 +158,25 @@ function isRevalidation(request: Request): boolean {
   return request.headers.has("if-none-match") || request.headers.has("if-modified-since");
 }
 
+function mayRespondNotModified(
+  request: Request,
+  stored: StoreAnswer,
+  cacheable: Response,
+): boolean {
+  if (stored.stale || stored.from !== "own") return false;
+  if (!cacheable.headers.has("cloudflare-cdn-cache-control")) return false;
+  const validator = cacheable.headers.get("etag");
+  const requestValidators = request.headers.get("if-none-match");
+  if (validator === null || requestValidators === null) return false;
+  const stripWeak = (tag: string) => tag.trim().replace(/^W\//, "");
+  return requestValidators.split(",").some((tag) => stripWeak(tag) === stripWeak(validator));
+}
+
+function respondNotModified(cacheable: Response): Response {
+  void cacheable.body?.cancel();
+  return new Response(null, { status: 304, headers: cacheable.headers });
+}
+
 function admitSegment(request: Request, response: Response): Response {
   return isSegmentPrefetch(request.headers) ? asSegmentPayload(response) : response;
 }
@@ -368,7 +387,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         found.render,
       );
     }
-    if (isRevalidation(request) || !isKeyedByPath(found.render, keyedUrl)) return render();
+    if (!isKeyedByPath(found.render, keyedUrl)) return render();
     let stored: StoreAnswer | null = null;
     try {
       stored = await this.askStore(request, found.render, release);
@@ -376,8 +395,40 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read; rendering at the origin", error);
     }
     if (!stored) return render();
-    if (stored.from === "lazy-fallback") return withholdFromEdge(stored.response);
-    return forCache(admitSegment(request, stored.response), cached);
+    if (stored.from === "lazy-fallback" && !isRevalidation(request)) {
+      return withholdFromEdge(stored.response);
+    }
+    const cacheable = forCache(admitSegment(request, stored.response), cached);
+    if (!isRevalidation(request)) return cacheable;
+    if (mayRespondNotModified(request, stored, cacheable)) return respondNotModified(cacheable);
+    if (stored.from !== "own") {
+      void cacheable.body?.cancel();
+      return render();
+    }
+    if (stored.stale) {
+      await this.regenerateBehind(
+        () => this.renderAtOrigin(request, { host, release, keyedUrl, unconditional: true }),
+        { release, keyedUrl },
+      );
+    }
+    return cacheable;
+  }
+
+  private async regenerateBehind(
+    render: () => Promise<Response>,
+    page: { release: string; keyedUrl: string },
+  ): Promise<void> {
+    const named = `${new URL(page.keyedUrl).pathname} of release ${page.release}`;
+    const regenerating = render()
+      .then((regenerated) => {
+        if (!regenerated.ok) {
+          console.error(`ocel: the origin answered ${regenerated.status} regenerating ${named}`);
+        }
+        return regenerated.body?.pipeTo(new WritableStream());
+      })
+      .catch((error) => console.error(`ocel: the origin did not regenerate ${named}`, error));
+    this.ctx.waitUntil(regenerating);
+    await settledWithin(regenerating, REGENERATION_HOLD_MS);
   }
 
   private async fromStoredShell(
@@ -400,12 +451,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     }
     if (!shell) return respondNoShell();
     if ((shell.stale || shell.from !== "own") && isRevalidation(request)) {
-      const regenerating = call
-        .render()
-        .then((regenerated) => regenerated.body?.pipeTo(new WritableStream()))
-        .catch((error) => console.error("ocel: the origin did not regenerate a PPR page", error));
-      this.ctx.waitUntil(regenerating);
-      await settledWithin(regenerating, REGENERATION_HOLD_MS);
+      await this.regenerateBehind(call.render, call);
     }
     return forCache(admitSegment(request, shell.response), call.cached);
   }
