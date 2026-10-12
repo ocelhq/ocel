@@ -11,6 +11,8 @@ import (
 const (
 	FilePath = statedir.Name + "/queues.json"
 
+	EnvVar = "OCEL_QUEUES"
+
 	WorkerConcurrencyEnv = "OCEL_WORKER_CONCURRENCY"
 
 	MaxReceiveCount = 1000

@@ -11,8 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/sns"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -142,14 +140,7 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 	}
 	var engine *tasks.Engine
 	if servesTasks {
-		engine = tasks.New(tasks.Config{
-			Topology:  *cfg.queues,
-			Table:     db,
-			Queues:    sqs.NewFromConfig(aws),
-			Topics:    sns.NewFromConfig(aws),
-			Worker:    cfg.worker,
-			WorkerURL: cfg.workerURL,
-		})
+		engine = tasks.NewAWS(aws, *cfg.queues, cfg.worker, cfg.workerURL)
 		services.Tasks, services.Topics = engine.Tasks(), engine.Topics()
 	}
 
