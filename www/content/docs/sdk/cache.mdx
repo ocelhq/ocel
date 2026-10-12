@@ -1,10 +1,10 @@
 ---
 title: Cache
-description: Tag cached responses and revalidate them.
+description: Tag cached responses, revalidate them, and state which routes an edge may cache.
 ---
 
 An edge that caches your app's responses keeps a page until its lifetime ends. `cacheTag`
-names the page, and `revalidateTag` and `revalidatePath` clear it sooner. They work in any
+names the page, and `revalidateTag` and `revalidatePath` refresh it sooner. They work in any
 Node framework: Express, Hono, Fastify, SvelteKit, and a plain handler. Next has its own
 `revalidateTag` and `revalidatePath`, which work as they always do.
 
@@ -19,7 +19,7 @@ app.get("/blog/:slug", async (req, res) => {
 app.post("/blog/:slug", async (req, res) => {
   await savePost(req.params.slug, req.body);
   revalidateTag(`post:${req.params.slug}`);
-  revalidateTag("posts", "max");
+  revalidateTag("posts", { expire: 0 });
   revalidatePath("/");
   res.sendStatus(204);
 });
@@ -28,52 +28,124 @@ app.post("/blog/:slug", async (req, res) => {
 `cacheTag(...tags)` tags the response the request is answering. Call it before the response
 starts.
 
-`revalidateTag(tag)` expires every response with that tag at once, so the next request renders
-a fresh one. `revalidateTag(tag, "max")` serves them stale while a fresh copy is made.
+`revalidateTag(tag)` marks every response with that tag stale, so an edge serves it while a
+fresh copy is made. `revalidateTag(tag, { expire: 0 })` purges them instead: the next request
+waits for a fresh render. Use a purge for a page that must not be served again, such as one
+published by mistake.
 
-`revalidatePath(path)` expires the cached page at a pathname such as `/blog/a`, with no query.
-`/blog/café` and `/blog/caf%C3%A9` name the same page.
+`revalidatePath(path)` does the same for the cached page at a pathname such as `/blog/a`, with
+no query, and takes the same `{ expire: 0 }`. `/blog/café` and `/blog/caf%C3%A9` name the same
+page.
 
 All three do nothing where no edge caches the app, as in `ocel dev` and in tests. Call them
 while handling a request, and call the two that revalidate before the response starts: a call
-made outside a request throws, and a revalidation made after the response began is lost and
-logged, as is one that names a tag no edge can store, such as a tag with a space.
-Never put a user or tenant id in a tag, because the tag names reach the edge in a response
-header.
+made outside a request throws, and a revalidation made after the response began is lost to the
+Cloudflare gateway and logged, as is one that names a tag no edge can store, such as a tag with
+a space. Never put a user or tenant id in a tag, because the tag names reach the edge in a
+response header.
+
+## Routes an edge may cache
+
+A build states which routes may be cached in `routes.json`, a route table that sits beside its
+`hosting.json`, and `hosting.json` names it with `"routeTable": "ocel"`. Framework adapters
+write it; a plain Node app that states none caches nothing by rule on any edge, though
+CloudFront and the load balancer still keep a response that sets its own `s-maxage`. A build with a cached route declares the
+`revalidation` need, which an edge serves by clearing what a revalidation names. Next keeps its
+own route table and does not use this one.
+
+```json title="routes.json"
+{
+  "version": 1,
+  "basePath": "",
+  "trailingSlash": "never",
+  "headers": [{ "src": "/(.*)", "headers": { "x-frame-options": "DENY" } }],
+  "redirects": [{ "src": "/old/(.*)", "location": "/new/$1", "status": 308 }],
+  "staticFirst": [],
+  "routes": [
+    {
+      "src": "/blog/([^/]+)",
+      "function": "index",
+      "cache": {
+        "revalidate": 60,
+        "expire": 600,
+        "allowQuery": ["page"],
+        "tags": ["posts"],
+        "bypassToken": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    { "src": "/account", "function": "index" }
+  ],
+  "fallback": { "function": "index" }
+}
+```
+
+- `src` is a pattern for the pathname after the base path, as the browser sends it: not decoded,
+  and with no query. It must match the whole pathname, and is written in the subset of regular
+  expressions that RE2 and JavaScript read the same way: groups `( )` and `(?: )`, classes,
+  `|`, the quantifiers, `\d \w \b` and their negations, and escaped punctuation. Lookaround,
+  backreferences, named groups, flags and `\s` are refused when the build is deployed.
+- `routes` are tried in order, and the first match wins. A route with no `cache` is never stored
+  by an edge, and a path no route names goes to `fallback`.
+- `headers` rules all apply, in order, over the headers your handler set. A rule may not set
+  `cache-control` on a cached route: its cache rule does.
+- `redirects` are tried in order, and the first match is answered without reaching your
+  handler. `location` may read the groups of `src` as `$1`, and the request's query carries
+  over unless the location has its own.
+- `trailingSlash` is `never`, `always` or `ignore`. A `GET` or `HEAD` for the other form is
+  redirected with a `308`, and a path whose last segment has a dot is left alone.
+- A cache rule's `revalidate` is the whole seconds a response stays fresh, at least 1, and
+  `expire`, if set, the seconds after which a stale one is no longer served, more than
+  `revalidate`.
+- `allowQuery` lists the query parameters in the cache key. Left off, every parameter is in it;
+  an empty list puts none in. A parameter outside the list is not passed on when the edge fills
+  the entry.
+- `tags` are stamped on every response of the route, beside the ones `cacheTag` adds.
+- `bypassToken` is described below. A table has at most one, shared by all its routes.
+
+A table that is not valid, that sends a request to a function other than the build's root
+function, or that caches a route without declaring `revalidation` refuses the deploy.
 
 ## Which responses an edge caches
 
 An edge caches a response when it asks to and the response allows it. A response is cacheable
 when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `private`,
 `no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
-(`s-maxage` and `stale-while-revalidate`) or from the build's cache rules.
+(`s-maxage` and `stale-while-revalidate`) or from the cache rule of its route.
 
-A request that carries a `Cookie` or `Authorization` header never takes its lifetime from a
-cache rule, on any edge. It reaches your app with them, and its response is cached only if it
-sets its own `s-maxage`, so a signed-in visitor's page is never cached for everyone by a rule.
+Behind an edge that caches, a cached route answers everyone the same, so your handler never
+sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every
+edge. A request with an
+`Authorization` header takes no lifetime from a rule and is not stored. A response that sets a
+cookie is never stored.
 
-A build states cache rules in the `cache` list of its `hosting.json`, which framework adapters
-write. Each rule names a path, the seconds the entry stays fresh, and optionally the seconds
-after which it is no longer served stale:
+### Previews and draft content
 
-```json title="hosting.json"
-{
-  "cache": [
-    { "path": "/", "revalidate": 30 },
-    { "path": "/blog/*", "revalidate": 60, "expire": 600 }
-  ]
-}
-```
-
-A path is exact, or ends in `/*` to name every path below it. The first rule that matches wins.
-A rule whose path is malformed, whose `revalidate` is below 1, or whose `expire` does not
-exceed `revalidate` refuses the deploy.
+A request carrying the route's `bypassToken` in the `__prerender_bypass` cookie skips the
+cache: it keeps its cookies, is rendered fresh and answered `private, no-store`, and is never
+stored. Set the cookie when an author starts a preview, and clear it when they stop. A `GET`
+or `HEAD` with the token in the `x-prerender-revalidate` header is rendered fresh and clears
+the path's entry, so the next request fills it again. Both names are Vercel's, and the token is
+compared in constant time.
 
 ## What each edge does
 
 | Edge | Caches | A revalidation |
 | --- | --- | --- |
-| Cloudflare | the paths a rule names, for `GET` requests with no `Cookie` or `Authorization` header, keyed by host and every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered |
-| CloudFront | every response that allows it | reaches nothing: the app says so once in its log, and the entry lapses with its lifetime |
-| Google Cloud load balancer | every response that allows it | reaches nothing, as on CloudFront |
+| Cloudflare | the cached routes of the table, for `GET` requests without `Authorization`, keyed by host, release and the allowed query | reaches the edge from the response that made it, and is awaited before a write is answered; it is also recorded for the origin's cloud, which clears its own cache |
+| CloudFront | every response that allows it, keyed by every query parameter | recorded in the app's tag table and cleared by the tag invalidator within moments; CloudFront cannot mark an entry stale, so both kinds clear it |
+| Google Cloud load balancer | every response that allows it, keyed by every query parameter | cleared from Cloud CDN by the service itself; both kinds clear the entry |
 | No edge | nothing | nothing |
+
+Redirects and header rules are applied by your app on every edge. On Cloudflare the gateway
+answers the redirects itself.
+
+Some of the route table is applied only where the edge can do it:
+- `allowQuery` keys the cache on Cloudflare only. CloudFront and the load balancer key on
+  every parameter, which splits the cache more but never serves the wrong page.
+- The bypass cookie and the revalidate header are honoured before the cache on Cloudflare only.
+  Behind CloudFront or the load balancer they take effect when the request reaches your app, so
+  a bypass cookie previews fresh content only when the page is not already cached.
+- `staticFirst` and `basePath` are validated and carried, and your app applies `basePath` when
+  it matches patterns. No edge serves a prerendered file ahead of a function from `staticFirst`
+  yet.
+- A container app is given no route table.
