@@ -6,10 +6,13 @@
   "pages": [
     "index",
     "---Resources---",
-    "bucket",
-    "realtime",
     "database",
-    "secret",
+    "bucket",
+    "kv",
+    "realtime",
+    "topic",
+    "task",
+    "env",
     "---Internals---",
     "dev-server",
     "wire-format"

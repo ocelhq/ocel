@@ -1,0 +1,68 @@
+---
+title: KV
+description: A key-value store of its own, typed by key pattern.
+---
+
+Declaring a KV store provisions one Valkey instance for it. Its entries name the key patterns
+your app reads and writes, and the kind of value each holds.
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts title="resources/index.ts"
+import { kv } from "ocel/kv";
+
+export const cache = kv("cache", {
+  entries: { session: kv.text("session/:id") },
+});
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go title="resources/resources.go"
+package resources
+
+import "ocel.dev"
+
+var Cache = ocel.KV("cache")
+
+var Session = ocel.KVText[string](Cache, "session", "session/:id")
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+import ocel
+
+cache = ocel.kv("cache")
+session = cache.text("session", "session/:id")
+```
+
+Install `ocel[kv]` to read and write it.
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+#[derive(ocel::KvKey)]
+#[ocel(pattern = "session/:id", text)]
+struct Session;
+
+#[derive(ocel::Resources)]
+pub struct Infra {
+    #[ocel(entries = [Session])]
+    pub cache: ocel::Kv,
+}
+```
+
+Enable the `kv` feature to read and write it.
+
+</Tab>
+
+</Tabs>
