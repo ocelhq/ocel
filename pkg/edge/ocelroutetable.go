@@ -72,7 +72,7 @@ const (
 var (
 	headerName            = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 	bypassTokenCharacters = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-	groupRead             = regexp.MustCompile(`\$(\d+)`)
+	groupReference        = regexp.MustCompile(`\$(\d+)`)
 	repeatBound           = regexp.MustCompile(`^\{(\d+)(?:,(\d*))?\}`)
 	absoluteLocation      = regexp.MustCompile(`(?i)^https?://`)
 )
@@ -184,7 +184,7 @@ func (r RedirectRule) refuse() error {
 	if !absoluteLocation.MatchString(r.Location) && !isSameSiteLocation(r.Location) {
 		return errors.New("a location is a path that begins with one slash, or an http or https URL")
 	}
-	for _, read := range groupRead.FindAllStringSubmatch(r.Location, -1) {
+	for _, read := range groupReference.FindAllStringSubmatch(r.Location, -1) {
 		if group, _ := strconv.Atoi(read[1]); group < 1 || group > compiled.NumSubexp() {
 			return fmt.Errorf("the location reads $%s, and the pattern has %d groups", read[1], compiled.NumSubexp())
 		}

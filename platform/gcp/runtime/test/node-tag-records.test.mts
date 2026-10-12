@@ -2,15 +2,15 @@ import type { TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
 import { openPurgeFor } from "../src/cache/purge-target.mjs";
-import { newGcpTagRecordWriter } from "../src/node/tag-records.mjs";
+import { newTagRecordWriter } from "../src/node/tag-records.mjs";
 
 test("writes nothing where the service has no edge to clear", () => {
-  expect(newGcpTagRecordWriter(undefined)).toBeUndefined();
+  expect(newTagRecordWriter(undefined)).toBeUndefined();
 });
 
 test("hands the edge a purge as an expired tag and an invalidation as a stale one", async () => {
   const handed: ReadonlyMap<string, TagRecord>[] = [];
-  const write = newGcpTagRecordWriter(async (tags) => {
+  const write = newTagRecordWriter(async (tags) => {
     handed.push(tags);
   })!;
 
@@ -27,7 +27,7 @@ test("hands the edge a purge as an expired tag and an invalidation as a stale on
 });
 
 test("lets the failure of the edge reach the caller", async () => {
-  const write = newGcpTagRecordWriter(async () => {
+  const write = newTagRecordWriter(async () => {
     throw new Error("Cloud CDN refused");
   })!;
 

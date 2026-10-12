@@ -13,12 +13,12 @@ export interface BypassRequest {
   revalidate?: string | null;
 }
 
-function digest(value: string): Buffer {
+function hashToken(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
 }
 
 function isToken(presented: string, token: string): boolean {
-  return timingSafeEqual(digest(presented), digest(token));
+  return timingSafeEqual(hashToken(presented), hashToken(token));
 }
 
 function carriesToken(cookie: string, token: string): boolean {

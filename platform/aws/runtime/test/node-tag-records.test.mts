@@ -26,8 +26,8 @@ async function writerWithResponses(responses: unknown[]) {
       },
     };
   });
-  const { newAwsTagRecordWriter } = await import("../src/node/tag-records.mjs");
-  return { sends, newWriter: newAwsTagRecordWriter };
+  const { newTagRecordWriter } = await import("../src/node/tag-records.mjs");
+  return { sends, newWriter: newTagRecordWriter };
 }
 
 test("writes nothing where the function was given no state table or tag namespace", async () => {

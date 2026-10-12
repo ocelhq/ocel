@@ -44,7 +44,7 @@ const longestMatchedPath = 4096;
 const lifetimeHeaders = ["cache-control", "cdn-cache-control", "surrogate-control"];
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const bypassTokenCharacters = /^[A-Za-z0-9_-]+$/;
-const groupRead = /\$(\d+)/g;
+const groupReference = /\$(\d+)/g;
 const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
 const redirectStatuses = [301, 302, 307, 308];
 const absoluteLocation = /^https?:\/\//i;
@@ -263,7 +263,7 @@ function refuseRedirect(rule: unknown): Refusal {
   if (!absoluteLocation.test(rule.location) && !sameSiteLocation.test(rule.location)) {
     return "a location is a path that begins with one slash, or an http or https URL";
   }
-  for (const read of rule.location.matchAll(groupRead)) {
+  for (const read of rule.location.matchAll(groupReference)) {
     const group = Number(read[1]);
     if (group < 1 || group > pattern.groups) {
       return `the location reads $${read[1]}, and the pattern has ${pattern.groups} groups`;
@@ -347,16 +347,16 @@ export interface CompiledRouteTable {
   routes: RegExp[];
 }
 
-function expressionOf(src: string): RegExp {
+function compileExpression(src: string): RegExp {
   return new RegExp(anchorPattern(src));
 }
 
 export function compileOcelRouteTable(table: OcelRouteTable): CompiledRouteTable {
   return {
     table,
-    headers: table.headers.map((rule) => expressionOf(rule.src)),
-    redirects: table.redirects.map((rule) => expressionOf(rule.src)),
-    routes: table.routes.map((route) => expressionOf(route.src)),
+    headers: table.headers.map((rule) => compileExpression(rule.src)),
+    redirects: table.redirects.map((rule) => compileExpression(rule.src)),
+    routes: table.routes.map((route) => compileExpression(route.src)),
   };
 }
 
@@ -407,7 +407,7 @@ export function findRedirect(
     const { location, status } = compiled.table.redirects[index]!;
     const groups = readGroups(match);
     const substituted = location.replace(
-      groupRead,
+      groupReference,
       (_, group: string) => groups[Number(group) - 1] ?? "",
     );
     return {
