@@ -195,11 +195,9 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	subnets, err := ec2.GetSubnets(pctx, &ec2.GetSubnetsArgs{
-		Filters: []ec2.GetSubnetsFilter{{Name: "vpc-id", Values: []string{vpc.Id}}},
-	})
+	subnetIDs, err := lookupDefaultSubnets(pctx, vpc.Id)
 	if err != nil {
-		return fmt.Errorf("look up default VPC subnets: %w", err)
+		return err
 	}
 
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
@@ -215,14 +213,14 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 		case provider.BindingPostgres:
 			args := translatePostgres(resource.Postgres)
 			args.Tags = transformed.tagsFor(transformTypePostgres, resource.Name)
-			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
+			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnetIDs)
 		case provider.BindingBucket:
 			args := translateBucket(resource.Bucket)
 			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
 			args.PatchedCORS = transformed.opensCORS(resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, r.cfg.AppRolePath, sessions, work.completer)
 		case provider.BindingKV:
-			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnets.Ids)
+			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnetIDs)
 		case provider.BindingTask, provider.BindingTopic, provider.BindingRealtime:
 			continue
 		default:

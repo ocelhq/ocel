@@ -475,11 +475,9 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	subnets, err := ec2.GetSubnets(ctx, &ec2.GetSubnetsArgs{
-		Filters: []ec2.GetSubnetsFilter{{Name: "vpc-id", Values: []string{vpc.Id}}},
-	})
+	subnetIDs, err := lookupDefaultSubnets(ctx, vpc.Id)
 	if err != nil {
-		return fmt.Errorf("look up default VPC subnets: %w", err)
+		return err
 	}
 	tags := pulumi.StringMap{}
 	for key, value := range w.tags {
@@ -553,7 +551,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(true),
 		SecurityGroups:   pulumi.StringArray{front.ID()},
-		Subnets:          pulumi.ToStringArray(subnets.Ids),
+		Subnets:          pulumi.ToStringArray(subnetIDs),
 		Tags:             tags,
 	})
 	if err != nil {
@@ -627,7 +625,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 
-	encoded, err := json.Marshal(subnets.Ids)
+	encoded, err := json.Marshal(subnetIDs)
 	if err != nil {
 		return err
 	}
@@ -644,7 +642,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		return nil
 	}
 	ctx.Export(outputKeyPublicRanges, pulumi.String(joinRanges(w.public)))
-	return w.runPublicFront(ctx, public, subnets.Ids, tags)
+	return w.runPublicFront(ctx, public, subnetIDs, tags)
 }
 
 func joinRanges(ranges []string) string {
