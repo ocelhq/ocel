@@ -48,6 +48,7 @@ const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
 const redirectStatuses = [301, 302, 307, 308];
 const absoluteLocation = /^https?:\/\//i;
 const sameSiteLocation = /^\/(?![/\\])/;
+const unsendableHeaderValue = /[^\t\x20-\x7e\x80-\xff]/;
 const leadingSlashes = /^[/\\\s]+/;
 
 type Refusal = string | undefined;
@@ -237,8 +238,8 @@ function refuseHeaderRule(rule: unknown): Refusal {
   }
   for (const [name, value] of Object.entries(rule.headers)) {
     if (!headerName.test(name)) return `${JSON.stringify(name)} is not a header name`;
-    if (typeof value !== "string" || /[\r\n\0]/.test(value)) {
-      return `the value of ${name} is a string with no line break`;
+    if (typeof value !== "string" || unsendableHeaderValue.test(value)) {
+      return `the value of ${name} is a string of tabs, visible ASCII and Latin-1 characters`;
     }
   }
   return undefined;

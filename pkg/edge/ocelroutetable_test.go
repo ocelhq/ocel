@@ -42,7 +42,7 @@ func TestTheFixturesRouteTableIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(routes.Routes) != 4 || routes.Routes[1].Cache == nil || routes.Routes[1].Cache.Expire != 600 {
+	if len(routes.Routes) != 4 || routes.Routes[1].Cache == nil || routes.Routes[1].Cache.Expire == nil || *routes.Routes[1].Cache.Expire != 600 {
 		t.Errorf("routes = %+v, want the four routes of the fixture with their cache rules", routes.Routes)
 	}
 }
