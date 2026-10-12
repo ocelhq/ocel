@@ -317,7 +317,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [...EVERY_NEXT_BEARING, deploy.nextPpr],
+        fixtures: [...EVERY_NEXT_BEARING, deploy.nextPpr, deploy.sveltekit, sdk.sveltekit],
         variants: [defaults, cloudfrontShielded],
         fails: [step.deploy],
         skipsCell: true,
