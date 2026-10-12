@@ -3,6 +3,7 @@ import cf from 'cloudfront';
 var kvs = cf.kvs();
 
 var DRAFT_COOKIE = '__prerender_bypass';
+var REVALIDATE_HEADER = 'x-prerender-revalidate';
 var ROUTER_HEADER = 'x-ocel-router';
 var ROUTER_KIND = 'cloudfront';
 var CACHE_KEY_HEADER = 'x-ocel-cache-key';
@@ -68,6 +69,9 @@ function variantPath(pathname, headers) {
 function cacheKey(release, pathname, headers, cookies) {
   var key = release + variantPath(pathname, headers);
   if (cookies && cookies[DRAFT_COOKIE] !== undefined) key += '.draft';
+  if (headerValue(headers, REVALIDATE_HEADER) !== null) {
+    key += '.revalidate.' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
   return key;
 }
 
