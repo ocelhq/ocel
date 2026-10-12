@@ -154,9 +154,9 @@ describe("the request the gateway hands Serve", () => {
     expect([...request.headers.keys()]).toEqual(["x-forwarded-proto"]);
   });
 
-  it("keeps the visitor's method", () => {
+  it("asks for a GET for a visitor's HEAD, so an entry is only ever filled from a full response", () => {
     const visitor = new Request("https://shop.example.com/", { method: "HEAD" });
-    expect(buildServeRequest("https://serve.example/", visitor).method).toBe("HEAD");
+    expect(buildServeRequest("https://serve.example/", visitor).method).toBe("GET");
   });
 
   it("is a plain GET when no visitor asked", () => {

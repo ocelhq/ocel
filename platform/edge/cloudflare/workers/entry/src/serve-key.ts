@@ -188,7 +188,17 @@ export function buildServeRequest(url: string, visitor?: Request): Request {
   ]) {
     headers.delete(name);
   }
-  return new Request(url, { method: visitor?.method ?? "GET", headers });
+  return new Request(url, { method: "GET", headers });
+}
+
+export function isRead(request: Request): boolean {
+  return request.method === "GET" || request.method === "HEAD";
+}
+
+export function dropBodyForHead(visitor: Request, response: Response): Response {
+  if (visitor.method !== "HEAD") return response;
+  void response.body?.cancel();
+  return new Response(null, response);
 }
 
 export function parseObjectKey(url: string): string {

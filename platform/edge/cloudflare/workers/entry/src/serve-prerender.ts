@@ -5,17 +5,18 @@ import {
   type Prerenderer,
   shouldBypass,
 } from "@framework/next-router";
-import {
-  type CacheStatus,
-  headResponse,
-  NEXT_CACHE_STATUS,
-  withStatus,
-} from "@framework/next-router/http-cache";
+import { type CacheStatus, NEXT_CACHE_STATUS, withStatus } from "@framework/next-router/http-cache";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { PurgeGroup } from "@platform/edge-contract/purge";
-import { buildResumeRequest, composePpr, PPR_SHELL_VARIANT, readPostponedShell } from "./ppr";
+import {
+  buildResumeRequest,
+  composePpr,
+  PPR_SHELL_VARIANT,
+  readPostponedShell,
+  shapePprHead,
+} from "./ppr";
 import { buildPathTag, ORIGIN_VARY } from "./serve-headers";
 import {
   buildEdgeCall,
@@ -23,6 +24,8 @@ import {
   buildOriginCall,
   buildServeRequest,
   buildVariantPath,
+  dropBodyForHead,
+  isRead,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
   SERVE_NO_SHELL_HEADER,
@@ -166,14 +169,11 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
   };
 
   const personalized = hasDraftCookie(request) || headers.has("x-middleware-set-cookie");
-  const onDemand =
-    isOnDemandRevalidate(request, target.config) &&
-    (request.method === "GET" || request.method === "HEAD") &&
-    !personalized;
+  const onDemand = isOnDemandRevalidate(request, target.config) && isRead(request) && !personalized;
 
   if (
     !onDemand &&
-    (shouldBypass(request, url, target.config) || request.method !== "GET" || personalized)
+    (shouldBypass(request, url, target.config) || !isRead(request) || personalized)
   ) {
     return withStatus(await answer(forwardUncached(headers)), "BYPASS");
   }
@@ -201,8 +201,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
       const tag = buildPathTag(serving.release, ctx.forwardUrl.pathname);
       await serving.purge([{ mode: "purge", tags: [tag] }], true);
     }
-    const answered = withStatus(rendered, "BYPASS");
-    return request.method === "HEAD" ? headResponse(answered) : answered;
+    return dropBodyForHead(request, withStatus(rendered, "BYPASS"));
   }
 
   const variant = findVariant(request, url, target);
@@ -249,10 +248,11 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     return withStatus(await answer(forwardUncached(headers)), "MISS");
   }
   const visitor = buildVisitorResponse(response, isSegmentPrefetch(request.headers));
-  if (!pprDocument) return visitor;
+  if (!pprDocument) return dropBodyForHead(request, visitor);
   const postponed = await readPostponedShell(visitor);
-  if (postponed === "unframed") return visitor;
+  if (postponed === "unframed") return dropBodyForHead(request, visitor);
   if (postponed === "malformed") return withStatus(await answer(forwardUncached(headers)), "MISS");
+  if (request.method === "HEAD") return shapePprHead(postponed.shell);
   return composePpr(
     postponed.shell,
     render(
