@@ -134,7 +134,7 @@ const (
 	realtimeInfix        = "realtime"
 	realtimeKeysInfix    = "keys"
 	realtimeSigningInfix = "signing"
-	realtimeSecretSep    = "_"
+	namespaceSecretSep   = "_"
 	maxReadableSecretID  = 200
 )
 
@@ -144,8 +144,18 @@ func (n Names) RealtimeGateway(project, env string) string {
 	return readable + "-" + serviceHash(string(n.namespace), project, env, realtimeInfix)
 }
 
+const previewGateInfix = "preview-gate"
+
+func (n Names) PreviewGateSecretPrefix() string {
+	return string(n.namespace) + namespaceSecretSep + previewGateInfix + "-"
+}
+
+func (n Names) PreviewGateSecret(slug string) string {
+	return hashedSecretID(n.PreviewGateSecretPrefix(), []string{slug}, string(n.namespace), previewGateInfix, slug)
+}
+
 func (n Names) RealtimeSecretPrefix() string {
-	return string(n.namespace) + realtimeSecretSep + realtimeInfix + "-"
+	return string(n.namespace) + namespaceSecretSep + realtimeInfix + "-"
 }
 
 func (n Names) RealtimeKeysSecretPrefix(tier environment.Tier) string {
@@ -153,16 +163,16 @@ func (n Names) RealtimeKeysSecretPrefix(tier environment.Tier) string {
 }
 
 func (n Names) RealtimeKeysSecret(tier environment.Tier, project, env string) string {
-	return realtimeSecret(n.RealtimeKeysSecretPrefix(tier), []string{project, env},
+	return hashedSecretID(n.RealtimeKeysSecretPrefix(tier), []string{project, env},
 		string(n.namespace), string(tier), project, env, realtimeInfix, realtimeKeysInfix)
 }
 
 func (n Names) RealtimeSigningSecret(project, env, resource string) string {
-	return realtimeSecret(n.RealtimeSecretPrefix()+realtimeSigningInfix+"-", []string{project, env, resource},
+	return hashedSecretID(n.RealtimeSecretPrefix()+realtimeSigningInfix+"-", []string{project, env, resource},
 		string(n.namespace), project, env, realtimeInfix, realtimeSigningInfix, resource)
 }
 
-func realtimeSecret(prefix string, readableParts []string, hashed ...string) string {
+func hashedSecretID(prefix string, readableParts []string, hashed ...string) string {
 	sanitized := make([]string, 0, len(readableParts))
 	for _, part := range readableParts {
 		sanitized = append(sanitized, naming.Sanitize(part))

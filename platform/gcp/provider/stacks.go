@@ -31,11 +31,11 @@ func (p *Provider) revisionTag(spec provider.StackSpec) string {
 	return spec.Ref.Name.Release.String()
 }
 
-const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, and Ocel runs no preview gate on Cloud Run itself. " +
-	"Front previews with an edge that shields the origin, or keep their urls to yourselves"
+const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it and previews.protection is off, so no preview gate checks its requests. " +
+	"Turn previews.protection on, front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
-	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin {
+	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin || isGatedPreview(spec) {
 		return
 	}
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
@@ -48,6 +48,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	}
 	if servesNext(app) {
 		if err := refuseGuardWithoutShieldingEdge(spec); err != nil {
+			return nil, err
+		}
+	}
+	for _, fn := range app.Functions {
+		if err := refuseGateOnFunction(spec, fn); err != nil {
 			return nil, err
 		}
 	}
@@ -80,6 +85,12 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
 		return nil, err
+	}
+	var gated gatedServing
+	if slices.ContainsFunc(app.Functions, func(fn provider.FunctionSpec) bool { return !ignoresPreviewGate(spec, fn) }) {
+		if gated, err = p.provisionPreviewGate(ctx, c, spec, account); err != nil {
+			return nil, err
+		}
 	}
 	purgeSecret, err := p.readEdgePurgeSecret(ctx, spec)
 	if err != nil {
@@ -146,6 +157,12 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		served.env = values
+		ignoresGate := ignoresPreviewGate(spec, fn)
+		if !ignoresGate {
+			if err := c.applyPreviewGate(ctx, gated, fn.Name, &served); err != nil {
+				return nil, err
+			}
+		}
 		ran, err := p.deployService(ctx, served, progress)
 		if err != nil {
 			return nil, err
@@ -161,7 +178,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			}
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision, IgnoresPreviewGate: ignoresGate,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -216,7 +233,7 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 		if err != nil {
 			return nil, err
 		}
-		functions = append(functions, provider.Function{Name: fn.Name, Physical: service})
+		functions = append(functions, provider.Function{Name: fn.Name, Physical: service, IgnoresPreviewGate: ignoresPreviewGate(spec, fn)})
 	}
 	return append(functions, workerFunctions(nameWorkers(names, spec))...), nil
 }
@@ -290,6 +307,10 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
+	gated, err := p.provisionPreviewGate(ctx, c, spec, account)
+	if err != nil {
+		return nil, err
+	}
 	served := serving{
 		service:   service,
 		image:     app.Image,
@@ -311,6 +332,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		if served.env, err = mergeValues(app.App, nextValues, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
 			return nil, err
 		}
+	}
+	if err := c.applyPreviewGate(ctx, gated, app.App, &served); err != nil {
+		return nil, err
 	}
 	ran, err := p.deployService(ctx, served, progress)
 	if err != nil {
@@ -516,6 +540,7 @@ const (
 	nextValues           = "the Next runtime"
 	cdnPurgeValues       = "Cloud CDN purging"
 	nodePurgeValues      = "the revalidation of a node service"
+	previewGateValues    = "the preview gate it mounts"
 )
 
 func mergeValues(what, source string, set, added map[string]string) (map[string]string, error) {

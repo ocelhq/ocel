@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -73,11 +74,23 @@ func (c *clients) addSecretVersion(ctx context.Context, service *secretmanager.S
 }
 
 func (c *clients) destroyVersionsBefore(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
+	return c.destroyVersionsSparing(ctx, service, name, kept, 0)
+}
+
+func (c *clients) destroyVersionsBeforePrevious(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
+	return c.destroyVersionsSparing(ctx, service, name, kept, 1)
+}
+
+func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion, spared int) error {
 	newest, err := versionNumber(kept.Name)
 	if err != nil {
 		return fmt.Errorf("read the version of the %s secret just written: %w", name, err)
 	}
-	var superseded []string
+	type numbered struct {
+		name   string
+		number int
+	}
+	var older []numbered
 	for token := ""; ; {
 		page, err := attempted(ctx, service.Projects.Secrets.Versions.List(secretPath(c.project, name)).
 			Filter(enabledVersions).PageToken(token).Context(ctx).Do)
@@ -87,16 +100,17 @@ func (c *clients) destroyVersionsBefore(ctx context.Context, service *secretmana
 		for _, version := range page.Versions {
 			number, err := versionNumber(version.Name)
 			if err == nil && version.State == enabledVersion && number < newest {
-				superseded = append(superseded, version.Name)
+				older = append(older, numbered{name: version.Name, number: number})
 			}
 		}
 		if token = page.NextPageToken; token == "" {
 			break
 		}
 	}
-	for _, version := range superseded {
-		if _, err := attempted(ctx, service.Projects.Secrets.Versions.Destroy(version, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !absent(err) && !unreadableVersion(err) {
-			return fmt.Errorf("destroy %s, which a newer version of the %s secret replaces: %w", version, name, err)
+	slices.SortFunc(older, func(a, b numbered) int { return b.number - a.number })
+	for _, version := range older[min(spared, len(older)):] {
+		if _, err := attempted(ctx, service.Projects.Secrets.Versions.Destroy(version.name, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !absent(err) && !unreadableVersion(err) {
+			return fmt.Errorf("destroy %s, which a newer version of the %s secret replaces: %w", version.name, name, err)
 		}
 	}
 	return nil

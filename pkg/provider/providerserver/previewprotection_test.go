@@ -12,9 +12,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -57,9 +60,14 @@ func changeProtection(t *testing.T, client contractv1connect.ProviderServiceClie
 
 func publishProtection(t *testing.T, client contractv1connect.ProviderServiceClient) (*progressv1.OperationResult, []*progressv1.OperationEvent, error) {
 	t.Helper()
+	return publishProtectionThrough(t, client, fake.KindRelay)
+}
+
+func publishProtectionThrough(t *testing.T, client contractv1connect.ProviderServiceClient, kind edge.Kind) (*progressv1.OperationResult, []*progressv1.OperationEvent, error) {
+	t.Helper()
 	stream, err := client.PublishPreviewProtection(context.Background(), &contractv1.PublishPreviewProtectionRequest{
 		Slug: "shop",
-		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
+		Edge: &contractv1.EdgeSelection{Kind: string(kind)},
 	})
 	if err != nil {
 		t.Fatalf("PublishPreviewProtection() error = %v", err)
@@ -107,7 +115,12 @@ func revokeBypass(id string) *contractv1.ChangePreviewProtectionRequest {
 
 func getProtection(t *testing.T, client contractv1connect.ProviderServiceClient, reveal bool) *contractv1.GetPreviewProtectionResponse {
 	t.Helper()
-	resp, err := client.GetPreviewProtection(context.Background(), &contractv1.GetPreviewProtectionRequest{Slug: "shop", RevealPassword: reveal, Edge: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}})
+	return getProtectionThrough(t, client, fake.KindRelay, reveal)
+}
+
+func getProtectionThrough(t *testing.T, client contractv1connect.ProviderServiceClient, kind edge.Kind, reveal bool) *contractv1.GetPreviewProtectionResponse {
+	t.Helper()
+	resp, err := client.GetPreviewProtection(context.Background(), &contractv1.GetPreviewProtectionRequest{Slug: "shop", RevealPassword: reveal, Edge: &contractv1.EdgeSelection{Kind: string(kind)}})
 	if err != nil {
 		t.Fatalf("GetPreviewProtection() = %v", err)
 	}
@@ -465,5 +478,65 @@ func TestEveryResponseCarryingThePreviewPasswordMarksItDebugRedactSoRedactvetRef
 		if options, _ := field.Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
 			t.Errorf("%s.password is not marked debug_redact, want it marked so redactvet refuses to print the response", descriptor.Name())
 		}
+	}
+}
+
+func previewIgnoringTheGate(t *testing.T, vendor *fake.Provider, env string) {
+	t.Helper()
+	err := stackrecords.Write(t.Context(), vendor.KeyValues(), environment.TierPreview, "shop", naming.AppStack(env, "api", naming.NewReleaseToken("build", env)), stackrecords.Stack{
+		Kind:      provider.StackApp,
+		App:       "api",
+		Functions: []provider.Function{{Name: "api", Physical: "shop-" + env + "-api", IgnoresPreviewGate: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheStatusOfAProtectedProjectNamesEveryPreviewFunctionThatIgnoresTheGateInsteadOfCallingItLive(t *testing.T) {
+	client, vendor := protectedOriginGatedPreview(t)
+	previewIgnoringTheGate(t, vendor, "pr-3")
+
+	edges := getProtectionThrough(t, client, fake.KindDirect, false).GetEdges()
+
+	if len(edges) != 1 || edges[0].GetPublished() {
+		t.Fatalf("status edges = %v, want the edge not live: function api of preview pr-3 answers anyone", edges)
+	}
+	if got := edges[0].GetError(); !strings.Contains(got, "api") || !strings.Contains(got, "pr-3") {
+		t.Errorf("status error = %q, want it to name function api of preview pr-3", got)
+	}
+}
+
+func TestPublishingWhileAPreviewFunctionIgnoresTheGateWritesTheGateAndFailsNamingIt(t *testing.T) {
+	client, vendor := protectedOriginGatedPreview(t)
+	previewIgnoringTheGate(t, vendor, "pr-3")
+
+	changed, err := changeProtection(t, client, &contractv1.ChangePreviewProtectionRequest{
+		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Change: rotatePassword().GetChange(),
+	})
+	if err != nil {
+		t.Fatalf("ChangePreviewProtection() = %v", err)
+	}
+	result, _, err := publishProtectionThrough(t, client, fake.KindDirect)
+	if err != nil {
+		t.Fatalf("PublishPreviewProtection() = %v", err)
+	}
+
+	published := directEdge(vendor).Publications()
+	if len(published) == 0 {
+		t.Fatal("the edge was published nothing")
+	}
+	if published := published[len(published)-1]; published.Gate == nil || published.Gate.PasswordMAC != previewgate.HashPassword(published.Gate.Key, changed.GetPassword()) {
+		t.Errorf("the edge holds %+v, want the rotated gate: every preview that checks it is protected by it", published.Gate)
+	}
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "answer anyone") {
+		t.Errorf("result = %+v, want a failure that says some previews still answer anyone", result)
+	}
+	if edges := result.GetProtection().GetEdges(); len(edges) != 1 || edges[0].GetPublished() || !strings.Contains(edges[0].GetError(), "function api of preview pr-3") {
+		t.Errorf("edges = %v, want the edge not live, naming function api of preview pr-3", edges)
+	}
+	if record, _ := recordedGateOf(t, vendor, "shop"); record.Pending {
+		t.Error("the record is pending, and the edge took the gate: `ocel preview protection sync` cannot gate a function that runs no gate")
 	}
 }

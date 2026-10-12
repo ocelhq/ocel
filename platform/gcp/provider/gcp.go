@@ -30,6 +30,7 @@ type Provider struct {
 	options     Options
 	tokens      TokenSource
 	endpoint    string
+	gateInEnv   bool
 	tagEndpoint string
 	namespace   provider.Namespace
 	warmRoots   *x509.CertPool
@@ -90,6 +91,7 @@ func NewProvider(options Options) (*Provider, error) {
 		options:     options,
 		tokens:      ApplicationDefault{},
 		endpoint:    endpoint,
+		gateInEnv:   endpoint != "",
 		tagEndpoint: tagEndpoint,
 		namespace:   namespace,
 		bases:       functionBases(),
@@ -112,6 +114,8 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
 		WorkerCeilings:  slices.Clone(workerCeilings),
+
+		RunsPreviewGates: true,
 	}
 }
 

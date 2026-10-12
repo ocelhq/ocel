@@ -23,6 +23,8 @@ const maxPreviewGateWrites = 3
 
 var errPreviewGateUnpublished = errors.New("an edge did not take the preview gate")
 
+var errPreviewGateIgnored = errors.New("a preview function ignores the preview gate")
+
 func (h *handlers) GetPreviewProtection(ctx context.Context, req *contractv1.GetPreviewProtectionRequest) (*contractv1.GetPreviewProtectionResponse, error) {
 	p, err := h.session.use()
 	if err != nil {
@@ -48,19 +50,51 @@ func (h *handlers) GetPreviewProtection(ctx context.Context, req *contractv1.Get
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if state.Kind != "" {
-		resp.Edges = []*progressv1.PreviewEdgePublication{h.describePreviewGateEdge(p, state.Kind, req.GetEdge(), record)}
+	if state.Kind == "" {
+		return resp, nil
+	}
+	front := h.openPreviewEdge(p, state.Kind, req.GetEdge())
+	status := describePreviewGateEdge(front, state.Kind, record)
+	resp.Edges = []*progressv1.PreviewEdgePublication{status}
+	if !record.Enabled || status.Error != "" {
+		return resp, nil
+	}
+	if _, err := reportPreviewGateIgnored(ctx, p, front, req.GetSlug(), status); err != nil {
+		return nil, provider.RefusalError(err)
 	}
 	return resp, nil
 }
 
-func (h *handlers) describePreviewGateEdge(p provider.Provider, kind edge.Kind, sel *contractv1.EdgeSelection, record stackrecords.PreviewGateRecord) *progressv1.PreviewEdgePublication {
+func (h *handlers) openPreviewEdge(p provider.Provider, kind edge.Kind, sel *contractv1.EdgeSelection) edge.Edge {
+	if front, err := h.edgeFor(p, sel); err == nil && front.Kind() == kind {
+		return front
+	}
+	if front, err := p.Edges().Open(kind, nil); err == nil {
+		return front
+	}
+	return nil
+}
+
+func describePreviewGateEdge(front edge.Edge, kind edge.Kind, record stackrecords.PreviewGateRecord) *progressv1.PreviewEdgePublication {
 	status := &progressv1.PreviewEdgePublication{Kind: string(kind), Published: record.Enabled && !record.Pending}
-	if front, err := h.edgeFor(p, sel); err == nil && front.Kind() == kind && !front.Facts().GatesPreviews {
+	if front != nil && !front.Facts().GatesPreviews {
 		status.Published = false
 		status.Error = describeFront(kind) + " runs no preview gate, so it answers the project's previews to anyone"
 	}
 	return status
+}
+
+func reportPreviewGateIgnored(ctx context.Context, p provider.Provider, front edge.Edge, slug string, status *progressv1.PreviewEdgePublication) (bool, error) {
+	if front != nil && !front.Facts().GatesPreviewsAtOrigin {
+		return false, nil
+	}
+	ignoring, err := listPreviewFunctionsIgnoringGate(ctx, p.KeyValues(), slug)
+	if err != nil || len(ignoring) == 0 {
+		return false, err
+	}
+	status.Published = false
+	status.Error = describePreviewGateIgnored(ignoring)
+	return true, nil
 }
 
 func readPreviewEdgeState(ctx context.Context, p provider.Provider, slug string) (stackrecords.EdgeState, error) {
@@ -190,6 +224,8 @@ func (h *handlers) PublishPreviewProtection(ctx context.Context, req *contractv1
 		switch {
 		case errors.Is(err, errPreviewGateUnpublished):
 			return failedPublication(outcome), nil
+		case errors.Is(err, errPreviewGateIgnored):
+			return ignoredPublication(outcome), nil
 		case err != nil:
 			return nil, err
 		}
@@ -209,6 +245,16 @@ func failedPublication(outcome *progressv1.PreviewProtectionPublished) *progress
 		Level: progressv1.Level_LEVEL_ERROR,
 		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 			Error:      "the change is recorded, but not every edge took it: run `ocel preview protection sync` to publish it again",
+			Protection: outcome,
+		}},
+	}
+}
+
+func ignoredPublication(outcome *progressv1.PreviewProtectionPublished) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Level: progressv1.Level_LEVEL_ERROR,
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
+			Error:      "the change is published to every preview that checks the gate, but some preview functions ignore the preview gate and still answer anyone who has their URLs",
 			Protection: outcome,
 		}},
 	}
@@ -253,6 +299,13 @@ func (h *handlers) publishPreviewProtection(ctx context.Context, p provider.Prov
 		return errors.Join(errPreviewGateUnpublished, markPreviewGatePending(ctx, p, slug))
 	}
 	published.Published = true
+	ignored, err := reportPreviewGateIgnored(ctx, p, front, slug, published)
+	if err != nil {
+		return err
+	}
+	if ignored {
+		return errPreviewGateIgnored
+	}
 	return nil
 }
 

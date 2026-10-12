@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,6 +24,7 @@ type revokedGrants struct {
 	topics  []topics.Topology
 	signers []string
 	buckets []string
+	gate    bool
 }
 
 func findOtherRunningStack(recorded []stackrecords.NamedStack, ref provider.StackRef) (naming.StackName, bool) {
@@ -81,6 +83,11 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if revoked.buckets, err = c.revokeBucketAccess(ctx, recorded, member, nil); err != nil {
 		return err
 	}
+	if ref.Tier == environment.TierPreview {
+		if revoked.gate, err = c.bindPreviewGateReader(ctx, ref.Project, member, false); err != nil {
+			return err
+		}
+	}
 	recordedNow, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
 	if err != nil {
 		return err
@@ -126,6 +133,11 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 	}
 	for _, bucket := range revoked.buckets {
 		if _, err := c.bindBucketRole(ctx, bucket, member, true); err != nil {
+			return err
+		}
+	}
+	if revoked.gate {
+		if _, err := c.bindPreviewGateReader(ctx, ref.Project, member, true); err != nil {
 			return err
 		}
 	}

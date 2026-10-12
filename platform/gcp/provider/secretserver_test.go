@@ -19,12 +19,15 @@ type storedVersion struct {
 
 type storedSecret struct {
 	versions []storedVersion
+	policy   *secretmanager.Policy
 }
 
 type secretServer struct {
 	mu      sync.Mutex
 	secrets map[string]*storedSecret
 	added   int
+
+	writtenFirstElsewhere map[string]string
 }
 
 func newSecretServer() *secretServer { return &secretServer{secrets: map[string]*storedSecret{}} }
@@ -39,6 +42,10 @@ func (s *secretServer) serve(t *testing.T, w http.ResponseWriter, r *http.Reques
 	switch {
 	case r.Method == http.MethodPost && path == "":
 		name := r.URL.Query().Get("secretId")
+		if payload, raced := s.writtenFirstElsewhere[name]; raced {
+			delete(s.writtenFirstElsewhere, name)
+			s.secrets[name] = &storedSecret{versions: []storedVersion{{payload: base64.StdEncoding.EncodeToString([]byte(payload))}}}
+		}
 		if _, taken := s.secrets[name]; taken {
 			w.WriteHeader(http.StatusConflict)
 			w.Write([]byte(`{"error":{"code":409,"message":"secret already exists"}}`))
@@ -46,6 +53,26 @@ func (s *secretServer) serve(t *testing.T, w http.ResponseWriter, r *http.Reques
 		}
 		s.secrets[name] = &storedSecret{}
 		writeBody(w, &secretmanager.Secret{Name: name})
+	case r.Method == http.MethodGet && strings.HasSuffix(path, ":getIamPolicy"):
+		secret := s.secrets[strings.TrimSuffix(path, ":getIamPolicy")]
+		if secret == nil {
+			secretAbsent(w)
+			return
+		}
+		policy := secret.policy
+		if policy == nil {
+			policy = &secretmanager.Policy{}
+		}
+		writeBody(w, policy)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, ":setIamPolicy"):
+		secret := s.secrets[strings.TrimSuffix(path, ":setIamPolicy")]
+		asked := readBody[secretmanager.SetIamPolicyRequest](w, r)
+		if secret == nil || asked == nil {
+			secretAbsent(w)
+			return
+		}
+		secret.policy = asked.Policy
+		writeBody(w, asked.Policy)
 	case r.Method == http.MethodPost && strings.HasSuffix(path, ":addVersion"):
 		secret := s.secrets[strings.TrimSuffix(path, ":addVersion")]
 		asked := readBody[secretmanager.AddSecretVersionRequest](w, r)
@@ -170,4 +197,20 @@ func (s *secretServer) destroy(name string, version int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.secrets[name].versions[version-1].destroyed = true
+}
+
+func (s *secretServer) members(name, role string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	secret := s.secrets[name]
+	if secret == nil || secret.policy == nil {
+		return nil
+	}
+	var members []string
+	for _, binding := range secret.policy.Bindings {
+		if binding.Role == role {
+			members = append(members, binding.Members...)
+		}
+	}
+	return members
 }

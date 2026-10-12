@@ -22,6 +22,7 @@ type edges struct {
 	namespace provider.Namespace
 	keyValues keyvalue.Store
 	pins      pin.Pins
+	gates     cloudrun.Gates
 	stacks    alb.Stacks
 	routes    alb.Routes
 	entries   alb.Entries
@@ -45,6 +46,7 @@ func (p *Provider) edges() edges {
 		namespace: p.namespace,
 		keyValues: p.KeyValues(),
 		pins:      p,
+		gates:     previewGateSecrets{p: p},
 		stacks:    albStacks{p: p},
 		routes:    p,
 		entries:   p,
@@ -62,7 +64,7 @@ func (p *Provider) edges() edges {
 	}
 }
 
-func (e edges) openCloudRun() *cloudrun.Edge { return cloudrun.New(e.pins) }
+func (e edges) openCloudRun() *cloudrun.Edge { return cloudrun.New(e.pins, e.gates) }
 
 func (e edges) openALB() *alb.Edge {
 	return alb.New(alb.Deps{

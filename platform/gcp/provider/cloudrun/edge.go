@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -11,23 +12,33 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
-type Edge struct {
-	pins pin.Pins
+type Gates interface {
+	Publish(ctx context.Context, slug string, gate *previewgate.Gate) error
+	Remove(ctx context.Context, slug string) error
 }
 
-func New(pins pin.Pins) *Edge {
-	return &Edge{pins: pins}
+type Edge struct {
+	pins  pin.Pins
+	gates Gates
+}
+
+func New(pins pin.Pins, gates Gates) *Edge {
+	return &Edge{pins: pins, gates: gates}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		Supported: []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
+		Supported:             []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
+		GatesPreviews:         true,
+		GatesPreviewsAtOrigin: true,
 	}
 }
 
-func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
+func (e *Edge) Hooks() edge.Hooks {
+	return edge.Hooks{PublishPreviewGate: e.publishPreviewGate}
+}
 
 func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
@@ -39,7 +50,7 @@ func Surface(slug string, tier environment.Tier) string {
 	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(tier))
 }
 
-func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"Cloud Run serves a project by its slug, and this stack names none")
@@ -47,6 +58,11 @@ func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.Stac
 	next := prior
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
+	if spec.Tier == environment.TierPreview {
+		if err := e.gates.Publish(ctx, spec.Slug, spec.PreviewGate); err != nil {
+			return nil, err
+		}
+	}
 	return &stack{e: e, state: next}, nil
 }
 
@@ -123,4 +139,9 @@ func (s *stack) UnbindDomain(_ context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) Destroy(context.Context) error { return nil }
+func (s *stack) Destroy(ctx context.Context) error {
+	if s.state.Tier != environment.TierPreview {
+		return nil
+	}
+	return s.e.gates.Remove(ctx, s.state.Slug)
+}

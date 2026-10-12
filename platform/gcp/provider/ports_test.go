@@ -343,12 +343,18 @@ func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecr
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	if strings.Contains(document.Document, "roles/secretmanager.admin") {
-		t.Errorf("Permissions(deploy) names roles/secretmanager.admin, which reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", document.Document)
+	const previewGate = `roles/secretmanager.admin, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_preview-gate-")`
+	for _, line := range strings.Split(document.Document, "\n") {
+		if strings.Contains(line, "roles/secretmanager.admin") && line != previewGate {
+			t.Errorf("Permissions(deploy) names %q, and roles/secretmanager.admin beyond the preview gate secrets reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", line, document.Document)
+		}
 	}
 	const realtime = `roles/secretmanager.editor, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_realtime-")`
 	if !slices.Contains(strings.Split(document.Document, "\n"), realtime) {
 		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy writes and deletes the realtime secrets of its namespace and no others", document.Document, realtime)
+	}
+	if !slices.Contains(strings.Split(document.Document, "\n"), previewGate) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy writes and deletes the preview gate secrets of its namespace, and sets who may read each, and no others", document.Document, previewGate)
 	}
 	if strings.Contains(document.Document, "resource.type !=") {
 		t.Errorf("Permissions(deploy) =\n%s\nadmits a resource by what it is not, which hands roles/secretmanager.editor on the project itself and on every resource that is not a secret", document.Document)

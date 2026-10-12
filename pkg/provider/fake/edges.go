@@ -194,6 +194,7 @@ type edgeAccount struct {
 	forwards        map[string]edge.Origin
 	addressesItself bool
 	gatesPreviews   *bool
+	gatesAtOrigin   bool
 	publications    []edge.PreviewGatePublication
 	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
@@ -602,13 +603,14 @@ func (e *Edge) Facts() edge.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	facts := edge.Facts{
-		Supported:       edge.AllNeeds(),
-		RunsCode:        e.kind == KindRelay,
-		ProxiesRecords:  e.proxies,
-		CachesResponses: e.caches,
-		CredentialScope: "fake-account",
-		TunnelsToOrigin: e.options.Tunnel,
-		GatesPreviews:   e.gatesPreviews == nil || *e.gatesPreviews,
+		Supported:             edge.AllNeeds(),
+		RunsCode:              e.kind == KindRelay,
+		ProxiesRecords:        e.proxies,
+		CachesResponses:       e.caches,
+		CredentialScope:       "fake-account",
+		TunnelsToOrigin:       e.options.Tunnel,
+		GatesPreviews:         e.gatesPreviews == nil || *e.gatesPreviews,
+		GatesPreviewsAtOrigin: e.gatesAtOrigin,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
@@ -631,6 +633,12 @@ func (e *Edge) GatesPreviews(gates bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.gatesPreviews = &gates
+}
+
+func (e *Edge) GatesPreviewsAtOrigin(gates bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.gatesAtOrigin = gates
 }
 
 func (e *Edge) Publications() []edge.PreviewGatePublication {

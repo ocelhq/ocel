@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/grpc/codes"
@@ -51,6 +53,7 @@ type serving struct {
 	account        string
 	compute        provider.Compute
 	health         string
+	probeToken     string
 	public         bool
 	cpu            string
 	memory         int
@@ -149,6 +152,9 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if s.compute == provider.ComputeContainer {
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{
 			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: containerimage.Port},
+		}
+		if s.probeToken != "" {
+			container.StartupProbe.HttpGet.HttpHeaders = []*run.GoogleCloudRunV2HTTPHeader{{Name: originguard.ProbeTokenHeader, Value: s.probeToken}}
 		}
 	}
 	volumes, mounted := volumesOf(s.mounts)
