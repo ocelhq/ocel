@@ -134,9 +134,12 @@ cookie is never stored.
 A request carrying the route's `bypassToken` in the `__prerender_bypass` cookie skips the
 cache: it keeps its cookies, is rendered fresh and answered `private, no-store`, and is never
 stored. Set the cookie when an author starts a preview, and clear it when they stop. A `GET`
-or `HEAD` with the token in the `x-prerender-revalidate` header is rendered fresh and clears
-the path's entry, so the next request fills it again. Both names are Vercel's, and the token is
-compared in constant time.
+or `HEAD` with the token in the `x-prerender-revalidate` header reaches your app on every edge,
+is rendered fresh and answered `private, no-store`, and clears the path's entry, so the next
+request fills it again. No edge refills the entry from the revalidating request itself: the
+Cloudflare gateway renders it outside its cache and purges the path, and behind CloudFront or
+the load balancer your app writes a purge of the path for the edge to clear. Both names are
+Vercel's, and the token is compared in constant time.
 
 ## What each edge does
 
@@ -153,8 +156,12 @@ answers the redirects itself.
 Some of the route table is applied only where the edge can do it:
 - `allowQuery` keys the cache on Cloudflare only. CloudFront and the load balancer key on
   every parameter, which splits the cache more but never serves the wrong page.
-- The bypass cookie and the revalidate header are honoured before the cache on Cloudflare only.
-  Behind CloudFront or the load balancer they take effect when the request reaches your app, so
-  a bypass cookie previews fresh content only when the page is not already cached.
+- The bypass cookie is checked before the cache on Cloudflare only. CloudFront keeps a request
+  with any `__prerender_bypass` cookie apart from the published page, and the load balancer
+  keys on its value, so a preview reaches your app unless a request with another value already
+  filled that entry.
+- The revalidate header is checked by your app. CloudFront gives the request a cache key no
+  other request shares, and the load balancer bypasses its cache for it, so it always reaches
+  your app.
 - `basePath` is applied by your app when it matches patterns.
 - A container app is given no route table.

@@ -127,6 +127,22 @@ func TestAShieldedBindingsBackendKeysNoHeaderOrCookieSoNextPagesStayUncachedTher
 	}
 }
 
+func TestABindingsBackendSendsARequestCarryingTheRevalidateHeaderToTheOrigin(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(cdnBinding())
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	policy, _ := seen[cdnBackend].Args["cdnPolicy"].(map[string]any)
+	got := policy["bypassCacheOnRequestHeaders"]
+	want := []any{map[string]any{"headerName": "x-prerender-revalidate"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("bypassCacheOnRequestHeaders = %v, want %v; Cloud CDN answers the request from the cache otherwise", got, want)
+	}
+}
+
 func cacheKeyPolicy(backend declaration) map[string]any {
 	policy, ok := backend.Args["cdnPolicy"].(map[string]any)
 	if !ok {
