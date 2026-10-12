@@ -5,7 +5,7 @@ on:
     inputs:
       nextjsRef:
         description: "Next.js repo ref (branch/tag/SHA). Match the `next` version frameworks/next/adapter pins."
-        default: "v16.2.10"
+        default: "v16.4.0"
         type: string
       recordBaseline:
         description: "Record a new known-failure baseline instead of filtering against the committed one"
