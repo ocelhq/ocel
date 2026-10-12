@@ -1,6 +1,5 @@
-import type { TagRecord } from "@framework/next-cache";
 import type { WriteTagRecords } from "@framework/node-runtime/tag-records";
-import type { PurgeEntry } from "@platform/edge-contract/purge";
+import type { PurgeEntry, TagRecord } from "@platform/edge-contract/purge";
 import type { PurgeTags } from "../next/cdn-purge.mjs";
 
 function recordOf({ mode, raisedAt }: PurgeEntry): TagRecord {

@@ -1,4 +1,4 @@
-import type { TagRecord } from "@framework/next-cache";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import type { TagRecordUpdate } from "../src/use-cache-store.mjs";
 
 export type TagRow = TagRecordUpdate & { tag: string };

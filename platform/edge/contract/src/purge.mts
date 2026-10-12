@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
 
-import type { TagRecord } from "@framework/next-cache";
 import { storedCacheTags } from "./cache-tags.mjs";
 
 export const purgePath = "/.ocel/purge";
@@ -15,6 +14,11 @@ const backoffCeilingMs = 10_000;
 const attemptTimeoutMs = 5_000;
 
 export type PurgeMode = "purge" | "invalidate";
+
+export interface TagRecord {
+  stale?: number;
+  expired?: number;
+}
 
 export interface PurgeEntry {
   tag: string;

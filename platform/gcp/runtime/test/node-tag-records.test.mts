@@ -1,4 +1,4 @@
-import type { TagRecord } from "@framework/next-cache";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
 import { openPurgeFor } from "../src/next/purge-target.mjs";

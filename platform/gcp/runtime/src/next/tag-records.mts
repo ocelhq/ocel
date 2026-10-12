@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mergeRecord, type PublishTag, type TagRecord } from "@framework/next-cache";
+import { mergeRecord, type PublishTag } from "@framework/next-cache";
 import type { TagSnapshotRead } from "@framework/next-runtime/use-cache-store";
+import type { TagRecord } from "@platform/edge-contract/purge";
 import { type Firestore, FirestoreError } from "./firestore.mjs";
 
 export interface TagRecords {

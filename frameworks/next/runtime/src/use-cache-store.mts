@@ -1,4 +1,4 @@
-import type { TagRecord } from "@framework/next-cache";
+import type { TagRecord } from "@platform/edge-contract/purge";
 
 export interface UseCacheEntry {
   tags: string[];

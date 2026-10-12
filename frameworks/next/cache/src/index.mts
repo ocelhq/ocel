@@ -1,3 +1,5 @@
+import type { TagRecord } from "@platform/edge-contract/purge";
+
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 export {
   latest,
@@ -15,11 +17,6 @@ export interface CacheEntryFile {
   lastModified: number;
   value: Record<string, any>;
   cacheControl?: { revalidate?: number | false; expire?: number };
-}
-
-export interface TagRecord {
-  stale?: number;
-  expired?: number;
 }
 
 export interface TagSnapshot {

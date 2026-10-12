@@ -1,4 +1,5 @@
-import type { TagRecord, TagSnapshot } from "./index.mjs";
+import type { TagRecord } from "@platform/edge-contract/purge";
+import type { TagSnapshot } from "./index.mjs";
 
 export function latest(a: number | undefined, b: number | undefined): number | undefined {
   if (a === undefined) return b;
