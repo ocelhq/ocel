@@ -159,6 +159,10 @@ describe("the request the gateway hands Serve", () => {
     expect(buildServeRequest("https://serve.example/", visitor).method).toBe("GET");
   });
 
+  it("never follows a redirect Serve answers with, so the visitor receives it", () => {
+    expect(buildServeRequest("https://serve.ocel.invalid/a").redirect).toBe("manual");
+  });
+
   it("is a plain GET when no visitor asked", () => {
     expect(buildServeRequest("https://serve.example/").method).toBe("GET");
   });

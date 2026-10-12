@@ -105,7 +105,13 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
 
-    const response = await serving.serve({ props: call.props }).fetch(served);
+    let response: Response;
+    try {
+      response = await serving.serve({ props: call.props }).fetch(served);
+    } catch (error) {
+      console.error("ocel: Serve failed for a cached route, forwarding it uncached", error);
+      return forwardUncached(request);
+    }
     if (response.headers.has(SERVE_REFUSED_HEADER) || response.headers.has(SERVE_MISS_HEADER)) {
       await response.body?.cancel();
       return forwardUncached(request);

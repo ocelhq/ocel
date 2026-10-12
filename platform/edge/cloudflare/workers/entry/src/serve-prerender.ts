@@ -238,10 +238,16 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
     return serving.serve({ props }).fetch(served);
   };
-  let response = await askServe(sharesFallbackShell(ctx, pprDocument));
-  if (response.headers.has(SERVE_UNSHARED_HEADER)) {
-    await response.body?.cancel();
-    response = await askServe(false);
+  let response: Response;
+  try {
+    response = await askServe(sharesFallbackShell(ctx, pprDocument));
+    if (response.headers.has(SERVE_UNSHARED_HEADER)) {
+      await response.body?.cancel();
+      response = await askServe(false);
+    }
+  } catch (error) {
+    console.error("ocel: Serve failed for a prerender, forwarding it uncached", error);
+    return withStatus(await answer(forwardUncached(headers)), "MISS");
   }
   if (response.headers.has(SERVE_REFUSED_HEADER) || response.headers.has(SERVE_NO_SHELL_HEADER)) {
     await response.body?.cancel();

@@ -20,6 +20,10 @@ export interface FakeServing {
   purges: { groups: PurgeGroup[]; awaited: boolean }[];
 }
 
+function isRedirect(response: Response): boolean {
+  return response.status >= 300 && response.status < 400 && response.headers.has("location");
+}
+
 export function fakeServing(
   answer: (call: ServeCall) => Response | Promise<Response> = () =>
     new Response("page", { headers: { "cf-cache-status": "MISS" } }),
@@ -40,7 +44,11 @@ export function fakeServing(
           originUrl: buildOriginUrl(request.url),
         };
         calls.push(call);
-        return answer(call);
+        const response = await answer(call);
+        if (request.redirect !== "manual" && isRedirect(response)) {
+          throw new TypeError(`workerd followed Serve's ${response.status} back into Serve`);
+        }
+        return response;
       },
       purge: async () => ({ ok: true }),
     }),
