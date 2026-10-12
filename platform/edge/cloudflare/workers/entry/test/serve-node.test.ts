@@ -5,7 +5,13 @@ import {
 } from "@platform/edge-contract/ocel-route-table";
 import { describe, expect, it } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
-import { RENDER_RELEASE_HEADER, type RenderRelease, SERVE_REFUSED_HEADER } from "../src/serve-key";
+import {
+  RENDER_RELEASE_HEADER,
+  type RenderRelease,
+  SERVE_LOOKUP_ONLY_HEADER,
+  SERVE_MISS_HEADER,
+  SERVE_REFUSED_HEADER,
+} from "../src/serve-key";
 import { serveNodeOrigin } from "../src/serve-node";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith, capturing, FN_URL, makeRecord } from "./origin-deps";
@@ -97,6 +103,7 @@ describe("a request a cached route names", () => {
       slug: "p1",
       isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
       tags: [],
+      nodeApp: true,
     });
   });
 
@@ -192,17 +199,17 @@ describe("a request a cached route names", () => {
     const routes = newRouteTable({ basePath: "/docs" });
     const { serve, calls } = setup(undefined, undefined, routes);
 
-    await serve(new Request("https://shop.example.com/docs/blog/a"));
-    await serve(new Request("https://shop.example.com/blog/a"));
+    await serve(new Request("https://shop.example.com/docs/blog/a?page=2&utm=x"));
+    await serve(new Request("https://shop.example.com/blog/a?page=2&utm=x"));
 
-    expect(calls.map(({ originUrl }) => new URL(originUrl).pathname)).toEqual(["/docs/blog/a"]);
+    expect(
+      calls.map(({ originUrl }) => new URL(originUrl).pathname + new URL(originUrl).search),
+    ).toEqual(["/docs/blog/a?page=2", "/blog/a?page=2&utm=x"]);
   });
 });
 
 describe("a request no cached route lets the edge cache", () => {
   const uncached = [
-    ["a route that caches nothing", "https://shop.example.com/account", {}],
-    ["a path no route names", "https://shop.example.com/about", {}],
     ["a write", "https://shop.example.com/blog/a", { method: "POST", body: "x" }],
     ["a HEAD", "https://shop.example.com/blog/a", { method: "HEAD" }],
     [
@@ -211,6 +218,21 @@ describe("a request no cached route lets the edge cache", () => {
       { headers: { authorization: "Bearer t" } },
     ],
     ["a path with repeated slashes", "https://shop.example.com/blog//a", {}],
+    [
+      "a request with a bypass cookie on a route that has no cache rule",
+      "https://shop.example.com/account",
+      { headers: { cookie: "__prerender_bypass=any" } },
+    ],
+    [
+      "a write to a route that has no cache rule",
+      "https://shop.example.com/account",
+      { method: "POST", body: "x" },
+    ],
+    [
+      "a request with credentials to a path no route names",
+      "https://shop.example.com/about",
+      { headers: { authorization: "Bearer t" } },
+    ],
   ] as const;
 
   for (const [name, url, init] of uncached) {
@@ -231,6 +253,114 @@ describe("a request no cached route lets the edge cache", () => {
 
     expect(calls).toHaveLength(0);
     expect(forwarded).toHaveLength(1);
+  });
+});
+
+describe("a request on a route no cache rule governs", () => {
+  const unruled = [
+    ["a route with no cache rule", "https://shop.example.com/account"],
+    ["a path no route names", "https://shop.example.com/about"],
+  ] as const;
+
+  for (const [name, url] of unruled) {
+    it(`is answered by Serve for ${name}, keyed by every query parameter in sorted order`, async () => {
+      const { serve, calls, forwarded } = setup();
+
+      const res = await serve(new Request(`${url}?b=2&a=1`));
+
+      expect(await res.text()).toBe("page");
+      expect(forwarded).toHaveLength(0);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.originUrl).toBe(`${ORIGIN}${new URL(url).pathname.slice(1)}?a=1&b=2`);
+      expect(calls[0]!.props).toEqual({ kind: "origin" });
+    });
+  }
+
+  it("asks the origin to shape its response for the edge, and tells Serve it is a node app's", async () => {
+    const { serve, calls } = setup();
+
+    await serve(new Request("https://shop.example.com/account"));
+
+    const { request } = calls[0]!;
+    expect(request.headers.get("x-ocel-edge-cache")).toBe("1");
+    expect(request.headers.has(SERVE_LOOKUP_ONLY_HEADER)).toBe(false);
+    expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toEqual({
+      slug: "p1",
+      isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+      tags: [],
+      nodeApp: true,
+    });
+  });
+
+  it("reaches the origin uncached when Serve refuses the origin", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+    );
+
+    const res = await serve(new Request("https://shop.example.com/account"));
+
+    expect(await res.text()).toBe("uncached");
+    expect(forwarded).toHaveLength(1);
+  });
+
+  it("only looks for a stored entry when the visitor carries a cookie, and passes the cookie to nobody but the origin", async () => {
+    const { serve, calls, forwarded } = setup();
+
+    await serve(new Request("https://shop.example.com/account", { headers: { cookie: "s=1" } }));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.request.headers.get(SERVE_LOOKUP_ONLY_HEADER)).toBe("1");
+    expect(calls[0]!.request.headers.has("cookie")).toBe(false);
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("answers a visitor with a cookie from the stored entry when there is one", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response("stored page", { headers: { "cf-cache-status": "HIT" } }),
+    );
+
+    const res = await serve(
+      new Request("https://shop.example.com/account", { headers: { cookie: "s=1" } }),
+    );
+
+    expect(await res.text()).toBe("stored page");
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("sends a visitor with a cookie to the origin with it, uncached, when there is no entry", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response(null, { status: 404, headers: { [SERVE_MISS_HEADER]: "1" } }),
+    );
+
+    const res = await serve(
+      new Request("https://shop.example.com/account", { headers: { cookie: "s=1" } }),
+    );
+
+    expect(await res.text()).toBe("uncached");
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.headers.get("cookie")).toBe("s=1");
+    expect(forwarded[0]!.headers.has("x-ocel-edge-cache")).toBe(false);
+  });
+
+  it("sends a visitor with a cookie to the origin when Serve refuses the origin", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+    );
+
+    await serve(new Request("https://shop.example.com/account", { headers: { cookie: "s=1" } }));
+
+    expect(forwarded).toHaveLength(1);
+  });
+
+  it("is looked up under the query a cookie-carrying visitor sent, in sorted order", async () => {
+    const { serve, calls } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/account?b=2&a=1", { headers: { cookie: "s=1" } }),
+    );
+
+    expect(calls[0]!.originUrl).toBe(`${ORIGIN}account?a=1&b=2`);
   });
 });
 
@@ -413,7 +543,11 @@ describe("a purge the origin announces on a response Serve did not cache", () =>
   it("is carried out without holding a read back", async () => {
     const { serve, purges } = setup(undefined, announcing);
 
-    await serve(new Request("https://shop.example.com/about"));
+    await serve(
+      new Request("https://shop.example.com/about", {
+        headers: { cookie: "__prerender_bypass=any" },
+      }),
+    );
 
     expect(purges.map(({ awaited }) => awaited)).toEqual([false]);
   });
@@ -470,12 +604,14 @@ describe("a node release resolved by the gateway", () => {
 
   const located = { routeTable: { format: "ocel" as const, key: routeTableKey() } };
 
-  it("answers a route the stored table caches from Serve, and reaches the origin for the rest", async () => {
+  it("answers a route the stored table caches from Serve, and reaches the origin for a write", async () => {
     const served: Request[] = [];
     const { serve, wire } = await resolved(located, newRouteTable(), ports(served));
 
     const cached = await (serve as ServeFetch)(new Request("https://api.example.com/blog/a"));
-    const direct = await (serve as ServeFetch)(new Request("https://api.example.com/about"));
+    const direct = await (serve as ServeFetch)(
+      new Request("https://api.example.com/about", { method: "POST", body: "x" }),
+    );
 
     expect(await cached.text()).toBe("cached page");
     expect(served).toHaveLength(1);

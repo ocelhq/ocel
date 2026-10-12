@@ -619,6 +619,53 @@ describe("a response of a route that caches nothing", () => {
   );
 });
 
+describe("a response of a route that caches nothing, which names a lifetime the edge takes", () => {
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront, "cache-tag", {}],
+    ["behind the Cloudflare gateway", behindCloudflare, "x-ocel-cache-tag", asked],
+  ])(
+    "is tagged by the tags its handler named, and its path, %s",
+    async (_edge, env, header, headers) => {
+      const get = await serve(env, (_req, res) => {
+        cacheHost().tag(["posts"]);
+        res.writeHead(200, { "cache-control": "public, max-age=60" });
+        res.end("page");
+      });
+
+      const res = await get("/account", { headers });
+
+      expect(res.headers.get("cache-control")).toBe("public, max-age=60");
+      expect(res.headers.get(header)).toBe("r0a1b2c3d|posts,r0a1b2c3d|path:/account");
+    },
+  );
+
+  test("is tagged for a CDN-Cache-Control lifetime too", async () => {
+    const get = await serve(behindCloudFront, (_req, res) => {
+      res.writeHead(200, { "cdn-cache-control": "max-age=60" });
+      res.end("page");
+    });
+
+    const res = await get("/account");
+
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
+  });
+
+  test.each([
+    ["a max-age of zero", "public, max-age=0"],
+    ["a response that is private", "private, max-age=60"],
+    ["a response that names no lifetime", "public"],
+  ])("is not tagged for %s", async (_name, cacheControl) => {
+    const get = await serve(behindCloudFront, (_req, res) => {
+      res.writeHead(200, { "cache-control": cacheControl });
+      res.end("page");
+    });
+
+    const res = await get("/account");
+
+    expect(res.headers.has("cache-tag")).toBe(false);
+  });
+});
+
 describe("an origin behind no caching edge", () => {
   test("shapes nothing, and exposes no cache host for the SDK to call", async () => {
     const get = await serve({ OCEL_ROUTE_TABLE: routes }, page);
