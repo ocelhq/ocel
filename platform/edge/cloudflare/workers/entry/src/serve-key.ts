@@ -81,12 +81,20 @@ const CACHE_KEYED_HEADERS = [
   "x-method-override",
 ] as const;
 
+function isReleaseObjectPath(segments: readonly string[]): boolean {
+  return (
+    segments.length > STORAGE_PREFIX_SEGMENTS &&
+    !segments.some((segment) => segment === "" || segment === "." || segment === "..")
+  );
+}
+
+export function isReleaseObjectKey(key: string): boolean {
+  return isReleaseObjectPath(key.split("/"));
+}
+
 export function parseKeyRelease(key: string): { app: string; release: string } {
   const segments = key.split("/");
-  if (
-    segments.length <= STORAGE_PREFIX_SEGMENTS ||
-    segments.some((segment) => segment === "" || segment === "." || segment === "..")
-  ) {
+  if (!isReleaseObjectPath(segments)) {
     throw new Error(`ocel: ${key} lies outside a release's storage prefix`);
   }
   return { app: segments[2], release: segments[3] };

@@ -52,6 +52,13 @@ describe("the object store that reads through Serve", () => {
     );
   });
 
+  it("reads a key that names no object of a release as none, without asking Serve", async () => {
+    const { calls, serve } = serving(() => new Response("x"));
+
+    expect(await serveObjects(serve, "h").get("prod/shop/web/r1a2b3c4d/assets/")).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
   it("reads a missing object as none", async () => {
     const { serve } = serving(() => new Response("Not Found", { status: 404 }));
 
