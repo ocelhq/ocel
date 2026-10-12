@@ -8,7 +8,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background } from "@framework/node-runtime/background";
-import { servesOnlyFresh } from "@platform/edge-contract/edge-cache";
+import { servesOnlyFresh } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";

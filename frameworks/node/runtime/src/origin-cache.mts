@@ -8,6 +8,7 @@ import {
 } from "@platform/edge-contract/cache-control";
 import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
+  cachesOnlyMarked,
   edgeCacheHeader,
   edgeCacheTagHeader,
   readEdgeCacheMode,
@@ -32,7 +33,7 @@ const cacheTagHeader = "cache-tag";
 
 export interface OriginCache {
   release: string;
-  edgeAsks: boolean;
+  edgeCachesOnlyMarked: boolean;
 }
 
 export interface RequestCache {
@@ -50,7 +51,7 @@ export function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
   if (!releasePattern.test(release)) {
     throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
   }
-  return { release, edgeAsks: readEdgeCacheMode(env) === "marked" };
+  return { release, edgeCachesOnlyMarked: cachesOnlyMarked(readEdgeCacheMode(env)) };
 }
 
 const requests = new AsyncLocalStorage<RequestCache>();
@@ -90,7 +91,7 @@ export function installCacheHost(cache: OriginCache): void {
       return;
     }
     const write = findTagRecordWriter();
-    if (!cache.edgeAsks && !write && !warnedUnreachable) {
+    if (!cache.edgeCachesOnlyMarked && !write && !warnedUnreachable) {
       warnedUnreachable = true;
       console.warn(
         `ocel: ${call} reaches no edge, because the edge in front of this app takes no purge from it; what ${tag} names lapses with its cache lifetime`,
@@ -114,7 +115,7 @@ export function installCacheHost(cache: OriginCache): void {
 }
 
 export function raisePathPurge(cache: OriginCache, store: RequestCache, pathname: string): void {
-  if (cache.edgeAsks) return;
+  if (cache.edgeCachesOnlyMarked) return;
   const write = findTagRecordWriter();
   const tag = buildPathCacheTag(pathname);
   if (!write || storedCacheTags(cache.release, [tag]).unstorable.length > 0) return;
@@ -147,7 +148,7 @@ export function watchRequestCache(
   store: RequestCache,
 ): void {
   res.once("close", () => {
-    if (store.revalidations.size > 0 && cache.edgeAsks) warnLostRevalidations(store);
+    if (store.revalidations.size > 0 && cache.edgeCachesOnlyMarked) warnLostRevalidations(store);
   });
 }
 
@@ -175,7 +176,7 @@ export function prepareCachedResponse(
 }
 
 function announce(res: http.ServerResponse, cache: OriginCache, store: RequestCache): void {
-  if (!cache.edgeAsks || store.revalidations.size === 0) return;
+  if (!cache.edgeCachesOnlyMarked || store.revalidations.size === 0) return;
   const raisedAt = Date.now();
   const entries: PurgeEntry[] = [...store.revalidations].map(([tag, mode]) => ({
     tag,
@@ -195,7 +196,7 @@ function shape(
   routed: RoutedRequest,
 ): void {
   const asked = req.headers[edgeCacheHeader] === "1";
-  if (cache.edgeAsks && !asked) return;
+  if (cache.edgeCachesOnlyMarked && !asked) return;
   if ((req.method !== "GET" && req.method !== "HEAD") || res.statusCode !== 200) return;
   if (res.getHeader("set-cookie") !== undefined) return;
 

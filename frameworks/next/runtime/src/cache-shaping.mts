@@ -2,6 +2,7 @@ import type http from "node:http";
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
+  cachesOnlyMarked,
   edgeCacheHeader,
   edgeCacheTagHeader,
   readEdgeCacheMode,
@@ -27,7 +28,7 @@ export interface RevalidatingRoutes {
 }
 
 export interface OriginShaping extends RevalidatingRoutes {
-  shapesOnlyWhenAsked: boolean;
+  edgeCachesOnlyMarked: boolean;
   release: string | null;
   tagsPerObject: number;
 }
@@ -65,11 +66,11 @@ export function originShaping(
   tagsPerObject = Number.POSITIVE_INFINITY,
 ): OriginShaping | null {
   const mode = readEdgeCacheMode(env);
-  if (mode === "none") return null;
+  if (mode === undefined) return null;
 
   return {
     ...routes,
-    shapesOnlyWhenAsked: mode === "marked",
+    edgeCachesOnlyMarked: cachesOnlyMarked(mode),
     release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     tagsPerObject,
   };
@@ -90,7 +91,7 @@ export function shapeOriginCache(
 
 function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {
   const asked = req.headers[edgeCacheHeader] === "1";
-  if (shaping.shapesOnlyWhenAsked && !asked) return;
+  if (shaping.edgeCachesOnlyMarked && !asked) return;
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {
