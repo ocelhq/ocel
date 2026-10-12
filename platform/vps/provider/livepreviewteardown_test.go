@@ -190,7 +190,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	}
 	infra := provider.StackRef{Project: teardownSlug, Tier: environment.TierPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Stacks().Destroy(ctx, infra, nil, spoken); err != nil {
-		t.Fatalf("Destroy(%s) = %v: an ephemeral preview provisions no infra stack, and teardown destroys one regardless", infra.Name, err)
+		t.Fatalf("Destroy(%s) = %v, want teardown to destroy the infra stack the preview provisioned", infra.Name, err)
 	}
 	return spoken
 }
