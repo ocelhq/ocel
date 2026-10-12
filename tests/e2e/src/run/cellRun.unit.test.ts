@@ -369,7 +369,7 @@ describe("a cell run", () => {
           headers.get("cookie") === "__Host-ocel-preview=session";
         if (new URL(url).pathname === "/.ocel/preview/login") {
           return new Response(null, {
-            status: 303,
+            status: 204,
             headers: { "set-cookie": "__Host-ocel-preview=session; Path=/" },
           });
         }

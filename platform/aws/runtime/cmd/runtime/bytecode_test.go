@@ -121,7 +121,7 @@ func TestHandleInvocationBytecode(t *testing.T) {
 		go m.drainControl(bufio.NewReader(goSide))
 
 		done := make(chan error, 1)
-		go func() { done <- handleInvocation(context.Background(), rt, m, loginFront{}) }()
+		go func() { done <- handleInvocation(context.Background(), rt, m) }()
 
 		time.Sleep(75 * time.Millisecond)
 		if early := cache.count(); early != 0 {

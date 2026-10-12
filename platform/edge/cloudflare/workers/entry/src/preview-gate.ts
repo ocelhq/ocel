@@ -1,13 +1,10 @@
 import {
   checkPreview,
   PREVIEW_GATE_CACHE_CONTROL,
-  PREVIEW_LOGIN_BODY_MAX_BYTES,
-  PREVIEW_LOGIN_PATH,
   PREVIEW_ROBOTS_TAG,
   type PreviewGate,
   parsePreviewGate,
 } from "@platform/edge-contract/preview-gate";
-import { readCapped } from "./capped-body";
 import type { Env } from "./env";
 
 export type PreviewGateRead =
@@ -18,8 +15,6 @@ export type PreviewGateRead =
 export type PreviewGateOutcome =
   | { kind: "respond"; response: Response }
   | { kind: "forward"; request: Request; responseHeaders: Headers };
-
-const OVERSIZED_LOGIN_BODY = new Uint8Array(PREVIEW_LOGIN_BODY_MAX_BYTES + 1);
 
 export function readPreviewGate(
   env: Pick<Env, "OCEL_PREVIEW_GATE" | "OCEL_PREVIEW_GATES">,
@@ -42,13 +37,9 @@ export async function gatePreview(
 ): Promise<PreviewGateOutcome> {
   const url = new URL(request.url);
   const target = url.pathname + url.search;
-  const body =
-    request.method === "POST" && url.pathname === PREVIEW_LOGIN_PATH
-      ? ((await readCapped(request, PREVIEW_LOGIN_BODY_MAX_BYTES)) ?? OVERSIZED_LOGIN_BODY)
-      : undefined;
   const verdict = await checkPreview(
     gate,
-    { method: request.method, host: url.host, target, headers: request.headers, body },
+    { method: request.method, host: url.host, target, headers: request.headers },
     nowSeconds,
   );
   if (verdict.kind === "respond") {

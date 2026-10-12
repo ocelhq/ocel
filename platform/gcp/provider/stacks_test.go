@@ -10,8 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -84,95 +82,6 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 	if slices.ContainsFunc(shielded.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
 		t.Errorf("a preview behind the load balancer said %q, and its service takes traffic from the load balancer alone", shielded.Lines())
-	}
-}
-
-func TestAPreviewWhoseServiceRunsThePreviewGateIsNotSaidToBeOpenAndIsHandedTheKeys(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	progress := &fake.Log{}
-	spec := previewSpec()
-	gate := previewgate.Gate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
-	spec.App.PreviewGate = &gate
-
-	if _, err := p.ProvisionContainers(context.Background(), spec, progress); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-
-	if slices.ContainsFunc(progress.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
-		t.Errorf("the release said %q, and a service that runs the preview gate does not answer anyone with its url", progress.Lines())
-	}
-	var delivered string
-	for _, variable := range server.service.Template.Containers[0].Env {
-		if variable.Name == edge.PreviewGateVar {
-			delivered = variable.Value
-		}
-	}
-	const want = `{"key":"k","passwordMac":"m","bypassSecrets":[],"allowOptions":[]}`
-	if delivered != want {
-		t.Errorf("the service's %s = %q, want the keys the deploy recorded, %s", edge.PreviewGateVar, delivered, want)
-	}
-}
-
-func TestAPreviewTheLoadBalancerGatesIsHandedTheKeysToAnswerLoginsAloneAndToldTheEdgeGatesIt(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	front, err := p.Edges().Open(alb.Kind, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := previewSpec()
-	spec.Edge = front
-	gate := previewgate.Gate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
-	spec.App.PreviewGate = &gate
-
-	if _, err := p.ProvisionContainers(context.Background(), spec, &fake.Log{}); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-
-	delivered := map[string]string{}
-	for _, variable := range server.service.Template.Containers[0].Env {
-		delivered[variable.Name] = variable.Value
-	}
-	if delivered[edge.PreviewGateVar] == "" {
-		t.Errorf("the service holds no %s, and it answers the login the load balancer hands it with those keys", edge.PreviewGateVar)
-	}
-	if delivered[edge.PreviewGateAtEdgeVar] != "true" {
-		t.Errorf("the service's %s = %q, want true: without it the service gates every request itself, behind the credentials the load balancer already took off",
-			edge.PreviewGateAtEdgeVar, delivered[edge.PreviewGateAtEdgeVar])
-	}
-}
-
-func TestAPreviewWithNothingInFrontOfItGatesItselfAndIsNotToldAnEdgeDoes(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	spec := previewSpec()
-	gate := previewgate.Gate{Key: "k", PasswordMAC: "m"}
-	spec.App.PreviewGate = &gate
-
-	if _, err := p.ProvisionContainers(context.Background(), spec, &fake.Log{}); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-
-	for _, variable := range server.service.Template.Containers[0].Env {
-		if variable.Name == edge.PreviewGateAtEdgeVar {
-			t.Errorf("the service sets %s = %q, but nothing in front of it gates the preview", variable.Name, variable.Value)
-		}
-	}
-}
-
-func TestAPreviewWithNoGateIsHandedNoPreviewGateVariable(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-
-	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), &fake.Log{}); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-
-	for _, variable := range server.service.Template.Containers[0].Env {
-		if variable.Name == edge.PreviewGateVar {
-			t.Errorf("the service sets %s, want none: no gate is recorded", edge.PreviewGateVar)
-		}
 	}
 }
 

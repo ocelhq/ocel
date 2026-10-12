@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
@@ -32,7 +31,6 @@ func main() {
 	start := time.Now()
 
 	served := readArtifact()
-	front := readLoginFront()
 
 	var prime primer
 	if !executable(served) {
@@ -76,7 +74,7 @@ func main() {
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
-		if err := handleInvocation(ctx, rt, child, front); err != nil {
+		if err := handleInvocation(ctx, rt, child); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
 			os.Exit(1)
 		}
@@ -198,7 +196,7 @@ func fatalInit(msg string) {
 	os.Exit(1)
 }
 
-func handleInvocation(ctx context.Context, rt *runtimeClient, c child, front loginFront) error {
+func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 	inv, err := rt.next(ctx)
 	if err != nil {
 		return err
@@ -244,7 +242,7 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child, front log
 		waiter = controlled.beginInvocation(inv.lc.AwsRequestID)
 	}
 	appCtx, cancelApp := answerBefore(ctx)
-	reached, err := c.endpoint().forward(appCtx, inv, rw, front)
+	reached, err := c.endpoint().forward(appCtx, inv, rw)
 	cancelApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
@@ -324,15 +322,11 @@ func newLoopbackClient() *http.Client {
 	}
 }
 
-func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWriter, front loginFront) (reached bool, err error) {
+func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
-	if previewgate.IsLogin(ev.method(), ev.path()) {
-		return false, u.relay(ctx, rw, front.answer(ev, time.Now()))
-	}
-
 	resp, err := u.forwardToApp(ctx, ev)
 	if err != nil {
 		return false, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("upstream request failed: %v", err))

@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -60,7 +59,6 @@ func run(ctx context.Context, command []string, environ []string) int {
 		env = append(env, entry)
 	}
 	guard, env := originguard.GuardFromEnv(env)
-	login, env := previewlogin.FromEnv(env)
 
 	values, err := resolve(ctx, manifest)
 	if err != nil {
@@ -101,11 +99,10 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
 	server := &http.Server{Handler: originguard.Handler(originguard.Options{
-		Upstream:     upstream,
-		Guard:        guard,
-		HealthPath:   healthPath,
-		Ready:        ready.Load,
-		PreviewLogin: login,
+		Upstream:   upstream,
+		Guard:      guard,
+		HealthPath: healthPath,
+		Ready:      ready.Load,
 	})}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(ln) }()

@@ -75,12 +75,11 @@ async function login(env: Env, host: string): Promise<string> {
   const { response } = await visit(
     new Request(`https://${host}/.ocel/preview/login`, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ password: PASSWORD, next: "/users" }),
+      headers: { authorization: basic(PASSWORD) },
     }),
     env,
   );
-  expect(response.status).toBe(303);
+  expect(response.status).toBe(204);
   return (response.headers.get("set-cookie") ?? "").split(";", 1)[0];
 }
 
@@ -94,7 +93,7 @@ describe("the preview gate on a project's preview worker", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("x-robots-tag")).toBe("noindex");
-    expect(await response.text()).toContain("<form");
+    expect(await response.text()).toContain('id="password"');
     expect(wire.calls).toHaveLength(0);
   });
 

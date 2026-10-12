@@ -510,7 +510,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		m.upstream = upstream{port: portOf(t, node), client: newLoopbackClient()}
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
-		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -543,7 +543,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		rt, captured := fakeRuntime(t, []byte(getEvent))
 		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
-		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -563,7 +563,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		go m.drainControl(bufio.NewReader(parentSide))
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
-		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -583,7 +583,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		rt, captured := warmRuntime(t, []byte(warmEvent),
 			time.Now().Add(bytecode.UploadBudget+completionMargin+700*time.Millisecond))
 		start := time.Now()
-		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
@@ -611,7 +611,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
 		start := time.Now()
-		if err := handleInvocation(context.Background(), rt, m, loginFront{}); err != nil {
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 

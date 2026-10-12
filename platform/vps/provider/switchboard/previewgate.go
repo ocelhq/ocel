@@ -12,7 +12,7 @@ import (
 
 var cacheOverrides = []string{"CDN-Cache-Control", "Cloudflare-CDN-Cache-Control", "Surrogate-Control"}
 
-func answerPreviewGate(w http.ResponseWriter, r *http.Request, previewGate *previewgate.Gate, named func(http.Header)) (func(http.Header), bool) {
+func answerPreviewGate(w http.ResponseWriter, r *http.Request, previewGate *previewgate.Gate, named func(http.Header), now time.Time) (func(http.Header), bool) {
 	if previewGate == nil {
 		return func(http.Header) {}, true
 	}
@@ -22,10 +22,7 @@ func answerPreviewGate(w http.ResponseWriter, r *http.Request, previewGate *prev
 		Target: r.URL.RequestURI(),
 		Header: previewgate.Header(r.Header),
 	}
-	if previewgate.IsLogin(request.Method, request.Target) {
-		request.Body, _ = io.ReadAll(io.LimitReader(r.Body, previewgate.LoginBodyMaxBytes+1))
-	}
-	verdict := previewGate.Check(request, time.Now())
+	verdict := previewGate.Check(request, now)
 	if answer := verdict.Response; answer != nil {
 		for name, values := range answer.Header {
 			w.Header()[name] = values

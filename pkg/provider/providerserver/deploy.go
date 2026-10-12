@@ -1208,7 +1208,6 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					AssetPrefix:               facts.AssetPrefix,
 					Static:                    facts.Static,
 					Guard:                     facts.Guard,
-					PreviewGate:               r.appPreviewGate(),
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
 					Topics:                    topics,

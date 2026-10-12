@@ -68,9 +68,6 @@ func (c Config) Check(req previewgate.Request, now time.Time) previewgate.Verdic
 	if !gated {
 		return previewgate.Verdict{Forward: req.Header}
 	}
-	if previewgate.IsLogin(req.Method, req.Target) {
-		return previewgate.Verdict{Forward: req.Header}
-	}
 	return gate.Check(req, now)
 }
 

@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -19,8 +18,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -41,8 +38,6 @@ type served struct {
 	Health  string `json:"health"`
 	Runtime string `json:"runtime"`
 	Token   string `json:"token"`
-	Gate    string `json:"gate"`
-	AtEdge  string `json:"atEdge"`
 }
 
 func TestContainerHelper(t *testing.T) {
@@ -111,8 +106,6 @@ func TestContainerHelper(t *testing.T) {
 			Health:  os.Getenv(originguard.HealthPathVar),
 			Runtime: os.Getenv(processenv.RuntimeAddressEnvVar),
 			Token:   os.Getenv(localrpc.SessionTokenEnvVar),
-			Gate:    os.Getenv(edge.PreviewGateVar),
-			AtEdge:  os.Getenv(edge.PreviewGateAtEdgeVar),
 		})
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(containerimage.PortEnvVar), mux); err != nil {
@@ -268,57 +261,6 @@ func TestRun(t *testing.T) {
 		}
 		if code := r.quit(t, ""); code != 0 {
 			t.Errorf("run = %d, want 0 for an app that finished cleanly", code)
-		}
-	})
-
-	t.Run("the front gates every request when no edge in front of it gates the preview", func(t *testing.T) {
-		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
-		r := launch(t, "serve", edge.PreviewGateVar+"="+gate)
-		signedIn := http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:pw"))}}
-		body := r.awaitFrontWith(t, "", signedIn)
-
-		if body.Gate != "" {
-			t.Errorf("the app was handed %s=%q; the keys that gate its preview are not the app's", edge.PreviewGateVar, body.Gate)
-		}
-		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("a request with no credentials = %d, want 401: nothing else in front of this service gates its preview", resp.StatusCode)
-		}
-		req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/quit", nil)
-		req.Header = signedIn
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			resp.Body.Close()
-		}
-		if code := r.await(t); code != 0 {
-			t.Errorf("run = %d, want 0", code)
-		}
-	})
-
-	t.Run("the front answers the preview login an edge hands it and the gate keys never reach the app", func(t *testing.T) {
-		const secret = "s3cr3t"
-		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
-		r := launch(t, "serve", originguard.OriginSecretVar+"="+secret, edge.PreviewGateVar+"="+gate, edge.PreviewGateAtEdgeVar+"=true")
-		body := r.awaitFront(t, secret)
-
-		if body.Gate != "" || body.AtEdge != "" {
-			t.Errorf("the app was handed %s=%q and %s=%q; the keys that gate its preview are not the app's",
-				edge.PreviewGateVar, body.Gate, edge.PreviewGateAtEdgeVar, body.AtEdge)
-		}
-		req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:"+r.port+previewgate.LoginPath, strings.NewReader("password=pw"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set(originguard.OriginSecretHeader, secret)
-		resp, err := http.DefaultTransport.RoundTrip(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Set-Cookie"), previewgate.CookieName+"=") {
-			t.Errorf("login = %d setting %q, want 303 with the session", resp.StatusCode, resp.Header.Get("Set-Cookie"))
-		}
-		if code := r.quit(t, secret); code != 0 {
-			t.Errorf("run = %d, want 0", code)
 		}
 	})
 

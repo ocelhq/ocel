@@ -194,14 +194,13 @@ export async function checkPreviewGate(
   });
   const login = await clock.fetch(`${release.deploymentUrl}${GATE_LOGIN_PATH}`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ password: credentials.password, next: DEPLOYMENT_PATH }),
+    headers: { authorization: `Basic ${btoa(`${GATE_BASIC_USER}:${credentials.password}`)}` },
     redirect: "manual",
   });
   const cookie = (login.headers.get("set-cookie") ?? "").split(";", 1)[0];
-  if (login.status !== 303 || !cookie.startsWith("__Host-ocel-preview=")) {
+  if (login.status !== 204 || !cookie.startsWith("__Host-ocel-preview=")) {
     throw new Error(
-      `${release.deploymentUrl}${GATE_LOGIN_PATH} answered ${login.status} to the password, want 303 with the session cookie`,
+      `${release.deploymentUrl}${GATE_LOGIN_PATH} answered ${login.status} to the password, want 204 with the session cookie`,
     );
   }
   await requireGateServing(clock, url, release.buildId, "the session cookie", {

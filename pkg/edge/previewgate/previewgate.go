@@ -1,7 +1,6 @@
 package previewgate
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -19,28 +18,32 @@ const (
 	methodOptions = "OPTIONS"
 	methodPost    = "POST"
 
-	statusSeeOther              = 303
-	statusUnauthorized          = 401
-	statusRequestEntityTooLarge = 413
-	statusUnsupportedMediaType  = 415
+	statusNoContent    = 204
+	statusSeeOther     = 303
+	statusUnauthorized = 401
 )
 
 const (
-	CookieName              = "__Host-ocel-preview"
-	LoginPath               = "/.ocel/preview/login"
-	HeaderBypass            = "x-ocel-preview-bypass"
-	HeaderSetBypassCookie   = "x-ocel-set-bypass-cookie"
-	SessionLifetime         = 7 * 24 * time.Hour
-	LoginBodyMaxBytes       = 1024
-	CacheControl            = "private, no-store"
-	RobotsTag               = "noindex"
-	formContentType         = "application/x-www-form-urlencoded"
-	htmlContentType         = "text/html; charset=utf-8"
-	signatureHexLen         = 2 * sha256.Size
-	cookiePurpose           = "cookie"
-	passwordPurpose         = "password"
-	bypassPurpose           = "bypass"
-	incorrectPasswordNotice = "Incorrect password."
+	CookieName            = "__Host-ocel-preview"
+	LoginPath             = "/.ocel/preview/login"
+	HeaderBypass          = "x-ocel-preview-bypass"
+	HeaderSetBypassCookie = "x-ocel-set-bypass-cookie"
+	SessionLifetime       = 7 * 24 * time.Hour
+	CacheControl          = "private, no-store"
+	RobotsTag             = "noindex"
+	htmlContentType       = "text/html; charset=utf-8"
+	signatureHexLen       = 2 * sha256.Size
+	cookiePurpose         = "cookie"
+	passwordPurpose       = "password"
+	bypassPurpose         = "bypass"
+	loginRealm            = `Basic realm="Ocel preview", charset="UTF-8"`
+	loginScript           = `var p=document.getElementById("password");async function go(){var r=await fetch("` + LoginPath + `",{method:"POST",headers:{Authorization:"Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(":"+p.value)))}});r.ok?location.assign(document.querySelector("main").dataset.next):document.getElementById("incorrect").hidden=!1}`
+	loginPage             = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview protected</title>` +
+		`<main data-next="%NEXT%"><p id="incorrect" role="alert" hidden>Incorrect password.</p>` +
+		`<label>Password <input id="password" type="password" autocomplete="current-password" autofocus onkeydown="event.key=='Enter'&&go()"></label>` +
+		`<button onclick="go()">Continue</button>` +
+		`<noscript><p><a href="` + LoginPath + `">Sign in with the browser prompt</a></p></noscript></main>` +
+		`<script>` + loginScript + `</script>`
 )
 
 type Gate struct {
@@ -67,7 +70,6 @@ type Request struct {
 	Host   string
 	Target string
 	Header Header
-	Body   []byte
 }
 
 type Response struct {
@@ -86,13 +88,13 @@ func HashPassword(key, password string) string {
 	return sign(key, passwordPurpose, password)
 }
 
-func IsLogin(method, target string) bool {
+func isLogin(method, target string) bool {
 	path, _, _ := strings.Cut(target, "?")
-	return method == methodPost && path == LoginPath
+	return path == LoginPath && (method == methodPost || method == methodGet || method == methodHead)
 }
 
 func (g Gate) Check(req Request, now time.Time) Verdict {
-	if IsLogin(req.Method, req.Target) {
+	if isLogin(req.Method, req.Target) {
 		return g.checkLogin(req, now)
 	}
 	path, _, _ := strings.Cut(req.Target, "?")
@@ -106,7 +108,7 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 	}
 
 	if !hasBasic && !hasBypass && !hasCookie && !g.allowsOptions(req.Method, path) {
-		return answerLoginForm(statusUnauthorized, sanitizeNext(req.Target), false)
+		return answerLoginPage(sanitizeNext(req.Target), false)
 	}
 
 	forward := req.Header.Clone()
@@ -120,19 +122,16 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 }
 
 func (g Gate) checkLogin(req Request, now time.Time) Verdict {
-	if len(req.Body) > LoginBodyMaxBytes {
-		return answerStatus(statusRequestEntityTooLarge)
+	if g.hasPassword(joinHeaderValues(req.Header, "Authorization")) {
+		if req.Method == methodPost {
+			return g.sessionStarted(req.Host, now)
+		}
+		return g.redirect("/", req.Host, now)
 	}
-	mediaType, _, _ := strings.Cut(joinHeaderValues(req.Header, "Content-Type"), ";")
-	if toLowerASCII(strings.Trim(mediaType, " \t")) != formContentType {
-		return answerStatus(statusUnsupportedMediaType)
+	if req.Method == methodPost {
+		return answerStatus(statusUnauthorized)
 	}
-	form := parseForm(req.Body)
-	next := sanitizeNext(form["next"])
-	if !g.isPassword(form["password"]) {
-		return answerLoginForm(statusUnauthorized, next, true)
-	}
-	return g.redirect(next, req.Host, now)
+	return answerLoginPage("/", true)
 }
 
 func (g Gate) isPassword(password string) bool {
@@ -209,26 +208,29 @@ func (g Gate) SignSession(host string, now time.Time) string {
 func (g Gate) redirect(location, host string, now time.Time) Verdict {
 	header := newGateResponseHeader()
 	header.Set("Location", location)
-	header.Set("Set-Cookie", CookieName+"="+g.SignSession(host, now)+
-		"; Max-Age="+strconv.Itoa(int(SessionLifetime/time.Second))+"; Path=/; Secure; HttpOnly; SameSite=Lax")
+	header.Set("Set-Cookie", g.sessionCookie(host, now))
 	return Verdict{Response: &Response{Status: statusSeeOther, Header: header}}
 }
 
-func answerLoginForm(status int, next string, incorrect bool) Verdict {
-	notice := ""
-	if incorrect {
-		notice = `<p role="alert">` + incorrectPasswordNotice + `</p>`
-	}
+func (g Gate) sessionCookie(host string, now time.Time) string {
+	return CookieName + "=" + g.SignSession(host, now) +
+		"; Max-Age=" + strconv.Itoa(int(SessionLifetime/time.Second)) + "; Path=/; Secure; HttpOnly; SameSite=Lax"
+}
+
+func (g Gate) sessionStarted(host string, now time.Time) Verdict {
+	header := newGateResponseHeader()
+	header.Set("Set-Cookie", g.sessionCookie(host, now))
+	return Verdict{Response: &Response{Status: statusNoContent, Header: header}}
+}
+
+func answerLoginPage(next string, prompt bool) Verdict {
 	header := newGateResponseHeader()
 	header.Set("Content-Type", htmlContentType)
-	body := `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-		`<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
-		`<title>Preview protected</title></head><body>` + notice +
-		`<form method="post" action="` + LoginPath + `">` +
-		`<label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>` +
-		`<input type="hidden" name="next" value="` + escapeHTML(next) + `">` +
-		`<button type="submit">Continue</button></form></body></html>`
-	return Verdict{Response: &Response{Status: status, Header: header, Body: body}}
+	if prompt {
+		header.Set("WWW-Authenticate", loginRealm)
+	}
+	body := strings.NewReplacer("%NEXT%", escapeHTML(next)).Replace(loginPage)
+	return Verdict{Response: &Response{Status: statusUnauthorized, Header: header, Body: body}}
 }
 
 func answerStatus(status int) Verdict {
@@ -265,46 +267,6 @@ func sanitizeNext(target string) string {
 		return "/"
 	}
 	return target
-}
-
-func parseForm(body []byte) map[string]string {
-	form := map[string]string{}
-	for _, pair := range bytes.Split(body, []byte("&")) {
-		if len(pair) == 0 {
-			continue
-		}
-		name, value, _ := bytes.Cut(pair, []byte("="))
-		key := decodeFormComponent(name)
-		if _, seen := form[key]; !seen {
-			form[key] = decodeFormComponent(value)
-		}
-	}
-	return form
-}
-
-func decodeFormComponent(component []byte) string {
-	decoded := make([]byte, 0, len(component))
-	for i := 0; i < len(component); i++ {
-		if component[i] == '+' {
-			decoded = append(decoded, ' ')
-			continue
-		}
-		if component[i] == '%' && i+2 < len(component) {
-			if escaped, ok := decodeHexByte(component[i+1 : i+3]); ok {
-				decoded = append(decoded, escaped)
-				i += 2
-				continue
-			}
-		}
-		decoded = append(decoded, component[i])
-	}
-	return string(decoded)
-}
-
-func decodeHexByte(digits []byte) (byte, bool) {
-	var decoded [1]byte
-	_, err := hex.Decode(decoded[:], digits)
-	return decoded[0], err == nil
 }
 
 var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")

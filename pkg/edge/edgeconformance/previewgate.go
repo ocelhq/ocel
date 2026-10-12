@@ -28,7 +28,6 @@ type previewGateCase struct {
 		Host    string                  `json:"host"`
 		Target  string                  `json:"target"`
 		Headers map[string]headerValues `json:"headers"`
-		Body    string                  `json:"body"`
 	} `json:"request"`
 	Expect struct {
 		Forward              bool              `json:"forward"`
@@ -54,15 +53,17 @@ func (v *headerValues) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, (*[]string)(v))
 }
 
-type PreviewGateCheck func(gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict
+type PreviewGateCheck func(t *testing.T, gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict
 
 func RunPreviewGate(t *testing.T) {
 	t.Helper()
 
-	RunPreviewGateWith(t, previewgate.Gate.Check, false)
+	RunPreviewGateWith(t, func(_ *testing.T, gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict {
+		return gate.Check(req, now)
+	})
 }
 
-func RunPreviewGateWith(t *testing.T, check PreviewGateCheck, withoutLogins bool) {
+func RunPreviewGateWith(t *testing.T, check PreviewGateCheck) {
 	t.Helper()
 
 	var vectors previewGateVector
@@ -72,9 +73,6 @@ func RunPreviewGateWith(t *testing.T, check PreviewGateCheck, withoutLogins bool
 	now := time.Unix(vectors.NowSeconds, 0)
 
 	for _, example := range vectors.Cases {
-		if withoutLogins && example.Request.Method == "POST" && strings.HasPrefix(example.Request.Target, previewgate.LoginPath) {
-			continue
-		}
 		t.Run(example.Name, func(t *testing.T) {
 			gate := vectors.Gate
 			gate.BypassSecrets = slices.Clone(gate.BypassSecrets)
@@ -90,12 +88,11 @@ func RunPreviewGateWith(t *testing.T, check PreviewGateCheck, withoutLogins bool
 					header.Add(name, value)
 				}
 			}
-			verdict := check(gate, previewgate.Request{
+			verdict := check(t, gate, previewgate.Request{
 				Method: example.Request.Method,
 				Host:   example.Request.Host,
 				Target: example.Request.Target,
 				Header: header,
-				Body:   []byte(example.Request.Body),
 			}, now)
 
 			if example.Expect.Forward {

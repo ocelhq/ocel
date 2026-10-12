@@ -13,14 +13,3 @@ func TestCloudRunSaysItShipsANextServerRuntime(t *testing.T) {
 		t.Error("Hooks().ReadNextServerRuntime = nil, want the Next server runtime a Cloud Run Next container loads its cache handlers from")
 	}
 }
-
-func TestCloudRunAnswersThePreviewLoginAnEdgeHandsItAndGatesAPreviewWhenNothingIsInFrontOfIt(t *testing.T) {
-	facts := pushing(t, "").Facts()
-
-	if !facts.AnswersPreviewLogin {
-		t.Error("Facts().AnswersPreviewLogin = false, and a gated preview behind the load balancer posts its password to the service, because the plugin reads no body")
-	}
-	if !facts.GatesPreviewsAtOrigin {
-		t.Error("Facts().GatesPreviewsAtOrigin = false, and a preview served on its own run.app url would be refused a gate")
-	}
-}

@@ -10,7 +10,6 @@ type originGuard struct {
 	RootFunction string
 	Secret       string
 	Previous     string
-	PreviewGate  string
 }
 
 func (f *originGuard) hosts(fn appFunction) bool {
@@ -27,9 +26,6 @@ func (f *originGuard) rootFunctionEnv(base map[string]string) map[string]string 
 	env[edge.OriginSecretVar] = f.Secret
 	if f.Previous != "" {
 		env[edge.OriginSecretPreviousVar] = f.Previous
-	}
-	if f.PreviewGate != "" {
-		env[edge.PreviewGateVar] = f.PreviewGate
 	}
 	return env
 }

@@ -1,21 +1,15 @@
 package originguard
 
 import (
-	"cmp"
 	"crypto/sha256"
 	"crypto/subtle"
-	"io"
-	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
-	"github.com/ocelhq/ocel/pkg/runtime/previewlogin"
 )
 
 const OriginSecretHeader = edge.OriginSecretHeader
@@ -81,12 +75,10 @@ func (g *Guard) Admits(r *http.Request) bool {
 }
 
 type Options struct {
-	Upstream          *url.URL
-	Guard             *Guard
-	HealthPath        string
-	Ready             func() bool
-	PreviewLogin      *previewlogin.Login
-	GatesEveryRequest bool
+	Upstream   *url.URL
+	Guard      *Guard
+	HealthPath string
+	Ready      func() bool
 }
 
 func Handler(opts Options) http.Handler {
@@ -113,10 +105,6 @@ func Handler(opts Options) http.Handler {
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if opts.PreviewLogin != nil && previewgate.IsLogin(r.Method, r.URL.Path) {
-			answerPreviewLogin(w, r, opts)
-			return
-		}
 		if opts.Ready != nil && !opts.Ready() {
 			w.Header().Set(AppUnansweredHeader, "true")
 			http.Error(w, "the app is still starting", http.StatusServiceUnavailable)
@@ -126,78 +114,8 @@ func Handler(opts Options) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		if opts.GatesEveryRequest && !admitPreview(w, r, opts, proxy) {
-			return
-		}
 		proxy.ServeHTTP(w, r)
 	})
-}
-
-func admitPreview(w http.ResponseWriter, r *http.Request, opts Options, proxy http.Handler) bool {
-	verdict := opts.PreviewLogin.Check(newPreviewRequest(r, nil), time.Now())
-	switch {
-	case verdict.Response == nil:
-		r.Header = http.Header(verdict.Forward)
-		maps.Copy(w.Header(), http.Header(verdict.ResponseHeader))
-		return true
-	case probe(r, opts.HealthPath):
-		answerStatusAlone(w, r, proxy)
-	default:
-		writeAnswer(w, *verdict.Response)
-	}
-	return false
-}
-
-type statusAlone struct {
-	header http.Header
-	status int
-}
-
-func (s *statusAlone) Header() http.Header { return s.header }
-
-func (s *statusAlone) Write(body []byte) (int, error) { return len(body), nil }
-
-func (s *statusAlone) WriteHeader(status int) {
-	if s.status == 0 {
-		s.status = status
-	}
-}
-
-func answerStatusAlone(w http.ResponseWriter, r *http.Request, proxy http.Handler) {
-	answered := &statusAlone{header: http.Header{}}
-	proxy.ServeHTTP(answered, r)
-	w.Header().Set("Cache-Control", previewgate.CacheControl)
-	w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
-	w.WriteHeader(cmp.Or(answered.status, http.StatusOK))
-}
-
-func newPreviewRequest(r *http.Request, body []byte) previewgate.Request {
-	return previewgate.Request{
-		Method: r.Method,
-		Host:   r.Host,
-		Target: r.URL.RequestURI(),
-		Header: previewgate.Header(r.Header),
-		Body:   body,
-	}
-}
-
-func writeAnswer(w http.ResponseWriter, answer previewgate.Response) {
-	maps.Copy(w.Header(), http.Header(answer.Header))
-	w.WriteHeader(answer.Status)
-	_, _ = io.WriteString(w, answer.Body)
-}
-
-func answerPreviewLogin(w http.ResponseWriter, r *http.Request, opts Options) {
-	if !opts.Guard.Admits(r) {
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-	body, err := previewlogin.ReadBody(r.Body)
-	if err != nil {
-		http.Error(w, "the login body could not be read", http.StatusBadRequest)
-		return
-	}
-	writeAnswer(w, opts.PreviewLogin.Answer(newPreviewRequest(r, body), time.Now()))
 }
 
 func probe(r *http.Request, healthPath string) bool {
