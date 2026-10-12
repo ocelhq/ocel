@@ -202,7 +202,8 @@ function shape(
     res.removeHeader("surrogate-control");
     const browser = listBrowserDirectives(declared);
     if (req.headers.authorization !== undefined) {
-      if (browser.length > 0) res.setHeader("cache-control", browser.join(", "));
+      const unshared = browser.filter((directive) => directive.toLowerCase() !== "public");
+      if (browser.length > 0) res.setHeader("cache-control", ["private", ...unshared].join(", "));
       else res.removeHeader("cache-control");
       return;
     }

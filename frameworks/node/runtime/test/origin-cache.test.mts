@@ -444,7 +444,7 @@ describe("a request for a cached route", () => {
     },
   );
 
-  test("drops the s-maxage its handler set when it carries credentials", async () => {
+  test("is kept from every shared cache when it carries credentials, and keeps its browser lifetime", async () => {
     const get = await serve(behindCloudFront, (req, res) => {
       res.writeHead(200, { "cache-control": "public, max-age=10, s-maxage=5" });
       res.end("page");
@@ -452,7 +452,7 @@ describe("a request for a cached route", () => {
 
     const res = await get("/blog/a", { headers: { authorization: "Bearer a" } });
 
-    expect(res.headers.get("cache-control")).toBe("public, max-age=10");
+    expect(res.headers.get("cache-control")).toBe("private, max-age=10");
     expect(res.headers.has("cache-tag")).toBe(false);
   });
 
