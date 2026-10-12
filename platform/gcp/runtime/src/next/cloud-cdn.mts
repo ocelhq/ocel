@@ -2,6 +2,7 @@ import type http from "node:http";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
+import { type HeaderLookup, isStoredBySomeEdge } from "@platform/edge-contract/cache-control";
 import {
   cacheTagsForCloudCdn,
   cloudCdnTagLimits,
@@ -27,42 +28,38 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
 
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
 
-export function withholdFromCloudCdn(cacheControl: string | null): string | null {
-  if (cacheControl === null || isImmutable(cacheControl)) return cacheControl;
-  const storable = cacheControl
-    .split(",")
-    .some((directive) => directive.trim().toLowerCase().startsWith("s-maxage"));
-  return storable ? uncacheable : cacheControl;
+export function isWithheldFromCloudCdn(headers: HeaderLookup, now: number): boolean {
+  return !isImmutable(headers.get("cache-control")) && isStoredBySomeEdge(headers, now);
 }
 
-function withholdValue(value: unknown): string | undefined {
-  const current = Array.isArray(value) ? value.join(", ") : String(value);
-  const withheld = withholdFromCloudCdn(current);
-  return withheld !== current ? (withheld ?? undefined) : undefined;
-}
-
-function withholdWriteHeadHeaders(headers: unknown): unknown {
+function readWriteHeadHeader(headers: unknown, name: string): string | null {
   if (Array.isArray(headers)) {
-    let copy: unknown[] | undefined;
     for (let i = 0; i + 1 < headers.length; i += 2) {
-      if (String(headers[i]).toLowerCase() !== "cache-control") continue;
-      const withheld = withholdValue(headers[i + 1]);
-      if (withheld === undefined) continue;
-      copy ??= [...headers];
-      copy[i + 1] = withheld;
+      if (String(headers[i]).toLowerCase() === name) return String(headers[i + 1]);
     }
-    return copy ?? headers;
+    return null;
   }
   if (headers !== null && typeof headers === "object") {
-    let copy: Record<string, unknown> | undefined;
     for (const [key, value] of Object.entries(headers)) {
-      if (key.toLowerCase() !== "cache-control") continue;
-      const withheld = withholdValue(value);
-      if (withheld === undefined) continue;
-      copy ??= { ...headers };
-      copy[key] = withheld;
+      if (key.toLowerCase() === name) return String(value);
     }
-    return copy ?? headers;
+  }
+  return null;
+}
+
+function withoutWriteHeadCacheControl(headers: unknown): unknown {
+  if (Array.isArray(headers)) {
+    const kept: unknown[] = [];
+    for (let i = 0; i + 1 < headers.length; i += 2) {
+      if (String(headers[i]).toLowerCase() !== "cache-control")
+        kept.push(headers[i], headers[i + 1]);
+    }
+    return kept;
+  }
+  if (headers !== null && typeof headers === "object") {
+    return Object.fromEntries(
+      Object.entries(headers).filter(([key]) => key.toLowerCase() !== "cache-control"),
+    );
   }
   return headers;
 }
@@ -71,11 +68,18 @@ export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): v
   const writeHead = prototype.writeHead;
   prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
     if (!this.headersSent) {
-      const current = this.getHeader("cache-control");
-      const withheld = withholdFromCloudCdn(current === undefined ? null : String(current));
-      if (withheld !== null && withheld !== current) this.setHeader("cache-control", withheld);
       const headersAt = typeof args[1] === "string" ? 2 : 1;
-      if (args.length > headersAt) args[headersAt] = withholdWriteHeadHeaders(args[headersAt]);
+      const passed = args.length > headersAt ? args[headersAt] : undefined;
+      const headers = {
+        get: (name: string): string | null => {
+          const value = readWriteHeadHeader(passed, name) ?? this.getHeader(name);
+          return value === undefined || value === null ? null : String(value);
+        },
+      };
+      if (isWithheldFromCloudCdn(headers, Date.now())) {
+        this.setHeader("cache-control", uncacheable);
+        if (passed !== undefined) args[headersAt] = withoutWriteHeadCacheControl(passed);
+      }
     }
     return (writeHead as any).apply(this, args);
   } as typeof prototype.writeHead;
