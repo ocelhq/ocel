@@ -2,9 +2,13 @@ import type http from "node:http";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { cloudCdnTagLimits } from "../cache/cloud-cdn-tags.mjs";
+import {
+  cacheTagsForCloudCdn,
+  cloudCdnTagLimits,
+  isImmutable,
+  uncacheable,
+} from "../cache/cloud-cdn-tags.mjs";
 
-const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
 const routerStateTree = "next-router-state-tree";
 
 export function trimVaryForCloudCdn(vary: string | null): string | null {
@@ -22,12 +26,6 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
 }
 
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
-
-function isImmutable(cacheControl: string | null): boolean {
-  return (cacheControl ?? "")
-    .split(",")
-    .some((directive) => directive.trim().toLowerCase() === "immutable");
-}
 
 export function withholdFromCloudCdn(cacheControl: string | null): string | null {
   if (cacheControl === null || isImmutable(cacheControl)) return cacheControl;
@@ -81,37 +79,6 @@ export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): v
     }
     return (writeHead as any).apply(this, args);
   } as typeof prototype.writeHead;
-}
-
-export function cacheTagsForCloudCdn(
-  release: string | null,
-  header: string | null,
-  cacheControl: string | null,
-): { value: string | null; dropped: string[] } {
-  const own = new Set<string>();
-  for (const token of (header ?? "").split(",")) {
-    const tag = token.trim();
-    if (tag !== "") own.add(tag);
-  }
-  const tagged = release !== null && !isImmutable(cacheControl);
-  if (tagged) own.delete(release);
-  const kept: string[] = [];
-  const dropped: string[] = [];
-  let bytes = 0;
-  for (const tag of tagged ? [release, ...own] : own) {
-    const joined = bytes + Buffer.byteLength(tag) + (kept.length > 0 ? 1 : 0);
-    if (
-      kept.length < cloudCdnTagLimits.perObject &&
-      Buffer.byteLength(tag) <= cloudCdnTagLimits.bytesPerTag &&
-      joined <= cloudCdnTagLimits.bytesPerObject
-    ) {
-      kept.push(tag);
-      bytes = joined;
-    } else {
-      dropped.push(tag);
-    }
-  }
-  return { value: kept.length > 0 ? kept.join(",") : null, dropped };
 }
 
 export function forCloudCdn(response: Response, release: string | null, url: string): Response {
