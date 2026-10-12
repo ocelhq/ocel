@@ -94,6 +94,20 @@ func describeArtifact(app string, framework buildoutput.Framework, entryFile str
 	})
 }
 
+func nameWorker(functionDir string, worker []string) error {
+	path := filepath.Join(functionDir, buildoutput.FunctionConfigFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var config buildoutput.FunctionConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	config.Worker = worker
+	return writeJSON(path, config)
+}
+
 func writeJSON(dest string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
