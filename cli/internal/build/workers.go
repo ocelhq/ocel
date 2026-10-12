@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
@@ -38,7 +37,7 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 
 	switch served.Language {
 	case language.JS:
-		if err := discovery.BundleNodeWorker(cfg.Dir, roots, filepath.Join(files, containerimage.NodeWorkerEntry)); err != nil {
+		if err := discovery.BundleNodeWorker(cfg.Dir, roots, filepath.Join(files, containerimage.NodeWorkerEntry.ImageFile)); err != nil {
 			return image.Image{}, fmt.Errorf("app %q: %w", app.Name, err)
 		}
 	case language.Go:
@@ -50,15 +49,15 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 		if err != nil {
 			return image.Image{}, err
 		}
-		if err := toolchain.CompileGo(ctx, app.Name, moduleRoot, pkg, filepath.Join(files, buildoutput.GoWorkerBinary), inspection.Architecture); err != nil {
+		if err := toolchain.CompileGo(ctx, app.Name, moduleRoot, pkg, filepath.Join(files, containerimage.GoWorkerEntry.ImageFile), inspection.Architecture); err != nil {
 			return image.Image{}, err
 		}
 	case language.Python:
-		entry, err := discovery.PythonArtifactWorkerEntry(cfg.Dir, roots, served)
+		packages, err := discovery.ListPythonPackages(cfg.Dir, roots, filepath.Join(cfg.Dir, app.Path))
 		if err != nil {
 			return image.Image{}, fmt.Errorf("app %q: %w", app.Name, err)
 		}
-		if err := os.WriteFile(filepath.Join(files, containerimage.PythonWorkerEntry), []byte(entry), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(files, containerimage.PythonWorkerEntry.ImageFile), []byte(discovery.RenderPythonWorkerEntry(packages)), 0o644); err != nil {
 			return image.Image{}, err
 		}
 	case language.Rust:

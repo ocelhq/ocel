@@ -97,7 +97,7 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	if config.EntryFile != pythonEntryFile {
 		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, pythonEntryFile)
 	}
-	if len(config.Command) != 2 || config.Command[0] != pythonRuntimeCommand || config.Command[1] != pythonEntryFile {
+	if len(config.Command) != 2 || config.Command[0] != containerimage.PythonWorkerEntry.Interpreter || config.Command[1] != pythonEntryFile {
 		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)
 	}
 	if config.Framework != (buildoutput.Framework{Name: "python", Arch: "arm64"}) {
@@ -195,8 +195,8 @@ func TestCompileRefusesAPythonAppWithDependenciesAndNoInterpreterToVendorThemWit
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), pythonRuntimeCommand) || !strings.Contains(err.Error(), pythonRequirementsFile) {
-		t.Fatalf("err = %v, want a refusal naming %s and %s — a package shipped without its dependencies fails at the app's first import instead", err, pythonRuntimeCommand, pythonRequirementsFile)
+	if err == nil || !strings.Contains(err.Error(), containerimage.PythonWorkerEntry.Interpreter) || !strings.Contains(err.Error(), pythonRequirementsFile) {
+		t.Fatalf("err = %v, want a refusal naming %s and %s — a package shipped without its dependencies fails at the app's first import instead", err, containerimage.PythonWorkerEntry.Interpreter, pythonRequirementsFile)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestCompileVendorsWhatTheAppDeclaresIntoTheArtifact(t *testing.T) {
 func TestVendoringRunsTheInterpretersPipAndNeverAModuleOfTheApps(t *testing.T) {
 	t.Parallel()
 
-	if _, err := exec.LookPath(pythonRuntimeCommand); err != nil {
+	if _, err := exec.LookPath(containerimage.PythonWorkerEntry.Interpreter); err != nil {
 		t.Skip("no python interpreter on PATH to vendor with")
 	}
 	marker := filepath.Join(t.TempDir(), "ran")
@@ -245,7 +245,7 @@ func TestVendoringRunsTheInterpretersPipAndNeverAModuleOfTheApps(t *testing.T) {
 }
 
 func pipAvailable() bool {
-	program, err := exec.LookPath(pythonRuntimeCommand)
+	program, err := exec.LookPath(containerimage.PythonWorkerEntry.Interpreter)
 	if err != nil {
 		return false
 	}
@@ -368,7 +368,7 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 		App:            "web",
 		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
-		DiscoveryRoots: []string{filepath.Join(project, discovery.DefaultRootDirName), filepath.Join(project, "server")},
+		PythonPackages: []discovery.PythonPackage{{Name: discovery.DefaultRootDirName, Dir: filepath.Join(project, discovery.DefaultRootDirName)}},
 		FunctionDir:    functionDir,
 		AppDir:         appDir,
 	})
@@ -380,9 +380,6 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 		if _, err := os.Stat(filepath.Join(functionDir, rel)); err != nil {
 			t.Errorf("the artifact contains no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(functionDir, "server")); err == nil {
-		t.Error("the artifact contains a server/ of its own: a root already inside the app dir is included by the app's own tree")
 	}
 }
 
@@ -400,7 +397,7 @@ func TestCompileCopiesNoDiscoveryRootTheAppsOwnDirectoryAlreadyContains(t *testi
 		App:            "web",
 		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
-		DiscoveryRoots: []string{filepath.Join(project, "server", "..infra")},
+		PythonPackages: []discovery.PythonPackage{{Name: "..infra", Dir: filepath.Join(project, "server", "..infra")}},
 		FunctionDir:    functionDir,
 		AppDir:         appDir,
 	})
@@ -428,10 +425,9 @@ func TestCompileWritesTheWorkerEntryBesideAPythonAppThatImportsDiscoveryRoots(t 
 		App:       "web",
 		Framework: buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:    filepath.Join(project, "server"),
-		DiscoveryRoots: []string{
-			filepath.Join(project, discovery.DefaultRootDirName),
-			filepath.Join(project, "server", "jobs"),
-			filepath.Join(project, "server"),
+		PythonPackages: []discovery.PythonPackage{
+			{Name: discovery.DefaultRootDirName, Dir: filepath.Join(project, discovery.DefaultRootDirName)},
+			{Name: "jobs", Dir: filepath.Join(project, "server", "jobs")},
 		},
 		FunctionDir: functionDir,
 		AppDir:      appDir,
@@ -444,10 +440,10 @@ func TestCompileWritesTheWorkerEntryBesideAPythonAppThatImportsDiscoveryRoots(t 
 	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"python3", containerimage.PythonArtifactEntry}; !slices.Equal(cfg.Worker, want) {
+	if want := []string{"python3", containerimage.PythonWorkerEntry.ArtifactFile}; !slices.Equal(cfg.Worker, want) {
 		t.Errorf("%s worker = %v, want %v", buildoutput.FunctionConfigFile, cfg.Worker, want)
 	}
-	entry := readFile(t, filepath.Join(functionDir, containerimage.PythonArtifactEntry))
+	entry := readFile(t, filepath.Join(functionDir, containerimage.PythonWorkerEntry.ArtifactFile))
 	for _, want := range []string{`import_module("` + discovery.DefaultRootDirName + `")`, `import_module("jobs")`, "sys.path.insert(0, os.getcwd())"} {
 		if !strings.Contains(entry, want) {
 			t.Errorf("the worker entry lacks %s:\n%s", want, entry)
@@ -463,7 +459,34 @@ func TestCompileWritesNoWorkerEntryForAPythonAppWithNoDiscoveryRoot(t *testing.T
 
 	_, functionDir := vendored(t, pythonApp(t, map[string]string{"main.py": "print('hi')\n"}), "x86_64")
 
-	if _, err := os.Stat(filepath.Join(functionDir, containerimage.PythonArtifactEntry)); err == nil {
-		t.Errorf("the artifact contains %s, and nothing declares a resource a worker could serve", containerimage.PythonArtifactEntry)
+	if _, err := os.Stat(filepath.Join(functionDir, containerimage.PythonWorkerEntry.ArtifactFile)); err == nil {
+		t.Errorf("the artifact contains %s, and nothing declares a resource a worker could serve", containerimage.PythonWorkerEntry.ArtifactFile)
+	}
+}
+
+func TestCompileCopiesADiscoveryFolderThatIsTheAppsOwnDirectoryUnderTheNameItIsImportedBy(t *testing.T) {
+	t.Parallel()
+
+	project := pythonApp(t, map[string]string{
+		"server/main.py":     "print('hi')\n",
+		"server/__init__.py": "db = 1\n",
+	})
+	out := t.TempDir()
+	appDir := filepath.Join(out, "apps", "web")
+	functionDir := filepath.Join(appDir, "functions", "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:            "web",
+		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
+		Source:         filepath.Join(project, "server"),
+		PythonPackages: []discovery.PythonPackage{{Name: "server", Dir: filepath.Join(project, "server")}},
+		FunctionDir:    functionDir,
+		AppDir:         appDir,
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(functionDir, "server", "__init__.py")); err != nil {
+		t.Errorf("the artifact holds no server/__init__.py, and its worker entry imports server from the artifact root: %v", err)
 	}
 }

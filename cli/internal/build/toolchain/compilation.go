@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
@@ -21,7 +22,7 @@ type Compilation struct {
 	WorkerPackage  string
 	FunctionDir    string
 	AppDir         string
-	DiscoveryRoots []string
+	PythonPackages []discovery.PythonPackage
 	Env            map[string]string
 	Unset          []string
 	Log            io.Writer

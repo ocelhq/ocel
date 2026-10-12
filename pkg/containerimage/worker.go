@@ -2,34 +2,47 @@ package containerimage
 
 import "github.com/ocelhq/ocel/pkg/buildoutput"
 
-const (
-	WorkerDir         = "/ocel/worker"
-	NodeWorkerEntry   = "worker.mjs"
-	NodeArtifactEntry = "ocel-worker.mjs"
+const WorkerDir = "/ocel/worker"
 
-	PythonWorkerEntry   = "worker.py"
-	PythonArtifactEntry = "ocel-worker.py"
-	PythonInterpreter   = "python3"
+type WorkerEntry struct {
+	Interpreter  string
+	ImageFile    string
+	ArtifactFile string
+}
+
+var (
+	GoWorkerEntry     = WorkerEntry{ImageFile: buildoutput.GoWorkerBinary, ArtifactFile: "./" + buildoutput.GoWorkerBinary}
+	NodeWorkerEntry   = WorkerEntry{Interpreter: "node", ImageFile: "worker.mjs", ArtifactFile: "ocel-worker.mjs"}
+	PythonWorkerEntry = WorkerEntry{Interpreter: "python3", ImageFile: "worker.py", ArtifactFile: "ocel-worker.py"}
 )
 
+var workerEntries = []WorkerEntry{GoWorkerEntry, NodeWorkerEntry, PythonWorkerEntry}
+
+func (e WorkerEntry) ImageCommand() []string {
+	return e.commandFor(WorkerDir + "/" + e.ImageFile)
+}
+
+func (e WorkerEntry) ArtifactCommand() []string {
+	return e.commandFor(e.ArtifactFile)
+}
+
+func (e WorkerEntry) commandFor(path string) []string {
+	if e.Interpreter == "" {
+		return []string{path}
+	}
+	return []string{e.Interpreter, path}
+}
+
 func WorkerCommand(present func(path string) bool, imageCommand []string) []string {
-	if binary := WorkerDir + "/" + buildoutput.GoWorkerBinary; present(binary) {
-		return []string{binary}
+	for _, entry := range workerEntries {
+		if present(WorkerDir + "/" + entry.ImageFile) {
+			return entry.ImageCommand()
+		}
 	}
-	if entry := WorkerDir + "/" + NodeWorkerEntry; present(entry) {
-		return []string{"node", entry}
-	}
-	if entry := WorkerDir + "/" + PythonWorkerEntry; present(entry) {
-		return []string{PythonInterpreter, entry}
-	}
-	if binary := "./" + buildoutput.GoWorkerBinary; present(binary) {
-		return []string{binary}
-	}
-	if present(NodeArtifactEntry) {
-		return []string{"node", NodeArtifactEntry}
-	}
-	if present(PythonArtifactEntry) {
-		return []string{PythonInterpreter, PythonArtifactEntry}
+	for _, entry := range workerEntries {
+		if present(entry.ArtifactFile) {
+			return entry.ArtifactCommand()
+		}
 	}
 	return imageCommand
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
@@ -18,11 +17,11 @@ func compiledFromSource(framework string) bool {
 
 func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, env environment, log io.Writer) error {
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
-	roots, err := discoveryRootsFor(cfg, a.Framework())
+	source := filepath.Join(cfg.Dir, a.Path)
+	packages, err := listAppPythonPackages(cfg, a.Framework(), source)
 	if err != nil {
 		return err
 	}
-	source := filepath.Join(cfg.Dir, a.Path)
 	workerPackage, err := goWorkerPackage(cfg, a.Framework(), source)
 	if err != nil {
 		return err
@@ -35,14 +34,14 @@ func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir
 		WorkerPackage:  workerPackage,
 		FunctionDir:    filepath.Join(appDir, buildoutput.FunctionsDir, buildoutput.RootFunctionDir),
 		AppDir:         appDir,
-		DiscoveryRoots: roots,
+		PythonPackages: packages,
 		Env:            env.set,
 		Unset:          env.unset,
 		Log:            log,
 	})
 }
 
-func discoveryRootsFor(cfg *project.Project, framework string) ([]string, error) {
+func listAppPythonPackages(cfg *project.Project, framework, source string) ([]discovery.PythonPackage, error) {
 	if framework != buildoutput.FrameworkPython {
 		return nil, nil
 	}
@@ -50,13 +49,7 @@ func discoveryRootsFor(cfg *project.Project, framework string) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	var dirs []string
-	for _, root := range roots {
-		if root.Language == language.Python {
-			dirs = append(dirs, root.Dir)
-		}
-	}
-	return dirs, nil
+	return discovery.ListPythonPackages(cfg.Dir, roots, source)
 }
 
 func goWorkerPackage(cfg *project.Project, framework, source string) (string, error) {
