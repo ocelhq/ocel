@@ -5,13 +5,26 @@ import { useEffect } from "react";
 const LIST = "#nd-sidebar [data-radix-scroll-area-viewport] > div";
 const ITEM = "a[data-active], button[aria-expanded]";
 
+export function follow(
+  current: Pick<Element, "isConnected"> | null,
+  visible: boolean,
+): "place" | "hide" | "stay" {
+  if (!visible) return "stay";
+  return current?.isConnected ? "place" : "hide";
+}
+
 export function SidebarHover() {
   useEffect(() => {
     let host: HTMLElement | null = null;
     let marker: HTMLDivElement | null = null;
     let current: Element | null = null;
     const resize = new ResizeObserver(() => {
-      if (current?.isConnected && marker?.dataset.visible === "true") place(current, false);
+      const action = follow(current, marker?.dataset.visible === "true");
+      if (action === "place" && current) place(current, false);
+      if (action === "hide" && marker) {
+        marker.dataset.visible = "false";
+        current = null;
+      }
     });
 
     function attach(list: HTMLElement) {
