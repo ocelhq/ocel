@@ -2125,6 +2125,18 @@
       "title": "LifecycleConfig",
       "type": "object"
     },
+    "previews": {
+      "additionalProperties": false,
+      "description": "How this project's previews are served.",
+      "properties": {
+        "protection": {
+          "description": "Whether every preview of this project asks for a password before it answers. Every deploy of a preview enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again. The password is shown and rotated with ocel preview protection. Left off, false.",
+          "type": "boolean"
+        }
+      },
+      "title": "PreviewsConfig",
+      "type": "object"
+    },
     "provider": {
       "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone.",
       "oneOf": [

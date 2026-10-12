@@ -178,18 +178,19 @@ type deployRun struct {
 	spec         provider.DeploySpec
 	spans        deploySpans
 
-	wildcard    stackrecords.Wildcard
-	previewOn   string
-	previewKey  edge.PreviewKey
-	previewKeys *openedPreviewKeys
-	previewGate *previewgate.Gate
-	builtAlias  string
-	aliasToken  string
-	aliases     []edge.PreviewHost
-	deployment  []edge.PreviewHost
-	selection   *contractv1.EdgeSelection
-	configured  []ConfiguredHost
-	pending     []string
+	wildcard        stackrecords.Wildcard
+	previewOn       string
+	previewKey      edge.PreviewKey
+	previewKeys     *openedPreviewKeys
+	previewGate     *previewgate.Gate
+	protectPreviews bool
+	builtAlias      string
+	aliasToken      string
+	aliases         []edge.PreviewHost
+	deployment      []edge.PreviewHost
+	selection       *contractv1.EdgeSelection
+	configured      []ConfiguredHost
+	pending         []string
 
 	values    variablestore.Store
 	scope     variablestore.Scope
@@ -309,8 +310,9 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 
 		infraProvisioned: req.GetInfraProvisioned(),
 
-		dry:           req.GetDry(),
-		allowDegraded: req.GetEdge().GetAllowDegraded(),
+		dry:             req.GetDry(),
+		allowDegraded:   req.GetEdge().GetAllowDegraded(),
+		protectPreviews: req.GetProtectPreviews(),
 	}
 	if err := run.openImages(ctx, req.GetProjectRegistry()); err != nil {
 		return nil, err
@@ -392,7 +394,7 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.ensureSignedPreviewHosts(ctx, progress); err != nil {
 		return err
 	}
-	if err := r.readProjectPreviewGate(ctx); err != nil {
+	if err := r.enforcePreviewProtection(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.readInlineRecords(ctx); err != nil {
@@ -663,6 +665,9 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	r.setEdgeStack(stack)
+	if err := r.settlePreviewGate(ctx); err != nil {
+		return err
+	}
 	if err := recordInvalidationTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
 		return err
 	}

@@ -233,3 +233,22 @@ func TestAKVStoreBindsToARecordPublishedElsewhere(t *testing.T) {
 		t.Errorf("BindingsFor(production) = %+v, want kv store cache bound to the record published as shared-cache", bound)
 	}
 }
+
+func TestPreviewProtectionIsOffUntilTheConfigTurnsItOn(t *testing.T) {
+	for config, want := range map[string]bool{
+		`{"slug":"shop"}`:                                 false,
+		`{"slug":"shop","previews":{}}`:                   false,
+		`{"slug":"shop","previews":{"protection":false}}`: false,
+		`{"slug":"shop","previews":{"protection":true}}`:  true,
+	} {
+		if got := mustLoadJSON(t, config).ProtectPreviews; got != want {
+			t.Errorf("%s: ProtectPreviews = %t, want %t", config, got, want)
+		}
+	}
+}
+
+func TestPreviewProtectionIsRefusedWhenItIsNotABoolean(t *testing.T) {
+	if _, err := loadJSON(t, `{"slug":"shop","previews":{"protection":"yes"}}`); err == nil {
+		t.Error("loading previews.protection: \"yes\" = nil error, want it refused: it is a boolean")
+	}
+}

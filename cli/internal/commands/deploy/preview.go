@@ -288,6 +288,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 
 			ProjectRegistry:  registry,
 			InlineBindings:   inline,
+			ProtectPreviews:  cfg.ProtectPreviews,
 			AliasToken:       facts.builtAlias,
 			InfraProvisioned: recovery.infra.isProvisioned(),
 			LeaseToken:       recovery.infra.readLeaseToken(),

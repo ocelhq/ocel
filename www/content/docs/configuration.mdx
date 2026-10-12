@@ -724,6 +724,37 @@ missing and publish it before the deploy:
 - run: ocel preview up pr-${{ github.event.number }}
 ```
 
+## previews
+
+How your project's previews are served. It takes one field today.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  previews: { protection: true },
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "previews": { "protection": true }
+}
+```
+
+`protection` asks every preview of the project for a password before it answers. It is a switch
+and nothing else: every preview deploy enforces it. With it on, the first preview deploy creates
+the password and a key that signs sessions, and a later deploy keeps them. With it off or left out,
+a preview deploy opens the project's previews again and warns that it does, and keeps the password
+and bypass secrets so that turning it back on restores them. Turning it on never
+prints the password; [`ocel preview protection`](/docs/cli/preview/protection) shows it, rotates it,
+sets one you choose and manages the secrets a test can send instead. An edge that cannot run the gate
+refuses the deploy rather than serve a protected preview to anyone, and on GCP that edge is the
+load balancer: Ocel does not gate a preview on Cloud Run alone.
+
 ## lifecycle
 
 Commands `ocel deploy` runs on your machine at points of a deploy. `preBuild` is the first: a

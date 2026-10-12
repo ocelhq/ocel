@@ -50,6 +50,8 @@ export interface OcelConfig {
   envSource?: EnvSourceConfig;
   /** Commands ocel runs on this machine at points of a deploy. */
   lifecycle?: LifecycleConfig;
+  /** How this project's previews are served. */
+  previews?: PreviewsConfig;
   /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
@@ -316,6 +318,12 @@ export interface LifecycleCommand {
   previews?: "persistent" | "all" | "none";
   /** How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m. */
   timeout?: string;
+}
+
+/** How this project's previews are served. */
+export interface PreviewsConfig {
+  /** Whether every preview of this project asks for a password before it answers. Every deploy of a preview enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again. The password is shown and rotated with ocel preview protection. Left off, false. */
+  protection?: boolean;
 }
 
 /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */

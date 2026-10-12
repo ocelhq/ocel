@@ -194,6 +194,7 @@ type edgeAccount struct {
 	forwards        map[string]edge.Origin
 	addressesItself bool
 	gatesPreviews   *bool
+	onReconcile     func(edge.StackSpec)
 
 	routerServes *[]edge.Need
 	refusal      error
@@ -704,10 +705,20 @@ func (e *Edge) Stacks() []edge.StackSpec {
 	return slices.Clone(e.stacks)
 }
 
+func (e *Edge) OnReconcile(fn func(edge.StackSpec)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onReconcile = fn
+}
+
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	e.mu.Lock()
 	e.stacks = append(e.stacks, spec)
+	during := e.onReconcile
 	e.mu.Unlock()
+	if during != nil {
+		during(spec)
+	}
 	e.warn(spec.Warn)
 	state := prior
 	state.Slug, state.Tier = spec.Slug, spec.Tier
