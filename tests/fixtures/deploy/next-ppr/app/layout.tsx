@@ -1,4 +1,4 @@
-export const metadata = { title: "Ocel prerender (Next, partial prerendering)" };
+export const metadata = { title: "Ocel (Next, partial prerendering)" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

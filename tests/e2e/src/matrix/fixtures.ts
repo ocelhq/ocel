@@ -147,6 +147,11 @@ export const deploy = {
       gcp: [defaults, container],
     },
   }),
+  nextPpr: fixture("deploy/next-ppr", {
+    apps: ["web"],
+    checks: [...healthChecks, ...nextPprChecks, ...nextStoreReadChecks],
+    on: { aws: [defaults, cloudflare] },
+  }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
     checks: NODE_CHECKS,
@@ -262,19 +267,6 @@ export const sdk = {
   }),
 };
 
-export const prerender = {
-  nextPpr: fixture("prerender/next-ppr", {
-    apps: ["web"],
-    checks: [...healthChecks, ...nextPprChecks],
-    on: { aws: [defaults, cloudflare] },
-  }),
-  nextStore: fixture("prerender/next-store", {
-    apps: ["web"],
-    checks: [...healthChecks, ...nextStoreReadChecks],
-    on: { aws: [cloudflare] },
-  }),
-};
-
 export const preBuild = {
   node: fixture("pre-build/node", {
     apps: ["web"],
@@ -315,7 +307,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
-  ...Object.values(prerender),
   ...Object.values(preBuild),
   ...Object.values(iac),
 ];
