@@ -109,24 +109,6 @@ describe("edgeOriginFetch", () => {
     expect(signed?.headers.get("next-resume")).toBe("1");
   });
 
-  it("keeps a request's no-store, so Cloudflare's cache never keeps what it sends", async () => {
-    let sent: Request | undefined;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      sent = new Request(input as RequestInfo, init);
-      return new Response("ok");
-    }) as typeof fetch;
-    try {
-      await edgeOriginFetch("AKIAEXAMPLE", "secretkey")!(
-        new Request(FUNCTION_URL, { cache: "no-store" }),
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-
-    expect(sent?.cache).toBe("no-store");
-  });
-
   it("drops the sentinel byte the origin marks an empty body with", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () =>

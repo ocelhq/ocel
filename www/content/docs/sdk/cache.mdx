@@ -86,8 +86,8 @@ own route table and does not use this one.
   group repeated with `*`, `+` or a count above one that holds a quantifier or `|`, such as
   `(a+)+`, which can take a matcher exponential time. An optional group, such as
   `(?:/([^/]+))?`, may hold either.
-- `routes` are tried in order, and the first match wins. A route with no `cache` is never stored
-  by an edge, and a path no route names goes to `fallback`.
+- `routes` are tried in order, and the first match wins. A path no route names goes to
+  `fallback`.
 - `headers` rules all apply, in order, over the headers your handler set. A rule may not set
   `Cache-Control`, `CDN-Cache-Control` or `Surrogate-Control`: a route's cache rule is the only
   lifetime the table gives.
@@ -116,12 +116,12 @@ when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `pr
 `no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
 (`s-maxage` and `stale-while-revalidate`) or from the cache rule of its route.
 
-In an app with a route table, a response of a route with no cache rule, or of a path that falls
-through to `fallback`, is never stored by an edge. Your app takes `public`, `s-maxage` and
-`stale-while-revalidate` out of its `Cache-Control`, drops `CDN-Cache-Control` and
-`Surrogate-Control`, and marks it `private` if a `max-age` or `Expires` is left for the browser.
-The Cloudflare gateway also asks Cloudflare's cache to store nothing it fetches for it. An app
-with no route table keeps the lifetime its handler sets.
+A cache rule governs only its own route. Only a route with a rule gets the rule's lifetime and
+has its request's cookies stripped. A route with no rule, and a path that falls through to
+`fallback`, keeps the cache headers your app sends, as plain HTTP does: an edge stores the
+response for as long as its `Cache-Control`, `CDN-Cache-Control` or `Surrogate-Control` allows,
+whoever asked for it. Never mark a personalised response `public` or give it an `s-maxage` on
+such a route. On Cloudflare a route with no rule is not stored, whatever its headers say.
 
 Behind an edge that caches, a cached route answers everyone the same, so your handler never
 sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every

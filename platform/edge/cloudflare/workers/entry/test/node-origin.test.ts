@@ -188,15 +188,6 @@ describe("node runtime serve path", () => {
     expect((await wire.calls[0].arrayBuffer()).byteLength).toBe(512);
   });
 
-  it("keeps a request's no-store on its way to the origin", async () => {
-    const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
-
-    await serve(new Request("https://api.example.com/account", { cache: "no-store" }));
-
-    expect(wire.calls[0].cache).toBe("no-store");
-  });
-
   it("binds none of next's machinery onto the forwarded request", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;

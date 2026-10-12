@@ -81,7 +81,6 @@ export function edgeOriginFetch(
             headers,
             body,
             redirect: "manual",
-            ...(request.cache === "no-store" ? { cache: "no-store" as const } : {}),
           }),
         ),
       ),

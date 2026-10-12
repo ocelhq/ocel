@@ -46,15 +46,6 @@ describe("originFetchFor", () => {
     expect(sent[0].headers.get("authorization")).toBe("Bearer t");
   });
 
-  it("keeps a request's no-store on the client certificate path", async () => {
-    const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
-    await withGlobalFetch(forbiddenFetch, () =>
-      originFetch(new Request("https://d-abc.origin.example.com/x", { cache: "no-store" })),
-    );
-    expect(sent[0].cache).toBe("no-store");
-  });
-
   it("adds no AWS signature to a request it sends through the client certificate binding", async () => {
     const { binding, sent } = fakeBinding();
     const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;

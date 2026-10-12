@@ -566,53 +566,30 @@ describe("a request bypassing the cache", () => {
 });
 
 describe("a response of a route that caches nothing", () => {
-  function sharing(req: http.IncomingMessage, res: http.ServerResponse): void {
-    res.writeHead(200, {
-      "cache-control": "public, max-age=10, s-maxage=600, stale-while-revalidate=60",
-      "cdn-cache-control": "max-age=600",
-      "surrogate-control": "max-age=600",
-    });
-    res.end("personal");
-  }
-
-  test("keeps no lifetime a shared cache would store it for, on a route or the fallback", async () => {
-    for (const env of [behindCloudFront, behindCloudflare]) {
-      const get = await serve(env, sharing);
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront, {}],
+    ["behind the Cloudflare gateway", behindCloudflare, asked],
+  ])(
+    "reaches the edge with the cache headers its handler set, on a route or the fallback %s",
+    async (_edge, env, headers) => {
+      const get = await serve(env, (req, res) => {
+        res.writeHead(200, {
+          "cache-control": "public, s-maxage=60",
+          "cdn-cache-control": "max-age=600",
+          "surrogate-control": "max-age=600",
+        });
+        res.end("shared");
+      });
 
       for (const path of ["/account", "/about"]) {
-        const res = await get(path, { headers: asked });
+        const res = await get(path, { headers });
 
-        expect(res.headers.get("cache-control"), path).toBe("private, max-age=10");
-        expect(res.headers.has("cdn-cache-control"), path).toBe(false);
-        expect(res.headers.has("surrogate-control"), path).toBe(false);
-        expect(res.headers.has("cache-tag"), path).toBe(false);
-        expect(res.headers.has("x-ocel-cache-tag"), path).toBe(false);
+        expect(res.headers.get("cache-control"), path).toBe("public, s-maxage=60");
+        expect(res.headers.get("cdn-cache-control"), path).toBe("max-age=600");
+        expect(res.headers.get("surrogate-control"), path).toBe("max-age=600");
       }
-    }
-  });
-
-  test("drops a cache-control that names a shared lifetime alone", async () => {
-    const get = await serve(behindCloudFront, (req, res) => {
-      res.writeHead(200, { "cache-control": "s-maxage=600" });
-      res.end();
-    });
-
-    const res = await get("/account");
-
-    expect(res.headers.has("cache-control")).toBe(false);
-  });
-
-  test("keeps the lifetime its handler set when the app states no route table", async () => {
-    const { OCEL_ROUTE_TABLE: _, ...noTable } = behindCloudFront;
-    const get = await serve(noTable, sharing);
-
-    const res = await get("/account");
-
-    expect(res.headers.get("cache-control")).toBe(
-      "public, max-age=10, s-maxage=600, stale-while-revalidate=60",
-    );
-    expect(res.headers.get("cdn-cache-control")).toBe("max-age=600");
-  });
+    },
+  );
 });
 
 describe("an origin behind no caching edge", () => {
