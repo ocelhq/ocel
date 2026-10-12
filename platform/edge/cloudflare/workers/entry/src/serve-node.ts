@@ -36,6 +36,8 @@ export interface ServeNodePorts {
   forward: (request: Request) => Promise<Response>;
 }
 
+const CONDITIONAL_HEADERS = ["if-none-match", "if-modified-since"] as const;
+
 function isRead(request: Request): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
@@ -95,7 +97,10 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     });
     const served = buildServeRequest(call.url, request);
     served.headers.set(edgeCacheHeader, "1");
-    if (onlyLooksUp) served.headers.set(SERVE_LOOKUP_ONLY_HEADER, "1");
+    if (onlyLooksUp) {
+      served.headers.set(SERVE_LOOKUP_ONLY_HEADER, "1");
+      for (const name of CONDITIONAL_HEADERS) served.headers.delete(name);
+    }
     const release: RenderRelease = {
       slug: serving.slug,
       isrPrefix: serving.isrPrefix,

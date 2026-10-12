@@ -343,6 +343,32 @@ describe("a request on a route no cache rule governs", () => {
     expect(forwarded[0]!.headers.has("x-ocel-edge-cache")).toBe(false);
   });
 
+  it("sends a visitor with a cookie and a conditional request to the origin with its cookie, and never stores the answer, when there is no entry", async () => {
+    const { serve, calls, forwarded } = setup(({ request }) =>
+      request.headers.has(SERVE_LOOKUP_ONLY_HEADER) &&
+      !request.headers.has("if-none-match") &&
+      !request.headers.has("if-modified-since")
+        ? new Response(null, { status: 404, headers: { [SERVE_MISS_HEADER]: "1" } })
+        : new Response("anonymous page, now stored", { headers: { "cf-cache-status": "MISS" } }),
+    );
+
+    const res = await serve(
+      new Request("https://shop.example.com/account", {
+        headers: {
+          cookie: "s=1",
+          "if-none-match": '"e1"',
+          "if-modified-since": "Mon, 12 Oct 2026 00:00:00 GMT",
+        },
+      }),
+    );
+
+    expect(await res.text()).toBe("uncached");
+    expect(calls).toHaveLength(1);
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.headers.get("cookie")).toBe("s=1");
+    expect(forwarded[0]!.headers.get("if-none-match")).toBe('"e1"');
+  });
+
   it("sends a visitor with a cookie to the origin when Serve refuses the origin", async () => {
     const { serve, forwarded } = setup(
       () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
