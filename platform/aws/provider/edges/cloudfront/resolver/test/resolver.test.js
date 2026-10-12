@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import fixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
 import { describe, expect, it } from "vitest";
 
@@ -8,7 +9,10 @@ const source = `${read("resolver.js")}\n${read("ungated.js")}`;
 
 function load(cf) {
   const body = source.replace(/^import cf from 'cloudfront';\n/m, "");
-  return new Function("cf", `${body}\nreturn handler;`)(cf);
+  return new Function("cf", "require", `${body}\nreturn handler;`)(
+    cf,
+    createRequire(import.meta.url),
+  );
 }
 
 class KeyMissing extends Error {}
@@ -39,6 +43,8 @@ function cloudfront(entries, { failing = false } = {}) {
 
 const RELEASE = fixture.release;
 
+const DRAFT_KEY_OF_TOKEN_1 = ".draft-6b86b273ff34fce1";
+
 const ASSET_PREFIX = "production/proj1/web/r3f8a1c9d/assets";
 
 const ROUTE = {
@@ -65,8 +71,8 @@ async function resolve(event, entries = { "shop.example.com": ROUTE }, options) 
   return { answered, origins: cf.origins, selected: cf.selected };
 }
 
-async function keyFor(testCase) {
-  const cookies = testCase.draft ? { __prerender_bypass: "1" } : {};
+async function keyFor(testCase, token = "1") {
+  const cookies = testCase.draft ? { __prerender_bypass: token } : {};
   const { answered } = await resolve(request(testCase.pathname, testCase.headers, cookies));
   return answered.headers["x-ocel-cache-key"].value;
 }
@@ -335,11 +341,30 @@ describe("the headers a viewer cannot forge past the resolver", () => {
 describe("the cache key the resolver computes", () => {
   for (const testCase of fixture.cases.filter((c) => c.variantPrerendered !== null)) {
     it(testCase.name, async () => {
-      const draft = testCase.draft ? ".draft" : "";
+      const draft = testCase.draft ? DRAFT_KEY_OF_TOKEN_1 : "";
 
       expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);
     });
   }
+});
+
+describe("the cache key of a request carrying a bypass cookie", () => {
+  const draft = fixture.cases.find((c) => c.draft && c.variantPrerendered !== null);
+
+  it("names the token by a digest of it, never by the token", async () => {
+    const key = await keyFor(draft, "s3cret-token");
+
+    expect(key).toMatch(/\.draft-[0-9a-f]{16}$/);
+    expect(key).not.toContain("s3cret-token");
+  });
+
+  it("gives a wrong token an entry of its own, apart from the valid token's", async () => {
+    expect(await keyFor(draft, "wrong")).not.toBe(await keyFor(draft, "right"));
+  });
+
+  it("gives the same token the same entry every time", async () => {
+    expect(await keyFor(draft, "right")).toBe(await keyFor(draft, "right"));
+  });
 });
 
 describe("the resolver reads no route table, so it keys every route as if it were static", () => {
@@ -353,7 +378,7 @@ describe("the resolver reads no route table, so it keys every route as if it wer
 
   for (const testCase of diverging) {
     it(`${testCase.name}, which a partially-static route would not cache at all`, async () => {
-      const draft = testCase.draft ? ".draft" : "";
+      const draft = testCase.draft ? DRAFT_KEY_OF_TOKEN_1 : "";
 
       expect(testCase.variantPartiallyStatic).toBeNull();
       expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);

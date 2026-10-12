@@ -162,10 +162,10 @@ answers the redirects itself.
 Some of the route table is applied only where the edge can do it:
 - `allowQuery` keys the cache on Cloudflare only. CloudFront and the load balancer key on
   every parameter, which splits the cache more but never serves the wrong page.
-- The bypass cookie is checked before the cache on Cloudflare only. CloudFront keeps a request
-  with any `__prerender_bypass` cookie apart from the published page, and the load balancer
-  keys on its value, so a preview reaches your app unless a request with another value already
-  filled that entry.
+- The bypass cookie is checked before the cache on Cloudflare only. CloudFront and the load
+  balancer key a request by the cookie's value, so a request with a wrong value fills an entry
+  of its own and never the one a valid token reads, and your app answers a valid token
+  `private, no-store`, which no edge stores. A preview therefore reaches your app on every edge.
 - The revalidate header is checked by your app. CloudFront gives the request a cache key no
   other request shares, and the load balancer bypasses its cache for it, so it always reaches
   your app.
