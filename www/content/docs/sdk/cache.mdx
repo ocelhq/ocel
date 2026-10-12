@@ -82,7 +82,10 @@ own route table and does not use this one.
   and with no query. It must match the whole pathname, and is written in the subset of regular
   expressions that RE2 and JavaScript read the same way: groups `( )` and `(?: )`, classes,
   `|`, the quantifiers, `\d \w \b` and their negations, and escaped punctuation. Lookaround,
-  backreferences, named groups, flags and `\s` are refused when the build is deployed.
+  backreferences, named groups, flags and `\s` are refused when the build is deployed, as is a
+  group repeated with `*`, `+` or a count above one that holds a quantifier or `|`, such as
+  `(a+)+`, which can take a matcher exponential time. An optional group, such as
+  `(?:/([^/]+))?`, may hold either.
 - `routes` are tried in order, and the first match wins. A route with no `cache` is never stored
   by an edge, and a path no route names goes to `fallback`.
 - `headers` rules all apply, in order, over the headers your handler set. A rule may not set

@@ -102,6 +102,37 @@ function refuseUnsharedSyntax(src: string): Refusal {
   return undefined;
 }
 
+function repeatsAgain(rest: string): boolean {
+  if (rest.startsWith("*") || rest.startsWith("+")) return true;
+  const bounds = repeatBound.exec(rest);
+  if (!bounds) return false;
+  const most = bounds[0].includes(",") ? bounds[2] : bounds[1];
+  return most === undefined || most === "" || Number(most) > 1;
+}
+
+function refuseAmbiguousRepeat(src: string): Refusal {
+  const groups: boolean[] = [];
+  let inClass = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]!;
+    if (c === "\\") i++;
+    else if (inClass) inClass = c !== "]";
+    else if (c === "[") inClass = true;
+    else if (c === "(") {
+      groups.push(false);
+      if (src.startsWith("(?:", i)) i += 2;
+    } else if (c === ")" && groups.length > 0) {
+      const ambiguous = groups.pop();
+      if (ambiguous && repeatsAgain(src.slice(i + 1))) {
+        return "a pattern repeats no group that holds a quantifier or an alternation";
+      }
+    } else if ("|*+?".includes(c) || (c === "{" && repeatBound.test(src.slice(i)))) {
+      groups.fill(true);
+    }
+  }
+  return undefined;
+}
+
 function countGroups(src: string): number {
   let groups = 0;
   let inClass = false;
@@ -125,7 +156,7 @@ interface Pattern {
 }
 
 function compilePattern(src: string): Pattern | string {
-  const refused = refuseUnsharedSyntax(src);
+  const refused = refuseUnsharedSyntax(src) ?? refuseAmbiguousRepeat(src);
   if (refused) return refused;
   try {
     return { expression: new RegExp(anchorPattern(src)), groups: countGroups(src) };

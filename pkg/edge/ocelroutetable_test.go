@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -62,9 +61,9 @@ func TestAPatternMatchesTheFixturePathsTheWayTheEdgeContractDoes(t *testing.T) {
 	t.Parallel()
 
 	for _, c := range readRoutesFixture(t).Patterns {
-		compiled, err := regexp.Compile(anchorPattern(c.Src))
+		compiled, err := compilePattern(c.Src)
 		if err != nil {
-			t.Errorf("%s did not compile: %v", c.Src, err)
+			t.Errorf("%s was refused: %v", c.Src, err)
 			continue
 		}
 		groups := compiled.FindStringSubmatch(c.Path)
