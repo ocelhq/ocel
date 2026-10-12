@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 const (
@@ -48,7 +49,32 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, nil, c.FunctionDir, c.AppDir)
+	worker, err := c.writePythonWorkerEntry()
+	if err != nil {
+		return err
+	}
+	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, worker, c.FunctionDir, c.AppDir)
+}
+
+func (c Compilation) writePythonWorkerEntry() ([]string, error) {
+	var packages []string
+	for _, root := range c.DiscoveryRoots {
+		rel, err := filepath.Rel(c.Source, root)
+		switch {
+		case err != nil || rel == ".." || strings.HasPrefix(rel, "../"):
+			packages = append(packages, filepath.Base(root))
+		case rel != ".":
+			packages = append(packages, strings.ReplaceAll(filepath.ToSlash(rel), "/", "."))
+		}
+	}
+	if len(packages) == 0 {
+		return nil, nil
+	}
+	entry := discovery.PythonWorkerSource(discovery.PythonArtifactRoot, packages)
+	if err := os.WriteFile(filepath.Join(c.FunctionDir, containerimage.PythonArtifactEntry), []byte(entry), 0o644); err != nil {
+		return nil, fmt.Errorf("write app %q's worker entry: %w", c.App, err)
+	}
+	return []string{pythonRuntimeCommand, containerimage.PythonArtifactEntry}, nil
 }
 
 func (c Compilation) copyDiscoveryRoots() error {
