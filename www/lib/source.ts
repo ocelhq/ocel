@@ -1,6 +1,5 @@
 import {
   ArrowDownTrayIcon,
-  BeakerIcon,
   BoltIcon,
   BookOpenIcon,
   CommandLineIcon,
@@ -34,7 +33,6 @@ const docs = defineDocs({
 
 const icons = {
   ArrowDownTrayIcon,
-  BeakerIcon,
   BoltIcon,
   BookOpenIcon,
   CommandLineIcon,

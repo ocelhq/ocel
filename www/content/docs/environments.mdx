@@ -1,6 +1,89 @@
 ---
 title: Environments
-description: Dev, preview, production.
+description: Production, previews and dev, and the variables each one reads.
 ---
 
-Dummy content.
+Every deploy lands in one of two deployed tiers, and `ocel dev` runs a third on your machine:
+
+| Tier | What puts your app there | Values come from |
+| --- | --- | --- |
+| `production` | [`ocel deploy`](/docs/cli/deploy) | ocel's own store in your account |
+| `preview` | [`ocel preview`](/docs/cli/preview), one per git branch | ocel's own store in your account |
+| `dev` | [`ocel dev`](/docs/cli/dev) and `ocel run` | your project's `.env` |
+
+Any tier can read its values from Infisical or a command instead; see [Env sources](/docs/env-sources).
+
+## Production and previews are kept apart
+
+A preview never reads production's values or touches production's resources:
+
+- **Values.** Each deployed tier has its own store, and a value is sealed to the tier it was set
+  for. A key set for production is not set for previews until you set it there too.
+- **Infrastructure.** Each tier is bootstrapped on its own, with `ocel bootstrap production` and
+  `ocel bootstrap preview`.
+- **Resources.** A preview shares the preview tier's database, bucket and other resources, never
+  production's. `ocel preview up --persistent` gives one preview resources of its own.
+- **Domains.** Production serves the hostnames under `domains.production`. Each preview gets a
+  hostname under the `domains.preview` wildcard, ending in a random token.
+
+A hostname nobody can guess is not access control, so keep production secrets out of previews.
+
+## Variables
+
+Your app declares the variables it reads, and the declaration is where each one's class is set:
+
+```ts title="resources/env.ts"
+import { defineEnv } from "ocel/env";
+import { z } from "zod";
+
+export const env = defineEnv({
+  NEXT_PUBLIC_SITE_NAME: { class: "plain" },
+  STRIPE_SECRET_KEY: { class: "sensitive" },
+  DATABASE_PASSWORD: { class: "secret" },
+  LOG_LEVEL: { class: "plain", schema: z.enum(["info", "debug"]).default("info") },
+});
+```
+
+Go, Python and Rust declare the same three classes; see [Env](/docs/sdk/env). You set the value
+for each tier:
+
+```bash
+ocel env set LOG_LEVEL=debug                               # production
+ocel env set LOG_LEVEL=debug --preview                     # every preview
+ocel env set LOG_LEVEL=debug --preview --environment pr-12 # one preview
+```
+
+A deploy that is missing a declared value stops and names the `ocel env set` that fills it.
+
+### Classes
+
+Every value is encrypted in ocel's store whatever its class. The class decides where the value
+may go once it leaves the store:
+
+|  | `plain` | `sensitive` | `secret` |
+| --- | --- | --- | --- |
+| Usable in browser code | Yes, as `NEXT_PUBLIC_*` or SvelteKit `public: true` | No | No |
+| Read by your app | Once, at startup | Once, at startup | On every access |
+| Picks up a changed value | On the next deploy | On the next deploy | Within about a minute |
+| Can have a default | Yes | Yes | No |
+| Quoted in a parse error | Yes | No | No |
+| In build output | As is | As `[secret]` | As `[secret]` |
+| Reaches an image build | No | Yes, as a build secret | Yes, as a build secret |
+| `ocel env get --reveal` | Prints it | Prints it | Prints it after `--yes` |
+
+### Which class to choose
+
+- **`plain`** for anything that isn't confidential: feature flags, log levels, public URLs. It is
+  the only class browser code can read.
+- **`sensitive`** for a confidential value your app reads once, such as an API key. It never
+  reaches a client bundle, an error message or the build output.
+- **`secret`** for a value that rotates, such as a database password. Your app reads it on each
+  use, so a rotation takes effect without a redeploy, and it has no default, because a missing
+  secret should fail loudly. A page prerendered from a secret keeps the old value until the next
+  deploy.
+
+### Variables in config
+
+`{ "$env": "NAME" }` in [your config](/docs/configuration) is a variable too, set the same way,
+and it is how a password, a connection string or a key reaches a binding. The app never
+receives it.
