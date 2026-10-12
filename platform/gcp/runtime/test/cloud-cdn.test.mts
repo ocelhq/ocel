@@ -4,8 +4,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { cacheTagsForCloudCdn, cloudCdnRelease } from "../src/cache/cloud-cdn-tags.mjs";
 import {
   forCloudCdn,
+  isWithheldFromCloudCdn,
   trimVaryForCloudCdn,
-  withholdFromCloudCdn,
   withholdResponsesFromCloudCdn,
 } from "../src/next/cloud-cdn.mjs";
 
@@ -200,23 +200,33 @@ test("a page whose tags all fit keeps its cache control", () => {
 
 const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
 
-test("a response Cloud CDN would store under s-maxage is withheld from it, because nothing tags it for clearing", () => {
-  expect(withholdFromCloudCdn(null)).toBeNull();
-  expect(withholdFromCloudCdn("s-maxage=60, stale-while-revalidate=31535940")).toBe(uncacheable);
-  expect(withholdFromCloudCdn("S-MaxAge=31536000")).toBe(uncacheable);
-  expect(withholdFromCloudCdn("private, no-cache, no-store, max-age=0, must-revalidate")).toBe(
-    uncacheable,
-  );
-  expect(withholdFromCloudCdn("public, max-age=0")).toBe("public, max-age=0");
-});
+const now = Date.parse("Mon, 12 Oct 2026 12:00:00 GMT");
 
-test("an immutable response stays storable by Cloud CDN, because a hashed file never needs clearing", () => {
-  expect(withholdFromCloudCdn("public, max-age=31536000, immutable")).toBe(
-    "public, max-age=31536000, immutable",
-  );
-  expect(withholdFromCloudCdn("public, s-maxage=60, immutable")).toBe(
-    "public, s-maxage=60, immutable",
-  );
+test.each([
+  ["an s-maxage", { "cache-control": "s-maxage=60, stale-while-revalidate=31535940" }],
+  ["an s-maxage in any case", { "cache-control": "S-MaxAge=31536000" }],
+  ["a max-age and no s-maxage", { "cache-control": "public, max-age=60" }],
+  ["a future Expires and no Cache-Control", { expires: "Mon, 12 Oct 2026 12:01:00 GMT" }],
+  [
+    "a future Expires and a Cache-Control naming no lifetime",
+    { "cache-control": "public", expires: "Mon, 12 Oct 2026 12:01:00 GMT" },
+  ],
+] as const)(
+  "a response with %s is withheld from Cloud CDN, because nothing tags it for clearing",
+  (_name, headers) => {
+    expect(isWithheldFromCloudCdn(new Headers(headers), now)).toBe(true);
+  },
+);
+
+test.each([
+  ["no cache headers", {}],
+  ["a refusal", { "cache-control": uncacheable }],
+  ["a max-age of zero", { "cache-control": "public, max-age=0" }],
+  ["an Expires in the past", { expires: "Mon, 12 Oct 2026 11:59:00 GMT" }],
+  ["an immutable max-age", { "cache-control": "public, max-age=31536000, immutable" }],
+  ["an immutable s-maxage", { "cache-control": "public, s-maxage=60, immutable" }],
+] as const)("a response with %s is left storable as it is", (_name, headers) => {
+  expect(isWithheldFromCloudCdn(new Headers(headers), now)).toBe(false);
 });
 
 test("a next start response that names s-maxage leaves the server private and unstorable", async () => {
@@ -302,6 +312,23 @@ test("an immutable or unstorable Cache-Control passed to writeHead is left as it
     res.writeHead(200, { "cache-control": "public, max-age=0" }),
   );
   expect(unstorable.cacheControl).toBe("public, max-age=0");
+});
+
+test("a response with a max-age and no s-maxage is withheld", async () => {
+  const seen = await cacheControlSeenFor((res) =>
+    res.writeHead(200, { "cache-control": "public, max-age=60", "x-other": "kept" }),
+  );
+  expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
+});
+
+test("a response whose only lifetime is a future Expires is withheld, from setHeader or writeHead", async () => {
+  const expires = () => new Date(Date.now() + 60_000).toUTCString();
+  const staged = await cacheControlSeenFor((res) => res.setHeader("expires", expires()));
+  expect(staged.cacheControl).toBe(uncacheable);
+  const written = await cacheControlSeenFor((res) =>
+    res.writeHead(200, ["Expires", expires(), "x-other", "kept"]),
+  );
+  expect(written).toEqual({ cacheControl: uncacheable, other: "kept" });
 });
 
 test("a Cache-Control staged with setHeader is still withheld when writeHead carries other headers", async () => {
