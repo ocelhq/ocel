@@ -522,14 +522,22 @@ async function publishUntilHeard(
   }
 }
 
-class RecordedWebSocket extends WebSocket {
-  static readonly opened: WebSocket[] = [];
-  static readonly reached = new Map<string, string>();
+type Socket = { close(): void };
 
-  constructor(url: string | URL, protocols?: string | string[]) {
-    super(RecordedWebSocket.reached.get(String(url)) ?? url, protocols);
-    RecordedWebSocket.opened.push(this);
-  }
+type SocketConstructor = new (url: string | URL, protocols?: string | string[]) => Socket;
+
+export function socketRecorder(
+  reached: Map<string, string>,
+  Base: SocketConstructor,
+): { Recorded: SocketConstructor; opened: Socket[] } {
+  const opened: Socket[] = [];
+  const Recorded = class extends Base {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(reached.get(String(url)) ?? url, protocols);
+      opened.push(this);
+    }
+  };
+  return { Recorded, opened };
 }
 
 export const realtimeReauthorizeCheck: Check = {
@@ -544,10 +552,13 @@ export const realtimeReauthorizeCheck: Check = {
     const heard = new Map<string, string[]>();
     const failures = new Map<string, RealtimeError[]>();
     const { url: socketUrl } = await requestBatch(ctx, { ops: [] });
-    RecordedWebSocket.reached.set(socketUrl, await ctx.reach(socketUrl));
+    const recorder = socketRecorder(
+      new Map([[socketUrl, await ctx.reach(socketUrl)]]),
+      globalThis.WebSocket,
+    );
     const handlerUrl = await ctx.reach(`${ctx.baseUrl}${HANDLER_PATH}`);
     const native = globalThis.WebSocket;
-    globalThis.WebSocket = RecordedWebSocket as typeof WebSocket;
+    globalThis.WebSocket = recorder.Recorded as typeof WebSocket;
     const clients = Object.entries(callers).map(([name, caller]) => {
       const client = createRealtimeClient<FixtureChannels>({
         url: handlerUrl,
@@ -566,7 +577,7 @@ export const realtimeReauthorizeCheck: Check = {
     try {
       await publishUntilHeard(ctx, orderId, heard, ["kept", "revoked"], "before");
       callers.revoked.orders = [];
-      const dropped = RecordedWebSocket.opened.splice(0);
+      const dropped = recorder.opened.splice(0);
       assert.equal(dropped.length, 2, "each client opened one socket");
       for (const socket of dropped) socket.close();
 
