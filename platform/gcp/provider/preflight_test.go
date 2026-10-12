@@ -94,9 +94,9 @@ func TestADeployDeclaringNoStoreReadsNothing(t *testing.T) {
 	}
 }
 
-func declaringATask(infra naming.StackName) provider.DeployPreflight {
+func declaringATask() provider.DeployPreflight {
 	return provider.DeployPreflight{
-		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Infra: infra},
+		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Infra: naming.InfraStack("prod")},
 		Resources: []provider.Resource{{Name: "task-resize", Declared: "resize", Type: provider.BindingTask, Topic: &provider.TopicSpec{
 			Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "worker", Exclusive: true}},
 		}}},

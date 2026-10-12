@@ -214,7 +214,7 @@ func TestTheFirstTopicOrTaskAddsTheTasksPartItRecordsAndMakesNoQueue(t *testing.
 
 func TestADryDeployDeclaringATaskPlansTheTasksPartAndMakesNothing(t *testing.T) {
 	var planned []provider.ChangeGroup
-	pre := declaringATask(naming.InfraStack("prod"))
+	pre := declaringATask()
 	pre.Dry = true
 	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
 
