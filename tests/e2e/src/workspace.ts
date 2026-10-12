@@ -21,6 +21,10 @@ export function migrateCommand(): string[] {
   return ["pnpm", "run", "migrate"];
 }
 
+export function migrateLine(): string {
+  return migrateCommand().join(" ");
+}
+
 export function stateComplaint(home: string, withState: string[]): string | undefined {
   const here = (dir: string) => path.resolve(dir) === path.resolve(home);
   const stray = withState.filter((dir) => !here(dir));

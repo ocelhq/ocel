@@ -14,7 +14,7 @@ import type {
 } from "./matrix/types";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
-import { migrateCommand } from "./workspace";
+import { migrateLine } from "./workspace";
 
 type PlannedCell = Pick<CellUnderTest, "name" | "slug" | "fixture" | "variant">;
 
@@ -115,7 +115,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         ...cell.fixture.configOn?.aws,
         ...cell.variant.config,
         ...(migrates(cell.fixture.checks) && !emulatorEndpoint(env)
-          ? { preBuild: migrateCommand().join(" ") }
+          ? { preBuild: migrateLine() }
           : {}),
         ...dnsOf(env),
         ...(forwarded && zone ? { dns: "cloudflare" as const } : {}),
@@ -288,7 +288,9 @@ export function renderConfig(base: string, overlay: Overlay): string {
     fields.push(`  allowDegraded: ${JSON.stringify(overlay.allowDegraded)},`);
   }
   if (overlay.preBuild) {
-    fields.push(`  lifecycle: { ...base.lifecycle, preBuild: ${JSON.stringify(overlay.preBuild)} },`);
+    fields.push(
+      `  lifecycle: { ...base.lifecycle, preBuild: ${JSON.stringify(overlay.preBuild)} },`,
+    );
   }
   if (overlay.previewDomain) {
     fields.push(

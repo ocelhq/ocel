@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { sdk, tasks } from "./matrix/fixtures";
-import { appCommand, appHomes, migrateCommand, stateComplaint } from "./workspace";
+import { appCommand, appHomes, migrateCommand, migrateLine, stateComplaint } from "./workspace";
 
 const workspace = sdk.workspace;
 const composite = sdk.node;
@@ -30,6 +30,10 @@ describe("a multi-app fixture", () => {
 
   it("migrates where the config sits, since the schema belongs to the project", () => {
     expect(migrateCommand()).toEqual(["pnpm", "run", "migrate"]);
+  });
+
+  it("writes the migration as the one shell line a pre-build or a remote shell runs", () => {
+    expect(migrateLine()).toBe("pnpm run migrate");
   });
 
   it("names the app directories that must contain no state of their own", () => {

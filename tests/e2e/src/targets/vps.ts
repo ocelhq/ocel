@@ -20,7 +20,7 @@ import { NonzeroExitError, ocel, recordOutput, runOcel, spawnOcel, workTree } fr
 import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
-import { migrateCommand } from "../workspace";
+import { migrateLine } from "../workspace";
 import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
 import {
@@ -749,7 +749,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
       target.user,
       `sudo docker exec -e OCEL_LIVE_DIR=${CONTAINER_LIVE_DIR} ` +
         `-w ${CONTAINER_APP_ROOT}/${fixtureMember(cell.fixture.name)} ${container} ` +
-        migrateCommand().join(" "),
+        migrateLine(),
     );
     await cell.evidence.write("deploy", "migrate.log", redact(said));
   }
