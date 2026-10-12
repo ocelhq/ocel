@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import type { TagRecord } from "@platform/edge-contract/purge";
 
 interface Mark {
   stale?: number;
-  expired?: number;
 }
 
 type Manifest = Map<string, Mark>;
@@ -42,18 +42,8 @@ export function mirrorTagsInto(manifest: Manifest | null): void {
   mirror().manifest = manifest;
 }
 
-function latest(a: number | undefined, b: number | undefined): number | undefined {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  return Math.max(a, b);
-}
-
-export function mirrorTag(tag: string, record: Mark): void {
+export function mirrorTag(tag: string, record: TagRecord): void {
   const manifest = mirror().manifest;
-  if (!manifest) return;
-  const existing = manifest.get(tag);
-  manifest.set(tag, {
-    stale: latest(existing?.stale, record.stale),
-    expired: latest(existing?.expired, record.expired),
-  });
+  if (!manifest || record.stale === undefined) return;
+  manifest.set(tag, { stale: Math.max(manifest.get(tag)?.stale ?? -Infinity, record.stale) });
 }
