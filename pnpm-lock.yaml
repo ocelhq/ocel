@@ -995,9 +995,6 @@ importers:
 
   platform/gcp/provider/payloads:
     devDependencies:
-      '@framework/node-runtime':
-        specifier: workspace:*
-        version: link:../../../../frameworks/node/runtime
       '@platform/gcp-runtime':
         specifier: workspace:*
         version: link:../../runtime
