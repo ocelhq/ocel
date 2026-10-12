@@ -85,7 +85,7 @@ bind.postgres("orders", {
 | Option        | Default                     | Meaning                                                                                    |
 | ------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
 | `tier`        | `"production"`              | The ocel tier the binding is published to.                                                     |
-| `environment` | none                        | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview.   |
+| `environment` | none                        | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview that names it under `bindings`.   |
 | `project`     | the program's directory     | The directory containing `ocel.config.ts` or `ocel.json`.                                                      |
 | `parent`      | none                        | The Pulumi resource this binding hangs under.                                                   |
 

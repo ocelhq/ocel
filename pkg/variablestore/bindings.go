@@ -93,7 +93,7 @@ func ValidateBindingName(environment, name string) error {
 func ValidateBindingEnvironment(environment string) error {
 	if environment == TierWideEnvironment {
 		return fmt.Errorf(
-			"%q is reserved: it names the pair that binds tier-wide. Leave the environment off to publish there, which serves every preview including the ephemeral ones",
+			"%q is reserved: it names the pair that binds tier-wide. Leave the environment off to publish there, which serves every preview that binds the name in its ocel config as \"bindings\": { <type>: { <name>: \"@<name>\" } }",
 			TierWideEnvironment)
 	}
 	return refuseControl("environment name", environment)

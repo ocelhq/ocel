@@ -43,7 +43,7 @@ export function checkTarget(target: Target): void {
   }
   if (target.environment === tierWideMarker) {
     throw new Error(
-      `${tierWideMarker} is reserved: leave the environment off to publish to the whole tier, which serves every preview including the ephemeral ones`,
+      `${tierWideMarker} is reserved: leave the environment off to publish to the whole tier, which serves every preview that binds the name in its ocel config as "bindings": { <type>: { <name>: "@<name>" } }`,
     );
   }
   if (target.environment && target.tier !== "preview") {
