@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -15,10 +16,6 @@ var emittedExtensions = map[string]string{
 }
 
 func (t Target) TracedHandler() (string, error) {
-	if t.WorkerSource != "" {
-		return "", fmt.Errorf("app %q has topics or tasks to run in a worker, and a traced app carries no worker entry; unset %s to bundle it",
-			t.App, PreferTracingEnv)
-	}
 	rel, err := filepath.Rel(t.Source, t.Entrypoint)
 	if err != nil || !filepath.IsLocal(rel) || slices.Contains(strings.Split(rel, string(filepath.Separator)), nodeModulesDir) {
 		return "", fmt.Errorf("entrypoint %s for app %q is not one of the app's own sources under %s, and a traced app is served from the entrypoint it copies there; name an entrypoint inside the app, or unset %s to bundle it",
@@ -31,7 +28,7 @@ func (t Target) TracedHandler() (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-func DescribeTrace(t Target) error {
+func DescribeTrace(ctx context.Context, t Target) error {
 	if err := refuseUnstated("describe a trace", []statedField{
 		{"app", t.App},
 		{"appDir", t.AppDir},
@@ -44,5 +41,8 @@ func DescribeTrace(t Target) error {
 	if err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Framework, handler, nil, nil, t.FunctionDir, t.AppDir)
+	if err := describeArtifact(t.App, t.Framework, handler, nil, nil, t.FunctionDir, t.AppDir); err != nil {
+		return err
+	}
+	return BundleWorker(ctx, t)
 }

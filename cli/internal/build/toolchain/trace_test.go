@@ -1,9 +1,17 @@
 package toolchain
 
 import (
+	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func TestTracedHandler(t *testing.T) {
@@ -47,14 +55,40 @@ func TestTracedHandler(t *testing.T) {
 			}
 		})
 	}
+}
 
-	t.Run("refuses an app whose discovery roots declare a worker", func(t *testing.T) {
-		t.Parallel()
+func TestDescribeTraceCarriesTheWorkerEntryOfAnAppThatDeclaresWorkers(t *testing.T) {
+	t.Parallel()
 
-		target := Target{App: "api", Source: source, Entrypoint: filepath.Join(source, "server.js"), WorkerSource: "await import('./tasks.js');\n"}
-		_, err := target.TracedHandler()
-		if err == nil || !strings.Contains(err.Error(), "worker") || !strings.Contains(err.Error(), PreferTracingEnv) {
-			t.Errorf("TracedHandler err = %v, want a refusal naming the worker and %s", err, PreferTracingEnv)
-		}
+	l := newLayout(t, tree{
+		"package.json": appPkg,
+		"server.js":    "console.log('served');\n",
+		"tasks.js":     "export const shape = 'worker:' + typeof process;\n",
 	})
+	if err := os.MkdirAll(l.functionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := l.target("server.js")
+	target.Source = l.appSrc
+	target.WorkerSource = "const { shape } = await import(" + strconv.Quote(filepath.Join(l.appSrc, "tasks.js")) + ");\nconsole.log(shape);\n"
+	target.WorkerResolveDir = l.appSrc
+
+	if err := DescribeTrace(context.Background(), target); err != nil {
+		t.Fatalf("DescribeTrace: %v", err)
+	}
+
+	var cfg buildoutput.FunctionConfig
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"node", "ocel-worker.mjs"}; !slices.Equal(cfg.Worker, want) {
+		t.Errorf("%s worker = %v, want %v: a traced function a worker runs from starts the bundled entry", buildoutput.FunctionConfigFile, cfg.Worker, want)
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	out, err := exec.Command("node", filepath.Join(l.functionDir, "ocel-worker.mjs")).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "worker:object") {
+		t.Errorf("the worker entry printed %q (%v), want the bundled declarations to run", out, err)
+	}
 }
