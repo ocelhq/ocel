@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { UNSUPPORTED_WARM } from "../src/host.mjs";
+import { boot } from "../src/boot.mjs";
+import {
+  installCompileCacheFlush,
+  installCompileCacheWarm,
+  UNSUPPORTED_WARM,
+} from "../src/host.mjs";
 
 const appModule = `export default (req, res) => res.end("ok");
 `;
@@ -65,7 +70,12 @@ beforeAll(async () => {
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = handler;
-  await import("../src/entrypoint.mjs");
+  boot({
+    hooks: () => {
+      installCompileCacheFlush();
+      installCompileCacheWarm(undefined);
+    },
+  });
   await waitFor(() => messages.some((m) => m.type === "server-ready"));
   port = messages.find((m) => m.type === "server-ready")!.payload.httpPort;
 });

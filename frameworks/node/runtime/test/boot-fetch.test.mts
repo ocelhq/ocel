@@ -3,6 +3,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { boot } from "../src/boot.mjs";
 
 const appModule = `export default {
   fetch: (request) => new Response("from fetch " + new URL(request.url).pathname),
@@ -59,7 +60,7 @@ beforeAll(async () => {
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = handler;
-  await import("../src/entrypoint.mjs");
+  boot();
   port = await serverReady();
 });
 
