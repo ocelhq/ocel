@@ -140,9 +140,12 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			if values, err = mergeValues(fn.Name, nextValues, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), purgeSecret))); err != nil {
 				return nil, err
 			}
-			if values, err = mergeValues(fn.Name, cdnPurgeValues, values, newCDNPurgeEnv(names, spec)); err != nil {
-				return nil, err
-			}
+		}
+		if values, err = mergeValues(fn.Name, cdnPurgeValues, values, newCDNPurgeEnv(names, spec)); err != nil {
+			return nil, err
+		}
+		if values, err = mergeValues(fn.Name, nodePurgeValues, values, newNodePurgeEnv(spec, purgeSecret)); err != nil {
+			return nil, err
 		}
 		served.env = values
 		ran, err := p.deployService(ctx, served, progress)
@@ -524,6 +527,7 @@ const (
 	ocelRoutesValues  = "its route table"
 	nextValues        = "the Next runtime"
 	cdnPurgeValues    = "Cloud CDN purging"
+	nodePurgeValues   = "the revalidation of a node service"
 )
 
 func mergeValues(what, source string, set, added map[string]string) (map[string]string, error) {

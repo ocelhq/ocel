@@ -32,6 +32,10 @@ async function bundle(entry, outfile, options) {
 
 await rm(dist, { recursive: true, force: true });
 
+await bundle(join(pkgDir, "src/node/serve.mts"), join(dist, "node", "serve.mjs"), {
+  format: "esm",
+});
+
 await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoint.mjs"), {
   format: "esm",
   minify: true,

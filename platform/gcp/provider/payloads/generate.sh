@@ -2,7 +2,6 @@
 set -eu
 
 payloads_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$payloads_dir/../../../.." && pwd)
 runtime_dir=$(CDPATH= cd -- "$payloads_dir/../../runtime" && pwd)
 realtime_dir=$(CDPATH= cd -- "$payloads_dir/../../../realtime" && pwd)
 gateplugin_dir=$(CDPATH= cd -- "$payloads_dir/../../gateplugin" && pwd)
@@ -10,7 +9,7 @@ dist="$payloads_dir/dist"
 
 rm -rf "$dist"
 mkdir -p "$dist"
-cp "$root/frameworks/node/runtime/dist/serve.mjs" "$dist/serve.mjs"
+cp "$runtime_dir/dist/node/serve.mjs" "$dist/serve.mjs"
 cp -R "$runtime_dir/dist/next" "$dist/next"
 
 (
