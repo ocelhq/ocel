@@ -14,11 +14,11 @@
     "./empty-body": "./src/empty-body.mts",
     "./preview-gate": "./src/preview-gate.mts",
     "./purge": "./src/purge.mts",
-    "./routes": "./src/routes.mts",
+    "./ocel-route-table": "./src/ocel-route-table.mts",
     "./hosting": "./src/hosting.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
     "./fixtures/preview-gate": "./fixtures/preview-gate.json",
-    "./fixtures/routes": "./fixtures/routes.json",
+    "./fixtures/ocel-route-table": "./fixtures/ocel-route-table.json",
     "./static": "./src/static.mts",
     "./fixtures/static-rules": "./fixtures/static-rules.json"
   },

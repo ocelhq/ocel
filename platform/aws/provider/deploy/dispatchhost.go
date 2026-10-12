@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	routerKindEnv    = "OCEL_ROUTER_KIND"
-	routeTableEnv    = "OCEL_NEXT_ROUTE_TABLE"
-	functionURLsEnv  = "OCEL_FUNCTION_URLS"
-	assetBucketEnv   = "OCEL_ASSET_BUCKET"
-	assetPrefixEnv   = "OCEL_ASSET_PREFIX"
-	slugEnv          = "OCEL_SLUG"
-	appNameEnv       = "OCEL_APP"
-	buildIDEnv       = "OCEL_BUILD_ID"
-	routeTableInTask = "/var/task/" + edge.NextRouteTableFile
-	ocelRoutesInTask = "/var/task/" + edge.OcelRoutesFile
+	routerKindEnv        = "OCEL_ROUTER_KIND"
+	routeTableEnv        = "OCEL_NEXT_ROUTE_TABLE"
+	functionURLsEnv      = "OCEL_FUNCTION_URLS"
+	assetBucketEnv       = "OCEL_ASSET_BUCKET"
+	assetPrefixEnv       = "OCEL_ASSET_PREFIX"
+	slugEnv              = "OCEL_SLUG"
+	appNameEnv           = "OCEL_APP"
+	buildIDEnv           = "OCEL_BUILD_ID"
+	routeTableInTask     = "/var/task/" + edge.NextRouteTableFile
+	ocelRouteTableInTask = "/var/task/" + edge.OcelRouteTableFile
 
 	functionURLBudgetBytes = 80
 )

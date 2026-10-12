@@ -46,14 +46,14 @@ response header.
 
 ## Routes an edge may cache
 
-A build states which routes may be cached in `routes.json`, a route table that sits beside its
+A build states which routes may be cached in `ocel-route-table.json`, a route table that sits beside its
 `hosting.json`, and `hosting.json` names it with `"routeTable": "ocel"`. Framework adapters
 write it; a plain Node app that states none caches nothing by rule on any edge, though
 CloudFront and the load balancer still keep a response that sets its own `s-maxage`. A build with a cached route declares the
 `revalidation` need, which an edge serves by clearing what a revalidation names. Next keeps its
 own route table and does not use this one.
 
-```json title="routes.json"
+```json title="ocel-route-table.json"
 {
   "version": 1,
   "basePath": "",

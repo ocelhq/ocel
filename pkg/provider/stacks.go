@@ -90,7 +90,7 @@ type AppSpec struct {
 	Grants []Binding
 
 	Routing        *RoutingSpec
-	OcelRoutes     *RoutingSpec
+	OcelRouteTable *RoutingSpec
 	EdgeRouteTable *EdgeRouteTable
 	Guard          *OriginGuard
 	ISR            *ISRSpec

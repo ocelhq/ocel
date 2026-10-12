@@ -2,15 +2,15 @@ import { encodeForwardedSearch } from "@framework/next-router/request-target";
 import { needsSlashNormalization } from "@framework/next-router/trailing-slash";
 import { readBypass, revalidateHeader } from "@platform/edge-contract/bypass";
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
-import { purgeHeader, readPurge } from "@platform/edge-contract/purge";
 import {
   type CacheRule,
-  type CompiledRoutes,
+  type CompiledRouteTable,
   findHeaders,
   findRedirect,
   findRoute,
   findSlashRedirect,
-} from "@platform/edge-contract/routes";
+} from "@platform/edge-contract/ocel-route-table";
+import { purgeHeader, readPurge } from "@platform/edge-contract/purge";
 import { buildPathTag } from "./serve-headers";
 import {
   buildCanonicalUrl,
@@ -26,7 +26,7 @@ export interface ServeNodePorts {
   serving: Serving;
   app: string;
   origin: string;
-  routes: CompiledRoutes | undefined;
+  routes: CompiledRouteTable | undefined;
   forward: (request: Request) => Promise<Response>;
 }
 
@@ -49,7 +49,7 @@ function canBeCached(request: Request): boolean {
 }
 
 function answerRedirect(
-  routes: CompiledRoutes,
+  routes: CompiledRouteTable,
   url: URL,
   redirect: { status: number; location: string },
 ): Response {
@@ -62,7 +62,7 @@ function answerRedirect(
 }
 
 function findEdgeRedirect(
-  routes: CompiledRoutes,
+  routes: CompiledRouteTable,
   request: Request,
   url: URL,
 ): { status: number; location: string } | undefined {

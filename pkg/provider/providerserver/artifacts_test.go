@@ -356,8 +356,8 @@ func TestDeployPacksTheOcelRouteTableIntoEveryFunctionOfTheApp(t *testing.T) {
 
 	spec := vendor.FakeStacks().Provisioned()[1]
 	for _, fn := range spec.App.Functions {
-		if got := packagedFiles(t, vendor, fn.Artifact)[edge.OcelRoutesFile]; got != cachedRoutes {
-			t.Errorf("%s's package contains %s = %q, want the table every function of the app reads", fn.Name, edge.OcelRoutesFile, got)
+		if got := packagedFiles(t, vendor, fn.Artifact)[edge.OcelRouteTableFile]; got != cachedRoutes {
+			t.Errorf("%s's package contains %s = %q, want the table every function of the app reads", fn.Name, edge.OcelRouteTableFile, got)
 		}
 	}
 }

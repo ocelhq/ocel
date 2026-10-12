@@ -25,7 +25,7 @@ type routesFixture struct {
 
 func readRoutesFixture(t *testing.T) routesFixture {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "platform", "edge", "contract", "fixtures", "routes.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "platform", "edge", "contract", "fixtures", "ocel-route-table.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func readRoutesFixture(t *testing.T) routesFixture {
 func TestTheFixturesRouteTableIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	routes, err := ReadOcelRoutes(readRoutesFixture(t).Table)
+	routes, err := ReadOcelRouteTable(readRoutesFixture(t).Table)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestEveryInvalidRouteTableOfTheFixtureIsRefused(t *testing.T) {
 	t.Parallel()
 
 	for _, c := range readRoutesFixture(t).Invalid {
-		if _, err := ReadOcelRoutes(c.Table); err == nil {
+		if _, err := ReadOcelRouteTable(c.Table); err == nil {
 			t.Errorf("a table with %s was accepted: %s", c.Reason, c.Table)
 		}
 	}
@@ -82,7 +82,7 @@ func TestAPatternMatchesTheFixturePathsTheWayTheEdgeContractDoes(t *testing.T) {
 func TestATableWithACachedRouteSaysSo(t *testing.T) {
 	t.Parallel()
 
-	routes, err := ReadOcelRoutes(readRoutesFixture(t).Table)
+	routes, err := ReadOcelRouteTable(readRoutesFixture(t).Table)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestATableWithACachedRouteSaysSo(t *testing.T) {
 func TestATableNamesNoFunctionBesideTheOnesItsBuildServes(t *testing.T) {
 	t.Parallel()
 
-	routes, err := ReadOcelRoutes(readRoutesFixture(t).Table)
+	routes, err := ReadOcelRouteTable(readRoutesFixture(t).Table)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestATableRefusesATrailingGarbageDocument(t *testing.T) {
 	t.Parallel()
 
 	table := strings.TrimSpace(string(readRoutesFixture(t).Table)) + ` {}`
-	if _, err := ReadOcelRoutes([]byte(table)); err == nil {
+	if _, err := ReadOcelRouteTable([]byte(table)); err == nil {
 		t.Error("a table followed by a second document was accepted")
 	}
 }

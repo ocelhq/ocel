@@ -25,7 +25,7 @@ export interface RedirectRule {
   status: 301 | 302 | 307 | 308;
 }
 
-export interface OcelRoutes {
+export interface OcelRouteTable {
   version: 1;
   basePath: string;
   trailingSlash: TrailingSlash;
@@ -35,7 +35,7 @@ export interface OcelRoutes {
   fallback: { function: string };
 }
 
-export const routesVar = "OCEL_ROUTES";
+export const ocelRouteTableVar = "OCEL_ROUTE_TABLE";
 
 const maxRepeat = 1000;
 const minBypassToken = 16;
@@ -282,25 +282,25 @@ function refuseTable(table: Record<string, unknown>): Refusal {
   );
 }
 
-export function readRoutes(table: unknown): OcelRoutes {
+export function readOcelRouteTable(table: unknown): OcelRouteTable {
   if (!isObject(table)) throw new Error("ocel: the route table is not an object");
   const refused = refuseTable(table);
   if (refused) throw new Error(`ocel: the route table is refused: ${refused}`);
-  return table as unknown as OcelRoutes;
+  return table as unknown as OcelRouteTable;
 }
 
-export function parseRoutes(text: string): OcelRoutes {
+export function parseOcelRouteTable(text: string): OcelRouteTable {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     throw new Error("ocel: the route table is not JSON");
   }
-  return readRoutes(parsed);
+  return readOcelRouteTable(parsed);
 }
 
-export interface CompiledRoutes {
-  table: OcelRoutes;
+export interface CompiledRouteTable {
+  table: OcelRouteTable;
   headers: RegExp[];
   redirects: RegExp[];
   routes: RegExp[];
@@ -310,7 +310,7 @@ function expressionOf(src: string): RegExp {
   return new RegExp(anchorPattern(src));
 }
 
-export function compileRoutes(table: OcelRoutes): CompiledRoutes {
+export function compileOcelRouteTable(table: OcelRouteTable): CompiledRouteTable {
   return {
     table,
     headers: table.headers.map((rule) => expressionOf(rule.src)),
@@ -319,7 +319,7 @@ export function compileRoutes(table: OcelRoutes): CompiledRoutes {
   };
 }
 
-function readInsideBasePath(table: OcelRoutes, pathname: string): string | undefined {
+function readInsideBasePath(table: OcelRouteTable, pathname: string): string | undefined {
   if (pathname.length > longestMatchedPath) return undefined;
   const { basePath } = table;
   if (basePath === "") return pathname;
@@ -337,7 +337,7 @@ export interface RouteMatch {
   groups: string[];
 }
 
-export function findRoute(compiled: CompiledRoutes, pathname: string): RouteMatch | undefined {
+export function findRoute(compiled: CompiledRouteTable, pathname: string): RouteMatch | undefined {
   const inside = readInsideBasePath(compiled.table, pathname);
   if (inside === undefined) return undefined;
   for (const [index, expression] of compiled.routes.entries()) {
@@ -347,12 +347,15 @@ export function findRoute(compiled: CompiledRoutes, pathname: string): RouteMatc
   return undefined;
 }
 
-export function findCacheRule(compiled: CompiledRoutes, pathname: string): CacheRule | undefined {
+export function findCacheRule(
+  compiled: CompiledRouteTable,
+  pathname: string,
+): CacheRule | undefined {
   return findRoute(compiled, pathname)?.route.cache;
 }
 
 export function findRedirect(
-  compiled: CompiledRoutes,
+  compiled: CompiledRouteTable,
   pathname: string,
 ): { status: number; location: string } | undefined {
   const inside = readInsideBasePath(compiled.table, pathname);
@@ -370,7 +373,10 @@ export function findRedirect(
   return undefined;
 }
 
-export function findHeaders(compiled: CompiledRoutes, pathname: string): Record<string, string> {
+export function findHeaders(
+  compiled: CompiledRouteTable,
+  pathname: string,
+): Record<string, string> {
   const inside = readInsideBasePath(compiled.table, pathname);
   const found: Record<string, string> = {};
   if (inside === undefined) return found;
@@ -383,7 +389,10 @@ export function findHeaders(compiled: CompiledRoutes, pathname: string): Record<
   return found;
 }
 
-export function findSlashRedirect(compiled: CompiledRoutes, pathname: string): string | undefined {
+export function findSlashRedirect(
+  compiled: CompiledRouteTable,
+  pathname: string,
+): string | undefined {
   const { basePath, trailingSlash } = compiled.table;
   if (trailingSlash === "ignore") return undefined;
   if (pathname !== basePath && !pathname.startsWith(`${basePath}/`) && basePath !== "")

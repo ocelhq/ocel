@@ -1,9 +1,9 @@
 import type http from "node:http";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { serveInvoke, setRequestScope } from "../src/host.mjs";
-import { useOriginRoutes } from "../src/origin-routes.mjs";
+import { useOriginRouteTable } from "../src/origin-route-table.mjs";
 import { setTagRecordWriter } from "../src/tag-records.mjs";
-import { bypassToken, newRoutes, writeRoutes } from "./routes-file.mjs";
+import { bypassToken, newRouteTable, writeRouteTable } from "./route-table-file.mjs";
 
 const hostKey = Symbol.for("ocel.cache.host");
 
@@ -17,21 +17,21 @@ function cacheHost(): CacheHost {
   return (globalThis as Record<symbol, CacheHost>)[hostKey]!;
 }
 
-const routes = writeRoutes(newRoutes());
+const routes = writeRouteTable(newRouteTable());
 
 const behindCloudflare = {
   OCEL_ORIGIN_FRESH_ONLY: "1",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
   OCEL_EDGE_ASKS_TO_CACHE: "1",
-  OCEL_ROUTES: routes,
+  OCEL_ROUTE_TABLE: routes,
 };
 
 const behindCloudFront = {
   OCEL_ORIGIN_FRESH_ONLY: "1",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
-  OCEL_ROUTES: routes,
+  OCEL_ROUTE_TABLE: routes,
 };
 
 beforeEach(() => {
@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useOriginRoutes({});
+  useOriginRouteTable({});
   setRequestScope(undefined);
   setTagRecordWriter(undefined);
   vi.restoreAllMocks();
@@ -51,7 +51,7 @@ async function serve(
   env: Record<string, string>,
   handler: Handler,
 ): Promise<(path: string, init?: RequestInit) => Promise<Response>> {
-  useOriginRoutes(env);
+  useOriginRouteTable(env);
   let port = 0;
   await serveInvoke(handler, (listening) => {
     port = listening;
@@ -346,7 +346,7 @@ describe("a revalidation behind the gateway that also writes durably", () => {
       settled = true;
     });
     const waited: Promise<unknown>[] = [];
-    useOriginRoutes(behindCloudFront);
+    useOriginRouteTable(behindCloudFront);
     let port = 0;
     await serveInvoke(
       (req, res, ocel) => {
@@ -514,7 +514,7 @@ describe("a request bypassing the cache", () => {
 
 describe("an origin behind no caching edge", () => {
   test("shapes nothing, and exposes no cache host for the SDK to call", async () => {
-    const get = await serve({ OCEL_ROUTES: routes }, page);
+    const get = await serve({ OCEL_ROUTE_TABLE: routes }, page);
 
     const res = await get("/blog/a", { headers: asked });
 

@@ -118,7 +118,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if values, err = mergeValues(fn.Name, cachingEdgeValues, values, newCachingEdgeEnv(spec)); err != nil {
 			return nil, err
 		}
-		if values, err = mergeValues(fn.Name, ocelRoutesValues, values, newOcelRoutesEnv(spec)); err != nil {
+		if values, err = mergeValues(fn.Name, ocelRouteTableValues, values, newOcelRouteTableEnv(spec)); err != nil {
 			return nil, err
 		}
 		served := serving{
@@ -521,13 +521,13 @@ func liveBindings(values provider.AppValues) []live.Binding {
 }
 
 const (
-	specValues        = "the environment its own spec names"
-	runtimeValues     = "the runtime environment Ocel gives it"
-	cachingEdgeValues = "the caching edge in front of it"
-	ocelRoutesValues  = "its route table"
-	nextValues        = "the Next runtime"
-	cdnPurgeValues    = "Cloud CDN purging"
-	nodePurgeValues   = "the revalidation of a node service"
+	specValues           = "the environment its own spec names"
+	runtimeValues        = "the runtime environment Ocel gives it"
+	cachingEdgeValues    = "the caching edge in front of it"
+	ocelRouteTableValues = "its route table"
+	nextValues           = "the Next runtime"
+	cdnPurgeValues       = "Cloud CDN purging"
+	nodePurgeValues      = "the revalidation of a node service"
 )
 
 func mergeValues(what, source string, set, added map[string]string) (map[string]string, error) {

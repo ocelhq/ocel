@@ -14,7 +14,7 @@ func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *tes
 	appRoot := t.TempDir()
 	for name, body := range map[string]string{
 		filepath.Join(edge.StaticAssetDir, "logo.svg"): "<svg/>",
-		edge.OcelRoutesFile:                            `{"bypassToken":"secret"}`,
+		edge.OcelRouteTableFile:                        `{"bypassToken":"secret"}`,
 		"hosting.json":                                 "{}",
 	} {
 		path := filepath.Join(appRoot, name)

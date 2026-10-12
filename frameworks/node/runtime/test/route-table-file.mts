@@ -2,11 +2,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OcelRoutes } from "@platform/edge-contract/routes";
+import type { OcelRouteTable } from "@platform/edge-contract/ocel-route-table";
 
 export const bypassToken = "0123456789abcdef0123456789abcdef";
 
-export function newRoutes(overrides: Partial<OcelRoutes> = {}): OcelRoutes {
+export function newRouteTable(overrides: Partial<OcelRouteTable> = {}): OcelRouteTable {
   return {
     version: 1,
     basePath: "",
@@ -27,8 +27,8 @@ export function newRoutes(overrides: Partial<OcelRoutes> = {}): OcelRoutes {
   };
 }
 
-export function writeRoutes(routes: OcelRoutes | string): string {
-  const file = join(mkdtempSync(join(tmpdir(), "ocel-routes-")), "routes.json");
+export function writeRouteTable(routes: OcelRouteTable | string): string {
+  const file = join(mkdtempSync(join(tmpdir(), "ocel-route-table-")), "ocel-route-table.json");
   writeFileSync(file, typeof routes === "string" ? routes : JSON.stringify(routes));
   return file;
 }

@@ -1,4 +1,8 @@
-import { compileRoutes, type OcelRoutes, readRoutes } from "@platform/edge-contract/routes";
+import {
+  compileOcelRouteTable,
+  type OcelRouteTable,
+  readOcelRouteTable,
+} from "@platform/edge-contract/ocel-route-table";
 import { describe, expect, it } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import { RENDER_RELEASE_HEADER, type RenderRelease, SERVE_REFUSED_HEADER } from "../src/serve-key";
@@ -12,7 +16,7 @@ const ORIGIN = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
 const token = "0123456789abcdef0123456789abcdef";
 
-function newRoutes(over: Partial<OcelRoutes> = {}): OcelRoutes {
+function newRouteTable(over: Partial<OcelRouteTable> = {}): OcelRouteTable {
   return {
     version: 1,
     basePath: "",
@@ -48,7 +52,7 @@ function forwardTo(answer: () => Response = () => new Response("uncached")) {
 function setup(
   answer?: Parameters<typeof fakeServing>[0],
   uncached?: () => Response,
-  routes: OcelRoutes | null = newRoutes(),
+  routes: OcelRouteTable | null = newRouteTable(),
 ) {
   const fake = fakeServing(answer);
   const origin = forwardTo(uncached);
@@ -56,7 +60,7 @@ function setup(
     serving: fake.serving,
     app: "web",
     origin: ORIGIN,
-    routes: routes ? compileRoutes(readRoutes(routes)) : undefined,
+    routes: routes ? compileOcelRouteTable(readOcelRouteTable(routes)) : undefined,
     forward: origin.forward,
   });
   return { ...fake, ...origin, serve };
@@ -113,7 +117,7 @@ describe("a request a cached route names", () => {
   });
 
   it("keys the entry by no query parameter when its route allows an empty list", async () => {
-    const routes = newRoutes({
+    const routes = newRouteTable({
       routes: [{ src: "/feed", function: "api", cache: { revalidate: 10, allowQuery: [] } }],
     });
     const { serve, calls } = setup(undefined, undefined, routes);
@@ -177,7 +181,7 @@ describe("a request a cached route names", () => {
   });
 
   it("is looked up under its path inside the base path", async () => {
-    const routes = newRoutes({ basePath: "/docs" });
+    const routes = newRouteTable({ basePath: "/docs" });
     const { serve, calls } = setup(undefined, undefined, routes);
 
     await serve(new Request("https://shop.example.com/docs/blog/a"));
@@ -310,7 +314,7 @@ describe("a request carrying the revalidate token", () => {
 });
 
 describe("a redirect the route table states", () => {
-  const redirecting = newRoutes({
+  const redirecting = newRouteTable({
     trailingSlash: "never",
     redirects: [{ src: "/old/(.*)", location: "/new/$1", status: 308 }],
     headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }],
@@ -394,7 +398,7 @@ describe("a node release resolved by the gateway", () => {
 
   async function resolved(
     over: Parameters<typeof makeRecord>[0],
-    routes: OcelRoutes | string | undefined,
+    routes: OcelRouteTable | string | undefined,
     serving?: ServingPorts,
   ) {
     const record = makeRecord({ isrPrefix: "prod/p1/api/r0a1b2c3d/isr", ...over });
@@ -431,7 +435,7 @@ describe("a node release resolved by the gateway", () => {
 
   it("answers a route the stored table caches from Serve, and reaches the origin for the rest", async () => {
     const served: Request[] = [];
-    const { serve, wire } = await resolved(located, newRoutes(), ports(served));
+    const { serve, wire } = await resolved(located, newRouteTable(), ports(served));
 
     const cached = await (serve as ServeFetch)(new Request("https://api.example.com/blog/a"));
     const direct = await (serve as ServeFetch)(new Request("https://api.example.com/about"));
