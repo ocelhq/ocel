@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { Refusal } from "../matrix/types";
-import { fixtureDir } from "../paths";
 import { type Check, type CheckContext, JOURNEY_NONCE_HEADER, json } from "./context";
 
 const TTL_MS = 2_000;
@@ -477,41 +473,3 @@ export const kvChecks: Check[] = [
   kvPasswordUnprintedCheck,
   kvPasswordOutOfEnvironmentCheck,
 ];
-
-type Site = { file: string; line: number };
-
-function findDeclaringSites(dir: string, marks: string[]): Site[] {
-  const sources = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(
-    (file) => /\.(ts|py|go|rs)$/.test(file) && !file.split(path.sep).includes("node_modules"),
-  );
-  return marks.map((mark) => {
-    for (const file of sources) {
-      const at = readFileSync(path.join(dir, file), "utf8")
-        .split("\n")
-        .findIndex((line) => line.includes(mark));
-      if (at >= 0) {
-        return { file: file.split(path.sep).join("/"), line: at + 1 };
-      }
-    }
-    throw new Error(`no source under ${dir} declares ${mark}`);
-  });
-}
-
-export function overlapRefusal(fixture: string, patterns: [string, string]): Refusal {
-  return {
-    title: "the build refuses entries whose patterns overlap, naming both declarations",
-    run: async (said) => {
-      const sites = findDeclaringSites(
-        fixtureDir(fixture),
-        patterns.map((one) => `"${one}"`),
-      );
-      assert.match(said, /overlaps/, `the deploy failed for another reason:\n${said}`);
-      for (const { file, line } of sites) {
-        assert.ok(
-          said.includes(`${file}:${line}`),
-          `the refusal does not name ${file}:${line}:\n${said}`,
-        );
-      }
-    },
-  };
-}
