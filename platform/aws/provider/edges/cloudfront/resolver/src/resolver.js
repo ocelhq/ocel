@@ -66,9 +66,18 @@ function variantPath(pathname, headers) {
   return base + '.rsc';
 }
 
+function draftSuffix(cookies) {
+  if (!cookies || cookies[DRAFT_COOKIE] === undefined) return '';
+  // biome-ignore lint/style/useNodejsImportProtocol: CloudFront Functions names its built-in module crypto
+  var digest = require('crypto')
+    .createHash('sha256')
+    .update(String(cookies[DRAFT_COOKIE].value))
+    .digest('hex');
+  return '.draft-' + digest.slice(0, 16);
+}
+
 function cacheKey(release, pathname, headers, cookies) {
-  var key = release + variantPath(pathname, headers);
-  if (cookies && cookies[DRAFT_COOKIE] !== undefined) key += '.draft';
+  var key = release + variantPath(pathname, headers) + draftSuffix(cookies);
   if (headerValue(headers, REVALIDATE_HEADER) !== null) {
     key += '.revalidate.' + Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
