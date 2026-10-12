@@ -1,5 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type http from "node:http";
+import {
+  isStoredBySomeEdge,
+  readCacheDirectives,
+  refusesSharedStore,
+  sharedPolicyHeaders,
+} from "@platform/edge-contract/cache-control";
 import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
   edgeCacheHeader,
@@ -194,8 +200,7 @@ function shape(
   if (res.getHeader("set-cookie") !== undefined) return;
 
   const declared = String(res.getHeader("cache-control") ?? "");
-  const declaredNames = listDirectiveNames(declared);
-  if (["private", "no-store", "no-cache"].some((name) => declaredNames.includes(name))) return;
+  if (refusesSharedStore(readCacheDirectives(declared))) return;
 
   if (routed.cacheRule) {
     res.removeHeader("cdn-cache-control");
@@ -208,7 +213,7 @@ function shape(
       return;
     }
     res.setHeader("cache-control", [...browser, formatCacheControl(routed.cacheRule)].join(", "));
-  } else if (!declaresEdgeLifetime(res)) {
+  } else if (!isStoredBySomeEdgeOf(res)) {
     return;
   }
 
@@ -231,16 +236,11 @@ function shape(
 
 const sharedDirectiveNames = ["s-maxage", "stale-while-revalidate"];
 
-function declaresEdgeLifetime(res: http.ServerResponse): boolean {
-  return ["cache-control", "cdn-cache-control"].some((name) =>
-    String(res.getHeader(name) ?? "")
-      .toLowerCase()
-      .split(",")
-      .some((directive) => {
-        const [key, value] = directive.trim().split("=");
-        return (key === "s-maxage" || key === "max-age") && Number(value) > 0;
-      }),
-  );
+function isStoredBySomeEdgeOf(res: http.ServerResponse): boolean {
+  return sharedPolicyHeaders.some((name) => {
+    const header = res.getHeader(name);
+    return header !== undefined && isStoredBySomeEdge(readCacheDirectives(String(header)));
+  });
 }
 
 function listBrowserDirectives(declared: string): string[] {
@@ -252,11 +252,4 @@ function listBrowserDirectives(declared: string): string[] {
         directive !== "" &&
         !sharedDirectiveNames.includes(directive.toLowerCase().split("=")[0]!.trim()),
     );
-}
-
-function listDirectiveNames(declared: string): string[] {
-  return declared
-    .toLowerCase()
-    .split(",")
-    .map((directive) => directive.trim().split("=")[0]!);
 }

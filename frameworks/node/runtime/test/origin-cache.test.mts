@@ -651,7 +651,33 @@ describe("a response of a route that caches nothing, which names a lifetime the 
   });
 
   test.each([
+    ["a max-age of zero it may serve stale", "public, max-age=0, stale-while-revalidate=60"],
+    ["an s-maxage of zero it may serve stale", "s-maxage=0, stale-while-revalidate=60"],
+  ])("is tagged for %s, which an edge stores", async (_name, cacheControl) => {
+    const get = await serve(behindCloudFront, (_req, res) => {
+      res.writeHead(200, { "cache-control": cacheControl });
+      res.end("page");
+    });
+
+    const res = await get("/account");
+
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
+  });
+
+  test("is tagged for a Cloudflare-CDN-Cache-Control lifetime", async () => {
+    const get = await serve(behindCloudFront, (_req, res) => {
+      res.writeHead(200, { "cloudflare-cdn-cache-control": "max-age=60" });
+      res.end("page");
+    });
+
+    const res = await get("/account");
+
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
+  });
+
+  test.each([
     ["a max-age of zero", "public, max-age=0"],
+    ["an s-maxage of zero, which wins over a max-age", "s-maxage=0, max-age=60"],
     ["a response that is private", "private, max-age=60"],
     ["a response that names no lifetime", "public"],
   ])("is not tagged for %s", async (_name, cacheControl) => {

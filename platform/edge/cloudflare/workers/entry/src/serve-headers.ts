@@ -1,3 +1,11 @@
+import {
+  type CacheDirectives,
+  isStoredLifetime,
+  readCacheDirectives,
+  readDirectiveSeconds,
+  refusesSharedStore,
+  sharedPolicyHeaders,
+} from "@platform/edge-contract/cache-control";
 import { buildPathCacheTag } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
@@ -13,8 +21,6 @@ const STALE_IF_ERROR_SECONDS = 86_400;
 const MAX_TAGS = 1000;
 
 const STORED_STATUSES = new Set([200, 301, 308, 404, 410]);
-
-const EDGE_POLICY_HEADERS = ["cloudflare-cdn-cache-control", "cdn-cache-control"] as const;
 
 const KEYED_VARY = new Set([
   "accept-encoding",
@@ -34,28 +40,6 @@ export interface CacheOptions {
   honoursAppCacheHeaders?: boolean;
 }
 
-type Directives = Map<string, string | true>;
-
-function directivesOf(header: string | null): Directives {
-  const directives: Directives = new Map();
-  for (const part of header?.split(",") ?? []) {
-    const [name, ...value] = part.trim().split("=");
-    if (!name) continue;
-    directives.set(name.toLowerCase(), value.length > 0 ? value.join("=").replace(/"/g, "") : true);
-  }
-  return directives;
-}
-
-function seconds(directives: Directives, name: string): number | undefined {
-  const value = directives.get(name);
-  if (typeof value !== "string" || !/^\d+$/.test(value)) return undefined;
-  return Number(value);
-}
-
-function refusesStoring(directives: Directives): boolean {
-  return directives.has("private") || directives.has("no-store") || directives.has("no-cache");
-}
-
 function variesOffKey(headers: Headers): boolean {
   return (headers.get("vary") ?? "")
     .split(",")
@@ -65,7 +49,8 @@ function variesOffKey(headers: Headers): boolean {
 
 function notStored(response: Response, options: CacheOptions): Response {
   const headers = new Headers(response.headers);
-  for (const name of EDGE_POLICY_HEADERS) headers.delete(name);
+  headers.delete("cloudflare-cdn-cache-control");
+  headers.delete("cdn-cache-control");
   if (options.honoursAppCacheHeaders) headers.set("cloudflare-cdn-cache-control", "no-store");
   else headers.set("cache-control", NOT_STORED);
   headers.delete("cache-tag");
@@ -74,10 +59,10 @@ function notStored(response: Response, options: CacheOptions): Response {
   return new Response(response.body, { status: response.status, headers });
 }
 
-function edgePolicy(headers: Headers): { source: string; directives: Directives } | undefined {
-  for (const name of [...EDGE_POLICY_HEADERS, "cache-control"]) {
+function edgePolicy(headers: Headers): { source: string; directives: CacheDirectives } | undefined {
+  for (const name of sharedPolicyHeaders) {
     const value = headers.get(name);
-    if (value !== null) return { source: name, directives: directivesOf(value) };
+    if (value !== null) return { source: name, directives: readCacheDirectives(value) };
   }
   return undefined;
 }
@@ -111,19 +96,19 @@ export function forCache(
     return notStored(response, options);
   }
   const policy = edgePolicy(response.headers);
-  if (!policy || refusesStoring(directivesOf(response.headers.get("cache-control")))) {
+  if (!policy || refusesSharedStore(readCacheDirectives(response.headers.get("cache-control")))) {
     return notStored(response, options);
   }
   const { directives } = policy;
-  if (refusesStoring(directives)) return notStored(response, options);
+  if (refusesSharedStore(directives)) return notStored(response, options);
 
   const lifetime =
-    seconds(directives, "s-maxage") ??
+    readDirectiveSeconds(directives, "s-maxage") ??
     (policy.source === "cache-control" && !options.honoursAppCacheHeaders
       ? undefined
-      : seconds(directives, "max-age"));
-  const staleWhileRevalidate = seconds(directives, "stale-while-revalidate");
-  if (lifetime === undefined || (lifetime === 0 && !staleWhileRevalidate)) {
+      : readDirectiveSeconds(directives, "max-age"));
+  const staleWhileRevalidate = readDirectiveSeconds(directives, "stale-while-revalidate");
+  if (lifetime === undefined || !isStoredLifetime(lifetime, staleWhileRevalidate)) {
     return notStored(response, options);
   }
 
