@@ -82,3 +82,38 @@ describe("serveStaticAsset under a basePath", () => {
     expect(await res.text()).toBe("<h1>introuvable</h1>");
   });
 });
+
+describe("serveStaticAsset beside a release's route table", () => {
+  const release = "prod/shop/web/r0a1b2c3d";
+  const table = `${"a".repeat(64)}.json`;
+
+  it("reads no key outside the asset prefix, however the path climbs out of it", async () => {
+    const asked: string[] = [];
+    const deps: AssetStoreDeps = {
+      store: {
+        async get(key) {
+          asked.push(key);
+          return key === `${release}/route-table/${table}`
+            ? { body: new Blob(['{"bypassToken":"secret"}']).stream() }
+            : null;
+        },
+      },
+      assetPrefix: `${release}/assets`,
+      cache: { match: async () => undefined, put: async () => {} },
+      waitUntil: () => {},
+    };
+
+    for (const path of [
+      `/../route-table/${table}`,
+      `/%2e%2e/route-table/${table}`,
+      `/..%2froute-table/${table}`,
+    ]) {
+      const url = new URL(`https://app.example${path}`);
+      const res = await serveStaticAsset(new Request(url), url, deps);
+
+      expect(res.status, path).toBe(404);
+      expect(await res.text(), path).not.toContain("secret");
+    }
+    expect(asked.every((key) => key.startsWith(`${release}/assets/`))).toBe(true);
+  });
+});

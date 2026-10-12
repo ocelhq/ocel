@@ -23,6 +23,27 @@ func staticAppTree(t *testing.T) string {
 	})
 }
 
+func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *testing.T) {
+	t.Parallel()
+
+	cfg := assetShippingConfig(t, "web")
+	cfg.ArtifactRoot = writeTree(t, map[string]string{
+		"apps/web/static/logo.svg":            "<svg/>",
+		"apps/web/" + edge.OcelRouteTableFile: `{"bypassToken":"secret"}`,
+	})
+	store := &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.Objects = store
+	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
+
+	if err := pushStaticAssetSet(context.Background(), cfg, "web", nextStatic, coord); err != nil {
+		t.Fatalf("pushStaticAssetSet: %v", err)
+	}
+
+	if got := sortedPuts(store); !slices.Equal(got, []string{coord.AssetKey("logo.svg")}) {
+		t.Errorf("published %q, want only the one file under %s", got, edge.StaticAssetDir)
+	}
+}
+
 func sortedPuts(f *fakeArtifactStore) []string {
 	keys := append([]string(nil), f.puts...)
 	slices.Sort(keys)
