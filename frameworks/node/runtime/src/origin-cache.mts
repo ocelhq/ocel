@@ -107,6 +107,15 @@ export function installCacheHost(cache: OriginCache): void {
   };
 }
 
+export function raisePathPurge(cache: OriginCache, store: RequestCache, pathname: string): void {
+  if (cache.edgeAsks) return;
+  const write = findTagRecordWriter();
+  const tag = buildPathCacheTag(pathname);
+  if (!write || storedCacheTags(cache.release, [tag]).unstorable.length > 0) return;
+  store.raised.set(tag, { tag, mode: "purge", raisedAt: Date.now() });
+  if (!store.writing) writeRaisedAfterResponse(write, store);
+}
+
 export function removeCacheHost(): void {
   delete (globalThis as Record<symbol, unknown>)[cacheHostKey];
 }
@@ -150,7 +159,7 @@ export function prepareCachedResponse(
   routed: RoutedRequest,
 ): void {
   announce(res, cache, store);
-  if (routed.bypass === "bypass") {
+  if (routed.bypass !== "none") {
     res.setHeader("cache-control", "private, no-store");
     res.removeHeader(cacheTagHeader);
     res.removeHeader(edgeCacheTagHeader);

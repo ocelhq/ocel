@@ -447,15 +447,68 @@ describe("a request for a cached route", () => {
     expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
     expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
   });
+});
 
-  test("is shaped as any other when it carries the revalidate token", async () => {
-    const get = await serve(behindCloudflare, page);
+describe("a request carrying the revalidate token", () => {
+  const revalidating = { "x-prerender-revalidate": bypassToken };
 
-    const res = await get("/blog/a", {
-      headers: { ...asked, "x-prerender-revalidate": bypassToken },
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront],
+    ["behind the Cloudflare gateway", behindCloudflare],
+  ])("is rendered fresh and answered private and unstored %s", async (_edge, env) => {
+    let rendered = 0;
+    const get = await serve(env, (req, res) => {
+      rendered++;
+      page(req, res);
     });
 
+    const res = await get("/blog/a", { headers: { ...asked, ...revalidating } });
+
+    expect(rendered).toBe(1);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.has("cache-tag")).toBe(false);
+    expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
+  });
+
+  test("writes a purge of its path for CloudFront or the load balancer to clear", async () => {
+    const written: { tag: string; mode: string }[] = [];
+    setTagRecordWriter(async (entries) => {
+      written.push(...entries.map(({ tag, mode }) => ({ tag, mode })));
+    });
+    const get = await serve(behindCloudFront, page);
+
+    await get("/blog/a", { headers: revalidating });
+    await vi.waitFor(() => expect(written).toHaveLength(1));
+
+    expect(written).toEqual([{ tag: "path:/blog/a", mode: "purge" }]);
+  });
+
+  test("leaves the clearing to the Cloudflare gateway, which purges the path itself", async () => {
+    const written: string[] = [];
+    setTagRecordWriter(async (entries) => {
+      written.push(...entries.map(({ tag }) => tag));
+    });
+    const get = await serve(behindCloudflare, page);
+
+    const res = await get("/blog/a", { headers: revalidating });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(res.headers.has("x-ocel-purge")).toBe(false);
+    expect(written).toEqual([]);
+  });
+
+  test("is a plain request for the cache when its token is wrong", async () => {
+    const written: string[] = [];
+    setTagRecordWriter(async (entries) => {
+      written.push(...entries.map(({ tag }) => tag));
+    });
+    const get = await serve(behindCloudFront, page);
+
+    const res = await get("/blog/a", { headers: { "x-prerender-revalidate": "wrong" } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
     expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
+    expect(written).toEqual([]);
   });
 });
 

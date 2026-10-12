@@ -18,6 +18,7 @@ import {
   type OriginCache,
   openRequestCache,
   prepareCachedResponse,
+  raisePathPurge,
   readOriginCache,
   removeCacheHost,
   removeSharedLifetime,
@@ -178,6 +179,7 @@ function runInRequest<T>(
     return (writeHead as any).apply(this, [status, ...message]);
   } as typeof res.writeHead;
   if (!origin.cache || !store) return run();
+  if (routed.bypass === "revalidate") raisePathPurge(origin.cache, store, pathname);
   watchRequestCache(origin.cache, res, store);
   return runWithRequestCache(store, run);
 }
