@@ -1,11 +1,11 @@
 # with-pulumi
 
-Rung three of the [fixture ladder](../../sdk/with-transforms), in Pulumi rather than
-[SST](../with-sst), and building on the same two rungs: Pulumi owns the database and the
-network it sits in, and ocel still deploys the app — into that network. Bindings are how the
-app reaches what Pulumi provisioned; transforms are how ocel renders what it provisions
-itself. `index.ts`, `ocel.json` and `transforms/network.transform.ts` are the three files
-that make it work.
+Rung three of a ladder that starts at [sdk/node](../../sdk/node), whose transforms are rung
+two, in Pulumi rather than [SST](../with-sst), and building on the same two rungs: Pulumi owns
+the database and the network it sits in, and ocel still deploys the app — into that network.
+Bindings are how the app reaches what Pulumi provisioned; transforms are how ocel renders what
+it provisions itself. `index.ts`, `ocel.json` and `transforms/network.transform.ts` are the
+three files that make it work.
 
 ## Run it
 

@@ -1,7 +1,11 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createRouteHandler } from "ocel/bucket/express";
 import { pg, uploads } from "../infra/index";
+import { env } from "../infra/variables";
+import { kvRoutes } from "./kv";
 import { probes } from "./probes";
+import { realtimeRoutes } from "./realtime";
+import { taskRoutes } from "./tasks";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3102);
@@ -22,6 +26,10 @@ app.get("/ocel.svg", (_req, res) => {
 });
 
 app.use("/api/probes", probes);
+
+app.use(kvRoutes);
+app.use(taskRoutes);
+app.use(realtimeRoutes);
 
 app.all("/api/upload", createRouteHandler(uploads));
 
@@ -63,6 +71,22 @@ app.delete("/api/todos/:id", async (req, res) => {
     return;
   }
   res.status(204).end();
+});
+
+app.get("/api/binding", (_req, res) => {
+  const url = new URL(pg.connectionString);
+  res.json({
+    host: url.hostname,
+    port: Number(url.port),
+    database: decodeURIComponent(url.pathname.slice(1)),
+    hasPassword: url.password.length > 0,
+    greeting: env.GREETING,
+  });
+});
+
+app.get("/api/binding/query", async (_req, res) => {
+  await pg.query("select 1");
+  res.json({ ok: true });
 });
 
 app.get("/api/documents", async (_req, res) => {

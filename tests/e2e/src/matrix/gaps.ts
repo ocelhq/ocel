@@ -44,7 +44,6 @@ import {
   buildVariables,
   clientEnv,
   deploy,
-  kv,
   lifecycle,
   prerender,
   realtime,
@@ -160,7 +159,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp.floci"],
-        fixtures: Object.values(realtime),
+        fixtures: [sdk.node, ...Object.values(realtime)],
         fails: [check(realtimeHandlerDefaultsCheck)],
       },
     ],
@@ -263,7 +262,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws"],
-        fixtures: [sdk.withTransforms],
+        fixtures: [sdk.node],
         variants: [apiGateway],
         fails: [check(bindingQueryCheck)],
       },
@@ -277,9 +276,24 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws"],
-        fixtures: [sdk.withTransforms],
+        fixtures: [sdk.node],
         variants: [apiGateway],
         fails: [check(bindingCheck, ["redeploy"])],
+      },
+    ],
+  },
+  {
+    id: "aws-functions-reach-no-kv",
+    reason:
+      "the aws provider runs a function app outside the VPC a kv store answers in, so it refuses a function app that uses kv before it deploys",
+    issue: 1473,
+    where: [
+      {
+        on: ["aws", "aws.floci"],
+        fixtures: [sdk.node],
+        variants: [defaults, apiGateway],
+        fails: [step.deploy],
+        skipsCell: true,
       },
     ],
   },
@@ -298,7 +312,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: Object.values(realtime),
+        fixtures: [sdk.node, ...Object.values(realtime)],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -470,7 +484,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp.floci"],
-        fixtures: [kv.node],
+        fixtures: [sdk.node],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -550,7 +564,7 @@ export const gaps: Gap[] = [
     reason:
       "on aws each queue is read by its own event source mapping in the order SQS hands its messages out, and SQS has no priority, so a lane is recorded on the run but takes no share of the reads",
     issue: 1559,
-    where: [{ on: ["aws", "aws.floci"], fixtures: [tasks.node], fails: [check(lanesCheck)] }],
+    where: [{ on: ["aws", "aws.floci"], fixtures: [sdk.node], fails: [check(lanesCheck)] }],
   },
   {
     id: "floci-polls-one-batch-per-mapping",
@@ -560,7 +574,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [tasks.node],
+        fixtures: [sdk.node],
         fails: [check(orderedKeysInParallelCheck), check(taskConcurrencyCheck)],
       },
     ],
@@ -570,14 +584,14 @@ export const gaps: Gap[] = [
     reason:
       "a gcp consumer is one Pub/Sub push subscription, and Pub/Sub has no priority, so a run's lane is recorded and takes no share of the deliveries",
     issue: 1562,
-    where: [{ on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(lanesCheck)] }],
+    where: [{ on: ["gcp", "gcp.floci"], fixtures: [sdk.node], fails: [check(lanesCheck)] }],
   },
   {
     id: "gcp-pushes-batches-of-one",
     reason:
       "a gcp consumer is a Pub/Sub push subscription, which pushes one message per request, so a batch consumer is handed batches of one",
     issue: 1563,
-    where: [{ on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(batchCheck)] }],
+    where: [{ on: ["gcp", "gcp.floci"], fixtures: [sdk.node], fails: [check(batchCheck)] }],
   },
   {
     id: "gcp-runs-tasks-unbounded",
@@ -585,7 +599,7 @@ export const gaps: Gap[] = [
       "a gcp worker bounds its runs by its Cloud Run concurrency alone, and nothing holds one task's runs below it, so a task's own concurrency is not enforced",
     issue: 1564,
     where: [
-      { on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(taskConcurrencyCheck)] },
+      { on: ["gcp", "gcp.floci"], fixtures: [sdk.node], fails: [check(taskConcurrencyCheck)] },
     ],
   },
   {
@@ -596,7 +610,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp.floci"],
-        fixtures: Object.values(realtime),
+        fixtures: [sdk.node, ...Object.values(realtime)],
         fails: [
           check([
             realtimeRuleAllowsCheck,

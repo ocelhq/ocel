@@ -1,16 +1,15 @@
-import express, { type NextFunction, type Request, type Response } from "express";
+import express, { type NextFunction, type Request, type Response, Router } from "express";
 import { type Run, type RunStatus, runs, type Task, type TriggerOptions } from "ocel/task";
 import type { SendOptions, Topic } from "ocel/topic";
-import { tasks, topics } from "../infra/index";
+import { tasks, topics } from "../infra/tasks";
 import { serveJSON } from "./serve";
 import { wire } from "./wire";
 
-const APP_NAME = "web";
-const PORT = Number(process.env.PORT ?? 3108);
+const TASK_PATHS = ["/api/tasks", "/api/runs", "/api/topics", "/api/wire"];
 
-const app = express();
-app.use("/api/wire", wire);
-app.use(express.json());
+export const taskRoutes = Router();
+taskRoutes.use("/api/wire", wire);
+taskRoutes.use(TASK_PATHS, express.json());
 
 function findTask(name: string): Task {
   const found = (tasks as Record<string, Task>)[name];
@@ -47,11 +46,7 @@ function serializeRun(run: Run) {
   };
 }
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, app: APP_NAME });
-});
-
-app.post(
+taskRoutes.post(
   "/api/tasks/:task/trigger",
   serveJSON(async (req) =>
     findTask(String(req.params.task)).trigger(
@@ -61,7 +56,7 @@ app.post(
   ),
 );
 
-app.post(
+taskRoutes.post(
   "/api/tasks/:task/batch-trigger",
   serveJSON(async (req) => ({
     ids: (
@@ -74,12 +69,12 @@ app.post(
   })),
 );
 
-app.get(
+taskRoutes.get(
   "/api/runs/:id",
   serveJSON(async (req) => serializeRun(await runs.retrieve(String(req.params.id)))),
 );
 
-app.get(
+taskRoutes.get(
   "/api/runs",
   serveJSON(async (req) => {
     const readQueryList = (name: string) =>
@@ -94,17 +89,17 @@ app.get(
   }),
 );
 
-app.post(
+taskRoutes.post(
   "/api/runs/:id/cancel",
   serveJSON(async (req) => serializeRun(await runs.cancel(String(req.params.id)))),
 );
 
-app.post(
+taskRoutes.post(
   "/api/runs/:id/replay",
   serveJSON(async (req) => runs.replay(String(req.params.id))),
 );
 
-app.post(
+taskRoutes.post(
   "/api/runs/:id/reschedule",
   serveJSON(async (req) =>
     serializeRun(
@@ -113,7 +108,7 @@ app.post(
   ),
 );
 
-app.post(
+taskRoutes.post(
   "/api/topics/:topic/send",
   serveJSON(async (req) => ({
     messageId: await findTopic(String(req.params.topic)).send(
@@ -123,7 +118,7 @@ app.post(
   })),
 );
 
-app.get(
+taskRoutes.get(
   "/api/topics/:topic/dead-letters/:consumer",
   serveJSON(async (req) => {
     const letters = findTopic(String(req.params.topic)).deadLetter(String(req.params.consumer));
@@ -132,7 +127,7 @@ app.get(
   }),
 );
 
-app.post(
+taskRoutes.post(
   "/api/topics/:topic/dead-letters/:consumer/redrive",
   serveJSON(async (req) => ({
     redriven: await findTopic(String(req.params.topic))
@@ -141,7 +136,7 @@ app.post(
   })),
 );
 
-app.post(
+taskRoutes.post(
   "/api/topics/:topic/dead-letters/:consumer/purge",
   serveJSON(async (req) => ({
     purged: await findTopic(String(req.params.topic))
@@ -150,11 +145,7 @@ app.post(
   })),
 );
 
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+taskRoutes.use(TASK_PATHS, (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const status = error instanceof RangeError ? 404 : 400;
   res.status(status).json({ error: error instanceof Error ? error.message : String(error) });
-});
-
-app.listen(PORT, () => {
-  console.log(`tasks fixture listening on http://localhost:${PORT}`);
 });

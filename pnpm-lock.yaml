@@ -1411,56 +1411,6 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  tests/fixtures/kv/node:
-    dependencies:
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ioredis:
-        specifier: ^5.11.1
-        version: 5.11.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/kv/node-overlap:
-    dependencies:
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-    devDependencies:
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   tests/fixtures/lifecycle/next:
     dependencies:
       better-sqlite3:
@@ -1746,31 +1696,6 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  tests/fixtures/realtime/node:
-    dependencies:
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   tests/fixtures/sdk/next:
     dependencies:
       better-sqlite3:
@@ -1825,40 +1750,9 @@ importers:
       express:
         specifier: ~5.0.0
         version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      pg:
-        specifier: ^8.22.0
-        version: 8.22.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      '@types/pg':
-        specifier: ^8.20.0
-        version: 8.20.0
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/sdk/with-transforms:
-    dependencies:
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
+      ioredis:
+        specifier: ^5.11.1
+        version: 5.11.1
       ocel:
         specifier: workspace:^
         version: link:../../../../packages/ocel
@@ -1872,6 +1766,9 @@ importers:
       '@ocel/transforms':
         specifier: workspace:^
         version: link:../../../../packages/ocel-transforms
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/express':
         specifier: ~5.0.0
         version: 5.0.6
@@ -1989,28 +1886,6 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.17)
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/tasks/node:
-    dependencies:
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-    devDependencies:
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
       typescript:
         specifier: ^5
         version: 5.9.3

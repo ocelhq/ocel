@@ -9,4 +9,7 @@ export const env = defineEnv({
   SECRET_TOKEN: {
     class: "secret",
   },
+  JOURNEY_NONCE: {
+    class: "secret",
+  },
 });
