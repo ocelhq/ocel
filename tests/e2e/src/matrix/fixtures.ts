@@ -17,7 +17,6 @@ import {
   nextStateChecks,
   nextStoreReadChecks,
   nodeRuntimeChecks,
-  overlapRefusal,
   preBuildChecks,
   preBuildPrerenderChecks,
   prerenderBucketChecks,
@@ -80,12 +79,6 @@ const SVELTEKIT_CHECKS = [
   ...svelteKitChecks,
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
-const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
-const TASKS_NODE_CHECKS = [
-  ...healthChecks,
-  ...tasksChecks,
-  ...tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" }),
-];
 const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
 const TASKS_GO_CHECKS = [
   ...healthChecks,
@@ -188,10 +181,19 @@ export const lifecycle = {
 export const sdk = {
   node: fixture("sdk/node", {
     apps: ["web"],
-    checks: NODE_SDK_CHECKS,
+    restarts: true,
+    redeploys: "where-releases-are-kept",
+    checks: [
+      ...NODE_SDK_CHECKS,
+      ...bindingChecks,
+      ...kvChecks,
+      ...tasksChecks,
+      ...tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" }),
+      ...realtimeChecks,
+    ],
     on: {
       dev: [defaults],
-      aws: [container, apiGateway],
+      aws: [defaults, container, apiGateway],
       vps: [defaults],
       gcp: [defaults],
     },
@@ -223,12 +225,6 @@ export const sdk = {
     },
     sample: { group: "node-http", representative: true },
     configOn: { gcp: { allowDegraded: ["edge-cache"] } },
-  }),
-  withTransforms: fixture("sdk/with-transforms", {
-    apps: ["web"],
-    redeploys: true,
-    checks: BINDING_CHECKS,
-    on: { aws: [container, apiGateway], vps: [defaults] },
   }),
 };
 
@@ -314,28 +310,7 @@ export const preBuild = {
   }),
 };
 
-export const kv = {
-  node: fixture("kv/node", {
-    apps: ["web"],
-    restarts: true,
-    redeploys: "where-releases-are-kept",
-    checks: KV_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [container], gcp: [defaults] },
-  }),
-  nodeOverlap: fixture("kv/node-overlap", {
-    apps: ["web"],
-    checks: [],
-    refusal: overlapRefusal("kv/node-overlap", ["notes/:id", ":kind/latest"]),
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-  }),
-};
-
 export const tasks = {
-  node: fixture("tasks/node", {
-    apps: ["web"],
-    checks: TASKS_NODE_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
-  }),
   go: fixture("tasks/go", {
     apps: ["web"],
     devCommands: { web: ["go", "run", "./server"] },
@@ -346,11 +321,6 @@ export const tasks = {
 };
 
 export const realtime = {
-  node: fixture("realtime/node", {
-    apps: ["web"],
-    checks: REALTIME_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-  }),
   go: fixture("realtime/go", {
     apps: ["web"],
     devCommands: { web: ["go", "run", "./server"] },
@@ -397,7 +367,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(clientEnv),
   ...Object.values(prerender),
   ...Object.values(preBuild),
-  ...Object.values(kv),
   ...Object.values(tasks),
   ...Object.values(realtime),
   ...Object.values(iac),

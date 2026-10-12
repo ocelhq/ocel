@@ -1,33 +1,21 @@
-import {
-  createPrivateKey,
-  generateKeyPairSync,
-  type KeyObject,
-  sign,
-  timingSafeEqual,
-} from "node:crypto";
+import { createPrivateKey, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
-import express from "express";
+import express, { Router } from "express";
 import { RealtimePublishError } from "ocel/realtime";
 import { createRealtimeHandler } from "ocel/realtime/express";
-import { live } from "../infra/index";
-import { env } from "../infra/variables";
+import { live } from "../infra/realtime";
+import { isJourneyNonce } from "./nonce";
 
-const APP_NAME = "web";
-const PORT = Number(process.env.PORT ?? 3113);
 const BINDING_KEY = `OCEL_RESOURCE_REALTIME_${live.name}`;
 const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 
 type Signer = "binding" | "another-key" | "nobody";
 
-const app = express();
+export const realtimeRoutes = Router();
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, app: APP_NAME });
-});
+realtimeRoutes.all("/api/realtime", createRealtimeHandler(live));
 
-app.all("/api/realtime", createRealtimeHandler(live));
-
-app.post("/api/publish", express.json({ limit: "1mb" }), async (req, res) => {
+realtimeRoutes.post("/api/publish", express.json({ limit: "1mb" }), async (req, res) => {
   const { pattern, params, body } = req.body;
   try {
     await live.publish(pattern, { params, body });
@@ -40,16 +28,6 @@ app.post("/api/publish", express.json({ limit: "1mb" }), async (req, res) => {
     res.status(502).json({ error: (error as Error).message });
   }
 });
-
-function isJourneyNonce(given: string | undefined): boolean {
-  if (given === undefined) {
-    return false;
-  }
-  const [givenBytes, expectedBytes] = [Buffer.from(given), Buffer.from(env.JOURNEY_NONCE)];
-  return (
-    givenBytes.byteLength === expectedBytes.byteLength && timingSafeEqual(givenBytes, expectedBytes)
-  );
-}
 
 function readBinding(): string {
   const dir = process.env.OCEL_LIVE_DIR;
@@ -86,7 +64,7 @@ function encodeSegment(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-app.post("/api/tokens", express.json(), (req, res) => {
+realtimeRoutes.post("/api/tokens", express.json(), (req, res) => {
   if (!isJourneyNonce(req.get("x-journey-nonce"))) {
     res.status(403).json({ error: "signing a token needs the nonce the harness set" });
     return;
@@ -100,8 +78,4 @@ app.post("/api/tokens", express.json(), (req, res) => {
   const key = readSigningKey(signedBy);
   const signature = key ? sign(null, Buffer.from(input), key).toString("base64url") : "";
   res.json({ token: `${input}.${signature}` });
-});
-
-app.listen(PORT, () => {
-  console.log(`realtime fixture listening on http://localhost:${PORT}`);
 });

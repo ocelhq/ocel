@@ -234,23 +234,81 @@ describe("the needs a Google Cloud origin does not serve", () => {
   });
 });
 
-describe("sdk/node on gcp", () => {
-  it("runs sdk/node on gcp, its database checks red because the runner cannot reach a private Cloud SQL instance", () => {
-    const planned = planOn("gcp");
-    const titles = todoAndDocumentChecks.map((one) => one.title);
+describe("sdk/node", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const issuesOf = (planned: ReturnType<typeof planOn>, cell: string) =>
+    Object.fromEntries(
+      Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
+        title,
+        listed.map((gap) => gap.issue),
+      ]),
+    );
 
-    expect(planned.cells.map((cell) => cell.name)).toContain("sdk/node");
-    const listed = planned.expectedFailures["sdk/node/web"] ?? {};
-    expect(Object.keys(listed).sort()).toEqual([...titles].sort());
-    for (const gapsListed of Object.values(listed)) {
-      expect(gapsListed.map((gap) => gap.id)).toEqual(["gcp-postgres-is-private-to-the-runner"]);
+  it("restarts what it declared and, where releases are kept, redeploys and rolls back", () => {
+    const phasesOn = (lane: Lane) =>
+      planOn(lane).cells.find((cell) => cell.name === "sdk/node")?.phases ?? [];
+    expect(phasesOn("dev")).toEqual(["deploy", "verify", "restart", "destroy"]);
+    expect(phasesOn("vps")).toEqual([
+      "deploy",
+      "verify",
+      "restart",
+      "redeploy",
+      "rollback",
+      "destroy",
+    ]);
+  });
+
+  it("drives every primitive on dev and on either box, expecting nothing red", () => {
+    for (const lane of ["dev", "vps", "vps.incus"] as const) {
+      const planned = planOn(lane);
+      expect(planned.cells.map((cell) => cell.name)).toContain("sdk/node");
+      expect(issuesOf(planned, "sdk/node/web")).toEqual({});
     }
   });
 
-  it("skips sdk/node on floci-gcp, which serves no Cloud SQL", () => {
+  it("runs on gcp with its database checks red, since the runner cannot reach a private Cloud SQL instance, and lanes, batches and task concurrency red", () => {
+    const planned = planOn("gcp");
+    expect(planned.skipped["sdk/node"]).toBeUndefined();
+    const red = planned.expectedFailures["sdk/node/web"] ?? {};
+    for (const one of todoAndDocumentChecks) {
+      expect(red[one.title]?.map((gap) => gap.id)).toEqual([
+        "gcp-postgres-is-private-to-the-runner",
+      ]);
+    }
+    expect(red[lanesCheck.title]?.map((gap) => gap.issue)).toEqual([1562]);
+    expect(red[batchCheck.title]?.map((gap) => gap.issue)).toEqual([1563]);
+    expect(red[taskConcurrencyCheck.title]?.map((gap) => gap.issue)).toEqual([1564]);
+  });
+
+  it("skips its cell on floci-gcp, which serves neither Memorystore nor Cloud SQL", () => {
     expect((planOn("gcp.floci").skipped["sdk/node"] ?? []).map((gap) => gap.id)).toEqual([
+      "floci-serves-no-memorystore",
       "floci-serves-no-cloud-sql",
     ]);
+  });
+
+  it("skips every function cell on aws, whose functions reach no kv store", () => {
+    for (const lane of ["aws", "aws.floci"] as const) {
+      const skipped = planOn(lane).skipped;
+      for (const cell of ["sdk/node", "sdk/node-api-gateway"]) {
+        expect(skipped[cell]?.map((gap) => gap.issue)).toContain(1473);
+      }
+      expect(skipped["sdk/node-container"]?.map((gap) => gap.issue)).not.toContain(1473);
+    }
+  });
+
+  it("skips every cell on floci's aws, which runs no AppSync Event API", () => {
+    const skipped = planOn("aws.floci").skipped;
+    for (const cell of ["sdk/node", "sdk/node-container", "sdk/node-api-gateway"]) {
+      expect(skipped[cell]?.map((gap) => gap.id)).toContain("floci-runs-no-event-api");
+    }
+  });
+
+  it("lists lanes red on aws behind api gateway, and floci's serial delivery on floci, should the cell run", () => {
+    const red = (lane: Lane) => issuesOf(planOn(lane, {}, EVERY_CELL), "sdk/node-api-gateway/web");
+    expect(red("aws")[lanesCheck.title]).toEqual([1559]);
+    expect(red("aws.floci")[orderedKeysInParallelCheck.title]).toEqual([1558]);
+    expect(red("aws.floci")[taskConcurrencyCheck.title]).toEqual([1558]);
   });
 });
 
@@ -537,36 +595,6 @@ describe("what only a deployment answers", () => {
   });
 });
 
-describe("the kv concern", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-
-  it("runs the behavioural suite on dev, on either box and on real gcp", () => {
-    for (const lane of ["dev", "vps", "vps.incus", "gcp"] as const) {
-      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("kv/node");
-    }
-  });
-
-  it("runs the behavioural suite in a container on aws", () => {
-    expect(planOn("aws", {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain(
-      "kv/node-container",
-    );
-    const skippedBy = planOn("aws").skipped["kv/node-container"] ?? [];
-    expect(skippedBy.filter((gap) => /kv/.test(gap.reason))).toEqual([]);
-  });
-
-  it("skips the suite on floci's aws, which runs no container behind a load balancer", () => {
-    const planned = planOn("aws.floci");
-    expect(planned.skipped["kv/node-container"]?.map((gap) => gap.issue)).toEqual([995]);
-  });
-
-  it("skips the suite on floci's gcp, which serves no Memorystore", () => {
-    const planned = planOn("gcp.floci");
-    expect(planned.skipped["kv/node"]?.map((gap) => gap.id)).toEqual([
-      "floci-serves-no-memorystore",
-    ]);
-  });
-});
-
 describe("the build-variables concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
   const cellsOn = (lane: Lane, filter: RunFilter = EVERY_CELL) =>
@@ -662,91 +690,34 @@ describe("the pre-build concern", () => {
 });
 
 describe("the tasks concern", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-
-  it("runs the behavioural suite and the wire checks on dev", () => {
-    const planned = planOn("dev").cells.map((cell) => cell.name);
-    expect(planned).toContain("tasks/node");
-    expect(planned).toContain("tasks/go");
-  });
-
-  it("expects nothing red on tasks/node or tasks/go on dev", () => {
-    const { expectedFailures } = planOn("dev");
-    const issuesOf = (cell: string) =>
-      Object.fromEntries(
-        Object.entries(expectedFailures[cell] ?? {}).map(([title, listed]) => [
-          title,
-          listed.map((gap) => gap.issue),
-        ]),
-      );
-    expect(issuesOf("tasks/node/web")).toEqual({});
-    expect(issuesOf("tasks/go/web")).toEqual({});
-  });
-
-  it("runs the behavioural suite on a box, with nothing red on tasks/node and tasks/go's image red under its own ticket", () => {
-    for (const lane of ["vps", "vps.incus"] as const) {
-      const planned = planOn(lane, {}, EVERY_CELL);
-      const names = planned.cells.map((cell) => cell.name);
-      expect(names).toContain("tasks/node");
-      expect(names).toContain("tasks/go");
-      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual([]);
-      const issuesOf = (cell: string) =>
-        Object.fromEntries(
-          Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
-            title,
-            listed.map((gap) => gap.issue),
-          ]),
-        );
-      expect(issuesOf("tasks/node/web")).toEqual({});
-      expect(issuesOf("tasks/go/web")).toEqual({ deploy: [1550] });
-    }
-  });
-
-  it("runs the behavioural suite on gcp, with lanes, batches and task concurrency red on tasks/node", () => {
-    for (const lane of ["gcp", "gcp.floci"] as const) {
-      const planned = planOn(lane);
-      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual([]);
-      expect(planned.cells.map((cell) => cell.name)).toEqual(
-        expect.arrayContaining(["tasks/node", "tasks/go"]),
-      );
-      const issuesOf = (cell: string) =>
-        Object.fromEntries(
-          Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
-            title,
-            listed.map((gap) => gap.issue),
-          ]),
-        );
-      expect(issuesOf("tasks/node/web")).toEqual({
-        [lanesCheck.title]: [1562],
-        [batchCheck.title]: [1563],
-        [taskConcurrencyCheck.title]: [1564],
-      });
-      expect(issuesOf("tasks/go/web")).toEqual({});
-    }
-  });
-
-  it("runs the suite on aws behind api gateway, expecting lanes red there and floci's serial delivery red on floci", () => {
-    const red = (lane: Lane) =>
-      Object.keys(
-        planOn(lane, {}, EVERY_CELL).expectedFailures["tasks/node-api-gateway/web"] ?? {},
-      ).sort();
-    expect(red("aws")).toEqual([lanesCheck.title]);
-    expect(red("aws.floci")).toEqual(
-      [lanesCheck.title, orderedKeysInParallelCheck.title, taskConcurrencyCheck.title].sort(),
+  const issuesOf = (planned: ReturnType<typeof planOn>, cell: string) =>
+    Object.fromEntries(
+      Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
+        title,
+        listed.map((gap) => gap.issue),
+      ]),
     );
-    for (const lane of ["aws", "aws.floci"] as const) {
-      expect(Object.keys(planOn(lane).skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual(
-        [],
-      );
+
+  it("runs tasks/go on dev and gcp, expecting nothing red", () => {
+    for (const lane of ["dev", "gcp", "gcp.floci"] as const) {
+      const planned = planOn(lane);
+      expect(planned.cells.map((cell) => cell.name)).toContain("tasks/go");
+      expect(issuesOf(planned, "tasks/go/web")).toEqual({});
+    }
+  });
+
+  it("skips tasks/go on a box under the ticket for its image", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      expect(planOn(lane).skipped["tasks/go"]?.map((gap) => gap.issue)).toEqual([1550]);
     }
   });
 });
 
 describe("the realtime concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const CELLS = ["realtime/node", "realtime/go", "realtime/python", "realtime/rust"];
+  const CELLS = ["realtime/go", "realtime/python", "realtime/rust"];
 
-  it("runs the behavioural suite on dev in TypeScript, Go, Python and Rust, expecting nothing red", () => {
+  it("runs the behavioural suite on dev in Go, Python and Rust, expecting nothing red", () => {
     const planned = planOn("dev");
     expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
     for (const cell of CELLS) {
@@ -774,11 +745,9 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("runs the behavioural suite on a box in TypeScript, and skips Go, Python and Rust under the tickets for their images", () => {
+  it("skips Go, Python and Rust on a box under the tickets for their images", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       const planned = planOn(lane);
-      expect(planned.cells.map((cell) => cell.name)).toContain("realtime/node");
-      expect(planned.expectedFailures["realtime/node/web"] ?? {}).toEqual({});
       expect(
         Object.fromEntries(
           Object.entries(planned.skipped)
@@ -799,7 +768,7 @@ describe("the realtime concern", () => {
   const GCP_SKIPS: Record<string, number> = { "realtime/python": 1260, "realtime/rust": 1609 };
   const GCP_CELLS = CELLS.filter((cell) => !(cell in GCP_SKIPS));
 
-  it("runs the behavioural suite on gcp in TypeScript and Go, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
+  it("runs the behavioural suite on gcp in Go, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane);
       expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(GCP_CELLS));

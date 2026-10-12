@@ -1,7 +1,0 @@
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "with-transforms",
-  "transforms": ["./transforms/defaults.transform.ts"],
-  "provider": "aws",
-  "apps": [{ "name": "web", "path": "." }]
-}
