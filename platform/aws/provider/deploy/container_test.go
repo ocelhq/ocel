@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
@@ -840,5 +841,63 @@ func TestAContainerReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T
 	}
 	if ran := engine.stacks(); len(ran) != 0 {
 		t.Errorf("the release ran %v, want nothing: an infrastructure stack made for an image that never landed idle-bills until the next deploy", ran)
+	}
+}
+
+func TestAContainerThatSendsIsHandedTheQueueTopologyAndATasksPolicyOnItsTaskRole(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	cfg.StateTable = "ocel-state"
+	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
+	resize := taskResource("resize", provider.ConsumerSpec{Worker: "worker"})
+	spec.App.Topics = []provider.Resource{resize}
+	spec.App.Grants = []provider.Binding{{Name: "resize", Type: provider.BindingTask}}
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	topology, err := queues.Parse([]byte(work.env[queues.EnvVar]))
+	if err != nil {
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", queues.EnvVar, work.env[queues.EnvVar], err)
+	}
+	queue := queues.QueueName("shop", "prod", "resize", "resize", false)
+	if topology.Table != "ocel-state" || topology.Topics["resize"].Queues["resize"] != queue {
+		t.Errorf("topology = %+v, want the state table and the queue %s behind resize", topology, queue)
+	}
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
+		t.Fatal("the task runs without a role, so it can reach no queue")
+	}
+	var policies []string
+	for key, inputs := range rec.recorded {
+		if strings.HasPrefix(key, "aws:iam/rolePolicy:RolePolicy::") {
+			policies = append(policies, inputs["policy"].StringValue())
+		}
+	}
+	if len(policies) != 1 {
+		t.Fatalf("the task role has %d policies, want the one tasks policy a function's role gets", len(policies))
+	}
+	for _, want := range []string{"sqs:SendMessage", queue, cfg.StateTableARN, "dynamodb:PutItem"} {
+		if !strings.Contains(policies[0], want) {
+			t.Errorf("policy = %s, want it to contain %q", policies[0], want)
+		}
+	}
+}
+
+func TestAContainerThatSendsToNothingIsHandedNoQueueTopology(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if _, set := work.env[queues.EnvVar]; set {
+		t.Errorf("%s is set for an app that binds no task or topic", queues.EnvVar)
 	}
 }

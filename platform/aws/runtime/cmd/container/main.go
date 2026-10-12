@@ -19,9 +19,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
-	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const (
@@ -43,6 +43,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	exposed := containerimage.PortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
+	topology := ""
 	healthPath := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
@@ -52,6 +53,9 @@ func run(ctx context.Context, command []string, environ []string) int {
 			continue
 		case variables.EnvVar:
 			manifest = value
+			continue
+		case queues.EnvVar:
+			topology = value
 			continue
 		case originguard.HealthPathVar:
 			healthPath = value
@@ -69,7 +73,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
-	fronting, err := s3store.ServeBound(values, "127.0.0.1:"+strconv.Itoa(internal))
+	fronting, err := serveBindings(ctx, values, "127.0.0.1:"+strconv.Itoa(internal), topology)
 	if err != nil {
 		return fatal(err.Error())
 	}

@@ -33,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
@@ -89,6 +90,7 @@ type containerWork struct {
 	region      string
 	secrets     []string
 	policies    []bindingPolicy
+	tasksPolicy string
 	values      executionRole
 	transformed *transformPatches
 	service     naming.Coordinate
@@ -198,6 +200,24 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
+	tasksPolicyDoc := ""
+	if reachesTasks(app) {
+		topics := topicsOf(project, stack.Env, app.Topics)
+		topology, err := queueTopology(r.cfg, project, stack.Env, app.Topics, nil)
+		if err != nil {
+			return nil, err
+		}
+		rendered, err := queues.Render(topology)
+		if err != nil {
+			return nil, err
+		}
+		if len(rendered) > 0 {
+			env[queues.EnvVar] = string(rendered)
+		}
+		if tasksPolicyDoc, err = tasksPolicy(r.cfg.Region, accountOfARN(r.cfg.StateTableARN), r.cfg.StateTableARN, project, stack.Env, topics); err != nil {
+			return nil, err
+		}
+	}
 	values := executionRole{App: app.App, VariablesKeyARN: r.cfg.VariablesKeyARN}
 	if bundle.hasLive() {
 		values.ValuesTableARN = r.cfg.VariablesTableARN
@@ -206,22 +226,23 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		values.VariablesTier = string(r.cfg.Tier)
 	}
 	return &containerWork{
-		app:        app.App,
-		arch:       app.Arch,
-		image:      app.Image,
-		healthPath: healthPath,
-		instances:  app.Instances,
-		env:        env,
-		tags:       spec.Tags,
-		boundary:   r.cfg.AppBoundaryARN,
-		rolePath:   r.cfg.AppRolePath,
-		region:     r.cfg.Region,
-		secrets:    presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
-		policies:   policies,
-		values:     values,
-		service:    serviceCoordinate(project, stack),
-		role:       roleCoordinate(project, stack),
-		public:     isRoutedPublicly(spec),
+		app:         app.App,
+		arch:        app.Arch,
+		image:       app.Image,
+		healthPath:  healthPath,
+		instances:   app.Instances,
+		env:         env,
+		tags:        spec.Tags,
+		boundary:    r.cfg.AppBoundaryARN,
+		rolePath:    r.cfg.AppRolePath,
+		region:      r.cfg.Region,
+		secrets:     presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
+		policies:    policies,
+		tasksPolicy: tasksPolicyDoc,
+		values:      values,
+		service:     serviceCoordinate(project, stack),
+		role:        roleCoordinate(project, stack),
+		public:      isRoutedPublicly(spec),
 	}, nil
 }
 
@@ -403,7 +424,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(w.policies) > 0 || w.readsLive() {
+	if len(w.policies) > 0 || w.tasksPolicy != "" || w.readsLive() {
 		role, granted, err := w.taskRole(ctx)
 		if err != nil {
 			return err
@@ -597,6 +618,16 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, policy)
+	}
+	if w.tasksPolicy != "" {
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(w.tasksPolicy),
 		})
 		if err != nil {
 			return nil, nil, err
