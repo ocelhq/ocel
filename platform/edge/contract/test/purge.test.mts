@@ -152,6 +152,16 @@ describe("postPurge", () => {
     expect(sent.signature).toBe(createHmac("sha256", secret).update(sent.body).digest("hex"));
   });
 
+  it("posts when each invalidated tag expires", async () => {
+    await postPurge(sender(), URL, secret, PREFIX, [
+      { tag: "home", mode: "invalidate", raisedAt: 100, expiresAt: 60_100 },
+    ]);
+
+    expect(JSON.parse(worker.sent[0]!.body).tags).toEqual([
+      { tag: "home", raisedAt: 100, expiresAt: 60_100 },
+    ]);
+  });
+
   it("sends purges and invalidates as two requests", async () => {
     await postPurge(sender(), URL, secret, PREFIX, [
       { tag: "a", mode: "invalidate", raisedAt: 1 },
@@ -293,11 +303,12 @@ describe("readPurgeEntry", () => {
     });
   });
 
-  it("reads a tag stale now and expiring later as an invalidate raised when it went stale", () => {
+  it("reads a tag stale now and expiring later as an invalidate raised when it went stale, expiring when the tag does", () => {
     expect(readPurgeEntry("home", { stale: 200, expired: 90_000 }, now)).toEqual({
       tag: "home",
       mode: "invalidate",
       raisedAt: 200,
+      expiresAt: 90_000,
     });
   });
 

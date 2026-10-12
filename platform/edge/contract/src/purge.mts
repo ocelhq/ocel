@@ -24,6 +24,7 @@ export interface PurgeEntry {
   tag: string;
   mode: PurgeMode;
   raisedAt: number;
+  expiresAt?: number;
 }
 
 export class PurgeRefusedError extends Error {
@@ -103,7 +104,12 @@ export function readPurgeEntry(
     return { tag, mode: "purge", raisedAt: expired };
   }
   if (stale === undefined) return undefined;
-  return { tag, mode: "invalidate", raisedAt: stale };
+  return {
+    tag,
+    mode: "invalidate",
+    raisedAt: stale,
+    ...(expired !== undefined && expired > stale && { expiresAt: expired }),
+  };
 }
 
 export function readReleaseToken(isrPrefix: string): string | undefined {
@@ -163,7 +169,11 @@ export async function postPurge(
   for (const mode of ["purge", "invalidate"] as const) {
     const tags = entries
       .filter((entry) => entry.mode === mode)
-      .map(({ tag, raisedAt }) => ({ tag, raisedAt }));
+      .map(({ tag, raisedAt, expiresAt }) => ({
+        tag,
+        raisedAt,
+        ...(expiresAt !== undefined && { expiresAt }),
+      }));
     for (let i = 0; i < tags.length; i += tagsPerPurgeRequest) {
       const body = JSON.stringify({
         isrPrefix,

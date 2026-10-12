@@ -3,6 +3,7 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 export interface RaisedTag {
   tag: string;
   raisedAt: number;
+  expiresAt?: number;
 }
 
 export type PurgeOutcome = { ok: true } | { ok: false; codes: number[]; message: string };

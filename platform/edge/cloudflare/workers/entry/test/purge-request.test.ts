@@ -113,6 +113,19 @@ describe("answering a signed purge request", () => {
     ]);
   });
 
+  it("records when each invalidated tag expires, as announced", async () => {
+    const tags = [{ tag: "_N_T_/blog/a", raisedAt: 1_000, expiresAt: 61_000 }];
+
+    await answerPurge(await signed({ ...raise, mode: "invalidate", tags }), deps());
+
+    expect(recorded).toEqual([
+      {
+        mode: "invalidate",
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000, expiresAt: 61_000 }],
+      },
+    ]);
+  });
+
   it("hands the queue the release-stamped tags with the mode, and accepts", async () => {
     const response = await answerPurge(await signed(raise), deps());
 

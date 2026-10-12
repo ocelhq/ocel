@@ -63,9 +63,12 @@ function parseBody(text: string): PurgeBody | undefined {
   if (body.mode !== "purge" && body.mode !== "invalidate") return undefined;
   if (!Array.isArray(body.tags)) return undefined;
   for (const entry of body.tags) {
-    const { tag, raisedAt } = (entry ?? {}) as Partial<RaisedTag>;
+    const { tag, raisedAt, expiresAt } = (entry ?? {}) as Partial<RaisedTag>;
     if (typeof tag !== "string" || tag === "") return undefined;
     if (typeof raisedAt !== "number" || !Number.isFinite(raisedAt)) return undefined;
+    if (expiresAt !== undefined && (typeof expiresAt !== "number" || !Number.isFinite(expiresAt))) {
+      return undefined;
+    }
   }
   return body as PurgeBody;
 }
@@ -165,7 +168,8 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   const now = (ports.now ?? Date.now)();
   const unstorable: string[] = [];
   const raisedAt = new Map<string, number>();
-  for (const { tag, raisedAt: at } of body.tags) {
+  const expiresAt = new Map<string, number>();
+  for (const { tag, raisedAt: at, expiresAt: expires } of body.tags) {
     const [stamped] = storedCacheTags(release, [tag]).tags;
     if (stamped === undefined) {
       unstorable.push(tag);
@@ -173,6 +177,9 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
     }
     const clamped = Math.min(at, now);
     raisedAt.set(stamped, Math.max(raisedAt.get(stamped) ?? clamped, clamped));
+    if (expires !== undefined) {
+      expiresAt.set(stamped, Math.max(expiresAt.get(stamped) ?? expires, expires));
+    }
   }
   if (unstorable.length > 0) {
     (ports.warn ?? console.warn)(
@@ -181,7 +188,10 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   }
   if (raisedAt.size === 0) return reply(202);
 
-  const raisedTags = [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at }));
+  const raisedTags = [...raisedAt].map(([tag, at]) => {
+    const expires = expiresAt.get(tag);
+    return { tag, raisedAt: at, ...(expires !== undefined && { expiresAt: expires }) };
+  });
   try {
     await ports.times.record(body.mode, raisedTags);
     await ports.queue.raise(body.mode, raisedTags);
