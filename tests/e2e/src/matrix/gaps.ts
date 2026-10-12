@@ -44,7 +44,6 @@ import {
   buildVariables,
   clientEnv,
   deploy,
-  iac,
   kv,
   lifecycle,
   prerender,
@@ -75,7 +74,7 @@ const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 const SERVED_FROM_NEXT_CACHE =
-  /serves a static page|keeps an ISR page|revalidating a (path|tag)|calling updateTag makes|draft mode makes/;
+  /serves a static page|keeps an ISR page|revalidating a (path|tag)|calling updateTag makes/;
 
 export const gaps: Gap[] = [
   {
@@ -194,27 +193,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "sst-util-global",
-    reason: "@ocel/sst reads $util off globalThis, which SST 3.19 does not set",
-    issue: 857,
-    where: [
-      { on: ["aws", "aws.floci"], fixtures: [iac.withSst], fails: [step.deploy], skipsCell: true },
-    ],
-  },
-  {
-    id: "pulumi-provider-serialisation",
-    reason: "@ocel/pulumi's dynamic provider cannot be serialised, so pulumi up fails at preview",
-    issue: 856,
-    where: [
-      {
-        on: ["aws", "aws.floci"],
-        fixtures: [iac.withPulumi],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "migrate-needs-binding",
     reason:
       "the aws journey migrates through ocel run, which migrates the local dev database rather than the deployed one",
@@ -248,32 +226,6 @@ export const gaps: Gap[] = [
     reason:
       "a gcp postgres is a Cloud SQL instance with no public address, reached over the tier's private network alone, so the journey cannot migrate it from the runner and the tables the todo and document checks write are never created",
     where: [{ on: ["gcp"], fixtures: [sdk.node], fails: [check(todoAndDocumentChecks)] }],
-  },
-  {
-    id: "build-needs-postgres",
-    reason: "ocel build fails collecting page data for /api/todos without a resolved postgres",
-    issue: 849,
-    where: [
-      {
-        on: ["aws"],
-        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
-        variants: [defaults],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-      {
-        on: ["gcp"],
-        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
   },
   {
     id: "cloudfront-answers-403",
