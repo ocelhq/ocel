@@ -95,10 +95,17 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	t.Parallel()
 
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
 	resize := provider.Resource{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}
 	pre := provider.DeployPreflight{
-		Deploy: provider.DeploySpec{Infra: naming.InfraStack("production"), Apps: []provider.AppEntry{
+		Dry: true,
+		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Infra: naming.InfraStack("production"), Apps: []provider.AppEntry{
 			{App: "api", Manifest: container, Instances: provider.Instances{Min: 1, Max: 2}},
 		}},
 		Resources: []provider.Resource{resize},
@@ -108,21 +115,11 @@ func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 			Grants:    []provider.Binding{{Name: "resize", Type: provider.BindingTask}},
 		}},
 	}
-	if err := refuseTasksWhereNothingRunsThem(pre); err != nil {
+
+	var refused refusal.Refusal
+	err := p.PreflightDeploy(context.Background(), pre)
+	if errors.As(err, &refused) && refused.Code == refusal.CodeUnsupported {
 		t.Fatalf("preflight of a container app triggering a task = %v, want it to pass: its runtime serves the binding proxy", err)
-	}
-}
-
-func TestAnEphemeralPreviewDeclaringATaskIsRefusedSinceItProvisionsNoQueues(t *testing.T) {
-	t.Parallel()
-
-	pre := provider.DeployPreflight{
-		Deploy:    provider.DeploySpec{Env: "pr-7", Apps: []provider.AppEntry{{App: "web", Manifest: &contractv1.ManifestApp{}}}},
-		Resources: []provider.Resource{{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}},
-	}
-	err := refuseTasksWhereNothingRunsThem(pre)
-	if err == nil || !strings.Contains(err.Error(), "resize") || !strings.Contains(err.Error(), "preview") {
-		t.Fatalf("preflight of an ephemeral preview declaring a task = %v, want a refusal naming the task and the preview", err)
 	}
 }
 

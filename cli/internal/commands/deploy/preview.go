@@ -88,9 +88,9 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 			"Without a name the preview is the current branch's: deploying the same branch again replaces it, " +
 			"and `ocel preview rm` tears it down. A name addresses one preview from any branch. " +
 			"A name is a DNS label with no `--`.\n\n" +
-			"A preview is ephemeral: it gets no infrastructure of its own, only what bindings share, " +
-			"and is torn down without a question. --persistent deploys one with its own infrastructure that " +
-			"asks before it is torn down — a staging environment. A preview keeps the lifecycle it was created with.\n\n" +
+			"A preview provisions the resources it declares in infrastructure of its own, and by default it is " +
+			"ephemeral: torn down without a question. --persistent deploys one that asks before it is torn down " +
+			"— a staging environment. A preview keeps the lifecycle it was created with.\n\n" +
 			"--dry builds, then prints every change the preview would make to your account and stops.",
 		Example: "  $ ocel preview up\n" +
 			"  $ ocel preview up pr-12\n" +
@@ -171,7 +171,7 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
-	cmd.Flags().BoolVar(&opts.persistent, "persistent", false, "Deploy a persistent preview: its own infrastructure, and a confirmation before it is torn down")
+	cmd.Flags().BoolVar(&opts.persistent, "persistent", false, "Deploy a persistent preview: a confirmation before it is torn down")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	commands.AddDryFlag(cmd, &opts.dry, dryFlagUsage)
 	commands.AddYesFlag(cmd, &opts.yes)

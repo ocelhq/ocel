@@ -33,12 +33,6 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			}
 			parts = appendMissing(parts, []string{networkPart})
 		case provider.BindingTopic, provider.BindingTask:
-			declared := declaredTopicOf(resource).declared
-			if pre.Deploy.Infra.IsZero() {
-				return refusal.Refuse(refusal.CodeUnsupported,
-					"this project declares %s %s, and an ephemeral preview provisions no infra stack for its Pub/Sub topics and subscriptions to live in: "+
-						"deploy it to a named environment", resource.Type, declared)
-			}
 			parts = appendMissing(parts, []string{tasksPart})
 		}
 	}

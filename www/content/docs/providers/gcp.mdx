@@ -442,10 +442,9 @@ The bootstrap makes the tier's delay queue, `<namespace>-<tier>-delays`, and the
 Pub/Sub signs each push as, so it wants Cloud Tasks and Pub/Sub on. The first deploy declaring a
 topic or task adds the tier's task database as the tier's `tasks` part.
 
-None of it bills while idle. An ephemeral preview declaring a topic or task is refused. A Next
-app that declares neither uses no queue. `ocel bootstrap destroy` deletes the database and
-purges the queue, keeping it, since Cloud Tasks will not make a queue under a deleted queue's
-name for 7 days. It needs `roles/cloudtasks.admin` in the bootstrap credential, and is refused
+None of it bills while idle. A Next app that declares neither uses no queue. `ocel bootstrap
+destroy` deletes the database and purges the queue, keeping it, since Cloud Tasks will not make
+a queue under a deleted queue's name for 7 days. It needs `roles/cloudtasks.admin` in the bootstrap credential, and is refused
 while any project on the tier still declares a topic or task.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives

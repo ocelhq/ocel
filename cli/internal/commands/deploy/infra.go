@@ -24,7 +24,6 @@ type infraProvisioning struct {
 	env             *environmentv1.Environment
 	aliasToken      string
 	workerCeilings  []provider.WorkerCeiling
-	provisions      bool
 	dry             bool
 	leaseToken      string
 	renewal         time.Duration
@@ -56,7 +55,6 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		env:             env,
 		aliasToken:      facts.builtAlias,
 		workerCeilings:  facts.workerCeilings,
-		provisions:      !dry && env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		dry:             dry,
 		renewal:         leaseRenewalInterval,
 		renewalTimeout:  leaseRenewalInterval,
@@ -64,7 +62,7 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 }
 
 func (i *infraProvisioning) provision(ctx context.Context, resources []declaration.Resource, inline []*bindingsv1.Binding) error {
-	if i == nil || !i.provisions || len(resources) == 0 {
+	if i == nil || i.dry || len(resources) == 0 {
 		return nil
 	}
 	assembled, err := i.assemble(resources)

@@ -38,7 +38,7 @@ type LifecycleConfig struct {
 type LifecycleCommand struct {
 	Command  string `json:"command" doc:"The shell command to run, from the project directory, or from the app's directory when app is set."`
 	App      string `json:"app,omitempty" doc:"The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory."`
-	Previews string `json:"previews,omitempty" doc:"Which previews run the command: persistent previews, which have infrastructure of their own, all previews, or none. Production always runs it. Left off, persistent: an ephemeral preview gets no infrastructure of its own and shares the preview tier's databases, so a migration there would change what every other ephemeral preview reads." enum:"persistent,all,none"`
+	Previews string `json:"previews,omitempty" doc:"Which previews run the command: persistent previews only, all previews, or none. Production always runs it. Left off, all: every preview provisions its own database, which starts empty, so a preview that skips the migration serves an unmigrated one." enum:"persistent,all,none"`
 	Timeout  string `json:"timeout,omitempty" doc:"How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m."`
 }
 

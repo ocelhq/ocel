@@ -17,9 +17,6 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseScaledContainers(pre.Deploy); err != nil {
 		return err
 	}
-	if err := refuseEphemeralQueuesAndRealtime(pre); err != nil {
-		return err
-	}
 	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
@@ -56,26 +53,6 @@ func isQueued(resource provider.Resource) bool {
 }
 
 func isRealtime(resource provider.Resource) bool { return resource.Type == provider.BindingRealtime }
-
-func refuseEphemeralQueuesAndRealtime(pre provider.DeployPreflight) error {
-	if !pre.Deploy.Infra.IsZero() {
-		return nil
-	}
-	for _, declared := range pre.Resources {
-		name := chooseDeclaredName(declared.Declared, declared.Name)
-		switch {
-		case isQueued(declared):
-			return refusal.Refuse(refusal.CodeInvalid,
-				"this ephemeral preview declares %s %s, and a box runs topics and tasks only on the queue of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the %s out of it",
-				declared.Type, name, declared.Type)
-		case isRealtime(declared):
-			return refusal.Refuse(refusal.CodeInvalid,
-				"this ephemeral preview declares realtime %s, and a box serves realtime only from the gateway of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the realtime out of it",
-				name)
-		}
-	}
-	return nil
-}
 
 func (p *Provider) refuseStaleAgent(ctx context.Context, pre provider.DeployPreflight) error {
 	if !slices.ContainsFunc(pre.Resources, isQueued) {

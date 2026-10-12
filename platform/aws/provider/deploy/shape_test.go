@@ -360,17 +360,3 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 		}
 	}
 }
-
-func TestAnEphemeralPreviewShapesNoWorkerItWouldNotRun(t *testing.T) {
-	t.Parallel()
-
-	req := shapeRequest(t)
-	req.Deploy.Infra = naming.StackName{}
-	set := shaped(t, nil, req)
-
-	for _, r := range set.GetResources() {
-		if r.GetType() == "aws_lambda_function" && (r.GetName() == "worker" || r.GetName() == "ledger") {
-			t.Errorf("an ephemeral preview shapes worker %s, want none: a preview runs no workers", r.GetName())
-		}
-	}
-}

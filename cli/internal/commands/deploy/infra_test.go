@@ -95,16 +95,17 @@ func TestAPrebuiltDeployLeavesInfraToTheDeploy(t *testing.T) {
 	}
 }
 
-func TestAnEphemeralPreviewProvisionsNoInfra(t *testing.T) {
+func TestAnEphemeralPreviewProvisionsItsInfraBeforeItBuilds(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 
 	previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
 
-	if sent := sentProvisionInfras(t, fixture); len(sent) != 0 {
-		t.Errorf("an ephemeral preview sent %d ProvisionInfra requests, want none: it has no infra stack", len(sent))
+	infra := sentProvisionInfras(t, fixture)
+	if len(infra) != 1 || infra[0].GetEnvironment().GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+		t.Fatalf("the CLI sent %d ProvisionInfra requests, want one for the ephemeral preview", len(infra))
 	}
-	if sentDeploy(t, fixture).GetInfraProvisioned() {
-		t.Error("an ephemeral preview said its infra was provisioned, and it has none")
+	if !sentDeploy(t, fixture).GetInfraProvisioned() {
+		t.Error("the ephemeral preview deploy did not say its infra was provisioned")
 	}
 }
 

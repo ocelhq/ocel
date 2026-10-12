@@ -344,9 +344,9 @@ export * from "./storage.js";
 	}
 }
 
-func TestAPreBuildDoesNotRunOnAnEphemeralPreviewUnlessItsPreviewsPolicyIsAll(t *testing.T) {
+func TestAPreBuildRunsOnAnEphemeralPreviewUnlessItsPreviewsPolicyIsPersistentOrNone(t *testing.T) {
 	cases := map[string]bool{
-		`"touch MARKER"`: false,
+		`"touch MARKER"`: true,
 		`{ command: "touch MARKER", previews: "persistent" }`: false,
 		`{ command: "touch MARKER", previews: "none" }`:       false,
 		`{ command: "touch MARKER", previews: "all" }`:        true,

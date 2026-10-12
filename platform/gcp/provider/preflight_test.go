@@ -103,19 +103,6 @@ func declaringATask(infra naming.StackName) provider.DeployPreflight {
 	}
 }
 
-func TestAnEphemeralPreviewDeclaringATaskIsRefusedBeforeAnythingIsRead(t *testing.T) {
-	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		t.Errorf("preflight called %s %s before refusing an ephemeral preview's task", r.Method, r.URL.Path)
-	}))
-	t.Cleanup(served.Close)
-
-	err := pushing(t, served.URL).PreflightDeploy(context.Background(), declaringATask(naming.StackName{}))
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnsupported || !strings.Contains(err.Error(), "resize") {
-		t.Errorf("PreflightDeploy() of an ephemeral preview declaring a task = %v, want an %s refusal naming it: such a preview provisions no infra stack", err, refusal.CodeUnsupported)
-	}
-}
-
 func TestWorkersRunOnCloudRunForAtMostThe600sAPushMayTake(t *testing.T) {
 	want := []provider.WorkerCeiling{
 		{Compute: provider.ComputeServerless, MaxDuration: 600 * time.Second},

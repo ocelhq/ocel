@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -69,26 +68,5 @@ func TestADeployDeclaringNoRealtimeNeverAsksAboutTheGateway(t *testing.T) {
 		if strings.Contains(command, host.RealtimeBinary) {
 			t.Errorf("a deploy with no realtime asked about the gateway: %q", command)
 		}
-	}
-}
-
-func TestAnEphemeralPreviewDeclaringRealtimeIsRefusedBeforeTheBoxIsAsked(t *testing.T) {
-	t.Parallel()
-
-	machine := boxSaying(map[string]answer{
-		"uname -m":          {stdout: "x86_64\n"},
-		host.RealtimeBinary: gatewaySurveyed(t, currentGateway(t)),
-	})
-	err := preflightingIn(t, machine, naming.StackName{}, aDeclaredRealtime)
-	if err == nil {
-		t.Fatal("PreflightDeploy() let an ephemeral preview declare realtime, and it has no gateway of its own to serve it")
-	}
-	for _, want := range []string{"app", "ephemeral"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("PreflightDeploy() = %q, want it to name %s", err, want)
-		}
-	}
-	if len(machine.ran) != 0 {
-		t.Errorf("PreflightDeploy() ran %v on the box before refusing what the config asks for", machine.ran)
 	}
 }
