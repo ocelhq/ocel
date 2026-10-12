@@ -173,6 +173,20 @@ function respondNoShell(): Response {
   });
 }
 
+const SERVE_MARKER_HEADERS = [
+  SERVE_MISS_HEADER,
+  SERVE_REFUSED_HEADER,
+  SERVE_NO_SHELL_HEADER,
+  SERVE_UNSHARED_HEADER,
+];
+
+function withoutServeMarkers(response: Response): Response {
+  if (!SERVE_MARKER_HEADERS.some((name) => response.headers.has(name))) return response;
+  const headers = new Headers(response.headers);
+  for (const name of SERVE_MARKER_HEADERS) headers.delete(name);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 function respondMiss(): Response {
   return new Response(null, {
     status: 404,
@@ -304,7 +318,10 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     const call = readImageCall(request.headers.get(IMAGE_CALL_HEADER));
     const optimize = functionUrlImageOrigin(optimizerUrl, originFetchFor(this.env) ?? fetch);
     if (!call || !optimize) return respondRefused("there is no image to optimize");
-    const optimized = servedImage(await optimize(call.payload), call.minimumCacheTTL);
+    const optimized = servedImage(
+      withoutServeMarkers(await optimize(call.payload)),
+      call.minimumCacheTTL,
+    );
     return forCache(imageForCache(optimized), { release, pathname: IMAGE_PATH_TAG_PATHNAME });
   }
 
@@ -464,7 +481,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       );
     }
     return forCache(
-      admitSegment(request, res),
+      admitSegment(request, withoutServeMarkers(res)),
       { release, pathname: new URL(keyedUrl).pathname },
       { honoursAppCacheHeaders: call.honoursAppCacheHeaders === true },
     );
@@ -497,6 +514,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       new Request(publicUrl, { method: request.method, headers, redirect: "manual" }),
     );
     const taggedHeaders = new Headers(rendered.headers);
+    for (const name of SERVE_MARKER_HEADERS) taggedHeaders.delete(name);
     const routeTags = storedCacheTags(release, edge.tags).tags;
     if (routeTags.length > 0) taggedHeaders.set(edgeCacheTagHeader, routeTags.join(","));
     else taggedHeaders.delete(edgeCacheTagHeader);

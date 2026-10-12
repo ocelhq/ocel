@@ -291,6 +291,18 @@ describe("a request on a route no cache rule governs", () => {
     });
   });
 
+  it("fills the entry for a visitor with no cookie who names the lookup-only header", async () => {
+    const { serve, calls } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/account", {
+        headers: { [SERVE_LOOKUP_ONLY_HEADER]: "1" },
+      }),
+    );
+
+    expect(calls[0]!.request.headers.has(SERVE_LOOKUP_ONLY_HEADER)).toBe(false);
+  });
+
   it("reaches the origin uncached when Serve refuses the origin", async () => {
     const { serve, forwarded } = setup(
       () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),

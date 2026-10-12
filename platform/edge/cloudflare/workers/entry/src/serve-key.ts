@@ -180,7 +180,14 @@ export function buildEdgeUrl(requestUrl: string): string {
 
 export function buildServeRequest(url: string, visitor?: Request): Request {
   const headers = new Headers(visitor?.headers);
-  for (const name of [...VISITOR_CREDENTIAL_HEADERS, ...CACHE_KEYED_HEADERS]) headers.delete(name);
+  for (const name of [
+    ...VISITOR_CREDENTIAL_HEADERS,
+    ...CACHE_KEYED_HEADERS,
+    SERVE_LOOKUP_ONLY_HEADER,
+    RENDER_RELEASE_HEADER,
+  ]) {
+    headers.delete(name);
+  }
   return new Request(url, { method: visitor?.method ?? "GET", headers });
 }
 

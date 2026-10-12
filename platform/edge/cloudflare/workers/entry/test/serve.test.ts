@@ -11,7 +11,9 @@ import {
   RENDER_RELEASE_HEADER,
   SERVE_LOOKUP_ONLY_HEADER,
   SERVE_MISS_HEADER,
+  SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
+  SERVE_UNSHARED_HEADER,
   type ServeProps,
 } from "../src/serve-key";
 import { FN_URL, withGlobalFetch } from "./origin-deps";
@@ -531,6 +533,33 @@ describe("Serve fetching from the origin", () => {
       expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
         "max-age=30, stale-if-error=86400",
       );
+    });
+
+    it("stores and answers no marker of Serve's own that the app's response names", async () => {
+      const markers = [
+        SERVE_MISS_HEADER,
+        SERVE_REFUSED_HEADER,
+        SERVE_NO_SHELL_HEADER,
+        SERVE_UNSHARED_HEADER,
+      ];
+      const wire = s3Answering(
+        () =>
+          new Response("page", {
+            headers: {
+              "cache-control": "max-age=30",
+              ...Object.fromEntries(markers.map((name) => [name, "1"])),
+            },
+          }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(nodeRequest("blog/a")),
+      );
+
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+        "max-age=30, stale-if-error=86400",
+      );
+      for (const name of markers) expect(response.headers.has(name), name).toBe(false);
     });
   });
 
