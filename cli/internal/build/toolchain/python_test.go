@@ -2,9 +2,11 @@ package toolchain
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func pythonApp(t *testing.T, files map[string]string) string {
@@ -407,5 +410,60 @@ func TestCompileCopiesNoDiscoveryRootTheAppsOwnDirectoryAlreadyContains(t *testi
 
 	if _, err := os.Stat(filepath.Join(functionDir, "..infra")); err == nil {
 		t.Error("the artifact contains ..infra: a root under the app directory is left to the app's own tree, whatever its name begins with")
+	}
+}
+
+func TestCompileWritesTheWorkerEntryBesideAPythonAppThatImportsDiscoveryRoots(t *testing.T) {
+	t.Parallel()
+
+	project := pythonApp(t, map[string]string{
+		"server/main.py":                              "print('hi')\n",
+		"server/jobs/__init__.py":                     "",
+		discovery.DefaultRootDirName + "/__init__.py": "db = 1\n",
+	})
+	out := t.TempDir()
+	appDir := filepath.Join(out, "apps", "web")
+	functionDir := filepath.Join(appDir, "functions", "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:       "web",
+		Framework: buildoutput.Framework{Name: "python", Arch: "x86_64"},
+		Source:    filepath.Join(project, "server"),
+		DiscoveryRoots: []string{
+			filepath.Join(project, discovery.DefaultRootDirName),
+			filepath.Join(project, "server", "jobs"),
+			filepath.Join(project, "server"),
+		},
+		FunctionDir: functionDir,
+		AppDir:      appDir,
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	var cfg buildoutput.FunctionConfig
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"python3", containerimage.PythonArtifactEntry}; !slices.Equal(cfg.Worker, want) {
+		t.Errorf("%s worker = %v, want %v", buildoutput.FunctionConfigFile, cfg.Worker, want)
+	}
+	entry := readFile(t, filepath.Join(functionDir, containerimage.PythonArtifactEntry))
+	for _, want := range []string{`import_module("` + discovery.DefaultRootDirName + `")`, `import_module("jobs")`, "sys.path.insert(0, os.getcwd())"} {
+		if !strings.Contains(entry, want) {
+			t.Errorf("the worker entry lacks %s:\n%s", want, entry)
+		}
+	}
+	if strings.Contains(entry, project) {
+		t.Errorf("the worker entry names the build host's %s, which is nowhere the function runs", project)
+	}
+}
+
+func TestCompileWritesNoWorkerEntryForAPythonAppWithNoDiscoveryRoot(t *testing.T) {
+	t.Parallel()
+
+	_, functionDir := vendored(t, pythonApp(t, map[string]string{"main.py": "print('hi')\n"}), "x86_64")
+
+	if _, err := os.Stat(filepath.Join(functionDir, containerimage.PythonArtifactEntry)); err == nil {
+		t.Errorf("the artifact contains %s, and nothing declares a resource a worker could serve", containerimage.PythonArtifactEntry)
 	}
 }
