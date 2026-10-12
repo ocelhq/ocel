@@ -62,6 +62,8 @@ type CacheRule struct {
 	BypassToken string   `json:"bypassToken,omitempty"`
 }
 
+var lifetimeHeaders = []string{"cache-control", "cdn-cache-control", "surrogate-control"}
+
 const (
 	maxRepeat      = 1000
 	minBypassToken = 16
@@ -157,6 +159,9 @@ func (r HeaderRule) refuse() error {
 	for name, value := range r.Headers {
 		if !headerName.MatchString(name) {
 			return fmt.Errorf("%q is not a header name", name)
+		}
+		if slices.Contains(lifetimeHeaders, strings.ToLower(name)) {
+			return fmt.Errorf("a header rule sets no %s: a route's cache rule gives its lifetime", name)
 		}
 		if strings.ContainsAny(value, "\r\n\x00") {
 			return fmt.Errorf("the value of %s holds a line break", name)

@@ -89,7 +89,8 @@ own route table and does not use this one.
 - `routes` are tried in order, and the first match wins. A route with no `cache` is never stored
   by an edge, and a path no route names goes to `fallback`.
 - `headers` rules all apply, in order, over the headers your handler set. A rule may not set
-  `cache-control` on a cached route: its cache rule does.
+  `Cache-Control`, `CDN-Cache-Control` or `Surrogate-Control`: a route's cache rule is the only
+  lifetime the table gives.
 - `redirects` are tried in order, and the first match is answered without reaching your
   handler. `location` is a path that begins with one slash, or an `http` or `https` URL, and may
   read the groups of `src` as `$1`. A path stays on your site: slashes a group puts at its start
