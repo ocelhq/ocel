@@ -18,7 +18,7 @@ import (
 
 func workerFixture(t *testing.T, name string) *project.Project {
 	t.Helper()
-	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "worker", name))
+	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", "worker", name))
 	if err != nil {
 		t.Fatal(err)
 	}

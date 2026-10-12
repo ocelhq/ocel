@@ -1,8 +1,8 @@
 [package]
-name = "web"
+name = "api"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 infra = { path = "../../crates/infra" }
-ocel-sdk = { path = "../../../../../../crates/ocel-sdk" }
+ocel-sdk = { path = "../../../../../crates/ocel-sdk" }

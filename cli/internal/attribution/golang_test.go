@@ -92,7 +92,7 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 }
 
 func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "go"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "testdata", "go"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}

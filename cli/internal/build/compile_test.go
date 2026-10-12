@@ -85,7 +85,7 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 
 	root := t.TempDir()
 	writeBuildScript(t, root)
-	fixture := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "worker", "go")
+	fixture := filepath.Join(fixturetest.RepoDir(t), "cli", "testdata", "worker", "go")
 	module, err := os.ReadFile(filepath.Join(fixture, "go.mod"))
 	if err != nil {
 		t.Fatal(err)

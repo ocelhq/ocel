@@ -72,7 +72,7 @@ func TestGoDiscoveryRefusesARootWithNoModuleAboveIt(t *testing.T) {
 
 func repoFixture(t *testing.T, name string) string {
 	t.Helper()
-	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", name))
+	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", name))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}
@@ -80,12 +80,12 @@ func repoFixture(t *testing.T, name string) string {
 }
 
 func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
-	configDir := repoFixture(t, filepath.Join("sdk", "go"))
+	configDir := repoFixture(t, "go")
 	app, err := os.ReadFile(filepath.Join(configDir, "server", "main.go"))
 	if err != nil {
 		t.Fatalf("read the fixture app: %v", err)
 	}
-	if !strings.Contains(string(app), "example.com/web/"+DefaultRootDirName) {
+	if !strings.Contains(string(app), "example.com/declares/"+DefaultRootDirName) {
 		t.Fatalf("the fixture app does not import the default discovery package")
 	}
 
@@ -149,7 +149,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 
 func TestRunNamesTheDeclaringFileByItsPathWhenGOFLAGSTrimsPaths(t *testing.T) {
 	t.Setenv("GOFLAGS", "-trimpath")
-	configDir := repoFixture(t, filepath.Join("sdk", "go"))
+	configDir := repoFixture(t, "go")
 	roots, err := Roots(configDir, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
