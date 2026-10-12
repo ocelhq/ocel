@@ -44,9 +44,7 @@ function isRead(request: Request): boolean {
 
 function canBeCached(request: Request): boolean {
   return (
-    request.method === "GET" &&
-    !request.headers.has("authorization") &&
-    !needsSlashNormalization(readRawPath(request.url))
+    !request.headers.has("authorization") && !needsSlashNormalization(readRawPath(request.url))
   );
 }
 
@@ -95,7 +93,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       app,
       release: serving.release,
     });
-    const served = buildServeRequest(call.url, request);
+    const served = new Request(buildServeRequest(call.url, request), { method: "GET" });
     served.headers.set(edgeCacheHeader, "1");
     if (onlyLooksUp) {
       served.headers.set(SERVE_LOOKUP_ONLY_HEADER, "1");
@@ -114,7 +112,8 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       await response.body?.cancel();
       return forwardUncached(request);
     }
-    return buildVisitorResponse(response, false);
+    const visitor = buildVisitorResponse(response, false);
+    return request.method === "HEAD" ? new Response(null, visitor) : visitor;
   }
 
   async function revalidate(request: Request): Promise<Response> {
@@ -134,7 +133,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
 
     const rule = findRoute(routes, url.pathname)?.route.cache;
     if (!rule) {
-      return canBeCached(request) && !hasDraftCookie(request)
+      return isRead(request) && canBeCached(request) && !hasDraftCookie(request)
         ? serveCached(request, undefined, request.headers.has("cookie"))
         : forwardUncached(request);
     }
@@ -151,7 +150,9 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       case "revalidate":
         return revalidate(request);
       default:
-        return canBeCached(request) ? serveCached(request, rule, false) : forwardUncached(request);
+        return request.method === "GET" && canBeCached(request)
+          ? serveCached(request, rule, false)
+          : forwardUncached(request);
     }
   };
 }
