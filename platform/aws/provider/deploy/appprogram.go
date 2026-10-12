@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -361,7 +362,9 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
-		maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
+		if !isForwardedPastEdge(spec) {
+			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
+		}
 	}
 	if app.OcelRouteTable != nil {
 		env[edge.OcelRouteTableVar] = ocelRouteTableInTask
@@ -381,6 +384,11 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 		env[key] = value
 	}
 	return env
+}
+
+func isForwardedPastEdge(spec provider.StackSpec) bool {
+	pairings := provider.Facts{Pairings: edges.Pairings()}
+	return pairings.IsForwarded(spec.Edge.Kind(), spec.App.Router)
 }
 
 func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
