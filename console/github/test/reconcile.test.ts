@@ -16,6 +16,7 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 function fakeClient() {
   const deployments: PreviewDeployment[] = [];
   const statuses: DeploymentStatusInput[] = [];
+  const deleted: number[] = [];
   const comments: PreviewComment[] = [];
   const created: string[] = [];
   const updated: string[] = [];
@@ -36,6 +37,17 @@ function fakeClient() {
     async createDeploymentStatus(status) {
       statuses.push(status);
     },
+    async deleteDeployment({ deploymentId }) {
+      const inactive = statuses.some(
+        (status) => status.deploymentId === deploymentId && status.state === "inactive",
+      );
+      if (!inactive) throw new Error(`deployment ${deploymentId} is still active`);
+      deleted.push(deploymentId);
+      deployments.splice(
+        deployments.findIndex((deployment) => deployment.id === deploymentId),
+        1,
+      );
+    },
     async listComments() {
       return comments;
     },
@@ -50,7 +62,7 @@ function fakeClient() {
     },
   };
 
-  return { client, deployments, statuses, comments, created, updated };
+  return { client, deployments, statuses, deleted, comments, created, updated };
 }
 
 const base: PreviewInput = {
@@ -106,7 +118,7 @@ test("failed posts a failure status", async () => {
   expect(fake.created[0]).toContain("build exited 1");
 });
 
-test("removed inactivates every deployment in the environment", async () => {
+test("removed inactivates then deletes every deployment in the environment", async () => {
   const fake = fakeClient();
 
   await reconcile(fake.client, base);
@@ -115,7 +127,8 @@ test("removed inactivates every deployment in the environment", async () => {
 
   await reconcile(fake.client, { ...base, phase: "removed", runUrl: undefined });
 
-  expect(fake.deployments).toHaveLength(2);
+  expect(fake.deployments).toHaveLength(0);
+  expect(fake.deleted).toEqual([1, 2]);
   expect(fake.statuses).toEqual([
     { deploymentId: 1, state: "inactive" },
     { deploymentId: 2, state: "inactive" },

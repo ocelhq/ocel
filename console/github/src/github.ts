@@ -59,6 +59,10 @@ export function previewClient(octokit: ProbotOctokit, owner: string, repo: strin
       });
     },
 
+    async deleteDeployment({ deploymentId }) {
+      await octokit.rest.repos.deleteDeployment({ owner, repo, deployment_id: deploymentId });
+    },
+
     async listComments({ pr }) {
       const { data } = await octokit.rest.issues.listComments({
         owner,
