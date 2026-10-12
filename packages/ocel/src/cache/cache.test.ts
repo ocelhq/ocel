@@ -7,7 +7,7 @@ const hostKey = Symbol.for("ocel.cache.host");
 interface Recorded {
   tagged: string[][];
   revalidatedTags: { tag: string; mode: string }[];
-  revalidatedPaths: string[];
+  revalidatedPaths: { path: string; mode: string }[];
 }
 
 function installHost(): Recorded {
@@ -15,7 +15,7 @@ function installHost(): Recorded {
   (globalThis as Record<symbol, unknown>)[hostKey] = {
     tag: (tags: string[]) => recorded.tagged.push(tags),
     revalidateTag: (tag: string, mode: string) => recorded.revalidatedTags.push({ tag, mode }),
-    revalidatePath: (path: string) => recorded.revalidatedPaths.push(path),
+    revalidatePath: (path: string, mode: string) => recorded.revalidatedPaths.push({ path, mode }),
   };
   return recorded;
 }
@@ -51,34 +51,61 @@ describe("cacheTag", () => {
 });
 
 describe("revalidateTag", () => {
-  it("expires everything the tag names at once when it is given no profile", () => {
+  it("marks everything the tag names stale at once, to be served while a fresh copy is made", () => {
     const recorded = installHost();
     revalidateTag("posts");
-    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "purge" }]);
-  });
-
-  it("serves what the tag names stale while it refreshes, when the profile is max", () => {
-    const recorded = installHost();
-    revalidateTag("posts", "max");
     expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "invalidate" }]);
   });
 
-  it("refuses a profile it does not know", () => {
+  it("purges what the tag names when it is given an expiry of 0", () => {
+    const recorded = installHost();
+    revalidateTag("posts", { expire: 0 });
+    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "purge" }]);
+  });
+
+  it("invalidates when it is given options that name no expiry", () => {
+    const recorded = installHost();
+    revalidateTag("posts", {});
+    expect(recorded.revalidatedTags).toEqual([{ tag: "posts", mode: "invalidate" }]);
+  });
+
+  it('refuses an expiry it does not know, which Next\'s profile string "max" is among', () => {
     installHost();
-    expect(() => revalidateTag("posts", "hours" as "max")).toThrow(/profile/);
+    expect(() => revalidateTag("posts", { expire: 60 } as unknown as { expire: 0 })).toThrow(
+      /expire/,
+    );
+    expect(() => revalidateTag("posts", "max" as unknown as { expire: 0 })).toThrow(/expire/);
+  });
+
+  it("refuses an empty tag", () => {
+    installHost();
+    expect(() => revalidateTag("")).toThrow(/tag/);
   });
 });
 
 describe("revalidatePath", () => {
-  it("revalidates the page at a path", () => {
+  it("marks the page at a path stale, to be served while a fresh copy is made", () => {
     const recorded = installHost();
     revalidatePath("/posts/1");
-    expect(recorded.revalidatedPaths).toEqual(["/posts/1"]);
+    expect(recorded.revalidatedPaths).toEqual([{ path: "/posts/1", mode: "invalidate" }]);
+  });
+
+  it("purges the page at a path when it is given an expiry of 0", () => {
+    const recorded = installHost();
+    revalidatePath("/posts/1", { expire: 0 });
+    expect(recorded.revalidatedPaths).toEqual([{ path: "/posts/1", mode: "purge" }]);
   });
 
   it("refuses a path that does not start with a slash or carries a query", () => {
     installHost();
     expect(() => revalidatePath("posts")).toThrow(/path/);
     expect(() => revalidatePath("/posts?page=2")).toThrow(/path/);
+  });
+
+  it("refuses an expiry it does not know", () => {
+    installHost();
+    expect(() => revalidatePath("/posts", { expire: 5 } as unknown as { expire: 0 })).toThrow(
+      /expire/,
+    );
   });
 });
