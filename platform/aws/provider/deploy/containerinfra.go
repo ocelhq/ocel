@@ -224,6 +224,12 @@ func (s containerInfra) front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
+func (r *Stacks) recordContainerInfraConsumer(ctx context.Context, ref provider.StackRef) error {
+	r.containerInfraLock.Lock()
+	defer r.containerInfraLock.Unlock()
+	return r.claimShared(ctx, containerShare, ref)
+}
+
 func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
 	return r.releaseShared(ctx, containerShare, store, ref, progress)
 }

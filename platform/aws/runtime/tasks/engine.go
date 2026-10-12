@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -29,6 +30,7 @@ type Config struct {
 	Table    table
 	Queues   queueService
 	Topics   topicService
+	Services serviceControl
 
 	Worker    string
 	WorkerURL string
@@ -39,8 +41,11 @@ type Engine struct {
 	cfg   Config
 	store store
 
-	mu   sync.Mutex
-	urls map[string]string
+	mu      sync.Mutex
+	urls    map[string]string
+	woken   map[string]time.Time
+	parked  map[string]bool
+	parking bool
 }
 
 func New(cfg Config) *Engine {
@@ -54,9 +59,11 @@ func New(cfg Config) *Engine {
 		}
 	}
 	return &Engine{
-		cfg:   cfg,
-		store: store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
-		urls:  map[string]string{},
+		cfg:    cfg,
+		store:  store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
+		urls:   map[string]string{},
+		woken:  map[string]time.Time{},
+		parked: map[string]bool{},
 	}
 }
 
@@ -127,4 +134,27 @@ func (e *Engine) queueURL(ctx context.Context, queue string) (string, error) {
 	e.urls[queue] = *out.QueueUrl
 	e.mu.Unlock()
 	return *out.QueueUrl, nil
+}
+
+func (e *Engine) park(receiptHandle string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.parking {
+		return
+	}
+	e.parked[receiptHandle] = true
+}
+
+func (e *Engine) isParked(receiptHandle string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.parked[receiptHandle]
+}
+
+func (e *Engine) unpark(receiptHandle string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	was := e.parked[receiptHandle]
+	delete(e.parked, receiptHandle)
+	return was
 }

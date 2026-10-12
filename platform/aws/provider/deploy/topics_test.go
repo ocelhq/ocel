@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	pulumi "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -113,7 +114,7 @@ func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnde
 		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
 	})
-	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics)
+	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,5 +322,78 @@ func TestTheSchedulerRoleCarriesTheManagedByTagTheCredentialCreatesAndPassesRole
 		if tags, ok := rec.inputs("aws:iam/role:Role", name)["tags"]; !ok || tags.ObjectValue()["ocel:managed-by"].StringValue() != "ocel" {
 			t.Errorf("role %s tags = %v, want ocel:managed-by=ocel so the credential may create it, put its policy and pass it", name, tags)
 		}
+	}
+}
+
+func TestAWorkerOnContainerComputeRunsAtMostTwelveHoursTheLongestSQSHoldsAMessage(t *testing.T) {
+	t.Parallel()
+
+	ceiling := workerCeilingOn(t, provider.ComputeContainer)
+	if ceiling.Unbounded || ceiling.MaxDuration != 12*time.Hour {
+		t.Errorf("container worker ceiling = %+v, want 12h: SQS extends a message's visibility to 12 hours and no further", ceiling)
+	}
+	if serverless := workerCeilingOn(t, provider.ComputeServerless); serverless.MaxDuration != 15*time.Minute {
+		t.Errorf("serverless worker ceiling = %v, want 15m, Lambda's own", serverless.MaxDuration)
+	}
+}
+
+func workerCeilingOn(t *testing.T, compute provider.Compute) provider.WorkerCeiling {
+	t.Helper()
+	for _, ceiling := range WorkerCeilings {
+		if ceiling.Compute == compute {
+			return ceiling
+		}
+	}
+	t.Fatalf("WorkerCeilings names no ceiling for %s compute", compute)
+	return provider.WorkerCeiling{}
+}
+
+func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNoOtherService(t *testing.T) {
+	t.Parallel()
+
+	topics := topicsOf("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "media"})})
+	workers := []provider.WorkerSpec{
+		{Name: "media", App: "jobs", Compute: provider.ComputeContainer},
+		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
+	}
+	cfg := Config{Region: "us-east-1", StateTableARN: testStateTableARN, Tier: environment.TierProduction}
+	policy, err := tasksPolicy(cfg, "shop", "prod", topics, containerServiceARNs(cfg, "shop", "prod", workers))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Statement []struct {
+			Action   any `json:"Action"`
+			Resource any `json:"Resource"`
+		} `json:"Statement"`
+	}
+	if err := json.Unmarshal([]byte(policy), &document); err != nil {
+		t.Fatalf("the policy %s is not JSON: %v", policy, err)
+	}
+	service := "arn:aws:ecs:us-east-1:" + mockAccount + ":service/ocel-containers-production/" + containerWorkerService("shop", "prod", "jobs", "media")
+	var found bool
+	for _, statement := range document.Statement {
+		actions, _ := json.Marshal(statement.Action)
+		if !strings.Contains(string(actions), "ecs:UpdateService") {
+			continue
+		}
+		found = true
+		if got, _ := json.Marshal(statement.Resource); string(got) != `["`+service+`"]` {
+			t.Errorf("ecs:UpdateService is granted on %s, want only %s: a function-hosted worker is woken by its queue", got, service)
+		}
+		if !strings.Contains(string(actions), "ecs:DescribeServices") || strings.Contains(string(actions), "*") {
+			t.Errorf("wake actions %s, want DescribeServices and UpdateService alone", actions)
+		}
+	}
+	if !found {
+		t.Errorf("the tasks policy %s grants no ecs:UpdateService, so a send could never start a worker sitting at no tasks", policy)
+	}
+
+	policy, err = tasksPolicy(cfg, "shop", "prod", topics, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(policy, "ecs:") {
+		t.Errorf("a deployment with no container worker was granted %s", policy)
 	}
 }

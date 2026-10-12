@@ -29,11 +29,12 @@ func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values pr
 		return provider.PackAppResult{}, nil
 	}
 	pack, err := packApp(ctx, provider.PackAppRequest{
-		Ref:    r.ref(entry.Stack),
-		Edge:   r.front.Kind(),
-		App:    entry.App,
-		Values: values,
-		Topics: topics,
+		Ref:     r.ref(entry.Stack),
+		Edge:    r.front.Kind(),
+		App:     entry.App,
+		Values:  values,
+		Topics:  topics,
+		Workers: r.spec.Workers,
 	}, progress)
 	if err != nil {
 		return provider.PackAppResult{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)

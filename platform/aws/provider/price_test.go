@@ -278,3 +278,29 @@ func TestAnEventAPIIsPricedPerOperationAndConnectionMinute(t *testing.T) {
 		t.Errorf("connection minutes = %s at %s, want 1000000 (the moderate profile) at 0.00000008 ($0.08 per million)", minutes.GetMonthlyQuantity(), minutes.GetUnitPrice())
 	}
 }
+
+func TestAContainerWorkersBacklogAlarmIsPricedPerMetricItWatchesAndItsServiceAtNoTasksCostsNothing(t *testing.T) {
+	_, costs := costServed(t)
+
+	alarm, _ := structpb.NewStruct(map[string]any{"metrics": 3})
+	service, _ := structpb.NewStruct(map[string]any{"desired_count": 0, "cpu": "512", "memory": "1024", "runtime_platform": map[string]any{"cpu_architecture": "X86_64"}})
+	set := &costv1.ResourceSet{
+		Source: "ocel",
+		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{
+			{Id: "p/aws_cloudwatch_metric_alarm:media", Scope: "p", Vendor: "aws", Type: "aws_cloudwatch_metric_alarm", Name: "media", Region: "us-east-1", Properties: alarm},
+			{Id: "p/aws_ecs_service:media", Scope: "p", Vendor: "aws", Type: "aws_ecs_service", Name: "media", Region: "us-east-1", Properties: service},
+		},
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	metrics := componentNamed(t, est, "p/aws_cloudwatch_metric_alarm:media", "Alarm metrics")
+	if metrics.GetUnitPrice() != "0.1" || metrics.GetMonthlyQuantity() != "3" || metrics.GetMonthlyCost() != "0.30" {
+		t.Errorf("alarm metrics = %s at %s costing %s, want 3 at 0.1 costing 0.30 ($0.10 per alarm metric a month)", metrics.GetMonthlyQuantity(), metrics.GetUnitPrice(), metrics.GetMonthlyCost())
+	}
+	if got := estimateNamed(t, est, "p/aws_ecs_service:media").GetMonthlyFixed(); got != "0.00" {
+		t.Errorf("an idle worker service costs %s a month, want nothing: no task runs", got)
+	}
+}

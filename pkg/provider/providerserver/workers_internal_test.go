@@ -38,11 +38,14 @@ func TestEachAppIsHandedTheWorkersThatJoinIt(t *testing.T) {
 		got[entry.App] = entry.Workers
 	}
 	want := map[string][]provider.WorkerSpec{
-		"web":  {{Name: "worker"}},
-		"jobs": {{Name: "media", Concurrency: 4}, {Name: "reports"}},
+		"web":  {{Name: "worker", App: "web", Compute: provider.ComputeServerless}},
+		"jobs": {{Name: "media", Concurrency: 4, App: "jobs", Compute: provider.ComputeServerless}, {Name: "reports", App: "jobs", Compute: provider.ComputeServerless}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("workers by app = %+v, want %+v", got, want)
+	}
+	if everyone := spec.Workers; len(everyone) != 3 || everyone[0].Name != "worker" || everyone[1].Name != "media" || everyone[2].Name != "reports" {
+		t.Errorf("the deployment's workers = %+v, want all three in manifest order, each naming the app that hosts it", everyone)
 	}
 }
 

@@ -18,15 +18,19 @@ import (
 )
 
 const (
-	workerCeiling        = 15 * time.Minute
-	workerSettleMargin   = 30 * time.Second
-	queueRetentionSecs   = 14 * 24 * 60 * 60
-	snsServicePrincipal  = "sns.amazonaws.com"
-	outputKeyTopicQueues = "queues"
-	outputKeyTopicARN    = "topic"
+	workerCeiling          = 15 * time.Minute
+	containerWorkerCeiling = 12 * time.Hour
+	workerSettleMargin     = 30 * time.Second
+	queueRetentionSecs     = 14 * 24 * 60 * 60
+	snsServicePrincipal    = "sns.amazonaws.com"
+	outputKeyTopicQueues   = "queues"
+	outputKeyTopicARN      = "topic"
 )
 
-var WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: workerCeiling}}
+var WorkerCeilings = []provider.WorkerCeiling{
+	{Compute: provider.ComputeServerless, MaxDuration: workerCeiling},
+	{Compute: provider.ComputeContainer, MaxDuration: containerWorkerCeiling},
+}
 
 type consumerQueue struct {
 	topic      string
@@ -212,7 +216,7 @@ func snsDeliveryPolicy(queueARN, topicARN string) (string, error) {
 	return string(encoded), err
 }
 
-func tasksPolicy(cfg Config, project, env string, topics []deployedTopic) (string, error) {
+func tasksPolicy(cfg Config, project, env string, topics []deployedTopic, wakes []string) (string, error) {
 	region, account := cfg.Region, accountOfARN(cfg.StateTableARN)
 	var queueARNs, topicARNs []string
 	for _, topic := range topics {
@@ -240,6 +244,9 @@ func tasksPolicy(cfg Config, project, env string, topics []deployedTopic) (strin
 	}
 	if len(topicARNs) > 0 {
 		statements = append(statements, map[string]any{"Effect": "Allow", "Action": "sns:Publish", "Resource": topicARNs})
+	}
+	if len(wakes) > 0 {
+		statements = append(statements, map[string]any{"Effect": "Allow", "Action": []string{"ecs:DescribeServices", "ecs:UpdateService"}, "Resource": wakes})
 	}
 	encoded, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 	return string(encoded), err

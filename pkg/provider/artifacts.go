@@ -41,11 +41,12 @@ type Upload struct {
 const UploadKind = "artifact"
 
 type PackAppRequest struct {
-	Ref    StackRef
-	Edge   edge.Kind
-	App    string
-	Values AppValues
-	Topics []Resource
+	Ref     StackRef
+	Edge    edge.Kind
+	App     string
+	Values  AppValues
+	Topics  []Resource
+	Workers []WorkerSpec
 }
 
 type PackAppResult struct {

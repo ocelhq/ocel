@@ -32,7 +32,13 @@ type Topic struct {
 }
 
 type Worker struct {
-	Concurrency int `json:"concurrency,omitempty"`
+	Concurrency int      `json:"concurrency,omitempty"`
+	Service     *Service `json:"service,omitempty"`
+}
+
+type Service struct {
+	Cluster string `json:"cluster"`
+	Name    string `json:"name"`
 }
 
 func Render(m Topology) ([]byte, error) {

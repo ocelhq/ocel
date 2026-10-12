@@ -115,6 +115,24 @@ func TestStackNamesHaveFixedArity(t *testing.T) {
 	}
 }
 
+func TestAnAppsContainerWorkersStackIsNamedApartFromItsWorkersStackAndEveryRelease(t *testing.T) {
+	containers := ContainerWorkersStack("prod", "web")
+	others := []StackName{
+		{Env: "prod", App: "web"},
+		{Env: "prod", App: "web-containers"},
+		AppStack("prod", "web", NewReleaseToken("b", "")),
+		InfraStack("prod"),
+	}
+	for _, other := range others {
+		if containers.String() == other.String() || containers == other {
+			t.Errorf("the container workers stack of web is %q, the same as %+v", containers, other)
+		}
+	}
+	if !containers.HoldsContainerWorkers() || (StackName{Env: "prod", App: "web"}).HoldsContainerWorkers() {
+		t.Error("only the stack ContainerWorkersStack names holds container workers")
+	}
+}
+
 func TestValidateRejectsTheFieldSeparator(t *testing.T) {
 	for _, bad := range []string{"my--project", "-leading", "trailing-", "Upper", ""} {
 		if err := Validate("project", bad); err == nil {

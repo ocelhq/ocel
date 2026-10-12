@@ -42,7 +42,7 @@ func refuseInvalidWorkers(manifest *contractv1.Manifest) error {
 	return nil
 }
 
-func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.WorkerSpec, error) {
+func readWorkers(manifest *contractv1.Manifest) ([]provider.WorkerSpec, error) {
 	if err := refuseInvalidWorkers(manifest); err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.Work
 	for _, app := range manifest.GetApps() {
 		computes[app.GetName()] = provider.ComputeOf(app)
 	}
-	byApp := map[string][]provider.WorkerSpec{}
+	var joined []provider.WorkerSpec
 	for _, worker := range manifest.GetWorkers() {
 		name := worker.GetName()
 		compute, found := computes[worker.GetApp()]
@@ -61,9 +61,17 @@ func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.Work
 			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q runs on %q compute, and its app %q runs on %q: a worker runs on its app's compute",
 				name, worker.GetCompute(), worker.GetApp(), compute)
 		}
-		byApp[worker.GetApp()] = append(byApp[worker.GetApp()], provider.WorkerSpec{Name: name, Concurrency: int(worker.GetConcurrency())})
+		joined = append(joined, provider.WorkerSpec{Name: name, Concurrency: int(worker.GetConcurrency()), App: worker.GetApp(), Compute: compute})
 	}
-	return byApp, nil
+	return joined, nil
+}
+
+func groupWorkersByApp(workers []provider.WorkerSpec) map[string][]provider.WorkerSpec {
+	byApp := map[string][]provider.WorkerSpec{}
+	for _, worker := range workers {
+		byApp[worker.App] = append(byApp[worker.App], worker)
+	}
+	return byApp
 }
 
 func refuseConsumerOnUndeclaredWorker(manifest *contractv1.Manifest, resource provider.Resource) error {

@@ -2159,3 +2159,23 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 		}
 	}
 }
+
+func TestTheDeployCredentialRaisesAndRemovesBacklogAlarmsOnlyUnderTheAppScope(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	for _, action := range []string{
+		"cloudwatch:PutMetricAlarm",
+		"cloudwatch:DeleteAlarms",
+		"cloudwatch:TagResource",
+		"cloudwatch:UntagResource",
+		"cloudwatch:ListTagsForResource",
+	} {
+		if wanted := (grant{action: action, resource: appAlarmARN, condition: "null"}); !grants[wanted] {
+			t.Errorf("the deploy credential does not grant %s on %s: a container worker at no tasks is started by an alarm on its queues", action, appAlarmARN)
+		}
+	}
+	for g := range grants {
+		if g.action == "cloudwatch:PutMetricAlarm" && g.resource != appAlarmARN && g.resource != scalingAlarmARN {
+			t.Errorf("the deploy credential grants cloudwatch:PutMetricAlarm on %s, want only the alarms Ocel names and the ones target tracking makes", g.resource)
+		}
+	}
+}

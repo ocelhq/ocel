@@ -1,6 +1,7 @@
 package providerserver_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -39,5 +40,34 @@ func TestAnAppIsPackedAndProvisionedWithTheTopicsTheDeployDeclares(t *testing.T)
 	requests := vendor.packings()
 	if len(requests) != 1 || !declared(requests[0].Topics) {
 		t.Errorf("the vendor was asked to pack %+v, want the declared topics handed to it", requests)
+	}
+}
+
+func TestEveryAppAndItsPackIsToldWhichAppHostsEachWorkerAndOnWhatCompute(t *testing.T) {
+	builtProject(t)
+	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)}
+	client := servedBy(t, vendor)
+	bootstrappedOverRPC(t, client)
+
+	req := twoAppRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "worker", App: "admin", Compute: string(provider.ComputeServerless)}}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	want := []provider.WorkerSpec{{Name: "worker", App: "admin", Compute: provider.ComputeServerless}}
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App == nil {
+			continue
+		}
+		if !reflect.DeepEqual(spec.App.DeploymentWorkers, want) {
+			t.Errorf("app %s was handed deployment workers %+v, want %+v: a sender must know where the worker it wakes runs", spec.App.App, spec.App.DeploymentWorkers, want)
+		}
+	}
+	for _, request := range vendor.packings() {
+		if !reflect.DeepEqual(request.Workers, want) {
+			t.Errorf("pack of %s was handed workers %+v, want %+v", request.App, request.Workers, want)
+		}
 	}
 }

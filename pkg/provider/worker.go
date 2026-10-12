@@ -7,6 +7,8 @@ const MaxConcurrency = 1000
 type WorkerSpec struct {
 	Name        string
 	Concurrency int
+	App         string
+	Compute     Compute
 }
 
 func RefuseConcurrency(concurrency int32) error {

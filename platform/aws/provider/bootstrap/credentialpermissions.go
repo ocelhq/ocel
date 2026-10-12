@@ -102,6 +102,7 @@ const (
 
 	scalableTargetARN = "arn:aws:application-autoscaling:*:*:scalable-target/*"
 	scalingAlarmARN   = "arn:aws:cloudwatch:*:*:alarm:TargetTracking-service/ocel-*"
+	appAlarmARN       = "arn:aws:cloudwatch:*:*:alarm:" + appScopePrefix + "*"
 	elbLinkedRoleARN  = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
@@ -822,6 +823,16 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:PutMetricAlarm"},
 			Resources: []string{scalingAlarmARN},
+		},
+		{
+			Actions: []string{
+				"cloudwatch:DeleteAlarms",
+				"cloudwatch:ListTagsForResource",
+				"cloudwatch:PutMetricAlarm",
+				"cloudwatch:TagResource",
+				"cloudwatch:UntagResource",
+			},
+			Resources: []string{appAlarmARN},
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},

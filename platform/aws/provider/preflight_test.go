@@ -186,3 +186,38 @@ func TestACertificatePinTheEdgeIgnoresIsAWarning(t *testing.T) {
 		t.Errorf("certificatesFor() said %q, want the ignored pin warned about", lines)
 	}
 }
+
+func TestACronTaskOnAWorkerOnContainerComputeIsRefusedSinceNothingStartsItsSchedule(t *testing.T) {
+	t.Parallel()
+
+	nightly := provider.Resource{Name: "topic--nightly", Declared: "nightly", Type: provider.BindingTask, Topic: &provider.TopicSpec{
+		Cron:      "0 3 * * *",
+		Consumers: []provider.ConsumerSpec{{Name: "nightly", Worker: "media", Exclusive: true}},
+	}}
+	resize := provider.Resource{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask, Topic: &provider.TopicSpec{
+		Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "media", Exclusive: true}},
+	}}
+	pre := provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Workers: []provider.WorkerSpec{
+			{Name: "media", App: "media", Compute: provider.ComputeContainer},
+			{Name: "worker", App: "web", Compute: provider.ComputeServerless},
+		}},
+		Resources: []provider.Resource{resize, nightly},
+	}
+
+	err := refuseCronOnContainerWorkers(pre)
+	if err == nil {
+		t.Fatal("preflight let a cron task land on a worker no schedule can start, so it would never run")
+	}
+	for _, want := range []string{"nightly", "media", "serverless"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("preflight = %q, want it to name %s", err, want)
+		}
+	}
+
+	nightly.Topic.Consumers[0].Worker = "worker"
+	pre.Resources = []provider.Resource{resize, nightly}
+	if err := refuseCronOnContainerWorkers(pre); err != nil {
+		t.Fatalf("preflight of a cron task on a serverless worker = %v, want it to pass", err)
+	}
+}
