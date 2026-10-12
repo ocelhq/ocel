@@ -40,6 +40,8 @@ import {
   readEdgeEntry,
   readImageOptimizer,
   readRenderCall,
+  SERVE_LOOKUP_ONLY_HEADER,
+  SERVE_MISS_HEADER,
   SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
@@ -119,6 +121,7 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
       isrPrefix: parsed.isrPrefix,
       tags,
       ...(parsed.sharesFallbackShell === true && { sharesFallbackShell: true }),
+      ...(parsed.nodeApp === true && { nodeApp: true }),
       entry: readStoredEntryCall(parsed.entry),
     };
   } catch {
@@ -167,6 +170,13 @@ function respondNoShell(): Response {
   return new Response(null, {
     status: 404,
     headers: { "cache-control": NOT_STORED, [SERVE_NO_SHELL_HEADER]: "1" },
+  });
+}
+
+function respondMiss(): Response {
+  return new Response(null, {
+    status: 404,
+    headers: { "cache-control": NOT_STORED, [SERVE_MISS_HEADER]: "1" },
   });
 }
 
@@ -309,7 +319,11 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (found.render.sharesFallbackShell) {
       return this.fromFallbackShell(request, found.render, release, cached);
     }
-    const render = () => this.renderAtOrigin(request, { host, release, keyedUrl });
+    const nodeApp = found.render.nodeApp === true;
+    if (nodeApp && request.headers.has(SERVE_LOOKUP_ONLY_HEADER) && !isRevalidation(request)) {
+      return respondMiss();
+    }
+    const render = () => this.renderAtOrigin(request, { host, release, keyedUrl, nodeApp });
     if (variant === PPR_SHELL_VARIANT) {
       const regenerate = () =>
         this.renderAtOrigin(request, { host, release, keyedUrl, unconditional: true });
@@ -408,7 +422,13 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async renderAtOrigin(
     request: Request,
-    call: { host: string; release: string; keyedUrl: string; unconditional?: boolean },
+    call: {
+      host: string;
+      release: string;
+      keyedUrl: string;
+      unconditional?: boolean;
+      nodeApp?: boolean;
+    },
   ): Promise<Response> {
     const { host, release, keyedUrl } = call;
     const headers = new Headers(request.headers);
@@ -438,7 +458,11 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         }),
       );
     }
-    return forCache(admitSegment(request, res), { release, pathname: new URL(keyedUrl).pathname });
+    return forCache(
+      admitSegment(request, res),
+      { release, pathname: new URL(keyedUrl).pathname },
+      { nodeApp: call.nodeApp === true },
+    );
   }
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {
