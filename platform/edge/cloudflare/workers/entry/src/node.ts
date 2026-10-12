@@ -1,8 +1,10 @@
-import { encodeForwardedSearch } from "@framework/next-router/request-target";
 import {
+  encodeForwardedSearch,
   needsSlashNormalization,
   normalizeRepeatedSlashes,
-} from "@framework/next-router/trailing-slash";
+  readPathAndQuery,
+  readRawPath,
+} from "@platform/edge-contract/request-path";
 
 export interface NodeOriginDeps {
   app: string;
@@ -18,13 +20,10 @@ export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<
     if (urls.length !== 1) return noSingleFunctionUrl(app, urls.length);
     if (!originFetch) return noOriginSigner(app);
 
-    const pathAndQuery = request.url.replace(/^[a-z][a-z\d+.-]*:\/\/[^/]*/i, "");
-    const queryIndex = pathAndQuery.indexOf("?");
-    const rawPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
-    if (needsSlashNormalization(rawPath)) {
+    if (needsSlashNormalization(readRawPath(request.url))) {
       return new Response(null, {
         status: 308,
-        headers: { location: normalizeRepeatedSlashes(pathAndQuery) },
+        headers: { location: normalizeRepeatedSlashes(readPathAndQuery(request.url)) },
       });
     }
 

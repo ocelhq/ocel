@@ -8,6 +8,13 @@ import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import { type PurgeGroup, purgeHeader, readPurge } from "@platform/edge-contract/purge";
+import {
+  encodeForwardedSearch,
+  needsSlashNormalization,
+  normalizeRepeatedSlashes,
+  readPathAndQuery,
+  readRawPath,
+} from "@platform/edge-contract/request-path";
 
 import { type AssetStoreDeps, isImmutablePathname, serveStaticAsset } from "./assets.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
@@ -20,7 +27,7 @@ import {
   unprovisionedImageOrigin,
 } from "./image.mjs";
 import { retainOwner } from "./origin-response.mjs";
-import { encodeForwardedSearch, encodeRequestTarget } from "./request-target.mjs";
+import { encodeRequestTarget } from "./request-target.mjs";
 import { retryTransientOrigin } from "./retry.mjs";
 import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
@@ -28,8 +35,6 @@ import {
   isNextDataPathname,
   middlewareMatchPathname,
   middlewarePathname,
-  needsSlashNormalization,
-  normalizeRepeatedSlashes,
   routingPathname,
   withoutBasePath,
 } from "./trailing-slash.mjs";
@@ -284,13 +289,10 @@ export async function serve(request: Request, deps: RouteDeps): Promise<Response
 }
 
 async function serveRequest(request: Request, deps: RouteDeps): Promise<Response> {
-  const pathAndQuery = request.url.replace(ABSOLUTE_URL_ORIGIN, "");
-  const queryIndex = pathAndQuery.indexOf("?");
-  const rawPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
-  if (needsSlashNormalization(rawPath)) {
+  if (needsSlashNormalization(readRawPath(request.url))) {
     return new Response(null, {
       status: 308,
-      headers: { location: normalizeRepeatedSlashes(pathAndQuery) },
+      headers: { location: normalizeRepeatedSlashes(readPathAndQuery(request.url)) },
     });
   }
 
