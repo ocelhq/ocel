@@ -228,6 +228,9 @@ platform/vps/provider/cmd/switchboard/switchboard
 # Local design-review working files.
 .impeccable/
 
+# Local security-scan workspace.
+.deepsec/
+
 /packages/*/LICENSE
 /packages/*/NOTICE
 /crates/*/LICENSE
