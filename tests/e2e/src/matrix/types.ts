@@ -34,32 +34,18 @@ export function laneNamed(name: string): Lane {
   return name as Lane;
 }
 
-export type Concern =
-  | "deploy"
-  | "lifecycle"
-  | "sdk"
-  | "build-variables"
-  | "client-env"
-  | "prerender"
-  | "pre-build"
-  | "kv"
-  | "tasks"
-  | "realtime"
-  | "iac";
+export type Concern = "deploy" | "lifecycle" | "sdk" | "iac";
 
-export const CONCERNS: Concern[] = [
-  "deploy",
-  "lifecycle",
-  "sdk",
-  "build-variables",
-  "client-env",
-  "prerender",
-  "pre-build",
-  "kv",
-  "tasks",
-  "realtime",
-  "iac",
-];
+export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "iac"];
+
+const FRAMEWORKS = ["go", "next", "node", "python", "rust", "sveltekit", "workspace"];
+
+export const APPS: Record<Concern, string[]> = {
+  deploy: [...FRAMEWORKS, "next-ppr"],
+  lifecycle: ["next"],
+  sdk: FRAMEWORKS,
+  iac: ["with-pulumi", "with-sst"],
+};
 
 const NAMED_ONLY: Concern[] = ["iac"];
 
@@ -141,9 +127,17 @@ export type Fixture = {
 };
 
 export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">): Fixture {
-  const [concern] = name.split("/");
+  const [concern, app] = name.split("/");
   if (!(CONCERNS as string[]).includes(concern ?? "") || name.split("/").length !== 2) {
     throw new Error(`${name} is no fixture path: <${CONCERNS.join("|")}>/<name>`);
+  }
+  const held = APPS[concern as Concern];
+  if (!held.includes(app ?? "")) {
+    throw new Error(
+      concern === "deploy" || concern === "sdk"
+        ? `${name} is no fixture: ${concern} holds one app per framework (${FRAMEWORKS.join(", ")}): extend ${concern}/<framework> with what ${app} would test`
+        : `${name} is no fixture: ${concern} holds ${held.join(", ")}`,
+    );
   }
   return { name, concern: concern as Concern, ...shape };
 }

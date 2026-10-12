@@ -281,12 +281,12 @@ describe("sweepStacks", () => {
     const complaints: string[] = [];
 
     await sweepStacks(
-      [stacked("iac/stuck", swept, true), fixture, stacked("iac/with-sst", swept)],
+      [stacked("iac/with-pulumi", swept, true), fixture, stacked("iac/with-sst", swept)],
       complaints,
       (stack) => stack.sweepRun("1874"),
     );
 
     expect(swept).toEqual(["iac/with-sst run 1874"]);
-    expect(complaints).toEqual(["iac/stuck stack sweep: Error: iac/stuck is stuck"]);
+    expect(complaints).toEqual(["iac/with-pulumi stack sweep: Error: iac/with-pulumi is stuck"]);
   });
 });

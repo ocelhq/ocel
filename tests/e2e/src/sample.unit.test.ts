@@ -15,10 +15,10 @@ function member(name: string, representative?: true): Fixture {
   });
 }
 
-const representative = member("deploy/representative", true);
-const other = member("deploy/other");
-const third = member("deploy/third");
-const loner = fixture("deploy/loner", {
+const representative = member("deploy/node", true);
+const other = member("deploy/go");
+const third = member("deploy/python");
+const loner = fixture("deploy/rust", {
   apps: ["web"],
   checks: [],
   on: { aws: [defaults, edge] },
@@ -95,7 +95,7 @@ describe("sampling the cells of a group", () => {
 
   it("runs every cell of a member the diff touches, and spreads the rest", () => {
     for (const seed of SEEDS) {
-      const chosen = sample(GROUP, every, "sampled", seeded(seed, ["deploy/other"]));
+      const chosen = sample(GROUP, every, "sampled", seeded(seed, ["deploy/go"]));
       expect(chosen.get(other.name)).toEqual(every(other));
       const rest = [representative, third].flatMap((one) => chosen.get(one.name) ?? []);
       expect(rest.length).toBeLessThan([representative, third].flatMap(every).length);
@@ -135,7 +135,7 @@ describe("sampling the cells of a group", () => {
   });
 
   it("keeps groups of one name apart across concerns", () => {
-    const sdk = member("sdk/representative", true);
+    const sdk = member("sdk/node", true);
     for (const seed of SEEDS) {
       const chosen = sample([representative, other, sdk], every, "sampled", seeded(seed));
       expect(chosen.get(sdk.name)).toEqual(every(sdk));

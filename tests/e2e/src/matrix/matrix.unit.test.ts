@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import {
@@ -20,9 +20,6 @@ import {
   preBuildPrerenderChecks,
   prerenderBucketChecks,
   prerenderChecks,
-  realtimeChecks,
-  realtimeOperationLimitCheck,
-  realtimeRuleDeniesCheck,
   taskConcurrencyCheck,
   todoAndDocumentChecks,
 } from "../checks";
@@ -34,7 +31,7 @@ import { filterFrom } from "../run/filter";
 import { hasPreviewGate, hasReleaseCycle, previewsOn, targetNamed } from "../targets";
 import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
-import { type Concern, LANES, type Lane, targetOfLane } from "./types";
+import { CONCERNS, type Concern, LANES, type Lane, targetOfLane } from "./types";
 
 const REGISTRY_CREDENTIALS = {
   OCEL_E2E_REGISTRY_USER: "octocat",
@@ -61,6 +58,34 @@ function concernIn(concern: Concern, planned: ReturnType<typeof planOn>): string
     (name) => name.startsWith(`${concern}/`),
   );
 }
+
+describe("the fixtures on disk", () => {
+  const root = path.dirname(fixtureDir("deploy"));
+  const dirsIn = (dir: string) =>
+    readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+  it("are one directory per concern and nothing else", () => {
+    expect(dirsIn(root)).toEqual([...CONCERNS].sort());
+  });
+
+  it("are exactly the apps the matrix drives, each under its concern", () => {
+    for (const concern of CONCERNS) {
+      const driven = fixtures
+        .filter((one) => one.concern === concern)
+        .map((one) => one.name.split("/")[1])
+        .sort();
+      const tracked = dirsIn(path.join(root, concern)).filter(
+        (name) =>
+          existsSync(path.join(root, concern, name, "README.md")) ||
+          readdirSync(path.join(root, concern, name)).some((file) => file.startsWith("ocel.")),
+      );
+      expect(tracked, concern).toEqual(driven);
+    }
+  });
+});
 
 describe("the journey matrix", () => {
   it("plans on every lane without a dead gap, with the registry credentials set and without", () => {

@@ -242,7 +242,7 @@ describe("the phases a target drives", () => {
 });
 
 describe("a fixture whose resources restart", () => {
-  const restarting = fixture("kv/node", {
+  const restarting = fixture("sdk/node", {
     apps: ["web"],
     restarts: true,
     redeploys: true,
@@ -259,7 +259,7 @@ describe("a fixture whose resources restart", () => {
     expect(phases).toEqual(["deploy", "verify", "restart", "redeploy", "rollback", "destroy"]);
     const titles = stepsOf(
       {
-        name: "kv/node",
+        name: "sdk/node",
         fixture: restarting,
         variant: defaults,
         cacheLayer: "origin",
@@ -299,7 +299,7 @@ describe("a fixture whose resources restart", () => {
       destroy: async () => {},
     };
     const cell: Cell = {
-      name: "kv/node",
+      name: "sdk/node",
       fixture: restarting,
       variant: defaults,
       cacheLayer: "origin",

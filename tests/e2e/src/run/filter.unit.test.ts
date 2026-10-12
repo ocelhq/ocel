@@ -3,30 +3,8 @@ import { filterFrom } from "./filter";
 
 describe("the concerns a run asks for", () => {
   it("is every concern but iac when nothing names one", () => {
-    expect(filterFrom({}).concerns).toEqual([
-      "deploy",
-      "lifecycle",
-      "sdk",
-      "build-variables",
-      "client-env",
-      "prerender",
-      "pre-build",
-      "kv",
-      "tasks",
-      "realtime",
-    ]);
-    expect(filterFrom({ OCEL_E2E_CONCERN: "  " }).concerns).toEqual([
-      "deploy",
-      "lifecycle",
-      "sdk",
-      "build-variables",
-      "client-env",
-      "prerender",
-      "pre-build",
-      "kv",
-      "tasks",
-      "realtime",
-    ]);
+    expect(filterFrom({}).concerns).toEqual(["deploy", "lifecycle", "sdk"]);
+    expect(filterFrom({ OCEL_E2E_CONCERN: "  " }).concerns).toEqual(["deploy", "lifecycle", "sdk"]);
   });
 
   it("takes a space- or comma-separated naming in concern order", () => {
