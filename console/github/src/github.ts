@@ -59,8 +59,17 @@ export function previewClient(octokit: ProbotOctokit, owner: string, repo: strin
       });
     },
 
-    async deleteDeployment({ deploymentId }) {
-      await octokit.rest.repos.deleteDeployment({ owner, repo, deployment_id: deploymentId });
+    async removeEnvironment({ environment }) {
+      try {
+        await octokit.rest.repos.deleteAnEnvironment({
+          owner,
+          repo,
+          environment_name: environment,
+        });
+      } catch (error) {
+        if ((error as { status?: number }).status === 404) return;
+        throw error;
+      }
     },
 
     async listComments({ pr }) {
