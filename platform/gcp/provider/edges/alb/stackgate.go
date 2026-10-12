@@ -129,8 +129,7 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 	if !s.isGated() {
 		return nil
 	}
-	changed, err := s.e.changeGateRecord(ctx, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false })
-	if err != nil || !changed {
+	if _, err := s.e.changeGateRecord(ctx, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false }); err != nil {
 		return err
 	}
 	return s.e.publishGates(ctx, gateProof{}, progress.Discard())

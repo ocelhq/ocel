@@ -739,3 +739,27 @@ func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
 		},
 	})
 }
+
+func TestDestroyingAGatedProjectAgainAfterAFailedWithdrawalRollsTheGateOutOfThePlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	stack := reconcileGated(t, balancer, "shop", &shopGate)
+	w.failUps(GateStack(environment.TierPreview), errors.New("the rollout failed"))
+
+	if err := stack.Destroy(ctx); err == nil {
+		t.Fatal("Destroy = nil, want the failed rollout")
+	}
+	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+		t.Fatalf("the plugin runs %q after the failed rollout, want the gate still in it", config)
+	}
+
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy (retry) = %v", err)
+	}
+
+	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
+		t.Errorf("the plugin still holds the destroyed project's keys after the retry:\n%s", config)
+	}
+}
