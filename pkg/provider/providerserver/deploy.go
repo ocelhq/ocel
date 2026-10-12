@@ -659,16 +659,24 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Program = program.Spec
-	if err := r.readPreviewGateInForce(ctx); err != nil {
-		return err
-	}
-	spec.PreviewGate = r.previewGate
-	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
+	disabled, err := r.disablePreviewGate(ctx)
 	if err != nil {
 		return err
 	}
+	written, err := r.readPreviewGateInForce(ctx)
+	if err != nil {
+		return err
+	}
+	spec.PreviewGate = written
+	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
+	if err != nil {
+		if disabled {
+			return errors.Join(err, r.restorePreviewGate(ctx))
+		}
+		return err
+	}
 	r.setEdgeStack(stack)
-	if err := r.settlePreviewGate(ctx, progress); err != nil {
+	if err := r.settlePreviewGate(ctx, written, progress); err != nil {
 		return err
 	}
 	if err := recordInvalidationTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
@@ -1211,6 +1219,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					AssetPrefix:               facts.AssetPrefix,
 					Static:                    facts.Static,
 					Guard:                     facts.Guard,
+					PreviewGate:               r.appPreviewGate(),
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
 					Topics:                    topics,
@@ -1239,6 +1248,9 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				}
 			}
 			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
+				return err
+			}
+			if err := r.warnPreviewGateTurnedOn(ctx, result.Functions, progress); err != nil {
 				return err
 			}
 			if _, err := pushRemovedImages(ctx, images, progress); err != nil {

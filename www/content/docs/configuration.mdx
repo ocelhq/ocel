@@ -752,8 +752,14 @@ a preview deploy opens the project's previews again and warns that it does, and 
 and bypass secrets so that turning it back on restores them. Turning it on never
 prints the password; [`ocel preview protection`](/docs/cli/preview/protection) shows it, rotates it,
 sets one you choose and manages the secrets a test can send instead. An edge that cannot run the gate
-refuses the deploy rather than serve a protected preview to anyone, and on GCP that edge is the
-load balancer: Ocel does not gate a preview on Cloud Run alone.
+refuses the deploy rather than serve a protected preview to anyone. On GCP with no edge in front,
+each Cloud Run service checks every request itself against the project's gate, which it reads
+from a secret it mounts even while protection is off, so turning protection on reaches the previews
+already running. Only Node, Next and SvelteKit functions and containers can check it, so a protected
+preview of a Go, Python or Rust function there is refused. While an unprotected preview of one is
+still deployed, a protected preview deploy warns, naming those functions, and changing the
+credentials or running `ocel preview protection sync` writes the gate and then exits with an error
+naming them, until those previews are destroyed.
 
 ## lifecycle
 

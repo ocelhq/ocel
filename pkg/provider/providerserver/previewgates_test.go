@@ -256,6 +256,30 @@ func TestAPreviewDeployThatDoesNotProtectOpensThePreviewsKeepsTheCredentialsAndS
 	}
 }
 
+func TestAProtectedPreviewDeployGatesWhatItCanAndSaysWhichOtherPreviewsIgnoreTheGate(t *testing.T) {
+	client, vendor, req := originGatedPreviewServed(t)
+	previewIgnoringTheGate(t, vendor, "pr-3")
+
+	result, events := deploy(t, client, protecting(req))
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: refusing would leave every preview open, the ones that check the gate too", result.GetError())
+	}
+	if got := provisionedApp(t, vendor).PreviewGate; got == nil {
+		t.Error("the deploy handed its app no gate")
+	}
+	warned := false
+	for _, text := range eventTexts(t, events, result) {
+		warned = warned || (strings.Contains(text, "api") && strings.Contains(text, "pr-3") && strings.Contains(text, "answer"))
+	}
+	if !warned {
+		t.Errorf("the deploy protected shop without saying function api of preview pr-3 still answers anyone: %q", eventTexts(t, events, result))
+	}
+	if note := noteOf(result); !strings.Contains(note, "pr-3") {
+		t.Errorf("the result's notes = %q, want them to name preview pr-3", note)
+	}
+}
+
 func TestTurningProtectionBackOnRestoresTheSameCredentials(t *testing.T) {
 	client, vendor := unprotectedPreviewServed(t)
 	if result, _ := deploy(t, client, previewDeployRequest()); !result.GetSuccess() {
@@ -284,8 +308,8 @@ func TestAnUnprotectedPreviewDeployWhoseEdgeWriteFailsKeepsThePreviewsProtected(
 		t.Fatal("Deploy() succeeded, want the edge failure")
 	}
 
-	if record, _ := recordedGateOf(t, vendor, "shop"); !record.Enabled || record.Password != shopPassword {
-		t.Errorf("shop's record is %+v, want it still enabled with its password: the edge still holds the gate", record)
+	if record, _ := recordedGateOf(t, vendor, "shop"); !record.Enabled || !record.Pending || record.Password != shopPassword {
+		t.Errorf("shop's record is %+v, want it enabled again with its password and pending: the edge may hold the gate or may have taken it down before failing", record)
 	}
 }
 

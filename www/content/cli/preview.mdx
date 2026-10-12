@@ -99,13 +99,22 @@ Creating a bypass secret leaves sessions alone.
 
 A change is recorded and then published to the edge, so it takes effect without a deploy. The
 Cloudflare worker may serve the old credentials for up to five seconds, and a GCP load balancer
-takes a few minutes to roll its gate plugin out. If an edge cannot be reached the command still
+takes a few minutes to roll its gate plugin out. A Cloud Run service with no edge in front
+reads its gate from a mounted secret at most five seconds after it last read it, and
+[Configure secrets for services](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+says Cloud Run fetches a mounted secret from Secret Manager each time it is read. If an edge cannot be reached the command still
 prints any secret it generated, exits with an error, and leaves the edge shown as pending until
 `ocel preview protection sync` publishes the recorded credentials again.
 
 An edge has to run the gate for a project to be protected on it, and a deploy through one that does
-not is refused. On GCP that edge is the load balancer: Ocel does not gate a preview served on its
-own Cloud Run URL, so a protected project's previews deploy behind the `alb` edge.
+not is refused. On GCP a preview served on its own Cloud Run URL is gated by its own service: the
+gate lives in a Secret Manager secret that every container and Node, Next or SvelteKit function of
+the project's previews mounts, even while protection is off, so turning it on or changing the
+credentials reaches the running instances without a deploy. A Go, Python or Rust function checks no
+gate: a protected preview with one is refused, and while an unprotected one is still deployed,
+`ocel preview protection` names it rather than calling the previews protected. A change or
+`ocel preview protection sync` then still writes the gate to every service that checks it, and
+exits with an error naming those functions, until those previews are destroyed.
 
 ## Ephemeral and persistent
 

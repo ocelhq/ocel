@@ -113,6 +113,8 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings:        p.edges.pairings(),
 		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
+
+		RunsPreviewGates: true,
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

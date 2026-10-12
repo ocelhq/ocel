@@ -118,10 +118,45 @@ opens it, and a first promotion that is taken back closes it again, so a service
 only ever serves a release the project promoted.
 
 A preview with no edge in front is answered on its own `run.app` URL, which the deploy
-prints. Nothing runs the preview gate for it, so that URL answers anyone who knows it and the
-deploy says so, and a deploy of a project whose config sets
-[`previews.protection`](/docs/configuration#previews) is refused: protect previews through the
-`alb` edge.
+prints, and the service gates its own preview. The project's gate, which holds the keys and never
+the plain password, is kept in one Secret Manager secret per project. Every preview service of the
+project that runs an Ocel runtime in front of the app, a container or a Node, Next or SvelteKit
+function, mounts that secret as a volume at version `latest`, whether
+[`previews.protection`](/docs/configuration#previews) is on or not. While it is off, the secret
+holds `null`, the runtimes serve every request, and the deploy says the preview answers anyone
+who knows its URL. The first preview deploy creates the secret, holding the gate if protection is
+on and `null` if it is off, and grants the app's service account read access to it before any
+service mounts it. Turning protection on
+writes the gate to the secret, and the previews already running are gated from then on, without
+a deploy and without a new revision.
+
+The container runtime and the Node runtime check every request against the mounted file, which
+they read again at most five seconds after they last read it. They answer every request that
+carries no credential with the login page, the health check path included, strip the credentials
+before the app sees them, and answer 503 while the file is missing, unreadable or takes longer than
+two seconds to read. A container's startup probe sends a token that only the service's
+configuration holds, and the runtime answers a probe carrying it with the app's status and no body.
+A deploy makes the token for any service that has none yet, including one that already exists,
+which rolls that service a new revision once; every later deploy keeps the token, so turning
+protection on or rotating the password never stops a new instance from starting.
+`ocel preview protection` writes a new secret version, which Cloud Run serves to running instances
+without a new revision:
+[Configure secrets for services](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+says that when it reads a volume, Cloud Run always fetches the secret value from Secret Manager.
+The version the new one replaces stays readable, so an instance that resolved `latest` just
+before the write still reads it; older versions are destroyed. An app's service account is
+shared by every preview of that app in the project, and may read the project's gate secret and
+no other: the deploy grants it on that secret alone.
+
+Go, Python and Rust functions run no Ocel runtime in front of the app, so nothing in them checks
+the gate. With `previews.protection` on, a preview with one is refused. With it off, the preview
+deploys as before, and Ocel records that the function ignores the gate before its service is
+created, and warns if protection was turned on while it deployed them. If protection is turned on
+while such a preview is still deployed, every protected preview
+deploy says so, and `ocel preview protection` names each of those functions instead of calling the
+previews protected. A change or `ocel preview protection sync` still writes the gate to every
+service that checks it, then exits with an error naming those functions. All of this lasts until
+those previews are destroyed.
 
 A preview answered by the load balancer is cached like production, and gated there without
 changing that. The preview tier's load balancer runs the gate as a Service Extensions plugin
@@ -496,6 +531,18 @@ gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/secretmanager.editor \
   --condition="title=ocel realtime secrets,expression=resource.name.startsWith('projects/$NUMBER/secrets/ocel_realtime-')"
+```
+
+A deploy also keeps the preview gate secrets of its namespace, and sets who may read each: it
+grants an app's service account `roles/secretmanager.secretAccessor` on its project's gate secret
+alone. Grant `roles/secretmanager.admin` under a condition naming ids that start with the
+namespace and `_preview-gate-`; it reaches no other secret.
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/secretmanager.admin \
+  --condition="title=ocel preview gate secrets,expression=resource.name.startsWith('projects/$NUMBER/secrets/ocel_preview-gate-')"
 ```
 
 A prune or a destroy untags the images no Cloud Run revision runs any more, and the

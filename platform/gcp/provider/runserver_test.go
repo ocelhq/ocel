@@ -36,6 +36,8 @@ type runServer struct {
 
 	uriEachRevision bool
 	failRouting     bool
+	refuseReads     bool
+	onCreate        func()
 
 	uploads []upload
 	present map[string]bool
@@ -153,6 +155,9 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 	desired := readBody[run.GoogleCloudRunV2Service](w, r)
 	if desired == nil {
 		return
+	}
+	if s.onCreate != nil {
+		s.onCreate()
 	}
 	s.created = append(s.created, desired)
 	s.events = append(s.events, "create")
@@ -443,6 +448,11 @@ func sameTemplate(current, desired *run.GoogleCloudRunV2RevisionTemplate) bool {
 }
 
 func (s *runServer) get(w http.ResponseWriter) {
+	if s.refuseReads {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":403,"message":"permission denied on the service"}}`))
+		return
+	}
 	if s.service == nil {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":{"code":404,"message":"service not found"}}`))

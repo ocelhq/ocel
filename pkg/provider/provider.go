@@ -42,6 +42,7 @@ type Facts struct {
 	WorkerCeilings    []WorkerCeiling
 
 	RetainsContainerReleases bool
+	RunsPreviewGates         bool
 	MaxFunctionBytes         int64
 }
 

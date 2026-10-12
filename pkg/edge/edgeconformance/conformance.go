@@ -22,15 +22,11 @@ type Suite struct {
 	Bootstrap func(t *testing.T) (edge.Edge, environment.Tier)
 }
 
-func Run(t *testing.T, suite Suite) {
+func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 	t.Helper()
 
-	if suite.Hostname == "" {
-		t.Fatal("the suite names no hostname, and every edge must be able to bind one")
-	}
-
 	t.Run("the code fact and the compatibility fact are one answer", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e := newEdge(t)
 		runsCode := e.Facts().RunsCode
 		if names := !e.Facts().Compatibility.IsZero(); runsCode != names {
 			t.Errorf("Facts().RunsCode = %v, but Facts().Compatibility named = %v; the code an edge runs loads under the compatibility it names, so an edge cannot answer them differently", runsCode, names)
@@ -44,7 +40,7 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("an edge that runs code names the entry module it runs, and one that does not names none", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e := newEdge(t)
 		facts := e.Facts()
 		if names := len(facts.Entry.Content) > 0; facts.RunsCode != names {
 			t.Errorf("Facts().RunsCode = %v, but Facts().Entry names a module = %v; an origin programs the entry an edge runs from the module the edge names", facts.RunsCode, names)
@@ -55,14 +51,22 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("an edge that runs code gates previews", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e := newEdge(t)
 		if facts := e.Facts(); facts.RunsCode && !facts.GatesPreviews {
 			t.Error("Facts().RunsCode = true but Facts().GatesPreviews = false; an edge that runs code answers previews itself, so it must run the preview gate that a deploy and `ocel preview protection` publish to it")
 		}
 	})
 
+	t.Run("an edge that has its origin gate previews also publishes the gate", func(t *testing.T) {
+		e := newEdge(t)
+		if facts := e.Facts(); facts.GatesPreviewsAtOrigin && (!facts.GatesPreviews || e.Hooks().PublishPreviewGate == nil || facts.RunsCode) {
+			t.Errorf("Facts().GatesPreviewsAtOrigin = true with GatesPreviews = %v, RunsCode = %v and PublishPreviewGate set = %v; an edge whose origin runs the gate runs no code and must publish the gate to the origin",
+				facts.GatesPreviews, facts.RunsCode, e.Hooks().PublishPreviewGate != nil)
+		}
+	})
+
 	t.Run("an edge whose records are proxied says what its proxied records need", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e := newEdge(t)
 		facts := e.Facts()
 		proxied := facts.ServesUnbound || facts.ProxiesRecords
 		if names := facts.ProxiedRecordNote != ""; proxied != names {
@@ -71,7 +75,7 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("every declared need is a need, and declared once", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e := newEdge(t)
 		supported := e.Facts().Supported
 		for i, need := range supported {
 			if !edge.ValidNeed(need) {
@@ -81,6 +85,19 @@ func Run(t *testing.T, suite Suite) {
 				t.Errorf("Facts().Supported names %q twice", need)
 			}
 		}
+	})
+}
+
+func Run(t *testing.T, suite Suite) {
+	t.Helper()
+
+	if suite.Hostname == "" {
+		t.Fatal("the suite names no hostname, and every edge must be able to bind one")
+	}
+
+	RunFacts(t, func(t *testing.T) edge.Edge {
+		e, _ := suite.New(t)
+		return e
 	})
 
 	t.Run("teardown plans are named, typed and honestly actioned", func(t *testing.T) {

@@ -70,6 +70,7 @@ type Facts struct {
 	InvalidatesByCacheTag bool
 	CachesResponses       bool
 	GatesPreviews         bool
+	GatesPreviewsAtOrigin bool
 	CredentialScope       string
 }
 

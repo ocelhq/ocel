@@ -34,6 +34,19 @@ type Stacks struct {
 
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
+	ignoresPreviewGate   bool
+}
+
+func (r *Stacks) IgnorePreviewGate() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ignoresPreviewGate = true
+}
+
+func (r *Stacks) functionsIgnorePreviewGate(spec provider.StackSpec) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ignoresPreviewGate && spec.Ref.Tier == environment.TierPreview && spec.Edge != nil && spec.Edge.Facts().GatesPreviewsAtOrigin
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
@@ -102,6 +115,11 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 		})
 	}
 	result.Functions = ProvisionedFunctions(spec)
+	if r.functionsIgnorePreviewGate(spec) {
+		for at := range result.Functions {
+			result.Functions[at].IgnoresPreviewGate = true
+		}
+	}
 	result.Containers = ProvisionedContainers(spec)
 	if spec.App != nil {
 		result.EdgeBundleKey = r.deliveredEdgeBundle(spec)

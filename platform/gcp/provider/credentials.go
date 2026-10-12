@@ -163,7 +163,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 		names := Names{namespace: c.Namespace, project: project}
 		roles := slices.Clone(rolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, realtimeSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant())
+			roles = append(roles, realtimeSecretsGrant(names), previewGateSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant())
 			roles = append(roles, queueGrants(names, c.Region)...)
 			roles = append(roles, untaggingGrants(names, c.Region)...)
 		}
