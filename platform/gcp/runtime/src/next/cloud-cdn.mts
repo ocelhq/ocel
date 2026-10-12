@@ -1,8 +1,8 @@
 import type http from "node:http";
-import { releaseOf } from "@framework/next-runtime/cache-shaping";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
-import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
+import type { Invoke } from "@framework/node-runtime/host";
+import { cloudCdnTagLimits } from "../cache/cloud-cdn-tags.mjs";
 
 const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
 const routerStateTree = "next-router-state-tree";
@@ -21,13 +21,7 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
   return kept.length > 0 ? kept.join(", ") : null;
 }
 
-export const cloudCdnTagLimits = { perObject: 50, bytesPerTag: 120, bytesPerObject: 4096 } as const;
-
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
-
-export function cloudCdnRelease(env: NodeJS.ProcessEnv): string | null {
-  return invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null;
-}
 
 function isImmutable(cacheControl: string | null): boolean {
   return (cacheControl ?? "")

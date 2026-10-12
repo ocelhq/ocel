@@ -1,16 +1,15 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
 import { readPortBind } from "@framework/node-runtime/host";
+import { openPurgeFor } from "../cache/purge-target.mjs";
 import { newGcpCacheStore } from "./cache-store.mjs";
-import { withCdnPurge } from "./cdn-purge.mjs";
 import { cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
 import { newCloudStorage } from "./cloud-storage.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newImageEndpointInvoke } from "./image-endpoint.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
-import { openPurgeFor } from "./purge-target.mjs";
-import { newFirestoreTagRecords } from "./tag-records.mjs";
+import { newFirestoreTagRecords, withCdnPurge } from "./tag-records.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
 
 const MB = 1024 * 1024;

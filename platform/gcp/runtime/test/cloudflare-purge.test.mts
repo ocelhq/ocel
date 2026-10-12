@@ -3,8 +3,8 @@ import { createHmac } from "node:crypto";
 import { purgeSignatureHeader, type TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
-import { withCdnPurge } from "../src/next/cdn-purge.mjs";
-import { newCloudflarePurge } from "../src/next/cloudflare-purge.mjs";
+import { newCloudflarePurge } from "../src/cache/cloudflare-purge.mjs";
+import { withCdnPurge } from "../src/next/tag-records.mjs";
 
 const url = "https://shop-prod.acct.workers.dev/.ocel/purge";
 const isrPrefix = "prod/shop/web/r1a2b3c4d/isr";

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { newMetadataToken } from "../src/next/metadata-token.mjs";
+import { newMetadataToken } from "../src/cache/metadata-token.mjs";
 
 const path = "/computeMetadata/v1/instance/service-accounts/default/token";
 

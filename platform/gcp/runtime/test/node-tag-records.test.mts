@@ -1,7 +1,7 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
-import { openPurgeFor } from "../src/next/purge-target.mjs";
+import { openPurgeFor } from "../src/cache/purge-target.mjs";
 import { newGcpTagRecordWriter } from "../src/node/tag-records.mjs";
 
 test("writes nothing where the service has no edge to clear", () => {

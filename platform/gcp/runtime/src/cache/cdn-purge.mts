@@ -1,7 +1,6 @@
-import type { PublishTag } from "@framework/next-cache";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import type { TagRecord } from "@platform/edge-contract/purge";
-import { cloudCdnTagLimits } from "./cloud-cdn.mjs";
+import { cloudCdnTagLimits } from "./cloud-cdn-tags.mjs";
 import { newMetadataToken } from "./metadata-token.mjs";
 
 export interface CdnPurgeOptions {
@@ -22,10 +21,6 @@ export type PurgeTags = (tags: ReadonlyMap<string, TagRecord>) => Promise<void>;
 
 const attempts = 4;
 const tagsPerRequest = 10;
-
-export function withCdnPurge(publish: PublishTag, purge: PurgeTags): PublishTag {
-  return (tag, record) => publish(tag, record).then(() => purge(new Map([[tag, record]])));
-}
 
 export function newCdnPurge(options: CdnPurgeOptions): PurgeTags {
   const { urlMap, release } = options;

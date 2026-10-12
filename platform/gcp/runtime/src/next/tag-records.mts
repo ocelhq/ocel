@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mergeRecord, type PublishTag } from "@framework/next-cache";
 import type { TagSnapshotRead } from "@framework/next-runtime/use-cache-store";
 import type { TagRecord } from "@platform/edge-contract/purge";
+import type { PurgeTags } from "../cache/cdn-purge.mjs";
 import { type Firestore, FirestoreError } from "./firestore.mjs";
 
 export interface TagRecords {
@@ -231,4 +232,8 @@ export function newFirestoreTagRecords(
       return { status: "fresh", records, cursor: cursorFor(readTime) };
     },
   };
+}
+
+export function withCdnPurge(publish: PublishTag, purge: PurgeTags): PublishTag {
+  return (tag, record) => publish(tag, record).then(() => purge(new Map([[tag, record]])));
 }
