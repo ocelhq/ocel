@@ -1,4 +1,4 @@
-import { newMetadataToken } from "./metadata-token.mjs";
+import { newMetadataToken } from "../cache/metadata-token.mjs";
 
 export interface CloudStorageOptions {
   bucket: string;

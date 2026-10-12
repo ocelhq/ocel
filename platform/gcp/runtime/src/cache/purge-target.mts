@@ -1,5 +1,5 @@
 import { newCdnPurge, type PurgeTags } from "./cdn-purge.mjs";
-import { cloudCdnRelease } from "./cloud-cdn.mjs";
+import { cloudCdnRelease } from "./cloud-cdn-tags.mjs";
 import { newCloudflarePurge } from "./cloudflare-purge.mjs";
 
 export function openPurgeFor(env: NodeJS.ProcessEnv): PurgeTags | undefined {

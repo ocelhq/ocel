@@ -1,6 +1,7 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
-import { newCdnPurge, withCdnPurge } from "../src/next/cdn-purge.mjs";
+import { newCdnPurge } from "../src/cache/cdn-purge.mjs";
+import { withCdnPurge } from "../src/next/tag-records.mjs";
 
 type Call = { url: string; init: RequestInit };
 
