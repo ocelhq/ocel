@@ -69,6 +69,17 @@ test("a later revalidation of the same tags writes them again", async () => {
   expect(written).toEqual(["products", "products"]);
 });
 
+test("a later revalidation that passes the same tags array writes them again", async () => {
+  const { store, written } = countingStore();
+  const { defaultCache } = await loadHandlers(store);
+  const tags = ["products"];
+
+  await defaultCache.updateTags(tags);
+  await defaultCache.updateTags(tags);
+
+  expect(written).toEqual(["products", "products"]);
+});
+
 test("a request revalidating hundreds of tags keeps eight writes in flight", async () => {
   const { store, written, mostInFlight } = countingStore(1);
   const { IncrementalCache } = await loadHandlers(store);
