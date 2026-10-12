@@ -663,7 +663,7 @@ message GetPreviewProtectionRequest {
 message GetPreviewProtectionResponse {
   bool recorded = 1;
 
-  string password = 2;
+  string password = 2 [debug_redact = true];
 
   repeated string bypass_secret_ids = 3;
 
