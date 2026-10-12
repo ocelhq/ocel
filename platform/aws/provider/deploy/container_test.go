@@ -885,6 +885,40 @@ func TestANextContainerWithRevalidationIsHandedTheCacheItsServerPreloadReads(t *
 	}
 }
 
+func TestANextContainerIsHandedItsTaskMemoryToSizeItsInstanceCache(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	unrevalidated := spec
+	unrevalidated.App = &provider.AppSpec{}
+	*unrevalidated.App = *spec.App
+	unrevalidated.App.ISR = nil
+
+	for name, candidate := range map[string]provider.StackSpec{"a Next app with revalidation": spec, "a Next app with no revalidation": unrevalidated} {
+		work, err := releasing(t, cfg).containerWork(candidate, fixtureContainerInfra())
+		if err != nil {
+			t.Fatalf("containerWork() of %s = %v", name, err)
+		}
+		if got, want := work.env["OCEL_FUNCTION_MEMORY_MB"], "1024"; got != want {
+			t.Errorf("%s: OCEL_FUNCTION_MEMORY_MB = %q, want the task's %s MB, which the Next host sizes its instance cache from", name, got, want)
+		}
+	}
+}
+
+func TestAContainerThatIsNotANextAppIsHandedNoMemory(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	spec.App.Framework = "node"
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if value, set := work.env["OCEL_FUNCTION_MEMORY_MB"]; set {
+		t.Errorf("OCEL_FUNCTION_MEMORY_MB = %q, want it unset: only the Next host reads it", value)
+	}
+}
+
 func TestAContainerThatIsNotANextAppWithRevalidationIsHandedNoCache(t *testing.T) {
 	t.Parallel()
 

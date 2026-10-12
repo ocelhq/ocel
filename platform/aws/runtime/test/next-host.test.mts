@@ -25,7 +25,19 @@ test("the AWS host's instance cache holds a tenth of Lambda's configured memory"
   expect(cache.read("huge")).toBeUndefined();
 });
 
-test("the AWS host's instance cache holds 50 MiB when Lambda names no memory", () => {
+test("the AWS host's instance cache in a container holds a tenth of the task memory Ocel hands it", () => {
+  const cache = newAwsNextHost({ OCEL_FUNCTION_MEMORY_MB: "1" }).instanceCache!;
+
+  cache.write("fits", 1, 100 * 1024);
+  cache.write("over", 2, 100 * 1024);
+  cache.write("huge", 3, 110 * 1024);
+
+  expect(cache.read("fits")).toBeUndefined();
+  expect(cache.read("over")).toBe(2);
+  expect(cache.read("huge")).toBeUndefined();
+});
+
+test("the AWS host's instance cache holds 50 MiB when neither Lambda nor Ocel names its memory", () => {
   const cache = newAwsNextHost({}).instanceCache!;
 
   cache.write("fits", 1, 50 * 1024 * 1024);

@@ -47,6 +47,7 @@ const (
 	containerMemory     = "1024"
 	containerName       = "app"
 	containerPortEnv    = "PORT"
+	containerMemoryEnv  = "OCEL_FUNCTION_MEMORY_MB"
 
 	containerLocalName = "container"
 
@@ -200,6 +201,9 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	env, err := containerEnv(app.App, app.Values, guard, previousGuard, bundle.Live)
 	if err != nil {
 		return nil, err
+	}
+	if spec.App.Framework == buildoutput.FrameworkNext {
+		env[containerMemoryEnv] = containerMemory
 	}
 	cache := r.containerCache(spec)
 	if cache != nil {

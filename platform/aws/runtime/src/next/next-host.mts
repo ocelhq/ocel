@@ -6,7 +6,7 @@ const MB = 1024 * 1024;
 const cloudFrontTagsPerObject = 50;
 
 export function newAwsNextHost(env: NodeJS.ProcessEnv): NextHost {
-  const memoryMb = Number(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE);
+  const memoryMb = Number(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? env.OCEL_FUNCTION_MEMORY_MB);
   return {
     newCacheStore: async () => (await import("./cache-store.mjs")).newAwsCacheStore(),
     newUseCacheStore: async () => {
