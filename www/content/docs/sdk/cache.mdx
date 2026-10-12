@@ -86,6 +86,11 @@ own route table and does not use this one.
   group repeated with `*`, `+` or a count above one that holds a quantifier or `|`, such as
   `(a+)+`, which can take a matcher exponential time. An optional group, such as
   `(?:/([^/]+))?`, may hold either.
+
+  Two parts repeated without bound (`*`, `+` or `{n,}`) are refused too when they can match the
+  same characters and nothing between them has to be matched by one of them alone, such as
+  `(.*)(.*)` or `/(.*)/(.*)`, which take a matcher polynomial time. A required character the
+  one side cannot match keeps them apart, so `/([^/]+)/([^/]+)` is accepted.
 - `routes` are tried in order, and the first match wins. A path no route names goes to
   `fallback`.
 - `headers` rules all apply, in order, over the headers your handler set. On a route with a
