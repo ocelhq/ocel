@@ -269,6 +269,7 @@ function finishDrainingOnTerm(): void {
 export type RequestScope = <T>(
   req: http.IncomingMessage,
   res: http.ServerResponse,
+  ocel: OcelContext,
   run: () => T,
 ) => T;
 
@@ -331,8 +332,9 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
           const { admitPreview } = await import("./preview-gate.mjs");
           if (!(await admitPreview(trust.gate, req, reachedHost, res, trust.gateAtEdge))) return;
         }
-        const run = () => invoke(req, res, { waitUntil });
-        return scope ? scope(req, res, run) : run();
+        const ocel: OcelContext = { waitUntil };
+        const run = () => invoke(req, res, ocel);
+        return scope ? scope(req, res, ocel, run) : run();
       })
       .catch((err: any) => {
         sendControl("log", { level: "error", message: String(err?.stack || err) });

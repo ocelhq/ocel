@@ -1,38 +1,37 @@
 import type http from "node:http";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { serveInvoke, setRequestScope } from "../src/host.mjs";
-import { useOriginCache } from "../src/origin-cache.mjs";
+import { useOriginRoutes } from "../src/origin-routes.mjs";
+import { setTagRecordWriter } from "../src/tag-records.mjs";
+import { bypassToken, newRoutes, writeRoutes } from "./routes-file.mjs";
 
 const hostKey = Symbol.for("ocel.cache.host");
 
 interface CacheHost {
   tag(tags: readonly string[]): void;
   revalidateTag(tag: string, mode: "purge" | "invalidate"): void;
-  revalidatePath(path: string): void;
+  revalidatePath(path: string, mode: "purge" | "invalidate"): void;
 }
 
 function cacheHost(): CacheHost {
   return (globalThis as Record<symbol, CacheHost>)[hostKey]!;
 }
 
-const rules = JSON.stringify([
-  { path: "/blog/*", revalidate: 60, expire: 600 },
-  { path: "/", revalidate: 30 },
-]);
+const routes = writeRoutes(newRoutes());
 
 const behindCloudflare = {
   OCEL_ORIGIN_FRESH_ONLY: "1",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
   OCEL_EDGE_ASKS_TO_CACHE: "1",
-  OCEL_CACHE_RULES: rules,
+  OCEL_ROUTES: routes,
 };
 
 const behindCloudFront = {
   OCEL_ORIGIN_FRESH_ONLY: "1",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
-  OCEL_CACHE_RULES: rules,
+  OCEL_ROUTES: routes,
 };
 
 beforeEach(() => {
@@ -40,8 +39,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useOriginCache({});
+  useOriginRoutes({});
   setRequestScope(undefined);
+  setTagRecordWriter(undefined);
   vi.restoreAllMocks();
 });
 
@@ -51,7 +51,7 @@ async function serve(
   env: Record<string, string>,
   handler: Handler,
 ): Promise<(path: string, init?: RequestInit) => Promise<Response>> {
-  useOriginCache(env);
+  useOriginRoutes(env);
   let port = 0;
   await serveInvoke(handler, (listening) => {
     port = listening;
@@ -67,13 +67,13 @@ function page(req: http.IncomingMessage, res: http.ServerResponse): void {
 }
 
 describe("an origin behind the Cloudflare gateway", () => {
-  test("gives a response the rule for its path, and tags it for the gateway only when asked", async () => {
+  test("gives a response the rule for its route, and tags it for the gateway only when asked", async () => {
     const get = await serve(behindCloudflare, page);
 
     const res = await get("/blog/a", { headers: asked });
 
     expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
-    expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|path:/blog/a");
+    expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
     expect(res.headers.has("cache-tag")).toBe(false);
   });
 
@@ -87,7 +87,7 @@ describe("an origin behind the Cloudflare gateway", () => {
     expect(res.headers.has("cache-tag")).toBe(false);
   });
 
-  test("tags a response with what its handler tagged, stamped by the release", async () => {
+  test("tags a response with what its handler tagged beside what its route tags, stamped by the release", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
       cacheHost().tag(["posts", "post:1"]);
       page(req, res);
@@ -96,7 +96,7 @@ describe("an origin behind the Cloudflare gateway", () => {
     const res = await get("/blog/a", { headers: asked });
 
     expect(res.headers.get("x-ocel-cache-tag")).toBe(
-      "r0a1b2c3d|posts,r0a1b2c3d|post:1,r0a1b2c3d|path:/blog/a",
+      "r0a1b2c3d|blog,r0a1b2c3d|posts,r0a1b2c3d|post:1,r0a1b2c3d|path:/blog/a",
     );
   });
 
@@ -109,7 +109,7 @@ describe("an origin behind the Cloudflare gateway", () => {
     const res = await get("/blog/a", { headers: asked });
 
     expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
-    expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|path:/blog/a");
+    expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
   });
 
   test("keeps the browser lifetime a response declares and adds the rule's beside it", async () => {
@@ -154,23 +154,26 @@ describe("an origin behind the Cloudflare gateway", () => {
     }
   });
 
-  test("tags nothing for a path no rule names and a response with no s-maxage", async () => {
+  test("tags nothing for a route that caches nothing and a response with no s-maxage", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
       cacheHost().tag(["posts"]);
       page(req, res);
     });
 
-    const res = await get("/about", { headers: asked });
+    for (const path of ["/about", "/account"]) {
+      const res = await get(path, { headers: asked });
 
-    expect(res.headers.has("cache-control")).toBe(false);
-    expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
+      expect(res.headers.has("cache-control"), path).toBe(false);
+      expect(res.headers.has("x-ocel-cache-tag"), path).toBe(false);
+    }
   });
 
   test("announces a tag revalidated while handling a request, stale or expired", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
       cacheHost().revalidateTag("posts", "invalidate");
       cacheHost().revalidateTag("post:1", "purge");
-      cacheHost().revalidatePath("/blog/a");
+      cacheHost().revalidatePath("/blog/a", "purge");
+      cacheHost().revalidatePath("/blog/b", "invalidate");
       res.writeHead(200);
       res.end();
     });
@@ -178,20 +181,22 @@ describe("an origin behind the Cloudflare gateway", () => {
     const res = await get("/blog/a", { method: "POST", headers: asked });
 
     expect(res.headers.get("x-ocel-purge")).toBe(
-      "purge r0a1b2c3d|post:1,r0a1b2c3d|path:/blog/a invalidate r0a1b2c3d|posts",
+      "purge r0a1b2c3d|post:1,r0a1b2c3d|path:/blog/a invalidate r0a1b2c3d|posts,r0a1b2c3d|path:/blog/b",
     );
   });
 
   test("names a path outside ASCII by the pathname the edge tags it with", async () => {
     const get = await serve(behindCloudflare, (req, res) => {
-      if (req.method === "POST") cacheHost().revalidatePath("/blog/café");
+      if (req.method === "POST") cacheHost().revalidatePath("/blog/café", "purge");
       page(req, res);
     });
 
     const read = await get("/blog/café", { headers: asked });
     const write = await get("/api/publish", { method: "POST" });
 
-    expect(read.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|path:/blog/caf%C3%A9");
+    expect(read.headers.get("x-ocel-cache-tag")).toBe(
+      "r0a1b2c3d|blog,r0a1b2c3d|path:/blog/caf%C3%A9",
+    );
     expect(write.headers.get("x-ocel-purge")).toBe("purge r0a1b2c3d|path:/blog/caf%C3%A9");
   });
 
@@ -241,7 +246,7 @@ describe("an origin behind the Cloudflare gateway", () => {
     expect(() => cacheHost().revalidateTag("posts", "purge")).toThrow(/request/);
   });
 
-  test("warns that a revalidation made after the response began reaches nothing", async () => {
+  test("warns that a revalidation made after the response began reaches nothing in band", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const get = await serve(behindCloudflare, (req, res) => {
       res.writeHead(200);
@@ -257,7 +262,7 @@ describe("an origin behind the Cloudflare gateway", () => {
 });
 
 describe("an origin behind CloudFront or the load balancer", () => {
-  test("shapes every cacheable response and writes its tags to cache-tag", async () => {
+  test("shapes every cacheable response of a cached route and writes its tags to cache-tag", async () => {
     const get = await serve(behindCloudFront, (req, res) => {
       cacheHost().tag(["posts"]);
       page(req, res);
@@ -266,11 +271,33 @@ describe("an origin behind CloudFront or the load balancer", () => {
     const res = await get("/blog/a");
 
     expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
-    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|posts,r0a1b2c3d|path:/blog/a");
+    expect(res.headers.get("cache-tag")).toBe(
+      "r0a1b2c3d|blog,r0a1b2c3d|posts,r0a1b2c3d|path:/blog/a",
+    );
     expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
   });
 
-  test("announces no purge, and says once that a revalidation reaches nothing here", async () => {
+  test("announces no purge in band, and says nothing of a revalidation it writes durably", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const written: unknown[] = [];
+    setTagRecordWriter(async (entries) => {
+      written.push(...entries);
+    });
+    const get = await serve(behindCloudFront, (req, res) => {
+      cacheHost().revalidateTag("posts", "purge");
+      res.writeHead(200);
+      res.end();
+    });
+
+    const res = await get("/api/publish", { method: "POST" });
+    await vi.waitFor(() => expect(written).toHaveLength(1));
+
+    expect(res.headers.has("x-ocel-purge")).toBe(false);
+    expect(written).toEqual([{ tag: "posts", mode: "purge", raisedAt: expect.any(Number) }]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test("says once that a revalidation reaches no edge where nothing writes it durably", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const get = await serve(behindCloudFront, (req, res) => {
       cacheHost().revalidateTag("posts", "purge");
@@ -287,21 +314,127 @@ describe("an origin behind CloudFront or the load balancer", () => {
   });
 });
 
-describe("a request that carries a cookie or credentials", () => {
+describe("a revalidation behind the gateway that also writes durably", () => {
+  test("announces it in band and writes each tag it names, a path by its path tag", async () => {
+    const written: { tag: string; mode: string }[] = [];
+    setTagRecordWriter(async (entries) => {
+      written.push(...entries.map(({ tag, mode }) => ({ tag, mode })));
+    });
+    const get = await serve(behindCloudflare, (req, res) => {
+      cacheHost().revalidateTag("posts", "invalidate");
+      cacheHost().revalidatePath("/blog/a", "purge");
+      res.writeHead(200);
+      res.end();
+    });
+
+    const res = await get("/api/publish", { method: "POST" });
+    await vi.waitFor(() => expect(written).toHaveLength(2));
+
+    expect(res.headers.get("x-ocel-purge")).toBe(
+      "purge r0a1b2c3d|path:/blog/a invalidate r0a1b2c3d|posts",
+    );
+    expect(written).toEqual([
+      { tag: "posts", mode: "invalidate" },
+      { tag: "path:/blog/a", mode: "purge" },
+    ]);
+  });
+
+  test("keeps the invocation alive until the durable write settles", async () => {
+    let settled = false;
+    setTagRecordWriter(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      settled = true;
+    });
+    const waited: Promise<unknown>[] = [];
+    useOriginRoutes(behindCloudFront);
+    let port = 0;
+    await serveInvoke(
+      (req, res, ocel) => {
+        const waitUntil = ocel.waitUntil;
+        ocel.waitUntil = (task) => {
+          waited.push(task);
+          waitUntil(task);
+        };
+        cacheHost().revalidateTag("posts", "purge");
+        res.writeHead(200);
+        res.end();
+      },
+      (listening) => {
+        port = listening;
+      },
+    );
+
+    await fetch(`http://127.0.0.1:${port}/api/publish`, { method: "POST" });
+    await Promise.all(waited);
+
+    expect(settled).toBe(true);
+  });
+
+  test("logs a durable write that fails, and still answers the request", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    setTagRecordWriter(async () => {
+      throw new Error("table unreachable");
+    });
+    const get = await serve(behindCloudFront, (req, res) => {
+      cacheHost().revalidateTag("posts", "purge");
+      res.writeHead(200);
+      res.end();
+    });
+
+    const res = await get("/api/publish", { method: "POST" });
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith(expect.stringMatching(/table unreachable/)),
+    );
+
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("a request for a cached route", () => {
   test.each([
     ["behind CloudFront or the load balancer", behindCloudFront, {}],
     ["behind the Cloudflare gateway", behindCloudflare, asked],
-  ])("gets no shared lifetime from a rule %s", async (_edge, env, headers) => {
-    const get = await serve(env, page);
+  ])("reaches the handler without its cookie %s", async (_edge, env, headers) => {
+    let seen: string | undefined = "unset";
+    const get = await serve(env, (req, res) => {
+      seen = req.headers.cookie;
+      page(req, res);
+    });
 
-    for (const personal of [{ cookie: "session=1" }, { authorization: "Bearer a" }]) {
-      const res = await get("/blog/a", { headers: { ...headers, ...personal } });
+    const res = await get("/blog/a", { headers: { ...headers, cookie: "session=1" } });
+
+    expect(seen).toBeUndefined();
+    expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
+  });
+
+  test("keeps the cookie of a write, and of a read of a route that caches nothing", async () => {
+    const seen: Record<string, string | undefined> = {};
+    const get = await serve(behindCloudFront, (req, res) => {
+      seen[`${req.method} ${req.url}`] = req.headers.cookie;
+      page(req, res);
+    });
+
+    await get("/blog/a", { method: "POST", headers: { cookie: "session=1" } });
+    await get("/account", { headers: { cookie: "session=2" } });
+
+    expect(seen).toEqual({ "POST /blog/a": "session=1", "GET /account": "session=2" });
+  });
+
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront, {}],
+    ["behind the Cloudflare gateway", behindCloudflare, asked],
+  ])(
+    "gets no shared lifetime from a rule when it carries credentials %s",
+    async (_edge, env, headers) => {
+      const get = await serve(env, page);
+
+      const res = await get("/blog/a", { headers: { ...headers, authorization: "Bearer a" } });
 
       expect(res.headers.has("cache-control")).toBe(false);
       expect(res.headers.has("cache-tag")).toBe(false);
       expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
-    }
-  });
+    },
+  );
 
   test("keeps the s-maxage its handler set itself, and tags it", async () => {
     const get = await serve(behindCloudFront, (req, res) => {
@@ -312,13 +445,76 @@ describe("a request that carries a cookie or credentials", () => {
     const res = await get("/blog/a", { headers: { cookie: "session=1" } });
 
     expect(res.headers.get("cache-control")).toBe("public, s-maxage=5");
-    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/blog/a");
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|blog,r0a1b2c3d|path:/blog/a");
+  });
+
+  test("is shaped as any other when it carries the revalidate token", async () => {
+    const get = await serve(behindCloudflare, page);
+
+    const res = await get("/blog/a", {
+      headers: { ...asked, "x-prerender-revalidate": bypassToken },
+    });
+
+    expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
+  });
+});
+
+describe("a request bypassing the cache", () => {
+  const bypass = { cookie: `theme=dark; __prerender_bypass=${bypassToken}` };
+
+  test.each([
+    ["behind CloudFront or the load balancer", behindCloudFront, {}],
+    ["behind the Cloudflare gateway", behindCloudflare, asked],
+  ])(
+    "reaches the handler with its cookie and is answered private and unstored %s",
+    async (_edge, env, headers) => {
+      let seen: string | undefined;
+      const get = await serve(env, (req, res) => {
+        seen = req.headers.cookie;
+        cacheHost().tag(["posts"]);
+        page(req, res);
+      });
+
+      const res = await get("/blog/a", { headers: { ...headers, ...bypass } });
+
+      expect(seen).toBe(bypass.cookie);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      expect(res.headers.has("cache-tag")).toBe(false);
+      expect(res.headers.has("x-ocel-cache-tag")).toBe(false);
+    },
+  );
+
+  test("replaces the lifetime the handler gave its response, which no edge may store", async () => {
+    const get = await serve(behindCloudFront, (req, res) => {
+      res.writeHead(200, { "cache-control": "public, s-maxage=5" });
+      res.end("page");
+    });
+
+    const res = await get("/blog/a", { headers: bypass });
+
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("is not bypassing when its cookie holds another token", async () => {
+    const get = await serve(behindCloudFront, page);
+
+    const res = await get("/blog/a", { headers: { cookie: "__prerender_bypass=wrong" } });
+
+    expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
+  });
+
+  test("leaves a route that caches nothing as the handler answered it", async () => {
+    const get = await serve(behindCloudFront, page);
+
+    const res = await get("/account", { headers: bypass });
+
+    expect(res.headers.has("cache-control")).toBe(false);
   });
 });
 
 describe("an origin behind no caching edge", () => {
   test("shapes nothing, and exposes no cache host for the SDK to call", async () => {
-    const get = await serve({ OCEL_CACHE_RULES: rules }, page);
+    const get = await serve({ OCEL_ROUTES: routes }, page);
 
     const res = await get("/blog/a", { headers: asked });
 
