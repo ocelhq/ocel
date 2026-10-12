@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,12 +10,44 @@ import { animatedGif, ico, notAnImage, png, svg } from "./fixture-assets.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
 const repoRoot = join(packageRoot, "..", "..", "..");
-const appRoot = join(repoRoot, "examples", "next-test");
+const adapterRoot = join(repoRoot, "frameworks", "next", "adapter");
+const appRoot = await mkdtemp(join(packageRoot, ".image-fixture-app-"));
+const nextBin = join(appRoot, "node_modules", "next", "dist", "bin", "next");
 const fixtureFile = join(packageRoot, "fixtures", "image-conformance.json");
 const port = Number(process.env.OCEL_IMAGE_FIXTURE_PORT ?? 3111);
 const origin = `http://127.0.0.1:${port}`;
 
 const BROWSER_ACCEPT = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+
+const APP_FILES = {
+  "package.json": `${JSON.stringify({ name: "image-fixture-app", private: true })}\n`,
+  "next.config.mjs": `const svg = process.env.OCEL_IMAGE_FIXTURES === "svg";
+
+export default {
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "**.allowed.example", pathname: "/img/**" }],
+    domains: ["legacy.example"],
+    dangerouslyAllowSVG: svg,
+  },
+};
+`,
+  "app/layout.jsx": `export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+`,
+  "app/image-fixtures/page.jsx": `import Image from "next/image";
+
+import photo from "./photo.png";
+
+export default function ImageFixturesPage() {
+  return <Image src={photo} alt="image fixture source" />;
+}
+`,
+};
 
 const ASSETS = {
   "public/_fixtures/photo.png": png(),
@@ -220,11 +252,11 @@ function run(command, args, options = {}) {
 }
 
 async function startServer(env) {
-  const child = spawn(
-    join(appRoot, "node_modules", ".bin", "next"),
-    ["start", "--port", String(port)],
-    { cwd: appRoot, env: { ...process.env, ...env }, stdio: "inherit" },
-  );
+  const child = spawn(process.execPath, [nextBin, "start", "--port", String(port)], {
+    cwd: appRoot,
+    env: { ...process.env, ...env },
+    stdio: "inherit",
+  });
   const stop = () =>
     new Promise((resolve) => {
       child.once("exit", resolve);
@@ -304,7 +336,7 @@ async function compiledConfig() {
 
 async function generateVariant(variant) {
   const env = { OCEL_IMAGE_FIXTURES: variant };
-  await run(join(appRoot, "node_modules", ".bin", "next"), ["build"], {
+  await run(process.execPath, [nextBin, "build"], {
     cwd: appRoot,
     env: { ...process.env, ...env },
   });
@@ -323,15 +355,25 @@ async function generateVariant(variant) {
   }
 }
 
-async function main() {
-  const require = createRequire(join(appRoot, "package.json"));
-  const nextVersion = require("next/package.json").version;
-
-  for (const [path, bytes] of Object.entries(ASSETS)) {
+async function writeApp() {
+  for (const [path, contents] of Object.entries({ ...APP_FILES, ...ASSETS })) {
     const file = join(appRoot, path);
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, bytes);
+    await writeFile(file, contents);
   }
+  const adapterRequire = createRequire(join(adapterRoot, "package.json"));
+  await mkdir(join(appRoot, "node_modules"));
+  for (const name of ["next", "react", "react-dom"]) {
+    const installed = dirname(adapterRequire.resolve(`${name}/package.json`));
+    await symlink(installed, join(appRoot, "node_modules", name), "dir");
+  }
+}
+
+async function main() {
+  await writeApp();
+  process.chdir(appRoot);
+  const require = createRequire(join(appRoot, "package.json"));
+  const nextVersion = require("next/package.json").version;
 
   await run("pnpm", ["--filter", "@framework/next-adapter", "build"], { cwd: repoRoot });
 
@@ -343,8 +385,11 @@ async function main() {
   await mkdir(dirname(fixtureFile), { recursive: true });
   await writeFile(fixtureFile, `${JSON.stringify({ next: nextVersion, variants }, null, 2)}\n`);
   console.log(`wrote ${fixtureFile}`);
-
-  await rm(join(appRoot, ".next"), { recursive: true, force: true });
 }
 
-await main();
+try {
+  await main();
+} finally {
+  process.chdir(packageRoot);
+  await rm(appRoot, { recursive: true, force: true });
+}
