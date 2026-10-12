@@ -215,10 +215,8 @@ func (c *Consumption) serve(ctx context.Context, deployed deployedConsumer, url 
 		held := &holding{}
 		stopRenewing, err := c.gather(ctx, deployed, url, held)
 		if err != nil {
+			c.giveBack(ctx, url, held.all())
 			if ctx.Err() != nil {
-				giving, given := context.WithTimeout(context.WithoutCancel(ctx), finishingBudget)
-				c.hide(giving, url, held.all(), 0)
-				given()
 				return
 			}
 			slog.Warn("receive from a queue", "queue", deployed.queue, "error", err)
@@ -237,6 +235,15 @@ func (c *Consumption) serve(ctx context.Context, deployed deployedConsumer, url 
 		}
 		c.work(ctx, deployed, messages, stopRenewing)
 	}
+}
+
+func (c *Consumption) giveBack(ctx context.Context, url string, messages []receivedMessage) {
+	if len(messages) == 0 {
+		return
+	}
+	budget, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishingBudget)
+	defer cancel()
+	c.hide(budget, url, messages, 0)
 }
 
 func (c *Consumption) gather(ctx context.Context, deployed deployedConsumer, url string, held *holding) (stop func(), err error) {

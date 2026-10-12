@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -26,11 +27,18 @@ type scriptedQueue struct {
 	extending chan struct{}
 	counts    map[string]string
 	queried   int
+	failing   func(receive int) error
 }
 
 func (q *scriptedQueue) ReceiveMessage(ctx context.Context, in *sqs.ReceiveMessageInput, _ ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
 	q.mu.Lock()
 	q.received = append(q.received, in)
+	if q.failing != nil {
+		if err := q.failing(len(q.received)); err != nil {
+			q.mu.Unlock()
+			return nil, err
+		}
+	}
 	take := min(len(q.waiting), int(in.MaxNumberOfMessages))
 	out := &sqs.ReceiveMessageOutput{Messages: append([]sqstypes.Message(nil), q.waiting[:take]...)}
 	q.waiting = q.waiting[take:]
@@ -515,4 +523,29 @@ func TestMessagesGatheredForABatchAreGivenBackWhenTheWorkerIsToldToStopBeforeThe
 	if len(given) != 3 {
 		t.Errorf("given back %v, want all three gathered messages visible at once rather than hidden for two minutes", given)
 	}
+}
+
+func TestMessagesGatheredForABatchAreGivenBackWhenAReceiveFailsBeforeTheBatchFills(t *testing.T) {
+	t.Parallel()
+
+	queue := &scriptedQueue{
+		waiting: []sqstypes.Message{message("a"), message("b"), message("c")},
+		failing: func(receive int) error {
+			if receive == 2 {
+				return errors.New("ServiceUnavailable")
+			}
+			return nil
+		},
+	}
+	c := consumption(consumingEngine(queue, provider.ConsumerSpec{Name: "tally", Worker: "media", Exclusive: true, Concurrency: 1, Batch: &provider.BatchPolicy{Size: 12, Timeout: time.Minute}}), queue, nothingDelivered)
+
+	runUntil(t, c, func() bool {
+		given := map[string]bool{}
+		for _, entry := range queue.extensions() {
+			if entry.VisibilityTimeout == 0 {
+				given[aws.ToString(entry.ReceiptHandle)] = true
+			}
+		}
+		return len(given) == 3
+	})
 }
