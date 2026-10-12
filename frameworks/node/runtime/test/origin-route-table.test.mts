@@ -134,6 +134,17 @@ describe("an origin handed a route table", () => {
     expect(res.headers.get("location")).toBe("/new?page=2");
   });
 
+  test("carries the query over before the fragment a location states", async () => {
+    const get = await serve(
+      newRouteTable({ redirects: [{ src: "/old", location: "/new#section?x", status: 307 }] }),
+      page,
+    );
+
+    const res = await get("/old?page=2");
+
+    expect(res.headers.get("location")).toBe("/new?page=2#section?x");
+  });
+
   test("keeps the query a location states of its own", async () => {
     const get = await serve(
       newRouteTable({ redirects: [{ src: "/old", location: "/new?from=old", status: 307 }] }),

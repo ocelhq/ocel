@@ -320,6 +320,18 @@ describe("a redirect the route table states", () => {
     headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }],
   });
 
+  it("carries the query over before the fragment its location states", async () => {
+    const { serve } = setup(
+      undefined,
+      undefined,
+      newRouteTable({ redirects: [{ src: "/old", location: "/new#section", status: 307 }] }),
+    );
+
+    const res = await serve(new Request("https://shop.example.com/old?x=1"));
+
+    expect(res.headers.get("location")).toBe("/new?x=1#section");
+  });
+
   it("is answered by the gateway itself, with the header rules, and the query carried over", async () => {
     const { serve, calls, forwarded } = setup(undefined, undefined, redirecting);
 

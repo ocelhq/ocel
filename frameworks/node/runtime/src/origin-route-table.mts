@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type http from "node:http";
 import { type Bypass, readBypass, revalidateHeader } from "@platform/edge-contract/bypass";
 import {
+  addRedirectQuery,
   type CacheRule,
   type CompiledRouteTable,
   compileOcelRouteTable,
@@ -117,7 +118,7 @@ function answerRedirect(
   query: string,
 ): void {
   applyHeaderRules(res, routed);
-  const location = redirect.location.includes("?") ? redirect.location : redirect.location + query;
+  const location = addRedirectQuery(redirect.location, query);
   res.writeHead(redirect.status, { location });
   res.end();
 }
