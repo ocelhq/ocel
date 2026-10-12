@@ -76,21 +76,21 @@ func TestABuiltAppRequiresWhatItsBuildOutputUsesWhateverItsFramework(t *testing.
 		want        []string
 	}{
 		{
-			name:      "a Next build that declares no ISR and writes no image config",
+			name:      "a Next build that declares no revalidation and writes no image config",
 			framework: "next",
 			hosting:   buildoutput.Hosting{Framework: "next"},
 		},
 		{
-			name:        "a Next build that writes an image config but declares no ISR",
+			name:        "a Next build that writes an image config but declares no revalidation",
 			framework:   "next",
 			hosting:     buildoutput.Hosting{Framework: "next"},
 			imageConfig: true,
 			want:        []string{fake.FeatureCache, fake.FeatureImages},
 		},
 		{
-			name:      "a SvelteKit build that declares ISR",
+			name:      "a SvelteKit build that declares revalidation",
 			framework: "sveltekit",
-			hosting:   buildoutput.Hosting{Framework: "sveltekit", ISR: true},
+			hosting:   buildoutput.Hosting{Framework: "sveltekit", Needs: revalidating},
 			want:      []string{fake.FeatureCache},
 		},
 	} {
@@ -138,7 +138,7 @@ func declaresISR(t *testing.T, app, framework string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: framework, ISR: true})
+	raw, err := json.Marshal(buildoutput.Hosting{Version: buildoutput.HostingVersion, Framework: framework, Needs: revalidating})
 	if err != nil {
 		t.Fatal(err)
 	}

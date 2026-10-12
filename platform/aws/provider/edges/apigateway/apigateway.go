@@ -136,7 +136,7 @@ func (p *apiGateway) Kind() edge.Kind { return Kind }
 
 func (p *apiGateway) Facts() edge.Facts {
 	return edge.Facts{
-		Supported: []edge.Need{edge.NeedStreaming},
+		Supported: []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
 	}
 }
 

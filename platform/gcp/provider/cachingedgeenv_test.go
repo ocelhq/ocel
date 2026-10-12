@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -29,7 +30,7 @@ func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) 
 	}
 }
 
-func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsReleaseAndItsCacheRules(t *testing.T) {
+func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	front, err := p.Edges().Open(alb.Kind, nil)
@@ -37,13 +38,11 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsReleaseAndItsCacheR
 		t.Fatal(err)
 	}
 	token := naming.NewReleaseToken("b1", "f1")
-	rules := []edge.CacheRule{{Path: "/blog/*", Revalidate: 60, Expire: 600}}
 	spec := nextSpec()
 	spec.Edge = front
 	spec.Ref.Name.Release = token
 	spec.App.Framework = buildoutput.FrameworkSvelteKit
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkSvelteKit
-	spec.App.Cache = rules
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
@@ -52,9 +51,6 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsReleaseAndItsCacheR
 	env := envOf(server.created[0].Template.Containers[0])
 	if env[edge.ReleaseTokenVar] != token.String() {
 		t.Errorf("the service reads %s=%q, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], token)
-	}
-	if want := edge.EncodeCacheRules(rules); env[edge.CacheRulesVar] != want {
-		t.Errorf("the service reads %s=%q, want %q", edge.CacheRulesVar, env[edge.CacheRulesVar], want)
 	}
 	if env[edge.OriginFreshOnlyVar] != "1" {
 		t.Errorf("the service reads %s=%q, want 1: it sits behind a cache", edge.OriginFreshOnlyVar, env[edge.OriginFreshOnlyVar])
@@ -123,5 +119,22 @@ func TestANextServiceBehindNoCachingEdgeServesStalePages(t *testing.T) {
 				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it revalidates a stale page", edge.OriginFreshOnlyVar, got)
 			}
 		})
+	}
+}
+
+func TestANodeServiceWithAnOcelRouteTableIsToldWhereItsImageHoldsIt(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	spec := nextSpec()
+	spec.App.Framework = buildoutput.FrameworkNode
+	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
+	spec.App.OcelRoutes = &provider.RoutingSpec{RootFunction: "index"}
+
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	if got, want := envOf(server.created[0].Template.Containers[0])[edge.RoutesVar], "/ocel/app/"+edge.OcelRoutesFile; got != want {
+		t.Errorf("the service reads %s=%q, want %q", edge.RoutesVar, got, want)
 	}
 }

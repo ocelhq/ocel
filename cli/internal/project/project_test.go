@@ -1124,7 +1124,7 @@ export default {
   allowDegraded: ["edge-middleware", "isr"],
 };
 `,
-			wantErr: []string{`has an invalid "allowDegraded"`, `"isr" is not a need`, "edge-middleware, edge-runtime, ppr-resume, edge-cache, streaming"},
+			wantErr: []string{`has an invalid "allowDegraded"`, `"isr" is not a need`, "edge-middleware, edge-runtime, ppr-resume, edge-cache, streaming, revalidation"},
 		},
 		{
 			name: "rejects a registry with no server, which names nowhere to push",

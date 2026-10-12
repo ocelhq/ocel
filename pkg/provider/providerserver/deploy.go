@@ -1163,7 +1163,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err != nil {
 				return err
 			}
-			staged, functions, err := r.stageFunctions(ctx, entry, pack, facts.OriginDispatch)
+			staged, functions, err := r.stageFunctions(ctx, entry, pack, facts.OriginTable())
 			if err != nil {
 				return err
 			}
@@ -1201,12 +1201,12 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Values:                    values,
 					Grants:                    grants,
 					Routing:                   facts.OriginDispatch,
+					OcelRoutes:                facts.OcelRoutes,
 					EdgeRouteTable:            facts.EdgeRouteTable,
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
 					Static:                    facts.Static,
-					Cache:                     facts.Cache,
 					Guard:                     facts.Guard,
 					PreviewGate:               r.appPreviewGate(),
 					VendorState:               pack.VendorState,
@@ -1586,7 +1586,6 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 	record := router.ReleaseRecord{
 		RouteTable:           routeTable,
 		Static:               facts.Static,
-		Cache:                facts.Cache,
 		App:                  entry.App,
 		Framework:            entry.Manifest.GetFramework().GetName(),
 		Release:              r.spec.Releases[entry.App],

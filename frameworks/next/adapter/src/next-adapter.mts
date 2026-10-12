@@ -533,6 +533,7 @@ const adapter = {
       ...(cachedRoutes.length > 0 && {
         "edge-cache": { count: cachedRoutes.length },
       }),
+      revalidation: { count: cachedRoutes.length },
       ...(streamedRoutes.length > 0 && {
         streaming: { count: streamedRoutes.length },
       }),
@@ -544,7 +545,6 @@ const adapter = {
       rootFunction,
       routeTable: "next",
       static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
-      isr: true,
       needs,
     });
 

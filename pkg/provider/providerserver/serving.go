@@ -36,14 +36,21 @@ type AppServingInput struct {
 type AppServing struct {
 	RootFunction   string
 	OriginDispatch *provider.RoutingSpec
+	OcelRoutes     *provider.RoutingSpec
 	EdgeRouteTable *provider.EdgeRouteTable
 	Guard          *provider.OriginGuard
 	ISR            *provider.ISRSpec
 	Bytecode       *provider.BytecodeSpec
 	AssetPrefix    string
 	Static         *edge.Static
-	Cache          []edge.CacheRule
 	Prerenders     bool
+}
+
+func (s AppServing) OriginTable() *provider.RoutingSpec {
+	if s.OcelRoutes != nil {
+		return s.OcelRoutes
+	}
+	return s.OriginDispatch
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
@@ -58,7 +65,6 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if present {
 		facts.RootFunction = hosting.RootFunction
 		facts.Static = hosting.Static
-		facts.Cache = hosting.Cache
 	}
 	uses, err := buildUses(q.Root, q.App, q.Framework, hosting, present)
 	if err != nil {
@@ -80,7 +86,11 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 			if facts.EdgeRouteTable, err = locateRouteTable(q.Coordinate, routing); err != nil {
 				return AppServing{}, err
 			}
-		} else {
+		}
+		switch {
+		case routing != nil && routing.RouteTable.Format == edge.RouteTableOcel:
+			facts.OcelRoutes = routing
+		case !q.EdgeRunsCode:
 			facts.OriginDispatch = routing
 		}
 	}
@@ -120,6 +130,11 @@ func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*
 	if err != nil {
 		return nil, fmt.Errorf("read the route table %s routes by: %w", q.App, err)
 	}
+	if hosting.RouteTable == edge.RouteTableOcel {
+		if err := refuseOcelRoutes(q.App, hosting, raw); err != nil {
+			return nil, err
+		}
+	}
 	return &provider.RoutingSpec{
 		RootFunction: hosting.RootFunction,
 		RouteTable:   router.RouteTable{Format: hosting.RouteTable, Table: raw},
@@ -128,6 +143,25 @@ func routingFor(q AppServingInput, hosting buildoutput.Hosting, present bool) (*
 
 var routeTableFiles = map[edge.RouteTableFormat]string{
 	edge.RouteTableNext: edge.NextRouteTableFile,
+	edge.RouteTableOcel: edge.OcelRoutesFile,
+}
+
+func refuseOcelRoutes(app string, hosting buildoutput.Hosting, raw []byte) error {
+	routes, err := edge.ReadOcelRoutes(raw)
+	if err != nil {
+		return refusal.Refuse(refusal.CodeInvalid, "the %s of app %s cannot be read: %v; rebuild the app", edge.OcelRoutesFile, app, err)
+	}
+	if functions := routes.Functions(); !slices.Equal(functions, []string{hosting.RootFunction}) {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the %s of app %s sends requests to the functions %q, and this CLI serves a node build from its root function %q alone; rebuild the app",
+			edge.OcelRoutesFile, app, functions, hosting.RootFunction)
+	}
+	if _, declared := hosting.Needs[edge.NeedRevalidation]; routes.HasCachedRoute() && !declared {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the %s of app %s caches a route, and its %s does not declare the %s need that purges it; rebuild the app",
+			edge.OcelRoutesFile, app, buildoutput.HostingFile, edge.NeedRevalidation)
+	}
+	return nil
 }
 
 func withoutSlash(prefix string) string {

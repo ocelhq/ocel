@@ -118,6 +118,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if values, err = mergeValues(fn.Name, cachingEdgeValues, values, newCachingEdgeEnv(spec)); err != nil {
 			return nil, err
 		}
+		if values, err = mergeValues(fn.Name, ocelRoutesValues, values, newOcelRoutesEnv(spec)); err != nil {
+			return nil, err
+		}
 		served := serving{
 			service:          service,
 			image:            fn.Image,
@@ -518,6 +521,7 @@ const (
 	specValues        = "the environment its own spec names"
 	runtimeValues     = "the runtime environment Ocel gives it"
 	cachingEdgeValues = "the caching edge in front of it"
+	ocelRoutesValues  = "its route table"
 	nextValues        = "the Next runtime"
 	cdnPurgeValues    = "Cloud CDN purging"
 )

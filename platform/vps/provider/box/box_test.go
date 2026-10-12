@@ -463,8 +463,8 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 	if facts.CredentialScope != sshScope {
 		t.Errorf("Facts().CredentialScope = %q, want the ssh destination %q it is reached at", facts.CredentialScope, sshScope)
 	}
-	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming}) {
-		t.Errorf("Facts().Supported = %v, want streaming alone", facts.Supported)
+	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming, edge.NeedRevalidation}) {
+		t.Errorf("Facts().Supported = %v, want streaming and revalidation alone", facts.Supported)
 	}
 }
 

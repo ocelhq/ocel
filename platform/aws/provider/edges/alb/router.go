@@ -25,7 +25,7 @@ func (r Router) Kind() router.Kind { return Kind }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
-		Supported:                   []edge.Need{edge.NeedStreaming},
+		Supported:                   []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
 		ReachesContainers:           true,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,

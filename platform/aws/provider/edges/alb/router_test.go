@@ -237,8 +237,8 @@ func TestAClaimBeforeAnyContainerAppDeployedBehindCloudflareIsNotReady(t *testin
 
 func TestTheALBRouterServesStreamingAndNoNeedThatRunsCodeAtTheEdge(t *testing.T) {
 	facts := newTestRouter(newFakeAWS()).Facts()
-	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming}) {
-		t.Errorf("Facts().Supported = %v, want streaming alone: Cloudflare forwards to the balancer and runs none of the edge's code for these apps", facts.Supported)
+	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming, edge.NeedRevalidation}) {
+		t.Errorf("Facts().Supported = %v, want streaming and revalidation alone: Cloudflare forwards to the balancer and runs none of the edge's code for these apps", facts.Supported)
 	}
 	if !facts.ReachesContainers || facts.ReachesFunctions {
 		t.Errorf("Facts() = %+v, want containers reached and no function", facts)

@@ -20,10 +20,11 @@ const (
 	NeedPPRResume      Need = "ppr-resume"
 	NeedEdgeCache      Need = "edge-cache"
 	NeedStreaming      Need = "streaming"
+	NeedRevalidation   Need = "revalidation"
 )
 
 func AllNeeds() []Need {
-	return []Need{NeedEdgeMiddleware, NeedEdgeRuntime, NeedPPRResume, NeedEdgeCache, NeedStreaming}
+	return []Need{NeedEdgeMiddleware, NeedEdgeRuntime, NeedPPRResume, NeedEdgeCache, NeedStreaming, NeedRevalidation}
 }
 
 func CodeNeeds() []Need {
