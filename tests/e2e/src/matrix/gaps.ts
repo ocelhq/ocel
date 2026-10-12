@@ -493,7 +493,7 @@ export const gaps: Gap[] = [
   {
     id: "go-image-built-from-the-app-path-alone",
     reason:
-      "a container app's image is built from its path alone, and the Go fixtures' module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
+      "a container app's image is built from its path alone, and the Go fixtures replace ocel.dev with the repository's sdk by a path outside it, so go build in the image finds no sdk",
     issue: 1550,
     where: [
       {
