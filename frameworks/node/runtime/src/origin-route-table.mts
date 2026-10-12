@@ -102,7 +102,6 @@ function routeRequest(origin: Origin, req: http.IncomingMessage, pathname: strin
 
 function applyHeaderRules(res: http.ServerResponse, routed: RoutedRequest): void {
   for (const [name, value] of Object.entries(routed.headers)) {
-    if (name === "cache-control" && routed.cacheRule) continue;
     res.setHeader(name, value);
   }
 }

@@ -64,20 +64,15 @@ describe("an origin handed a route table", () => {
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
 
-  test("leaves cache-control to the cache rule of a cached route, and sets it on a route that caches nothing", async () => {
-    const get = await serve(
-      newRouteTable({
-        headers: [{ src: "/(.*)", headers: { "cache-control": "public, max-age=3" } }],
-      }),
-      page,
-      { OCEL_RELEASE_TOKEN: "r0a1b2c3d" },
-    );
-
-    const cached = await get("/blog/a");
-    const uncached = await get("/account");
-
-    expect(cached.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
-    expect(uncached.headers.get("cache-control")).toBe("public, max-age=3");
+  test("refuses to boot with a header rule that sets a cache lifetime, which only a cache rule gives", () => {
+    for (const name of ["cache-control", "CDN-Cache-Control", "surrogate-control"]) {
+      const table = newRouteTable({
+        headers: [{ src: "/(.*)", headers: { [name]: "s-maxage=60" } }],
+      });
+      expect(() => useOriginRouteTable({ OCEL_ROUTE_TABLE: writeRouteTable(table) }), name).toThrow(
+        /route table/,
+      );
+    }
   });
 
   test("redirects the first rule that matches, with the groups of its pattern", async () => {

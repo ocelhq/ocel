@@ -1411,6 +1411,84 @@
           "function": "index"
         }
       }
+    },
+    {
+      "reason": "a header rule setting cache-control",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "Cache-Control": "public, s-maxage=60"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header rule setting cdn-cache-control",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "cdn-cache-control": "public, s-maxage=60"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header rule setting surrogate-control",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "Surrogate-Control": "public, s-maxage=60"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
     }
   ]
 }
