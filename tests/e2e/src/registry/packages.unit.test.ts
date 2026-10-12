@@ -22,13 +22,13 @@ describe("registryPackages", () => {
 
   it("names one package per app a registry cell deploys, however many fixtures share it", () => {
     const shared = [
-      fixture("deploy/one", { apps: ["web"], checks: [], on: { vps: [registry] } }),
-      fixture("deploy/two", {
+      fixture("deploy/node", { apps: ["web"], checks: [], on: { vps: [registry] } }),
+      fixture("deploy/workspace", {
         apps: ["web", "api"],
         checks: [],
         on: { vps: [defaults, registry] },
       }),
-      fixture("deploy/three", { apps: ["worker"], checks: [], on: { vps: [defaults] } }),
+      fixture("deploy/go", { apps: ["worker"], checks: [], on: { vps: [defaults] } }),
     ];
     expect(registryPackages(shared, "vps")).toEqual([
       { org: "ocelhq", name: "journey-vps/web", deployed: false },
@@ -38,7 +38,7 @@ describe("registryPackages", () => {
 
   it("names a package after the app as the CLI sanitizes it into an image repository", () => {
     const shouting = [
-      fixture("deploy/one", { apps: ["Api_Server"], checks: [], on: { vps: [registry] } }),
+      fixture("deploy/node", { apps: ["Api_Server"], checks: [], on: { vps: [registry] } }),
     ];
     expect(registryPackages(shouting, "vps")).toEqual([
       { org: "ocelhq", name: "journey-vps/api-server", deployed: false },
@@ -47,18 +47,18 @@ describe("registryPackages", () => {
 
   it("marks deployed the package of each app a registry cell passed its deploy step with", () => {
     const pair = [
-      fixture("deploy/two", {
+      fixture("deploy/workspace", {
         apps: ["web", "api"],
         checks: [],
         on: { vps: [defaults, registry] },
       }),
     ];
     const results = [
-      result("deploy/two/web", "deploy", "passed"),
-      result("deploy/two/api", "deploy", "passed"),
-      result("deploy/two-registry/web", "deploy", "passed"),
-      result("deploy/two-registry/api", "deploy", "failed"),
-      result("deploy/two-registry/api", "destroy", "passed"),
+      result("deploy/workspace/web", "deploy", "passed"),
+      result("deploy/workspace/api", "deploy", "passed"),
+      result("deploy/workspace-registry/web", "deploy", "passed"),
+      result("deploy/workspace-registry/api", "deploy", "failed"),
+      result("deploy/workspace-registry/api", "destroy", "passed"),
     ];
     expect(registryPackages(pair, "vps", results)).toEqual([
       { org: "ocelhq", name: "journey-vps/web", deployed: true },

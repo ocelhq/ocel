@@ -151,7 +151,7 @@ describe("the steps a cell walks through", () => {
   });
 
   it("redeploys a cell that asks to only where the lane's target keeps releases", () => {
-    const kept = one("kv/node", { redeploys: "where-releases-are-kept" });
+    const kept = one("sdk/node", { redeploys: "where-releases-are-kept" });
     expect(planOf([kept]).cells[0]?.phases).toEqual([
       "deploy",
       "verify",
@@ -268,8 +268,8 @@ describe("what a lane is asked to run", () => {
 
   it("samples a group when sampled, and runs all of it for every cell", () => {
     const grouped = [
-      one("deploy/a", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
-      one("deploy/b", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
+      one("deploy/go", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
+      one("deploy/rust", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
     ];
     expect(cellsOf(planOf(grouped))).toHaveLength(4);
     const sampled = planOf(grouped, {
@@ -581,10 +581,10 @@ describe("a matrix that cannot be planned", () => {
   it("refuses a sample group with two representatives", () => {
     const represents = (name: string) =>
       one(name, { sample: { group: "g", representative: true } });
-    expect(() => planOf([represents("deploy/a"), represents("deploy/b")])).toThrow(
-      /the deploy\/g group is represented by both deploy\/a and deploy\/b/,
+    expect(() => planOf([represents("deploy/go"), represents("deploy/rust")])).toThrow(
+      /the deploy\/g group is represented by both deploy\/go and deploy\/rust/,
     );
-    expect(() => planOf([represents("deploy/a"), represents("sdk/b")])).not.toThrow();
+    expect(() => planOf([represents("deploy/go"), represents("sdk/rust")])).not.toThrow();
   });
 
   it("refuses a variant that calls itself the default", () => {
@@ -596,5 +596,18 @@ describe("a matrix that cannot be planned", () => {
   it("refuses a fixture path outside the concerns", () => {
     expect(() => one("console/node")).toThrow(/console\/node is no fixture path/);
     expect(() => one("deploy/node/web")).toThrow(/is no fixture path/);
+  });
+
+  it("refuses a concern beyond deploy, sdk, lifecycle and iac", () => {
+    for (const name of ["kv/node", "tasks/go", "prerender/next", "pre-build/node"]) {
+      expect(() => one(name)).toThrow(/is no fixture path: <deploy\|lifecycle\|sdk\|iac>/);
+    }
+  });
+
+  it("refuses an app its concern does not hold, and says to extend the one it does", () => {
+    expect(() => one("sdk/node-kv")).toThrow(
+      /sdk holds one app per framework \(go, next, node, python, rust, sveltekit, workspace\): extend sdk\/<framework>/,
+    );
+    expect(() => one("lifecycle/node")).toThrow(/lifecycle holds next/);
   });
 });
