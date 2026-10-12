@@ -4,7 +4,7 @@ description: Application defined Infrastructure
 icon: BookOpenIcon
 ---
 
-The Ocel SDK lets you define the infrastructure your app needs as variables in that app. Declare a resource once in a [discovery folder](/docs/configuration#discoverypaths), then import it wherever you use it.
+Declare a resource once in a [discovery folder](/docs/configuration#discoverypaths), then import it wherever you use it. The declaration is the provisioning step.
 
 ```ts title="resources/index.ts"
 import { postgres } from "ocel/postgres";
@@ -26,47 +26,6 @@ app.get("/documents", async (_req, res) => {
 app.listen(3000);
 ```
 
-This is not exactly a new concept. Infrastructure from code (IfC) has been around for a while now. Each implementation, however, differs slightly. Let's break down ours.
-
-## How it works
-
-There's generally two ways to approach IfC:
-
-- Static analysis: parse the code, traverse the AST, find resource declarations
-- Code execution: run the code, SDKs make RPC calls to declare themselves
-
-Ocel declares resources with approach two. Rather than running your whole app, it runs only the configured discovery folders, so the code that executes is exactly the code you chose to put there.
-
-<Callout>
-  FYI: Tools like [Encore](https://encore.dev) use approach one, while others
-  like [Nitric](https://nitric.io/docs) also use the second.
-</Callout>
-
-What the flow looks like, when you call `postgres("main")`, is this:
-
-```bash
-# (simplified)
-ocel dev / deploy / preview -> starts an rpc server
-    |
-    |
-(runs the discovery folders)
-postgres("main")
-    |
-    |
-rpc DeclareResource { ... }
-    |
-    |
-resources collected
-    |
-    |
-dev:    resolved locally, app started with the bindings injected
-deploy: provisioned in your account, app shipped with the bindings injected
-```
-
-We call this process of running your declarations to collect resource definitions `discovery`.
-
-When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this is abstracted from you and happens in one continuous flow. You generally don't have to think about it.
-
 <Files>
   <Folder name="resources" defaultOpen>
     <File name="index.ts" />
@@ -78,56 +37,49 @@ When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this 
   <File name="package.json" />
 </Files>
 
-<Callout>
-  TIP: The CLI reads the discovery folder's language from its source files,
-  rather than from a manifest. The default and monorepo configuration live under
-  [`discovery.paths`](/docs/configuration#discoverypaths).
-</Callout>
+## How it works
 
-A discovery folder does not have to be TypeScript. A folder of `.go` files is a Go package: put `var DB = ocel.Postgres("main")` in it, import [`ocel.dev`](https://pkg.go.dev/ocel.dev), and discovery generates a `main` that imports the package and nothing else, under the `.ocel/` of the module the nearest `go.mod` above the folder names, then runs it there with `go run`. Your app's own `main` is never built, and your `go.work` is left alone.
+`ocel dev`, `ocel deploy` and `ocel preview` run only your discovery folders, never your app. Each declaration reports itself to the CLI, which provisions the resources (in containers under `ocel dev`, in your account on deploy), then starts or ships the app with their bindings. This pass is **discovery**.
 
-A folder of `.py` files is a package. Put `db = postgres("main")` in its `__init__.py`, install [`ocel`](https://pypi.org/project/ocel/), and discovery imports the folder as a package from the nearest `pyproject.toml` or `requirements.txt` above it, through a script it writes under that project's `.ocel/`. The interpreter is the project's own `.venv` when it has one. Your app's `main.py` is never run, and the folder travels with the app into its artifact so the same `from resources import db` resolves once deployed.
+```bash
+ocel dev / deploy / preview    starts a local RPC server
+  └─ runs the discovery folders
+       └─ postgres("main")  →  Declare { postgres "main" }
+  └─ provisions what was declared
+  └─ starts or ships the app with the bindings
+```
 
-Rust needs no discovery folder, and declares from the app crate itself. Add [`ocel-sdk`](https://crates.io/crates/ocel-sdk), derive `ocel::Resources` on a struct whose fields are `ocel::Postgres` and `ocel::Env` on a struct whose fields are the variables your app reads, then write `#[ocel::main]` above your `main` and take the values with `Infra::load()?` and `Env::load()?`. Each derive registers what its struct declares at link time rather than running any file, so discovery is your own binary: `cargo run` of the crate the config names, from that crate's workspace root. `#[ocel::main]` posts everything the binary links and returns before the body of your `main` ever runs. The CLI hands the binary that workspace root as `OCEL_SOURCE_ROOT`, so a declaration in a file cargo compiled through a relative path still names an absolute file.
+The CLI reads a folder's language from its source files:
 
-### The magic, distilled
+| Language | Install | Discovery runs |
+| --- | --- | --- |
+| TypeScript | [`ocel`](https://www.npmjs.com/package/ocel) | the folder's files |
+| Go | [`ocel.dev`](https://pkg.go.dev/ocel.dev) | a generated `main` that imports the folder's package, with `go run` under the `.ocel/` of the nearest `go.mod`. Your `main` and `go.work` are untouched. |
+| Python | [`ocel`](https://pypi.org/project/ocel/) | the folder imported as a package from the nearest `pyproject.toml` or `requirements.txt`, using the project's `.venv` when present. The folder ships with the app, so `from resources import db` resolves once deployed. |
+| Rust | [`ocel-sdk`](https://crates.io/crates/ocel-sdk) | your own binary (`cargo run` of the crate the config names). No discovery folder: see below. |
 
-As magical as it may be made to seem, put plainly, the SDK combines the following steps into one:
-
-- Resource definition (usually separate IaC code)
-- Resource creation
-- Resource binding
-
-It sees what resources your app declares, sends that to the CLI, which provisions, and injects the outputs of provisioning as bindings the SDK understands.
+Rust declares from the app crate. Derive `ocel::Resources` on a struct of resources and `ocel::Env` on a struct of variables, put `#[ocel::main]` on `main`, and read them with `Infra::load()?` and `Env::load()?`. During discovery `#[ocel::main]` reports what the binary links and returns before your `main` body runs.
 
 ## Gotchas
 
-Building software is making trade-offs. Going with code execution for declarations avoids building an AST parser for each language we support (which comes with its own set of problems, believe me!). Running only the discovery folders avoids the other half of the trade: your server, migrations and startup hooks never run at deploy time.
-
-That leaves two constraints.
-
 ### Define, don't read
 
-The discovery folder runs before anything exists. Declaring a resource there is fine. Reading from it is not.
+Discovery runs before anything exists. Declare in the discovery folder; read everywhere else.
 
 ```ts title="resources/index.ts"
-import { postgres } from "ocel/postgres";
-
 export const db = postgres("main");
 
-console.log(db.connectionString);
+console.log(db.connectionString); // fails: not provisioned yet
 ```
-
-Anything outside the discovery folders only runs once the app starts, so it can read freely:
 
 ```ts title="src/server.ts"
 import { db } from "../resources";
 
-console.log(db.connectionString);
+console.log(db.connectionString); // fine
 ```
 
 ### An app binds what it imports
 
-On deploy, each app is granted a resource only if that app imports the file declaring it. Ocel follows the app's import graph to decide this, so a resource declared in a discovery folder that no app imports is provisioned but bound to nothing. Reaching it at runtime fails with a missing binding error.
+On deploy, an app is bound only to the resources declared in files it imports. A resource no app imports is provisioned but bound to nothing, and reaching it fails with a missing binding error.
 
-The same walk needs to resolve every import statically. An app that reaches a project file through a dynamic `import()` or `require()` with a computed path refuses to deploy rather than guess which resources it uses.
+An app that imports a project file through a dynamic `import()` or `require()` with a computed path is refused, since its resources cannot be resolved.

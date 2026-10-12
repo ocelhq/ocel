@@ -3,8 +3,7 @@ title: Topic
 description: Messages every consumer of the topic receives.
 ---
 
-A topic is where your app sends messages. Each consumer is declared on the topic with a name and
-the function that handles a message, and every consumer receives every message sent.
+Every consumer of a topic receives every message sent to it.
 
 <Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
@@ -68,7 +67,7 @@ async def audit(order: dict, ctx: ocel.RunContext) -> None:
 <Tab value="Rust">
 
 ```rust title="src/main.rs"
-#[derive(Clone, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct Order {
     id: String,
 }
@@ -88,3 +87,45 @@ async fn audit(order: Order, _run: &ocel::Run) -> Result<(), ocel::RunError> {
 </Tab>
 
 </Tabs>
+
+## Sending
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts
+const messageId = await orders.send({ id: "o_123" });
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go
+messageID, err := resources.Orders.Send(ctx, resources.Order{ID: "o_123"})
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python
+message_id = orders.send({"id": "o_123"})
+```
+
+`send_async` is the awaitable twin.
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust
+let message_id = resources.orders.send(Order { id: "o_123".into() }).await?;
+```
+
+</Tab>
+
+</Tabs>
+
+A payload is at most 256 KiB of JSON. Send options: `delay` (up to 30 days), `idempotencyKey`, `key` (orders the messages of an ordered topic) and `lane`.

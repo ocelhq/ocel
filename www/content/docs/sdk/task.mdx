@@ -3,8 +3,7 @@ title: Task
 description: Background work, run once per trigger.
 ---
 
-A task is a named function your app triggers to run in the background. Declaring it is the whole
-setup: the deploy provisions what runs it.
+A task is a named function the app triggers to run in the background, once per trigger.
 
 <Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
@@ -60,7 +59,7 @@ async def resize(image: dict, ctx: ocel.RunContext) -> int:
 <Tab value="Rust">
 
 ```rust title="src/main.rs"
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Image {
     url: String,
 }
@@ -74,3 +73,45 @@ async fn resize(image: Image, _run: &ocel::Run) -> Result<usize, ocel::RunError>
 </Tab>
 
 </Tabs>
+
+## Triggering
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts
+const run = await resize.trigger({ url }, { delay: "5m" });
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go
+run, err := resources.Resize.Trigger(ctx, resources.Image{URL: url}, ocel.Delay(5*time.Minute))
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python
+run = resize.trigger({"url": url}, delay=timedelta(minutes=5))
+```
+
+`trigger_async` is the awaitable twin.
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust
+let run = resize.trigger(Image { url }).delay(Duration::from_secs(300)).await?;
+```
+
+</Tab>
+
+</Tabs>
+
+`run.id` (`run.ID` in Go) names the run. `delay` is at most 30 days, and a payload at most 256 KiB of JSON. Other trigger options: `ttl`, `idempotencyKey`, `debounce`, `key` (orders the runs of an `ordered` task), `lane`, `maxAttempts`, `tags` and `metadata`. `batchTrigger` starts several runs in one call.

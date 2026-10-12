@@ -3,14 +3,136 @@ title: Next.js
 description: Deploy a Next.js app.
 ---
 
-Dummy content.
+```bash
+ocel deploy
+```
+
+That is the whole setup. The CLI carries Ocel's Next.js adapter, so there is nothing to install
+and nothing to add to `next.config`. It needs Next.js 16.2.10 or later.
+
+`ocel deploy` recognises the app by a `next.config.*` or a `next` dependency, and runs its
+`build` script with the adapter. [Quick start](/docs/quick-start) walks a first deploy.
+
+## What works
+
+| Next.js feature | On AWS |
+| --- | --- |
+| App Router and Pages Router, route handlers and API routes | Yes |
+| Server Actions | Yes |
+| Streaming | Yes |
+| Static and prerendered pages, ISR with `revalidate` | Yes, cached at the edge |
+| `revalidatePath` and `revalidateTag` | Yes, purges the edge by tag |
+| `use cache` and `cacheComponents` | Yes |
+| Partial prerendering (the static shell of a `cacheComponents` page) | [Cloudflare edge](#edges), or degraded |
+| `proxy.ts` and other Node.js middleware | Yes, in the app's function |
+| Edge-runtime middleware and `runtime = "edge"` routes | [Cloudflare edge](#edges), or degraded |
+| `next/image` | Yes, through a shared optimizer |
+| Redirects, rewrites and headers in `next.config`, `basePath`, `i18n`, `trailingSlash` | Yes |
+| Draft mode | Yes |
+
+Next.js's own [deployment adapter test suite](https://nextjs.org/docs/app/api-reference/adapters/testing-adapters)
+runs against Ocel on AWS behind Cloudflare. The cases it still fails are listed in
+[`tests/next-compat/baseline-manifest.json`](https://github.com/ocelhq/ocel/blob/main/tests/next-compat/baseline-manifest.json).
+
+## Edges
+
+What a page needs from the edge in front of it decides where it can be served. The build records
+each need, and the deploy checks it against the edge:
+
+| The app has | Need | CloudFront (default) | API Gateway | [Cloudflare](/docs/providers/cloudflare) |
+| --- | --- | --- | --- | --- |
+| Prerendered or cached pages | `edge-cache` | Yes | No | Yes |
+| App Router pages | `streaming` | Yes | Yes | Yes |
+| Partially prerendered pages | `ppr-resume` | No | No | Yes |
+| Edge-runtime middleware | `edge-middleware` | No | No | Yes |
+| `runtime = "edge"` routes | `edge-runtime` | No | No | Yes |
+
+A deploy that needs something its edge does not serve is refused, naming the routes it affects.
+Move to the Cloudflare edge:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ edge: cloudflare(), dns: cloudflareDns() }),
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "aws": { "edge": "cloudflare", "dns": "cloudflare" } }
+}
+```
+
+Or keep the edge and accept the degraded behaviour with `allowDegraded`:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  allowDegraded: ["ppr-resume", "edge-runtime"],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws",
+  "allowDegraded": ["ppr-resume", "edge-runtime"]
+}
+```
+
+| Waived | What changes |
+| --- | --- |
+| `ppr-resume` | The shell and the resumed stream both come from the origin, so the shell no longer arrives first |
+| `edge-middleware` | Middleware runs in the origin's function, so every request makes the round trip before it is routed |
+| `edge-runtime` | Edge routes run in the origin's function, answering from one region |
+| `edge-cache` | Responses are cached at the origin only, so every hit crosses the network |
+| `streaming` | Responses are buffered, so the first byte waits on the last |
+
+## Functions
+
+Each route runs in an AWS Lambda function. Routes are packed together until a function reaches
+200 MiB, then the next starts, so a large app is split across several functions on its own.
+Node.js middleware runs in the first function.
+
+To serve every route from one image instead, set `compute: "container"` on the app
+([container](/docs/configuration#container)).
+
+## Caching
+
+- Prerendered pages and ISR entries are cached at the edge. On CloudFront, cache misses for them
+  go through [Origin Shield](/docs/providers/aws#cloudfront-origin-shield).
+- `revalidatePath` and `revalidateTag` purge the edge by cache tag.
+- `revalidate` does nothing on an edge-rendered route. The build warns which.
+- Ocel installs its own cache handler. A build that sets `cacheHandler` or `cacheHandlers` is
+  refused, as is one that sets `adapterPath`.
+- For the production build, Ocel sets `cacheMaxMemorySize: 0`, so every function reads the shared
+  cache rather than a copy of its own.
+- `next/image` with a `loader` other than the default, or `unoptimized: true`, deploys no optimizer, and the build
+  says so.
+
+## Previews
+
+A preview of a Next.js app is built and served like production. See
+[`ocel preview`](/docs/cli/preview).
 
 ## Environment variables
 
 Declare variables with `defineEnv` from `ocel/env/next`, in a file in your
-[discovery folder](/docs/configuration#discoverypaths), where ocel looks for declarations. A key with the `NEXT_PUBLIC_` prefix is public: Next inlines it into the browser
-bundle, so it must be class `plain`, and declaring one as `sensitive` or `secret` is a type error
-and refused at runtime.
+[discovery folder](/docs/configuration#discoverypaths), where ocel looks for declarations. A key
+with the `NEXT_PUBLIC_` prefix is public: Next inlines it into the browser bundle, so it must be
+class `plain`. Declaring one as `sensitive` or `secret` is a type error, and refused at runtime.
 
 ```ts title="resources/env.ts"
 import { defineEnv } from "ocel/env/next";
@@ -32,11 +154,13 @@ export default function Page() {
 }
 ```
 
-In the browser, `env.NEXT_PUBLIC_API_URL` is parsed through its schema and any other key throws,
-saying it is server-only. The server and the edge read the same inlined value for a public key, so a
-page renders the same on the server as in the browser. Groups work like they do in `ocel/env`.
+In the browser, `env.NEXT_PUBLIC_API_URL` is parsed through its schema, and any other key throws,
+saying it is server-only. The server and the edge read the same inlined value for a public key,
+so a page renders the same on the server as in the browser. Groups work like they do in
+`ocel/env`.
 
 Next inlines the value when it builds, so `ocel env set` on a public key needs a rebuild; under
 `ocel dev`, ocel restarts the dev server. `NEXT_PUBLIC_OCEL_URL` holds the URL the deployment is
-served from, like `OCEL_URL`: both come from the hostname the deploy serves the app on, so an app
-served on none, such as one reached only at its provider's own address, gets neither. Ocel writes nothing into your `tsconfig.json`.
+served from, like `OCEL_URL`. Both come from the hostname the deploy serves the app on, so an app
+served on none, such as one reached only at its provider's own address, gets neither. Ocel
+writes nothing into your `tsconfig.json`.

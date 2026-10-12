@@ -1,58 +1,43 @@
 ## Install
 
-`ocel` is a single static binary. Pick whichever of the three suits the machine — they
-install the same build, and each one replaces an earlier install in place.
+`ocel` is a single static binary. All three installs below ship the same build, and each replaces
+an earlier install in place.
 
 ### Installer
 
+macOS and Linux, on x86-64 and arm64:
+
 ```bash
 curl -fsSL https://ocel.dev/install.sh | sh
+curl -fsSL https://ocel.dev/install.sh | OCEL_VERSION=0.1.0 sh   # pin a version
+curl -fsSL https://ocel.dev/install.sh | OCEL_CHANNEL=next sh    # or nightly
 ```
 
-It installs into `~/.local/bin`, verifies the download against the release's
-`checksums.txt` before writing anything, and prints the line to add to your shell profile
-if `~/.local/bin` is not already on `PATH`. Pin a version with `OCEL_VERSION`:
-
-```bash
-curl -fsSL https://ocel.dev/install.sh | OCEL_VERSION=0.1.0 sh
-```
-
-Or follow a channel other than the stable releases with `OCEL_CHANNEL` — `next` takes the
-newest release candidate, `nightly` the newest nightly build:
-
-```bash
-curl -fsSL https://ocel.dev/install.sh | OCEL_CHANNEL=next sh
-```
-
-macOS and Linux, on x86-64 and arm64.
+It verifies the download against the release's `checksums.txt` before writing anything, installs
+into `~/.local/bin`, and prints the line to add to your shell profile if that isn't on `PATH`.
+`next` is the newest release candidate, `nightly` the newest nightly build.
 
 ### Homebrew
 
 ```bash
 brew install --cask ocelhq/tap/ocel
+brew upgrade --cask ocel
 ```
 
-`brew upgrade --cask ocel` moves to the newest stable release; the tap publishes no release
-candidates or nightlies.
+Stable releases only: the tap has no release candidates or nightlies.
 
 ### npm
 
 ```bash
-npm install -g @ocel/cli
+npm install -g @ocel/cli            # or @ocel/cli@next, @ocel/cli@nightly
+npm install --save-dev @ocel/cli    # pin the CLI per project
 ```
 
-`@ocel/cli@next` is the newest release candidate and `@ocel/cli@nightly` the newest
-nightly. The binary itself arrives as an optional dependency for your platform —
-`@ocel/cli-darwin-arm64`, `@ocel/cli-darwin-x64`, `@ocel/cli-linux-arm64`,
-`@ocel/cli-linux-x64` or `@ocel/cli-win32-x64` — so nothing else is downloaded. This is the
-only one of the three that covers Windows, and the only one that pins the CLI per project:
+The only install that covers Windows or pins per project. The binary comes as the optional
+dependency for your platform, such as `@ocel/cli-linux-x64`, so nothing else is downloaded.
 
-```bash
-npm install --save-dev @ocel/cli
-```
-
-`ocel` — the package your app imports for `postgres()`, `bucket()` and the config
-types — is a separate install and contains no binary:
+The `ocel` package your app imports for `postgres()`, `bucket()` and the config types is separate,
+and contains no binary:
 
 ```bash
 npm install ocel

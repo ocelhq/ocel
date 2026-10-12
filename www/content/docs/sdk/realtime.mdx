@@ -3,107 +3,204 @@ title: Realtime
 description: Typed channels that browsers subscribe to and your server publishes on.
 ---
 
-A realtime resource holds a set of channel patterns. Your app decides who may subscribe or
-publish, in rules it runs behind its own realtime handler. The transport that holds the
-sockets only checks the short-lived tokens your handler signed.
+A realtime resource is a set of channel patterns. Your app's handler authorizes each subscribe and publish and signs a short-lived token; the transport only checks the token.
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
 
 ```ts title="resources/realtime.ts"
 import { realtime } from "ocel/realtime";
+import { z } from "zod";
 
 export const rt = realtime("app", {
   authorize: async (req) => {
-    const session = await auth.api.getSession({ headers: req.headers });
+    const session = await getSession(req.headers);
     return session ? { id: session.user.id } : null;
   },
   channels: {
     "orders/:orderId": {
-      schema: OrderEvent,
+      schema: z.object({ status: z.string() }),
       subscribe: async ({ auth, params }) => ownsOrder(auth.id, params.orderId),
     },
-    status: { schema: Status, subscribe: "public" },
+    status: { schema: z.object({ text: z.string() }), subscribe: "public" },
   },
 });
+```
 
+```ts title="app/api/realtime/route.ts"
+import { createRealtimeHandler } from "ocel/realtime/next";
+import { rt } from "../../../resources/realtime";
+
+export const { GET, POST, OPTIONS } = createRealtimeHandler(rt);
+```
+
+`ocel/realtime/express` and `ocel/realtime/hono` export the same function.
+
+```ts
 await rt.publish("orders/:orderId", { params: { orderId }, body: { status: "shipped" } });
 ```
 
+</Tab>
+
+<Tab value="Go">
+
+```go title="resources/realtime.go"
+package resources
+
+import (
+	"net/http"
+
+	"ocel.dev"
+)
+
+type Caller struct {
+	ID string `json:"id"`
+}
+
+var Live = ocel.Realtime("app", ocel.RealtimeAuthorize(func(r *http.Request) (*Caller, error) {
+	return readCaller(r)
+}))
+
+type OrderEvent struct {
+	Status string `json:"status"`
+}
+
+type OrderParams struct {
+	OrderID string `realtime:"orderId"`
+}
+
+var Orders = ocel.Channel[OrderEvent, OrderParams](Live, "orders/:orderId",
+	ocel.ChannelSubscribe(func(ctx *ocel.SubscribeContext[Caller, OrderParams]) (bool, error) {
+		return ownsOrder(ctx.Auth.ID, ctx.Params.OrderID), nil
+	}),
+)
+```
+
+```go
+http.Handle("/api/realtime", resources.Live.Handler())
+
+err := resources.Orders.Publish(ctx, resources.OrderParams{OrderID: id},
+	resources.OrderEvent{Status: "shipped"})
+```
+
+`ocel.ChannelSubscribePublic()` opens a channel to anyone; `ocel.ChannelPublish(rule)` lets browsers publish.
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+from pydantic import BaseModel
+
+import ocel
+
+live = ocel.realtime("app", authorize=read_caller)
+
+
+class OrderEvent(BaseModel):
+    status: str
+
+
+@live.channel("orders/:orderId", schema=OrderEvent)
+def orders(ctx: ocel.RuleContext) -> bool:
+    return owns_order(ctx.auth.id, ctx.params["orderId"])
+```
+
+```python
+serve_realtime = live.asgi()  # or live.wsgi(); mount at /api/realtime
+
+orders.publish({"status": "shipped"}, orderId=order_id)
+```
+
+The decorated function is the subscribe rule. `subscribe="public"` opens a channel to anyone; `publish=rule` lets browsers publish. A refused publish raises `ocel.RealtimePublishError`.
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+use ocel::realtime::{Realtime, SubscribeContext};
+
+#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+struct OrderEvent {
+    status: String,
+}
+
+#[allow(non_snake_case)]
+#[derive(ocel::Channel)]
+#[ocel(realtime = "app", pattern = "orders/:orderId", event = OrderEvent, schema)]
+struct Orders {
+    orderId: String,
+}
+
+fn build_realtime() -> Realtime {
+    Realtime::builder("app")
+        .authorize(|request: Arc<ocel::realtime::Request>| async move {
+            Ok::<_, Infallible>(read_caller(&request))
+        })
+        .subscribe::<Orders>(|ctx: SubscribeContext<Caller, Orders>| async move {
+            Ok::<_, Infallible>(owns_order(&ctx.auth.id, &ctx.params.orderId))
+        })
+        .build()
+        .expect("the realtime resource this app declares")
+}
+```
+
+```rust
+let rt = build_realtime();
+let app = axum::Router::new().nest_service("/api/realtime", ocel::realtime::axum::router(rt.clone()));
+
+rt.publish(&Orders { orderId: id }, &OrderEvent { status: "shipped".into() }).await?;
+```
+
+Enable the `realtime` feature, plus `axum` for the router and `schemars` for `schema`. `#[ocel(public)]` opens a channel to anyone; `#[ocel(publish)]` plus `.publish::<C>(rule)` lets browsers publish.
+
+</Tab>
+
+</Tabs>
+
+In the browser:
+
+```ts title="app/live.ts"
+import { createRealtimeClient } from "ocel/realtime/client";
+import type { rt } from "../resources/realtime";
+
+const live = createRealtimeClient<typeof rt>({ url: "/api/realtime" });
+
+const stop = live.subscribe("orders/:orderId", { params: { orderId } }, (event) => {
+  console.log(event);
+});
+```
+
+For a Go, Python or Rust backend, run [`ocel generate`](/docs/cli/generate) and type the client with `createRealtimeClient<RealtimeResources["app"]>` from the generated `ocel-realtime.d.ts`.
+
 ## Where it runs
 
-| Target | Transport | A subscription outlives a revoked caller for at most |
+| Target | Transport | A revoked caller keeps an open subscription for at most |
 | --- | --- | --- |
-| `ocel dev` | the Ocel gateway inside `ocel dev` | the dev server's lifetime |
+| `ocel dev` | Ocel gateway inside `ocel dev` | the dev server's lifetime |
 | AWS | AppSync Events | 24 hours |
-| Google Cloud | the Ocel gateway on Cloud Run | 60 minutes |
-| VPS | the Ocel gateway in a container on the box | the next deploy |
+| Google Cloud | Ocel gateway on Cloud Run | 60 minutes |
+| VPS | Ocel gateway in a container on the box | the next deploy |
 
-Access is checked when a browser subscribes and again every time it reconnects. A
-subscription that is already open keeps receiving events until its connection ends, so
-taking a user's access away takes effect within the window above, not at once.
+Rules run on subscribe and on every reconnect, not on events to an open subscription. The browser client reconnects on its own and re-authorizes every live subscription in one request.
 
 ## On AWS
 
-Each environment gets one AppSync Event API, and each realtime resource is a channel
-namespace on it. Ocel deploys one Lambda authorizer per API: a Go function with 128 MB on
-arm64 that checks each connect and subscribe token against the resource's public key. It
-runs none of your code. It answers every request uncached, so a token is never admitted
-after it expires.
-
-- **Publishing.** Only the server publishes to AppSync. `publish` hands the event to the
-  Ocel runtime beside your app, which signs a `POST /event` with your app's own IAM role.
-  That role may connect to its API and publish to its own namespace and nothing else. A
-  browser publish goes through your handler, which runs the `publish` rule and then
-  publishes from the server.
-- **Signing key.** The first deploy mints an Ed25519 key per resource and keeps it in
-  Secrets Manager. It reaches your app through the resource's binding. Removing the
-  resource, or destroying the environment, deletes the key at once with no recovery
-  window.
-- **Connection lifetime.** AppSync closes every connection after 24 hours. The browser
-  client reconnects on its own and asks your handler to authorize every live
-  subscription again in one request, so your rules run again.
-- **Cost.** AppSync bills each publish, subscribe and delivered message as an operation,
-  plus connection minutes. The authorizer is billed per connect and subscribe, and each
-  signing key is one secret. Ocel's cost estimate prices all of these.
-
-Realtime needs AppSync and Secrets Manager permissions on the deploy credentials and on
-the boundary every app role is made under. Both live in the bootstrap stack, so an account
-bootstrapped before realtime existed has its bootstrap stack updated before its first
-realtime deploy.
+- One AppSync Event API per environment; each realtime resource is a channel namespace on it.
+- A Lambda authorizer (128 MB, arm64) checks each connect and subscribe token, uncached, so an expired token is never admitted.
+- Only the server publishes, signed with the app's IAM role, which reaches only its own namespace. A browser publish goes through your handler's `publish` rule.
+- Each resource's Ed25519 signing key is a Secrets Manager secret, deleted with no recovery window when the resource or environment goes.
+- Billed: AppSync operations and connection minutes, authorizer calls, one secret per resource. The cost estimate prices them.
+- An account bootstrapped before realtime existed has its bootstrap stack updated before the first realtime deploy.
 
 ## On Google Cloud
 
-Each environment gets one Cloud Run service running the Ocel gateway, and it serves every
-realtime resource in that environment. Browsers connect to its `run.app` address directly,
-so it takes traffic from anywhere with Cloud Run's invoker check off. The gateway admits a
-socket from any origin; the tokens your handler signs are the only check.
-
-- **Publishing.** `publish` hands the event to the Ocel runtime beside your app, which
-  posts it to the gateway's `/publish` under a token signed with the resource's key. The
-  runtime sends a publish again only when Cloud Run answered 429, no sooner than its
-  `Retry-After`, or no connection to the gateway opened, so an event is delivered at most
-  once.
-- **Keys.** The first deploy mints an Ed25519 key per resource and keeps it in Secret
-  Manager. It reaches your app through the resource's binding. The gateway reads every
-  resource's public key from one secret per environment, mounted at its latest version, so
-  adding or removing a resource changes no revision. The gateway reads that secret again
-  at least every 30 seconds.
-- **Connection lifetime.** Cloud Run ends a request after 60 minutes, and a socket is a
-  request. The browser client reconnects on its own and asks your handler to authorize
-  every live subscription again.
-- **Capacity.** The gateway runs as one instance of 1 vCPU and 1 GiB, and holds up to 950
-  sockets. It refuses the next one with 503 before it opens, keeping room for publishes,
-  and the client retries.
-- **Upgrades.** A deploy that brings a new gateway version rolls a new revision. Sockets
-  on the old revision stay open for up to 60 minutes but stop receiving events, because
-  publishes reach the new one. While the new revision starts, Cloud Run may also run a
-  second instance for a short time, and sockets on it miss events from the other. Clients
-  recover when those sockets close and reconnect.
-- **Cost.** Cloud Run bills the gateway for every second a socket is open, at its
-  request-based rate: about $70 a month if a browser is connected all the time, plus
-  requests and egress. Each key is one secret. Ocel's cost estimate prices all of these.
-
-Every realtime secret is named under one prefix, so IAM conditions confine both sides to
-them. The deploy credentials need `roles/secretmanager.editor` on the realtime secrets of
-their namespace alone ([what to grant](/docs/providers/gcp#what-to-grant)). The bootstrap
-adds the service account the gateway runs as, which may read its tier's verify keys and no
-other secret. A realtime deploy in a project bootstrapped before realtime existed is
-refused until you run the bootstrap again.
+- One Cloud Run service per environment runs the gateway for every resource. Browsers connect to its `run.app` address from any origin; the tokens are the only check.
+- A publish is retried only on 429 or when no connection opened: at most once delivery.
+- Signing keys live in Secret Manager. The gateway rereads the public keys every 30 seconds, so adding a resource rolls no revision.
+- One instance (1 vCPU, 1 GiB) holds 950 sockets; the next gets 503 and retries.
+- A gateway upgrade rolls a revision: sockets on the old one get no events until they reconnect.
+- Billed per second a socket is open: about $70 a month for one always-connected browser, plus requests and egress.
+- The deploy credentials need `roles/secretmanager.editor` on their namespace's realtime secrets ([what to grant](/docs/providers/gcp#what-to-grant)). A project bootstrapped before realtime existed is refused until you bootstrap again.

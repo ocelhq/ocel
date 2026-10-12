@@ -1,6 +1,22 @@
 ---
 title: Dev server
-description: How the SDK talks to ocel dev.
+description: What ocel dev runs for the resources you declare.
 ---
 
-Diagram goes here.
+`ocel dev -- <command>` runs discovery, starts what the app declares, then runs `<command>` with the bindings. Docker is the only prerequisite.
+
+| Resource | Runs as |
+| --- | --- |
+| Database | a `postgres` container; version `17` unless declared (`14`–`17`) |
+| KV | a `valkey/valkey` container; version `9` unless declared (`8`, `9`) |
+| Bucket | a RustFS container |
+| Topic, task | a Postgres container with pgmq, plus worker processes `ocel dev` starts |
+| Realtime | a gateway inside `ocel dev`, on a local port |
+
+## Lifecycle
+
+- **Changes.** Editing a discovery folder re-runs discovery. When the bindings change, the app restarts; otherwise it keeps running.
+- **Data.** Containers keep their data in docker volumes between runs. They stop when the last `ocel` command using them exits.
+- **Reset.** `ocel dev --reset` wipes this project's dev data and starts from empty resources. It refuses while another `ocel` command is using them.
+- **Several terminals.** A second `ocel dev` in the same project joins the running one: it shares its resources and receives its binding updates.
+- **State.** Kept under `.ocel/devresources/` in the project.

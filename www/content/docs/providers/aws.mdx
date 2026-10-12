@@ -7,13 +7,6 @@ description: Deploy to your AWS account.
 ocel init --provider aws
 ```
 
-Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
-`ocel permissions deploy` prints the policy they need. Untagged, the user or role may delete
-container images in every Ocel ECR repository of the account. Tag it with `ocel:project` set to
-the project's slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, every run of
-other characters a single `-`), and it may create, tag and delete images only in that project's
-repositories.
-
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
 import awsProvider from "ocel/providers/aws";
@@ -34,20 +27,25 @@ export default defineConfig({
 }
 ```
 
-Then:
+Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
+`ocel permissions deploy` prints the policy they need.
 
 ```bash
 ocel deploy
 ```
 
-In a terminal, a first deploy that finds no Ocel infrastructure in the account offers to run
-`ocel bootstrap production`, and carries on once it has. Nothing is asked in a script or in CI,
-so run the bootstrap there first:
+A first deploy in a terminal offers to run `ocel bootstrap production` when the account has no
+Ocel infrastructure. A script or CI is never asked, so bootstrap there first:
 
 ```bash
 ocel bootstrap production
 ocel deploy
 ```
+
+**Scope image deletes to one project.** Untagged, the deploy user or role may delete container
+images in every Ocel ECR repository of the account. Tag it `ocel:project` with the project's
+slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, each run of other characters
+a single `-`), and it may create, tag and delete images only in that project's repositories.
 
 ## Options
 
@@ -56,152 +54,25 @@ ocel deploy
 | `region` | The region to deploy into. |
 | `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap --features variables-key` makes a key ocel owns. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
-| `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
-
-## KV stores
-
-`kv("cache")` runs as an ElastiCache Valkey replication group with cluster mode off: a primary
-and a replica in another availability zone, which takes over if the primary fails. Two
-`cache.t4g.micro` nodes cost about $18.69 a month in us-east-1. The group sits in the default
-VPC's subnets, and its security group admits port 6379 from inside that VPC only, so only an app
-with `"compute": "container"` can reach it. A deploy refuses a serverless app that uses a store
-until functions can join the VPC ([#1473](https://github.com/ocelhq/ocel/issues/1473)).
-
-Traffic uses TLS and the data is encrypted at rest. Apps connect with no username and an AUTH
-token ocel generates on the first deploy. The token is kept as a SecureString in SSM Parameter
-Store under `/<namespace>/kv/`.
-
-`memory` picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
-`t4g.small`, `t4g.medium`, `m7g.large`, `r7g.large`, `r7g.xlarge` and `r7g.2xlarge` up to
-32gb. The rest of the node is reserved, so the store holds what it declares and no more. To
-change the node, change `memory`; a transform cannot set the node type. Leave
-`eviction` out and the store never evicts, as on every other provider; ElastiCache's own default
-is `volatile-lru`. Version 8 runs ElastiCache 8.1 and version 9 runs 9.1. ElastiCache takes a
-snapshot once a day and keeps it for a day, which costs nothing: ElastiCache stores one snapshot of each
-active cache free.
-
-**One node.** A [transform](/docs/transforms) can drop a store to a single node and halve its
-cost, for an environment that can afford to lose its data. ElastiCache runs neither failover nor
-Multi-AZ without a replica, so the patch turns both off, and a deploy refuses one that leaves
-either on:
-
-```ts title="transforms/kv.transform.ts"
-import { defineTransform } from "@ocel/transforms";
-
-export default defineTransform({
-  aws: {
-    kv: {
-      replicationGroup: { numCacheClusters: 1, automaticFailoverEnabled: false, multiAzEnabled: false },
-    },
-  },
-});
-```
-
-A single node has no replica to copy from, and ElastiCache keeps no append-only file. When
-ElastiCache replaces that node, after a hardware failure or during maintenance, the store comes
-back empty.
-
-**Changing the version.** Moving `version` from 8 to 9 creates a parameter group for the new
-family and upgrades the replication group in place. ElastiCache cannot move a group back to an
-older major.
-
-**Removing it.** `ocel destroy` takes the replication group with its snapshots, its parameter
-and subnet groups, its security group and its token.
-
-## Topics, tasks and workers
-
-A task is sent to an SQS queue of its own. A topic publishes to an SNS topic, which delivers
-to one SQS queue for each consumer, so a consumer can be added without changing anything
-that sends. An `ordered` task or topic uses FIFO queues, with the `key` as the message group.
-Each queue has a dead-letter queue for messages a worker could never take. The dead letters
-that `deadLetter(consumer)` lists, redrives and purges are failed runs, as on every other
-provider.
-
-A worker is a Lambda function built from its app's code. It has no URL: each queue it serves
-invokes it, one run at a time, or a batch consumer's batch. A worker's concurrency, and a
-concurrency of 1, are held in the state table, so a run that arrives when the worker is full
-waits a second or two on its queue, and longer each time it finds the worker still full, up
-to five minutes. On a FIFO queue every wait is a delivery of the same message, and SQS
-dead-letters a message after 1,000 deliveries, so a run still waiting then ends failed and is
-listed with the dead letters. Runs, idempotency keys and debounce records live in the
-account's state table under the deployment's own keys.
-
-`maxDuration` can be at most 15 minutes. A worker on container compute is refused.
-
-On a standard queue a delay of up to 15 minutes is the queue's own message delay, and a
-longer delay is sent again every 15 minutes until the run is due. A FIFO queue takes no
-per-message delay: an `ordered` run's message arrives at once and stays on the queue, hidden
-for up to 12 hours at a time until the run is due, and later runs with the same `key` wait
-behind it. A `cron` task is started by an EventBridge Scheduler schedule. Queues, topics and
-schedules bill by the request.
-
-Lanes are recorded on a run but don't change the order runs start in, because SQS has no
-priority. An app on container compute can't send to a task or topic yet, and an ephemeral
-preview, which provisions nothing of its own, refuses to declare one.
-
-**Rolling back.** Workers run the most recently deployed code. Rolling an app back changes
-what its routes serve, not its workers; deploy again to change them.
-
-**Removing it.** `ocel destroy` takes the workers, the queues, the topics and the schedules.
-Runs and keys expire from the state table on their own. A run expires 30 days after it
-finishes, or 30 days after it was due if it never finished. An idempotency key leaves the
-table an hour after its `idempotencyKeyTTL` ends, 30 days by default, and a debounce record an
-hour after the run it folds into is due.
-
-## Logs
-
-Each Lambda function and worker logs to a CloudWatch log group of its own, which `ocel destroy`
-deletes with it. Containers log to `/ocel/containers/<tier>`, one log group per tier. Both keep
-entries for 14 days. Read them with [`ocel logs`](/docs/cli/logs), which also lists the
-CloudWatch rate limits a read shares.
+| `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no gaps between polls, billed per session-minute past the free tier, at most 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
+| `edge` | `cloudfront` (default), `api-gateway` or [`cloudflare`](/docs/providers/cloudflare). See [Edge](#edge). |
+| `dns` | `route53` or [`cloudflare`](/docs/providers/cloudflare). A Cloudflare edge needs `cloudflare`. |
 
 ## Edge
 
-Leave `edge` out of the provider's options and the deployment is fronted by CloudFront. Name
-an edge there to choose it — `cloudfront` and `api-gateway` are its own,
-[`cloudflare`](/docs/providers/cloudflare) is bought independently. On `api-gateway` a preview is served on its alias alone, with no
-hostname per deployment: each hostname would take a REST API of its own, and a region holds
-at most 600.
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import awsProvider from "ocel/providers/aws";
-import { cloudfront } from "ocel/providers/aws/edge";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: awsProvider({ edge: cloudfront() }),
-  apps: [{ name: "web", path: "." }],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": { "aws": { "edge": "cloudfront" } },
-  "apps": [{ "name": "web", "path": "." }]
-}
-```
+`api-gateway` serves a preview on its alias only, with no hostname per deployment: each
+hostname would take a REST API of its own, and a region holds at most 600.
 
 ### CloudFront origin shield
 
-A page nothing has cached yet reaches your function once from every CloudFront edge location
-that sees a request for it, each in an execution environment of its own. For a Next.js release
-with prerendered pages, including pages rendered on first request and cached after, CloudFront
-routes the cache misses of `GET` and `HEAD` requests to the app's function through
+For a Next.js release with prerendered pages, `GET` and `HEAD` cache misses go through
 [Origin Shield](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html)
-in the function's region, which consolidates simultaneous requests for one page into as few as
-one call to the function. Where CloudFront offers no Origin Shield in the function's region,
-Ocel uses the nearest region that has it; a region Ocel does not know is left unshielded.
-Static files and every other method never pass through it.
+in the function's region, or the nearest that has it. An uncached page then reaches the function
+as few as once, not once per edge location. Static files, containers and releases without
+prerendered pages skip it.
 
-CloudFront bills Origin Shield per request that reaches it: $0.0075 per 10,000 requests in
-the US. A response cached for less than an hour (3,600 seconds), or not cached at all, counts
-as dynamic, and every such `GET` or `HEAD` that misses the edge cache is billed. Only a
-response cached for an hour or longer skips the charge when its request arrives through the
-regional edge cache in the shield's own region. A release with no prerendered page is never
-shielded, nor is a container. To turn it off for the project:
+It bills $0.0075 per 10,000 requests in the US, for every miss on a response cached under an
+hour or not at all. To turn it off:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -223,3 +94,82 @@ export default defineConfig({
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
+
+## KV stores
+
+`kv("cache")` is an ElastiCache Valkey replication group, cluster mode off: a primary and a
+replica in another availability zone that takes over if the primary fails. Two
+`cache.t4g.micro` nodes cost about $18.69 a month in us-east-1.
+
+- **Container apps only.** The group sits in the default VPC's subnets and admits port 6379
+  from inside that VPC only. A deploy refuses a serverless app that uses a store until functions
+  can join the VPC ([#1473](https://github.com/ocelhq/ocel/issues/1473)).
+- **Auth.** TLS, encrypted at rest, and an AUTH token ocel generates, kept in SSM Parameter Store
+  under `/<namespace>/kv/`.
+- **`memory`** picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
+  `t4g.small`, `t4g.medium`, `m7g.large`, `r7g.large`, `r7g.xlarge` and `r7g.2xlarge` up to
+  32gb. A transform cannot set the node type.
+- **`eviction`** left out means never evict, as on every provider (ElastiCache's own default
+  is `volatile-lru`).
+- **`version`** 8 runs ElastiCache 8.1, 9 runs 9.1. Moving 8 to 9 upgrades the group in place;
+  ElastiCache cannot move back to an older major.
+- **Snapshots.** One a day, kept a day, at no charge.
+
+**One node.** A [transform](/docs/transforms) can halve the cost by dropping to a single node,
+for an environment that can lose its data. ElastiCache runs neither failover nor Multi-AZ
+without a replica, so turn both off; a deploy refuses a patch that leaves either on:
+
+```ts title="transforms/kv.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  aws: {
+    kv: {
+      replicationGroup: { numCacheClusters: 1, automaticFailoverEnabled: false, multiAzEnabled: false },
+    },
+  },
+});
+```
+
+With no replica and no append-only file, a replaced node comes back empty.
+
+`ocel destroy` takes the replication group, its snapshots, parameter and subnet groups,
+security group and token.
+
+## Topics, tasks and workers
+
+| Declared | On AWS |
+| --- | --- |
+| task | an SQS queue of its own |
+| topic | an SNS topic delivering to one SQS queue per consumer |
+| `ordered` | FIFO queues, with `key` as the message group |
+| `cron` | an EventBridge Scheduler schedule |
+| worker | a Lambda function built from the app's code, with no URL |
+
+Every queue has a dead-letter queue; `deadLetter(consumer)` lists, redrives and purges failed
+runs as on every provider. Runs, idempotency keys and debounce records live in the account's
+state table. Queues, topics and schedules bill by the request.
+
+Limits and differences:
+
+- `maxDuration` is at most 15 minutes. A worker on container compute is refused, an app on
+  container compute can't send to a task or topic yet, and an ephemeral preview refuses to
+  declare one.
+- A run that finds its worker at its concurrency waits on the queue, up to five minutes at a
+  time. On a FIFO queue each wait is a delivery, and SQS dead-letters after 1,000, so a run
+  still waiting then ends failed.
+- A delayed `ordered` run holds up later runs with the same `key` until it is due.
+- Lanes are recorded but don't change start order: SQS has no priority.
+- Workers run the most recently deployed code. Rolling an app back changes its routes, not its
+  workers; deploy again to change them.
+
+`ocel destroy` takes the workers, queues, topics and schedules. Records expire on their own: a
+run 30 days after it finishes or was due, an idempotency key an hour after its
+`idempotencyKeyTTL` (30 days by default).
+
+## Logs
+
+Each Lambda function and worker logs to a CloudWatch log group of its own, deleted with it by
+`ocel destroy`. Containers log to `/ocel/containers/<tier>`, one group per tier. Both keep 14
+days. Read them with [`ocel logs`](/docs/cli/logs), which lists the CloudWatch rate limits a read
+shares.

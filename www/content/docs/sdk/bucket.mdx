@@ -3,12 +3,7 @@ title: Bucket
 description: Object storage.
 ---
 
-Declaring a bucket in a [discovery folder](/docs/configuration#discoverypaths) hands back the
-handle your app reads and writes its objects through. There is no client to construct and no
-endpoint to configure: the deploy provisions the store and delivers the binding under the name
-you declared.
-
-<Tabs items={["TypeScript", "Go", "Python", "Rust"]}>
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
 <Tab value="TypeScript">
 
@@ -56,8 +51,7 @@ fn main() {
 }
 ```
 
-Rust declares from the app crate itself, so a field of type `ocel::Bucket` is the declaration.
-The field's identifier is the bucket's name unless `#[ocel(name = "…")]` says otherwise.
+The field name is the bucket name unless `#[ocel(name = "…")]` sets one.
 
 </Tab>
 
@@ -65,10 +59,9 @@ The field's identifier is the bucket's name unless `#[ocel(name = "…")]` says 
 
 ## Reading and writing
 
-A key is a path under the bucket. Every segment must be non-empty and neither `.` nor `..`, and
-`.ocel/` is reserved for the runtime.
+A key is a path. Each segment is non-empty and neither `.` nor `..`; `.ocel/` is reserved.
 
-<Tabs items={["TypeScript", "Go", "Python", "Rust"]}>
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
 <Tab value="TypeScript">
 
@@ -87,9 +80,8 @@ for await (const object of uploads.list({ prefix: "reports/" })) {
 await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
 ```
 
-`get` and `head` answer `null` when the bucket has nothing under the key. `copy` moves bytes
-within one bucket, and `list` is also walked a page at a time with `list().page({ cursor })`.
-A write also takes `cacheControl` and `metadata`; the metadata comes back on the object's `info`.
+- `get` and `head` return `null` for a missing key.
+- Also: `copy`, `list().page({ cursor })`, and `cacheControl` / `metadata` on writes.
 
 </Tab>
 
@@ -111,8 +103,8 @@ for object, err := range resources.Uploads.List(ctx, ocel.Prefix("reports/")) {
 err = resources.Uploads.Delete(ctx, "reports/q3.pdf", "reports/q2.pdf")
 ```
 
-`NewReader` and `NewWriter` stream one object instead of reading it all into memory, and a read that
-finds nothing reports `ocel.ErrObjectNotFound`.
+- `NewReader` and `NewWriter` stream one object.
+- A missing key returns `ocel.ErrObjectNotFound`.
 
 </Tab>
 
@@ -132,9 +124,9 @@ for entry in uploads.list(prefix="reports/"):
 uploads.delete("reports/q3.pdf", "reports/q2.pdf")
 ```
 
-`uploads.open(key, "rb")` treats an object as a binary file. Every method that reaches the store
-has an `_async` twin that runs on a loop; `public_url` only formats an address, so it has none. A
-read that finds nothing raises `ocel.ObjectNotFound`.
+- `uploads.open(key, "rb")` opens an object as a binary file.
+- Every method that reaches the store has an `_async` twin (`public_url` does not).
+- A missing key raises `ocel.ObjectNotFound`.
 
 </Tab>
 
@@ -160,42 +152,38 @@ while let Some(object) = walk.next().await {
 resources.uploads.delete("reports/q3.pdf").await?;
 ```
 
-`put`, `get`, `list`, `signed_url` and `signed_upload` return builders, and awaiting one performs
-the call. `reader` and `writer` stream an object, and a read that finds nothing fails with
-`Error::NotFound`.
+- `put`, `get`, `list`, `signed_url` and `signed_upload` return builders; awaiting one runs it.
+- `reader` and `writer` stream one object.
+- A missing key fails with `Error::NotFound`.
 
 </Tab>
 
 </Tabs>
 
-Conditional writes go with the write: `ifNoneMatch: "*"` (`ocel.IfNotExists()`, `if_not_exists=True`,
-`.if_not_exists()`) writes only where the bucket has nothing, and `ifMatch` only while the object
-still has that etag. Either unmet is refused rather than overwritten.
+### Conditional writes
+
+| Condition | TypeScript | Go | Python | Rust |
+| --- | --- | --- | --- | --- |
+| Only if the key is empty | `ifNoneMatch: "*"` | `ocel.IfNotExists()` | `if_not_exists=True` | `.if_not_exists()` |
+| Only while the etag matches | `ifMatch: etag` | `ocel.IfMatch(etag)` | `if_match=etag` | `.if_match(etag)` |
+
+An unmet condition refuses the write.
 
 ## Public buckets
 
-A bucket declared `public` serves every object it contains anonymously, and `publicUrl(key)` is the
-address. In TypeScript that method exists only on a bucket declared public; the other languages
-fail at the call on a bucket that has no public address.
-
 ```ts title="resources/index.ts"
-import { bucket } from "ocel/bucket";
-
 export const assets = bucket("assets", { public: true });
 
-// assets.publicUrl("logo.svg") -> https://storage.example.com/logo.svg
+assets.publicUrl("logo.svg"); // https://storage.example.com/logo.svg
 ```
 
-The public address comes from the domain bound to the project, so a project with no domain has
-none, and `publicUrl` fails rather than returning an address nothing answers. On a VPS the address
-is the `storage.` hostname the box currently claims, read where your app runs, so it follows a
-domain you bind without your having to pass it anywhere. `ocel.BucketPublic()`, `public=True` and
-`#[ocel(public)]` declare the same thing.
+Go `ocel.BucketPublic()`, Python `public=True`, Rust `#[ocel(public)]`.
+
+- The address comes from the domain bound to the project. With no domain, `publicUrl` fails.
+- In TypeScript `publicUrl` exists only on a public bucket; the other SDKs fail at the call.
+- AWS and Google Cloud refuse `public`; serve through your app or a signed url.
 
 ## Signed urls
-
-A signed url hands one object to someone who has no credential, for as long as it stays valid.
-`signedUrl` reads and `signedUpload` writes:
 
 ```ts
 const read = await uploads.signedUrl("reports/q3.pdf", {
@@ -210,22 +198,11 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 });
 ```
 
-`signedUpload` answers a `url`, a `method`, the `headers` the signature covers and the form
-`fields` a POST target needs. Send the body exactly as the target describes: a changed header
-breaks the signature. Both are minted against the store's public address, so both need a domain
-bound to the project.
-
-A store that signs no POST policy refuses a `signedUpload` that asks for a maximum size with `maxSize`. That covers an
-S3-compatible store bound with an endpoint, such as R2. Sign the upload without `maxSize` and check
-the object's size once it lands.
-
-`expiresIn` is clamped to seven days, the longest a sigv4 signature is valid for. Ask for more and
-you get seven days.
+- `signedUpload` returns `url`, `method`, signed `headers` and POST `fields`; send them unchanged.
+- Both need a domain bound to the project.
+- A store bound with an `endpoint` (such as R2) signs no POST policy and refuses `maxSize`; check the size after upload instead.
 
 ## Browser uploads
-
-An uploader is a named flow the browser drives. It authorizes the request, bounds what the
-browser may send, decides the key, and runs your code once the bytes have landed:
 
 ```ts title="resources/index.ts"
 import { bucket, uploader } from "ocel/bucket/next";
@@ -256,18 +233,12 @@ export const uploads = bucket("uploads", {
 });
 ```
 
-What `middleware` returns is the metadata the rest of the uploader reads, and a request it throws
-on is refused. Mount the route the browser talks to:
-
 ```ts title="app/api/upload/route.ts"
 import { createRouteHandler } from "ocel/bucket/next";
 import { uploads } from "../../../resources";
 
 export const { GET, POST } = createRouteHandler(uploads);
 ```
-
-`ocel/bucket/hono` and `ocel/bucket/express` are the same two functions shaped for those
-frameworks, and `ocel/bucket` is the framework-neutral pair. Then in the browser:
 
 ```ts title="app/upload-button.tsx"
 import { createUploadClient } from "ocel/bucket/client";
@@ -278,63 +249,26 @@ const client = createUploadClient<typeof uploads>({ url: "/api/upload" });
 await client.upload("document", { files, input: { ownerId } });
 ```
 
-The client is typed from the bucket: an uploader name it does not declare, or an input that does
-not match that uploader's schema, is a compile error. It presigns each file, sends it straight to
-the store, and waits for the upload to be recorded before resolving, so `onUploadComplete` has run
-by the time it returns. It asks after a second, then doubles the wait up to fifteen seconds, and
-gives the upload up after fifteen minutes. `pollIntervalMs` and `maxPollMs` move the first wait
-and that deadline.
-
-`allowedOrigins` is what the browser sends from. The store answers those origins and the hostnames
-bound to the project, and nothing else: there is no rule that answers every origin.
-
-Go, Python and Rust have no browser half of their own. Mint a `signedUpload` on the server, hand
-the target to the page, and let JavaScript send the body to it.
+- `middleware` returns the uploader's `metadata`; throwing refuses the request.
+- `ocel/bucket/hono` and `ocel/bucket/express` export the same pair; `ocel/bucket` is framework-neutral.
+- An unknown uploader name or a mismatched `input` is a compile error.
+- `upload` resolves once `onUploadComplete` has run: it polls from 1 s (`pollIntervalMs`), doubling to 15 s, for up to 15 minutes (`maxPollMs`).
+- The store answers only `allowedOrigins` and the hostnames bound to the project.
+- From Go, Python or Rust, hand the page a `signedUpload` target.
 
 ## Limits
 
-A server write of 16 MB or less goes in one request. Anything larger is split into 8 MB parts,
-four in flight, and completed as one object. You do not ask for that, and nothing is stored until
-the last part lands.
-
-A browser upload is a single request, so it is bounded by what the store accepts in one, which on
-S3 is 5 GB. Cap it lower with `maxFileSize` on the uploader, or with `maxSize` on a signed upload where the store signs POST policies (see [Signed urls](#signed-urls)).
-
-One listing page returns at most 1000 objects, and user metadata is capped at 2 KB per object.
-
-## On a VPS
-
-The box runs a RustFS store of its own, on your project's own network, with
-its data on a docker volume. Every bucket you declare is a bucket inside it. It publishes no port
-on the machine, and reaches browsers through `storage.<domain>` on the same proxy that serves your
-apps, claimed when a domain is bound to the project. Until then a signed url, a browser upload and
-a public object have no address, and the runtime refuses them rather than handing out one nothing
-can reach. A bucket answers the browsers of the hostnames bound to the project at that moment: binding
-a hostname, by a deploy or by `ocel domain add`, adds it at once, and releasing one takes it away.
-
-The store writes to the same disk as everything else on the box, so it stops signing writes while
-the volume has less than 1 GiB, or a tenth of its size, free.
-
-Drop the last bucket a project declares in an environment and the store goes with it: the
-container, its volume and every byte those buckets stored, its route on the proxy, and the
-credentials the box kept for it. Take a backup first if you want the objects.
-
-<Callout>
-  The box's own store is as durable as the box's disk. [Bind a bucket](#a-bucket-in-a-store-you-already-run)
-  to a store you trust for anything you cannot afford to lose with the machine.
-</Callout>
-
-A [transform](/docs/transforms#on-a-vps) changes what the store container runs: its image, its
-memory, where its volume lives. One container stores every bucket a project declares in an
-environment, so it runs as one shape. Two buckets patched into different shapes are refused by
-name: gate the rule on the environment rather than on which bucket it reaches, or patch both the
-same way.
+| | Limit |
+| --- | --- |
+| Server write in one request | 16 MB; larger writes go as 8 MB parts, 4 in flight, stored once the last lands |
+| Browser upload | One request: the store's single-request limit (5 GB on S3). Cap with `maxFileSize` or `maxSize` |
+| List page | 1000 objects |
+| User metadata | 2 KB per object |
+| Signed url `expiresIn` | 7 days; longer is clamped |
 
 ## A bucket in a store you already run
 
-Bind a declared bucket to one in an S3-compatible store of your own (R2, a Hetzner or AWS
-bucket, anything that speaks S3) and ocel reaches that bucket instead of provisioning one. The
-binding lives in `bindings`, on any provider:
+On any provider, bind a declared bucket to an S3-compatible bucket you run (R2, Hetzner, AWS) and Ocel uses it instead of provisioning one.
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -382,47 +316,38 @@ export default defineConfig({
 }
 ```
 
-The key pair is written as variables you set with `ocel env set`, per tier and environment, so
-the config never contains it and the app never reads it. Add `"pathStyle": true` for a store that
-serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can store
-several resources, and `$env` on `bucket` or `prefix` gives each preview environment its own.
-`publicBaseUrl` is used as written, with each key appended, so it names the address the prefix is
-served on.
-Keyed by `production` or `preview`, the binding serves only that tier, and the other provisions
-its own bucket as usual.
+| Field | Use |
+| --- | --- |
+| `accessKeyId`, `secretAccessKey` | Variables set with `ocel env set`; the app never sees them. Scope the key to this bucket. |
+| `prefix` | Every key goes under it. |
+| `pathStyle: true` | For a store with no wildcard DNS. |
+| `publicBaseUrl` | Used as written, with the key appended. Required when the code sets `public`. |
 
-Ocel has no admin credential for a store it does not run, so it checks the bucket at every
-deploy instead of configuring it. The bucket must answer. When the code sets `allowedOrigins`, the
-bucket's CORS rules must allow each of them. When it sets `public`, the bucket's policy must let
-anyone read the objects under the prefix, and the binding must name `publicBaseUrl`. A mismatch
-refuses the deploy and names the difference. A rule the key pair may not read, or a store that
-serves no bucket policy, becomes a warning naming what could not be checked.
+`$env` on `bucket` or `prefix` gives each preview its own. Keyed by `production` or `preview`, a binding serves only that tier.
 
-Uploads, signed urls and multipart work as they do on any bucket. Upload sessions are kept in the
-bucket itself, under the prefix, and completed by checking what the store contains.
+Each deploy checks that the bucket answers, that its CORS allows every `allowedOrigins` entry, and, for `public`, that anyone may read under the prefix. A mismatch refuses the deploy; a rule the key cannot read is a warning.
+
+## On a VPS
+
+- One RustFS container per environment holds every bucket, on a docker volume. Browsers reach it at `storage.<domain>`; until a domain is bound, signed urls, browser uploads and public objects are refused.
+- Binding or releasing a hostname updates the allowed origins at once.
+- The store stops signing writes while the volume has less than 1 GiB or 10% free.
+- Dropping the last bucket deletes the container, its volume and every object. Back up first.
+- A [transform](/docs/transforms#on-a-vps) can change the container. Two buckets patched differently are refused: gate the rule on the environment.
 
 <Callout>
-  Issue a key scoped to that one bucket. The runtime in front of your app keeps it, and the app
-  never sees it.
+  The box's store is only as durable as its disk. [Bind a bucket](#a-bucket-in-a-store-you-already-run)
+  to a store you trust for data you cannot lose with the machine.
 </Callout>
 
 ## On Google Cloud
 
-Each declared bucket is its own Cloud Storage bucket, named for the namespace, the project, the
-environment and the bucket, with CORS set from `allowedOrigins`. Only the service accounts of the apps that
-bind it may read and write its objects. An app's account is shared by its environments in a tier, so
-access is per app across the tier's environments: `web` in one preview can reach another preview's
-buckets of `web`, and no other app's. Signed urls and browser upload forms are signed by the
-app's own account through IAM, so no key exists to leak, and a signature lasts at most seven days. Upload sessions
-are kept in the bucket itself and completed by checking what it contains. An abandoned multipart
-upload is aborted after a day, and an upload session is deleted a day after it was last written.
-
-`public` is refused: buckets are created under public access prevention, so serve those objects
-through your app or a signed url. `ocel destroy`, or dropping a bucket from the code, deletes the
-bucket and every object in it.
+- Each bucket is its own Cloud Storage bucket, with CORS from `allowedOrigins`.
+- Only the apps that bind it can read and write. Access is per app across a tier: `web` in one preview can reach another preview's `web` buckets.
+- Signed urls are signed through IAM by the app's account; no key exists.
+- Abandoned multipart uploads are aborted after a day; upload sessions are deleted a day after their last write.
+- `ocel destroy`, or removing the bucket from code, deletes the bucket and its objects.
 
 ## On AWS
 
-Each declared bucket is its own S3 bucket, with CORS set from `allowedOrigins` and browser uploads
-recorded by a function the deploy provisions beside it. `public` is refused: the provider blocks
-public access at the account's edge, so serve those objects through your app or a signed url.
+- Each bucket is its own S3 bucket, with CORS from `allowedOrigins`. A function beside it records browser uploads.

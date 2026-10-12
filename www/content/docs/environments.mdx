@@ -44,8 +44,8 @@ export const env = defineEnv({
 });
 ```
 
-Go, Python and Rust declare the same three classes; see [Env](/docs/sdk/env). You set the value
-for each tier:
+Go, Python and Rust declare the same three classes; see [Env](/docs/sdk/env). Set each value
+per tier:
 
 ```bash
 ocel env set LOG_LEVEL=debug                               # production
@@ -57,8 +57,7 @@ A deploy that is missing a declared value stops and names the `ocel env set` tha
 
 ### Classes
 
-Every value is encrypted in ocel's store whatever its class. The class decides where the value
-may go once it leaves the store:
+Every value is encrypted in ocel's store. The class decides where it may go from there:
 
 |  | `plain` | `sensitive` | `secret` |
 | --- | --- | --- | --- |
@@ -84,6 +83,6 @@ may go once it leaves the store:
 
 ### Variables in config
 
-`{ "$env": "NAME" }` in [your config](/docs/configuration) is a variable too, set the same way,
-and it is how a password, a connection string or a key reaches a binding. The app never
+`{ "$env": "NAME" }` in [your config](/docs/configuration#bindings) is a variable too, set the
+same way. It is how a password, connection string or key reaches a binding, and the app never
 receives it.

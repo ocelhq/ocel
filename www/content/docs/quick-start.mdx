@@ -4,15 +4,15 @@ description: A Next.js app in your AWS account.
 icon: BoltIcon
 ---
 
-By the end of this page a Next.js app is running in your AWS account, with a URL.
+By the end of this page a Next.js app is running in your AWS account, on a hostname you own.
 
 ## Before you start
 
 | You need | Why |
 | --- | --- |
-| Node 20 or newer | Ocel builds your Next.js app with it |
-| An AWS account | Where the app runs |
-| AWS credentials in your shell | Ocel provisions with them |
+| Node 20.9 or newer | Next.js 16 needs it, and Ocel builds the app with it |
+| An AWS account, with credentials in your shell | The app runs there, and Ocel provisions with those credentials |
+| A domain you can add DNS records to | CloudFront, which serves the app, answers on a hostname you own |
 
 Check the credentials are visible:
 
@@ -37,20 +37,31 @@ cd my-app
 ocel deploy
 ```
 
-The first deploy sets up what the project is missing, asks before each step, and then deploys:
+Ocel needs Next.js 16.2.10 or later. The first deploy sets up what the project is missing, asking
+before each step:
 
-- **The project.** There is no config yet, so it asks where `my-app` should deploy, writes `ocel.config.ts`, and adds the ocel SDK to your dependencies. The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once.
-- **The shared infrastructure.** Your account has none yet, so it offers to run `ocel bootstrap production`. Expect a few minutes for that one. Later deploys reuse it.
+1. **The config.** It asks where `my-app` should deploy. Pick `aws`. It writes `ocel.config.ts`
+   and adds the `ocel` package to your dependencies.
+2. **The hostname.** It prints the line to add to `ocel.config.ts` and waits for you to save it.
+   Use a hostname on your domain.
+3. **The shared infrastructure.** The account has none yet, so it offers to run
+   `ocel bootstrap production`. Later deploys, and other projects, reuse it.
 
-Answer no to any of them and nothing changes; the deploy names the command to run when you're ready.
+Answer no to any step and the deploy stops and names the command to run when you're ready.
+
+Then it builds and provisions. The hostname needs DNS records: the deploy prints them and waits
+up to 15 minutes while you add them at your DNS provider. If the domain's zone is in Route 53,
+add `dns: route53()` and Ocel writes them itself. The config ends up like this:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
 import awsProvider from "ocel/providers/aws";
+import { route53 } from "ocel/providers/aws/dns";
 
 export default defineConfig({
   slug: "my-app",
-  provider: awsProvider(),
+  provider: awsProvider({ dns: route53() }),
+  domains: { production: "my-app.example.com" },
 });
 ```
 
@@ -58,60 +69,58 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": "aws"
+  "provider": { "aws": { "dns": "route53" } },
+  "domains": { "production": "my-app.example.com" }
 }
 ```
 
-```txt
-→ web › Building
-✓ web  24s
-→ web › Provisioning
-✓ web › Provisioning  21s
-→ Promotion › Finalizing
-✓ Promotion  2s
+Every resource Ocel creates is keyed on the slug, so keep it once you've deployed.
 
-✓ Deployed in 54s
+The deploy prints the URL when it finishes. Open it: that is your app, in your account.
 
-  https://my-app.example.com
-```
-
-Open the URL. That is your app, in your account.
-
-In a script or in CI nothing is asked, so a missing step stops the deploy and names the command
-that sets it up. Run them first there:
+In a script or in CI nothing is asked, so set the project up first:
 
 ```bash
 ocel init --provider aws
-ocel bootstrap production
-ocel deploy
+# add domains.production to ocel.config.ts
+ocel bootstrap production --yes
+ocel deploy --yes
 ```
-
-`ocel lock` pins the providers this CLI runs; commit its result and every machine and every CI
-run fetches the same bytes.
 
 ## Change something and deploy again
 
-Edit a page, then:
+Edit `app/page.tsx`, then:
 
 ```bash
 ocel deploy
 ```
 
-The build runs again, provisioning changes nothing unless the app now asks for something new, and traffic moves to the new deployment. The previous one is still there:
+Traffic moves to the new deployment. The previous ones are kept:
 
 ```bash
 ocel promotions ls
 ocel rollback
 ```
 
-## Try a branch
+## Preview a branch
+
+A preview needs a wildcard to be served under. Add one beside the production hostname:
+
+```ts title="ocel.config.ts"
+domains: {
+  production: "my-app.example.com",
+  preview: "*.preview.example.com",
+},
+```
 
 ```bash
 git switch -c checkout
 ocel preview
 ```
 
-The preview is a full deployment beside production, named after the branch, on its own hostname. `ocel preview rm` tears it down and leaves production alone. Give it a name, as in `ocel preview up pr-12`, to address it from any branch; [`ocel preview`](/docs/cli/preview) covers names and persistent previews.
+The first preview offers to run `ocel bootstrap preview`. The preview is a full deployment beside
+production, on its own hostname under the wildcard. `ocel preview rm` tears it down and leaves
+production alone. [`ocel preview`](/docs/cli/preview) covers names, CI and persistent previews.
 
 ## Clean up
 
@@ -119,14 +128,21 @@ The preview is a full deployment beside production, named after the branch, on i
 ocel destroy production
 ```
 
-This removes everything the project created in your account and nothing else.
+It asks you to type the project name, then removes the project's apps, resources and hostnames,
+and nothing else. The shared infrastructure stays for other projects. Remove it once nothing is
+deployed on it:
+
+```bash
+ocel bootstrap destroy production
+ocel bootstrap destroy preview
+```
 
 ## Next steps
 
 <Cards>
+  <Card title="Next.js" href="/docs/frameworks/nextjs" description="What Ocel supports, and on which edge." />
   <Card title="Add a database" href="/docs/sdk/database" description="One function call declares it, and the app is connected." />
   <Card title="Variables and secrets" href="/docs/environments" description="Typed in code, stored in your account." />
   <Card title="Deploy to a VPS" href="/docs/providers/vps" description="The same config, pointed at a server over SSH." />
-  <Card title="Ocel CLI" href="/docs/cli" description="Every command and flag." />
   <Card title="Configuration" href="/docs/configuration" description="Every option the config takes." />
 </Cards>

@@ -1,0 +1,16 @@
+```bash
+ocel dev -- next dev
+ocel dev -- npm run dev
+```
+
+Starts the resources your code declares, such as postgres and buckets, on your machine, then
+runs your command with their connections in its environment. Docker is needed only when the app
+declares a resource.
+
+- **Values** come from the dev tier's [env source](/docs/env-sources), your project's `.env` by
+  default, with `.env.local` on top.
+- **Declarations** are watched: changing a file in a [discovery
+  folder](/docs/configuration#discoverypaths) resolves the resources again.
+- **A second `ocel dev`** in the same project connects to the running one instead of starting
+  resources of its own.
+- **`--reset`** wipes the data the dev resources kept and starts them empty.

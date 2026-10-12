@@ -3,10 +3,6 @@ title: Database
 description: A Postgres database, handed to your app as a connected pool.
 ---
 
-Declaring a database in a [discovery folder](/docs/configuration#discoverypaths) hands back the
-pool your app queries through. The deploy provisions the database and delivers its connection
-under the name you declared.
-
 <Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
 <Tab value="TypeScript">
@@ -16,8 +12,6 @@ import { postgres } from "ocel/postgres";
 
 export const db = postgres("main");
 ```
-
-`db` is a [`pg`](https://node-postgres.com) pool: `await db.query("select * from documents")`.
 
 </Tab>
 
@@ -31,9 +25,6 @@ import "ocel.dev"
 var DB = ocel.Postgres("main")
 ```
 
-`DB.Pool(ctx)` opens a [pgx](https://github.com/jackc/pgx) pool on its first call and returns the
-same one after.
-
 </Tab>
 
 <Tab value="Python">
@@ -43,9 +34,6 @@ import ocel
 
 db = ocel.postgres("main")
 ```
-
-Install `ocel[postgres]`, then `await db.fetch("select * from documents")`, or take the
-[asyncpg](https://magicstack.github.io/asyncpg/) pool with `await db.pool()`.
 
 </Tab>
 
@@ -63,8 +51,64 @@ fn main() {
 }
 ```
 
-With the `postgres` feature, `resources.main.pool().await?` is a [sqlx](https://github.com/launchbadge/sqlx) `PgPool`.
+</Tab>
+
+</Tabs>
+
+The Postgres major version is `17` unless declared: `{ version: "16" }`, `ocel.PostgresVersion("16")`, `version="16"`, `#[ocel(version = "16")]`.
+
+## Querying
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+`db` is a [`pg`](https://node-postgres.com) pool.
+
+```ts
+const { rows } = await db.query("select * from documents where id = $1", [id]);
+```
+
+</Tab>
+
+<Tab value="Go">
+
+`Pool` opens a [pgx](https://github.com/jackc/pgx) pool on the first call and returns the same one after.
+
+```go
+pool, err := resources.DB.Pool(ctx)
+if err != nil {
+	return err
+}
+rows, err := pool.Query(ctx, "select * from documents where id = $1", id)
+```
+
+</Tab>
+
+<Tab value="Python">
+
+Install `ocel[postgres]`. `await db.pool()` is the [asyncpg](https://magicstack.github.io/asyncpg/) pool.
+
+```python
+rows = await db.fetch("select * from documents where id = $1", id)
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+Enable the `postgres` feature. `pool()` is a [sqlx](https://github.com/launchbadge/sqlx) `PgPool`.
+
+```rust
+let pool = resources.main.pool().await?;
+let rows = sqlx::query("select * from documents where id = $1")
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+```
 
 </Tab>
 
 </Tabs>
+
+Every SDK also exposes the connection as a URL: `db.connectionString`, `DB.ConnectionString()`, `db.connection_string`, `resources.main.connection_string()?`.
