@@ -217,35 +217,175 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toEqual([]);
   });
 
-  it("answers Workers Cache's revalidation from the origin when its validator is not the stored entry's", async () => {
+  it("answers Workers Cache's revalidation with the fresh stored page when its validator is an older answer's, without calling the origin", async () => {
     await seed(storedEntry());
     const h = harness() as Used;
 
-    const response = await revalidate(h, 'W/"ocel-store-1"');
+    const response = await h.fetchOrigin(async () => {
+      const answered = await revalidate(h, 'W/"ocel-store-1"');
+      await h.settled();
+      return answered;
+    });
 
-    expect(await response.text()).toBe("<html>from the origin</html>");
-    expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(/^max-age=300\b/);
-    expect(h.originCalls.map(({ url }) => url)).toEqual([`${FN_URL}blog/a`]);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("<html>from the store</html>");
+    expect(response.headers.get("x-ocel-entry-source")).toBe("store");
+    expect(response.headers.get("etag")).toBe(validatorOf(entryKey));
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toMatch(
+      /^max-age=0, stale-while-revalidate=\d+/,
+    );
+    expect(h.originCalls).toEqual([]);
   });
 
-  it("answers Workers Cache's revalidation from the origin once the stored entry is past its revalidate window", async () => {
+  it("answers Workers Cache's revalidation of a stale stored page from the store and has the origin regenerate it behind the answer", async () => {
     await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
     const h = harness({ call: { entry: { path: "/blog/a", revalidate: 5 } } }) as Used;
 
+    const response = await h.fetchOrigin(async () => {
+      const answered = await revalidate(h, validatorOf(entryKey));
+      await h.settled();
+      return answered;
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("<html>from the store</html>");
+    expect(response.headers.get("x-ocel-entry-source")).toBe("stale-store");
+    expect(h.originCalls).toHaveLength(1);
+    expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
+    expect(h.originCalls[0].headers.has("if-modified-since")).toBe(false);
+  });
+
+  it("logs a regeneration the origin answered with an error, naming the page and its release", async () => {
+    await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
+    const h = harness({
+      originStatus: 503,
+      call: { entry: { path: "/blog/a", revalidate: 5 } },
+    }) as Used;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await h.fetchOrigin(async () => {
+        const answered = await revalidate(h, validatorOf(entryKey));
+        await h.settled();
+        return answered;
+      });
+
+      expect(await response.text()).toBe("<html>from the store</html>");
+      const lines = logged.mock.calls.map((args) => args.join(" "));
+      expect(lines).toContainEqual(expect.stringMatching(/503.*\/blog\/a.*r1a2b3c4d/));
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("answers Workers Cache's revalidation of a page whose tag was invalidated from the store and has the origin regenerate it", async () => {
+    await seed(storedEntry());
+    const h = harness({ times: { "r1a2b3c4d|posts": { invalidatedAt: Date.now() } } }) as Used;
+
+    const response = await h.fetchOrigin(async () => {
+      const answered = await revalidate(h, validatorOf(entryKey));
+      await h.settled();
+      return answered;
+    });
+
+    expect(await response.text()).toBe("<html>from the store</html>");
+    expect(response.headers.get("x-ocel-entry-source")).toBe("stale-store");
+    expect(h.originCalls).toHaveLength(1);
+    expect(h.originCalls[0].headers.has("if-none-match")).toBe(false);
+  });
+
+  it("answers Workers Cache's revalidation from the origin once a tag of the stored entry was purged, as expireNow does", async () => {
+    await seed(storedEntry());
+    const h = harness({ times: { "r1a2b3c4d|posts": { purgedAt: Date.now() - 1_000 } } }) as Used;
+
+    const response = await revalidate(h, validatorOf(entryKey));
+
+    expect(await response.text()).toBe("<html>from the origin</html>");
+    expect(response.headers.has("x-ocel-entry-source")).toBe(false);
+    expect(h.originCalls).toHaveLength(1);
+  });
+
+  it("answers Workers Cache's revalidation from the origin once the stored entry is past its expire window", async () => {
+    await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
+    const h = harness({
+      call: { entry: { path: "/blog/a", revalidate: 5, expire: 10 } },
+    }) as Used;
+
     const response = await revalidate(h, validatorOf(entryKey));
 
     expect(await response.text()).toBe("<html>from the origin</html>");
     expect(h.originCalls).toHaveLength(1);
   });
 
-  it("answers Workers Cache's revalidation from the origin once a tag of the stored entry was invalidated", async () => {
-    await seed(storedEntry());
-    const h = harness({ times: { "r1a2b3c4d|posts": { invalidatedAt: Date.now() } } }) as Used;
+  it("holds the revalidation of a stale stored page until the origin has rendered it in full", async () => {
+    await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
+    let finish!: () => void;
+    let reached!: () => void;
+    const called = new Promise<void>((resolve) => (reached = resolve));
+    const h = harness({
+      call: { entry: { path: "/blog/a", revalidate: 5 } },
+      origin: async () => {
+        reached();
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              finish = () => controller.close();
+            },
+          }),
+        );
+      },
+    }) as Used;
 
-    const response = await revalidate(h, validatorOf(entryKey));
+    await h.fetchOrigin(async () => {
+      let answered = false;
+      const pending = revalidate(h, validatorOf(entryKey));
+      void pending.then(() => (answered = true));
+      await called;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(answered).toBe(false);
 
-    expect(await response.text()).toBe("<html>from the origin</html>");
-    expect(h.originCalls).toHaveLength(1);
+      finish();
+      expect(await (await pending).text()).toBe("<html>from the store</html>");
+    });
+  });
+
+  it("answers the revalidation of a stale stored page from the store once the origin has rendered for longer than the hold", async () => {
+    await seed({ ...storedEntry(), lastModified: Date.now() - 20_000 });
+    let finish!: () => void;
+    let reached!: () => void;
+    const called = new Promise<void>((resolve) => (reached = resolve));
+    const h = harness({
+      call: { entry: { path: "/blog/a", revalidate: 5 } },
+      origin: async () => {
+        reached();
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              finish = () => controller.close();
+            },
+          }),
+        );
+      },
+    }) as Used;
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await h.fetchOrigin(async () => {
+        let answered = false;
+        const pending = revalidate(h, validatorOf(entryKey));
+        void pending.then(() => (answered = true));
+        await called;
+        await vi.advanceTimersByTimeAsync(REGENERATION_HOLD_MS - 1);
+        expect(answered).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await (await pending).text()).toBe("<html>from the store</html>");
+        finish();
+        await h.settled();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("answers Workers Cache's revalidation from the origin when the purge queue cannot be read", async () => {
