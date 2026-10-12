@@ -697,6 +697,50 @@ test("elects the primary on a directory asset's recursive bytes", async () => {
   expect((await readLauncher(projectDir)).primary).toBe("/");
 });
 
+test("records on each prerender the route of the page that renders it, under the base path", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  (args.config as { basePath: string }).basePath = "/docs";
+  for (const output of [...args.outputs.appPages, ...args.outputs.prerenders]) {
+    output.pathname = output.pathname === "/" ? "/docs" : `/docs${output.pathname}`;
+  }
+  const blogHandler = join(projectDir, ".next/server/app/blog/[slug]/page.js");
+  await mkdir(dirname(blogHandler), { recursive: true });
+  await writeFile(blogHandler, "module.exports = () => {}");
+  args.outputs.appPages.push({
+    pathname: "/docs/blog/[slug]",
+    id: "/blog/[slug]",
+    assets: {},
+    runtime: "nodejs",
+    filePath: blogHandler,
+    config: {},
+    type: "APP_PAGE",
+  });
+  args.outputs.prerenders.push({
+    pathname: "/docs/blog/hello",
+    id: "/blog/hello",
+    type: "PRERENDER",
+    parentOutputId: "/blog/[slug]",
+    groupId: 2,
+    fallback: {
+      filePath: join(projectDir, ".next/server/app/index.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: { allowQuery: [] } as never,
+  });
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/docs/blog/hello"]).toMatchObject({
+    kind: "prerender",
+    parent: "/docs/blog/[slug]",
+  });
+  expect(manifest.dispatch["/docs"]).toMatchObject({ kind: "prerender", parent: "/docs" });
+  expect(manifest.dispatch["/docs/index.rsc"]).toMatchObject({ parent: "/docs" });
+});
+
 test("gives variants one shared bundle id and one shared entry key", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
