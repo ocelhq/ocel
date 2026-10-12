@@ -132,9 +132,11 @@ has its request's cookies stripped. A route with no rule, and a path that falls 
 does, and an edge stores the response whoever asked for it: CloudFront for as long as its
 `Cache-Control` or `Expires` allows, the load balancer for as long as its `CDN-Cache-Control`
 allows or, without one, its `Cache-Control` or `Expires`, and Cloudflare for as long as its
-`s-maxage`, `max-age` or `CDN-Cache-Control` allows. All three take a `max-age` as the shared
-lifetime when there is no `s-maxage`, and stores a lifetime of zero that names a
-`stale-while-revalidate`, so mark a personalised response `private` on such a route. Your
+`CDN-Cache-Control`, `Cache-Control` or `Expires` allows. All three take a `max-age` as the
+shared lifetime when there is no `s-maxage`, take a future `Expires` when `Cache-Control` names
+neither (the load balancer only when there is no `Cache-Control` at all), and store a lifetime
+of zero that names a `stale-while-revalidate`, so mark a personalised response `private` on
+such a route. Your
 handler's `Cache-Control` still reaches the browser as you set it, stored or not, on every edge.
 
 On such a route Cloudflare asks for the response of a `GET` that carries no cookie and no
@@ -143,10 +145,14 @@ with a cookie is answered from the stored entry, if one exists, as CloudFront do
 CloudFront ignores cookies; if there is none it reaches your app with its cookies and the
 response is never stored. Such a lookup drops the request's `If-None-Match` and
 `If-Modified-Since`, so a visitor with a cookie gets the stored entry in full rather than a
-`304`. A `HEAD` is answered with the status and headers of the entry a `GET` fills, and one
-that finds no entry with a cookie reaches your app as a `HEAD`. A request with
+`304`. A request with
 `Authorization`, a request that is neither a `GET` nor a `HEAD`, a path with repeated slashes,
 and a request carrying a `__prerender_bypass` cookie reach your app and are never stored.
+
+On Cloudflare a `HEAD` is answered from the cache wherever a `GET` would be, on a route with
+a rule, a route without one and a Next prerender alike: it is answered with the status and
+headers of the entry a `GET` fills, and the entry is only ever filled by a `GET`. A `HEAD` that
+finds no entry, or that the cache refuses, reaches your app as a `HEAD`.
 
 Behind an edge that caches, a cached route answers everyone the same, so your handler never
 sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every
@@ -170,7 +176,7 @@ Vercel's, and the token is compared in constant time.
 
 | Edge | Caches | A revalidation |
 | --- | --- | --- |
-| Cloudflare | requests without `Authorization`: `GET` on the cached routes of the table, keyed by host, release and the allowed query, and `GET` and `HEAD` on every other route that sends a lifetime, keyed by every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered; it is also recorded for the origin's cloud, which clears its own cache |
+| Cloudflare | requests without `Authorization`: `GET` and `HEAD` on the cached routes of the table, keyed by host, release and the allowed query, and on every other route that sends a lifetime, keyed by every query parameter | reaches the edge from the response that made it, and is awaited before a write is answered; it is also recorded for the origin's cloud, which clears its own cache |
 | CloudFront | every response that allows it, keyed by every query parameter | recorded in the app's tag table and cleared by the tag invalidator within moments; CloudFront cannot mark an entry stale, so both kinds clear it |
 | Google Cloud load balancer | every response that allows it, keyed by every query parameter | cleared from Cloud CDN by the service itself; both kinds clear the entry |
 | No edge | nothing | nothing |
@@ -189,7 +195,9 @@ Some of the route table is applied only where the edge can do it:
   other request shares, and the load balancer bypasses its cache for it, so it always reaches
   your app.
 - `basePath` is applied by your app when it matches patterns.
-- A container app is given no route table.
-- A container app on AWS that Cloudflare forwards to the load balancer is cached by no edge:
-  Cloudflare runs none of the gateway for it, so your app is told nothing caches its responses
-  and a revalidation clears nothing.
+- A container app is given no route table, and nothing in its container shapes or tags its
+  responses. CloudFront and the load balancer store them as their own headers allow, untagged,
+  so a revalidation does not reach them; a Next container on Google Cloud keeps every response
+  the load balancer would store out of its cache instead. Behind Cloudflare a container app is
+  forwarded to the load balancer and runs none of the gateway, so the gateway caches nothing
+  for it.
