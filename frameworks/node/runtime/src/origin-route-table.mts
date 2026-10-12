@@ -29,6 +29,7 @@ import {
 interface Origin {
   routes: CompiledRouteTable | undefined;
   cache: OriginCache | null;
+  bypassToken: string | undefined;
 }
 
 export interface RoutedRequest {
@@ -53,8 +54,17 @@ function readOriginRouteTable(env: NodeJS.ProcessEnv): CompiledRouteTable | unde
   return compileOcelRouteTable(parseOcelRouteTable(text));
 }
 
+function findTableBypassToken(routes: CompiledRouteTable | undefined): string | undefined {
+  return routes?.table.routes.find((route) => route.cache?.bypassToken)?.cache?.bypassToken;
+}
+
 export function useOriginRouteTable(env: NodeJS.ProcessEnv): void {
-  const origin: Origin = { routes: readOriginRouteTable(env), cache: readOriginCache(env) };
+  const routes = readOriginRouteTable(env);
+  const origin: Origin = {
+    routes,
+    cache: readOriginCache(env),
+    bypassToken: findTableBypassToken(routes),
+  };
   if (origin.cache) installCacheHost(origin.cache);
   else removeCacheHost();
   setRequestScope(
@@ -90,14 +100,14 @@ function routeRequest(origin: Origin, req: http.IncomingMessage, pathname: strin
     pathname,
     headers: routes ? findHeaders(routes, pathname) : {},
     cacheRule,
-    bypass: cacheRule
-      ? readBypass({
-          token: cacheRule.bypassToken,
+    bypass: !origin.cache
+      ? "none"
+      : readBypass({
+          token: origin.bypassToken,
           method: req.method ?? "GET",
           cookie: req.headers.cookie,
-          revalidate: Array.isArray(header) ? header[0] : header,
-        })
-      : "none",
+          revalidate: cacheRule ? (Array.isArray(header) ? header[0] : header) : undefined,
+        }),
     redirect,
   };
 }
