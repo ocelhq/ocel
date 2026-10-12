@@ -28,6 +28,8 @@ type scriptedQueue struct {
 	counts    map[string]string
 	queried   int
 	failing   func(receive int) error
+
+	holdOutrunsExtension bool
 }
 
 func (q *scriptedQueue) ReceiveMessage(ctx context.Context, in *sqs.ReceiveMessageInput, _ ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
@@ -97,8 +99,36 @@ func (q *scriptedQueue) SendMessage(context.Context, *sqs.SendMessageInput, ...f
 	return &sqs.SendMessageOutput{}, nil
 }
 
-func (q *scriptedQueue) ChangeMessageVisibility(context.Context, *sqs.ChangeMessageVisibilityInput, ...func(*sqs.Options)) (*sqs.ChangeMessageVisibilityOutput, error) {
+func (q *scriptedQueue) ChangeMessageVisibility(_ context.Context, in *sqs.ChangeMessageVisibilityInput, _ ...func(*sqs.Options)) (*sqs.ChangeMessageVisibilityOutput, error) {
+	q.mu.Lock()
+	q.extended = append(q.extended, sqstypes.ChangeMessageVisibilityBatchRequestEntry{ReceiptHandle: in.ReceiptHandle, VisibilityTimeout: in.VisibilityTimeout})
+	recorded := len(q.extended)
+	q.mu.Unlock()
+	if q.holdOutrunsExtension {
+		q.awaitExtension(aws.ToString(in.ReceiptHandle), recorded)
+	}
 	return &sqs.ChangeMessageVisibilityOutput{}, nil
+}
+
+func (q *scriptedQueue) awaitExtension(handle string, after int) {
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		extended := q.extensions()
+		for _, entry := range extended[after:] {
+			if aws.ToString(entry.ReceiptHandle) == handle {
+				return
+			}
+		}
+	}
+}
+
+func (q *scriptedQueue) lastVisibility(handle string) (int32, bool) {
+	extended := q.extensions()
+	for i := len(extended) - 1; i >= 0; i-- {
+		if aws.ToString(extended[i].ReceiptHandle) == handle {
+			return extended[i].VisibilityTimeout, true
+		}
+	}
+	return 0, false
 }
 
 func (q *scriptedQueue) deletedHandles() []string {
@@ -246,31 +276,25 @@ func TestAMessageBeingWorkedIsKeptHiddenUntilTheEngineIsDone(t *testing.T) {
 	}
 }
 
-func TestAMessageTheEngineParkedOnItsQueueIsNotExtendedBackIntoView(t *testing.T) {
+func TestAMessageTheEngineHoldsOnItsQueueIsHiddenForTheHoldOnceItsWorkIsDone(t *testing.T) {
 	t.Parallel()
 
 	queue := &scriptedQueue{waiting: []sqstypes.Message{message("a")}}
 	e := consumingEngine(queue, provider.ConsumerSpec{Name: "resize", Worker: "media", Exclusive: true})
-	release := make(chan struct{})
-	e.parking = true
-	e.park("handle-a")
-	c := consumption(e, queue, func(ctx context.Context, event events.SQSEvent) events.SQSEventResponse {
-		time.Sleep(60 * time.Millisecond)
-		close(release)
+	var delivered atomic.Bool
+	c := consumption(e, queue, func(context.Context, events.SQSEvent) events.SQSEventResponse {
+		e.recordHold("handle-a", time.Now().Add(10*time.Minute))
+		delivered.Store(true)
 		return events.SQSEventResponse{BatchItemFailures: []events.SQSBatchItemFailure{{ItemIdentifier: "a"}}}
 	})
 
 	runUntil(t, c, func() bool {
-		select {
-		case <-release:
-			return true
-		default:
-			return false
-		}
+		_, given := queue.lastVisibility("handle-a")
+		return delivered.Load() && given
 	})
 
-	if extended := queue.extensions(); len(extended) != 0 {
-		t.Errorf("extended %+v a message the engine had hidden for its own longer wait, cutting that wait short", extended)
+	if last, _ := queue.lastVisibility("handle-a"); last < 590 || last > 600 {
+		t.Errorf("the message was last hidden for %ds, want the ten minutes the engine held it for rather than the few seconds a retained message waits", last)
 	}
 }
 
@@ -547,5 +571,26 @@ func TestMessagesGatheredForABatchAreGivenBackWhenAReceiveFailsBeforeTheBatchFil
 			}
 		}
 		return len(given) == 3
+	})
+}
+
+func TestAHoldTheEngineSetsWhileAMessageIsWorkedOutlastsTheExtensionsOfThatWork(t *testing.T) {
+	t.Parallel()
+
+	queue := &scriptedQueue{waiting: []sqstypes.Message{message("a")}, holdOutrunsExtension: true}
+	e := consumingEngine(queue, provider.ConsumerSpec{Name: "resize", Worker: "media", Exclusive: true})
+	deployed := e.consumersOf("media")[0]
+	var delivered atomic.Bool
+	c := consumption(e, queue, func(ctx context.Context, event events.SQSEvent) events.SQSEventResponse {
+		time.Sleep(30 * time.Millisecond)
+		e.holdInQueue(ctx, deployed, arrival{record: event.Records[0]}, 10*time.Minute)
+		time.Sleep(30 * time.Millisecond)
+		delivered.Store(true)
+		return events.SQSEventResponse{BatchItemFailures: []events.SQSBatchItemFailure{{ItemIdentifier: "a"}}}
+	})
+
+	runUntil(t, c, func() bool {
+		last, _ := queue.lastVisibility("handle-a")
+		return delivered.Load() && last >= 590
 	})
 }

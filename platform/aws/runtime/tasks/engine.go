@@ -41,11 +41,12 @@ type Engine struct {
 	cfg   Config
 	store store
 
-	mu      sync.Mutex
-	urls    map[string]string
-	woken   map[string]time.Time
-	parked  map[string]bool
-	parking bool
+	mu    sync.Mutex
+	urls  map[string]string
+	woken map[string]time.Time
+	holds map[string]time.Time
+
+	pollsItsQueues bool
 }
 
 func New(cfg Config) *Engine {
@@ -59,11 +60,11 @@ func New(cfg Config) *Engine {
 		}
 	}
 	return &Engine{
-		cfg:    cfg,
-		store:  store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
-		urls:   map[string]string{},
-		woken:  map[string]time.Time{},
-		parked: map[string]bool{},
+		cfg:   cfg,
+		store: store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
+		urls:  map[string]string{},
+		woken: map[string]time.Time{},
+		holds: map[string]time.Time{},
 	}
 }
 
@@ -136,25 +137,16 @@ func (e *Engine) queueURL(ctx context.Context, queue string) (string, error) {
 	return *out.QueueUrl, nil
 }
 
-func (e *Engine) park(receiptHandle string) {
+func (e *Engine) recordHold(receiptHandle string, until time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if !e.parking {
-		return
-	}
-	e.parked[receiptHandle] = true
+	e.holds[receiptHandle] = until
 }
 
-func (e *Engine) isParked(receiptHandle string) bool {
+func (e *Engine) takeHold(receiptHandle string) (time.Time, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.parked[receiptHandle]
-}
-
-func (e *Engine) unpark(receiptHandle string) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	was := e.parked[receiptHandle]
-	delete(e.parked, receiptHandle)
-	return was
+	until, held := e.holds[receiptHandle]
+	delete(e.holds, receiptHandle)
+	return until, held
 }
