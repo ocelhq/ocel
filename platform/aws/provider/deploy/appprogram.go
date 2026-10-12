@@ -129,8 +129,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if reachesTasks(app) {
-		topics := topicsOf(project, stack.Env, app.Topics)
-		if role.TasksPolicy, err = tasksPolicy(r.cfg.Region, accountOfARN(r.cfg.StateTableARN), r.cfg.StateTableARN, project, stack.Env, topics); err != nil {
+		if role.TasksPolicy, err = tasksPolicy(r.cfg, project, stack.Env, topicsOf(project, stack.Env, app.Topics)); err != nil {
 			return nil, err
 		}
 	}

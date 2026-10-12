@@ -113,7 +113,7 @@ func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnde
 		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
 	})
-	policy, err := tasksPolicy("us-east-1", mockAccount, testStateTableARN, "shop", "prod", topics)
+	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +151,10 @@ func TestTheQueueTopologyNamesEachTopicsQueuesAndSNSTopic(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{Region: "us-east-1", StateTable: "ocel-state", StateTableARN: testStateTableARN}
-	topology, err := queueTopology(cfg, "shop", "prod", []provider.Resource{
+	topology, err := queueTopology(cfg, "shop", "prod", topicsOf("shop", "prod", []provider.Resource{
 		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
-	}, nil)
+	}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

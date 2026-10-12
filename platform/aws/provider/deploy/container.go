@@ -203,7 +203,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	tasksPolicyDoc := ""
 	if reachesTasks(app) {
 		topics := topicsOf(project, stack.Env, app.Topics)
-		topology, err := queueTopology(r.cfg, project, stack.Env, app.Topics, nil)
+		topology, err := queueTopology(r.cfg, project, stack.Env, topics, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		if len(rendered) > 0 {
 			env[queues.EnvVar] = string(rendered)
 		}
-		if tasksPolicyDoc, err = tasksPolicy(r.cfg.Region, accountOfARN(r.cfg.StateTableARN), r.cfg.StateTableARN, project, stack.Env, topics); err != nil {
+		if tasksPolicyDoc, err = tasksPolicy(r.cfg, project, stack.Env, topics); err != nil {
 			return nil, err
 		}
 	}

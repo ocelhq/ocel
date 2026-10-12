@@ -117,12 +117,11 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 	if err != nil {
 		return proxy{}, fmt.Errorf("load aws config: %w", err)
 	}
-	db := dynamodb.NewFromConfig(aws)
 	var services bindingproxy.Services
 	if servesBuckets {
 		objects := s3.NewFromConfig(aws)
 		services.Buckets = s3store.NewDispatch(bucket.New(bucket.Config{
-			DDB:              db,
+			DDB:              dynamodb.NewFromConfig(aws),
 			Presigner:        s3.NewPresignClient(objects),
 			Objects:          objects,
 			Table:            cfg.table,
