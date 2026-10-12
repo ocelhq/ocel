@@ -54,15 +54,22 @@ export function buildResumeRequest(
   return new Request(url, { method: "POST", headers, body, redirect: "manual" });
 }
 
-export function composePpr(shell: Response, resumed: Promise<Response>): Response {
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  void pipe(shell, resumed, writable);
-
+function buildPprHeaders(shell: Response): Headers {
   const headers = new Headers(shell.headers);
   headers.set("cache-control", "private, no-store");
   headers.delete("content-length");
+  return headers;
+}
 
-  return new Response(readable, { status: shell.status, headers });
+export function composePpr(shell: Response, resumed: Promise<Response>): Response {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  void pipe(shell, resumed, writable);
+  return new Response(readable, { status: shell.status, headers: buildPprHeaders(shell) });
+}
+
+export function shapePprHead(shell: Response): Response {
+  void shell.body?.cancel();
+  return new Response(null, { status: shell.status, headers: buildPprHeaders(shell) });
 }
 
 async function pipe(

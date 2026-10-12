@@ -6,6 +6,7 @@ import {
   RENDER_RELEASE_HEADER,
   readEdgeEntry,
   SERVE_NO_SHELL_HEADER,
+  SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
 import { type FakeServing, fakeServing } from "./serving-deps";
@@ -266,14 +267,31 @@ describe("a prerender served through Serve", () => {
     expect(res.headers.get("x-nextjs-cache")).toBe("HIT");
   });
 
-  it("serves a HEAD request from the origin, never from Serve", async () => {
-    const served = fakeServing();
+  it("answers a HEAD from the entry a GET fills, with its headers and no body", async () => {
+    const served = fakeServing(cached("HIT", { etag: '"e1"' }));
+    const origin = recorder();
+
+    const res = await get("/blog", deps(served, { origin }), { method: "HEAD" });
+
+    expect(origin.requests).toHaveLength(0);
+    expect(served.calls).toHaveLength(1);
+    expect(served.calls[0].request.method).toBe("GET");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBe('"e1"');
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await res.text()).toBe("");
+  });
+
+  it("sends a HEAD to the origin as a HEAD when Serve refuses the origin", async () => {
+    const served = fakeServing(
+      () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+    );
     const origin = recorder();
 
     await get("/blog", deps(served, { origin }), { method: "HEAD" });
 
-    expect(served.calls).toHaveLength(0);
     expect(origin.requests).toHaveLength(1);
+    expect(origin.requests[0].method).toBe("HEAD");
   });
 });
 
@@ -379,6 +397,24 @@ describe("the document of a PPR route", () => {
     expect(resume.headers.get("cookie")).toBe("session=1");
     expect(new URL(resume.url).toString()).toBe("https://fn.example.com/blog");
     expect(await resume.text()).toBe(state);
+  });
+
+  it("answers a HEAD with the composed page's status and headers, and resumes nothing", async () => {
+    const served = fakeServing(framedShell());
+    const origin = recorder(() => new Response("<p>dynamic</p>"));
+
+    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+      method: "HEAD",
+    });
+
+    expect(served.calls).toHaveLength(1);
+    expect(served.calls[0].request.method).toBe("GET");
+    expect(origin.requests).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.has("x-ocel-postponed-length")).toBe(false);
+    expect(await res.text()).toBe("");
   });
 
   it("resumes with the route's own resume headers", async () => {

@@ -153,6 +153,33 @@ describe("a request a cached route names", () => {
     expect(calls[0]!.request.headers.has("cookie")).toBe(false);
   });
 
+  it("answers a HEAD from the entry a GET fills, with its headers and no body", async () => {
+    const { serve, calls, forwarded } = setup(
+      () => new Response("page", { headers: { "cf-cache-status": "HIT", etag: '"e1"' } }),
+    );
+
+    const res = await serve(new Request("https://shop.example.com/blog/a", { method: "HEAD" }));
+
+    expect(forwarded).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.request.method).toBe("GET");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBe('"e1"');
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await res.text()).toBe("");
+  });
+
+  it("sends a HEAD to the origin as a HEAD when Serve refuses the origin", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response("no", { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+    );
+
+    await serve(new Request("https://shop.example.com/blog/a", { method: "HEAD" }));
+
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.method).toBe("HEAD");
+  });
+
   it("tells the visitor how the cache answered, and hides what is for the edge alone", async () => {
     const { serve } = setup(
       () =>
@@ -210,7 +237,6 @@ describe("a request a cached route names", () => {
 describe("a request no cached route lets the edge cache", () => {
   const uncached = [
     ["a write", "https://shop.example.com/blog/a", { method: "POST", body: "x" }],
-    ["a HEAD", "https://shop.example.com/blog/a", { method: "HEAD" }],
     [
       "a request with credentials",
       "https://shop.example.com/blog/a",

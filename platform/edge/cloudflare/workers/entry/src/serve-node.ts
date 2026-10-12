@@ -20,6 +20,8 @@ import {
   buildCanonicalUrl,
   buildOriginCall,
   buildServeRequest,
+  dropBodyForHead,
+  isRead,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
   SERVE_LOOKUP_ONLY_HEADER,
@@ -37,10 +39,6 @@ export interface ServeNodePorts {
 }
 
 const CONDITIONAL_HEADERS = ["if-none-match", "if-modified-since"] as const;
-
-function isRead(request: Request): boolean {
-  return request.method === "GET" || request.method === "HEAD";
-}
 
 function canBeCached(request: Request): boolean {
   return (
@@ -93,7 +91,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       app,
       release: serving.release,
     });
-    const served = new Request(buildServeRequest(call.url, request), { method: "GET" });
+    const served = buildServeRequest(call.url, request);
     served.headers.set(edgeCacheHeader, "1");
     if (onlyLooksUp) {
       served.headers.set(SERVE_LOOKUP_ONLY_HEADER, "1");
@@ -112,8 +110,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       await response.body?.cancel();
       return forwardUncached(request);
     }
-    const visitor = buildVisitorResponse(response, false);
-    return request.method === "HEAD" ? new Response(null, visitor) : visitor;
+    return dropBodyForHead(request, buildVisitorResponse(response, false));
   }
 
   async function revalidate(request: Request): Promise<Response> {
@@ -150,7 +147,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
       case "revalidate":
         return revalidate(request);
       default:
-        return request.method === "GET" && canBeCached(request)
+        return isRead(request) && canBeCached(request)
           ? serveCached(request, rule, false)
           : forwardUncached(request);
     }
