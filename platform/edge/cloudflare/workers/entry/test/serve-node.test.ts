@@ -213,6 +213,7 @@ describe("a request no cached route lets the edge cache", () => {
 
       expect(calls).toHaveLength(0);
       expect(forwarded).toHaveLength(1);
+      expect(forwarded[0]!.cache).toBe("no-store");
     });
   }
 
@@ -461,6 +462,14 @@ describe("a node release resolved by the gateway", () => {
     expect(served).toHaveLength(1);
     expect(await direct.text()).toBe("origin");
     expect(wire.calls.map(({ url }) => url)).toEqual([`${FN_URL}about`]);
+  });
+
+  it("asks the origin's fetch to store nothing for a path the stored table caches nothing for", async () => {
+    const { serve, wire } = await resolved(located, newRouteTable(), ports([]));
+
+    await (serve as ServeFetch)(new Request("https://api.example.com/account"));
+
+    expect(wire.calls[0]!.cache).toBe("no-store");
   });
 
   it("reaches the origin for every path when the release has no route table", async () => {

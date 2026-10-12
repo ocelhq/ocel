@@ -116,6 +116,13 @@ when it is a `GET` or `HEAD` answered with `200`, sets no cookie, and is not `pr
 `no-store` or `no-cache`. The cache lifetime comes from the response's own `Cache-Control`
 (`s-maxage` and `stale-while-revalidate`) or from the cache rule of its route.
 
+In an app with a route table, a response of a route with no cache rule, or of a path that falls
+through to `fallback`, is never stored by an edge. Your app takes `public`, `s-maxage` and
+`stale-while-revalidate` out of its `Cache-Control`, drops `CDN-Cache-Control` and
+`Surrogate-Control`, and marks it `private` if a `max-age` or `Expires` is left for the browser.
+The Cloudflare gateway also asks Cloudflare's cache to store nothing it fetches for it. An app
+with no route table keeps the lifetime its handler sets.
+
 Behind an edge that caches, a cached route answers everyone the same, so your handler never
 sees a `Cookie` header on a `GET` or `HEAD` for it, and the response is safe to store on every
 edge. A request with an

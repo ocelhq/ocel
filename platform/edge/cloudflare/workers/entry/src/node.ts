@@ -39,6 +39,7 @@ export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<
         headers,
         body: request.body,
         redirect: "manual",
+        ...(request.cache === "no-store" ? { cache: "no-store" as const } : {}),
       }),
     );
   };
