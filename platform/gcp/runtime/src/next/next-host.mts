@@ -40,9 +40,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
         }
       : undefined;
   const newCacheStore = async () =>
-    shared
-      ? newGcpCacheStore(shared.storage, shared.objectPrefix, shared.tags.publish)
-      : newInstanceCacheStore(cache);
+    shared ? newGcpCacheStore(shared.storage, shared.objectPrefix) : newInstanceCacheStore(cache);
   return {
     bind: readPortBind(env),
     cacheTagsPerObject: cloudCdnShapedTagsPerObject,

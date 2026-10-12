@@ -53,12 +53,6 @@ test("an instance cache store keeps no entry larger than its whole budget", asyn
   expect(await store.readEntry("/huge")).toBeNull();
 });
 
-test("an instance cache store takes tag writes that reach only the writing instance's own tag clock", async () => {
-  await expect(
-    newInstanceCacheStore(newInstanceCache(1024)).writeTags(["products"], { expired: 1 }),
-  ).resolves.toBeUndefined();
-});
-
 test("an instance use-cache store reads back the entry it was handed", async () => {
   const store = newInstanceUseCacheStore(newInstanceCache(1024 * 1024));
   const entry = { tags: ["a"], stale: 1, timestamp: 2, expire: 3, revalidate: 4, body: "Ym9keQ==" };

@@ -17,7 +17,6 @@ vi.mock("../src/next/cache-store.mjs", () => {
       writeEntry: async (key: string, entry: unknown) => void entries.set(`entry:${key}`, entry),
       readFetch: async (hash: string) => entries.get(`fetch:${hash}`) ?? null,
       writeFetch: async (hash: string, entry: unknown) => void entries.set(`fetch:${hash}`, entry),
-      writeTags: async () => {},
     }),
   };
 });

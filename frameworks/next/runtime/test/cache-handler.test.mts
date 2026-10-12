@@ -62,12 +62,23 @@ function fakeStore() {
       if (gate) await gate;
       fetches.set(hash, entry);
     },
-    async writeTags(names, record) {
-      if (gate) await gate;
-      for (const n of names) tags.set(n, { ...tags.get(n), ...record });
-    },
   };
   OcelCacheHandler.store = Promise.resolve(store);
+  setTagClockStore({
+    async readEntry() {
+      return null;
+    },
+    async writeEntry() {},
+    async readTagSnapshot() {
+      return { status: "unusable" };
+    },
+    async writeTag(name, record) {
+      if (gate) await gate;
+      const { writtenAt: _, ...written } = record;
+      tags.set(name, { ...tags.get(name), ...written });
+      return true;
+    },
+  });
   return store;
 }
 

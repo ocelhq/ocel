@@ -39,7 +39,7 @@ test("the AWS host declares the 50 cache tags CloudFront stores per object", () 
   expect(newAwsNextHost({}).cacheTagsPerObject).toBe(50);
 });
 
-test("the ISR and use-cache stores of one host publish tags revalidated together in one snapshot write", async () => {
+test("the use-cache store of the host publishes tags revalidated together in one snapshot write", async () => {
   const prefix = "prod/proj/app/r3f8a1c9d/isr";
   const snapshotKey = `${prefix}/tag-clock.json`;
   const bucket = newTagSnapshotBucket(snapshotKey, {
@@ -62,13 +62,10 @@ test("the ISR and use-cache stores of one host publish tags revalidated together
     },
   }));
   const host = newAwsNextHost({});
-  const [cacheStore, useCacheStore] = await Promise.all([
-    host.newCacheStore!(),
-    host.newUseCacheStore!(),
-  ]);
+  const useCacheStore = await host.newUseCacheStore!();
 
   await Promise.all([
-    cacheStore.writeTags(["products"], { expired: 4_000 }),
+    useCacheStore.writeTag("products", { expired: 4_000, writtenAt: 4_000 }),
     useCacheStore.writeTag("cart", { expired: 4_000, writtenAt: 4_000 }),
   ]);
 
@@ -79,7 +76,7 @@ test("the ISR and use-cache stores of one host publish tags revalidated together
   });
 });
 
-test("a failed publisher setup is tried again on the next store open", async () => {
+test("a use-cache store that fails to open is opened again on the next try", async () => {
   const prefix = "prod/proj/app/r3f8a1c9d/isr";
   vi.stubEnv("OCEL_ISR_PREFIX", prefix);
   vi.stubEnv("OCEL_STATE_TABLE", "state");
@@ -102,7 +99,7 @@ test("a failed publisher setup is tried again on the next store open", async () 
   }));
   const host = newAwsNextHost({});
 
-  await expect(host.newCacheStore!()).rejects.toThrow("OCEL_ISR_BUCKET");
+  await expect(host.newUseCacheStore!()).rejects.toThrow("OCEL_ISR_BUCKET");
 
   vi.stubEnv("OCEL_ISR_BUCKET", "assets");
   await expect(host.newUseCacheStore!()).resolves.toBeDefined();

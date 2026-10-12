@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { areTagsExpired, mergeRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
+import { runTagWrites } from "@framework/node-runtime/tag-records";
 import type { TagRecord } from "@platform/edge-contract/purge";
 import { getNextHost } from "./host.mjs";
 import { notePurge } from "./purge-signal.mjs";
@@ -119,40 +120,55 @@ function startSync(): Promise<void> {
   }));
 }
 
-async function writeTags(tags: string[], at: number): Promise<void> {
+function readInstant(): number {
+  return Math.max(Date.now(), now());
+}
+
+const revalidations = new WeakMap<readonly string[], Promise<void>>();
+
+async function writeRevalidation(
+  tags: readonly string[],
+  record: TagRecord,
+  at: number,
+): Promise<void> {
   const backend = await openUseCacheStore();
   if (!backend) return;
 
-  const writes = await Promise.allSettled(
-    tags.map((tag) => backend.writeTag(tag, { ...state.records.get(tag)!, writtenAt: at })),
+  const failures = await runTagWrites(tags, (tag) =>
+    backend.writeTag(tag, { ...record, writtenAt: at }),
   );
-  const failed = writes.find((write) => write.status === "rejected");
-  if (failed) throw failed.reason;
+  if (failures.length > 0) throw failures[0];
 }
 
-export function recordTags(tags: string[], record: TagRecord): void {
-  for (const tag of tags) observe(tag, record);
+export function revalidateTags(
+  tags: string | readonly string[],
+  durations?: { expire?: number },
+): Promise<void> {
+  const list = typeof tags === "string" ? [tags] : tags;
+  if (list.length === 0) return Promise.resolve();
+
+  const known = typeof tags === "string" ? undefined : revalidations.get(tags);
+  if (known) return known;
+
+  const at = readInstant();
+  const record: TagRecord = durations
+    ? {
+        stale: at,
+        ...(durations.expire !== undefined ? { expired: at + durations.expire * 1000 } : {}),
+      }
+    : { expired: at };
+  for (const tag of list) {
+    observe(tag, record);
+    notePurge(tag, record, at);
+  }
+
+  const written = keptUntilSettled(writeRevalidation(list, record, at));
+  if (typeof tags !== "string") revalidations.set(tags, written);
+  return written;
 }
 
 export const tagClock: TagClock = {
-  async updateTags(tags, durations) {
-    const at = now();
-    for (const tag of tags) {
-      const existing = state.records.get(tag) ?? {};
-      const updated: TagRecord = durations
-        ? {
-            ...existing,
-            stale: at,
-            ...(durations.expire !== undefined ? { expired: at + durations.expire * 1000 } : {}),
-          }
-        : { ...existing, expired: at };
-      state.records.set(tag, updated);
-      mirrorTag(tag, updated);
-      notePurge(tag, updated, at);
-    }
-
-    await keptUntilSettled(writeTags(tags, at));
-  },
+  updateTags: revalidateTags,
 
   async refreshTags() {
     if (state.inflight) return state.inflight;
@@ -184,7 +200,7 @@ export const tagClock: TagClock = {
 
 export async function tagsExpireEntry(tags: string[], lastModified: number): Promise<boolean> {
   await tagClock.refreshTags();
-  return areTagsExpired(tags, state.records, lastModified, Date.now());
+  return areTagsExpired(tags, state.records, lastModified, readInstant());
 }
 
 export const clockMethods = {

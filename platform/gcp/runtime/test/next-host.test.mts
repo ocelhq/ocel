@@ -134,35 +134,13 @@ test("the GCP host records tags in the tags database its service is told", async
   });
   try {
     const host = newGcpNextHost({ ...tagEnv, OCEL_FIRESTORE_ENDPOINT: origin });
-    const store = await host.newCacheStore!();
+    const store = await host.newUseCacheStore!();
 
-    await store.writeTags(["cart"], { expired: 5 });
+    await store.writeTag("cart", { expired: 5, writtenAt: 1 });
 
     expect(requests).toEqual([
       { method: "POST", url: "/v1/projects/p/databases/d/documents:commit" },
     ]);
-  } finally {
-    server.close();
-  }
-});
-
-test("the GCP host's cache store and use-cache store record tags through one writer", async () => {
-  const bodies: string[] = [];
-  const { server, origin } = await listen((_req, body) => {
-    bodies.push(body);
-  });
-  try {
-    const host = newGcpNextHost({ ...tagEnv, OCEL_FIRESTORE_ENDPOINT: origin });
-    const pages = await host.newCacheStore!();
-    const useCache = await host.newUseCacheStore!();
-
-    await Promise.all([
-      pages.writeTags(["a"], { expired: 5 }),
-      useCache.writeTag("b", { expired: 6, writtenAt: 1 }),
-    ]);
-
-    expect(bodies).toHaveLength(1);
-    expect(JSON.parse(bodies[0]!).writes).toHaveLength(2);
   } finally {
     server.close();
   }
@@ -272,10 +250,9 @@ test("a GCP host told a url map clears each tag it records, after the record lan
       OCEL_CDN_URL_MAP: "projects/p/global/urlMaps/m",
       OCEL_FIRESTORE_ENDPOINT: origin,
     });
-    const pages = await host.newCacheStore!();
     const useCache = await host.newUseCacheStore!();
 
-    await pages.writeTags(["cart"], { expired: 5 });
+    await useCache.writeTag("cart", { expired: 5, writtenAt: 1 });
     await useCache.writeTag("shelf", { expired: 6, writtenAt: 1 });
 
     expect(seen.map((s) => s.kind)).toEqual(["commit", "purge", "commit", "purge"]);
@@ -287,9 +264,9 @@ test("a GCP host told a url map clears each tag it records, after the record lan
 test("a GCP host told no url map clears nothing", async () => {
   await withCloudCdnStub(async (seen, origin) => {
     const host = newGcpNextHost({ ...purgeEnv, OCEL_FIRESTORE_ENDPOINT: origin });
-    const pages = await host.newCacheStore!();
+    const useCache = await host.newUseCacheStore!();
 
-    await pages.writeTags(["cart"], { expired: 5 });
+    await useCache.writeTag("cart", { expired: 5, writtenAt: 1 });
 
     expect(seen.map((s) => s.kind)).toEqual(["commit"]);
   });
@@ -322,9 +299,12 @@ test("the GCP host told where the worker purges clears each tag it records at th
       OCEL_PURGE_SECRET: "s",
       OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
     });
-    const store = await host.newCacheStore!();
+    const store = await host.newUseCacheStore!();
 
-    await store.writeTags(["a", "b"], { expired: 5 });
+    await Promise.all([
+      store.writeTag("a", { expired: 5, writtenAt: 1 }),
+      store.writeTag("b", { expired: 5, writtenAt: 1 }),
+    ]);
 
     const bodies = fetched.map((call) => JSON.parse(String(call.init?.body)));
     expect(
@@ -374,7 +354,8 @@ test("the GCP host keeps pages in Cloud Storage and tags in the tags database, w
     const store = await host.newCacheStore!();
 
     await store.writeEntry("blog", { lastModified: 1, value: { kind: "FETCH", data: {} } });
-    await store.writeTags(["a"], { expired: 5 });
+    const useCache = await host.newUseCacheStore!();
+    await useCache.writeTag("a", { expired: 5, writtenAt: 1 });
 
     expect(calls.map((url) => url.pathname)).toEqual([
       "/upload/storage/v1/b/b/o",
