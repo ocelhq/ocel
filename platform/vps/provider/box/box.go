@@ -2,7 +2,6 @@ package box
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -105,10 +104,8 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	next.PreviewBase = declaredPreviewBase(spec)
-	if spec.Tier == environment.TierPreview {
-		if err := e.machine.PutPreviewGate(ctx, Surface(spec.Slug, spec.Tier), spec.PreviewGate); err != nil {
-			return nil, fmt.Errorf("hand the switchboard the preview gate of %s: %w", spec.Slug, err)
-		}
+	if err := e.PutPreviewGate(ctx, spec); err != nil {
+		return nil, err
 	}
 	return &stack{e: e, state: next}, nil
 }
