@@ -41,7 +41,7 @@ func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
 }
 
 func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
-	next := buildoutput.Uses{ISR: true, ImageOptimization: true}
+	next := buildoutput.Uses{Revalidation: true, ImageOptimization: true}
 	for _, tc := range []struct {
 		name string
 		apps []buildoutput.Uses
@@ -53,13 +53,13 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 			apps: []buildoutput.Uses{{}},
 		},
 		{
-			name: "a build using ISR and image optimization needs both features",
+			name: "a build using revalidation and image optimization needs both features",
 			apps: []buildoutput.Uses{{}, next},
 			want: []string{FeatureISR, FeatureImageOptimization},
 		},
 		{
-			name: "a build using ISR alone needs no image optimizer",
-			apps: []buildoutput.Uses{{ISR: true}},
+			name: "a build using revalidation alone needs no image optimizer",
+			apps: []buildoutput.Uses{{Revalidation: true}},
 			want: []string{FeatureISR},
 		},
 		{

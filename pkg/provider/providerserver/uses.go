@@ -49,5 +49,5 @@ func buildUses(root, app, framework string, hosting buildoutput.Hosting, present
 		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app, err)
 	}
 	_, revalidates := hosting.Needs[edge.NeedRevalidation]
-	return buildoutput.Uses{ISR: revalidates, ImageOptimization: err == nil}, nil
+	return buildoutput.Uses{Revalidation: revalidates, ImageOptimization: err == nil}, nil
 }

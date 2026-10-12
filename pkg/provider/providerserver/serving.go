@@ -70,7 +70,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if err != nil {
 		return AppServing{}, err
 	}
-	if uses.ISR {
+	if uses.Revalidation {
 		facts.ISR = &provider.ISRSpec{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),

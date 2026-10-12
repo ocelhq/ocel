@@ -10,7 +10,7 @@ import (
 var isrFeature = feature{
 	name:       FeatureISR,
 	summary:    "incremental static regeneration — the invalidator that clears stale copies from the fronts",
-	serves:     buildoutput.Uses{ISR: true},
+	serves:     buildoutput.Uses{Revalidation: true},
 	template:   isrTemplate,
 	payloads:   isrPayloads,
 	placements: isrPlacements,

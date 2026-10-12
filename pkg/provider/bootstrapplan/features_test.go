@@ -13,7 +13,7 @@ import (
 )
 
 var testCatalogue = []provider.Feature{
-	{Name: "isr", Summary: "incremental regeneration", Serves: buildoutput.Uses{ISR: true}},
+	{Name: "isr", Summary: "incremental regeneration", Serves: buildoutput.Uses{Revalidation: true}},
 	{Name: "image-optimization", Summary: "image optimizer", Serves: buildoutput.Uses{ImageOptimization: true}},
 	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Edges: []edge.Kind{"cloudflare"}},
 }
@@ -223,17 +223,17 @@ func TestRequiredFeatures(t *testing.T) {
 		{name: "a project needing nothing needs no feature"},
 		{
 			name: "an app pulls the features that serve what it uses",
-			apps: []buildoutput.Uses{{ISR: true, ImageOptimization: true}},
+			apps: []buildoutput.Uses{{Revalidation: true, ImageOptimization: true}},
 			want: []string{"isr", "image-optimization"},
 		},
 		{
-			name: "an app using ISR alone pulls no image optimizer",
-			apps: []buildoutput.Uses{{ISR: true}},
+			name: "an app using revalidation alone pulls no image optimizer",
+			apps: []buildoutput.Uses{{Revalidation: true}},
 			want: []string{"isr"},
 		},
 		{
 			name: "what the apps use together is one set",
-			apps: []buildoutput.Uses{{ImageOptimization: true}, {}, {ISR: true}},
+			apps: []buildoutput.Uses{{ImageOptimization: true}, {}, {Revalidation: true}},
 			want: []string{"isr", "image-optimization"},
 		},
 		{
@@ -243,7 +243,7 @@ func TestRequiredFeatures(t *testing.T) {
 		},
 		{
 			name: "apps and edge together are one set",
-			apps: []buildoutput.Uses{{ISR: true, ImageOptimization: true}},
+			apps: []buildoutput.Uses{{Revalidation: true, ImageOptimization: true}},
 			edge: "cloudflare",
 			want: []string{"isr", "image-optimization", "cloudflare-edge"},
 		},
