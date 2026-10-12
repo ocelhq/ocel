@@ -353,12 +353,15 @@ async function serveRequest(request: Request, deps: RouteDeps): Promise<Response
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
     pathnames: routingTableOf(deps.manifest).pathnames,
-    routes: withoutInternalRedirects(
-      deps.manifest.routes,
-      routingUrl.pathname,
-      deps.manifest.basePath,
-      deps.manifest.buildId,
-    ),
+    routes: {
+      ...withoutInternalRedirects(
+        deps.manifest.routes,
+        routingUrl.pathname,
+        deps.manifest.basePath,
+        deps.manifest.buildId,
+      ),
+      middlewareMatchers: undefined,
+    },
 
     invokeMiddleware: async (ctx) => {
       const middleware = deps.manifest.middleware;
@@ -1307,9 +1310,12 @@ function middlewareMatches(
   headers: Headers,
 ): boolean {
   if (!matchers || matchers.length === 0) return true;
+  const pathnames = [url.pathname];
+  const decoded = decodedPathname(url.pathname);
+  if (decoded !== undefined && decoded !== url.pathname) pathnames.push(decoded);
   return matchers.some(
     (matcher) =>
-      new RegExp(matcher.sourceRegex).test(url.pathname) &&
+      pathnames.some((pathname) => new RegExp(matcher.sourceRegex).test(pathname)) &&
       (matcher.has ?? []).every((has) => matchesHas(has, headers, url)) &&
       !(matcher.missing ?? []).some((has) => matchesHas(has, headers, url)),
   );
