@@ -41,10 +41,6 @@ func readCaller(r *http.Request) (*Caller, error) {
 	}, nil
 }
 
-var Env = ocel.Env[struct {
-	JourneyNonce ocel.Secret `ocel:"JOURNEY_NONCE"`
-}]()
-
 var Live = ocel.Realtime("app", ocel.RealtimeAuthorize(readCaller))
 
 type OrderEvent struct {

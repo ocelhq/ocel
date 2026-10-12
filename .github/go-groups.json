@@ -2,7 +2,7 @@
   {
     "name": "cli",
     "scope": "cli",
-    "dirs": "cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server tests/fixtures/tasks/go tests/fixtures/worker/go tests/fixtures/realtime/go scripts/redactvet",
+    "dirs": "cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server tests/fixtures/worker/go scripts/redactvet",
     "generate": "cli platform/aws/provider"
   },
   {

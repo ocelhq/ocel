@@ -174,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "ocel"
-version = "0.0.0"
+version = "0.0.1"
 source = { editable = "../../../../python/ocel" }
 dependencies = [
     { name = "connectrpc" },
@@ -408,7 +408,7 @@ wheels = [
 ]
 
 [[package]]
-name = "realtime-python"
+name = "sdk-python"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

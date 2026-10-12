@@ -5,9 +5,13 @@ import (
 	"log"
 	"net/http"
 	"os"
-
-	"example.com/web/infra"
 )
+
+func writeAnswer(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -15,18 +19,13 @@ func main() {
 		port = "3104"
 	}
 
-	http.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":       true,
-			"database": infra.DB.Name(),
-			"bucket":   infra.Uploads.Name(),
-			"greeting": infra.Env.Greeting,
-		})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		writeAnswer(w, http.StatusOK, map[string]any{"ok": true, "app": "web"})
 	})
+	handleWire(mux)
+	handleRealtime(mux)
 
 	log.Printf("go listening on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
