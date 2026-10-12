@@ -3,6 +3,7 @@ import { needsSlashNormalization } from "@framework/next-router/trailing-slash";
 import { readBypass, revalidateHeader } from "@platform/edge-contract/bypass";
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import {
+  addRedirectQuery,
   type CacheRule,
   type CompiledRouteTable,
   findHeaders,
@@ -54,10 +55,7 @@ function answerRedirect(
   redirect: { status: number; location: string },
 ): Response {
   const headers = new Headers(findHeaders(routes, url.pathname));
-  headers.set(
-    "location",
-    redirect.location.includes("?") ? redirect.location : redirect.location + url.search,
-  );
+  headers.set("location", addRedirectQuery(redirect.location, url.search));
   return new Response(null, { status: redirect.status, headers });
 }
 

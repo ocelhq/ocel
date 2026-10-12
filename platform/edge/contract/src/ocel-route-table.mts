@@ -415,6 +415,13 @@ export function findRedirect(
   return undefined;
 }
 
+export function addRedirectQuery(location: string, query: string): string {
+  const fragmentAt = location.indexOf("#");
+  const target = fragmentAt === -1 ? location : location.slice(0, fragmentAt);
+  if (target.includes("?")) return location;
+  return target + query + location.slice(target.length);
+}
+
 export function findHeaders(
   compiled: CompiledRouteTable,
   pathname: string,
