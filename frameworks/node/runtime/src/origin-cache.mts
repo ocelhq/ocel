@@ -211,9 +211,32 @@ function shape(
   res.setHeader(header, [...new Set([...existing, ...tags])].join(","));
 }
 
-function listDirectiveNames(declared: string): string[] {
-  return declared
-    .toLowerCase()
+const sharedLifetimeHeaders = ["cdn-cache-control", "surrogate-control"];
+const sharedDirectives = ["public", "s-maxage", "stale-while-revalidate"];
+const unstoredDirectives = ["private", "no-store"];
+
+function readDirectiveName(directive: string): string {
+  return directive.trim().split("=")[0]!.toLowerCase();
+}
+
+export function removeSharedLifetime(res: http.ServerResponse): void {
+  for (const header of sharedLifetimeHeaders) res.removeHeader(header);
+  const declared = res.getHeader("cache-control");
+  const kept = String(declared ?? "")
     .split(",")
-    .map((directive) => directive.trim().split("=")[0]!);
+    .map((directive) => directive.trim())
+    .filter(
+      (directive) => directive !== "" && !sharedDirectives.includes(readDirectiveName(directive)),
+    );
+  const names = kept.map(readDirectiveName);
+  const grantsLifetime = names.includes("max-age") || res.hasHeader("expires");
+  if (grantsLifetime && !names.some((name) => unstoredDirectives.includes(name))) {
+    kept.unshift("private");
+  }
+  if (kept.length > 0) res.setHeader("cache-control", kept.join(", "));
+  else res.removeHeader("cache-control");
+}
+
+function listDirectiveNames(declared: string): string[] {
+  return declared.split(",").map(readDirectiveName);
 }

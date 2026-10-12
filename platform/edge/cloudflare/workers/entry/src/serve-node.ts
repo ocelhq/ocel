@@ -74,7 +74,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
   const { serving, app, origin, routes, forward } = ports;
 
   async function forwardUncached(request: Request): Promise<Response> {
-    const response = await forward(request);
+    const response = await forward(routes ? new Request(request, { cache: "no-store" }) : request);
     const announced = response.headers.get(purgeHeader);
     if (announced === null) return response;
     await serving.purge(readPurge(announced), !isRead(request));

@@ -20,6 +20,7 @@ import {
   prepareCachedResponse,
   readOriginCache,
   removeCacheHost,
+  removeSharedLifetime,
   runWithRequestCache,
   watchRequestCache,
 } from "./origin-cache.mjs";
@@ -33,6 +34,7 @@ export interface RoutedRequest {
   pathname: string;
   headers: Record<string, string>;
   cacheRule: CacheRule | undefined;
+  isCachedRoute: boolean;
   bypass: Bypass;
   redirect: { status: number; location: string } | undefined;
 }
@@ -88,6 +90,7 @@ function routeRequest(origin: Origin, req: http.IncomingMessage, pathname: strin
     pathname,
     headers: routes ? findHeaders(routes, pathname) : {},
     cacheRule,
+    isCachedRoute: route?.route.cache !== undefined,
     bypass: cacheRule
       ? readBypass({
           token: cacheRule.bypassToken,
@@ -170,6 +173,7 @@ function runInRequest<T>(
     const message = typeof rest[0] === "string" ? [rest.shift()] : [];
     declareHeaders(this, rest[0]);
     applyHeaderRules(this, routed);
+    if (origin.routes && !routed.isCachedRoute) removeSharedLifetime(this);
     if (origin.cache && store) prepareCachedResponse(origin.cache, req, this, store, routed);
     return (writeHead as any).apply(this, [status, ...message]);
   } as typeof res.writeHead;
