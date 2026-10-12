@@ -3,6 +3,7 @@ import http from "node:http";
 import Module from "node:module";
 import net from "node:net";
 import type { Duplex } from "node:stream";
+import { readEdgeCacheMode } from "@platform/edge-contract/edge-cache";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -171,6 +172,10 @@ const cacheTagPurgeVar = "OCEL_CACHE_TAG_PURGE";
 
 export function invalidatesByCacheTag(env: NodeJS.ProcessEnv): boolean {
   return Boolean(env[cacheTagPurgeVar]);
+}
+
+export function servesOnlyFresh(env: NodeJS.ProcessEnv): boolean {
+  return readEdgeCacheMode(env) !== undefined;
 }
 
 const originSecretVar = "OCEL_ORIGIN_SECRET";

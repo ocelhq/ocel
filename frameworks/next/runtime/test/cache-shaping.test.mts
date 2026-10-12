@@ -1,5 +1,4 @@
-import { invalidatesByCacheTag } from "@framework/node-runtime/host";
-import { servesOnlyFresh } from "@platform/edge-contract/edge-cache";
+import { invalidatesByCacheTag, servesOnlyFresh } from "@framework/node-runtime/host";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,
