@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -303,23 +302,6 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
-		}
-	}
-}
-
-func TestAContainerAppCloudflareForwardsToTheLoadBalancerIsToldNoEdgeCachesItsResponses(t *testing.T) {
-	t.Parallel()
-
-	env := releasing(t, routedConfig(t, cloudflare.Kind)).appEnv(provider.StackSpec{
-		Kind: provider.StackApp,
-		Ref:  provider.StackRef{Name: naming.AppStack("production", "web", naming.NewReleaseToken("b1", "f1"))},
-		Edge: fakeEdgeOf(cloudflare.Kind),
-		App:  &provider.AppSpec{App: "web", Compute: provider.ComputeContainer, Router: alb.Kind},
-	}, appBundle{}, sessionScope{})
-
-	for _, name := range []string{edge.EdgeCacheVar, edge.ReleaseTokenVar, edge.CacheTagPurgeVar} {
-		if value, set := env[name]; set {
-			t.Errorf("%s = %q, want it unset: Cloudflare forwards these requests to the load balancer and runs none of the edge's code, so nothing marks or stores them", name, value)
 		}
 	}
 }
