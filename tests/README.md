@@ -17,30 +17,19 @@ daemon they drive is missing.
 ## Running one cell locally
 
 A cell is one fixture on one target. `e2e/src/matrix/fixtures.ts` names every fixture
-and the targets and variants it runs on. A fixture belongs to one concern: `deploy` asks
-whether a runtime runs on a target at all, and its apps under `fixtures/deploy/` declare no
-resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
-`fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
-usable, from `fixtures/sdk/`; `build-variables` asks whether a Next build that reads a
-sensitive and a secret value at import deploys, leaving neither in `.ocel/output`, `.next`
-or a live dir, from `fixtures/build-variables/`; `client-env` asks whether a Next and a SvelteKit
-app read a public value through `ocel/env/next` and `ocel/env/sveltekit` on the server and in the
-browser, render the deployment url, and leave a sensitive value out of the page and every script it
-loads, from `fixtures/client-env/`; `prerender` asks whether `ocel deploy` hands
-a build the bindings of the postgres it reads while prerendering, over a port forward, from
-`fixtures/prerender/`; `pre-build` asks whether `lifecycle.preBuild` runs a migration against the
-deployed postgres before the app is built, whether a Next build then prerenders the rows only that
-migration creates, and whether a command that fails stops the deploy there, from `fixtures/pre-build/`; `kv` asks whether a kv store behaves as the map in #1474 says on
-a target, from `fixtures/kv/`, restarting what the app declared and, where the target keeps
-releases, redeploying it to see its data survive; `tasks` asks whether topics, tasks and
-workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `realtime` asks
-whether realtime channels behave as the map in #1508 says on a target, from
-`fixtures/realtime/`, through the app's handler and a socket the suite opens on the transport
-it names; `iac` asks whether an app binds to what an SST or Pulumi stack
-provisions beside it, from `fixtures/iac/`, and runs only when a run names it. The harness
-starts nothing but the `ocel` binary; bring up what the target needs first. For `dev` that
-is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the
-database topics and tasks run on, in, and for a go fixture such as `tasks/go` the go that
+and the targets and variants it runs on. The concerns are four, and each holds few beefy apps,
+one per framework, every one driving all its concern covers: `deploy` asks whether an app runs
+on a target, from apps under `fixtures/deploy/` that declare no resources; `lifecycle` asks
+whether a release can be replaced and rolled back there, and whether `lifecycle.preBuild`
+migrates the deployed database before the build, from `fixtures/lifecycle/`; `sdk` asks whether
+every primitive an app declares (postgres, buckets, environment, kv, tasks, topics, workers and
+realtime) is provisioned, bound and usable, including at build time, from `fixtures/sdk/`; `iac`
+asks whether an app binds to what an SST or Pulumi stack provisions beside it, from
+`fixtures/iac/`, and runs only when a run names it. A new feature or primitive extends the app
+of each framework it reaches; `fixture()` refuses any other concern or app, and what a target
+cannot do is a gap in `e2e/src/matrix/gaps.ts`. The harness starts nothing but the `ocel`
+binary; bring up what the target needs first. For `dev` that is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the
+database topics and tasks run on, in, and for a go fixture such as `sdk/go` the go that
 `go.work` pins, which runs its app and its workers:
 
 ```
@@ -142,8 +131,8 @@ pnpm --filter @ocel-tests/e2e smoke --target <aws|gcp|vps|dev|next>
 ```
 
 The E2E Tests run on every push to main and on a release pull request, against the
-emulators and VMs: `deploy`, `lifecycle`, `sdk`, `build-variables`, `kv`, `tasks` and
-`realtime`, `lifecycle` cells first, plus `deploy/node` on a box whose docker 28 bootstrap adopts. `iac` deploys real
+emulators and VMs: `deploy`, `lifecycle` and `sdk`, `lifecycle` cells first, plus
+`deploy/node` on a box whose docker 28 bootstrap adopts. `iac` deploys real
 SST and Pulumi stacks, so only a workflow dispatch that names it runs it, and only with
 `skips=run`: the gap list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). The
 run spreads each edge of a fixture group over one member of that group, rotated by the

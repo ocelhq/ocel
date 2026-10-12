@@ -100,7 +100,11 @@ which are tooling.
   generated JSON Schema under `public/schema/`.
 - **`tests/`** — the suites that drive the real binary — the e2e suite, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
-  apps they drive. A fixture directory exercises one concern and nothing else. Under
+  apps they drive. The concerns are `deploy`, `lifecycle`, `sdk` and `iac`, and each holds
+  few beefy apps, one per framework, each driving everything its concern covers: a new
+  feature or primitive extends the app of each framework it reaches. A test that needs an
+  app shaped for it alone is a unit or integration test, and keeps that app beside it, as
+  `cli/testdata/` does. Under
   `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that set
   it up before bootstrap, check it after, and take it down, and the `proxy` option its
   projects set. Both the live suite and the e2e harness drive them.
