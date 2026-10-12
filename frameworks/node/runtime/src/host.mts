@@ -4,6 +4,11 @@ import Module from "node:module";
 import net from "node:net";
 import type { Duplex } from "node:stream";
 import { readEdgeCacheMode } from "@platform/edge-contract/edge-cache";
+import {
+  PREVIEW_GATE_FILE_VAR,
+  PREVIEW_GATE_INLINE_VAR,
+} from "@platform/edge-contract/preview-gate";
+import type { MountedGate, PreviewGateSource } from "./preview-gate.mjs";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -216,10 +221,20 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   };
 }
 
+function takeMountedGate(env: NodeJS.ProcessEnv): MountedGate | undefined {
+  const file = env[PREVIEW_GATE_FILE_VAR];
+  const inline = env[PREVIEW_GATE_INLINE_VAR];
+  delete env[PREVIEW_GATE_FILE_VAR];
+  delete env[PREVIEW_GATE_INLINE_VAR];
+  return file === undefined && inline === undefined ? undefined : { file, inline };
+}
+
 interface Trust {
   entry?: boolean;
   forwarded?: boolean;
   guard?: OriginGuard;
+  mounted?: MountedGate;
+  gate?: PreviewGateSource;
 }
 
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
@@ -271,6 +286,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
     const admitted = !trust.guard || trust.guard(req.headers);
+    const reachedHost = req.headers.host ?? "";
     normalizeLoopbackHeaders(req.headers, trust);
     const start = performance.now();
 
@@ -313,6 +329,11 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
           res.end();
           return;
         }
+        if (trust.mounted) {
+          const { admitPreview, openPreviewGate } = await import("./preview-gate.mjs");
+          trust.gate ??= openPreviewGate(trust.mounted);
+          if (!(await admitPreview(trust.gate, req, res, reachedHost))) return;
+        }
         const ocel: OcelContext = { waitUntil };
         const run = () => invoke(req, res, ocel);
         return scope ? scope(req, res, ocel, run) : run();
@@ -326,7 +347,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
 }
 
 function originTrust(env: NodeJS.ProcessEnv, forwarded: boolean): Trust {
-  return { forwarded, guard: originGuard(env) };
+  return { forwarded, guard: originGuard(env), mounted: takeMountedGate(env) };
 }
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
@@ -364,12 +385,18 @@ const forbiddenUpgradeAnswer =
 function wrapUpgrade(server: http.Server, lifted: Listener[], trust: Trust): UpgradeListener {
   return (req, socket, head) => {
     const admitted = !trust.guard || trust.guard(req.headers);
+    const reachedHost = req.headers.host ?? "";
     normalizeLoopbackHeaders(req.headers, trust);
     Promise.resolve()
       .then(async () => {
         if (!admitted) {
           socket.end(forbiddenUpgradeAnswer);
           return;
+        }
+        if (trust.mounted) {
+          const { admitPreviewUpgrade, openPreviewGate } = await import("./preview-gate.mjs");
+          trust.gate ??= openPreviewGate(trust.mounted);
+          if (!(await admitPreviewUpgrade(trust.gate, req, socket, reachedHost))) return;
         }
         for (const listener of [...lifted]) listener.call(server, req, socket, head);
       })
