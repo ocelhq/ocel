@@ -1,0 +1,76 @@
+---
+title: Task
+description: Background work, run once per trigger.
+---
+
+A task is a named function your app triggers to run in the background. Declaring it is the whole
+setup: the deploy provisions what runs it.
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts title="resources/index.ts"
+import { task } from "ocel/task";
+
+type Image = { url: string };
+
+export const resize = task("resize-image", {
+  run: async (image: Image) => image.url.length,
+});
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go title="resources/resources.go"
+package resources
+
+import (
+	"context"
+
+	"ocel.dev"
+)
+
+type Image struct {
+	URL string `json:"url"`
+}
+
+var Resize = ocel.Task("resize-image", func(ctx context.Context, image Image) (int, error) {
+	return len(image.URL), nil
+})
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+import ocel
+
+
+@ocel.task("resize-image")
+async def resize(image: dict, ctx: ocel.RunContext) -> int:
+    return len(image["url"])
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+#[derive(serde::Deserialize)]
+struct Image {
+    url: String,
+}
+
+#[ocel::task(name = "resize-image")]
+async fn resize(image: Image, _run: &ocel::Run) -> Result<usize, ocel::RunError> {
+    Ok(image.url.len())
+}
+```
+
+</Tab>
+
+</Tabs>
