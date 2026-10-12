@@ -52,3 +52,61 @@ test("a node response whose tags fit Cloud CDN's limits keeps its lifetime and t
   expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
   expect(res.headers.get("cache-tag")).toBe("r1a2b3c4d|posts,r1a2b3c4d|path:/blog/a");
 });
+
+async function seenFor(
+  respond: (res: http.ServerResponse) => void,
+): Promise<{ cacheControl: string | null; tags: string | null; other: string | null }> {
+  class TestResponse extends http.ServerResponse {}
+  withholdOverTaggedResponsesFromCloudCdn(TestResponse.prototype);
+  const server = http.createServer({ ServerResponse: TestResponse }, (_req, res) => {
+    respond(res);
+    res.end("page");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/blog/a`);
+    return {
+      cacheControl: res.headers.get("cache-control"),
+      tags: res.headers.get("cache-tag"),
+      other: res.headers.get("x-other"),
+    };
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test("a node response whose over-limit tags are passed to writeHead is not stored", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const tags = Array.from({ length: 51 }, (_, i) => `r1a2b3c4d|t${i}`).join(",");
+  const expected = {
+    cacheControl: "private, no-cache, no-store, max-age=0, must-revalidate",
+    tags: null,
+    other: "kept",
+  };
+
+  const asObject = await seenFor((res) =>
+    res.writeHead(200, { "cache-control": "s-maxage=60", "Cache-Tag": tags, "x-other": "kept" }),
+  );
+  const asArray = await seenFor((res) =>
+    res.writeHead(200, "Fine", [
+      "cache-control",
+      "s-maxage=60",
+      "cache-tag",
+      tags,
+      "x-other",
+      "kept",
+    ]),
+  );
+
+  expect(asObject).toEqual(expected);
+  expect(asArray).toEqual(expected);
+});
+
+test("a node response whose tags passed to writeHead fit keeps its lifetime and tags", async () => {
+  const seen = await seenFor((res) =>
+    res.writeHead(200, { "cache-control": "s-maxage=60", "cache-tag": "r1a2b3c4d|posts" }),
+  );
+
+  expect(seen.cacheControl).toBe("s-maxage=60");
+  expect(seen.tags).toBe("r1a2b3c4d|posts");
+});

@@ -338,3 +338,33 @@ test("a Cache-Control staged with setHeader is still withheld when writeHead car
   });
   expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
 });
+
+test("a Cache-Control repeated in writeHead is judged on every value it sends", async () => {
+  const flat = await cacheControlSeenFor((res) =>
+    res.writeHead(200, [
+      "Cache-Control",
+      "public",
+      "Cache-Control",
+      "s-maxage=60",
+      "x-other",
+      "kept",
+    ]),
+  );
+  expect(flat).toEqual({ cacheControl: uncacheable, other: "kept" });
+  const paired = await cacheControlSeenFor((res) =>
+    res.writeHead(200, [
+      ["Cache-Control", "public"],
+      ["Cache-Control", "s-maxage=60"],
+      ["x-other", "kept"],
+    ]),
+  );
+  expect(paired).toEqual({ cacheControl: uncacheable, other: "kept" });
+  const cased = await cacheControlSeenFor((res) =>
+    res.writeHead(200, {
+      "Cache-Control": "public",
+      "cache-control": "s-maxage=60",
+      "x-other": "kept",
+    }),
+  );
+  expect(cased).toEqual({ cacheControl: uncacheable, other: "kept" });
+});

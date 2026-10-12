@@ -9,6 +9,11 @@ import {
   isImmutable,
   uncacheable,
 } from "../cache/cloud-cdn-tags.mjs";
+import {
+  newWriteHeadLookup,
+  readWriteHeadHeaders,
+  withoutWriteHeadHeaders,
+} from "../cache/write-head.mjs";
 
 const routerStateTree = "next-router-state-tree";
 
@@ -32,53 +37,14 @@ export function isWithheldFromCloudCdn(headers: HeaderLookup, now: number): bool
   return !isImmutable(headers.get("cache-control")) && isStoredBySomeEdge(headers, now);
 }
 
-function readWriteHeadHeader(headers: unknown, name: string): string | null {
-  if (Array.isArray(headers)) {
-    for (let i = 0; i + 1 < headers.length; i += 2) {
-      if (String(headers[i]).toLowerCase() === name) return String(headers[i + 1]);
-    }
-    return null;
-  }
-  if (headers !== null && typeof headers === "object") {
-    for (const [key, value] of Object.entries(headers)) {
-      if (key.toLowerCase() === name) return String(value);
-    }
-  }
-  return null;
-}
-
-function withoutWriteHeadCacheControl(headers: unknown): unknown {
-  if (Array.isArray(headers)) {
-    const kept: unknown[] = [];
-    for (let i = 0; i + 1 < headers.length; i += 2) {
-      if (String(headers[i]).toLowerCase() !== "cache-control")
-        kept.push(headers[i], headers[i + 1]);
-    }
-    return kept;
-  }
-  if (headers !== null && typeof headers === "object") {
-    return Object.fromEntries(
-      Object.entries(headers).filter(([key]) => key.toLowerCase() !== "cache-control"),
-    );
-  }
-  return headers;
-}
-
 export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): void {
   const writeHead = prototype.writeHead;
   prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
     if (!this.headersSent) {
-      const headersAt = typeof args[1] === "string" ? 2 : 1;
-      const passed = args.length > headersAt ? args[headersAt] : undefined;
-      const headers = {
-        get: (name: string): string | null => {
-          const value = readWriteHeadHeader(passed, name) ?? this.getHeader(name);
-          return value === undefined || value === null ? null : String(value);
-        },
-      };
-      if (isWithheldFromCloudCdn(headers, Date.now())) {
+      const { at, passed } = readWriteHeadHeaders(args);
+      if (isWithheldFromCloudCdn(newWriteHeadLookup(this, passed), Date.now())) {
         this.setHeader("cache-control", uncacheable);
-        if (passed !== undefined) args[headersAt] = withoutWriteHeadCacheControl(passed);
+        if (passed !== undefined) args[at] = withoutWriteHeadHeaders(passed, ["cache-control"]);
       }
     }
     return (writeHead as any).apply(this, args);
