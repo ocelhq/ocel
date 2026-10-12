@@ -1,3 +1,5 @@
+import { refuseOverlappingRepeats } from "./ocel-route-pattern.mjs";
+
 export type TrailingSlash = "never" | "always" | "ignore";
 
 export interface CacheRule {
@@ -159,11 +161,13 @@ interface Pattern {
 function compilePattern(src: string): Pattern | string {
   const refused = refuseUnsharedSyntax(src) ?? refuseAmbiguousRepeat(src);
   if (refused) return refused;
+  let expression: RegExp;
   try {
-    return { expression: new RegExp(anchorPattern(src)), groups: countGroups(src) };
+    expression = new RegExp(anchorPattern(src));
   } catch (error) {
     return `the pattern does not compile: ${error instanceof Error ? error.message : String(error)}`;
   }
+  return refuseOverlappingRepeats(src) ?? { expression, groups: countGroups(src) };
 }
 
 function refuseUnknownFields(value: object, known: string[], where: string): Refusal {

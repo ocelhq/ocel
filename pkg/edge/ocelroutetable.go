@@ -275,6 +275,9 @@ func compilePattern(src string) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the pattern does not compile: %w", err)
 	}
+	if err := refuseOverlappingRepeats(src); err != nil {
+		return nil, err
+	}
 	return compiled, nil
 }
 

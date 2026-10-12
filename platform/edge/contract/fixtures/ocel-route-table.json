@@ -425,6 +425,68 @@
       "src": "/(?:ab){2}",
       "path": "/abab",
       "groups": []
+    },
+    {
+      "src": "^/([^/]+)/([^/]+)$",
+      "path": "/a/b",
+      "groups": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "src": "(?:/(.+?))?",
+      "path": "/a/b",
+      "groups": [
+        "a/b"
+      ]
+    },
+    {
+      "src": "^/blog/([^/]+)(?:/__data\\.json)?$",
+      "path": "/blog/x/__data.json",
+      "groups": [
+        "x"
+      ]
+    },
+    {
+      "src": "^/blog/([^/]+)(?:/__data\\.json)?$",
+      "path": "/blog/x",
+      "groups": [
+        "x"
+      ]
+    },
+    {
+      "src": "/[a-z]+-\\d+",
+      "path": "/ab-12",
+      "groups": []
+    },
+    {
+      "src": "/(\\d+)/x*",
+      "path": "/12/xx",
+      "groups": [
+        "12"
+      ]
+    },
+    {
+      "src": "/a*b*c*",
+      "path": "/aabbcc",
+      "groups": []
+    },
+    {
+      "src": "/([^/]+)/(.*)",
+      "path": "/a/b/c",
+      "groups": [
+        "a",
+        "b/c"
+      ]
+    },
+    {
+      "src": "/(\\w+)\\.(json)",
+      "path": "/a.json",
+      "groups": [
+        "a",
+        "json"
+      ]
     }
   ],
   "invalid": [
@@ -1716,6 +1778,329 @@
         "routes": [
           {
             "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two catch-alls in a row",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with three catch-alls in a row followed by a literal",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)(.*)(.*)x",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats of the same letter",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/a*a*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats split by a separator both sides can match",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats split by a dash both sides can match",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/([^/]+)-([^/]+)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a digit repeat followed by a word repeat",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/\\d+\\w*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats of overlapping ranges",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/[a-z]+[a-c]*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats with only an optional atom between",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/x*y?x*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats with only an optional group between",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.+)(?:/)?(.+)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats with only zero-width anchors between",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/.*\\b.*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a repeat followed by an optional group that repeats",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/a+(?:b|a*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a repeat of a negated class followed by a catch-all",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/[^/]*(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a repeat after an optional repeat of the same class",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/\\w*\\w+",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a repeat followed by a group holding a repeat of the same letters",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/a+(?:a*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with a lazy repeat followed by a catch-all",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.+?)(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats within one alternative of a group",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(?:x|(.*)(.*))",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern with two repeats with a lower bound only",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/a{2,}a{3,}",
             "function": "index"
           }
         ],
