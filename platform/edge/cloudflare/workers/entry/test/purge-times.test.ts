@@ -26,6 +26,22 @@ describe("the times the PurgeQueue keeps for the tags raised", () => {
     });
   });
 
+  it("reads back when an invalidation expires, the latest of the invalidations", async () => {
+    const queue = freshQueue();
+    const now = Date.now();
+
+    await queue.record("invalidate", [
+      { tag: "r1|a", raisedAt: now - 500, expiresAt: now + 60_000 },
+    ]);
+    await queue.record("invalidate", [
+      { tag: "r1|a", raisedAt: now - 900, expiresAt: now + 5_000 },
+    ]);
+
+    expect(await queue.readTimes(["r1|a"])).toEqual({
+      "r1|a": { invalidatedAt: now - 500, expiresAt: now + 60_000 },
+    });
+  });
+
   it("answers for no tag it was never told about", async () => {
     expect(await freshQueue().readTimes(["r1|never"])).toEqual({});
   });

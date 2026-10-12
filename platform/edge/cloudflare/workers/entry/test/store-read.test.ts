@@ -266,6 +266,33 @@ describe("whether an entry in the store may still be served", () => {
     expect(answer?.response.headers.get("x-ocel-entry-source")).toBe("stale-store");
   });
 
+  it("serves an invalidated entry as stale until the invalidation's expire passes", async () => {
+    const { deps } = harness(
+      { [key("blog/a")]: entry() },
+      { "r1a2b3c4d|_N_T_/blog/a": { invalidatedAt: NOW - 2_000, expiresAt: NOW + 1_000 } },
+    );
+
+    expect((await readFromStore(call(), deps))?.stale).toBe(true);
+  });
+
+  it("reads no entry once the expire of an invalidation after it was written has passed, as Next judges it expired", async () => {
+    const { deps } = harness(
+      { [key("blog/a")]: entry() },
+      { "r1a2b3c4d|_N_T_/blog/a": { invalidatedAt: NOW - 2_000, expiresAt: NOW - 1_000 } },
+    );
+
+    expect(await readFromStore(call(), deps)).toBeNull();
+  });
+
+  it("serves an entry written after an invalidation's expire passed", async () => {
+    const { deps } = harness(
+      { [key("blog/a")]: entry({}, NOW - 500) },
+      { "r1a2b3c4d|_N_T_/blog/a": { invalidatedAt: NOW - 2_000, expiresAt: NOW - 1_000 } },
+    );
+
+    expect((await readFromStore(call(), deps))?.stale).toBe(false);
+  });
+
   it("serves as fresh an entry the origin rewrote within a second after an invalidation, as the origin judges it", async () => {
     const { deps } = harness(
       { [key("blog/a")]: entry({}, NOW - 10_000) },

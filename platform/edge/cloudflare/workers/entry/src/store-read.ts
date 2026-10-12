@@ -123,6 +123,10 @@ function judge(
   for (const tag of tags) {
     const time = times[tag];
     if (time?.purgedAt !== undefined && time.purgedAt >= floor) return "purged";
+    const expiresAt = time?.expiresAt;
+    if (expiresAt !== undefined && expiresAt <= now && expiresAt > entry.lastModified) {
+      return "expired";
+    }
     if (time?.invalidatedAt !== undefined && time.invalidatedAt > entry.lastModified) {
       invalidated = true;
     }

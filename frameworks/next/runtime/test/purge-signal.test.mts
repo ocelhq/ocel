@@ -17,12 +17,14 @@ test("reports a tag only marked stale as an invalidate", () => {
   expect(purgedSince(mark)).toEqual([{ tag: "home", mode: "invalidate", raisedAt: 700 }]);
 });
 
-test("reports a tag that expires later as an invalidate", () => {
+test("reports a tag that expires later as an invalidate expiring when the tag does", () => {
   const mark = purgeMark();
 
   notePurge("home", { stale: 700, expired: 90_000 }, 1_000);
 
-  expect(purgedSince(mark)).toEqual([{ tag: "home", mode: "invalidate", raisedAt: 700 }]);
+  expect(purgedSince(mark)).toEqual([
+    { tag: "home", mode: "invalidate", raisedAt: 700, expiresAt: 90_000 },
+  ]);
 });
 
 test("reports nothing for a record with neither time", () => {
