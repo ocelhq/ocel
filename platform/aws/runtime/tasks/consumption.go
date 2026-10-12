@@ -53,7 +53,7 @@ type Consumption struct {
 }
 
 func NewConsumption(engine *Engine, queues receivingQueues) *Consumption {
-	engine.parking = true
+	engine.pollsItsQueues = true
 	return &Consumption{engine: engine, queues: queues, deliver: engine.Deliver, renewEvery: renewEvery, idleAfter: idleAfter, idleEvery: idleEvery, lastBusy: time.Now()}
 }
 
@@ -243,7 +243,7 @@ func (c *Consumption) giveBack(ctx context.Context, url string, messages []recei
 	}
 	budget, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishingBudget)
 	defer cancel()
-	c.hide(budget, url, messages, 0)
+	c.hide(budget, url, hiddenAlike(messages, 0))
 }
 
 func (c *Consumption) gather(ctx context.Context, deployed deployedConsumer, url string, held *holding) (stop func(), err error) {
@@ -338,14 +338,22 @@ func (c *Consumption) work(ctx context.Context, deployed deployedConsumer, messa
 	}
 	finishing, finished := context.WithTimeout(context.WithoutCancel(ctx), finishingBudget)
 	defer finished()
-	var done, again []receivedMessage
+	again := retainedHiddenFor
+	if ctx.Err() != nil {
+		again = 0
+	}
+	now := time.Now()
+	var done []receivedMessage
+	var hidden []visibilityChange
 	for _, message := range messages {
-		parked := c.engine.unpark(message.record.ReceiptHandle)
+		until, held := c.engine.takeHold(message.record.ReceiptHandle)
 		switch {
 		case !retained[message.record.MessageId]:
 			done = append(done, message)
-		case !parked:
-			again = append(again, message)
+		case held:
+			hidden = append(hidden, visibilityChange{message: message, hiddenFor: holdAt(message.receivedAt, until, now)})
+		default:
+			hidden = append(hidden, visibilityChange{message: message, hiddenFor: again})
 		}
 	}
 	url, err := c.engine.queueURL(finishing, deployed.queue)
@@ -354,11 +362,24 @@ func (c *Consumption) work(ctx context.Context, deployed deployedConsumer, messa
 		return
 	}
 	c.delete(finishing, url, done)
-	hide := retainedHiddenFor
-	if ctx.Err() != nil {
-		hide = 0
+	c.hide(finishing, url, hidden)
+}
+
+func holdAt(received, until, now time.Time) time.Duration {
+	return max(0, min(until.Sub(now), received.Add(maxVisibilityDelay).Sub(now)))
+}
+
+type visibilityChange struct {
+	message   receivedMessage
+	hiddenFor time.Duration
+}
+
+func hiddenAlike(messages []receivedMessage, hiddenFor time.Duration) []visibilityChange {
+	changes := make([]visibilityChange, 0, len(messages))
+	for _, message := range messages {
+		changes = append(changes, visibilityChange{message: message, hiddenFor: hiddenFor})
 	}
-	c.hide(finishing, url, again, hide)
+	return changes
 }
 
 func (c *Consumption) delete(ctx context.Context, url string, messages []receivedMessage) {
@@ -378,14 +399,14 @@ func (c *Consumption) delete(ctx context.Context, url string, messages []receive
 	}
 }
 
-func (c *Consumption) hide(ctx context.Context, url string, messages []receivedMessage, duration time.Duration) {
-	for chunk := range slices.Chunk(messages, maxSQSBatch) {
+func (c *Consumption) hide(ctx context.Context, url string, changes []visibilityChange) {
+	for chunk := range slices.Chunk(changes, maxSQSBatch) {
 		entries := make([]sqstypes.ChangeMessageVisibilityBatchRequestEntry, 0, len(chunk))
-		for i, message := range chunk {
+		for i, change := range chunk {
 			entries = append(entries, sqstypes.ChangeMessageVisibilityBatchRequestEntry{
 				Id:                aws.String(strconv.Itoa(i)),
-				ReceiptHandle:     aws.String(message.record.ReceiptHandle),
-				VisibilityTimeout: int32(duration / time.Second),
+				ReceiptHandle:     aws.String(change.message.record.ReceiptHandle),
+				VisibilityTimeout: int32(change.hiddenFor / time.Second),
 			})
 		}
 		out, err := c.queues.ChangeMessageVisibilityBatch(ctx, &sqs.ChangeMessageVisibilityBatchInput{QueueUrl: aws.String(url), Entries: entries})
@@ -420,7 +441,7 @@ func (c *Consumption) keepHidden(ctx context.Context, url string, held *holding)
 		var entries []sqstypes.ChangeMessageVisibilityBatchRequestEntry
 		for _, message := range held.all() {
 			extension, extend := extensionAt(message.receivedAt, now)
-			if !extend || c.engine.isParked(message.record.ReceiptHandle) {
+			if !extend {
 				continue
 			}
 			entries = append(entries, sqstypes.ChangeMessageVisibilityBatchRequestEntry{

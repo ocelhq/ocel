@@ -240,6 +240,10 @@ func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got
 	if receives := receiveCount(got.record); receives >= queues.MaxReceiveCount {
 		return e.failUndelivered(ctx, deployed, got, receives)
 	}
+	if e.pollsItsQueues {
+		e.recordHold(got.record.ReceiptHandle, time.Now().Add(max(wait, time.Second)))
+		return retained
+	}
 	url, err := e.queueURL(ctx, deployed.queue)
 	if err == nil {
 		_, err = e.cfg.Queues.ChangeMessageVisibility(ctx, &sqs.ChangeMessageVisibilityInput{
@@ -250,9 +254,7 @@ func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got
 	}
 	if err != nil {
 		slog.Warn("hold a message on its queue", "queue", deployed.queue, "error", err)
-		return retained
 	}
-	e.park(got.record.ReceiptHandle)
 	return retained
 }
 
