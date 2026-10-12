@@ -407,3 +407,15 @@ describe("the keys the resolver gives requests the shared fixture records no cac
     expect(one).not.toBe(other);
   });
 });
+
+describe("the key the resolver gives a request carrying the revalidate header", () => {
+  it("is one no other request shares, so the request misses the cache and reaches the origin", async () => {
+    const plain = await keyFor({ pathname: "/blog", headers: {}, draft: false });
+    const revalidating = { pathname: "/blog", headers: { "x-prerender-revalidate": "t" } };
+    const first = await keyFor(revalidating);
+    const second = await keyFor(revalidating);
+
+    expect(first).not.toBe(plain);
+    expect(second).not.toBe(first);
+  });
+});
