@@ -135,6 +135,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		ServeBindingProxy:     p.ServeBindingProxy,
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
+		RemovedApps:           &provider.RemovedAppHooks{Plan: p.PlanRemovedApps, Retire: p.RetireRemovedApps},
 		ReadNextServerRuntime: p.ReadNextServerRuntime,
 	}
 }
