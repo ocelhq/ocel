@@ -1,5 +1,3 @@
-import { encodeForwardedSearch } from "@framework/next-router/request-target";
-import { needsSlashNormalization } from "@framework/next-router/trailing-slash";
 import { readBypass, revalidateHeader } from "@platform/edge-contract/bypass";
 import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
 import {
@@ -12,6 +10,11 @@ import {
   findSlashRedirect,
 } from "@platform/edge-contract/ocel-route-table";
 import { purgeHeader, readPurge } from "@platform/edge-contract/purge";
+import {
+  encodeForwardedSearch,
+  needsSlashNormalization,
+  readRawPath,
+} from "@platform/edge-contract/request-path";
 import { buildPathTag } from "./serve-headers";
 import {
   buildCanonicalUrl,
@@ -35,17 +38,11 @@ function isRead(request: Request): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
 
-function readRawPath(request: Request): string {
-  const pathAndQuery = request.url.replace(/^[a-z][a-z\d+.-]*:\/\/[^/]*/i, "");
-  const queryIndex = pathAndQuery.indexOf("?");
-  return queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
-}
-
 function canBeCached(request: Request): boolean {
   return (
     request.method === "GET" &&
     !request.headers.has("authorization") &&
-    !needsSlashNormalization(readRawPath(request))
+    !needsSlashNormalization(readRawPath(request.url))
   );
 }
 
