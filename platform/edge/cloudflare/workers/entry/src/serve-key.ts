@@ -36,6 +36,10 @@ export const SERVE_NO_SHELL_HEADER = "x-ocel-serve-no-shell";
 
 export const SERVE_UNSHARED_HEADER = "x-ocel-serve-unshared";
 
+export const SERVE_LOOKUP_ONLY_HEADER = "x-ocel-serve-lookup-only";
+
+export const SERVE_MISS_HEADER = "x-ocel-serve-miss";
+
 export interface StoredEntryCall {
   path: string;
   fallbackPath?: string;
@@ -48,6 +52,7 @@ export interface RenderRelease {
   isrPrefix: string;
   tags: string[];
   sharesFallbackShell?: boolean;
+  nodeApp?: boolean;
   entry?: StoredEntryCall;
 }
 

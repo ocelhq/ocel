@@ -211,3 +211,104 @@ describe("the headers a cached response leaves Serve with", () => {
     expect(await response.text()).toBe("page");
   });
 });
+
+describe("the headers a node app's response leaves Serve with", () => {
+  function fromNodeApp(init: ResponseInit & { body?: string | null }): Response {
+    const { body = "page", ...rest } = init;
+    return forCache(new Response(body, rest), { release, pathname }, { nodeApp: true });
+  }
+
+  it("takes a max-age with no s-maxage as the edge lifetime, as CloudFront and Cloud CDN do", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cache-control": "public, max-age=120" },
+    });
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      "max-age=120, stale-if-error=86400",
+    );
+  });
+
+  it("prefers an s-maxage to a max-age", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cache-control": "max-age=5, s-maxage=90" },
+    });
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      "max-age=90, stale-if-error=86400",
+    );
+  });
+
+  it("leaves the app's own Cache-Control on a stored response for the browser", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cache-control": "public, max-age=120" },
+    });
+
+    expect(response.headers.get("cache-control")).toBe("public, max-age=120");
+  });
+
+  it("leaves the app's own Cache-Control on a response it does not store", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cache-control": "private, max-age=600" },
+    });
+
+    expect(response.headers.get("cache-control")).toBe("private, max-age=600");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+  });
+
+  it("leaves a response with no Cache-Control without one, and not stored", () => {
+    const response = fromNodeApp({ status: 200 });
+
+    expect(response.headers.has("cache-control")).toBe(false);
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+  });
+
+  it("does not store a response that sets a cookie, whatever lifetime it names", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "set-cookie": "a=1", "cache-control": "public, max-age=60", "cache-tag": "a" },
+    });
+
+    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-tag")).toBeNull();
+    expect(response.headers.get("set-cookie")).toBe("a=1");
+  });
+
+  it("does not store a max-age of zero", () => {
+    const response = fromNodeApp({ status: 200, headers: { "cache-control": "max-age=0" } });
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+  });
+
+  it("keeps the app's CDN-Cache-Control off the client, as it does for any response", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cdn-cache-control": "max-age=30", "cache-control": "no-cache" },
+    });
+
+    expect(response.headers.get("cdn-cache-control")).toBeNull();
+  });
+
+  it("tags a stored response with its release and its path", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { "cache-control": "max-age=60", "x-ocel-cache-tag": `${release}|posts` },
+    });
+
+    expect(response.headers.get("cache-tag")).toBe(
+      `${release},${release}|path:${pathname},${release}|posts`,
+    );
+  });
+});
+
+describe("a Next prerender keeps taking only an s-maxage as its lifetime", () => {
+  it("does not store a max-age with no s-maxage", () => {
+    const response = shaped({ status: 200, headers: { "cache-control": "public, max-age=120" } });
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+});

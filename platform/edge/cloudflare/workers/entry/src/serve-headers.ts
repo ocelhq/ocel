@@ -30,6 +30,10 @@ export interface CachedResponse {
   pathname: string;
 }
 
+export interface CacheOptions {
+  nodeApp?: boolean;
+}
+
 type Directives = Map<string, string | true>;
 
 function directivesOf(header: string | null): Directives {
@@ -59,10 +63,11 @@ function variesOffKey(headers: Headers): boolean {
     .some((name) => name !== "" && !KEYED_VARY.has(name));
 }
 
-function notStored(response: Response): Response {
+function notStored(response: Response, options: CacheOptions): Response {
   const headers = new Headers(response.headers);
-  headers.set("cache-control", NOT_STORED);
   for (const name of EDGE_POLICY_HEADERS) headers.delete(name);
+  if (options.nodeApp) headers.set("cloudflare-cdn-cache-control", "no-store");
+  else headers.set("cache-control", NOT_STORED);
   headers.delete("cache-tag");
   headers.delete(edgeCacheTagHeader);
   headers.delete(purgeHeader);
@@ -93,27 +98,33 @@ function releaseTags(headers: Headers, { release, pathname }: CachedResponse): s
   return [...own, ...new Set(origin)].slice(0, MAX_TAGS).join(",");
 }
 
-export function forCache(response: Response, cached: CachedResponse): Response {
+export function forCache(
+  response: Response,
+  cached: CachedResponse,
+  options: CacheOptions = {},
+): Response {
   if (
     !STORED_STATUSES.has(response.status) ||
     response.headers.has("set-cookie") ||
     variesOffKey(response.headers)
   ) {
-    return notStored(response);
+    return notStored(response, options);
   }
   const policy = edgePolicy(response.headers);
   if (!policy || refusesStoring(directivesOf(response.headers.get("cache-control")))) {
-    return notStored(response);
+    return notStored(response, options);
   }
   const { directives } = policy;
-  if (refusesStoring(directives)) return notStored(response);
+  if (refusesStoring(directives)) return notStored(response, options);
 
   const lifetime =
     seconds(directives, "s-maxage") ??
-    (policy.source === "cache-control" ? undefined : seconds(directives, "max-age"));
+    (policy.source === "cache-control" && !options.nodeApp
+      ? undefined
+      : seconds(directives, "max-age"));
   const staleWhileRevalidate = seconds(directives, "stale-while-revalidate");
   if (lifetime === undefined || (lifetime === 0 && !staleWhileRevalidate)) {
-    return notStored(response);
+    return notStored(response, options);
   }
 
   const headers = new Headers(response.headers);
@@ -126,7 +137,7 @@ export function forCache(response: Response, cached: CachedResponse): Response {
     ].join(", "),
   );
   headers.delete("cdn-cache-control");
-  if (policy.source === "cache-control" || !headers.has("cache-control")) {
+  if (!options.nodeApp && (policy.source === "cache-control" || !headers.has("cache-control"))) {
     headers.set("cache-control", BROWSER_REVALIDATES);
   }
   headers.set("cache-tag", releaseTags(headers, cached));

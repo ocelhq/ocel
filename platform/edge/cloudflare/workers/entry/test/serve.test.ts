@@ -9,6 +9,8 @@ import {
   buildServeRequest,
   ORIGIN_PURGE_SCOPE,
   RENDER_RELEASE_HEADER,
+  SERVE_LOOKUP_ONLY_HEADER,
+  SERVE_MISS_HEADER,
   SERVE_REFUSED_HEADER,
   type ServeProps,
 } from "../src/serve-key";
@@ -440,6 +442,93 @@ describe("Serve fetching from the origin", () => {
 
   it("makes a header-less page private", async () => {
     const wire = s3Answering(() => new Response("page"));
+
+    const response = await withGlobalFetch(wire.fetch, () =>
+      serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
+    );
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  describe("for a node app", () => {
+    const nodeRelease = {
+      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags: [], nodeApp: true }),
+    };
+    const nodeRequest = (path: string, headers: Record<string, string> = {}) =>
+      new Request(buildOriginCall(`${FN_URL}${path}`, coordinates).url, {
+        headers: { ...nodeRelease, ...headers },
+      });
+
+    it("stores a response that names only a max-age, for that long, and leaves the browser its Cache-Control", async () => {
+      const wire = s3Answering(
+        () => new Response("page", { headers: { "cache-control": "public, max-age=30" } }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(nodeRequest("blog/a")),
+      );
+
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+        "max-age=30, stale-if-error=86400",
+      );
+      expect(response.headers.get("cache-control")).toBe("public, max-age=30");
+      expect(response.headers.get("cache-tag")).toBe("r1a2b3c4d,r1a2b3c4d|path:/blog/a");
+    });
+
+    it("keeps a response that names no lifetime out of the cache without rewriting what it sent", async () => {
+      const wire = s3Answering(
+        () => new Response("page", { headers: { "cache-control": "private, max-age=600" } }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(nodeRequest("blog/a")),
+      );
+
+      expect(response.headers.get("cache-control")).toBe("private, max-age=600");
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+    });
+
+    it("answers a request that only looks for a stored entry with a miss, and renders nothing", async () => {
+      const wire = s3Answering(
+        () => new Response("page", { headers: { "cache-control": "max-age=30" } }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(
+          nodeRequest("blog/a", { [SERVE_LOOKUP_ONLY_HEADER]: "1" }),
+        ),
+      );
+
+      expect(wire.calls).toEqual([]);
+      expect(response.status).toBe(404);
+      expect(response.headers.get(SERVE_MISS_HEADER)).toBe("1");
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+    });
+
+    it("renders for a conditional request that only looks for a stored entry, since that is the cache refreshing one", async () => {
+      const wire = s3Answering(
+        () => new Response("page", { headers: { "cache-control": "max-age=30" } }),
+      );
+
+      const response = await withGlobalFetch(wire.fetch, () =>
+        serveWith(originEnv, originProps).fetch(
+          nodeRequest("blog/a", { [SERVE_LOOKUP_ONLY_HEADER]: "1", "if-none-match": '"e1"' }),
+        ),
+      );
+
+      expect(wire.calls).toHaveLength(1);
+      expect(response.headers.get(SERVE_MISS_HEADER)).toBeNull();
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+        "max-age=30, stale-if-error=86400",
+      );
+    });
+  });
+
+  it("does not take a max-age as the lifetime of a prerender that is not a node app's", async () => {
+    const wire = s3Answering(
+      () => new Response("page", { headers: { "cache-control": "public, max-age=30" } }),
+    );
 
     const response = await withGlobalFetch(wire.fetch, () =>
       serveWith(originEnv, originProps).fetch(originRequest("blog/a")),
