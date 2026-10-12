@@ -249,7 +249,13 @@ The service sits at no tasks and costs nothing then:
   one a minute while the backlog lasts, up to the app's `instances.max`. Each alarm watches at
   most nine queues and costs $0.10 a month per queue.
 - A worker with nothing to work for five minutes and empty queues sets its service back to
-  none. The app's `instances.min` is the floor of the app's own service, not of its workers.
+  its floor.
+
+A worker that joins the app named after it has that app to itself: the app deploys no web
+service or load balancer rule, and its `instances.min` is the floor of its workers' services,
+none unless it sets one. A worker that joins an app that serves traffic sits at no tasks
+whatever that app's `instances.min`, which stays the floor of the app's own service. So no
+worker is billed while idle unless its app asks for it.
 
 A run working when its task stops, for a deploy or a scale-in, is queued again and the next
 task starts it. A task renews its hold on each run it works every 40 seconds, so a run whose

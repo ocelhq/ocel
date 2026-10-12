@@ -80,11 +80,14 @@ func (p *Provider) refuseStaleGateway(ctx context.Context, pre provider.DeployPr
 		host.RealtimeBinary, provider.BootstrapCommand(pre.Deploy.Tier))
 }
 
-var oneInstance = provider.Instances{Min: 1, Max: 1}
+var (
+	oneInstance = provider.Instances{Min: 1, Max: 1}
+	noIdleFloor = provider.Instances{Min: 0, Max: 1}
+)
 
 func refuseScaledContainers(spec provider.DeploySpec) error {
 	for _, app := range spec.Apps {
-		if app.Compute() != provider.ComputeContainer || app.Instances == oneInstance {
+		if app.Compute() != provider.ComputeContainer || app.Instances == oneInstance || (app.Instances == noIdleFloor && provider.IsWorkerApp(app.App, app.Workers)) {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,

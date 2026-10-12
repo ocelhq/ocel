@@ -221,3 +221,17 @@ func TestACronTaskOnAWorkerOnContainerComputeIsRefusedSinceNothingStartsItsSched
 		t.Fatalf("preflight of a cron task on a serverless worker = %v, want it to pass", err)
 	}
 }
+
+func TestAContainerAppThatOnlyHostsItsWorkerMayHaveAFloorOfZeroOnAws(t *testing.T) {
+	t.Parallel()
+
+	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
+	media := provider.WorkerSpec{Name: "media", App: "media", Compute: provider.ComputeContainer}
+	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Apps: []provider.AppEntry{
+		{App: "media", Manifest: container, Instances: provider.Instances{Min: 0, Max: 3}, Workers: []provider.WorkerSpec{media}},
+	}}}
+
+	if err := refuseContainersScaledToZero(pre); err != nil {
+		t.Fatalf("preflight of a worker app with no idle floor = %v, want it to pass: its services start on a send and a backlog, not on requests", err)
+	}
+}

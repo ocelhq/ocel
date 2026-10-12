@@ -132,7 +132,7 @@ export interface ImageConfig {
 export interface InstancesConfig {
   /** The most instances run at once, however busy the app is. Left off, as many as min, or 1. */
   max?: number;
-  /** The fewest instances kept running, however quiet the app is. Left off, 1. */
+  /** The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name. */
   min?: number;
 }
 

@@ -89,6 +89,7 @@ type containerWorkersWork struct {
 	env         map[string]string
 	infra       containerInfra
 	instances   provider.Instances
+	floor       int
 	tags        map[string]string
 	boundary    string
 	rolePath    string
@@ -106,7 +107,14 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
 	account := accountOfARN(r.cfg.StateTableARN)
 	topics := topicsOf(project, env, app.Topics)
-	topology, err := queueTopology(r.cfg, project, env, topics, containerWorkers(r.cfg.Tier, project, env, app.DeploymentWorkers))
+	served := containerWorkers(r.cfg.Tier, project, env, app.DeploymentWorkers)
+	floor := workerFloor(app)
+	for _, worker := range app.Workers {
+		if hosted, found := served[worker.Name]; found {
+			hosted.Service.Floor = floor
+		}
+	}
+	topology, err := queueTopology(r.cfg, project, env, topics, served)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +142,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 		env:         workerEnv,
 		infra:       web.infra,
 		instances:   web.instances,
+		floor:       floor,
 		tags:        web.tags,
 		boundary:    web.boundary,
 		rolePath:    web.rolePath,
@@ -145,6 +154,13 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 		values:      web.values,
 		tasksPolicy: tasks,
 	}, nil
+}
+
+func workerFloor(app *provider.AppSpec) int {
+	if provider.IsWorkerApp(app.App, app.Workers) {
+		return app.Instances.Min
+	}
+	return 0
 }
 
 func (w *containerWorkersWork) coordinate(kind naming.Kind, name string) naming.Coordinate {
@@ -265,7 +281,7 @@ func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provide
 		Name:           pulumi.String(service),
 		Cluster:        pulumi.String(w.infra.Cluster),
 		TaskDefinition: task.Arn,
-		DesiredCount:   pulumi.Int(0),
+		DesiredCount:   pulumi.Int(w.floor),
 		LaunchType:     pulumi.String("FARGATE"),
 		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
 			Subnets:        pulumi.ToStringArray(w.infra.Subnets),
@@ -294,8 +310,8 @@ func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provid
 		ServiceNamespace:  pulumi.String(scalingNamespace),
 		ScalableDimension: pulumi.String(scalingDimension),
 		ResourceId:        pulumi.Sprintf("service/%s/%s", cluster, service.Name),
-		MinCapacity:       pulumi.Int(0),
-		MaxCapacity:       pulumi.Int(max(w.instances.Max, 1)),
+		MinCapacity:       pulumi.Int(w.floor),
+		MaxCapacity:       pulumi.Int(max(w.instances.Max, w.floor, 1)),
 		Tags:              tags,
 	})
 	if err != nil {

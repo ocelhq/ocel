@@ -157,7 +157,7 @@ func preflighting(machine *scripted) error {
 	})
 }
 
-func preflightingInstances(machine *scripted, instances provider.Instances) error {
+func preflightingInstances(machine *scripted, instances provider.Instances, workers ...provider.WorkerSpec) error {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
@@ -172,7 +172,7 @@ func preflightingInstances(machine *scripted, instances provider.Instances) erro
 			Slug: "shop",
 			Tier: environment.TierProduction,
 			Apps: []provider.AppEntry{{
-				App: "web", Stack: stack, Image: deployedRef, Instances: instances,
+				App: "web", Stack: stack, Image: deployedRef, Instances: instances, Workers: workers,
 				Manifest: &contractv1.ManifestApp{Name: "web", Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}},
 			}},
 		},
@@ -494,5 +494,14 @@ func TestASwitchboardThatCouldNotBeRestartedIsRefusedWithWhatTheBoxSaid(t *testi
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", err, wanted)
 		}
+	}
+}
+
+func TestAContainerAppThatOnlyHostsItsWorkerMayLeaveItsFloorAtNone(t *testing.T) {
+	t.Parallel()
+
+	err := preflightingInstances(boxSaying(nil), provider.Instances{Min: 0, Max: 1}, provider.WorkerSpec{Name: "web", App: "web", Compute: provider.ComputeContainer})
+	if err != nil {
+		t.Fatalf("PreflightDeploy() = %v, want the box's one container let through: a worker app has no idle floor unless it sets one", err)
 	}
 }

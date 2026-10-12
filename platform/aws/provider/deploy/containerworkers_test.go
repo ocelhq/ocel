@@ -666,3 +666,80 @@ func TestThePlanToDestroyTheLastContainerReleaseListsItsContainerWorkers(t *test
 		t.Errorf("plan groups = %v, want the container workers stack %s deleted with the last release", plan.Groups, workers)
 	}
 }
+
+var webAsItsOwnWorker = provider.WorkerSpec{Name: "web", Concurrency: 2, App: "web", Compute: provider.ComputeContainer}
+
+func TestAContainerAppThatOnlyHostsItsWorkerDeclaresNoWebServiceOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	opened, spec, _ := hostingContainerWorkers(t, webAsItsOwnWorker)
+	work, err := opened.containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
+		t.Fatalf("run the app's program: %v", err)
+	}
+
+	for _, kind := range []string{"aws:ecs/service:Service", "aws:ecs/taskDefinition:TaskDefinition", "aws:lb/targetGroup:TargetGroup", "aws:lb/listenerRule:ListenerRule"} {
+		if declared := rec.registered(kind); len(declared) > 0 {
+			t.Errorf("declared %s %v, want none: a worker app takes no traffic, so a web service would only bill its floor idle", kind, declared)
+		}
+	}
+}
+
+func TestProvisioningAContainerAppThatOnlyHostsItsWorkerReturnsTheWorkerAloneAndUsesTheContainersPart(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	stacks, engine, spec := containerStacksHostingWorkers(t, store)
+	spec.App.Workers = []provider.WorkerSpec{webAsItsOwnWorker}
+	spec.App.DeploymentWorkers = spec.App.Workers
+	spec.App.Topics = []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "web"})}
+	delete(engine.outputs, "web")
+	engine.outputs[resources.WorkerName("web")] = auto.OutputValue{Value: map[string]any{outputKeyContainerPhysical: containerWorkerService("shop", "prod", "web", "web")}}
+
+	result, err := stacks.Provision(context.Background(), spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("web") || result.Containers[0].URL != "" {
+		t.Errorf("Containers = %+v, want the worker alone, with no URL", result.Containers)
+	}
+	part, present, err := ReadContainerInfrastructurePart(context.Background(), store, "us-east-1", environment.TierProduction)
+	if err != nil || !present || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
+		t.Errorf("containers part = %+v, %v, %v, want it added and used by %s: its worker's service runs in the cluster", part, present, err, spec.Ref.Project)
+	}
+}
+
+func TestAContainerWorkerAppsMinInstancesIsItsWorkersFloorAndAWebAppsIsNot(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		worker provider.WorkerSpec
+		floor  float64
+	}{
+		{worker: webAsItsOwnWorker, floor: 1},
+		{worker: mediaOnContainers, floor: 0},
+	} {
+		_, _, hosted := hostingContainerWorkers(t, tc.worker)
+		rec := programRecorded(t, hosted)
+
+		service := recordedOf(t, rec, "aws:ecs/service:Service")
+		if service["desiredCount"].NumberValue() != tc.floor {
+			t.Errorf("worker %s's service starts at %v tasks, want %v", tc.worker.Name, service["desiredCount"], tc.floor)
+		}
+		target := recordedOf(t, rec, "aws:appautoscaling/target:Target")
+		if target["minCapacity"].NumberValue() != tc.floor {
+			t.Errorf("worker %s scales in to %v tasks, want %v", tc.worker.Name, target["minCapacity"], tc.floor)
+		}
+		topology, err := queues.Parse([]byte(hosted.topology))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if served := topology.Workers[tc.worker.Name].Service; served == nil || float64(served.Floor) != tc.floor {
+			t.Errorf("worker %s's topology names service %+v, want a floor of %v for the worker to scale itself in to", tc.worker.Name, served, tc.floor)
+		}
+	}
+}
