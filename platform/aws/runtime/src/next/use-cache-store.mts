@@ -9,9 +9,9 @@ import {
   tagSnapshotKey,
 } from "@framework/next-cache";
 import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use-cache-store";
+import { newDynamoDBClient, newS3Client } from "../cache/sdk-clients.mjs";
+import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
 import { isNotFound, readBodyText, requireEnv } from "./object-store.mjs";
-import { newDynamoDBClient, newS3Client } from "./sdk-clients.mjs";
-import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");

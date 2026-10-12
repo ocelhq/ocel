@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { newDynamoDBClient, newS3Client } from "../src/next/sdk-clients.mjs";
+import { newDynamoDBClient, newS3Client } from "../src/cache/sdk-clients.mjs";
 
 let server: Server;
 

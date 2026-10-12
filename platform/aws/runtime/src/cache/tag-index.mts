@@ -1,4 +1,4 @@
-import type { TagRecordUpdate } from "@framework/next-runtime/use-cache-store";
+import type { TagRecord } from "@platform/edge-contract/purge";
 
 export type TagAttribute = { S: string } | { N: string };
 
@@ -18,7 +18,7 @@ export function tagRecordUpdate(
   table: string,
   namespace: string,
   tag: string,
-  record: TagRecordUpdate,
+  record: TagRecord & { writtenAt: number },
 ): TagUpdateItem {
   const advancing = record.expired !== undefined ? "expired" : "stale";
   const sets = ["tag = :tag", "gsi1pk = :ns", "gsi1sk = :writtenAt"];

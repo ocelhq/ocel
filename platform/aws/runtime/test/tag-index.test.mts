@@ -6,7 +6,7 @@ import {
   tagNamespace,
   tagRecordUpdate,
   tagSortKey,
-} from "../src/next/tag-index.mjs";
+} from "../src/cache/tag-index.mjs";
 
 const update = (tag: string, record: { stale?: number; expired?: number; writtenAt: number }) =>
   tagRecordUpdate("state", "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#", tag, record);

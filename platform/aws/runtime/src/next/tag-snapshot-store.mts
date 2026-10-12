@@ -8,8 +8,8 @@ import {
   type TagSnapshotStore,
   tagSnapshotKey,
 } from "@framework/next-cache";
+import { newS3Client } from "../cache/sdk-clients.mjs";
 import { isNotFound, requireEnv } from "./object-store.mjs";
-import { newS3Client } from "./sdk-clients.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;
