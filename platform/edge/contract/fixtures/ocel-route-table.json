@@ -365,6 +365,49 @@
       "groups": [
         "d_1"
       ]
+    },
+    {
+      "src": "^/blog/([^/]+?)(?:/)?$",
+      "path": "/blog/hello/",
+      "groups": [
+        "hello"
+      ]
+    },
+    {
+      "src": "/blog(?:/__data\\.json)?",
+      "path": "/blog/__data.json",
+      "groups": []
+    },
+    {
+      "src": "/docs(?:/(.+?))?(?:/)?",
+      "path": "/docs/a/b",
+      "groups": [
+        "a/b"
+      ]
+    },
+    {
+      "src": "/docs(?:/(.+?))?(?:/)?",
+      "path": "/docs",
+      "groups": [
+        ""
+      ]
+    },
+    {
+      "src": "(?:/([^/]+))?/?",
+      "path": "/en",
+      "groups": [
+        "en"
+      ]
+    },
+    {
+      "src": "/(?:a|b)?c",
+      "path": "/c",
+      "groups": []
+    },
+    {
+      "src": "/(?:ab){2}",
+      "path": "/abab",
+      "groups": []
     }
   ],
   "invalid": [
@@ -1228,6 +1271,139 @@
         "routes": [
           {
             "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group that holds a quantifier",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(a+)+",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group that holds an alternation",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(a|a)*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group that holds a lazy quantifier",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(?:a*?)+",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group whose inner group is optional",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(?:x(?:a+)?)*",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group that holds an optional atom",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(a?){2,}",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group a bounded number of times that holds a quantifier",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(?:[^/]+/){1,10}",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a pattern repeating a group that holds a bounded repeat",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(?:a{1,3})+",
             "function": "index"
           }
         ],

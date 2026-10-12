@@ -228,6 +228,9 @@ func compilePattern(src string) (*regexp.Regexp, error) {
 	if err := refuseUnsharedSyntax(src); err != nil {
 		return nil, err
 	}
+	if err := refuseAmbiguousRepeat(src); err != nil {
+		return nil, err
+	}
 	compiled, err := regexp.Compile(anchorPattern(src))
 	if err != nil {
 		return nil, fmt.Errorf("the pattern does not compile: %w", err)
@@ -269,6 +272,53 @@ func refuseUnsharedSyntax(src string) error {
 		}
 	}
 	return nil
+}
+
+func refuseAmbiguousRepeat(src string) error {
+	var groups []bool
+	inClass := false
+	for i := 0; i < len(src); i++ {
+		switch c := src[i]; {
+		case c == '\\':
+			i++
+		case inClass:
+			inClass = c != ']'
+		case c == '[':
+			inClass = true
+		case c == '(':
+			groups = append(groups, false)
+			if strings.HasPrefix(src[i:], "(?:") {
+				i += 2
+			}
+		case c == ')' && len(groups) > 0:
+			ambiguous := groups[len(groups)-1]
+			groups = groups[:len(groups)-1]
+			if ambiguous && repeatsAgain(src[i+1:]) {
+				return errors.New("a pattern repeats no group that holds a quantifier or an alternation")
+			}
+		case strings.IndexByte("|*+?", c) >= 0 || c == '{' && repeatBound.MatchString(src[i:]):
+			for j := range groups {
+				groups[j] = true
+			}
+		}
+	}
+	return nil
+}
+
+func repeatsAgain(rest string) bool {
+	if strings.HasPrefix(rest, "*") || strings.HasPrefix(rest, "+") {
+		return true
+	}
+	bounds := repeatBound.FindStringSubmatch(rest)
+	if bounds == nil {
+		return false
+	}
+	most := bounds[2]
+	if !strings.Contains(bounds[0], ",") {
+		most = bounds[1]
+	}
+	n, err := strconv.Atoi(most)
+	return err != nil || n > 1
 }
 
 func repeatsPast(bounds []string) bool {
