@@ -28,10 +28,13 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
-func containerWorkerService(project, env, app, worker string) string {
+func appScopedName(at naming.Coordinate) string {
 	scope := awsports.AppScope + naming.WordSeparator
-	at := naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker}
 	return scope + at.PhysicalName(maxLambdaNameLen-len(scope))
+}
+
+func containerWorkerService(project, env, app, worker string) string {
+	return appScopedName(naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker})
 }
 
 func containerWorkers(tier environment.Tier, project, env string, workers []provider.WorkerSpec) map[string]queues.Worker {
@@ -79,26 +82,17 @@ type workerDefinition struct {
 }
 
 type containerWorkersWork struct {
+	web         *containerWork
 	project     string
 	stack       naming.StackName
 	workers     []provider.WorkerSpec
 	topics      deployedTopics
 	topology    string
-	image       string
-	arch        string
 	env         map[string]string
-	infra       containerInfra
-	instances   provider.Instances
 	floor       int
-	tags        map[string]string
-	boundary    string
-	rolePath    string
-	region      string
 	account     string
 	table       string
 	prefix      string
-	policies    []bindingPolicy
-	values      executionRole
 	tasksPolicy string
 	group       string
 }
@@ -133,26 +127,17 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 	workerEnv[queues.EnvVar] = string(rendered)
 	workerEnv["AWS_REGION"] = r.cfg.Region
 	return &containerWorkersWork{
+		web:         web,
 		project:     project,
 		stack:       naming.ContainerWorkersStack(env, app.App),
 		workers:     app.Workers,
 		topics:      topics,
 		topology:    string(rendered),
-		image:       web.image,
-		arch:        web.arch,
 		env:         workerEnv,
-		infra:       web.infra,
-		instances:   web.instances,
 		floor:       floor,
-		tags:        web.tags,
-		boundary:    web.boundary,
-		rolePath:    web.rolePath,
-		region:      r.cfg.Region,
 		account:     account,
 		table:       r.cfg.StateTableARN,
 		prefix:      naming.TaskKeyPrefix(project, env),
-		policies:    web.policies,
-		values:      web.values,
 		tasksPolicy: tasks,
 		group:       queues.ScheduleGroupName(project, env),
 	}, nil
@@ -188,7 +173,7 @@ func (w *containerWorkersWork) declareCrons(ctx *pulumi.Context) error {
 	for _, worker := range w.workers {
 		for _, task := range w.topics.cronTasks(worker.Name) {
 			queue := task.queues[0]
-			arn := sqsQueueARN(w.region, w.account, queue.name)
+			arn := sqsQueueARN(w.web.region, w.account, queue.name)
 			scheduled := cronTarget{task: task, arn: pulumi.String(arn)}
 			if queue.fifo {
 				scheduled.messageGroup = cronMessageGroup
@@ -204,7 +189,7 @@ func (w *containerWorkersWork) declareCrons(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.boundary, path: w.rolePath, tags: w.tags}
+	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.web.boundary, path: w.web.rolePath, tags: w.web.tags}
 	return declareCrons(ctx, assumed, w.group, pulumi.String(policy), crons)
 }
 
@@ -214,23 +199,23 @@ func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulum
 		NamePrefix:          pulumi.String(rolePrefix(at)),
 		Description:         capDescription(at.Description("task role for this app's workers"), maxDescriptionLen),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
-		PermissionsBoundary: pulumi.String(w.boundary),
-		Path:                pulumi.String(w.rolePath),
-		Tags:                resourceTags(naming.KindRole, "", w.tags),
+		PermissionsBoundary: pulumi.String(w.web.boundary),
+		Path:                pulumi.String(w.web.rolePath),
+		Tags:                resourceTags(naming.KindRole, "", w.web.tags),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	consumption, err := consumptionPolicy(w.workers, w.topics, w.region, w.account, w.table, w.prefix)
+	consumption, err := consumptionPolicy(w.workers, w.topics, w.web.region, w.account, w.table, w.prefix)
 	if err != nil {
 		return nil, nil, err
 	}
 	documents := map[string]string{"queues": consumption, "tasks": w.tasksPolicy}
-	for _, binding := range w.policies {
+	for _, binding := range w.web.policies {
 		documents["binding-"+binding.Binding] = binding.Policy
 	}
-	if w.values.ValuesTableARN != "" {
-		if documents["variables"], err = variablesReadPolicy(w.values); err != nil {
+	if w.web.values.ValuesTableARN != "" {
+		if documents["variables"], err = variablesReadPolicy(w.web.values); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -257,15 +242,15 @@ func (w *containerWorkersWork) definition(worker provider.WorkerSpec, service st
 	}
 	encoded, err := json.Marshal([]workerDefinition{{
 		Name:        containerName,
-		Image:       w.image,
+		Image:       w.web.image,
 		Essential:   true,
 		Environment: pairs,
 		StopTimeout: workerStopTimeoutSeconds,
 		LogConfig: logConfiguration{
 			Driver: "awslogs",
 			Options: map[string]string{
-				"awslogs-group":         w.infra.LogGroup,
-				"awslogs-region":        w.region,
+				"awslogs-group":         w.web.infra.LogGroup,
+				"awslogs-region":        w.web.region,
 				"awslogs-stream-prefix": service,
 			},
 		},
@@ -278,7 +263,7 @@ func (w *containerWorkersWork) definition(worker provider.WorkerSpec, service st
 
 func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, role *iam.Role, granted []pulumi.Resource) error {
 	service := containerWorkerService(w.project, w.stack.Env, w.stack.App, worker.Name)
-	tags := resourceTags(naming.KindWorker, "", w.tags)
+	tags := resourceTags(naming.KindWorker, "", w.web.tags)
 	definition, err := w.definition(worker, service)
 	if err != nil {
 		return err
@@ -289,12 +274,12 @@ func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provide
 		Memory:                  pulumi.String(containerMemory),
 		NetworkMode:             pulumi.String("awsvpc"),
 		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-		ExecutionRoleArn:        pulumi.String(w.infra.ExecutionRole),
+		ExecutionRoleArn:        pulumi.String(w.web.infra.ExecutionRole),
 		TaskRoleArn:             role.Arn,
 		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
-			CpuArchitecture:       pulumi.String(fargateCPUArchitecture(w.arch)),
+			CpuArchitecture:       pulumi.String(fargateCPUArchitecture(w.web.arch)),
 		},
 		Tags: tags,
 	}, pulumi.DependsOn(granted))
@@ -303,13 +288,13 @@ func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provide
 	}
 	running, err := ecs.NewService(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "service"), &ecs.ServiceArgs{
 		Name:           pulumi.String(service),
-		Cluster:        pulumi.String(w.infra.Cluster),
+		Cluster:        pulumi.String(w.web.infra.Cluster),
 		TaskDefinition: task.Arn,
 		DesiredCount:   pulumi.Int(w.floor),
 		LaunchType:     pulumi.String("FARGATE"),
 		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
-			Subnets:        pulumi.ToStringArray(w.infra.Subnets),
-			SecurityGroups: pulumi.StringArray{pulumi.String(w.infra.TaskSecurity)},
+			Subnets:        pulumi.ToStringArray(w.web.infra.Subnets),
+			SecurityGroups: pulumi.StringArray{pulumi.String(w.web.infra.TaskSecurity)},
 			AssignPublicIp: pulumi.Bool(true),
 		},
 		Tags: tags,
@@ -325,17 +310,17 @@ func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provide
 }
 
 func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provider.WorkerSpec, service *ecs.Service, tags pulumi.StringMap) error {
-	clusterARN, err := arn.Parse(w.infra.Cluster)
+	clusterARN, err := arn.Parse(w.web.infra.Cluster)
 	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
 	if err != nil || !found {
-		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so worker %s's service has no scalable target to name", w.infra.Cluster, worker.Name)
+		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so worker %s's service has no scalable target to name", w.web.infra.Cluster, worker.Name)
 	}
 	target, err := appautoscaling.NewTarget(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "scaling"), &appautoscaling.TargetArgs{
 		ServiceNamespace:  pulumi.String(scalingNamespace),
 		ScalableDimension: pulumi.String(scalingDimension),
 		ResourceId:        pulumi.Sprintf("service/%s/%s", cluster, service.Name),
 		MinCapacity:       pulumi.Int(w.floor),
-		MaxCapacity:       pulumi.Int(max(w.instances.Max, w.floor, 1)),
+		MaxCapacity:       pulumi.Int(max(w.web.instances.Max, w.floor, 1)),
 		Tags:              tags,
 	})
 	if err != nil {
@@ -371,8 +356,7 @@ func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provid
 }
 
 func (w *containerWorkersWork) declareBacklogAlarm(ctx *pulumi.Context, worker provider.WorkerSpec, at int, queueNames []string, out *appautoscaling.Policy, tags pulumi.StringMap) error {
-	scope := awsports.AppScope + naming.WordSeparator
-	name := scope + w.coordinate(naming.KindWorker, worker.Name+"-backlog-"+strconv.Itoa(at)).PhysicalName(maxLambdaNameLen-len(scope))
+	name := appScopedName(w.coordinate(naming.KindWorker, worker.Name+"-backlog-"+strconv.Itoa(at)))
 	queries := cloudwatch.MetricAlarmMetricQueryArray{}
 	ids := make([]string, 0, len(queueNames))
 	for i, queue := range queueNames {
@@ -422,7 +406,7 @@ func (w *containerWorkersWork) decode(outputs auto.OutputMap) (provider.StackRes
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		containers = append(containers, provider.AppContainer{Name: logical, Physical: physical, Image: w.image})
+		containers = append(containers, provider.AppContainer{Name: logical, Physical: physical, Image: w.web.image})
 	}
 	return provider.StackResult{Containers: containers}, nil
 }
