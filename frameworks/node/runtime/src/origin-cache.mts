@@ -197,10 +197,18 @@ function shape(
   const declaredNames = listDirectiveNames(declared);
   if (["private", "no-store", "no-cache"].some((name) => declaredNames.includes(name))) return;
 
-  if (!declaredNames.includes("s-maxage")) {
-    if (req.headers.authorization !== undefined || !routed.cacheRule) return;
-    const ruled = formatCacheControl(routed.cacheRule);
-    res.setHeader("cache-control", declared === "" ? ruled : `${declared}, ${ruled}`);
+  if (routed.cacheRule) {
+    res.removeHeader("cdn-cache-control");
+    res.removeHeader("surrogate-control");
+    const browser = listBrowserDirectives(declared);
+    if (req.headers.authorization !== undefined) {
+      if (browser.length > 0) res.setHeader("cache-control", browser.join(", "));
+      else res.removeHeader("cache-control");
+      return;
+    }
+    res.setHeader("cache-control", [...browser, formatCacheControl(routed.cacheRule)].join(", "));
+  } else if (!declaredNames.includes("s-maxage")) {
+    return;
   }
 
   const { tags, unstorable } = storedCacheTags(cache.release, [
@@ -218,6 +226,19 @@ function shape(
     .split(",")
     .filter((tag) => tag !== "");
   res.setHeader(header, [...new Set([...existing, ...tags])].join(","));
+}
+
+const sharedDirectiveNames = ["s-maxage", "stale-while-revalidate"];
+
+function listBrowserDirectives(declared: string): string[] {
+  return declared
+    .split(",")
+    .map((directive) => directive.trim())
+    .filter(
+      (directive) =>
+        directive !== "" &&
+        !sharedDirectiveNames.includes(directive.toLowerCase().split("=")[0]!.trim()),
+    );
 }
 
 function listDirectiveNames(declared: string): string[] {
