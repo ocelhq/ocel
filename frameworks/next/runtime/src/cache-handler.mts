@@ -14,7 +14,7 @@ import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
-import { readServedRoute } from "./served-route.mjs";
+import { isUncachedRender, readServedRoute } from "./served-route.mjs";
 import { revalidateTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -107,12 +107,12 @@ function toBuffer(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
-function isStaleEntry(lastModified: number, tags: string[], revalidate: unknown): boolean {
-  const timeStale =
+function isTimeStale(lastModified: number, revalidate: unknown): boolean {
+  return (
     typeof revalidate === "number" &&
     revalidate > 0 &&
-    Date.now() - lastModified > revalidate * 1000;
-  return timeStale || tagClock.areTagsStale(tags, lastModified);
+    Date.now() - lastModified > revalidate * 1000
+  );
 }
 
 export default class OcelCacheHandler {
@@ -128,6 +128,10 @@ export default class OcelCacheHandler {
 
   private get isRscRequest(): boolean {
     return isRscRequest(this.requestHeaders);
+  }
+
+  private canServeStaleFetch(isFetch: boolean): boolean {
+    return isFetch && isUncachedRender(this.requestHeaders);
   }
 
   private openStore(): Promise<CacheStore> {
@@ -162,8 +166,11 @@ export default class OcelCacheHandler {
         ctx?.kind === "FETCH"
           ? ctx.revalidate || entry.value.revalidate
           : (entry.cacheControl?.revalidate ?? served?.revalidate);
-      const stale = isStaleEntry(entry.lastModified, tags, revalidate);
-      if (stale && servesOnlyFresh(process.env)) return null;
+      if (servesOnlyFresh(process.env)) {
+        if (tagClock.areTagsStale(tags, entry.lastModified)) return null;
+        const timeStale = isTimeStale(entry.lastModified, revalidate);
+        if (timeStale && !this.canServeStaleFetch(ctx?.kind === "FETCH")) return null;
+      }
       if (ctx?.kind !== "FETCH") this.noteOriginTags(tags);
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
@@ -193,7 +200,7 @@ export default class OcelCacheHandler {
         isFetch
           ? (await store).writeFetch(key, entry)
           : (await store).writeEntry(cacheKey(key), entry);
-      if (servesOnlyFresh(process.env)) await write();
+      if (servesOnlyFresh(process.env) && !this.canServeStaleFetch(isFetch)) await write();
       else background(write);
     } catch {}
   }

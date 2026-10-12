@@ -10,7 +10,7 @@ import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
 import { collectTags, notedTags } from "../src/origin-tags.mjs";
 import { purgedSince, purgeMark } from "../src/purge-signal.mjs";
-import { noteServedRoute } from "../src/served-route.mjs";
+import { noteServedRoute, noteUncachedRender } from "../src/served-route.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
 
 function fakeStore() {
@@ -951,4 +951,68 @@ test("behind a caching edge, a fetch with no window of its own is judged by the 
   const entry = await handler.get("abc", { kind: "FETCH", tags: [], revalidate: 0 });
 
   expect(entry).toBeNull();
+});
+
+function uncachedRender() {
+  const requestHeaders: any = {};
+  noteUncachedRender(requestHeaders);
+  return new OcelCacheHandler({ _requestHeaders: requestHeaders });
+}
+
+test("behind a caching edge, a time-stale fetch entry is served to a render no edge stores", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+
+  const entry = await uncachedRender().get("abc", { kind: "FETCH", tags: [], revalidate: 60 });
+
+  expect(entry?.value.data.body).toBe("cached");
+});
+
+test("behind a caching edge, a tag-stale fetch entry is a miss even to a render no edge stores", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedFetch(store, 10_000, ["products"]);
+  fakeSnapshot({ products: { stale: Date.now() - 5_000 } });
+
+  const entry = await uncachedRender().get("abc", {
+    kind: "FETCH",
+    tags: ["products"],
+    revalidate: 60,
+  });
+
+  expect(entry).toBeNull();
+});
+
+test("behind a caching edge, a time-stale page entry is a miss even to a render no edge stores", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 120_000,
+    cacheControl: { revalidate: 60 },
+  });
+
+  expect(await uncachedRender().get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("behind a caching edge, a render no edge stores does not wait for its fetch entry to be written", async () => {
+  behindCachingEdge();
+  const store = fakeStore();
+  const release = store.holdWrites();
+  const requestHeaders: any = {};
+  noteUncachedRender(requestHeaders);
+  let resolved = false;
+
+  const deferred = await invocation(() =>
+    new OcelCacheHandler({ _requestHeaders: requestHeaders })
+      .set("abc", { kind: "FETCH", data: { body: "x" }, revalidate: 60 }, { tags: [] })
+      .then(() => {
+        resolved = true;
+      }),
+  );
+
+  expect(resolved).toBe(true);
+  release();
+  await Promise.all(deferred);
+  expect(store.fetches.get("abc")?.value.data.body).toBe("x");
 });

@@ -15,7 +15,11 @@ import {
   servesOnlyFresh,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
-import { cachesOnlyMarked, readEdgeCacheMode } from "@platform/edge-contract/edge-cache";
+import {
+  cachesOnlyMarked,
+  edgeCacheHeader,
+  readEdgeCacheMode,
+} from "@platform/edge-contract/edge-cache";
 import { purgeHeader, purgeHeaderFor } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import {
@@ -31,7 +35,7 @@ import { loadProjectManifest } from "./project-manifest.mjs";
 import { purgedSince, purgeMark } from "./purge-signal.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
-import { noteServedRoute } from "./served-route.mjs";
+import { noteServedRoute, noteUncachedRender } from "./served-route.mjs";
 import { loadTagsManifest, mirrorTagsInto } from "./tags-manifest.mjs";
 
 function isPprResume(req: http.IncomingMessage): boolean {
@@ -78,8 +82,9 @@ async function boot(): Promise<void> {
   const routes = revalidatingRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
   const freshOnly = servesOnlyFresh(process.env);
+  const edgeCachesOnlyMarked = cachesOnlyMarked(readEdgeCacheMode(process.env));
   const purgeRelease =
-    invalidatesByCacheTag(process.env) && cachesOnlyMarked(readEdgeCacheMode(process.env))
+    invalidatesByCacheTag(process.env) && edgeCachesOnlyMarked
       ? releaseOf(process.env.OCEL_ISR_PREFIX)
       : null;
 
@@ -90,6 +95,9 @@ async function boot(): Promise<void> {
     if (freshOnly) {
       const window = findRouteWindow(req.url, routes);
       if (window) noteServedRoute(req.headers as RequestHeaders, window);
+      else if (edgeCachesOnlyMarked && req.headers[edgeCacheHeader] !== "1") {
+        noteUncachedRender(req.headers as RequestHeaders);
+      }
     }
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
