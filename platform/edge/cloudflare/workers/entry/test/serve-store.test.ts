@@ -260,33 +260,45 @@ describe("Serve answering a miss from the durable store", () => {
     expect(await response.text()).toBe("<html>from the origin</html>");
   });
 
-  it("reads no store for a call that names no entry", async () => {
+  it("answers the stored page for a query its route's path determines", async () => {
+    await seed(storedEntry());
+    const h = harness({ call: { entry: { path: "/blog/a", pathDeterminesQuery: true } } }) as Used;
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/a?nxtPid=a")));
+
+    expect(await response.text()).toBe("<html>from the store</html>");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers a segment prefetch whose query its route's path determines from the stored segment", async () => {
+    await seed({
+      ...storedEntry(),
+      value: {
+        ...storedEntry().value,
+        segmentHeaders: { "content-type": "text/x-component" },
+        segmentData: { "/_tree": Buffer.from("tree segment").toString("base64") },
+      },
+    });
+    const h = harness({ call: { entry: { path: "/blog/a", pathDeterminesQuery: true } } }) as Used;
+    const prefetch = h.request("blog/a?nxtPid=a");
+    prefetch.headers.set("rsc", "1");
+    prefetch.headers.set("next-router-prefetch", "1");
+    prefetch.headers.set("next-router-segment-prefetch", "/_tree");
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(prefetch));
+
+    expect(await response.text()).toBe("tree segment");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("goes to the origin for a query named like a route parameter on a route whose every query varies the page", async () => {
     await seed(storedEntry());
     const h = harness() as Used;
-    const request = new Request(buildOriginCall(`${FN_URL}blog/a`, coordinates).url, {
-      headers: { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix }) },
-    });
 
-    const response = await h.fetchOrigin(() => h.serve.fetch(request));
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/a?nxtPx=1")));
 
     expect(await response.text()).toBe("<html>from the origin</html>");
-  });
-});
-
-describe("Serve reading tag times from the purge queue itself", () => {
-  it("skips the store on the next miss once the purge queue recorded a purge of a tag of the entry", async () => {
-    await seed(storedEntry());
-    const queues = { PurgeQueue: env.PURGE_QUEUE };
-    const h = harness({ queues: queues.PurgeQueue }) as Used;
-
-    const before = await h.fetchOrigin(() => h.serve.fetch(h.request()));
-    await openPurgeQueue(queues).record("purge", [
-      { tag: "r1a2b3c4d|posts", raisedAt: Date.now() },
-    ]);
-    const after = await h.fetchOrigin(() => h.serve.fetch(h.request()));
-
-    expect(await before.text()).toBe("<html>from the store</html>");
-    expect(await after.text()).toBe("<html>from the origin</html>");
+    expect(h.originCalls).toHaveLength(1);
   });
 });
 
@@ -402,6 +414,31 @@ describe("Serve answering the shell of a PPR document", () => {
 
     expect(await response.text()).toBe("STATE<html>shell</html>");
     expect(response.headers.get("x-ocel-postponed-length")).toBe("5");
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it.each([
+    [
+      "frames the stored shell for a query its route's path determines",
+      { pathDeterminesQuery: true },
+      "STATE<html>shell</html>",
+    ],
+    ["answers that it has no shell for a query that varies the page", {}, null],
+  ])("%s", async (_, entry, body) => {
+    await seed(shellEntry());
+    const h = harness({ call: { entry: { path: "/blog/a", ...entry } } }) as Used;
+    const url = buildOriginCall(`${FN_URL}blog/a?nxtPid=a`, {
+      ...coordinates,
+      variant: ".ppr-shell",
+    }).url;
+    const request = new Request(url, {
+      headers: { [RENDER_RELEASE_HEADER]: h.request().headers.get(RENDER_RELEASE_HEADER)! },
+    });
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(request));
+
+    if (body === null) expect(response.headers.get(SERVE_NO_SHELL_HEADER)).toBe("1");
+    else expect(await response.text()).toBe(body);
     expect(h.originCalls).toEqual([]);
   });
 

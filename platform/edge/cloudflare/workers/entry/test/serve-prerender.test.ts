@@ -140,7 +140,13 @@ describe("a prerender served through Serve", () => {
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
-    ).toEqual({ path: "/blog", fallbackPath: "/blog", revalidate: 30, expire: 300 });
+    ).toEqual({
+      path: "/blog",
+      fallbackPath: "/blog",
+      revalidate: 30,
+      expire: 300,
+      pathDeterminesQuery: true,
+    });
   });
 
   it("names no revalidate window for a route that never revalidates", async () => {
@@ -151,8 +157,45 @@ describe("a prerender served through Serve", () => {
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
-    ).toEqual({ path: "/blog", fallbackPath: "/blog" });
+    ).toEqual({ path: "/blog", fallbackPath: "/blog", pathDeterminesQuery: true });
   });
+
+  it.each([
+    ["a static route", [], "", true],
+    ["a dynamic route", ["nxtPid"], "?nxtPid=a", true],
+    ["a route whose every query varies the page", undefined, "?nxtPid=a&utm=x", false],
+  ])(
+    "keys %s by the query its allowQuery keeps, and says whether the path determines it",
+    async (_, allowQuery, search, pathDeterminesQuery) => {
+      const served = fakeServing();
+
+      await get("/blog?utm=x&nxtPid=a", deps(served, { target: { allowQuery } }));
+
+      const sent = served.calls[0].request;
+      expect(new URL(sent.url).search).toBe(search);
+      const entry = JSON.parse(sent.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry;
+      expect(entry.pathDeterminesQuery === true).toBe(pathDeterminesQuery);
+    },
+  );
+
+  it.each([
+    ["document", {}, ".ppr-shell"],
+    ["segment prefetch", { rsc: "1", "next-router-segment-prefetch": "/_tree" }, ".segments"],
+  ])(
+    "says the path determines the query of a PPR route's %s, whose shell allowQuery keeps no query",
+    async (_, headers, variant) => {
+      const served = fakeServing();
+      const target = { config: { renderingMode: "PARTIALLY_STATIC" }, allowQuery: [] };
+
+      await get("/blog?nxtPid=a", deps(served, { target }), { headers });
+
+      const sent = served.calls[0].request;
+      expect(decodeURIComponent(sent.url)).toContain(variant);
+      expect(new URL(sent.url).search).toBe("");
+      const entry = JSON.parse(sent.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry;
+      expect(entry.pathDeterminesQuery).toBe(true);
+    },
+  );
 
   it("renders at the origin, uncached, when Serve refuses the call", async () => {
     const served = fakeServing(
@@ -603,7 +646,11 @@ describe("the document of a PPR route whose param was not prerendered", () => {
       served.calls[1].request.headers.get(RENDER_RELEASE_HEADER) ?? "null",
     );
     expect(release).not.toHaveProperty("sharesFallbackShell");
-    expect(release.entry).toEqual({ path: "/blog/42", fallbackPath: "/blog/[id]" });
+    expect(release.entry).toEqual({
+      path: "/blog/42",
+      fallbackPath: "/blog/[id]",
+      pathDeterminesQuery: true,
+    });
     expect(await response.text()).toBe("shell of 42");
     expect(response.headers.has(SERVE_UNSHARED_HEADER)).toBe(false);
   });
@@ -615,7 +662,7 @@ describe("the document of a PPR route whose param was not prerendered", () => {
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
-    ).toEqual({ path: "/blog/[id]", fallbackPath: "/blog/[id]" });
+    ).toEqual({ path: "/blog/[id]", fallbackPath: "/blog/[id]", pathDeterminesQuery: true });
   });
 
   it("keeps a shell per path when the route's fallback is not partial", async () => {
