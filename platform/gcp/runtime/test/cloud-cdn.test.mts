@@ -1,9 +1,8 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, expect, test, vi } from "vitest";
-import { cloudCdnRelease } from "../src/cache/cloud-cdn-tags.mjs";
+import { cacheTagsForCloudCdn, cloudCdnRelease } from "../src/cache/cloud-cdn-tags.mjs";
 import {
-  cacheTagsForCloudCdn,
   forCloudCdn,
   trimVaryForCloudCdn,
   withholdFromCloudCdn,
