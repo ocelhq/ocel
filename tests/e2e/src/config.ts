@@ -288,7 +288,7 @@ export function renderConfig(base: string, overlay: Overlay): string {
     fields.push(`  allowDegraded: ${JSON.stringify(overlay.allowDegraded)},`);
   }
   if (overlay.preBuild) {
-    fields.push(`  lifecycle: { preBuild: ${JSON.stringify(overlay.preBuild)} },`);
+    fields.push(`  lifecycle: { ...base.lifecycle, preBuild: ${JSON.stringify(overlay.preBuild)} },`);
   }
   if (overlay.previewDomain) {
     fields.push(
@@ -393,7 +393,7 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
     written.allowDegraded = overlay.allowDegraded;
   }
   if (overlay.preBuild) {
-    written.lifecycle = { preBuild: overlay.preBuild };
+    written.lifecycle = { ...(read.lifecycle as object | undefined), preBuild: overlay.preBuild };
   }
   if (overlay.previewDomain) {
     written.domains = { ...(read.domains as object | undefined), preview: overlay.previewDomain };

@@ -490,7 +490,7 @@ export default defineConfig({
   it("declares the pre-build the cell migrates in", () => {
     expect(
       renderConfig(TS_BASE, { target: "aws", slug: "j-1-node", preBuild: "pnpm run migrate" }),
-    ).toContain(`  lifecycle: { preBuild: "pnpm run migrate" },`);
+    ).toContain(`  lifecycle: { ...base.lifecycle, preBuild: "pnpm run migrate" },`);
   });
 
   it("declares a pre-build in a JSON config", () => {
@@ -502,6 +502,17 @@ export default defineConfig({
       }),
     );
     expect(written.lifecycle).toEqual({ preBuild: "pnpm run migrate" });
+  });
+
+  it("keeps the lifecycle a JSON config already declares beside the pre-build", () => {
+    const written = JSON.parse(
+      renderJsonConfig(`{"slug":"node","lifecycle":{"postDeploy":"true","preBuild":"true"}}`, {
+        target: "aws",
+        slug: "j-1-node",
+        preBuild: "pnpm run migrate",
+      }),
+    );
+    expect(written.lifecycle).toEqual({ postDeploy: "true", preBuild: "pnpm run migrate" });
   });
 
   it("leaves the provider alone when no key is brought", () => {
