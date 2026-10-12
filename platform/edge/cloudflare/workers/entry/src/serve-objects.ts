@@ -2,7 +2,12 @@ import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { EdgeObjectStore, EdgeStoredObject } from "./edge";
 import type { PurgeOutcome } from "./purge-backlog";
-import { buildObjectCall, buildServeRequest, type ServeProps } from "./serve-key";
+import {
+  buildObjectCall,
+  buildServeRequest,
+  isReleaseObjectKey,
+  type ServeProps,
+} from "./serve-key";
 
 export type ServeFactory = (options: { props: ServeProps }) => {
   fetch(request: Request): Promise<Response>;
@@ -17,6 +22,7 @@ export function serveObjects(
 ): EdgeObjectStore & AssetBucket & { get(key: string): Promise<ServedObject | null> } {
   return {
     async get(key) {
+      if (!isReleaseObjectKey(key)) return null;
       const { url, props } = buildObjectCall(host, key);
       const res = await serve({ props }).fetch(buildServeRequest(url));
       if (res.status === 404) {

@@ -119,6 +119,36 @@ describe("the gateway on an origin whose bucket an HMAC key reads", () => {
   });
 });
 
+describe("the gateway on an app with no root page", () => {
+  const table: NextRouteTable = {
+    rootFunction: "/",
+    buildId: "deploy-1",
+    basePath: "",
+    pathnames: [],
+    routes: {
+      beforeMiddleware: [],
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    dispatch: {},
+  };
+
+  it("answers a 404 for the root rather than throwing when no index.html is stored", async () => {
+    const { ctx } = ctxWithServe((key) =>
+      key === routeTableKey()
+        ? new Response(JSON.stringify(table))
+        : new Response("", { status: 404 }),
+    );
+
+    const response = await worker.fetch(new Request("https://shop.example.com/"), env, ctx);
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe("the gateway calling Serve", () => {
   it("hands Serve none of the visitor's cookies or credentials", async () => {
     const { headers, ctx } = ctxWithServe(() => new Response("Not Found", { status: 404 }));
