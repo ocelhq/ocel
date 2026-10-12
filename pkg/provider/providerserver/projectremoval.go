@@ -109,14 +109,14 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	plan, err := removal.plan()
+	plan, err := removal.plan(ctx)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	return plan, nil
 }
 
-func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
+func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 	plan := &planv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
 	vendor := string(r.provider.Facts().Vendor)
 	for _, stack := range r.apps {
@@ -127,6 +127,16 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 			Action: planv1.Change_ACTION_DELETE,
 			Reason: "everything this release of " + stack.App + " provisioned",
 		})
+	}
+	for _, env := range r.environments() {
+		removed, err := planRemovedApps(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress.Discard())
+		if err != nil {
+			return nil, err
+		}
+		for _, group := range removed.Groups {
+			group.Name = vendor + "/" + group.Name
+			plan.Groups = append(plan.Groups, GroupProto(group))
+		}
 	}
 	for _, stack := range r.infra {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
@@ -249,7 +259,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err != nil {
 			return project.explain(err)
 		}
-		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
+		if err := removal.refuseIfPlanGrew(project.context(), req.GetConsented()); err != nil {
 			return project.explain(err)
 		}
 		removed, leased, err := removal.listRemovedEnvironments(project.context())
@@ -299,11 +309,11 @@ func removalTitle(env *environmentv1.Environment) progress.Title {
 	}
 }
 
-func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
+func (r *projectRemoval) refuseIfPlanGrew(ctx context.Context, consented *planv1.ChangePlan) error {
 	if len(consented.GetGroups()) == 0 {
 		return nil
 	}
-	current, err := r.plan()
+	current, err := r.plan(ctx)
 	if err != nil {
 		return err
 	}
@@ -323,6 +333,11 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 
 	if err := r.unbind(ctx, progress); err != nil {
 		errs = append(errs, err)
+	}
+	for _, env := range r.environments() {
+		if err := retireRemovedApps(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	errs = append(errs, destroyAppsThenInfra(r.apps, r.infra, func(stack naming.StackName) error {
 		return r.destroyStack(ctx, stack)

@@ -32,6 +32,8 @@ type Provider struct {
 	runtimeArch      string
 	runtimeBinary    []byte
 	hooks            provider.Hooks
+	retirements      []provider.LiveApps
+	retired          []retiredApp
 	setFacts         func(*provider.Facts)
 
 	journal        *Journal
@@ -93,6 +95,7 @@ func NewProvider(options Options) *Provider {
 		ProgramEdge:        p.ProgramEdge,
 		OpenRegistryImages: p.OpenRegistryImages,
 		Cost:               &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		RemovedApps:        &provider.RemovedAppHooks{Plan: p.PlanRemovedApps, Retire: p.RetireRemovedApps},
 	}
 	return p
 }

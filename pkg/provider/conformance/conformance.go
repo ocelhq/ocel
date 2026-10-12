@@ -64,6 +64,12 @@ func runHooks(t *testing.T, suite Suite) {
 			t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
 		}
 	})
+	t.Run("RemovedApps", func(t *testing.T) {
+		if hooks.RemovedApps == nil {
+			t.Skip("this provider keeps nothing per app outside its releases, so an app removed from config leaves nothing behind")
+		}
+		RunRemovedApps(t, hooks.RemovedApps)
+	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.ReadNextServerRuntime == nil {
 			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
