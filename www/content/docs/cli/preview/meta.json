@@ -1,4 +1,4 @@
 {
   "title": "ocel preview",
-  "pages": ["index", "ls", "prune", "rm", "up"]
+  "pages": ["index", "ls", "protection", "prune", "rm", "up"]
 }

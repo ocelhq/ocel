@@ -33,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/login"
 	"github.com/ocelhq/ocel/cli/internal/commands/logs"
 	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
+	"github.com/ocelhq/ocel/cli/internal/commands/previewprotection"
 	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
 	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
 	"github.com/ocelhq/ocel/cli/internal/commands/schema"
@@ -206,7 +207,9 @@ func newCommand() *command {
 		DiscoverPRNumber:        deploy.DiscoverPRNumber,
 	}
 	rootCmd.AddCommand(deploy.NewCommand(deployDependencies))
-	rootCmd.AddCommand(deploy.NewPreviewCommand(deployDependencies))
+	previewCmd := deploy.NewPreviewCommand(deployDependencies)
+	previewCmd.AddCommand(previewprotection.NewCommand(invocation))
+	rootCmd.AddCommand(previewCmd)
 	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
 	rootCmd.AddCommand(promotions.NewPromotionsCommand(invocation))

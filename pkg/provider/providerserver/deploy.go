@@ -659,13 +659,16 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Program = program.Spec
+	if err := r.readPreviewGateInForce(ctx); err != nil {
+		return err
+	}
 	spec.PreviewGate = r.previewGate
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		return err
 	}
 	r.setEdgeStack(stack)
-	if err := r.settlePreviewGate(ctx); err != nil {
+	if err := r.settlePreviewGate(ctx, progress); err != nil {
 		return err
 	}
 	if err := recordInvalidationTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {

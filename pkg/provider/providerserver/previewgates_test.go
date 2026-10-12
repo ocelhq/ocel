@@ -270,7 +270,7 @@ func TestTurningProtectionBackOnRestoresTheSameCredentials(t *testing.T) {
 	if !record.Enabled || record.Pending || record.Password != shopPassword || record.Gate.Key != shopGate.Key {
 		t.Errorf("shop's record is %+v, want it enabled again with the same password and key", record)
 	}
-	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
+	stacks := relayEdge(vendor).Stacks()
 	if got := stacks[len(stacks)-1].PreviewGate; got == nil || !reflect.DeepEqual(*got, shopGate) {
 		t.Errorf("the edge was handed %+v, want the kept gate", got)
 	}
@@ -278,8 +278,7 @@ func TestTurningProtectionBackOnRestoresTheSameCredentials(t *testing.T) {
 
 func TestAnUnprotectedPreviewDeployWhoseEdgeWriteFailsKeepsThePreviewsProtected(t *testing.T) {
 	client, vendor := unprotectedPreviewServed(t)
-	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
-	relay.OnReconcile(func(edge.StackSpec) { relay.Refuse(errors.New("the edge is unreachable")) })
+	relayEdge(vendor).OnReconcile(func(edge.StackSpec) { relayEdge(vendor).Refuse(errors.New("the edge is unreachable")) })
 
 	if result, _ := deploy(t, client, previewDeployRequest()); result.GetSuccess() {
 		t.Fatal("Deploy() succeeded, want the edge failure")
@@ -287,6 +286,40 @@ func TestAnUnprotectedPreviewDeployWhoseEdgeWriteFailsKeepsThePreviewsProtected(
 
 	if record, _ := recordedGateOf(t, vendor, "shop"); !record.Enabled || record.Password != shopPassword {
 		t.Errorf("shop's record is %+v, want it still enabled with its password: the edge still holds the gate", record)
+	}
+}
+
+func TestACredentialChangeDuringADeploysEdgeWriteIsWhatTheEdgeHoldsAfterward(t *testing.T) {
+	client, vendor := protectedPreview(t)
+	var rotated *contractv1.ChangePreviewProtectionResponse
+	relayEdge(vendor).OnReconcile(func(edge.StackSpec) {
+		relayEdge(vendor).OnReconcile(nil)
+		rotated, _ = changeAndPublish(t, client, rotatePassword())
+	})
+
+	if result, _ := deploy(t, client, protecting(previewDeployRequest())); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	record, _ := recordedGateOf(t, vendor, "shop")
+	if rotated.GetPassword() == "" || record.Password != rotated.GetPassword() {
+		t.Fatalf("the record holds password %q, want the one rotated mid-deploy", record.Password)
+	}
+	stacks := relayEdge(vendor).Stacks()
+	if got := stacks[len(stacks)-1].PreviewGate; got == nil || got.Key == record.Gate.Key {
+		t.Fatalf("the deploy wrote %+v, want it to have written the gate it read before the rotation", got)
+	}
+	republished := 0
+	for _, published := range relayEdge(vendor).Publications() {
+		if published.Gate != nil && published.Gate.Key == record.Gate.Key {
+			republished++
+		}
+	}
+	if republished < 2 {
+		t.Errorf("the rotated gate was published %d times, want the deploy to publish it again after writing the older gate over it", republished)
+	}
+	if record.Pending {
+		t.Error("the record is pending although the edge holds it")
 	}
 }
 

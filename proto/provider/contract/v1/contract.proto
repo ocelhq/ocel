@@ -51,6 +51,12 @@ service ProviderService {
 
     rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse);
 
+    rpc GetPreviewProtection(GetPreviewProtectionRequest) returns (GetPreviewProtectionResponse);
+
+    rpc ChangePreviewProtection(ChangePreviewProtectionRequest) returns (ChangePreviewProtectionResponse);
+
+    rpc PublishPreviewProtection(PublishPreviewProtectionRequest) returns (stream common.progress.v1.OperationEvent);
+
     rpc Preflight(PreflightRequest) returns (stream PreflightEvent);
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
@@ -645,6 +651,70 @@ message ForgetPreviewAliasRequest {
 }
 
 message ForgetPreviewAliasResponse {}
+
+message GetPreviewProtectionRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  bool reveal_password = 2;
+
+  EdgeSelection edge = 3;
+}
+
+message GetPreviewProtectionResponse {
+  bool recorded = 1;
+
+  string password = 2;
+
+  repeated string bypass_secret_ids = 3;
+
+  repeated common.progress.v1.PreviewEdgePublication edges = 4;
+
+  bool enabled = 5;
+}
+
+message ChangePreviewProtectionRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 2;
+
+  oneof change {
+    option (buf.validate.oneof).required = true;
+
+    RotatePreviewPassword rotate_password = 3;
+
+    SetPreviewPassword set_password = 4;
+
+    CreatePreviewBypassSecret create_bypass_secret = 5;
+
+    RevokePreviewBypassSecret revoke_bypass_secret = 6;
+  }
+}
+
+message ChangePreviewProtectionResponse {
+  string password = 1 [debug_redact = true];
+
+  string bypass_secret = 2 [debug_redact = true];
+
+  string bypass_secret_id = 3;
+}
+
+message PublishPreviewProtectionRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 2;
+}
+
+message RotatePreviewPassword {}
+
+message SetPreviewPassword {
+  string password = 1 [(buf.validate.field).string = {min_len: 12, max_bytes: 256}];
+}
+
+message CreatePreviewBypassSecret {}
+
+message RevokePreviewBypassSecret {
+  string id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{12}$"];
+}
 
 message PreflightRequest {
   common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];

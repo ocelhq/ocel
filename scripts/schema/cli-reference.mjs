@@ -142,9 +142,13 @@ function renderBehaviour(command, output) {
     if (hasFlag(command, "dry")) ways.push("`--dry` prints what it would change and stops");
     lines.push(`- Asks before it changes anything: ${ways.join(", and ")}.`);
   }
-  if (output === RESULT) {
+  if (output === RESULT && command.prints_data) {
     lines.push(
       `- Prints data on stdout. Under \`--json\` it prints one result envelope, whose JSON Schema \`ocel schema ${command.path}\` prints.`,
+    );
+  } else if (output === RESULT) {
+    lines.push(
+      `- Under \`--json\` it prints one result envelope on stdout, whose JSON Schema \`ocel schema ${command.path}\` prints.`,
     );
   } else if (output === RUN_EVENTS) {
     lines.push(

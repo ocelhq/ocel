@@ -78,6 +78,18 @@ const env = {
 
 const envLs = { ...env, path: "env ls", short: "List values", usage: "ocel env ls [flags]" };
 
+describe("renderPage of a command that prints its result only under --json", () => {
+  const page = renderPage(
+    { ...envSet, prints_data: false },
+    { output: "COMMAND_OUTPUT_RESULT", subcommands: [] },
+  );
+
+  it("says it prints the result envelope under --json and never that it prints data otherwise", () => {
+    assert.ok(page.includes("- Under `--json` it prints one result envelope on stdout"));
+    assert.ok(!page.includes("Prints data on stdout"));
+  });
+});
+
 describe("renderPage", () => {
   const page = renderPage(envSet, { output: "COMMAND_OUTPUT_RESULT", subcommands: [] });
 

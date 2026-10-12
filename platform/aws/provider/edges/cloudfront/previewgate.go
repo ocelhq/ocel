@@ -70,7 +70,7 @@ func encodePreviewGate(slug string, gate *previewgate.Gate) (string, error) {
 	}
 	if len(encoded) > keyValueStoreValueMaxBytes {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the keys that gate the preview of %s take %d bytes, and the %q edge keeps them in a key value store that holds %d per value. Revoke bypass secrets or shorten the allowed OPTIONS prefixes until they fit",
+			"the keys that gate the preview of %s take %d bytes, and the %q edge keeps them in a key value store that holds %d per value. Revoke bypass secrets with `ocel preview protection bypass revoke` until they fit",
 			slug, len(encoded), Kind, keyValueStoreValueMaxBytes)
 	}
 	return string(encoded), nil

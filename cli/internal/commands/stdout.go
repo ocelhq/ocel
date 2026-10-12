@@ -8,6 +8,7 @@ import (
 
 const (
 	stdoutAnnotation    = "ocel.stdout"
+	jsonOnlyAnnotation  = "ocel.stdout-json-only"
 	runEventsAnnotation = "ocel.run-events"
 )
 
@@ -28,6 +29,18 @@ func ChooseRunOutput(cmd *cobra.Command) io.Writer {
 
 func PrintsData(cmd *cobra.Command) bool {
 	return isStdoutReserved(cmd) && !isTerminalSharedWithChild(cmd)
+}
+
+func PrintOnlyUnderJSON(cmd *cobra.Command) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[jsonOnlyAnnotation] = "true"
+	return cmd
+}
+
+func PrintsTextData(cmd *cobra.Command) bool {
+	return PrintsData(cmd) && cmd.Annotations[jsonOnlyAnnotation] == ""
 }
 
 func DeclareRunEvents(cmd *cobra.Command) *cobra.Command {

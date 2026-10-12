@@ -118,9 +118,10 @@ opens it, and a first promotion that is taken back closes it again, so a service
 only ever serves a release the project promoted.
 
 A preview with no edge in front is answered on its own `run.app` URL, which the deploy
-prints. No edge runs the preview gate for it, so the service runs the gate itself, in front of
-the app, whenever the project has preview gate keys recorded; without them the URL answers
-anyone who knows it, and the deploy says so.
+prints. Nothing runs the preview gate for it, so that URL answers anyone who knows it and the
+deploy says so, and a deploy of a project whose config sets
+[`previews.protection`](/docs/configuration#previews) is refused: protect previews through the
+`alb` edge.
 
 A preview answered by the load balancer is cached like production, and gated there without
 changing that. The preview tier's load balancer runs the gate as a Service Extensions plugin
@@ -128,9 +129,9 @@ on its forwarding rule, ahead of the URL map and Cloud CDN, so it sees every req
 including one a cache would answer, and a response the gate admitted is cached exactly as an
 ungated one would be. The deploy never rewrites an app's `Cache-Control` for a gate. The plugin
 admits a request carrying the preview password, a bypass secret or a session, takes those
-credentials off before the request goes on, and answers everyone else with the login form.
-The login itself is posted to the service, which holds the keys and answers it, because a
-plugin reads no request body. Every preview response carries `X-Robots-Tag: noindex`, set on the
+credentials off before the request goes on, and answers everyone else with the login page.
+The login is answered by the plugin too, from the password sent as HTTP Basic credentials,
+so the password never reaches the service. Every preview response carries `X-Robots-Tag: noindex`, set on the
 preview backends and on the assets bucket.
 
 The plugin and its config share the 5 MiB Google allows a plugin, and the config holds each
@@ -147,7 +148,8 @@ asks the hostname through the load balancer until the gate's own refusal answers
 in a row, for up to about five minutes, before it routes the hostname. If the gate never
 answers, the deploy fails and the hostname stays unrouted. A project that gates an
 already-routed preview waits the same way, and that preview is open until the wait ends.
-Changing or revoking a password or secret takes a few minutes to apply, too.
+Changing or revoking a password or secret takes the same few minutes to apply, and
+`ocel preview protection` streams the rollout while it waits.
 
 The preview tier's bootstrap attaches the plugin with an empty gate set that admits
 everything, and a plugin that crashes refuses requests rather than passing them. The bootstrap checks

@@ -134,6 +134,56 @@ message PreviewSummary {
   repeated string alias_urls = 5;
 }
 
+message PreviewProtectionResult {
+  string slug = 1;
+
+  bool enabled = 2;
+
+  bool recorded = 3;
+
+  repeated string bypass_secret_ids = 4;
+
+  repeated PreviewEdgeResult edges = 5;
+}
+
+message PreviewBypassSecretListResult {
+  string slug = 1;
+
+  repeated string ids = 2;
+}
+
+message PreviewPasswordResult {
+  string slug = 1;
+
+  string password = 2;
+
+  repeated PreviewEdgeResult edges = 3;
+}
+
+message PreviewBypassSecretResult {
+  string slug = 1;
+
+  string id = 2;
+
+  string secret = 3;
+
+  repeated PreviewEdgeResult edges = 4;
+}
+
+message PreviewPublicationResult {
+  string slug = 1;
+
+  repeated PreviewEdgeResult edges = 2;
+}
+
+message PreviewEdgeResult {
+  string kind = 1;
+
+  bool published = 2;
+
+  string error = 3;
+}
+
 message DomainListResult {
   repeated DomainHostStatus hosts = 1;
 }
