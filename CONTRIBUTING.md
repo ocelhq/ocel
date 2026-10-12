@@ -106,21 +106,26 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 
 ## Fix what you find
 
-A finding is observed incorrectness or a broken gate in `.greptile/rules.md`; a preference is
-not one. State only an unreleased build could have written is never a finding (Clean break).
-Each finding gets one disposition:
+A finding is observed incorrectness or a broken gate in `.greptile/rules.md`, proven by a
+failing test or a `file:line` trace to the wrong result. A suspicion you have not proven
+is not a finding: prove it or drop it, and never report it. A preference is never a
+finding, nor is state only an unreleased build could have written (Clean break).
 
-1. **Fix it** when it is in a file this change modifies, or the fix is 50 changed lines or
-   fewer (tests excluded) and touches no contract path this change does not. A fix elsewhere
-   is its own commit. A behaviour fix adds a regression test that fails without it.
-2. **File it** only if it is a verified Trust issue (correctness, security, reliability) too
-   large to fix. Verified means a failing test or a concrete `file:line` trace to the wrong
-   result. Search open issues first; comment on a match instead of filing.
-3. **Call it out** otherwise: unverified, too large and not about Trust, or needing a
-   maintainer ruling. One line with `file:line` under **Found, not fixed** in the pull
-   request, or in the report when there is no pull request. Never filed.
+Each finding is fixed or filed:
 
-A fix that grows past 50 lines is reverted and goes to 2 or 3.
+1. **Fix it.** Start every fix. A fix outside the files this change modifies is its own
+   commit, and a behaviour fix adds a regression test that fails without it.
+2. **File it** only when the attempt itself crosses the bound: it changes more than 10
+   files (tests and generated code excluded), or it has to change a contract path this
+   change does not. Push the attempt to `found/<slug>`, then file one issue per root cause
+   with the failing test, the branch, and the attempt's `git diff --stat` (or the contract
+   file it reached), labelled `needs-triage`. Search open issues first and comment on a
+   match instead. Never file before attempting.
+
+A fix that cannot be finished because the right behaviour is unclear goes under **Needs a
+ruling** in the pull request, with its failing test. So does any other question only a
+maintainer can answer, such as disagreement with a rule or a term for GLOSSARY.md. A
+finding with a clear fix never goes there.
 
 ## Commits
 
