@@ -33,11 +33,6 @@ func currentAgent(t *testing.T) []byte {
 
 func preflightingResources(t *testing.T, machine *scripted, declared ...provider.Resource) error {
 	t.Helper()
-	return preflightingIn(t, machine, naming.InfraStack("prod"), declared...)
-}
-
-func preflightingIn(t *testing.T, machine *scripted, infra naming.StackName, declared ...provider.Resource) error {
-	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
@@ -51,7 +46,7 @@ func preflightingIn(t *testing.T, machine *scripted, infra naming.StackName, dec
 		Deploy: provider.DeploySpec{
 			Slug:  "shop",
 			Tier:  environment.TierProduction,
-			Infra: infra,
+			Infra: naming.InfraStack("prod"),
 			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 		Resources: declared,

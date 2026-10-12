@@ -99,13 +99,8 @@ func pointerFor(tier environment.Tier, env string) string {
 	return env
 }
 
-func ephemeral(env *environmentv1.Environment) bool {
-	return env.GetTier() == environmentv1.Tier_TIER_PREVIEW &&
-		env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
-}
-
 func readPreviewLifecycle(env *environmentv1.Environment) stackrecords.Lifecycle {
-	if ephemeral(env) {
+	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW && env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		return stackrecords.LifecycleEphemeral
 	}
 	return stackrecords.LifecyclePersistent
