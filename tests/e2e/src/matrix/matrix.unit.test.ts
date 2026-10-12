@@ -689,114 +689,52 @@ describe("the pre-build concern", () => {
   });
 });
 
-describe("the tasks concern", () => {
-  const issuesOf = (planned: ReturnType<typeof planOn>, cell: string) =>
-    Object.fromEntries(
-      Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
-        title,
-        listed.map((gap) => gap.issue),
-      ]),
-    );
+describe("sdk/go, sdk/python and sdk/rust", () => {
+  const CELLS = ["sdk/go", "sdk/python", "sdk/rust"];
 
-  it("runs tasks/go on dev and gcp, expecting nothing red", () => {
-    for (const lane of ["dev", "gcp", "gcp.floci"] as const) {
+  it("drives every primitive on dev and on aws in every language, expecting nothing red", () => {
+    for (const lane of ["dev", "aws"] as const) {
       const planned = planOn(lane);
-      expect(planned.cells.map((cell) => cell.name)).toContain("tasks/go");
-      expect(issuesOf(planned, "tasks/go/web")).toEqual({});
+      expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
+      for (const cell of CELLS) {
+        expect(planned.skipped[cell]).toBeUndefined();
+        expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+      }
     }
   });
 
-  it("skips tasks/go on a box under the ticket for its image", () => {
-    for (const lane of ["vps", "vps.incus"] as const) {
-      expect(planOn(lane).skipped["tasks/go"]?.map((gap) => gap.issue)).toEqual([1550]);
-    }
-  });
-});
-
-describe("the realtime concern", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const CELLS = ["realtime/go", "realtime/python", "realtime/rust"];
-
-  it("runs the behavioural suite on dev in Go, Python and Rust, expecting nothing red", () => {
-    const planned = planOn("dev");
-    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
-    for (const cell of CELLS) {
-      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
-    }
-  });
-
-  it("runs the behavioural suite on aws in every language, expecting nothing red", () => {
-    const planned = planOn("aws");
-    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
-    for (const cell of CELLS) {
-      expect(planned.skipped[cell]).toBeUndefined();
-      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
-    }
-  });
-
-  it("skips the suite on floci, which runs no AppSync Event API", () => {
-    const planned = planOn("aws.floci");
-    expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"))).toEqual(
-      CELLS,
-    );
-    for (const cell of CELLS) {
-      const gap = planned.skipped[cell]?.find((one) => one.id === "floci-runs-no-event-api");
+  it("skips every cell on floci's aws, which runs no AppSync Event API", () => {
+    const skipped = planOn("aws.floci").skipped;
+    for (const cell of [...CELLS, "sdk/go-api-gateway"]) {
+      const gap = skipped[cell]?.find((one) => one.id === "floci-runs-no-event-api");
       expect(gap?.reason).toMatch(/Event API/);
     }
   });
 
-  it("skips Go, Python and Rust on a box under the tickets for their images", () => {
+  it("skips every language on a box under the tickets for their images", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
-      const planned = planOn(lane);
       expect(
         Object.fromEntries(
-          Object.entries(planned.skipped)
-            .filter(([cell]) => cell.startsWith("realtime/"))
+          Object.entries(planOn(lane).skipped)
+            .filter(([cell]) => CELLS.includes(cell))
             .map(([cell, gaps]) => [cell, gaps.map((gap) => gap.issue)]),
         ),
-      ).toEqual({
-        "realtime/go": [1550],
-        "realtime/python": [1598],
-        "realtime/rust": [1598],
-      });
-      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toEqual(
-        expect.arrayContaining(CELLS),
-      );
+      ).toEqual({ "sdk/go": [1550], "sdk/python": [1598], "sdk/rust": [1598] });
     }
   });
 
-  const GCP_SKIPS: Record<string, number> = { "realtime/python": 1260, "realtime/rust": 1609 };
-  const GCP_CELLS = CELLS.filter((cell) => !(cell in GCP_SKIPS));
-
-  it("runs the behavioural suite on gcp in Go, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
-    for (const lane of ["gcp", "gcp.floci"] as const) {
-      const planned = planOn(lane);
-      expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(GCP_CELLS));
-      for (const [cell, issue] of Object.entries(GCP_SKIPS)) {
-        expect(planned.skipped[cell]?.map((gap) => gap.issue)).toEqual([issue]);
-      }
-    }
+  it("runs Go on gcp, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
     const planned = planOn("gcp");
-    for (const cell of GCP_CELLS) {
-      expect(planned.skipped[cell]).toBeUndefined();
-      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
-    }
+    expect(planned.skipped["sdk/go"]).toBeUndefined();
+    expect(planned.expectedFailures["sdk/go/web"] ?? {}).toEqual({});
+    expect(planned.skipped["sdk/python"]?.map((gap) => gap.issue)).toEqual([1260]);
+    expect(planned.skipped["sdk/rust"]?.map((gap) => gap.issue)).toEqual([1609]);
   });
 
-  it("runs the suite on floci-gcp, expecting red every check that holds a socket or hears a publish, or asks the handler to know its own origin", () => {
-    const planned = planOn("gcp.floci");
-    const handlerOnly = [realtimeRuleDeniesCheck, realtimeOperationLimitCheck].map(
-      (one) => one.title,
-    );
-    for (const cell of GCP_CELLS) {
-      expect(planned.skipped[cell]).toBeUndefined();
-      const red = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
-      expect(red.sort()).toEqual(
-        realtimeChecks
-          .map((one) => one.title)
-          .filter((title) => !handlerOnly.includes(title))
-          .sort(),
-      );
+  it("skips every language on floci-gcp, which serves no Cloud SQL", () => {
+    const skipped = planOn("gcp.floci").skipped;
+    for (const cell of CELLS) {
+      expect(skipped[cell]?.map((gap) => gap.id)).toContain("floci-serves-no-cloud-sql");
     }
   });
 });

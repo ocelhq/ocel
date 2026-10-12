@@ -91,14 +91,11 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"platform/aws/provider/deploy_awslive_test.go": {
 			DefaultRootDirName: true,
 		},
-		"tests/fixtures/realtime/go/server/main.go": {
-			"example.com/realtime/" + DefaultRootDirName: true,
-		},
-		"tests/fixtures/sdk/go/server/main.go": {
+		"tests/fixtures/sdk/go/server/realtime.go": {
 			"example.com/web/" + DefaultRootDirName: true,
 		},
-		"tests/fixtures/tasks/go/server/main.go": {
-			"example.com/tasks/" + DefaultRootDirName: true,
+		"tests/fixtures/sdk/go/server/wire.go": {
+			"example.com/web/" + DefaultRootDirName: true,
 		},
 	}
 	segments := []*regexp.Regexp{
@@ -175,14 +172,11 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/prerender/next",
 		"tests/fixtures/prerender/next-bucket",
 		"tests/fixtures/prerender/next-dockerfile",
-		"tests/fixtures/realtime/go",
-		"tests/fixtures/realtime/python",
 		"tests/fixtures/sdk/go",
 		"tests/fixtures/sdk/next",
 		"tests/fixtures/sdk/node",
 		"tests/fixtures/sdk/python",
 		"tests/fixtures/sdk/workspace",
-		"tests/fixtures/tasks/go",
 		"tests/fixtures/worker/go",
 		"tests/fixtures/worker/node",
 		"tests/fixtures/worker/python",

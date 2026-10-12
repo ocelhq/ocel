@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { sdk, tasks } from "./matrix/fixtures";
+import { sdk } from "./matrix/fixtures";
 import { appCommand, appHomes, migrateCommand, migrateLine, stateComplaint } from "./workspace";
 
 const workspace = sdk.workspace;
@@ -19,7 +19,7 @@ describe("a multi-app fixture", () => {
   });
 
   it("runs a go app with go itself, from where the config sits", () => {
-    expect(appCommand(tasks.go, "web")).toEqual(["go", "run", "./server"]);
+    expect(appCommand(sdk.go, "web")).toEqual(["go", "run", "./server"]);
   });
 
   it("runs only the app a dev command is named for with it, and every other app with its dev script", () => {

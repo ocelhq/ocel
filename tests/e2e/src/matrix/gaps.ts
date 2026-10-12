@@ -40,16 +40,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import {
-  buildVariables,
-  clientEnv,
-  deploy,
-  lifecycle,
-  prerender,
-  realtime,
-  sdk,
-  tasks,
-} from "./fixtures";
+import { buildVariables, clientEnv, deploy, lifecycle, prerender, sdk } from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
@@ -159,7 +150,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp.floci"],
-        fixtures: [sdk.node, ...Object.values(realtime)],
+        fixtures: [sdk.node, sdk.go, sdk.python, sdk.rust],
         fails: [check(realtimeHandlerDefaultsCheck)],
       },
     ],
@@ -312,7 +303,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [sdk.node, ...Object.values(realtime)],
+        fixtures: [sdk.node, sdk.go, sdk.python, sdk.rust],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -497,7 +488,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp.floci"],
-        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING, sdk.node],
+        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING, sdk.node, sdk.go, sdk.python, sdk.rust],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -511,7 +502,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["vps", "vps.incus"],
-        fixtures: [tasks.go, realtime.go],
+        fixtures: [sdk.go],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -525,7 +516,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["vps", "vps.incus"],
-        fixtures: [realtime.python, realtime.rust],
+        fixtures: [sdk.python, sdk.rust],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -534,12 +525,12 @@ export const gaps: Gap[] = [
   {
     id: "python-function-vendors-requirements-alone",
     reason:
-      "a Python function vendors what requirements.txt lists and nothing else, and realtime/python declares its dependencies, the SDK among them, in pyproject.toml, so the function cannot import them and Cloud Run never sees it ready",
+      "a Python function vendors what requirements.txt lists and nothing else, and sdk/python declares its dependencies, the SDK among them, in pyproject.toml, so the function cannot import them and Cloud Run never sees it ready",
     issue: 1260,
     where: [
       {
         on: ["gcp", "gcp.floci"],
-        fixtures: [realtime.python],
+        fixtures: [sdk.python],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -553,7 +544,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp", "gcp.floci"],
-        fixtures: [realtime.rust],
+        fixtures: [sdk.rust],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -610,7 +601,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp.floci"],
-        fixtures: [sdk.node, ...Object.values(realtime)],
+        fixtures: [sdk.node, sdk.go, sdk.python, sdk.rust],
         fails: [
           check([
             realtimeRuleAllowsCheck,

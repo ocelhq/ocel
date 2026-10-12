@@ -15,7 +15,7 @@ import {
   writeJourneyConfig,
 } from "./config";
 import { evidence } from "./evidence";
-import { deploy, realtime, sdk } from "./matrix/fixtures";
+import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
 import {
   alb,
@@ -787,11 +787,11 @@ describe("renderJsonConfig", () => {
 
   it("moves a go app on vps to its server directory, since a container takes no entrypoint", () => {
     const base = `{"slug":"go","provider":"aws","apps":[{"name":"web","path":".","compute":{"serverless":{"entrypoint":"./server"}}}]}`;
-    const written = JSON.parse(renderJsonConfig(base, overlayFor(cell(realtime.go), "vps", {})));
+    const written = JSON.parse(renderJsonConfig(base, overlayFor(cell(sdk.go), "vps", {})));
 
     expect(written.apps[0]).toMatchObject({ name: "web", path: "./server" });
     expect(written.apps[0].compute).toEqual({ container: { health: { path: "/health" } } });
-    expect(overlayFor(cell(realtime.go), "gcp", {}).apps).toBeUndefined();
+    expect(overlayFor(cell(sdk.go), "gcp", {}).apps).toBeUndefined();
   });
 
   it("still runs a vps app on the compute its cell names", () => {

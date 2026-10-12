@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import ocel
 from infra import Env, deploys, live, orders, rooms, status
 
-DEFAULT_PORT = "3115"
+DEFAULT_PORT = "3104"
 BINDING_KEY = f"OCEL_RESOURCE_REALTIME_{live.name}"
 MAX_REQUEST_BYTES = 1 << 20
 CHANNELS = {channel.pattern: channel for channel in (orders, deploys, rooms, status)}
@@ -120,7 +120,7 @@ def app(environ, start_response):
 
 def main():
     port = int(os.environ.get("PORT") or DEFAULT_PORT)
-    print(f"realtime fixture listening on http://localhost:{port}", flush=True)
+    print(f"python listening on http://localhost:{port}", flush=True)
     make_server("", port, app, ThreadingServer, QuietHandler).serve_forever()
 
 

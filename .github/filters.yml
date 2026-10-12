@@ -6,8 +6,6 @@ go:
   - "packages/ocel/**"
   - "tests/fixtures/sdk/go/**"
   - "tests/fixtures/deploy/go/**"
-  - "tests/fixtures/tasks/go/**"
-  - "tests/fixtures/realtime/go/**"
   - "tests/fixtures/worker/**"
   - "tests/fixtures/sdk/python/**"
   - "tests/fixtures/sdk/rust/**"

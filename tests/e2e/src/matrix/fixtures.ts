@@ -80,8 +80,8 @@ const SVELTEKIT_CHECKS = [
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
-const TASKS_GO_CHECKS = [
-  ...healthChecks,
+const SDK_GO_CHECKS = [
+  ...REALTIME_CHECKS,
   ...tasksWireChecks({ task: "exact-echo", topic: "exact-orders", consumer: "exact-audit" }),
 ];
 
@@ -199,6 +199,25 @@ export const sdk = {
     },
     sample: { group: "node-http" },
   }),
+  go: fixture("sdk/go", {
+    apps: ["web"],
+    devCommands: { web: ["go", "run", "./server"] },
+    checks: SDK_GO_CHECKS,
+    on: { dev: [defaults], aws: [defaults, apiGateway], vps: [defaults], gcp: [defaults] },
+    configOn: { vps: { apps: { web: { path: "./server" } } } },
+  }),
+  python: fixture("sdk/python", {
+    apps: ["web"],
+    devCommands: { web: [".venv/bin/python", "main.py"] },
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], aws: [defaults], vps: [defaults], gcp: [defaults] },
+  }),
+  rust: fixture("sdk/rust", {
+    apps: ["web"],
+    devCommands: { web: ["cargo", "run", "--quiet"] },
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], aws: [defaults], vps: [defaults], gcp: [defaults] },
+  }),
   next: fixture("sdk/next", {
     apps: ["web"],
     checks: [
@@ -310,38 +329,6 @@ export const preBuild = {
   }),
 };
 
-export const tasks = {
-  go: fixture("tasks/go", {
-    apps: ["web"],
-    devCommands: { web: ["go", "run", "./server"] },
-    checks: TASKS_GO_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
-    configOn: { vps: { apps: { web: { path: "./server" } } } },
-  }),
-};
-
-export const realtime = {
-  go: fixture("realtime/go", {
-    apps: ["web"],
-    devCommands: { web: ["go", "run", "./server"] },
-    checks: REALTIME_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-    configOn: { vps: { apps: { web: { path: "./server" } } } },
-  }),
-  python: fixture("realtime/python", {
-    apps: ["web"],
-    devCommands: { web: [".venv/bin/python", "main.py"] },
-    checks: REALTIME_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-  }),
-  rust: fixture("realtime/rust", {
-    apps: ["web"],
-    devCommands: { web: ["cargo", "run", "--quiet"] },
-    checks: REALTIME_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
-  }),
-};
-
 export const iac = {
   withSst: fixture("iac/with-sst", {
     apps: ["web"],
@@ -367,7 +354,5 @@ export const fixtures: Fixture[] = [
   ...Object.values(clientEnv),
   ...Object.values(prerender),
   ...Object.values(preBuild),
-  ...Object.values(tasks),
-  ...Object.values(realtime),
   ...Object.values(iac),
 ];

@@ -8,12 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"example.com/realtime/infra"
+	"example.com/web/infra"
 	"ocel.dev"
 )
 
@@ -29,12 +28,6 @@ type signRequest struct {
 	Header   json.RawMessage `json:"header"`
 	Claims   json.RawMessage `json:"claims"`
 	SignedBy string          `json:"signedBy"`
-}
-
-func writeAnswer(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
 }
 
 func decodeInto[T any](raw json.RawMessage) (T, error) {
@@ -150,19 +143,8 @@ func serveTokens(w http.ResponseWriter, r *http.Request) {
 	writeAnswer(w, http.StatusOK, map[string]string{"token": input + "." + signature})
 }
 
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3114"
-	}
-
-	http.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		writeAnswer(w, http.StatusOK, map[string]any{"ok": true, "app": "web"})
-	})
-	http.Handle("/api/realtime", infra.Live.Handler())
-	http.HandleFunc("POST /api/publish", servePublish)
-	http.HandleFunc("POST /api/tokens", serveTokens)
-
-	log.Printf("realtime fixture listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+func handleRealtime(mux *http.ServeMux) {
+	mux.Handle("/api/realtime", infra.Live.Handler())
+	mux.HandleFunc("POST /api/publish", servePublish)
+	mux.HandleFunc("POST /api/tokens", serveTokens)
 }
