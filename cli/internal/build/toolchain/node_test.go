@@ -477,3 +477,43 @@ func TestNodeEntrypoint(t *testing.T) {
 		}
 	})
 }
+
+func TestBundleWorkerAddsTheWorkerEntryToAFunctionAnotherBuildWrote(t *testing.T) {
+	t.Parallel()
+
+	l := newLayout(t, tree{
+		"package.json":                      appPkg,
+		"tasks.js":                          "import dep from 'cjs-dep';\nexport const shape = dep.shape;\n",
+		"node_modules/cjs-dep/package.json": `{"name":"cjs-dep","main":"index.js"}`,
+		"node_modules/cjs-dep/index.js":     "module.exports = { shape: 'worker:' + typeof __dirname };\n",
+	})
+	written := buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "__next_launcher.cjs", ID: "bundle-0", App: "api"}
+	if err := writeJSON(filepath.Join(l.functionDir, buildoutput.FunctionConfigFile), written); err != nil {
+		t.Fatal(err)
+	}
+	target := l.target("tasks.js")
+	target.Framework = written.Framework
+	target.Source = l.appSrc
+	target.WorkerSource = "const { shape } = await import(" + strconv.Quote(filepath.Join(l.appSrc, "tasks.js")) + ");\nconsole.log(shape);\n"
+	target.WorkerResolveDir = l.appSrc
+
+	if err := BundleWorker(context.Background(), target); err != nil {
+		t.Fatalf("BundleWorker: %v", err)
+	}
+
+	var cfg buildoutput.FunctionConfig
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionConfigFile))), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	written.Worker = []string{"node", workerFile}
+	if !reflect.DeepEqual(cfg, written) {
+		t.Errorf("%s = %+v, want the function's own config plus its worker: %+v", buildoutput.FunctionConfigFile, cfg, written)
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	out, err := exec.Command("node", filepath.Join(l.functionDir, workerFile)).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "worker:string") {
+		t.Errorf("the worker entry printed %q (%v), want the bundled declarations to run", out, err)
+	}
+}

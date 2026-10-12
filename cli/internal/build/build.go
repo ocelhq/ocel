@@ -9,6 +9,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
@@ -22,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type Log struct {
@@ -292,11 +295,46 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		}
 	}
 	for _, a := range scriptBuilt {
+		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir); err != nil {
+			return err
+		}
 		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a project.App, outputDir string) error {
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return err
+	}
+	workerSource, workerResolveDir, err := discovery.NodeWorkerSource(roots)
+	if err != nil {
+		return fmt.Errorf("app %q: %w", a.Name, err)
+	}
+	if workerSource == "" {
+		return nil
+	}
+	functions, err := readAppFunctions(outputDir, buildoutput.AppRoot(outputDir, a.Name))
+	if err != nil {
+		return err
+	}
+	if len(functions) == 0 {
+		return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework())
+	}
+	hosting := slices.MinFunc(functions, func(x, y Function) int {
+		return strings.Compare(naming.Join(naming.FieldSeparator, string(naming.KindFunction), x.App, x.Route), naming.Join(naming.FieldSeparator, string(naming.KindFunction), y.App, y.Route))
+	})
+	return toolchain.BundleWorker(ctx, toolchain.Target{
+		App:              a.Name,
+		Framework:        buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},
+		Source:           filepath.Join(cfg.Dir, a.Path),
+		FunctionDir:      filepath.Join(outputDir, filepath.FromSlash(hosting.ArtifactPath)),
+		WorkerSource:     workerSource,
+		WorkerResolveDir: workerResolveDir,
+	})
 }
 
 func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {

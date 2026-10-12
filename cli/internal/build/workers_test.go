@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func workerFixture(t *testing.T, name string) *project.Project {
@@ -133,4 +134,38 @@ func keysOf(entries map[string][]byte) []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testing.T) {
+	cfg := workerFixture(t, "node")
+	app := project.App{Name: "web", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}
+	outputDir := t.TempDir()
+	appDir := buildoutput.AppRoot(outputDir, app.Name)
+	for _, id := range []string{"bundle-1", "bundle-0"} {
+		function := filepath.Join(appDir, buildoutput.FunctionsDir, id+buildoutput.FunctionDirSuffix)
+		if err := os.MkdirAll(function, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		config := `{"framework":{"name":"next"},"entryFile":"launcher.cjs","id":"` + id + `","app":"web"}`
+		if err := os.WriteFile(filepath.Join(function, buildoutput.FunctionConfigFile), []byte(config), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := addWorkerEntryToFunction(context.Background(), cfg, app, outputDir); err != nil {
+		t.Fatalf("addWorkerEntryToFunction() = %v", err)
+	}
+
+	first := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-0"+buildoutput.FunctionDirSuffix)
+	if _, err := os.Stat(filepath.Join(first, containerimage.NodeArtifactEntry)); err != nil {
+		t.Errorf("the first function carries no worker entry: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(first, buildoutput.FunctionConfigFile))
+	if err != nil || !strings.Contains(string(raw), `"worker": [`) {
+		t.Errorf("the first function's config = %s (%v), want it to name the worker command", raw, err)
+	}
+	other := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-1"+buildoutput.FunctionDirSuffix)
+	if _, err := os.Stat(filepath.Join(other, containerimage.NodeArtifactEntry)); err == nil {
+		t.Error("a function a worker never runs from carries the worker entry")
+	}
 }
