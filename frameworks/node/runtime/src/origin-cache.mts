@@ -2,9 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type http from "node:http";
 import { buildPathCacheTag, storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
-  edgeAsksToCacheVar,
   edgeCacheHeader,
   edgeCacheTagHeader,
+  readEdgeCacheMode,
   releaseTokenVar,
 } from "@platform/edge-contract/edge-cache";
 import { formatCacheControl } from "@platform/edge-contract/ocel-route-table";
@@ -44,7 +44,7 @@ export function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
   if (!releasePattern.test(release)) {
     throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
   }
-  return { release, edgeAsks: Boolean(env[edgeAsksToCacheVar]) };
+  return { release, edgeAsks: readEdgeCacheMode(env) === "marked" };
 }
 
 const requests = new AsyncLocalStorage<RequestCache>();

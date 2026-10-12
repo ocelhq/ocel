@@ -52,8 +52,8 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.
 	if env[edge.ReleaseTokenVar] != token.String() {
 		t.Errorf("the service reads %s=%q, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], token)
 	}
-	if env[edge.OriginFreshOnlyVar] != "1" {
-		t.Errorf("the service reads %s=%q, want 1: it sits behind a cache", edge.OriginFreshOnlyVar, env[edge.OriginFreshOnlyVar])
+	if env[edge.EdgeCacheVar] != string(edge.EdgeCacheAll) {
+		t.Errorf("the service reads %s=%q, want all: Cloud CDN stores whatever the response headers allow", edge.EdgeCacheVar, env[edge.EdgeCacheVar])
 	}
 }
 
@@ -80,7 +80,7 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 	}
 }
 
-func TestANextServiceBehindAnEdgeThatCachesResponsesServesOnlyFreshPages(t *testing.T) {
+func TestANextServiceBehindAnEdgeThatCachesResponsesIsToldItsEdgeStoresWhateverItsHeadersAllow(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	front, err := p.Edges().Open(alb.Kind, nil)
@@ -94,12 +94,12 @@ func TestANextServiceBehindAnEdgeThatCachesResponsesServesOnlyFreshPages(t *test
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(server.created[0].Template.Containers[0])[edge.OriginFreshOnlyVar]; got != "1" {
-		t.Errorf("the Next service reads %s=%q, want 1: Cloud CDN revalidates a stale page itself", edge.OriginFreshOnlyVar, got)
+	if got := envOf(server.created[0].Template.Containers[0])[edge.EdgeCacheVar]; got != string(edge.EdgeCacheAll) {
+		t.Errorf("the Next service reads %s=%q, want all: Cloud CDN stores whatever the response headers allow", edge.EdgeCacheVar, got)
 	}
 }
 
-func TestANextServiceBehindNoCachingEdgeServesStalePages(t *testing.T) {
+func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
 	none, err := (&runServer{}).open(t).Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -115,8 +115,8 @@ func TestANextServiceBehindNoCachingEdgeServesStalePages(t *testing.T) {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, set := envOf(server.created[0].Template.Containers[0])[edge.OriginFreshOnlyVar]; set {
-				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it revalidates a stale page", edge.OriginFreshOnlyVar, got)
+			if got, set := envOf(server.created[0].Template.Containers[0])[edge.EdgeCacheVar]; set {
+				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it stores a response", edge.EdgeCacheVar, got)
 			}
 		})
 	}

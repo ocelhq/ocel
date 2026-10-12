@@ -1,7 +1,11 @@
 import type http from "node:http";
-import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
-import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
+import {
+  edgeCacheHeader,
+  edgeCacheTagHeader,
+  readEdgeCacheMode,
+} from "@platform/edge-contract/edge-cache";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import { type ProjectManifest, walkPrerender } from "./project-manifest.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
@@ -60,12 +64,12 @@ export function originShaping(
   env: NodeJS.ProcessEnv,
   tagsPerObject = Number.POSITIVE_INFINITY,
 ): OriginShaping | null {
-  const dispatches = dispatchesAtOrigin(env);
-  if (!dispatches && !invalidatesByCacheTag(env)) return null;
+  const mode = readEdgeCacheMode(env);
+  if (mode === "none") return null;
 
   return {
     ...routes,
-    shapesOnlyWhenAsked: !dispatches,
+    shapesOnlyWhenAsked: mode === "marked",
     release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     tagsPerObject,
   };

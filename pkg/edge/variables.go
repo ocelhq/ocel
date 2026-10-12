@@ -26,9 +26,9 @@ const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 const StaticRulesVar = "OCEL_STATIC_RULES"
 
 const (
-	OcelRouteTableVar  = "OCEL_ROUTE_TABLE"
-	ReleaseTokenVar    = "OCEL_RELEASE_TOKEN"
-	EdgeAsksToCacheVar = "OCEL_EDGE_ASKS_TO_CACHE"
+	OcelRouteTableVar = "OCEL_ROUTE_TABLE"
+	ReleaseTokenVar   = "OCEL_RELEASE_TOKEN"
+	EdgeCacheVar      = "OCEL_EDGE_CACHE"
 )
 
 const PurgeURLVar = "OCEL_PURGE_URL"
@@ -39,7 +39,6 @@ const (
 	OriginSignedVar         = "OCEL_ORIGIN_SIGNED"
 	OriginDispatchVar       = "OCEL_ORIGIN_DISPATCH"
 	CacheTagPurgeVar        = "OCEL_CACHE_TAG_PURGE"
-	OriginFreshOnlyVar      = "OCEL_ORIGIN_FRESH_ONLY"
 	OriginSecretHeader      = "x-ocel-origin-secret"
 
 	OriginContainerHeader = "x-ocel-container"

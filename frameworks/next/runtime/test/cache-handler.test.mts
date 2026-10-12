@@ -766,7 +766,7 @@ test("a stale fetch entry is served while it refreshes", async () => {
 });
 
 function behindCachingEdge() {
-  vi.stubEnv("OCEL_ORIGIN_FRESH_ONLY", "1");
+  vi.stubEnv("OCEL_EDGE_CACHE", "all");
 }
 
 const hour = 3_600_000;

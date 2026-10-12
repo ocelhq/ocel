@@ -12,9 +12,9 @@ import {
   serveEntry,
   serveInvoke,
   serveLocal,
-  servesOnlyFresh,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
+import { readEdgeCacheMode, servesOnlyFresh } from "@platform/edge-contract/edge-cache";
 import { purgeHeader, purgeHeaderFor } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import {
@@ -78,7 +78,7 @@ async function boot(): Promise<void> {
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
   const freshOnly = servesOnlyFresh(process.env);
   const purgeRelease =
-    invalidatesByCacheTag(process.env) && !dispatchesAtOrigin(process.env)
+    invalidatesByCacheTag(process.env) && readEdgeCacheMode(process.env) === "marked"
       ? releaseOf(process.env.OCEL_ISR_PREFIX)
       : null;
 

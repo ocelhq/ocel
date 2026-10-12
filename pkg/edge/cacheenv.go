@@ -1,17 +1,34 @@
 package edge
 
+type EdgeCacheMode string
+
+const (
+	EdgeCacheNone   EdgeCacheMode = ""
+	EdgeCacheMarked EdgeCacheMode = "marked"
+	EdgeCacheAll    EdgeCacheMode = "all"
+)
+
+func NewEdgeCacheMode(facts Facts) EdgeCacheMode {
+	switch {
+	case !facts.CachesResponses:
+		return EdgeCacheNone
+	case facts.RunsCode:
+		return EdgeCacheMarked
+	default:
+		return EdgeCacheAll
+	}
+}
+
 func NewCachingOriginEnv(facts Facts, release string) map[string]string {
 	env := map[string]string{}
 	if facts.InvalidatesByCacheTag {
 		env[CacheTagPurgeVar] = "1"
 	}
-	if !facts.CachesResponses {
+	mode := NewEdgeCacheMode(facts)
+	if mode == EdgeCacheNone {
 		return env
 	}
-	env[OriginFreshOnlyVar] = "1"
+	env[EdgeCacheVar] = string(mode)
 	env[ReleaseTokenVar] = release
-	if facts.RunsCode {
-		env[EdgeAsksToCacheVar] = "1"
-	}
 	return env
 }
