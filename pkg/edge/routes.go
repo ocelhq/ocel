@@ -29,7 +29,6 @@ type OcelRoutes struct {
 	TrailingSlash TrailingSlash  `json:"trailingSlash"`
 	Headers       []HeaderRule   `json:"headers"`
 	Redirects     []RedirectRule `json:"redirects"`
-	StaticFirst   []string       `json:"staticFirst"`
 	Routes        []Route        `json:"routes"`
 	Fallback      Fallback       `json:"fallback"`
 }
@@ -112,8 +111,8 @@ func (r OcelRoutes) refuse() error {
 		return fmt.Errorf("the route table's basePath %q is empty, or starts with a slash, ends in none and names no query or fragment", r.BasePath)
 	case !slices.Contains([]TrailingSlash{TrailingSlashNever, TrailingSlashAlways, TrailingSlashIgnore}, r.TrailingSlash):
 		return fmt.Errorf("the route table's trailingSlash is %q, and it is never, always or ignore", r.TrailingSlash)
-	case r.Headers == nil || r.Redirects == nil || r.StaticFirst == nil || r.Routes == nil:
-		return errors.New("the route table states headers, redirects, staticFirst and routes, each a list, empty if need be")
+	case r.Headers == nil || r.Redirects == nil || r.Routes == nil:
+		return errors.New("the route table states headers, redirects and routes, each a list, empty if need be")
 	case r.Fallback.Function == "":
 		return errors.New("the route table's fallback names no function")
 	}
@@ -125,11 +124,6 @@ func (r OcelRoutes) refuse() error {
 	for i, rule := range r.Redirects {
 		if err := rule.refuse(); err != nil {
 			return fmt.Errorf("redirect %d (%q): %w", i, rule.Src, err)
-		}
-	}
-	for i, src := range r.StaticFirst {
-		if _, err := compilePattern(src); err != nil {
-			return fmt.Errorf("staticFirst pattern %d (%q): %w", i, src, err)
 		}
 	}
 	return r.refuseRoutes()

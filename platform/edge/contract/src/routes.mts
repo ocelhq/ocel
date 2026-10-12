@@ -31,7 +31,6 @@ export interface OcelRoutes {
   trailingSlash: TrailingSlash;
   headers: HeaderRule[];
   redirects: RedirectRule[];
-  staticFirst: string[];
   routes: Route[];
   fallback: { function: string };
 }
@@ -245,38 +244,16 @@ function refuseBypassTokens(routes: Route[]): Refusal {
   return tokens.size > 1 ? "a table has one bypassToken, and its routes state more" : undefined;
 }
 
-function refuseStaticFirst(patterns: unknown[]): Refusal {
-  return refuseEach(
-    patterns,
-    (src) => {
-      if (typeof src !== "string") return "a staticFirst entry is a pattern";
-      const pattern = compilePattern(src);
-      return typeof pattern === "string" ? pattern : undefined;
-    },
-    "staticFirst pattern",
-  );
-}
-
 const trailingSlashModes = ["never", "always", "ignore"];
 
 function refuseTable(table: Record<string, unknown>): Refusal {
   const unknown = refuseUnknownFields(
     table,
-    [
-      "version",
-      "basePath",
-      "trailingSlash",
-      "headers",
-      "redirects",
-      "staticFirst",
-      "routes",
-      "fallback",
-    ],
+    ["version", "basePath", "trailingSlash", "headers", "redirects", "routes", "fallback"],
     "the table",
   );
   if (unknown) return unknown;
-  const { version, basePath, trailingSlash, headers, redirects, staticFirst, routes, fallback } =
-    table;
+  const { version, basePath, trailingSlash, headers, redirects, routes, fallback } = table;
   if (version !== 1)
     return `the table is version ${String(version)}, and this reader reads version 1`;
   if (
@@ -289,13 +266,8 @@ function refuseTable(table: Record<string, unknown>): Refusal {
   if (!trailingSlashModes.includes(trailingSlash as string)) {
     return `trailingSlash is ${JSON.stringify(trailingSlash)}, and it is never, always or ignore`;
   }
-  if (
-    !Array.isArray(headers) ||
-    !Array.isArray(redirects) ||
-    !Array.isArray(staticFirst) ||
-    !Array.isArray(routes)
-  ) {
-    return "the table states headers, redirects, staticFirst and routes, each a list, empty if need be";
+  if (!Array.isArray(headers) || !Array.isArray(redirects) || !Array.isArray(routes)) {
+    return "the table states headers, redirects and routes, each a list, empty if need be";
   }
   if (!isObject(fallback) || typeof fallback.function !== "string" || fallback.function === "") {
     return "the fallback names no function";
@@ -305,7 +277,6 @@ function refuseTable(table: Record<string, unknown>): Refusal {
     extra ??
     refuseEach(headers, refuseHeaderRule, "header rule") ??
     refuseEach(redirects, refuseRedirect, "redirect") ??
-    refuseStaticFirst(staticFirst) ??
     refuseEach(routes, refuseRoute, "route") ??
     refuseBypassTokens(routes as Route[])
   );
@@ -332,7 +303,6 @@ export interface CompiledRoutes {
   table: OcelRoutes;
   headers: RegExp[];
   redirects: RegExp[];
-  staticFirst: RegExp[];
   routes: RegExp[];
 }
 
@@ -345,7 +315,6 @@ export function compileRoutes(table: OcelRoutes): CompiledRoutes {
     table,
     headers: table.headers.map((rule) => expressionOf(rule.src)),
     redirects: table.redirects.map((rule) => expressionOf(rule.src)),
-    staticFirst: table.staticFirst.map(expressionOf),
     routes: table.routes.map((route) => expressionOf(route.src)),
   };
 }
@@ -412,11 +381,6 @@ export function findHeaders(compiled: CompiledRoutes, pathname: string): Record<
     }
   }
   return found;
-}
-
-export function isStaticFirst(compiled: CompiledRoutes, pathname: string): boolean {
-  const inside = readInsideBasePath(compiled.table, pathname);
-  return inside !== undefined && compiled.staticFirst.some((expression) => expression.test(inside));
 }
 
 export function findSlashRedirect(compiled: CompiledRoutes, pathname: string): string | undefined {

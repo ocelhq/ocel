@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-const cachedRoutes = `{"version":1,"basePath":"","trailingSlash":"ignore","headers":[],"redirects":[],"staticFirst":[],` +
+const cachedRoutes = `{"version":1,"basePath":"","trailingSlash":"ignore","headers":[],"redirects":[],` +
 	`"routes":[{"src":"/blog/(.*)","function":"index","cache":{"revalidate":60}}],"fallback":{"function":"index"}}`
 
 func ocelRoutesRoot(t *testing.T, hosting buildoutput.Hosting, routes string) string {
