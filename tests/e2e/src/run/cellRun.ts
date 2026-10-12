@@ -10,6 +10,7 @@ import {
 import {
   type Clock,
   checkOwnReleases,
+  checkPreviewGate,
   checkPruned,
   PREVIEW_NAME,
   type PreviewCheck,
@@ -194,6 +195,15 @@ export class CellRun {
         await this.once("previewPrune", () => target.previewPrune(this, PREVIEW_NAME, 1));
         const seen = await checkPruned(this.clock, app, first, second);
         await this.evidence.write("preview", `pruned-${app}.json`, `${JSON.stringify({ seen })}\n`);
+        return;
+      }
+      case "gated": {
+        const target = this.previewing();
+        assert.ok(
+          target.previewGate,
+          `${target.name} hands a gated preview no credentials to present`,
+        );
+        await checkPreviewGate(this.clock, second, await target.previewGate(this, PREVIEW_NAME));
         return;
       }
     }

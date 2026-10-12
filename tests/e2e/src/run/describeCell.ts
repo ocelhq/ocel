@@ -9,7 +9,7 @@ import { readPrepareFailure } from "../prepare";
 import { progress } from "../progress";
 import { phasesDriven, stepsPlanned } from "../steps";
 import { targetNamed } from "../targets";
-import { hasPreviews } from "../targets/types";
+import { hasPreviewGate, hasPreviews } from "../targets/types";
 import { CellRun, messageOf } from "./cellRun";
 import { resultWriter } from "./results";
 
@@ -22,7 +22,7 @@ export function describeCell(planFile: string, name: string) {
   const target = targetNamed(planned.target);
   const phases = phasesDriven(target, plannedCell.phases);
   const cell = cellNamed(fixtures, target.name, name);
-  const steps = stepsPlanned(cell, plannedCell);
+  const steps = stepsPlanned(cell, plannedCell, hasPreviewGate(target));
   const runId = currentRunIdentity();
   const prepareFailure = readPrepareFailure(runId, target.name);
   const run = new CellRun({

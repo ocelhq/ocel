@@ -22,6 +22,7 @@ describe("a smoke", () => {
         lane: LANE_IN_CI[name],
         releaseCycle: smoke.target !== "dev",
         previews: false,
+        gatesPreviews: false,
         filter: smokeFilter(smoke),
         env: {},
       });

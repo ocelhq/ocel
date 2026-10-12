@@ -17,7 +17,13 @@ import { type Plan, plan, type RunFilter } from "../plan";
 import type { PrepareFailures } from "../prepare";
 import { follow, PROGRESS_ENV } from "../progress";
 import { type SuiteExit, writeReport } from "../report";
-import { hasReleaseCycle, laneWorkers, previewsOn, selectedTarget } from "../targets";
+import {
+  hasPreviewGate,
+  hasReleaseCycle,
+  laneWorkers,
+  previewsOn,
+  selectedTarget,
+} from "../targets";
 import type { Target } from "../targets/types";
 import { filterFrom } from "./filter";
 
@@ -107,6 +113,7 @@ export async function runJourney(target: Target, filter: RunFilter): Promise<num
     lane,
     releaseCycle: hasReleaseCycle(target),
     previews: previewsOn(target, lane),
+    gatesPreviews: hasPreviewGate(target),
     filter,
     env: process.env,
   });
