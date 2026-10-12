@@ -12,14 +12,6 @@ import (
 
 func newPreviewGateReader(store keyvalue.Store, cipher seal.Cipher) box.PreviewGateReader {
 	return func(ctx context.Context, project string) (*previewgate.Gate, error) {
-		previewGates, err := stackrecords.ReadPreviewGates(ctx, store, cipher)
-		if err != nil {
-			return nil, err
-		}
-		previewGate, recorded := previewGates[project]
-		if !recorded {
-			return nil, nil
-		}
-		return &previewGate, nil
+		return stackrecords.ReadPreviewGate(ctx, store, cipher, project)
 	}
 }

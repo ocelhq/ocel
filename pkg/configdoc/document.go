@@ -21,8 +21,13 @@ type Document struct {
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
 	Registry      *RegistryConfig      `json:"registry,omitempty" doc:"Where this project's container images are pushed."`
+	Previews      *PreviewsConfig      `json:"previews,omitempty" doc:"How this project's previews are served."`
 	Lifecycle     *LifecycleConfig     `json:"lifecycle,omitempty" doc:"Commands ocel runs on this machine at points of a deploy."`
 	EnvSource     *EnvSourceConfig     `json:"envSource,omitempty" doc:"Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev."`
+}
+
+type PreviewsConfig struct {
+	Protection bool `json:"protection,omitempty" doc:"Whether every preview of this project asks for a password before it answers. Every deploy of a preview enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again. The password is shown and rotated with ocel preview protection. Left off, false."`
 }
 
 type LifecycleConfig struct {

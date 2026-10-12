@@ -17,9 +17,13 @@ import (
 )
 
 func recordedPreviewGates(t *testing.T, gates map[string]previewgate.Gate) (keyvalue.Store, *fake.Cipher) {
+	records := map[string]stackrecords.PreviewGateRecord{}
+	for slug, gate := range gates {
+		records[slug] = stackrecords.PreviewGateRecord{Gate: gate, Password: "a password", Enabled: true}
+	}
 	t.Helper()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
-	plaintext, err := json.Marshal(gates)
+	plaintext, err := json.Marshal(records)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +53,26 @@ func TestThePreviewGateOfAProjectIsTheOneRecordedForItsSlugAndNoOnesElse(t *test
 	other, err := read(context.Background(), "docs")
 	if err != nil || other != nil {
 		t.Errorf("gate of docs = %+v, %v, want none: no gate is recorded for it", other, err)
+	}
+}
+
+func TestAProjectWhosePreviewsProtectionTurnedOffIsNotGatedThoughItsCredentialsAreKept(t *testing.T) {
+	t.Parallel()
+	store, cipher := recordedPreviewGates(t, map[string]previewgate.Gate{"shop": {Key: "k"}})
+	err := stackrecords.ChangePreviewGates(context.Background(), store, cipher, func(records map[string]stackrecords.PreviewGateRecord) error {
+		record := records["shop"]
+		record.Enabled = false
+		records["shop"] = record
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gate, err := vps.NewPreviewGateReader(store, cipher)(context.Background(), "shop")
+
+	if err != nil || gate != nil {
+		t.Errorf("gate of shop = %+v, %v, want none: its record is kept but disabled", gate, err)
 	}
 }
 

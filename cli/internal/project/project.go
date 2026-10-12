@@ -31,21 +31,22 @@ type DNS struct {
 }
 
 type Project struct {
-	Slug           string
-	Transforms     []string
-	DiscoveryPaths []string
-	Provider       *Provider
-	Edge           *Edge
-	DNS            *DNS
-	AllowDegraded  []edge.Need
-	Apps           []App
-	Bindings       []Binding
-	Domains        Domains
-	Registry       *Registry
-	Lifecycle      Lifecycle
-	EnvSource      envsource.Tiers
-	Dir            string
-	Path           string
+	Slug            string
+	Transforms      []string
+	DiscoveryPaths  []string
+	Provider        *Provider
+	Edge            *Edge
+	DNS             *DNS
+	AllowDegraded   []edge.Need
+	Apps            []App
+	Bindings        []Binding
+	Domains         Domains
+	Registry        *Registry
+	Lifecycle       Lifecycle
+	ProtectPreviews bool
+	EnvSource       envsource.Tiers
+	Dir             string
+	Path            string
 }
 
 func (p *Project) EdgeKind() edge.Kind {
@@ -139,27 +140,30 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid %w", configPath, err), "lifecycle")
 	}
 
+	protectPreviews := doc.Previews != nil && doc.Previews.Protection
+
 	var discoveryPaths []string
 	if doc.Discovery != nil {
 		discoveryPaths = doc.Discovery.Paths
 	}
 
 	return &Project{
-		Slug:           doc.Slug,
-		Transforms:     doc.Transforms,
-		DiscoveryPaths: discoveryPaths,
-		Provider:       provider,
-		Edge:           front,
-		DNS:            normalizeDNS(dns),
-		AllowDegraded:  allowDegraded,
-		Apps:           apps,
-		Bindings:       bindings,
-		Domains:        domains,
-		Registry:       registry,
-		Lifecycle:      lifecycle,
-		EnvSource:      doc.EnvSource.Tiers(),
-		Dir:            filepath.Dir(configPath),
-		Path:           configPath,
+		Slug:            doc.Slug,
+		Transforms:      doc.Transforms,
+		DiscoveryPaths:  discoveryPaths,
+		Provider:        provider,
+		Edge:            front,
+		DNS:             normalizeDNS(dns),
+		AllowDegraded:   allowDegraded,
+		Apps:            apps,
+		Bindings:        bindings,
+		Domains:         domains,
+		Registry:        registry,
+		Lifecycle:       lifecycle,
+		ProtectPreviews: protectPreviews,
+		EnvSource:       doc.EnvSource.Tiers(),
+		Dir:             filepath.Dir(configPath),
+		Path:            configPath,
 	}, nil
 }
 

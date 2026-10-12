@@ -138,6 +138,29 @@ func TestAPreviewDeployCarriesTheAliasItsBuildWasGivenAndNotTheOneThisRunMinted(
 	}
 }
 
+func TestAPreviewDeploySendsWhetherTheConfigProtectsPreviews(t *testing.T) {
+	for name, fields := range map[string]string{
+		"previews.protection on":  `  previews: { protection: true },` + "\n",
+		"previews.protection off": `  previews: { protection: false },` + "\n",
+		"no previews setting":     "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := setUpPreviewProject(t)
+			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],`+"\n"+fields)
+			writeAppSource(t, fixture.Root, "api")
+			dependencies := previewDependencies("feature/login", "")
+			stubBuild(&dependencies, apiFunction())
+
+			previewUp(t, fixture, dependencies, previewUpOptions{})
+
+			want := strings.Contains(fields, "protection: true")
+			if got := sentDeploy(t, fixture).GetProtectPreviews(); got != want {
+				t.Errorf("the deploy carried protect_previews = %t, want %t: every preview deploy enforces the config", got, want)
+			}
+		})
+	}
+}
+
 func TestPreviewUpSendsThePreviewEnvironmentItsNameAndFlagsDescribe(t *testing.T) {
 	t.Run("an ephemeral preview sends a preview, ephemeral environment", func(t *testing.T) {
 		fixture := setUpPreviewProject(t)

@@ -2215,6 +2215,7 @@ type DeployRequest struct {
 	AliasToken       string                 `protobuf:"bytes,8,opt,name=alias_token,json=aliasToken,proto3" json:"alias_token,omitempty"`
 	InfraProvisioned bool                   `protobuf:"varint,9,opt,name=infra_provisioned,json=infraProvisioned,proto3" json:"infra_provisioned,omitempty"`
 	LeaseToken       string                 `protobuf:"bytes,10,opt,name=lease_token,json=leaseToken,proto3" json:"lease_token,omitempty"`
+	ProtectPreviews  bool                   `protobuf:"varint,11,opt,name=protect_previews,json=protectPreviews,proto3" json:"protect_previews,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2317,6 +2318,13 @@ func (x *DeployRequest) GetLeaseToken() string {
 		return x.LeaseToken
 	}
 	return ""
+}
+
+func (x *DeployRequest) GetProtectPreviews() bool {
+	if x != nil {
+		return x.ProtectPreviews
+	}
+	return false
 }
 
 type ProvisionInfraRequest struct {
@@ -6767,7 +6775,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vconcurrency\x18\x05 \x01(\x05R\vconcurrency\x12<\n" +
 	"\fmax_duration\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\vmaxDuration\x12(\n" +
 	"\x05lanes\x18\a \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n" +
-	"\x05batch\x18\b \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\"\xcb\x04\n" +
+	"\x05batch\x18\b \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\"\xf6\x04\n" +
 	"\rDeployRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
@@ -6781,7 +6789,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x11infra_provisioned\x18\t \x01(\bR\x10infraProvisioned\x129\n" +
 	"\vlease_token\x18\n" +
 	" \x01(\tB\x18\xbaH\x15r\x132\x11^([a-f0-9]{32})?$R\n" +
-	"leaseToken\"\x93\x03\n" +
+	"leaseToken\x12)\n" +
+	"\x10protect_previews\x18\v \x01(\bR\x0fprotectPreviews\"\x93\x03\n" +
 	"\x15ProvisionInfraRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
