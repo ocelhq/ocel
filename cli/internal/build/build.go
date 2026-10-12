@@ -287,7 +287,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		if err := variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch); err != nil {
 			return err
 		}
-		if err := toolchain.DescribeTrace(target); err != nil {
+		if err := toolchain.DescribeTrace(ctx, target); err != nil {
 			return err
 		}
 	}
