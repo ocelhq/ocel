@@ -358,10 +358,10 @@ describe("Next on gcp", () => {
     }
   });
 
-  it("skips the Next fixtures that declare a postgres on gcp under #849", () => {
+  it("deploys the Next fixtures that declare a postgres on gcp", () => {
     const planned = planOn("gcp");
     for (const cell of POSTGRES_NEXT) {
-      expect((planned.skipped[cell] ?? []).map((gap) => gap.issue)).toEqual([849]);
+      expect(planned.skipped[cell] ?? []).toEqual([]);
     }
   });
 
@@ -453,7 +453,6 @@ describe("the Next cache a cell is held to", () => {
       "revalidating a path makes the Next server move the page it names and nothing else",
       "revalidating a tag makes the Next server move the page that carries it and nothing else",
       "a server action calling updateTag makes the Next server move the page it revalidates",
-      "draft mode makes the Next server bypass its cache with a cookie that survives the redirect",
     ];
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
