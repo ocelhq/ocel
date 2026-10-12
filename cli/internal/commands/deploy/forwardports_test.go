@@ -377,7 +377,7 @@ func TestADeployLeavesNoForwardedBindingsPasswordInTheProjectsOcelDirectory(t *t
 	}
 }
 
-func TestAnEphemeralPreviewOfResourcesNothingPublishedBuildsWithoutTheirBindingsAndLeavesTheRefusalToItsDeploy(t *testing.T) {
+func TestAnEphemeralPreviewProvisionsItsResourcesAndBuildsWithTheirBindings(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubGit(&dependencies, "feature/login", "")
 	fixture := setUpPreviewProject(t)
@@ -385,18 +385,10 @@ func TestAnEphemeralPreviewOfResourcesNothingPublishedBuildsWithoutTheirBindings
 	forwardingPorts(t, fixture)
 	built := capturingBuild(t, &dependencies)
 
-	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+	previewUp(t, fixture, dependencies, previewUpOptions{})
 
-	if err == nil || !strings.Contains(err.Error(), "--persistent") {
-		t.Errorf("runPreviewUp() = %v, want the deploy's own refusal of a preview nothing covers", err)
-	}
-	if _, ok := built.Live[forwardedPostgresKey]; ok {
-		t.Errorf("the preview was built with %s, which nothing published", forwardedPostgresKey)
-	}
-	if said := stdout.String(); !strings.Contains(said, "The build goes without the bindings of main") {
-		t.Errorf("the preview said %q, want it to say the build goes without main", said)
+	if _, ok := built.Live[forwardedPostgresKey]; !ok {
+		t.Errorf("the preview was built without %s, want the binding of the database its own infra stack provisioned", forwardedPostgresKey)
 	}
 }
 

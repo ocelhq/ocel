@@ -2101,7 +2101,7 @@
                   "type": "string"
                 },
                 "previews": {
-                  "description": "Which previews run the command: persistent previews, which have infrastructure of their own, all previews, or none. Production always runs it. Left off, persistent: an ephemeral preview gets no infrastructure of its own and shares the preview tier's databases, so a migration there would change what every other ephemeral preview reads.",
+                  "description": "Which previews run the command: persistent previews only, all previews, or none. Production always runs it. Left off, all: every preview provisions its own database, which starts empty, so a preview that skips the migration serves an unmigrated one.",
                   "enum": [
                     "persistent",
                     "all",

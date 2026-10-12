@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -149,7 +150,7 @@ func TestShapeOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
 	}
 }
 
-func TestShapeOfAnEphemeralPreviewPricesNoDatabaseOrBucketOfItsOwn(t *testing.T) {
+func TestShapeOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -164,13 +165,17 @@ func TestShapeOfAnEphemeralPreviewPricesNoDatabaseOrBucketOfItsOwn(t *testing.T)
 		t.Fatalf("Shape() = %v", err)
 	}
 
+	var priced []string
 	for _, resource := range set.GetResources() {
-		if resource.GetName() == "main" || resource.GetName() == "uploads" {
-			t.Errorf("an ephemeral preview priced %s %s, which only an infra stack it never gets would provision", resource.GetType(), resource.GetId())
+		priced = append(priced, resource.GetName())
+	}
+	for _, want := range []string{"main", "uploads"} {
+		if !slices.Contains(priced, want) {
+			t.Errorf("an ephemeral preview priced %v, want %s: its infra stack provisions it", priced, want)
 		}
 	}
-	if counts := typeCounts(set); counts["aws_rds_cluster"] != 0 {
-		t.Errorf("an ephemeral preview priced %d aurora clusters, want none", counts["aws_rds_cluster"])
+	if counts := typeCounts(set); counts["aws_rds_cluster"] == 0 {
+		t.Error("an ephemeral preview priced no aurora cluster, want the one it provisions")
 	}
 }
 

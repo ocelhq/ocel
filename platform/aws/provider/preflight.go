@@ -21,9 +21,6 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseContainersScaledToZero(pre); err != nil {
 		return err
 	}
-	if err := refuseTasksWhereNothingRunsThem(pre); err != nil {
-		return err
-	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -135,23 +132,6 @@ func refusePublicBuckets(pre provider.DeployPreflight) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s asks to be public, and this provider provisions its buckets with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
-	}
-	return nil
-}
-
-func isTopicOrTask(kind provider.BindingType) bool {
-	return kind == provider.BindingTask || kind == provider.BindingTopic
-}
-
-func refuseTasksWhereNothingRunsThem(pre provider.DeployPreflight) error {
-	if pre.Deploy.Infra.IsZero() {
-		for _, resource := range pre.Resources {
-			if isTopicOrTask(resource.Type) && resource.Binding == "" {
-				return refusal.Refuse(refusal.CodeUnsupported,
-					"this ephemeral preview declares %s %s, and an ephemeral preview on this provider provisions no infrastructure of its own, so no queue or worker would run it: deploy it to a persistent environment",
-					resource.Type, resource.Declared)
-			}
-		}
 	}
 	return nil
 }

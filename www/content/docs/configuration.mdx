@@ -594,7 +594,7 @@ export default defineConfig({
 | --- | --- | --- |
 | `command` | Yes | The shell command. |
 | `app` | | The app whose variables the command also receives, and whose directory it runs from. Left off, the project directory and the bindings alone. |
-| `previews` | | `persistent` (default), `all` or `none`. Production always runs it. |
+| `previews` | | `all` (default), `persistent` or `none`. Production always runs it. |
 | `timeout` | | A duration such as `90s` or `15m`. Default 30 minutes. Past it, the command and everything it started are stopped. |
 
 The command sees the deployed resources as your code does, as under
@@ -607,8 +607,9 @@ The command sees the deployed resources as your code does, as under
 - Skipped by `ocel rollback`, `ocel env set`, `--dry` (listed only) and `--prebuilt` (run it
   yourself with `ocel run --env`).
 - An npm `prebuild` script still runs per app. When both are set, the deploy warns once.
-- Ephemeral previews share the preview tier's databases, hence the `persistent` default. Use
-  `all` only when each preview [binds its own branch](#a-database-branch-per-preview).
+- Every preview provisions its own database, which starts empty, hence the `all` default. Use
+  `persistent` when each ephemeral preview [binds its own branch](#a-database-branch-per-preview)
+  and that branch is migrated elsewhere.
 
 The serving release runs against the new schema until promotion. Expand (add nullable or
 defaulted columns), deploy, then contract (drop) in a later deploy. A rename takes three.

@@ -176,9 +176,6 @@ func (s costShape) topics(scope string, topics []deployedTopic) {
 }
 
 func (s costShape) workers(environment string, req provider.ShapeRequest, topics []deployedTopic) error {
-	if req.Deploy.Infra.IsZero() {
-		return nil
-	}
 	for _, app := range req.Deploy.Apps {
 		if len(app.Workers) == 0 || app.Compute() != provider.ComputeServerless {
 			continue

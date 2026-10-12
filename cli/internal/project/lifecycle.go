@@ -66,7 +66,7 @@ func normalizeLifecycleCommand(raw configdoc.LifecycleCommand, apps []App) (Life
 	previews := Previews(raw.Previews)
 	switch previews {
 	case "":
-		previews = PreviewsPersistent
+		previews = PreviewsAll
 	case PreviewsPersistent, PreviewsAll, PreviewsNone:
 	default:
 		return LifecycleCommand{}, fmt.Errorf("previews is %q, want persistent, all or none", raw.Previews)

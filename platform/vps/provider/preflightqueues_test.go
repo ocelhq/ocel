@@ -101,24 +101,3 @@ func TestADeployDeclaringNoTopicOrTaskNeverAsksAboutTheAgent(t *testing.T) {
 		}
 	}
 }
-
-func TestAnEphemeralPreviewDeclaringATaskIsRefusedBeforeTheBoxIsAsked(t *testing.T) {
-	t.Parallel()
-
-	machine := boxSaying(map[string]answer{
-		"uname -m":      {stdout: "x86_64\n"},
-		host.LiveBinary: agentSurveyed(t, currentAgent(t)),
-	})
-	err := preflightingIn(t, machine, naming.StackName{}, aDeclaredTask)
-	if err == nil {
-		t.Fatal("PreflightDeploy() let an ephemeral preview declare a task, and it has no queue of its own, so every trigger would fail at runtime")
-	}
-	for _, want := range []string{"receipt", "ephemeral"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("PreflightDeploy() = %q, want it to name %s", err, want)
-		}
-	}
-	if len(machine.ran) != 0 {
-		t.Errorf("PreflightDeploy() ran %v on the box before refusing what the config asks for", machine.ran)
-	}
-}

@@ -60,8 +60,9 @@ other one to the same name is refused, so remove it first or use another name.
 
 | | Ephemeral | Persistent |
 | --- | --- | --- |
-| Infrastructure | None of its own, only what [bindings](/docs/cli/bindings) share | Its own database, bucket and the rest |
+| Infrastructure | Its own database, bucket and the rest | Its own database, bucket and the rest |
 | Teardown | `rm` tears it down straight away | `rm` asks first, and needs `--yes` in CI |
 
-If an ephemeral preview's app declares a resource no binding covers, the deploy stops: pass
-`--persistent`, or add a binding with `ocel bindings set --preview`.
+Both provision every resource the app declares, so no preview shares a database or a store
+with another, and `rm` destroys that infrastructure with the preview. To use a resource you run
+yourself instead, name its published binding under `bindings` in the config.

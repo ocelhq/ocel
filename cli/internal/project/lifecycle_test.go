@@ -17,8 +17,8 @@ func TestALifecyclePointWrittenAsAStringIsACommandWithTheDefaults(t *testing.T) 
 	if got == nil {
 		t.Fatal("Lifecycle.PreBuild = nil, want the command")
 	}
-	if got.Command != "pnpm drizzle-kit migrate" || got.App != "" || got.Previews != PreviewsPersistent || got.Timeout != DefaultLifecycleTimeout {
-		t.Errorf("PreBuild = %+v, want the command run on persistent previews with the default timeout and no app", got)
+	if got.Command != "pnpm drizzle-kit migrate" || got.App != "" || got.Previews != PreviewsAll || got.Timeout != DefaultLifecycleTimeout {
+		t.Errorf("PreBuild = %+v, want the command run on every preview with the default timeout and no app", got)
 	}
 }
 

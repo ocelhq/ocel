@@ -218,8 +218,7 @@ state table. Queues, topics and schedules bill by the request.
 Limits and differences:
 
 - `maxDuration` is at most 15 minutes. A worker on container compute is refused, though an
-  app on container compute sends to topics and triggers tasks as a serverless app does. An
-  ephemeral preview refuses to declare a task or topic.
+  app on container compute sends to topics and triggers tasks as a serverless app does.
 - A run that finds its worker at its concurrency waits on the queue, up to five minutes at a
   time. On a FIFO queue each wait is a delivery, and SQS dead-letters after 1,000, so a run
   still waiting then ends failed.

@@ -112,8 +112,6 @@ preview deploy is refused until you pick one:
 - behind Traefik, set `previewResolver`; behind your Caddy, serve a wildcard certificate;
 - or set `perHostnamePreviewCertificates: true` to accept that the hostnames are published.
 
-An ephemeral preview can't declare topics, tasks or realtime; use `ocel preview up --persistent`.
-
 ## Behind Cloudflare
 
 ```json
@@ -375,7 +373,6 @@ After upgrading ocel, a deploy that needs a newer box agent tells you to run `oc
 | `… has … free on …; this deploy needs …` | Free space on Docker's data root. |
 | `app … asks for instances.min …` | A box runs one container per app: set both to 1 or leave them off. |
 | `… orders a publicly trusted certificate for each preview hostname …` | See [Previews](#previews). |
-| `this ephemeral preview declares …` | Deploy a persistent preview. |
 | `this box's agent … predates this ocel` | Run `ocel bootstrap <tier>`. |
 | `no ocel-switchboard container on …` | Run `ocel bootstrap <tier>`. |
 | A deploy refused with a `proxy` value to write | Every project on a box must name the same `proxy`. |
