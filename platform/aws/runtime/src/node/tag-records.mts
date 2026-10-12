@@ -14,14 +14,13 @@ export function newAwsTagRecordWriter(env: NodeJS.ProcessEnv): WriteTagRecords |
   const table = env.OCEL_STATE_TABLE;
   const namespace = env.OCEL_ISR_TAG_NAMESPACE;
   if (!table || !namespace) return undefined;
-  let ddb: ReturnType<typeof newDynamoDBClient> | undefined;
+  let client: ReturnType<typeof newDynamoDBClient> | undefined;
   return async (entries) => {
-    ddb ??= newDynamoDBClient();
-    const client = ddb;
+    const database = (client ??= newDynamoDBClient());
     const writes = await Promise.allSettled(
       entries.map(async (entry) => {
         try {
-          await client.send(
+          await database.send(
             new UpdateItemCommand(tagRecordUpdate(table, namespace, entry.tag, recordOf(entry))),
           );
         } catch (error) {
