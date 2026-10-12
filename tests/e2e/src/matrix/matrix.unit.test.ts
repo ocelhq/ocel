@@ -671,10 +671,10 @@ describe("sdk/next and sdk/sveltekit", () => {
     }
   });
 
-  it("skips the Next cell on floci's aws, whose CloudFront serves no Next app, and runs the SvelteKit one", () => {
+  it("skips both cells on floci's aws, whose stubbed CloudFront routes no domain", () => {
     const planned = planOn("aws.floci");
     expect(planned.skipped["sdk/next"]?.map((gap) => gap.issue)).toEqual([852]);
-    expect(planned.skipped["sdk/sveltekit"]).toBeUndefined();
+    expect(planned.skipped["sdk/sveltekit"]?.map((gap) => gap.issue)).toEqual([852]);
   });
 });
 
