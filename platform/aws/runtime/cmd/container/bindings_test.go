@@ -17,11 +17,14 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
-type declared struct{ bindings []live.Binding }
+type fixedRecords struct {
+	bindings []live.Binding
+	values   map[string]string
+}
 
-func (d declared) Bindings() []live.Binding { return d.bindings }
-func (d declared) Value(string) string      { return "" }
-func (d declared) Generation() uint32       { return 1 }
+func (f fixedRecords) Bindings() []live.Binding { return f.bindings }
+func (f fixedRecords) Value(key string) string  { return f.values[key] }
+func (f fixedRecords) Generation() uint32       { return 1 }
 
 func envValue(env []string, key string) string {
 	for _, entry := range env {
@@ -43,7 +46,7 @@ func TestAContainerAppBoundToATaskTriggersItThroughTheProxyOnlyWithTheQueueTopol
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
-	values := declared{bindings: []live.Binding{{Name: "resize", Type: bindingsv1.BindingType_BINDING_TYPE_TASK}}}
+	values := fixedRecords{bindings: []live.Binding{{Name: "resize", Type: bindingsv1.BindingType_BINDING_TYPE_TASK}}}
 
 	if _, err := serveBindings(context.Background(), values, "127.0.0.1:1", ""); err == nil || !strings.Contains(err.Error(), queues.EnvVar) {
 		t.Fatalf("serveBindings with no queue topology = %v, want an error naming %s", err, queues.EnvVar)
@@ -62,8 +65,29 @@ func TestAContainerAppBoundToATaskTriggersItThroughTheProxyOnlyWithTheQueueTopol
 }
 
 func TestAContainerAppBoundToNeitherABucketNorATaskServesNoProxy(t *testing.T) {
-	served, err := serveBindings(context.Background(), declared{bindings: []live.Binding{{Name: "db", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}}, "127.0.0.1:1", "")
+	served, err := serveBindings(context.Background(), fixedRecords{bindings: []live.Binding{{Name: "db", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}}, "127.0.0.1:1", "")
 	if err != nil || len(served.Env) != 0 {
 		t.Fatalf("serveBindings = %+v, %v, want no proxy for an app that reaches nothing through it", served, err)
+	}
+}
+
+func TestAContainerAppBoundToABucketIsServedTheProxyAndNeverHandedTheStoresKey(t *testing.T) {
+	served, err := serveBindings(context.Background(), fixedRecords{
+		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		values: map[string]string{
+			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"r2-secret"}}`,
+		},
+	}, "127.0.0.1:1", "")
+	if err != nil {
+		t.Fatalf("serveBindings: %v", err)
+	}
+	t.Cleanup(func() { _ = served.Close() })
+	if envValue(served.Env, processenv.RuntimeAddressEnvVar) == "" {
+		t.Fatal("the app is handed no proxy, and it reaches a bound bucket only through one")
+	}
+	for _, entry := range served.Env {
+		if strings.Contains(entry, "r2-secret") {
+			t.Errorf("the app is handed %q: the store's key is the proxy's alone", entry)
+		}
 	}
 }

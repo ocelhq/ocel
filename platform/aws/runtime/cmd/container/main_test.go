@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 const (
@@ -26,6 +27,7 @@ type served struct {
 	Port   string `json:"port"`
 	Secret string `json:"secret"`
 	Health string `json:"health"`
+	Queues string `json:"queues"`
 }
 
 func TestContainerHelper(t *testing.T) {
@@ -66,6 +68,7 @@ func TestContainerHelper(t *testing.T) {
 			Port:   os.Getenv(containerimage.PortEnvVar),
 			Secret: os.Getenv(originguard.OriginSecretVar),
 			Health: os.Getenv(originguard.HealthPathVar),
+			Queues: os.Getenv(queues.EnvVar),
 		})
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(containerimage.PortEnvVar), mux); err != nil {
@@ -242,6 +245,18 @@ func TestRun(t *testing.T) {
 			t.Errorf("probe status = %d, want %d: the platform's probe sends no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
 		}
 		if code := r.quit(t, secret); code != 0 {
+			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
+	t.Run("the queue topology is the runtime's and never reaches the app", func(t *testing.T) {
+		r := launch(t, "serve", queues.EnvVar+`={"table":"state","keyPrefix":"PROJECT#shop#ENV#prod#TASKS#","topics":{}}`)
+		body := r.awaitFront(t, "")
+
+		if body.Queues != "" {
+			t.Errorf("the app was handed %s=%q; the runtime reads the queues behind its bindings, and the app reaches them only through the proxy", queues.EnvVar, body.Queues)
+		}
+		if code := r.quit(t, ""); code != 0 {
 			t.Errorf("run = %d, want 0", code)
 		}
 	})

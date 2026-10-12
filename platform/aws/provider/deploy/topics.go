@@ -104,8 +104,7 @@ func sqsQueueARN(region, account, name string) string {
 	return fmt.Sprintf("arn:aws:sqs:%s:%s:%s", region, account, name)
 }
 
-func queueTopology(cfg Config, project, env string, resources []provider.Resource, workers map[string]queues.Worker) (queues.Topology, error) {
-	topics := topicsOf(project, env, resources)
+func queueTopology(cfg Config, project, env string, topics []deployedTopic, workers map[string]queues.Worker) (queues.Topology, error) {
 	topology := queues.Topology{Table: cfg.StateTable, KeyPrefix: naming.TaskKeyPrefix(project, env), Topics: map[string]queues.Topic{}, Workers: workers}
 	if len(topics) == 0 {
 		return topology, nil
@@ -213,7 +212,8 @@ func snsDeliveryPolicy(queueARN, topicARN string) (string, error) {
 	return string(encoded), err
 }
 
-func tasksPolicy(region, account, tableARN, project, env string, topics []deployedTopic) (string, error) {
+func tasksPolicy(cfg Config, project, env string, topics []deployedTopic) (string, error) {
+	region, account := cfg.Region, accountOfARN(cfg.StateTableARN)
 	var queueARNs, topicARNs []string
 	for _, topic := range topics {
 		if topic.sns != "" {
@@ -227,7 +227,7 @@ func tasksPolicy(region, account, tableARN, project, env string, topics []deploy
 		map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"},
-			"Resource": tableARN,
+			"Resource": cfg.StateTableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringLike": map[string]any{"dynamodb:LeadingKeys": []string{naming.TaskKeyPrefix(project, env) + "*"}},
 			},

@@ -9,6 +9,8 @@ import (
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
 type ownBackend struct {
@@ -130,5 +132,13 @@ func TestABucketNoBindingNamesIsRefusedWhenTheRuntimeHasNoStoreOfItsOwn(t *testi
 	_, err = handler.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_0a1b2c"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("CompleteUpload(untagged) = %v, want not found", err)
+	}
+}
+
+func TestAnAppBoundToATaskOrTopicAloneServesNoBucketProxy(t *testing.T) {
+	for _, kind := range []bindingsv1.BindingType{bindingsv1.BindingType_BINDING_TYPE_TASK, bindingsv1.BindingType_BINDING_TYPE_TOPIC} {
+		if dispatch := NewBoundDispatch(fixedRecords{bindings: []live.Binding{{Name: "orders", Key: "OCEL_RESOURCE_ORDERS", Type: kind}}}, "127.0.0.1:1"); dispatch != nil {
+			t.Errorf("NewBoundDispatch with only a %v binding = a bucket service, want none: the app reaches no bucket", kind)
+		}
 	}
 }

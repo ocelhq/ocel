@@ -416,7 +416,8 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ pro
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
-	topology, err := queueTopology(opened.cfg, naming.Sanitize(req.Ref.Project), req.Ref.Name.Env, req.Topics, nil)
+	project, env := naming.Sanitize(req.Ref.Project), req.Ref.Name.Env
+	topology, err := queueTopology(opened.cfg, project, env, topicsOf(project, env, req.Topics), nil)
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
