@@ -6,6 +6,7 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
 import type { ComponentProps } from "react";
+import { AlphaNotice } from "@/components/docs/alpha-notice";
 import { CompareWith } from "@/components/docs/compare";
 import { CompareChips } from "@/components/docs/compare/chips";
 import { DevTerminal } from "@/components/docs/dev-terminal";
@@ -76,6 +77,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Card: Tile,
     Cards: TileGrid,
     Hero,
+    AlphaNotice,
     StartCards,
     ResourceCards,
     DevTerminal,
