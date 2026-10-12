@@ -42,12 +42,10 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 		Env:         name,
 		Label:       env.GetLabel(),
 		Pointer:     pointerFor(tier, name),
+		Infra:       naming.InfraStack(name),
 		PromotionID: promotionID,
 		Tag:         req.GetTag(),
 		Releases:    make(map[string]string, len(manifest.GetApps())),
-	}
-	if !ephemeral(env) {
-		spec.Infra = naming.InfraStack(name)
 	}
 	workers, err := readWorkersByApp(manifest)
 	if err != nil {
@@ -106,8 +104,8 @@ func ephemeral(env *environmentv1.Environment) bool {
 		env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
 }
 
-func readPreviewLifecycle(spec provider.DeploySpec) stackrecords.Lifecycle {
-	if isEphemeralPreview(spec) {
+func readPreviewLifecycle(env *environmentv1.Environment) stackrecords.Lifecycle {
+	if ephemeral(env) {
 		return stackrecords.LifecycleEphemeral
 	}
 	return stackrecords.LifecyclePersistent
@@ -198,8 +196,4 @@ func fingerprintVariables(variables []*contractv1.ManifestVariable) string {
 		provider.WriteLenPrefixed(h, []byte(strconv.FormatInt(variable.GetVersion(), 10)))
 	}
 	return hex.EncodeToString(h.Sum(nil))[:provider.FingerprintHexLen]
-}
-
-func isEphemeralPreview(spec provider.DeploySpec) bool {
-	return spec.Infra.IsZero()
 }

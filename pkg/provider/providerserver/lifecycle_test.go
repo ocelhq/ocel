@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,10 +23,6 @@ import (
 func newPreviewRequest(lifecycle environmentv1.Lifecycle) *contractv1.DeployRequest {
 	req := previewDeployRequest()
 	req.Environment.Lifecycle = lifecycle
-	if lifecycle == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
-		req.Manifest.Resources = nil
-		req.Manifest.Usages = nil
-	}
 	return req
 }
 
@@ -103,12 +100,6 @@ func TestADeployOfTheOtherLifecycleToAPreviewIsRefusedBeforeItProvisionsAnything
 	}
 }
 
-func newEphemeralRequestWithOrders() *contractv1.DeployRequest {
-	req := previewDeployRequest()
-	req.Environment.Lifecycle = environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
-	return req
-}
-
 func publishPreviewRecord(t *testing.T, vendor *fake.Provider, preview string, binding *bindingsv1.Binding) {
 	t.Helper()
 	pair, err := variablestoreserver.BindingPair("terraform", binding)
@@ -123,38 +114,42 @@ func publishPreviewRecord(t *testing.T, vendor *fake.Provider, preview string, b
 	}
 }
 
-func TestAnEphemeralDeployOfAResourceNoBindingCoversIsRefused(t *testing.T) {
+func TestAnEphemeralDeployProvisionsTheResourcesItDeclaresInAnInfraStackOfItsOwn(t *testing.T) {
 	client, vendor := servePreview(t)
 
-	said := expectDeployRefused(t, client, newEphemeralRequestWithOrders())
+	result, _ := deploy(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
 
-	for _, want := range []string{"orders", "--persistent", "`ocel bindings set --preview --environment pr-7`", "`ocel bindings set --preview`"} {
-		if !strings.Contains(said, want) {
-			t.Errorf("Deploy() said %q, want it to contain %q", said, want)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want an ephemeral preview to provision orders itself", result.GetError())
+	}
+	var kinds []provider.StackKind
+	var grants []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		kinds = append(kinds, spec.Kind)
+		if spec.Kind == provider.StackApp {
+			grants = grantNames(spec)
 		}
 	}
-	if provisioned := vendor.FakeStacks().Provisioned(); len(provisioned) != 0 {
-		t.Errorf("the refused deploy provisioned %d stacks, want none", len(provisioned))
+	if !slices.Contains(kinds, provider.StackInfra) {
+		t.Errorf("the stacks port saw %v, want the preview's own infra stack beside its app stack", kinds)
+	}
+	if !slices.Equal(grants, []string{"orders"}) {
+		t.Errorf("web was granted %v, want the orders the preview provisioned", grants)
 	}
 }
 
-func TestAnEphemeralDeployOfAResourceABindingCoversGrantsThatBinding(t *testing.T) {
+func TestAPublishedRecordNamedForAResourceBindsAnEphemeralPreviewAsItBindsAPersistentOne(t *testing.T) {
 	for name, preview := range map[string]string{"at the preview": "pr-7", "tier-wide": ""} {
 		t.Run(name, func(t *testing.T) {
-			client, vendor := servePreview(t)
-			publishPreviewRecord(t, vendor, preview, postgresRecord("orders", "terraform"))
-
-			result, _ := deploy(t, client, newEphemeralRequestWithOrders())
-
-			if !result.GetSuccess() {
-				t.Fatalf("Deploy() = %q, want the published orders to cover the resource", result.GetError())
+			var said []string
+			for _, lifecycle := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
+				client, vendor := servePreview(t)
+				publishPreviewRecord(t, vendor, preview, postgresRecord("orders", "terraform"))
+				result, _ := deploy(t, client, newPreviewRequest(lifecycle))
+				said = append(said, result.GetError())
 			}
-			provisioned := vendor.FakeStacks().Provisioned()
-			if len(provisioned) != 1 || provisioned[0].Kind != provider.StackApp {
-				t.Fatalf("the stacks port saw %d specs, want only the app stack: an ephemeral preview has no infra stack", len(provisioned))
-			}
-			if grants := grantNames(provisioned[0]); !slices.Equal(grants, []string{"orders"}) {
-				t.Errorf("web was granted %v, want the published orders", grants)
+			if said[0] != said[1] || !strings.Contains(said[1], "already published by publisher terraform") {
+				t.Errorf("a persistent preview said %q and an ephemeral one %q, want the same refusal naming the publisher that holds orders", said[0], said[1])
 			}
 		})
 	}
@@ -181,19 +176,6 @@ func TestAPersistentPreviewWhoseFirstDeployFailsAfterItsInfraKeepsItsLifecycle(t
 	}
 	if got := len(vendor.FakeStacks().Provisioned()); got != provisioned {
 		t.Errorf("the ephemeral deploy provisioned %d stacks, want none: pr-7's infra stack would be orphaned", got-provisioned)
-	}
-}
-
-func TestAFirstDeployOfAPreviewRefusedBeforeItProvisionsLeavesTheNameFreeForTheOtherLifecycle(t *testing.T) {
-	client, _ := servePreview(t)
-	expectDeployRefused(t, client, newEphemeralRequestWithOrders())
-
-	if result, _ := deploy(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want the persistent deploy to create pr-7: the refused ephemeral deploy provisioned nothing to claim it for", result.GetError())
-	}
-
-	if listed := listLifecycles(t, client)["pr-7"]; listed != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
-		t.Errorf("pr-7 is listed %s, want persistent", listed)
 	}
 }
 
@@ -227,5 +209,52 @@ func TestADeployRacingTheFirstDeployOfAPreviewIsRefusedBeforeItProvisions(t *tes
 	}
 	if listed := listLifecycles(t, client)["pr-7"]; listed != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
 		t.Errorf("pr-7 is listed %s, want persistent", listed)
+	}
+}
+
+func TestRemovingAnEphemeralPreviewDestroysTheInfraStackItsDeployProvisioned(t *testing.T) {
+	client, vendor := servePreview(t)
+	if result, _ := deploy(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL)); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the ephemeral preview deployed", result.GetError())
+	}
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
+	owned := func() int {
+		records, err := store.ListBindings(t.Context(), scope, "pr-7")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		for _, record := range records {
+			if record.Environment == "pr-7" && record.Owner == variablestore.OwnerOcel {
+				n++
+			}
+		}
+		return n
+	}
+	if owned() == 0 {
+		t.Fatal("the deploy published no binding of its own for pr-7, so there is nothing for the removal to take with it")
+	}
+
+	stream, err := client.RemoveEnvironment(t.Context(), &contractv1.RemoveEnvironmentRequest{
+		Slug: "shop",
+		Environment: &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Identity:  "pr-7",
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %v, %v", result.GetError(), err)
+	}
+
+	if !slices.Contains(vendor.Journal(), "destroy "+naming.InfraStack("pr-7").String()) {
+		t.Errorf("the removal reached %v, want pr-7's infra stack destroyed: it would bill on, orphaned", vendor.Journal())
+	}
+	if got := owned(); got != 0 {
+		t.Errorf("pr-7 keeps %d bindings ocel wrote, want them removed with the preview", got)
 	}
 }

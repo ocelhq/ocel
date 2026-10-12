@@ -180,6 +180,7 @@ type deployRun struct {
 	spanEvents   *spanEvents
 	manifest     *contractv1.Manifest
 	spec         provider.DeploySpec
+	lifecycle    stackrecords.Lifecycle
 	spans        deploySpans
 
 	wildcard    stackrecords.Wildcard
@@ -301,6 +302,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		spanEvents:     newSpanEvents(sender),
 		manifest:       req.GetManifest(),
 		spec:           spec,
+		lifecycle:      readPreviewLifecycle(req.GetEnvironment()),
 		selection:      req.GetEdge(),
 		builtAlias:     req.GetAliasToken(),
 		values:         variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()},
@@ -441,14 +443,14 @@ func (r *deployRun) refuseOtherLifecycle(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return meta.RefuseOtherLifecycle(r.spec.Env, readPreviewLifecycle(r.spec))
+	return meta.RefuseOtherLifecycle(r.spec.Env, r.lifecycle)
 }
 
 func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 	if r.spec.Tier != environment.TierPreview || r.dry {
 		return nil
 	}
-	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, readPreviewLifecycle(r.spec), r.aliasToken)
+	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.lifecycle, r.aliasToken)
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
@@ -1080,9 +1082,6 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
-	if isEphemeralPreview(r.spec) {
-		return nil
-	}
 	declaredResources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -1764,7 +1763,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				return err
 			}
 			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
-				r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.spec.Label, readPreviewLifecycle(r.spec))
+				r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.spec.Label, r.lifecycle)
 		})
 	}); err != nil {
 		return nil, err

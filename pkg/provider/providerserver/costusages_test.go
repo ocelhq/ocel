@@ -48,7 +48,7 @@ func usedBy(usages []provider.AppUsage, app string) []string {
 	return names
 }
 
-func TestShapeOfAnEphemeralPreviewStillNamesWhatEachAppUses(t *testing.T) {
+func TestShapeOfAnEphemeralPreviewNamesWhatEachAppUses(t *testing.T) {
 	recording := &shapeRecording{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client, _ := costServed(t, recording)
 	req := shapeRequest()
@@ -62,12 +62,8 @@ func TestShapeOfAnEphemeralPreviewStillNamesWhatEachAppUses(t *testing.T) {
 		t.Fatalf("Shape() error = %v", err)
 	}
 
-	request := recording.requests[0]
-	if len(request.Resources) != 0 {
-		t.Fatalf("resources = %v, want none an ephemeral preview provisions itself", request.Resources)
-	}
-	if got := usedBy(request.Usages, "web"); len(got) == 0 {
-		t.Errorf("web uses %v, want what it reaches in the persistent environment: it attaches to the same network", got)
+	if got := usedBy(recording.requests[0].Usages, "web"); len(got) == 0 {
+		t.Errorf("web uses %v, want the resources the preview's own infra stack provisions", got)
 	}
 }
 

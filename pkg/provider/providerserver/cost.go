@@ -32,13 +32,9 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	declared, err := manifestResources(req.GetManifest())
+	resources, err := manifestResources(req.GetManifest())
 	if err != nil {
 		return nil, provider.RefusalError(err)
-	}
-	resources := declared
-	if isEphemeralPreview(spec) {
-		resources = nil
 	}
 	parts := bootstrapplan.RequiredParts(readiness.Bootstrap.Parts(), readiness.Edge)
 	set, err := cost.Shape(ctx, provider.ShapeRequest{
@@ -47,7 +43,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		Parts:      parts,
 		Resources:  resources,
 		Functions:  shapedFunctions(req.GetManifest()),
-		Usages:     shapedUsages(spec, req.GetManifest(), declared),
+		Usages:     shapedUsages(spec, req.GetManifest(), resources),
 		Transforms: h.session.transforms(),
 	})
 	if err != nil {
