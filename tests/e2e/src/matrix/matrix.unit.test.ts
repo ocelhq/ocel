@@ -4,12 +4,18 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
+  buildVariablesChecks,
+  clientEnvDeploymentUrlCheck,
+  imageShowsNoBindingCheck,
   lanesCheck,
   nextCacheChecks,
+  nextClientEnvChecks,
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   orderedKeysInParallelCheck,
+  prerenderBucketChecks,
+  prerenderChecks,
   realtimeChecks,
   realtimeOperationLimitCheck,
   realtimeRuleDeniesCheck,
@@ -189,12 +195,9 @@ describe("Cloudflare in front of gcp", () => {
 
 describe("the needs a Google Cloud origin does not serve", () => {
   const WAIVED = {
-    "build-variables/next": ["edge-runtime", "edge-cache"],
-    "client-env/next": ["edge-runtime", "edge-cache"],
     "deploy/next": ["edge-runtime", "edge-cache"],
     "lifecycle/next": ["edge-runtime", "edge-cache"],
     "sdk/next": ["edge-runtime", "edge-cache"],
-    "prerender/next-bucket": ["edge-runtime", "edge-cache"],
     "deploy/workspace": ["edge-cache"],
     "sdk/workspace": ["edge-cache"],
   };
@@ -595,77 +598,54 @@ describe("what only a deployment answers", () => {
   });
 });
 
-describe("the build-variables concern", () => {
+describe("sdk/next and sdk/sveltekit", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const cellsOn = (lane: Lane, filter: RunFilter = EVERY_CELL) =>
-    planOn(lane, {}, filter).cells.map((cell) => cell.name);
+  const cellsOn = (lane: Lane) => planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name);
 
-  it("builds its Next app as functions on aws and on gcp, floci's among them", () => {
-    for (const lane of ["aws", "gcp", "gcp.floci"] as const) {
-      expect(cellsOn(lane)).toContain("build-variables/next");
-    }
-    expect(cellsOn("gcp.floci", NO_FILTER)).toContain("build-variables/next");
-  });
-
-  it("builds nothing as an image, whose build gets none of the values yet", () => {
+  it("deploys the Next app on every lane, built from its Dockerfile on a box too, and the SvelteKit app on every lane", () => {
     for (const lane of LANES) {
-      expect(cellsOn(lane).filter((name) => name.startsWith("build-variables/"))).toEqual(
-        ["aws", "aws.floci", "gcp", "gcp.floci"].includes(lane) ? ["build-variables/next"] : [],
-      );
+      expect(cellsOn(lane)).toEqual(expect.arrayContaining(["sdk/next", "sdk/sveltekit"]));
+    }
+    for (const lane of ["vps", "vps.incus"] as const) {
+      expect(cellsOn(lane)).toContain("sdk/next-dockerfile");
     }
   });
 
-  it("skips the cell on floci's aws, whose CloudFront serves no Next app", () => {
-    expect(planOn("aws.floci").skipped["build-variables/next"]?.map((gap) => gap.issue)).toEqual([
-      852,
-    ]);
+  it("sets the build variables, the client values and the plain and secret values on every target", () => {
+    const next = fixtures.find((one) => one.name === "sdk/next");
+    expect(next?.checks).toEqual(expect.arrayContaining(buildVariablesChecks));
+    expect(next?.checks).toEqual(expect.arrayContaining(nextClientEnvChecks));
+    expect(next?.checks).toEqual(expect.arrayContaining(prerenderChecks));
+    expect(next?.checks).toEqual(expect.arrayContaining(prerenderBucketChecks));
   });
-});
 
-describe("the client-env concern", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const cellsOn = (lane: Lane) =>
-    planOn(lane, {}, EVERY_CELL)
-      .cells.map((cell) => cell.name)
-      .filter((name) => name.startsWith("client-env/"));
+  it("checks that only the image built from the Dockerfile shows no binding", () => {
+    const planned = planOn("vps");
+    const titlesOf = (cell: string) =>
+      planned.cells.find((one) => one.name === cell)?.steps.map((step) => step.title) ?? [];
+    expect(titlesOf("sdk/next-dockerfile")).toContain(imageShowsNoBindingCheck.title);
+    expect(titlesOf("sdk/next")).not.toContain(imageShowsNoBindingCheck.title);
+  });
 
-  it("deploys its Next app on aws and gcp, and its SvelteKit app on every lane", () => {
-    for (const lane of LANES) {
-      expect(cellsOn(lane)).toEqual(
-        lane === "dev" || lane.startsWith("vps")
-          ? ["client-env/sveltekit"]
-          : ["client-env/next", "client-env/sveltekit"],
-      );
+  it("expects the deployment url red on gcp, where a cell declares no hostname", () => {
+    const { expectedFailures } = planOn("gcp");
+    for (const cell of ["sdk/next/web", "sdk/sveltekit/web"]) {
+      expect(
+        expectedFailures[cell]?.[clientEnvDeploymentUrlCheck.title]?.map((gap) => gap.id),
+      ).toEqual(["cloud-run-hands-no-deployment-url"]);
     }
   });
 
-  it("skips the Next cell on floci's aws, whose CloudFront serves no Next app", () => {
-    const planned = planOn("aws.floci");
-    expect(planned.skipped["client-env/next"]?.map((gap) => gap.issue)).toEqual([852]);
-    expect(planned.skipped["client-env/sveltekit"]).toBeUndefined();
-  });
-
-  it("expects only the deployment url red on gcp, where a cell declares no hostname", () => {
-    for (const lane of ["gcp", "gcp.floci"] as const) {
-      const { expectedFailures } = planOn(lane);
-      for (const cell of ["client-env/next/web", "client-env/sveltekit/web"]) {
-        const listed = Object.entries(expectedFailures[cell] ?? {});
-        expect(listed.map(([title]) => title)).toEqual([
-          expect.stringContaining("renders the url the deployment is served from"),
-        ]);
-        for (const [, gapsListed] of listed) {
-          expect(gapsListed.map((gap) => gap.id)).toEqual(["cloud-run-hands-no-deployment-url"]);
-        }
-      }
-    }
-  });
-
-  it("expects nothing red where the deploy writes the deployment url", () => {
+  it("expects nothing of the SvelteKit app red where the deploy writes the deployment url", () => {
     for (const lane of ["aws", "dev", "vps", "vps.incus"] as const) {
-      const { expectedFailures } = planOn(lane);
-      expect(expectedFailures["client-env/next/web"] ?? {}).toEqual({});
-      expect(expectedFailures["client-env/sveltekit/web"] ?? {}).toEqual({});
+      expect(planOn(lane).expectedFailures["sdk/sveltekit/web"] ?? {}).toEqual({});
     }
+  });
+
+  it("skips the Next cell on floci's aws, whose CloudFront serves no Next app, and runs the SvelteKit one", () => {
+    const planned = planOn("aws.floci");
+    expect(planned.skipped["sdk/next"]?.map((gap) => gap.issue)).toEqual([852]);
+    expect(planned.skipped["sdk/sveltekit"]).toBeUndefined();
   });
 });
 
@@ -775,30 +755,6 @@ describe("the fixtures a lane deploys", () => {
       }
     }
     expect([...undetectable].sort()).toEqual([]);
-  });
-});
-
-describe("the prerender-from-a-bucket cell", () => {
-  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const cellsOn = (lane: Lane) =>
-    planOn(lane, {}, EVERY_CELL)
-      .cells.map((cell) => cell.name)
-      .filter((name) => name === "prerender/next-bucket");
-
-  it("builds a page from a bucket on every vendor, behind the binding proxy its provider serves", () => {
-    for (const lane of ["aws", "gcp", "gcp.floci", "vps", "vps.incus"] as const) {
-      expect(cellsOn(lane)).toEqual(["prerender/next-bucket"]);
-    }
-  });
-
-  it("runs on no lane that serves no Next app", () => {
-    expect(cellsOn("dev")).toEqual([]);
-  });
-
-  it("skips the cell on floci's aws, whose CloudFront serves no Next app", () => {
-    expect(planOn("aws.floci").skipped["prerender/next-bucket"]?.map((gap) => gap.issue)).toEqual([
-      852,
-    ]);
   });
 });
 

@@ -27,41 +27,42 @@ async function page(ctx: Parameters<Check["run"]>[0], path: string) {
 }
 
 export const prerenderedFromTheDatabaseCheck: Check = {
-  title: "GET / answers the page next build prerendered from the deployed postgres, once",
+  title: "GET /prerender answers the page next build prerendered from the deployed postgres, once",
+  assertsDeployment: true,
   run: async (ctx) => {
-    const first = await page(ctx, "/");
+    const first = await page(ctx, "/prerender");
     assert.equal(first.res.status, 200);
     const database = DATABASE.exec(first.body)?.[1];
-    assert.ok(database, `the home page names no database it was prerendered from:\n${first.body}`);
+    assert.ok(database, `/prerender names no database it was prerendered from:\n${first.body}`);
     const at = AT.exec(first.body)?.[1];
-    assert.ok(at, `the home page names no time it was prerendered at:\n${first.body}`);
+    assert.ok(at, `/prerender names no time it was prerendered at:\n${first.body}`);
 
-    const second = await page(ctx, "/");
+    const second = await page(ctx, "/prerender");
     assert.equal(
       AT.exec(second.body)?.[1],
       at,
-      "the home page was rendered again for a second request, so it read postgres at request time rather than at build",
+      "/prerender was rendered again for a second request, so it read postgres at request time rather than at build",
     );
   },
 };
 
 export const staticParamsFromTheDatabaseCheck: Check = {
   title:
-    "GET /rows/:n answers each row generateStaticParams read from postgres, and none past them",
+    "GET /prerender/rows/:n answers each row generateStaticParams read from postgres, and none past them",
   run: async (ctx) => {
     for (const n of [1, 2, 3]) {
-      const { res, body } = await page(ctx, `/rows/${n}`);
-      assert.equal(res.status, 200, `/rows/${n} answered ${res.status}`);
+      const { res, body } = await page(ctx, `/prerender/rows/${n}`);
+      assert.equal(res.status, 200, `/prerender/rows/${n} answered ${res.status}`);
       assert.match(
         body,
         new RegExp(`row (?:<!-- -->)?${n}(?:<!-- -->)? squared is (?:<!-- -->)?${n * n}`),
       );
     }
-    const past = await page(ctx, "/rows/4");
+    const past = await page(ctx, "/prerender/rows/4");
     assert.equal(
       past.res.status,
       404,
-      "/rows/4 answered, so the route serves params generateStaticParams never read",
+      "/prerender/rows/4 answered, so the route serves params generateStaticParams never read",
     );
   },
 };
@@ -88,26 +89,28 @@ const BUCKET = /prerendered from a bucket holding (?:<!-- -->)?(\d+)(?:<!-- -->)
 const MISSING = /and (?:<!-- -->)?no(?:<!-- -->)? object at a key nothing wrote/;
 
 export const prerenderedFromTheBucketCheck: Check = {
-  title: "GET / answers the page next build prerendered from the deployed bucket, once",
+  title:
+    "GET /prerender/bucket answers the page next build prerendered from the deployed bucket, once",
+  assertsDeployment: true,
   run: async (ctx) => {
-    const first = await page(ctx, "/");
+    const first = await page(ctx, "/prerender/bucket");
     assert.equal(first.res.status, 200);
     assert.ok(
       BUCKET.test(first.body),
-      `the home page names no bucket it was prerendered from, so the build never reached it:\n${first.body}`,
+      `/prerender/bucket names no bucket it was prerendered from, so the build never reached it:\n${first.body}`,
     );
     assert.ok(
       MISSING.test(first.body),
-      `the home page found an object at a key nothing wrote:\n${first.body}`,
+      `/prerender/bucket found an object at a key nothing wrote:\n${first.body}`,
     );
     const at = AT.exec(first.body)?.[1];
-    assert.ok(at, `the home page names no time it was prerendered at:\n${first.body}`);
+    assert.ok(at, `/prerender/bucket names no time it was prerendered at:\n${first.body}`);
 
-    const second = await page(ctx, "/");
+    const second = await page(ctx, "/prerender/bucket");
     assert.equal(
       AT.exec(second.body)?.[1],
       at,
-      "the home page was rendered again for a second request, so it read the bucket at request time rather than at build",
+      "/prerender/bucket was rendered again for a second request, so it read the bucket at request time rather than at build",
     );
   },
 };
@@ -117,5 +120,4 @@ export const prerenderBucketChecks: Check[] = [prerenderedFromTheBucketCheck];
 export const prerenderChecks: Check[] = [
   prerenderedFromTheDatabaseCheck,
   staticParamsFromTheDatabaseCheck,
-  imageShowsNoBindingCheck,
 ];

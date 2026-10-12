@@ -47,6 +47,7 @@ import {
   cloudfrontShielded,
   container,
   defaults,
+  dockerfile,
   registry,
 } from "./variants";
 
@@ -224,14 +225,28 @@ export const sdk = {
       ...NODE_SDK_CHECKS,
       ...NEXT_ROUTING_AND_CACHE_CHECKS,
       ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
+      ...buildVariablesChecks,
+      ...nextClientEnvChecks,
+      ...prerenderChecks,
+      ...prerenderBucketChecks,
     ],
     on: {
       dev: [defaults],
       aws: [defaults, container, cloudflare],
-      vps: [defaults],
+      vps: [defaults, dockerfile],
       gcp: [defaults],
     },
     configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+  }),
+  sveltekit: fixture("sdk/sveltekit", {
+    apps: ["web"],
+    checks: [...healthChecks, ...svelteKitClientEnvChecks],
+    on: {
+      dev: [defaults],
+      aws: [defaults],
+      vps: [defaults],
+      gcp: [defaults],
+    },
   }),
   workspace: fixture("sdk/workspace", {
     apps: ["next", "express"],
@@ -247,52 +262,7 @@ export const sdk = {
   }),
 };
 
-export const buildVariables = {
-  next: fixture("build-variables/next", {
-    apps: ["web"],
-    checks: [...healthChecks, ...buildVariablesChecks],
-    on: {
-      aws: [defaults],
-      gcp: [defaults],
-    },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
-  }),
-};
-
-export const clientEnv = {
-  next: fixture("client-env/next", {
-    apps: ["web"],
-    checks: [...healthChecks, ...nextClientEnvChecks],
-    on: {
-      aws: [defaults],
-      gcp: [defaults],
-    },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
-  }),
-  sveltekit: fixture("client-env/sveltekit", {
-    apps: ["web"],
-    checks: [...healthChecks, ...svelteKitClientEnvChecks],
-    on: {
-      dev: [defaults],
-      aws: [defaults],
-      vps: [defaults],
-      gcp: [defaults],
-    },
-  }),
-};
-
 export const prerender = {
-  next: fixture("prerender/next", {
-    apps: ["web"],
-    checks: [...healthChecks, ...prerenderChecks],
-    on: { vps: [defaults] },
-  }),
-  nextBucket: fixture("prerender/next-bucket", {
-    apps: ["web"],
-    checks: [...healthChecks, ...prerenderBucketChecks],
-    on: { aws: [defaults], gcp: [defaults], vps: [defaults] },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
-  }),
   nextPpr: fixture("prerender/next-ppr", {
     apps: ["web"],
     checks: [...healthChecks, ...nextPprChecks],
@@ -302,11 +272,6 @@ export const prerender = {
     apps: ["web"],
     checks: [...healthChecks, ...nextStoreReadChecks],
     on: { aws: [cloudflare] },
-  }),
-  nextDockerfile: fixture("prerender/next-dockerfile", {
-    apps: ["web"],
-    checks: [...healthChecks, ...prerenderChecks],
-    on: { vps: [defaults] },
   }),
 };
 
@@ -350,8 +315,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
-  ...Object.values(buildVariables),
-  ...Object.values(clientEnv),
   ...Object.values(prerender),
   ...Object.values(preBuild),
   ...Object.values(iac),

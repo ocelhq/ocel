@@ -6,7 +6,14 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { clientEnvValuesOf, migrates, setsEnv, setsSecret } from "../checks";
+import {
+  BUILD_VARIABLES,
+  clientEnvValuesOf,
+  migrates,
+  setsBuildVariables,
+  setsEnv,
+  setsSecret,
+} from "../checks";
 import {
   INITIAL_GREETING,
   JOURNEY_NONCE_ENV,
@@ -231,6 +238,11 @@ async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
   }
   if (setsJourneyNonce(cell.fixture.checks)) {
     lines.push(`${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`);
+  }
+  if (setsBuildVariables(cell.fixture.checks)) {
+    for (const [key, value] of Object.entries(BUILD_VARIABLES)) {
+      lines.push(`${key}=${value}`);
+    }
   }
   for (const [key, value] of Object.entries(clientEnvValuesOf(cell.fixture.checks))) {
     lines.push(`${key}=${value}`);

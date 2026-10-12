@@ -20,7 +20,7 @@ describe("findBindingsShown", () => {
     const history = [
       "RUN |1 OCEL_LIVE_HASH=9f2c0d /bin/sh -c OCEL_LIVE_DIR=/run/ocel-live pnpm run build # buildkit",
       "ARG OCEL_LIVE_HASH=9f2c0d",
-      "WORKDIR /workspace/tests/fixtures/prerender/next-dockerfile",
+      "WORKDIR /app/tests/fixtures/sdk/next",
       "postgres://127.0.0.1:5432/db",
     ].join("\n");
 
