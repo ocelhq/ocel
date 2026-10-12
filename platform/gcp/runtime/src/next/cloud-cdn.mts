@@ -1,14 +1,8 @@
-import type http from "node:http";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { type HeaderLookup, isStoredBySomeEdge } from "@platform/edge-contract/cache-control";
-import {
-  cacheTagsForCloudCdn,
-  cloudCdnTagLimits,
-  isImmutable,
-  uncacheable,
-} from "../cache/cloud-cdn-tags.mjs";
+import { uncacheableCacheControl } from "@framework/node-runtime/origin-cache-control";
+import { cacheTagsForCloudCdn, cloudCdnTagLimits } from "../cache/cloud-cdn-tags.mjs";
 
 const routerStateTree = "next-router-state-tree";
 
@@ -27,63 +21,6 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
 }
 
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
-
-export function isWithheldFromCloudCdn(headers: HeaderLookup, now: number): boolean {
-  return !isImmutable(headers.get("cache-control")) && isStoredBySomeEdge(headers, now);
-}
-
-function readWriteHeadHeader(headers: unknown, name: string): string | null {
-  if (Array.isArray(headers)) {
-    for (let i = 0; i + 1 < headers.length; i += 2) {
-      if (String(headers[i]).toLowerCase() === name) return String(headers[i + 1]);
-    }
-    return null;
-  }
-  if (headers !== null && typeof headers === "object") {
-    for (const [key, value] of Object.entries(headers)) {
-      if (key.toLowerCase() === name) return String(value);
-    }
-  }
-  return null;
-}
-
-function withoutWriteHeadCacheControl(headers: unknown): unknown {
-  if (Array.isArray(headers)) {
-    const kept: unknown[] = [];
-    for (let i = 0; i + 1 < headers.length; i += 2) {
-      if (String(headers[i]).toLowerCase() !== "cache-control")
-        kept.push(headers[i], headers[i + 1]);
-    }
-    return kept;
-  }
-  if (headers !== null && typeof headers === "object") {
-    return Object.fromEntries(
-      Object.entries(headers).filter(([key]) => key.toLowerCase() !== "cache-control"),
-    );
-  }
-  return headers;
-}
-
-export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): void {
-  const writeHead = prototype.writeHead;
-  prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (!this.headersSent) {
-      const headersAt = typeof args[1] === "string" ? 2 : 1;
-      const passed = args.length > headersAt ? args[headersAt] : undefined;
-      const headers = {
-        get: (name: string): string | null => {
-          const value = readWriteHeadHeader(passed, name) ?? this.getHeader(name);
-          return value === undefined || value === null ? null : String(value);
-        },
-      };
-      if (isWithheldFromCloudCdn(headers, Date.now())) {
-        this.setHeader("cache-control", uncacheable);
-        if (passed !== undefined) args[headersAt] = withoutWriteHeadCacheControl(passed);
-      }
-    }
-    return (writeHead as any).apply(this, args);
-  } as typeof prototype.writeHead;
-}
 
 export function forCloudCdn(response: Response, release: string | null, url: string): Response {
   const vary = response.headers.get("vary");
@@ -104,7 +41,7 @@ export function forCloudCdn(response: Response, release: string | null, url: str
   if (trimmedVary === null) rewritten.headers.delete("vary");
   else rewritten.headers.set("vary", trimmedVary);
   if (dropped.length > 0) {
-    rewritten.headers.set("cache-control", uncacheable);
+    rewritten.headers.set("cache-control", uncacheableCacheControl);
     rewritten.headers.delete("cache-tag");
   } else if (value === null) rewritten.headers.delete("cache-tag");
   else rewritten.headers.set("cache-tag", value);

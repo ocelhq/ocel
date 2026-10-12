@@ -16,6 +16,7 @@ import type { RequestHeaders } from "./request-headers.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
 import { readServedRoute } from "./served-route.mjs";
 import { revalidateTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
+import { now } from "./use-cache-entry.mjs";
 
 function unchunk(html: any): string {
   if (typeof html === "string") return html;
@@ -109,9 +110,7 @@ function toBuffer(bytes: Uint8Array): Buffer {
 
 function isStaleEntry(lastModified: number, tags: string[], revalidate: unknown): boolean {
   const timeStale =
-    typeof revalidate === "number" &&
-    revalidate > 0 &&
-    Date.now() - lastModified > revalidate * 1000;
+    typeof revalidate === "number" && revalidate > 0 && now() - lastModified > revalidate * 1000;
   return timeStale || tagClock.areTagsStale(tags, lastModified);
 }
 
@@ -185,7 +184,7 @@ export default class OcelCacheHandler {
       if (!isFetch) this.noteOriginTags(tagsOf(value, ctx));
       const cacheControl = !isFetch && cacheControlOf(ctx);
       const entry = {
-        lastModified: Date.now(),
+        lastModified: now(),
         value,
         ...(cacheControl && { cacheControl }),
       };

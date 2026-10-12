@@ -51,18 +51,19 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 
 	hooks := p.Hooks()
 	for name, set := range map[string]bool{
-		"PreflightDeploy":     hooks.PreflightDeploy != nil,
-		"VerifyGrants":        hooks.VerifyGrants != nil,
-		"InspectStack":        hooks.InspectStack != nil,
-		"PackApp":             hooks.PackApp != nil,
-		"EmbedCode":           hooks.EmbedCode != nil,
-		"WarmFunctions":       hooks.WarmFunctions != nil,
-		"ProgramEdge":         hooks.ProgramEdge != nil,
-		"EnsureImageRegistry": hooks.EnsureImageRegistry != nil,
-		"OpenRegistryImages":  hooks.OpenRegistryImages != nil,
-		"ProveIdentity":       hooks.ProveIdentity != nil,
-		"ServeBindingProxy":   hooks.ServeBindingProxy != nil,
-		"Cost":                hooks.Cost != nil,
+		"PreflightDeploy":       hooks.PreflightDeploy != nil,
+		"VerifyGrants":          hooks.VerifyGrants != nil,
+		"InspectStack":          hooks.InspectStack != nil,
+		"PackApp":               hooks.PackApp != nil,
+		"EmbedCode":             hooks.EmbedCode != nil,
+		"WarmFunctions":         hooks.WarmFunctions != nil,
+		"ProgramEdge":           hooks.ProgramEdge != nil,
+		"EnsureImageRegistry":   hooks.EnsureImageRegistry != nil,
+		"OpenRegistryImages":    hooks.OpenRegistryImages != nil,
+		"ProveIdentity":         hooks.ProveIdentity != nil,
+		"ServeBindingProxy":     hooks.ServeBindingProxy != nil,
+		"ReadNextServerRuntime": hooks.ReadNextServerRuntime != nil,
+		"Cost":                  hooks.Cost != nil,
 	} {
 		if !set {
 			t.Errorf("the aws provider's hooks leave %s nil, so the deploy skips a step this provider implements", name)

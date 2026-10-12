@@ -49,6 +49,32 @@ test.each([
   ],
   ["an Expires in the past", { expires: "Mon, 12 Oct 2026 11:59:00 GMT" }, false],
   ["an Expires that is not a date", { expires: "0" }, false],
+  ["a future Expires in RFC 850 form", { expires: "Monday, 12-Oct-26 12:01:00 GMT" }, true],
+  ["a future Expires in asctime form", { expires: "Mon Oct 12 12:01:00 2026" }, true],
+  ["a future asctime Expires with a one-digit day", { expires: "Tue Nov  3 12:01:00 2026" }, true],
+  ["an Expires in RFC 850 form in the past", { expires: "Monday, 12-Oct-26 11:59:00 GMT" }, false],
+  ["an Expires in asctime form in the past", { expires: "Mon Oct 12 11:59:00 2026" }, false],
+  [
+    "an RFC 850 Expires whose two-digit year is read as the past century",
+    { expires: "Sunday, 06-Nov-94 08:49:37 GMT" },
+    false,
+  ],
+  ["an Expires naming a day the month lacks", { expires: "Mon, 31 Feb 2027 12:00:00 GMT" }, false],
+  [
+    "an Expires that is not a date, which is already expired, with a stale-while-revalidate",
+    { "cache-control": "stale-while-revalidate=30", expires: "0" },
+    true,
+  ],
+  [
+    "an Expires in the past with a stale-while-revalidate",
+    { "cache-control": "stale-while-revalidate=30", expires: "Mon, 12 Oct 2026 11:59:00 GMT" },
+    true,
+  ],
+  [
+    "an Expires that is not a date under a max-age, which wins over it",
+    { "cache-control": "max-age=60", expires: "0" },
+    true,
+  ],
   [
     "an Expires later than the Date it is stated against",
     { expires: "Mon, 12 Oct 2026 11:01:00 GMT", date: "Mon, 12 Oct 2026 11:00:00 GMT" },

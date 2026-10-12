@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 func TestPayloads(t *testing.T) {
@@ -89,5 +91,33 @@ func TestPayloadsDiffer(t *testing.T) {
 			t.Errorf("%s and %s have the same bytes", name, other)
 		}
 		seen[p.SHA256] = name
+	}
+}
+
+func TestTheNextServerRuntimeHoldsThePreloadAlone(t *testing.T) {
+	files := NextServerRuntime()
+	if len(files[containerimage.NextServerPreloadFile]) == 0 {
+		t.Errorf("NextServerRuntime() holds no bytes for %s, and a Next container runs it from the image", containerimage.NextServerPreloadFile)
+	}
+	if len(files) != 1 {
+		t.Errorf("NextServerRuntime() holds %d files, want the preload alone: the cache handlers are bundled into it", len(files))
+	}
+}
+
+func TestTheRuntimeLayerDoesNotCarryTheNextServerPreload(t *testing.T) {
+	for _, architecture := range []string{arch.X8664, arch.ARM64} {
+		layer, err := RuntimeLayer(architecture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := zip.NewReader(bytes.NewReader(layer.Bytes), int64(len(layer.Bytes)))
+		if err != nil {
+			t.Fatalf("read the %s layer as a zip: %v", architecture, err)
+		}
+		for _, f := range r.File {
+			if strings.Contains(f.Name, containerimage.NextServerPreloadFile) {
+				t.Errorf("the %s layer carries %s, which only a Next container loads and every function would pay to unpack", architecture, f.Name)
+			}
+		}
 	}
 }

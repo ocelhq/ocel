@@ -33,10 +33,10 @@ const (
 var forwarded = []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2}
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Environ()))
+	os.Exit(run(context.Background(), os.Args[1:], os.Environ(), fileExists))
 }
 
-func run(ctx context.Context, command []string, environ []string) int {
+func run(ctx context.Context, command []string, environ []string, present func(path string) bool) int {
 	if len(command) == 0 {
 		return fatal("the image names no command for the runtime to run: it must set an ENTRYPOINT or CMD")
 	}
@@ -78,6 +78,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
+	env = containerimage.AppendNextServerPreload(present, env)
 
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
@@ -138,6 +139,11 @@ func run(ctx context.Context, command []string, environ []string) int {
 			return exitCode(exit)
 		}
 	}
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func exitCode(exit child.Exit) int {

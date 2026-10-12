@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads
@@ -36,7 +37,10 @@ var (
 	realtimeAuthorizer = load("realtime-authorizer.zip")
 	imageOptimizer     = load("image-optimizer.zip")
 	tagInvalidator     = load("tag-invalidator.zip")
+	nextServerRuntime  = loadNextServerRuntime()
 )
+
+var nextServerRuntimeFiles = []string{containerimage.NextServerPreloadFile}
 
 func RuntimeLayer(architecture string) (Payload, error) {
 	goarch, builds := arch.GoArch(architecture)
@@ -64,6 +68,8 @@ func ImageOptimizer() Payload { return imageOptimizer }
 
 func TagInvalidator() Payload { return tagInvalidator }
 
+func NextServerRuntime() map[string][]byte { return nextServerRuntime }
+
 func Of(data []byte) Payload {
 	sum := sha256.Sum256(data)
 	return Payload{
@@ -79,4 +85,16 @@ func load(name string) Payload {
 		panic(fmt.Sprintf("payloads: %v", err))
 	}
 	return Of(data)
+}
+
+func loadNextServerRuntime() map[string][]byte {
+	files := make(map[string][]byte, len(nextServerRuntimeFiles))
+	for _, name := range nextServerRuntimeFiles {
+		body, err := embedded.ReadFile(path.Join("dist", "next", name))
+		if err != nil {
+			panic(fmt.Sprintf("payloads: %v", err))
+		}
+		files[name] = body
+	}
+	return files
 }

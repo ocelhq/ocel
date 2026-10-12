@@ -26,7 +26,8 @@
     "./use-cache-default": "./src/use-cache-default.mts",
     "./use-cache-entry": "./src/use-cache-entry.mts",
     "./use-cache-remote": "./src/use-cache-remote.mts",
-    "./use-cache-store": "./src/use-cache-store.mts"
+    "./use-cache-store": "./src/use-cache-store.mts",
+    "./withhold-responses": "./src/withhold-responses.mts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

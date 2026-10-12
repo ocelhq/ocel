@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type http from "node:http";
 import { join } from "node:path";
 import type { ProjectManifest } from "./project-manifest.mjs";
+import { now } from "./use-cache-entry.mjs";
 
 const MAIN_KEY_PREFIX = "v4";
 const PRERENDER_REVALIDATE_HEADER = "x-prerender-revalidate";
@@ -35,7 +36,7 @@ class PagesRuntimeIncrementalCache {
     if (entry?.value?.kind !== "FETCH") return null;
 
     const revalidate = ctx.revalidate || entry.value.revalidate;
-    const age = (Date.now() - (entry.lastModified || 0)) / 1000;
+    const age = (now() - (entry.lastModified || 0)) / 1000;
     return {
       isStale: age > revalidate,
       value: { kind: "FETCH", data: entry.value.data, revalidate },

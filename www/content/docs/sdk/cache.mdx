@@ -136,7 +136,8 @@ allows or, without one, its `Cache-Control` or `Expires`, and Cloudflare for as 
 shared lifetime when there is no `s-maxage`, take a future `Expires` when `Cache-Control` names
 neither (the load balancer only when there is no `Cache-Control` at all), and store a lifetime
 of zero that names a `stale-while-revalidate`, so mark a personalised response `private` on
-such a route. Your
+such a route. An `Expires` is read in any of the three date forms HTTP allows, and one that is
+not a date counts as already expired, as RFC 9111 has it. Your
 handler's `Cache-Control` still reaches the browser as you set it, stored or not, on every edge.
 
 On such a route Cloudflare asks for the response of a `GET` that carries no cookie and no
@@ -162,10 +163,13 @@ sets a cookie is never stored.
 
 ### Previews and draft content
 
-A request carrying the route's `bypassToken` in the `__prerender_bypass` cookie skips the
-cache: it keeps its cookies, is rendered fresh and answered `private, no-store`, and is never
-stored. Set the cookie when an author starts a preview, and clear it when they stop. A `GET`
-or `HEAD` with the token in the `x-prerender-revalidate` header reaches your app on every edge,
+A request carrying the table's `bypassToken` in the `__prerender_bypass` cookie skips the
+cache on every route of the app, whether the route has a rule or not and on `fallback` too: it
+keeps its cookies, is rendered fresh and answered `private, no-store` with no cache tags, and
+is never stored. Set the cookie when an author starts a preview, and clear it when they stop. A
+table that states no `bypassToken` has none to match. A `GET`
+or `HEAD` with the token in the `x-prerender-revalidate` header on a route with a rule reaches
+your app on every edge,
 is rendered fresh and answered `private, no-store`, and clears the path's entry, so the next
 request fills it again. No edge refills the entry from the revalidating request itself: the
 Cloudflare gateway renders it outside its cache and purges the path, and behind CloudFront or
@@ -197,7 +201,8 @@ Some of the route table is applied only where the edge can do it:
 - `basePath` is applied by your app when it matches patterns.
 - A container app is given no route table, and nothing in its container shapes or tags its
   responses. CloudFront and the load balancer store them as their own headers allow, untagged,
-  so a revalidation does not reach them; a Next container on Google Cloud keeps every response
-  the load balancer would store out of its cache instead. Behind Cloudflare a container app is
-  forwarded to the load balancer and runs none of the gateway, so the gateway caches nothing
-  for it.
+  so a revalidation does not reach them; a Next container, on AWS and on Google Cloud, keeps
+  every response the edge would store out of its cache instead, and its pages are served from
+  Next's own cache, which a revalidation clears. A response marked `immutable` is still stored.
+  Behind Cloudflare a container app is forwarded to the load balancer and runs none of the
+  gateway, so the gateway caches nothing for it.

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -45,6 +47,7 @@ const (
 	containerMemory     = "1024"
 	containerName       = "app"
 	containerPortEnv    = "PORT"
+	containerMemoryEnv  = "OCEL_FUNCTION_MEMORY_MB"
 
 	containerLocalName = "container"
 
@@ -95,6 +98,7 @@ type containerWork struct {
 	role        naming.Coordinate
 	infra       containerInfra
 	public      bool
+	cache       *isrConfig
 }
 
 func (w *containerWork) readListenerArn() string {
@@ -198,6 +202,13 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
+	if spec.App.Framework == buildoutput.FrameworkNext {
+		env[containerMemoryEnv] = containerMemory
+	}
+	cache := r.containerCache(spec)
+	if cache != nil {
+		maps.Copy(env, cache.env())
+	}
 	values := executionRole{App: app.App, VariablesKeyARN: r.cfg.VariablesKeyARN}
 	if bundle.hasLive() {
 		values.ValuesTableARN = r.cfg.VariablesTableARN
@@ -222,7 +233,20 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
 		public:     isRoutedPublicly(spec),
+		cache:      cache,
 	}, nil
+}
+
+func (r *release) containerCache(spec provider.StackSpec) *isrConfig {
+	if spec.App.Framework != buildoutput.FrameworkNext {
+		return nil
+	}
+	cache := r.isrCache(spec)
+	if cache != nil {
+		cache.EdgeReadable = false
+		cache.PurgeSecret = ""
+	}
+	return cache
 }
 
 func liveOnly(values provider.AppValues) provider.AppValues {
@@ -403,7 +427,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(w.policies) > 0 || w.readsLive() {
+	if len(w.policies) > 0 || w.readsLive() || w.cache != nil {
 		role, granted, err := w.taskRole(ctx)
 		if err != nil {
 			return err
@@ -603,6 +627,20 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		}
 		granted = append(granted, policy)
 	}
+	if w.cache != nil {
+		rendered, err := isrPolicy(*w.cache)
+		if err != nil {
+			return nil, nil, err
+		}
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "isr", "cache"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(rendered),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, policy)
+	}
 	if w.readsLive() {
 		rendered, err := variablesReadPolicy(w.values)
 		if err != nil {
@@ -634,6 +672,11 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	}
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
+	}
+	if work.cache != nil {
+		if err := seedTagSnapshot(ctx, r.cfg, work.cache, time.Now()); err != nil {
+			return provider.StackResult{}, err
+		}
 	}
 	public, err := readPublicRanges(spec)
 	if err != nil {
