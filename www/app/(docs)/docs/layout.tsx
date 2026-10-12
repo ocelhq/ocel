@@ -3,6 +3,7 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { CSSProperties, ReactNode } from "react";
+import { SidebarHover } from "@/components/docs/sidebar-hover";
 import { baseOptions } from "@/lib/layout.shared";
 import { layoutTree, tabColors } from "@/lib/source";
 import "./globals.css";
@@ -71,6 +72,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             }}
           >
             {children}
+            <SidebarHover />
           </DocsLayout>
         </RootProvider>
         {/* impeccable-live-start */}
