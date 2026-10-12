@@ -359,11 +359,11 @@ func TestThePlanToDestroyAReleaseShowsTheStacksDestroyTakesDown(t *testing.T) {
 		t.Fatalf("provisionWorkers() = %v", err)
 	}
 
-	plan, err := release.Stacks.PlanDestroy(ctx, spec.Ref, nil)
+	plan, err := release.PlanDestroy(ctx, spec.Ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
 	}
-	if err := release.Stacks.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, spec.Ref, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -415,7 +415,7 @@ func TestReclaimingAFailedDeploysReleaseLeavesTheWorkersTheLiveReleaseRuns(t *te
 		t.Fatalf("provisionWorkers() of the failing deploy's release = %v", err)
 	}
 
-	if err := release.Stacks.Destroy(ctx, failed.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, failed.Ref, nil, nil); err != nil {
 		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
 	}
 
@@ -442,7 +442,7 @@ func TestReclaimingTheOnlyReleaseOfAnAppTakesDownItsWorkersStack(t *testing.T) {
 	}
 	recordRelease(t, release.cfg.KeyValues, spec.Ref)
 
-	if err := release.Stacks.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, spec.Ref, nil, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
