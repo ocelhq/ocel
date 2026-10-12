@@ -17,7 +17,7 @@ let serveBundle: string;
 beforeAll(async () => {
   const dist = await mkdtemp(join(tmpdir(), "ocel-serve-"));
   dirs.push(dist);
-  await execFileAsync("bun", ["scripts/bundle-serve.mjs", relative(pkgDir, dist)], { cwd: pkgDir });
+  await execFileAsync("bun", ["test/bundle-serve.mjs", relative(pkgDir, dist)], { cwd: pkgDir });
   serveBundle = join(dist, "serve.mjs");
 }, 120_000);
 
