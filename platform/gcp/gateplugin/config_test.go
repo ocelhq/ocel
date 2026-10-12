@@ -38,6 +38,29 @@ func TestAConfigRoundTripsEveryGateItHolds(t *testing.T) {
 	}
 }
 
+func TestAConfigFindsOneProjectsGateAndTheHostsItGates(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
+		map[string]string{"pr-2-shop.example.dev": "shop", "pr-1-shop.example.dev": "shop", "main-blog.example.dev": "blog"},
+		map[string]previewgate.Gate{"shop": {Key: "shop-key"}, "blog": {Key: "blog-key"}, "docs": {Key: "docs-key"}},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gate, hosts, found := parsed.FindProject("shop")
+	if !found || gate.Key != "shop-key" || !reflect.DeepEqual(hosts, []string{"pr-1-shop.example.dev", "pr-2-shop.example.dev"}) {
+		t.Errorf("FindProject(shop) = %+v, %v, %t, want shop's gate and its two hosts", gate, hosts, found)
+	}
+	if gate, hosts, found := parsed.FindProject("docs"); !found || gate.Key != "docs-key" || len(hosts) != 0 {
+		t.Errorf("FindProject(docs) = %+v, %v, %t, want docs' gate and no hosts", gate, hosts, found)
+	}
+	if _, _, found := parsed.FindProject("ghost"); found {
+		t.Error("FindProject(ghost) found a gate the config does not hold")
+	}
+}
+
 func normalized(gate previewgate.Gate) previewgate.Gate {
 	if len(gate.BypassSecrets) == 0 {
 		gate.BypassSecrets = nil

@@ -64,6 +64,25 @@ func (e *Edge) publishGates(ctx context.Context, proof gateProof, log progress.L
 	return e.proveGated(ctx, proof, log)
 }
 
+func (e *Edge) runsRecordedGate(ctx context.Context, slug string, record gateRecord, gated bool) (bool, error) {
+	publication, published, err := e.readGatePublication(ctx)
+	if err != nil || !published {
+		return !gated, err
+	}
+	if !publication.Confirmed {
+		return false, nil
+	}
+	config, err := gateplugin.ParseConfig(publication.Main.Config)
+	if err != nil {
+		return false, nil
+	}
+	gate, hosts, running := config.FindProject(slug)
+	if !gated || !running {
+		return !gated && !running, nil
+	}
+	return sameGateRecord(gateRecord{Hosts: hosts, Gate: gate}, record), nil
+}
+
 func (e *Edge) refuseOversizedConfig(config string) error {
 	if total := len(e.deps.GatePlugin) + len(config); total > gateplugin.PackageLimitBytes {
 		return refusal.Refuse(refusal.CodeInvalid,

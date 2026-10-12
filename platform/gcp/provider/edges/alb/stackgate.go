@@ -72,14 +72,23 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	}
 	routed := s.listRoutedHosts()
 	newlyGated := false
-	if _, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
+	var record gateRecord
+	changed, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
 		if gate == nil {
 			return gateRecord{}, false
 		}
 		newlyGated = !found
-		return gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *gate}, true
-	}); err != nil {
+		record = gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *gate}
+		return record, true
+	})
+	if err != nil {
 		return err
+	}
+	if !changed {
+		running, err := s.e.runsRecordedGate(ctx, spec.Slug, record, gate != nil)
+		if err != nil || running {
+			return err
+		}
 	}
 	log := sayingTo(spec.Warn)
 	proof := gateProof{Address: s.recorded.LoadBalancer.Address}
@@ -129,8 +138,15 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 	if !s.isGated() {
 		return nil
 	}
-	if _, err := s.e.changeGateRecord(ctx, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false }); err != nil {
+	changed, err := s.e.changeGateRecord(ctx, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false })
+	if err != nil {
 		return err
+	}
+	if !changed {
+		running, err := s.e.runsRecordedGate(ctx, s.state.Slug, gateRecord{}, false)
+		if err != nil || running {
+			return err
+		}
 	}
 	return s.e.publishGates(ctx, gateProof{}, progress.Discard())
 }
