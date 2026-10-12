@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -100,32 +101,97 @@ func workerNames(workers []provider.WorkerSpec) []string {
 }
 
 func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.Function, error) {
-	if spec.App == nil || len(spec.App.Workers) == 0 || work == nil {
+	if !hostsWorkersStack(spec, work) {
 		return nil, nil
 	}
-	if spec.Ref.Name.Env == "" {
-		return nil, nil
+	if len(spec.App.Workers) == 0 {
+		return nil, r.removeIdleWorkers(ctx, spec, progress)
 	}
-	hosted, err := r.workersWork(spec, work)
+	workers, err := r.workersWork(spec, work)
 	if err != nil {
 		return nil, err
 	}
-	ref := provider.StackRef{Project: spec.Ref.Project, Tier: spec.Ref.Tier, Name: hosted.stack}
-	if r.cfg.KeyValues != nil {
-		entry, err := keyvalue.ReadOrEmpty(ctx, r.cfg.KeyValues, workersAt(ref))
-		if err != nil {
-			return nil, err
-		}
-		entry.Value = []byte("{}")
-		if _, err := r.cfg.KeyValues.Write(ctx, entry); err != nil {
-			return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
-		}
+	ref := workersRef(spec.Ref)
+	if err := r.recordWorkers(ctx, ref); err != nil {
+		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 	}
-	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: hosted}, progress)
+	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}
 	return result.Functions, nil
+}
+
+func hostsWorkersStack(spec provider.StackSpec, work *appWork) bool {
+	return spec.App != nil && work != nil && spec.Ref.Name.Env != ""
+}
+
+func workersRef(app provider.StackRef) provider.StackRef {
+	return provider.StackRef{Project: app.Project, Tier: app.Tier, Name: workersStack(app.Name.Env, app.Name.App)}
+}
+
+func (r *release) recordWorkers(ctx context.Context, ref provider.StackRef) error {
+	if r.cfg.KeyValues == nil {
+		return nil
+	}
+	entry, err := keyvalue.ReadOrEmpty(ctx, r.cfg.KeyValues, workersAt(ref))
+	if err != nil || len(entry.Value) > 0 {
+		return err
+	}
+	entry.Value = []byte("{}")
+	_, err = r.cfg.KeyValues.Write(ctx, entry)
+	return err
+}
+
+func (r *release) hasRecordedWorkers(ctx context.Context, ref provider.StackRef) (bool, error) {
+	if r.cfg.KeyValues == nil {
+		return false, nil
+	}
+	_, err := r.cfg.KeyValues.Read(ctx, workersAt(ref))
+	if errors.Is(err, keyvalue.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (r *release) removeIdleWorkers(ctx context.Context, spec provider.StackSpec, progress progress.Log) error {
+	if spec.Ref.Name.Env == "" {
+		return nil
+	}
+	ref := workersRef(spec.Ref)
+	recorded, err := r.hasRecordedWorkers(ctx, ref)
+	if err != nil || !recorded {
+		return err
+	}
+	say(progress, fmt.Sprintf("Removing stack %s: app %s hosts no workers any more", ref.Name, spec.Ref.Name.App))
+	return r.destroyWorkersStack(ctx, ref, progress)
+}
+
+func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
+		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
+	}
+	return keyvalue.Forget(ctx, r.cfg.KeyValues, workersAt(ref))
+}
+
+func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.ChangeGroup, error) {
+	if !hostsWorkersStack(spec, work) {
+		return nil, nil
+	}
+	ref := workersRef(spec.Ref)
+	if len(spec.App.Workers) == 0 {
+		if recorded, err := r.hasRecordedWorkers(ctx, ref); err != nil || !recorded {
+			return nil, err
+		}
+		planned, err := r.automation.PreviewDestroy(ctx, ref, progress)
+		return planned.Groups, err
+	}
+	workers, err := r.workersWork(spec, work)
+	if err != nil {
+		return nil, err
+	}
+	planned, err := r.automation.Preview(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
+	return planned.Groups, err
 }
 
 func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, error) {
@@ -145,29 +211,98 @@ func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, erro
 	return provider.StackResult{Functions: functions}, nil
 }
 
-func (r *Stacks) destroyWorkers(ctx context.Context, opened *release, ref provider.StackRef, progress progress.Log) error {
-	store := opened.cfg.KeyValues
-	if store == nil || !ref.Name.IsInfra() {
-		return nil
+func (r *release) findWorkersOfLastRelease(ctx context.Context, app provider.StackRef) (provider.StackRef, bool, error) {
+	if app.Name.IsInfra() || app.Name.Release.IsZero() || app.Name.Env == "" {
+		return provider.StackRef{}, false, nil
 	}
-	partition := stackrecords.StacksPartition(ref.Tier, ref.Project)
-	recorded, err := store.List(ctx, partition, workersKey, ref.Name.Env)
+	ref := workersRef(app)
+	recorded, err := r.hasRecordedWorkers(ctx, ref)
+	if err != nil || !recorded {
+		return provider.StackRef{}, false, err
+	}
+	releases, err := stackrecords.List(ctx, r.cfg.KeyValues, app.Tier, app.Project)
 	if err != nil {
+		return provider.StackRef{}, false, err
+	}
+	for _, other := range releases {
+		if other.Name.Env == app.Name.Env && other.Name.App == app.Name.App && !other.Name.Release.IsZero() && other.Name != app.Name {
+			return provider.StackRef{}, false, nil
+		}
+	}
+	return ref, true, nil
+}
+
+func (r *release) planWorkersOfLastRelease(ctx context.Context, app provider.StackRef, progress progress.Log) ([]provider.ChangeGroup, error) {
+	ref, last, err := r.findWorkersOfLastRelease(ctx, app)
+	if err != nil || !last {
+		return nil, err
+	}
+	planned, err := r.automation.PreviewDestroy(ctx, ref, progress)
+	return planned.Groups, err
+}
+
+func (r *release) destroyWorkersOfLastRelease(ctx context.Context, app provider.StackRef, progress progress.Log) error {
+	ref, last, err := r.findWorkersOfLastRelease(ctx, app)
+	if err != nil || !last {
 		return err
 	}
-	for _, entry := range recorded {
-		if len(entry.Key.Path) != 3 {
-			continue
-		}
-		stack := provider.StackRef{Project: ref.Project, Tier: ref.Tier, Name: workersStack(entry.Key.Path[1], entry.Key.Path[2])}
-		if err := opened.automation.Destroy(ctx, stack, progress); err != nil {
-			return fmt.Errorf("take down the workers of %s: %w", stack.Name.App, err)
-		}
-		if err := keyvalue.Forget(ctx, store, entry.Key); err != nil {
+	say(progress, fmt.Sprintf("Removing stack %s: release %s is the last of app %s", ref.Name, app.Name.Release, app.Name.App))
+	return r.destroyWorkersStack(ctx, ref, progress)
+}
+
+func (r *Stacks) PlanWorkersRetirement(ctx context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
+	opened, retired, err := r.listRetiredWorkers(ctx, live)
+	if err != nil || opened == nil {
+		return provider.Plan{}, err
+	}
+	var plan provider.Plan
+	for _, stack := range retired {
+		plan.Groups = append(plan.Groups, provider.ChangeGroup{
+			Kind:   provider.StackGroupKind,
+			Name:   stack.Name.String(),
+			Action: provider.ActionDelete,
+			Reason: retiredReason(live, stack),
+		})
+	}
+	return plan, nil
+}
+
+func (r *Stacks) RetireWorkers(ctx context.Context, live provider.LiveApps, progress progress.Log) error {
+	opened, retired, err := r.listRetiredWorkers(ctx, live)
+	if err != nil || opened == nil {
+		return err
+	}
+	for _, stack := range retired {
+		say(progress, fmt.Sprintf("Removing stack %s: %s", stack.Name, retiredReason(live, stack)))
+		if err := opened.destroyWorkersStack(ctx, stack, progress); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func retiredReason(live provider.LiveApps, stack provider.StackRef) string {
+	return fmt.Sprintf("app %s is no longer deployed to %s", stack.Name.App, live.Env)
+}
+
+func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps) (*release, []provider.StackRef, error) {
+	infra := provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: naming.InfraStack(live.Env)}
+	opened, err := r.at(ctx, infra, "")
+	if err != nil || opened.cfg.KeyValues == nil {
+		return nil, nil, err
+	}
+	recorded, err := opened.cfg.KeyValues.List(ctx, stackrecords.StacksPartition(live.Tier, live.Slug), workersKey, live.Env)
+	if err != nil {
+		return nil, nil, err
+	}
+	var retired []provider.StackRef
+	for _, entry := range recorded {
+		if len(entry.Key.Path) != 3 || slices.Contains(live.Apps, entry.Key.Path[2]) {
+			continue
+		}
+		retired = append(retired, provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: workersStack(entry.Key.Path[1], entry.Key.Path[2])})
+	}
+	return opened, retired, nil
 }
 
 func (w *workersWork) served(worker string) []consumerQueue {

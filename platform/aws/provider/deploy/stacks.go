@@ -448,7 +448,16 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return opened.automation.PreviewDestroy(ctx, ref, progress)
+	removal, err := opened.automation.PreviewDestroy(ctx, ref, progress)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	workerGroups, err := opened.planWorkersOfLastRelease(ctx, ref, progress)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	removal.Groups = append(removal.Groups, workerGroups...)
+	return removal, nil
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
@@ -465,7 +474,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		defer func() {
 			_ = resources.ReconcileImages(ctx, r.cfg.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
 		}()
-		return r.provisionContainer(ctx, spec, progress)
+		container, err := r.provisionContainer(ctx, spec, progress)
+		if err != nil {
+			return provider.StackResult{}, err
+		}
+		return container, r.removeIdleWorkers(ctx, spec, progress)
 	}
 	prepared, work, err := r.prepare(ctx, spec, runProvision)
 	if err != nil {
@@ -509,7 +522,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, _, err := r.prepare(ctx, spec, runPreview)
+	prepared, work, err := r.prepare(ctx, spec, runPreview)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -520,6 +533,11 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
 	}
+	workerGroups, err := r.previewWorkers(ctx, prepared, work, progress)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	previewed.Groups = append(previewed.Groups, workerGroups...)
 	return previewed, nil
 }
 
@@ -583,7 +601,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 	if err != nil {
 		return err
 	}
-	if err := r.destroyWorkers(ctx, opened, ref, progress); err != nil {
+	if err := opened.destroyWorkersOfLastRelease(ctx, ref, progress); err != nil {
 		return err
 	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {

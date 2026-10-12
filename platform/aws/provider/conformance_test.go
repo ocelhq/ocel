@@ -63,6 +63,7 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 		"ProveIdentity":       hooks.ProveIdentity != nil,
 		"ServeBindingProxy":   hooks.ServeBindingProxy != nil,
 		"Cost":                hooks.Cost != nil,
+		"RemovedApps":         hooks.RemovedApps != nil,
 	} {
 		if !set {
 			t.Errorf("the aws provider's hooks leave %s nil, so the deploy skips a step this provider implements", name)

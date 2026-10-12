@@ -2,14 +2,21 @@ package deploy
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	pulumi "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func newWorkerOutputs(names map[string]string) auto.OutputMap {
@@ -30,6 +37,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	cfg.ImageOptimizerURL = ""
 	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
 	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
+	cfg.KeyValues = fake.NewKeyValues()
 	for _, worker := range workers {
 		spec.App.Workers = append(spec.App.Workers, provider.WorkerSpec{Name: worker})
 	}
@@ -168,5 +176,280 @@ func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *tes
 	}
 	if len(physical) != 2 || physical[resources.WorkerName("media")] != lambdas["media"] || physical[resources.WorkerName("ledger")] != lambdas["ledger"] {
 		t.Errorf("decoded %v, want each worker by its Lambda's name %v", physical, lambdas)
+	}
+}
+
+func countRecordedWorkerStacks(t *testing.T, store keyvalue.Store, ref provider.StackRef) int {
+	t.Helper()
+	entries, err := store.List(context.Background(), stackrecords.StacksPartition(ref.Tier, ref.Project), workersKey)
+	if err != nil {
+		t.Fatalf("list the recorded workers stacks: %v", err)
+	}
+	return len(entries)
+}
+
+func recordWorkersStack(t *testing.T, store keyvalue.Store, ref provider.StackRef) {
+	t.Helper()
+	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: workersAt(ref), Value: []byte("{}")}); err != nil {
+		t.Fatalf("record the workers stack of %s: %v", ref.Name, err)
+	}
+}
+
+func TestAnAppThatNoLongerHostsWorkersTakesDownItsWorkersStackAndSaysSo(t *testing.T) {
+	t.Parallel()
+
+	release, spec, work, engine := newReleaseHostingWorkers(t, "media")
+	engine.outputs = newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"})
+	ctx := context.Background()
+	if _, err := release.provisionWorkers(ctx, spec, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() = %v", err)
+	}
+	spec.App.Workers = nil
+	log := &fake.Log{}
+
+	functions, err := release.provisionWorkers(ctx, spec, work, log)
+	if err != nil {
+		t.Fatalf("provisionWorkers() after the app dropped its workers = %v", err)
+	}
+
+	workers := workersStack(spec.Ref.Name.Env, "web").String()
+	if len(functions) != 0 {
+		t.Errorf("returned %v, want no worker where the app hosts none", functions)
+	}
+	if got := engine.torn(); !slices.Equal(got, []string{workers}) {
+		t.Errorf("took down %v, want the workers stack %s the app no longer hosts", got, workers)
+	}
+	if got := countRecordedWorkerStacks(t, release.cfg.KeyValues, spec.Ref); got != 0 {
+		t.Errorf("the deploy still records %d workers stacks, so a later retirement would take down a stack that is gone", got)
+	}
+	if !slices.ContainsFunc(log.Lines(), func(line string) bool { return strings.Contains(line, workers) }) {
+		t.Errorf("the deploy said %q, want a line naming the workers stack it removed", log.Lines())
+	}
+}
+
+func TestAnAppThatNeverHostedWorkersTakesDownNoStack(t *testing.T) {
+	t.Parallel()
+
+	release, spec, work, engine := newReleaseHostingWorkers(t)
+
+	if _, err := release.provisionWorkers(context.Background(), spec, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() = %v", err)
+	}
+	if got := engine.torn(); len(got) != 0 {
+		t.Errorf("took down %v, want nothing where the app never hosted workers", got)
+	}
+}
+
+func mustReleaseToken(t *testing.T, value string) naming.ReleaseToken {
+	t.Helper()
+	token, err := naming.ParseReleaseToken(value)
+	if err != nil {
+		t.Fatalf("ParseReleaseToken(%q) = %v", value, err)
+	}
+	return token
+}
+
+func TestPlanningAnAppThatHostsWorkersIncludesTheWorkersStack(t *testing.T) {
+	t.Parallel()
+
+	release, spec, _, _ := newReleaseHostingWorkers(t, "media")
+
+	plan, err := release.plan(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatalf("plan() = %v", err)
+	}
+	workers := workersStack(spec.Ref.Name.Env, "web").String()
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Kind == provider.StackGroupKind && group.Name == workers && group.Action == provider.ActionCreate
+	}) {
+		t.Errorf("plan groups = %v, want a group creating the workers stack %s the deploy provisions", plan.Groups, workers)
+	}
+}
+
+func TestPlanningAnAppThatNoLongerHostsWorkersListsTheRemovalOfItsWorkersStack(t *testing.T) {
+	t.Parallel()
+
+	release, spec, _, engine := newReleaseHostingWorkers(t)
+	recordWorkersStack(t, release.cfg.KeyValues, provider.StackRef{Project: spec.Ref.Project, Tier: spec.Ref.Tier, Name: workersStack(spec.Ref.Name.Env, "web")})
+	engine.previewed = []provider.Change{{Kind: "aws:lambda/function:Function", Name: "fn"}}
+
+	plan, err := release.plan(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatalf("plan() = %v", err)
+	}
+	workers := workersStack(spec.Ref.Name.Env, "web").String()
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Name == workers && group.Action == provider.ActionDelete
+	}) {
+		t.Errorf("plan groups = %v, want a group deleting the workers stack %s the deploy removes", plan.Groups, workers)
+	}
+}
+
+func recordWorkersStacks(t *testing.T, store keyvalue.Store, stacks ...naming.StackName) {
+	t.Helper()
+	for _, stack := range stacks {
+		recordWorkersStack(t, store, provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: stack})
+	}
+}
+
+func liveInProd(apps ...string) provider.LiveApps {
+	return provider.LiveApps{Slug: "conformance", Tier: environment.TierProduction, Env: "prod", Apps: apps}
+}
+
+func TestRetiringWorkersTakesDownTheWorkersStackOfEachAppNoLongerDeployedToTheEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.KeyValues = fake.NewKeyValues()
+	engine := &mockedEngine{}
+	recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"), workersStack("staging", "jobs"))
+	log := &fake.Log{}
+
+	if err := stacksWith(cfg, engine).RetireWorkers(context.Background(), liveInProd("web"), log); err != nil {
+		t.Fatalf("RetireWorkers() = %v", err)
+	}
+
+	retired := workersStack("prod", "jobs").String()
+	if got := engine.torn(); !slices.Equal(got, []string{retired}) {
+		t.Errorf("took down %v, want only %s, whose app this environment no longer deploys", got, retired)
+	}
+	if got := countRecordedWorkerStacks(t, cfg.KeyValues, provider.StackRef{Project: "conformance", Tier: environment.TierProduction}); got != 2 {
+		t.Errorf("%d workers stacks are recorded, want the live app's and the other environment's", got)
+	}
+	if !slices.ContainsFunc(log.Lines(), func(line string) bool { return strings.Contains(line, retired) }) {
+		t.Errorf("the deploy said %q, want a line naming the workers stack it removed", log.Lines())
+	}
+}
+
+func TestThePlanToRetireWorkersDeletesEachStackRetiringTakesDown(t *testing.T) {
+	t.Parallel()
+
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.KeyValues = fake.NewKeyValues()
+	engine := &mockedEngine{}
+	recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"), workersStack("staging", "jobs"))
+
+	plan, err := stacksWith(cfg, engine).PlanWorkersRetirement(context.Background(), liveInProd(), nil)
+	if err != nil {
+		t.Fatalf("PlanWorkersRetirement() = %v", err)
+	}
+	var deleted []string
+	for _, group := range plan.Groups {
+		if group.Kind == provider.StackGroupKind && group.Action == provider.ActionDelete {
+			deleted = append(deleted, group.Name)
+		}
+	}
+	slices.Sort(deleted)
+	if want := []string{workersStack("prod", "jobs").String(), workersStack("prod", "web").String()}; !slices.Equal(deleted, want) {
+		t.Errorf("plan deletes %v, want every workers stack of the environment with no app live %v", deleted, want)
+	}
+	if got := engine.torn(); len(got) != 0 {
+		t.Errorf("planning took down %v, want nothing", got)
+	}
+}
+
+func TestThePlanToDestroyAReleaseShowsTheStacksDestroyTakesDown(t *testing.T) {
+	t.Parallel()
+
+	release, spec, work, engine := newReleaseHostingWorkers(t, "media")
+	engine.outputs = newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"})
+	engine.previewed = []provider.Change{{Kind: "aws:lambda/function:Function", Name: "fn"}}
+	ctx := context.Background()
+	if _, err := release.provisionWorkers(ctx, spec, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() = %v", err)
+	}
+
+	plan, err := release.Stacks.PlanDestroy(ctx, spec.Ref, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroy() = %v", err)
+	}
+	if err := release.Stacks.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+
+	var shown []string
+	for _, group := range plan.Groups {
+		shown = append(shown, group.Name)
+	}
+	slices.Sort(shown)
+	torn := engine.torn()
+	slices.Sort(torn)
+	if !slices.Equal(shown, torn) {
+		t.Errorf("PlanDestroy() shows %v and Destroy() took down %v, and a teardown is consented to by what it shows", shown, torn)
+	}
+}
+
+func TestAnAppMovedToContainerComputeTakesDownTheWorkersStackItHadOnFunctions(t *testing.T) {
+	t.Parallel()
+
+	stacks, engine, _, spec := retainingContainers(t)
+	ref := workersRef(spec.Ref)
+	opened, err := stacks.at(context.Background(), spec.Ref, edgeKindOf(spec))
+	if err != nil {
+		t.Fatalf("open the release: %v", err)
+	}
+	recordWorkersStack(t, opened.cfg.KeyValues, ref)
+
+	if _, err := stacks.Provision(context.Background(), spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if !slices.Contains(engine.torn(), ref.Name.String()) {
+		t.Errorf("took down %v, want the workers stack %s a container app cannot run", engine.torn(), ref.Name)
+	}
+}
+
+func TestReclaimingAFailedDeploysReleaseLeavesTheWorkersTheLiveReleaseRuns(t *testing.T) {
+	t.Parallel()
+
+	release, spec, work, engine := newReleaseHostingWorkers(t, "media")
+	engine.outputs = newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"})
+	ctx := context.Background()
+	if _, err := release.provisionWorkers(ctx, spec, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() of the live release = %v", err)
+	}
+	recordRelease(t, release.cfg.KeyValues, spec.Ref)
+	failed := spec
+	failed.Ref.Name = naming.AppStack(spec.Ref.Name.Env, "web", mustReleaseToken(t, "r00000009"))
+	if _, err := release.provisionWorkers(ctx, failed, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() of the failing deploy's release = %v", err)
+	}
+
+	if err := release.Stacks.Destroy(ctx, failed.Ref, nil, nil); err != nil {
+		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
+	}
+
+	if workers := workersRef(spec.Ref).Name.String(); slices.Contains(engine.torn(), workers) {
+		t.Errorf("took down %v on reclaiming a release that never went live, so the live release's queues and schedules stop being served", engine.torn())
+	}
+}
+
+func recordRelease(t *testing.T, store keyvalue.Store, ref provider.StackRef) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: ref.Name.App}); err != nil {
+		t.Fatalf("record the release %s: %v", ref.Name, err)
+	}
+}
+
+func TestReclaimingTheOnlyReleaseOfAnAppTakesDownItsWorkersStack(t *testing.T) {
+	t.Parallel()
+
+	release, spec, work, engine := newReleaseHostingWorkers(t, "media")
+	engine.outputs = newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"})
+	ctx := context.Background()
+	if _, err := release.provisionWorkers(ctx, spec, work, nil); err != nil {
+		t.Fatalf("provisionWorkers() = %v", err)
+	}
+	recordRelease(t, release.cfg.KeyValues, spec.Ref)
+
+	if err := release.Stacks.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+
+	if workers := workersRef(spec.Ref).Name.String(); !slices.Contains(engine.torn(), workers) {
+		t.Errorf("took down %v, want %s too: no release of web is left to run its workers, so they would consume its queues on code nothing serves", engine.torn(), workers)
+	}
+	if got := countRecordedWorkerStacks(t, release.cfg.KeyValues, spec.Ref); got != 0 {
+		t.Errorf("%d workers stacks are still recorded after the only release of their app went", got)
 	}
 }
