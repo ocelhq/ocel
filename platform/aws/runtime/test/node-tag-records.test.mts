@@ -76,3 +76,31 @@ test("writes every tag it can, then reports the first one that failed", async ()
   ).rejects.toThrow(/throttled/);
   expect(sends).toHaveLength(2);
 });
+
+test("keeps a bounded number of writes in flight however many tags one request revalidates", async () => {
+  let inFlight = 0;
+  let most = 0;
+  vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
+    const actual = await orig<any>();
+    return {
+      ...actual,
+      DynamoDBClient: class {
+        async send() {
+          inFlight++;
+          most = Math.max(most, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          inFlight--;
+          return {};
+        }
+      },
+    };
+  });
+  const { newTagRecordWriter } = await import("../src/node/tag-records.mjs");
+
+  await newTagRecordWriter(env)!(
+    Array.from({ length: 200 }, (_, i) => ({ tag: `t${i}`, mode: "purge" as const, raisedAt: 1 })),
+  );
+
+  expect(most).toBeGreaterThan(1);
+  expect(most).toBeLessThanOrEqual(16);
+});
