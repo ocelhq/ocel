@@ -61,6 +61,7 @@ func (e *Engine) enqueue(ctx context.Context, deployed deployedConsumer, msg que
 	if _, err := e.cfg.Queues.SendMessage(ctx, in); err != nil {
 		return fmt.Errorf("send %s to queue %s: %w", msg.executionFor(deployed.consumer.Name), deployed.queue, err)
 	}
+	e.wake(ctx, deployed.consumer.Worker, delay)
 	return nil
 }
 
@@ -76,6 +77,11 @@ func (e *Engine) publish(ctx context.Context, topicName, topicARN string, fifo b
 	}
 	if _, err := e.cfg.Topics.Publish(ctx, in); err != nil {
 		return fmt.Errorf("publish message %s to topic %s: %w", msg.Message, topicName, err)
+	}
+	if topic, found := e.topic(topicName); found {
+		for _, consumer := range topic.Declared.Consumers {
+			e.wake(ctx, consumer.Worker, time.Until(time.UnixMicro(msg.DueAtMicros)))
+		}
 	}
 	return nil
 }

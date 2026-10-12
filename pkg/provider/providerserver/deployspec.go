@@ -47,10 +47,10 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 		Tag:         req.GetTag(),
 		Releases:    make(map[string]string, len(manifest.GetApps())),
 	}
-	workers, err := readWorkersByApp(manifest)
-	if err != nil {
+	if spec.Workers, err = readWorkers(manifest); err != nil {
 		return provider.DeploySpec{}, err
 	}
+	workers := groupWorkersByApp(spec.Workers)
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name, promotionID)
 		if err != nil {

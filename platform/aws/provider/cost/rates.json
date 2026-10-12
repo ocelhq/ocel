@@ -125,6 +125,24 @@
       }
     },
     {
+      "id": "aws/cloudwatch/alarm-metric",
+      "region": "us-east-1",
+      "unit": "Alarms",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json#EVETVUGEN3MUTMXM",
+      "verified": "2026-10-12",
+      "query": {
+        "alarmType": "Standard",
+        "service": "AmazonCloudWatch",
+        "usagetype": "CW:AlarmMonitorUsage"
+      }
+    },
+    {
       "id": "aws/s3/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",

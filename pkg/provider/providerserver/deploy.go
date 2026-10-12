@@ -1224,6 +1224,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Arch:                      entry.Arch,
 					Instances:                 entry.Instances,
 					Workers:                   entry.Workers,
+					DeploymentWorkers:         r.spec.Workers,
 					Values:                    values,
 					Grants:                    grants,
 					Routing:                   facts.OriginDispatch,

@@ -190,7 +190,7 @@ func TestShapeHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing
 	for _, app := range recorded.shaped.Deploy.Apps {
 		workers[app.App] = app.Workers
 	}
-	if want := []provider.WorkerSpec{{Name: "media"}}; !reflect.DeepEqual(workers["admin"], want) {
+	if want := []provider.WorkerSpec{{Name: "media", App: "admin", Compute: provider.ComputeServerless}}; !reflect.DeepEqual(workers["admin"], want) {
 		t.Errorf("shaped admin workers = %+v, want %+v", workers["admin"], want)
 	}
 }

@@ -138,7 +138,8 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if reachesTasks(app) {
-		if role.TasksPolicy, err = tasksPolicy(r.cfg, project, stack.Env, topicsOf(project, stack.Env, app.Topics)); err != nil {
+		wakes := containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)
+		if role.TasksPolicy, err = tasksPolicy(r.cfg, project, stack.Env, topicsOf(project, stack.Env, app.Topics), wakes); err != nil {
 			return nil, err
 		}
 	}

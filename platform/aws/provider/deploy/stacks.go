@@ -180,6 +180,8 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 		return work.run(pctx)
 	case *workersWork:
 		return work.run(pctx)
+	case *containerWorkersWork:
+		return work.run(pctx)
 	case *infraWork:
 		if err := work.transformed.install(pctx); err != nil {
 			return err
@@ -304,6 +306,9 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 	if work, ok := spec.VendorState.(*workersWork); ok {
 		return work.decode(outputs)
 	}
+	if work, ok := spec.VendorState.(*containerWorkersWork); ok {
+		return work.decode(outputs)
+	}
 	if work, ok := spec.VendorState.(*containerWork); ok {
 		return r.decodeContainer(work, outputs)
 	}
@@ -422,7 +427,7 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ pro
 		return provider.PackAppResult{}, err
 	}
 	project, env := naming.Sanitize(req.Ref.Project), req.Ref.Name.Env
-	topology, err := queueTopology(opened.cfg, project, env, topicsOf(project, env, req.Topics), nil)
+	topology, err := queueTopology(opened.cfg, project, env, topicsOf(project, env, req.Topics), containerWorkers(opened.cfg.Tier, project, env, req.Workers))
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}

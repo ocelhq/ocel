@@ -101,6 +101,7 @@ var formulas = pricing.Table{
 	"aws_sqs_queue":                   queue,
 	"aws_sns_topic":                   topic,
 	"aws_scheduler_schedule":          schedule,
+	"aws_cloudwatch_metric_alarm":     metricAlarm,
 	"aws_cloudfront_function":         cloudFrontFunction,
 	"aws_cloudfront_key_value_store":  free,
 	"aws_cloudfront_distribution":     distribution,
@@ -262,6 +263,10 @@ func topic(r *pricing.Subject) {
 		rate = "aws/sns/requests-fifo"
 	}
 	r.Add(pricing.Component{Name: "Publish requests", Unit: "requests", Rate: rate, Quantity: r.Usage(usageRequests, writesBand), UsageBased: true})
+}
+
+func metricAlarm(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Alarm metrics", Unit: "alarm-metrics", Rate: "aws/cloudwatch/alarm-metric", Quantity: r.Number("metrics")})
 }
 
 func schedule(r *pricing.Subject) {

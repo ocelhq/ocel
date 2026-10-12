@@ -16,6 +16,8 @@ type DeploySpec struct {
 	Infra naming.StackName
 	Apps  []AppEntry
 
+	Workers []WorkerSpec
+
 	PromotionID string
 	Tag         string
 	Releases    map[string]string

@@ -27,7 +27,8 @@ import (
 )
 
 const (
-	workersKey = "workers"
+	workersKey          = "workers"
+	containerWorkersKey = "containers"
 
 	schedulerServicePrincipal = "scheduler.amazonaws.com"
 
@@ -63,7 +64,11 @@ func workersStack(env, app string) naming.StackName {
 }
 
 func workersAt(ref provider.StackRef) keyvalue.Key {
-	return stackrecords.StacksPartition(ref.Tier, ref.Project).Key(workersKey, ref.Name.Env, ref.Name.App)
+	path := []string{workersKey, ref.Name.Env, ref.Name.App}
+	if ref.Name.HoldsContainerWorkers() {
+		path = append(path, containerWorkersKey)
+	}
+	return stackrecords.StacksPartition(ref.Tier, ref.Project).Key(path...)
 }
 
 func (r *release) workersWork(spec provider.StackSpec, work *appWork) (*workersWork, error) {
@@ -136,12 +141,16 @@ func hostsWorkersStack(spec provider.StackSpec, work *appWork) bool {
 	return spec.App != nil && work != nil && spec.Ref.Name.Env != "" && len(spec.App.Workers) > 0
 }
 
-func needsWorkersStack(app provider.LiveApp) bool {
-	return app.Compute != provider.ComputeContainer && len(app.Workers) > 0
+func needsWorkersStack(app provider.LiveApp, stack naming.StackName) bool {
+	return len(app.Workers) > 0 && (app.Compute == provider.ComputeContainer) == stack.HoldsContainerWorkers()
 }
 
 func workersRef(app provider.StackRef) provider.StackRef {
 	return provider.StackRef{Project: app.Project, Tier: app.Tier, Name: workersStack(app.Name.Env, app.Name.App)}
+}
+
+func containerWorkersRef(app provider.StackRef) provider.StackRef {
+	return provider.StackRef{Project: app.Project, Tier: app.Tier, Name: naming.ContainerWorkersStack(app.Name.Env, app.Name.App)}
 }
 
 func (r *release) recordWorkers(ctx context.Context, ref provider.StackRef) error {
@@ -171,6 +180,11 @@ func (r *release) hasRecordedWorkers(ctx context.Context, ref provider.StackRef)
 func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
+	}
+	if ref.Name.HoldsContainerWorkers() {
+		if err := r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress); err != nil {
+			return err
+		}
 	}
 	if err := keyvalue.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
 		return err
@@ -208,43 +222,63 @@ func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, erro
 	return provider.StackResult{Functions: functions}, nil
 }
 
-func (r *release) findWorkersOfLastRelease(ctx context.Context, app provider.StackRef) (provider.StackRef, bool, error) {
+func (r *release) listWorkersOfLastRelease(ctx context.Context, app provider.StackRef) ([]provider.StackRef, error) {
 	if app.Name.IsInfra() || app.Name.Release.IsZero() || app.Name.Env == "" {
-		return provider.StackRef{}, false, nil
+		return nil, nil
 	}
-	ref := workersRef(app)
-	recorded, err := r.hasRecordedWorkers(ctx, ref)
-	if err != nil || !recorded {
-		return provider.StackRef{}, false, err
+	var recorded []provider.StackRef
+	for _, ref := range []provider.StackRef{workersRef(app), containerWorkersRef(app)} {
+		found, err := r.hasRecordedWorkers(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			recorded = append(recorded, ref)
+		}
+	}
+	if len(recorded) == 0 {
+		return nil, nil
 	}
 	releases, err := stackrecords.List(ctx, r.cfg.KeyValues, app.Tier, app.Project)
 	if err != nil {
-		return provider.StackRef{}, false, err
+		return nil, err
 	}
 	for _, other := range releases {
 		if other.Name.Env == app.Name.Env && other.Name.App == app.Name.App && !other.Name.Release.IsZero() && other.Name != app.Name {
-			return provider.StackRef{}, false, nil
+			return nil, nil
 		}
 	}
-	return ref, true, nil
+	return recorded, nil
 }
 
 func (r *release) planWorkersOfLastRelease(ctx context.Context, app provider.StackRef, progress progress.Log) ([]provider.ChangeGroup, error) {
-	ref, last, err := r.findWorkersOfLastRelease(ctx, app)
-	if err != nil || !last {
+	refs, err := r.listWorkersOfLastRelease(ctx, app)
+	if err != nil {
 		return nil, err
 	}
-	planned, err := r.automation.PreviewDestroy(ctx, ref, progress)
-	return planned.Groups, err
+	var groups []provider.ChangeGroup
+	for _, ref := range refs {
+		planned, err := r.automation.PreviewDestroy(ctx, ref, progress)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, planned.Groups...)
+	}
+	return groups, nil
 }
 
 func (r *release) destroyWorkersOfLastRelease(ctx context.Context, app provider.StackRef, progress progress.Log) error {
-	ref, last, err := r.findWorkersOfLastRelease(ctx, app)
-	if err != nil || !last {
+	refs, err := r.listWorkersOfLastRelease(ctx, app)
+	if err != nil {
 		return err
 	}
-	say(progress, fmt.Sprintf("Removing stack %s: release %s is the last of app %s", ref.Name, app.Name.Release, app.Name.App))
-	return r.destroyWorkersStack(ctx, ref, progress)
+	for _, ref := range refs {
+		say(progress, fmt.Sprintf("Removing stack %s: release %s is the last of app %s", ref.Name, app.Name.Release, app.Name.App))
+		if err := r.destroyWorkersStack(ctx, ref, progress); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Stacks) PlanWorkersRetirement(ctx context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
@@ -295,21 +329,39 @@ func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps)
 	}
 	var retired []retiredWorkersStack
 	for _, entry := range recorded {
-		if len(entry.Key.Path) != 3 {
+		stack, found := recordedWorkersStack(entry.Key, live.Env)
+		if !found {
 			continue
 		}
-		app := entry.Key.Path[2]
-		reason := fmt.Sprintf("app %s is no longer deployed to %s", app, live.Env)
-		if deployed, found := live.Find(app); found {
-			if needsWorkersStack(deployed) {
+		reason := fmt.Sprintf("app %s is no longer deployed to %s", stack.App, live.Env)
+		if deployed, found := live.Find(stack.App); found {
+			if needsWorkersStack(deployed, stack) {
 				continue
 			}
-			reason = fmt.Sprintf("app %s hosts no workers on functions any more", app)
+			reason = fmt.Sprintf("app %s hosts no workers on %s any more", stack.App, workersCompute(stack))
 		}
-		ref := provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: workersStack(entry.Key.Path[1], app)}
+		ref := provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: stack}
 		retired = append(retired, retiredWorkersStack{ref: ref, reason: reason})
 	}
 	return opened, retired, nil
+}
+
+func recordedWorkersStack(key keyvalue.Key, env string) (naming.StackName, bool) {
+	rest, found := key.Under(workersKey, env)
+	switch {
+	case found && len(rest) == 1:
+		return workersStack(env, rest[0]), true
+	case found && len(rest) == 2 && rest[1] == containerWorkersKey:
+		return naming.ContainerWorkersStack(env, rest[0]), true
+	}
+	return naming.StackName{}, false
+}
+
+func workersCompute(stack naming.StackName) string {
+	if stack.HoldsContainerWorkers() {
+		return "containers"
+	}
+	return "functions"
 }
 
 func (w *workersWork) served(worker string) []consumerQueue {
@@ -374,18 +426,23 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 }
 
 func (w *workersWork) consumptionPolicy() (string, error) {
+	return consumptionPolicy(w.workers, w.topics, w.region, w.account, w.table, w.prefix)
+}
+
+func consumptionPolicy(workers []provider.WorkerSpec, topics []deployedTopic, region, account, table, prefix string) (string, error) {
+	served := &workersWork{topics: topics}
 	var queueARNs []string
-	for _, worker := range w.workers {
-		for _, queue := range w.served(worker.Name) {
-			queueARNs = append(queueARNs, sqsQueueARN(w.region, w.account, queue.name))
+	for _, worker := range workers {
+		for _, queue := range served.served(worker.Name) {
+			queueARNs = append(queueARNs, sqsQueueARN(region, account, queue.name))
 		}
 	}
 	statements := []any{map[string]any{
 		"Effect":   "Allow",
 		"Action":   []string{"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"},
-		"Resource": w.table,
+		"Resource": table,
 		"Condition": map[string]any{
-			"ForAllValues:StringLike": map[string]any{"dynamodb:LeadingKeys": []string{w.prefix + "*"}},
+			"ForAllValues:StringLike": map[string]any{"dynamodb:LeadingKeys": []string{prefix + "*"}},
 		},
 	}}
 	if len(queueARNs) > 0 {

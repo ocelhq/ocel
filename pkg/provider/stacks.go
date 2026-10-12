@@ -83,7 +83,8 @@ type AppSpec struct {
 	Arch                      string
 	Instances                 Instances
 
-	Workers []WorkerSpec
+	Workers           []WorkerSpec
+	DeploymentWorkers []WorkerSpec
 
 	Values AppValues
 

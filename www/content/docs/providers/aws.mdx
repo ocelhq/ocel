@@ -209,7 +209,7 @@ automatic attach for the functions it names.
 | topic | an SNS topic delivering to one SQS queue per consumer |
 | `ordered` | FIFO queues, with `key` as the message group |
 | `cron` | an EventBridge Scheduler schedule |
-| worker | a Lambda function built from the app's code, with no URL |
+| worker | a Lambda function built from the app's code, with no URL; on container compute, an ECS service of its own running the app's image |
 
 Every queue has a dead-letter queue; `deadLetter(consumer)` lists, redrives and purges failed
 runs as on every provider. Runs, idempotency keys and debounce records live in the account's
@@ -217,19 +217,49 @@ state table. Queues, topics and schedules bill by the request.
 
 Limits and differences:
 
-- `maxDuration` is at most 15 minutes. A worker on container compute is refused, though an
-  app on container compute sends to topics and triggers tasks as a serverless app does.
+- `maxDuration` is at most 15 minutes on a Lambda worker and 12 hours on container compute,
+  the longest SQS keeps a received message hidden. A longer one is refused, naming the task
+  and its file and line.
 - A run that finds its worker at its concurrency waits on the queue, up to five minutes at a
   time. On a FIFO queue each wait is a delivery, and SQS dead-letters after 1,000, so a run
   still waiting then ends failed.
 - A delayed `ordered` run holds up later runs with the same `key` until it is due.
 - Lanes are recorded but don't change start order: SQS has no priority.
-- Workers run the most recently deployed code. Rolling an app back changes its routes, not its
-  workers; deploy again to change them.
+- Workers, Lambda or container, run the most recently deployed code. Rolling an app back
+  changes its routes, not its workers; deploy again to change them.
 
 `ocel destroy` takes the workers, queues, topics and schedules. Records expire on their own: a
 run 30 days after it finishes or was due, an idempotency key an hour after its
 `idempotencyKeyTTL` (30 days by default).
+
+### Workers on container compute
+
+A worker of a container app runs as an ECS service of its own in the tier's cluster, from the
+app's image, with no load balancer and no port. It reads its queues itself and keeps each
+message hidden until its run ends; retries, concurrency slots, abort, timeout and run records
+work as on a Lambda worker. A consumer's `concurrency`, or its worker's, is how many messages
+the service works at once, ten without one.
+
+The service sits at no tasks and costs nothing then:
+
+- A send to one of its queues starts a task: the sender reads the service and sets it to one
+  task when it has none. A message not due for a minute or more does not wake it.
+- If that wake fails, or the message came from somewhere that cannot make the call, an alarm
+  on the visible messages of the worker's queues starts a task within a few minutes and adds
+  one a minute while the backlog lasts, up to the app's `instances.max`. Each alarm watches at
+  most nine queues and costs $0.10 a month per queue.
+- A worker with nothing to work for five minutes and empty queues sets its service back to
+  none. The app's `instances.min` is the floor of the app's own service, not of its workers.
+
+A run working when its task stops, for a deploy or a scale-in, is queued again and the next
+task starts it. A task that crashes holds its run until the run's `maxDuration` has passed,
+or 12 hours without one, so declare a `maxDuration` on a task that can run long. A `cron`
+task cannot run on a worker on container compute; the deploy refuses it, naming the task and
+the worker.
+
+A container app's workers count as a user of the `containers` part, so the cluster stays while
+their services exist. Moving an app between serverless and container compute starts its workers
+on the new compute and takes the old ones down once the promotion serves.
 
 ## Logs
 

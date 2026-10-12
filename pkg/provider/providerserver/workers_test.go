@@ -150,7 +150,7 @@ func TestADeployHandsEachAppStackTheWorkersThatJoinIt(t *testing.T) {
 			workers[spec.App.App] = spec.App.Workers
 		}
 	}
-	want := map[string][]provider.WorkerSpec{"web": nil, "admin": {{Name: "media", Concurrency: 4}}}
+	want := map[string][]provider.WorkerSpec{"web": nil, "admin": {{Name: "media", Concurrency: 4, App: "admin", Compute: provider.ComputeServerless}}}
 	if !reflect.DeepEqual(workers, want) {
 		t.Errorf("app stacks were handed workers %+v, want %+v", workers, want)
 	}

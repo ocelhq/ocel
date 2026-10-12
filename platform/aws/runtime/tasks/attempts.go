@@ -250,7 +250,9 @@ func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got
 	}
 	if err != nil {
 		slog.Warn("hold a message on its queue", "queue", deployed.queue, "error", err)
+		return retained
 	}
+	e.park(got.record.ReceiptHandle)
 	return retained
 }
 
@@ -498,6 +500,13 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arri
 	case envelope.Canceled:
 		return acknowledged, 0
 	case envelope.Interrupted:
+		if _, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
+			set:        map[string]any{"status": string(provider.RunQueued), "error": answer.Reason, "lease_until": 0},
+			condition:  "#status = :executing AND #delivery = :token",
+			conditions: map[string]any{":executing": string(provider.RunExecuting), ":token": got.msg.Delivery},
+		}); err != nil && !errors.Is(err, errConditionFailed) {
+			slog.Warn("give back the lease of an interrupted run", "execution", got.execution, "error", err)
+		}
 		return retained, 0
 	case envelope.Succeeded:
 		e.settle(ctx, deployed, got, provider.RunCompleted, answer.Output, "")

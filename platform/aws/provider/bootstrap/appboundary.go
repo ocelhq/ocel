@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
@@ -154,6 +155,14 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
                 'aws:ResourceTag/%s': '%s'
           - Effect: Allow
             Action:
+              - ecs:DescribeServices
+              - ecs:UpdateService
+            Resource: '%s'
+            Condition:
+              StringEquals:
+                'aws:ResourceTag/%s': '%s'
+          - Effect: Allow
+            Action:
               - ecr:GetAuthorizationToken
             Resource: '*'
           - Effect: Allow
@@ -166,7 +175,12 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
 		yamlActions(appBoundaryActions()),
 		appBoundaryKeyStatement(ns, tier, broughtKey),
 		yamlActions(appBoundarySecretActions()), appSecretARN, managedSecretClusterTagKey, appClusterARN,
+		appWorkerServiceARN(tier), managedByTagKey, managedByTagValue,
 		registry.Namespace)
+}
+
+func appWorkerServiceARN(tier environment.Tier) string {
+	return "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + appScopePrefix + "*"
 }
 
 func appBoundaryOutput() string {

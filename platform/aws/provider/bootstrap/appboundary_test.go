@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"gopkg.in/yaml.v3"
 )
 
@@ -159,6 +160,36 @@ func TestTheAppBoundaryAdmitsTheChannelsABastionTaskOpensToSSM(t *testing.T) {
 				if !slices.Contains(admitted, action) {
 					t.Errorf("the boundary does not admit %s, so the ECS Exec agent of a bastion task cannot reach Session Manager", action)
 				}
+			}
+		})
+	}
+}
+
+func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterThatOcelMade(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			var waking []boundaryStatement
+			for _, st := range boundaryStatements(t, tier, "") {
+				for _, action := range yamlStrings(st.Action) {
+					if service, _, _ := strings.Cut(action, ":"); service == "ecs" {
+						waking = append(waking, st)
+						break
+					}
+				}
+			}
+			if len(waking) != 1 {
+				t.Fatalf("the boundary admits ecs in %d statements, want exactly one scoped to worker services", len(waking))
+			}
+			st := waking[0]
+			if got := yamlStrings(st.Action); !slices.Equal(got, []string{"ecs:DescribeServices", "ecs:UpdateService"}) {
+				t.Errorf("ecs actions %v, want reading a service and setting its task count and nothing else", got)
+			}
+			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + appScopePrefix + "*"; st.Resource != want {
+				t.Errorf("ecs is admitted on %q, want %q: this tier's cluster and the app scope alone", st.Resource, want)
+			}
+			equals, _ := st.Condition["StringEquals"].(map[string]any)
+			if equals["aws:ResourceTag/"+managedByTagKey] != managedByTagValue {
+				t.Errorf("ecs is admitted under %v, want it pinned to services Ocel tagged", st.Condition)
 			}
 		})
 	}

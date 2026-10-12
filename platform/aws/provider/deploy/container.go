@@ -203,7 +203,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	tasksPolicyDoc := ""
 	if reachesTasks(app) {
 		topics := topicsOf(project, stack.Env, app.Topics)
-		topology, err := queueTopology(r.cfg, project, stack.Env, topics, nil)
+		topology, err := queueTopology(r.cfg, project, stack.Env, topics, containerWorkers(r.cfg.Tier, project, stack.Env, app.DeploymentWorkers))
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		if len(rendered) > 0 {
 			env[queues.EnvVar] = string(rendered)
 		}
-		if tasksPolicyDoc, err = tasksPolicy(r.cfg, project, stack.Env, topics); err != nil {
+		if tasksPolicyDoc, err = tasksPolicy(r.cfg, project, stack.Env, topics, containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)); err != nil {
 			return nil, err
 		}
 	}
@@ -682,6 +682,11 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err := work.transformed.refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
 	}
+	workers, err := r.provisionContainerWorkers(ctx, spec, work, progress)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	result.Containers = append(result.Containers, workers...)
 	return result, nil
 }
 
@@ -745,16 +750,11 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 			shared.Action = provider.ActionUpdate
 			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier an edge forwards to raises the public load balancer every such app shares"
 		}
-		return provider.Plan{Groups: []provider.ChangeGroup{
-			shared,
-			{
-				Kind:   provider.StackGroupKind,
-				Name:   spec.Ref.Name.String(),
-				Action: provider.ActionCreate,
-				Reason: provider.DetailUnavailable,
-				Slow:   true,
-			},
-		}}, nil
+		groups := []provider.ChangeGroup{shared, unpreviewedStack(spec.Ref)}
+		if hostsContainerWorkers(spec) {
+			groups = append(groups, unpreviewedStack(containerWorkersRef(spec.Ref)))
+		}
+		return provider.Plan{Groups: groups}, nil
 	}
 	work, err := r.containerWork(spec, infra)
 	if err != nil {
@@ -774,7 +774,22 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err := work.transformed.refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
 	}
+	workerGroups, err := r.previewContainerWorkers(ctx, spec, work, progress)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	previewed.Groups = append(previewed.Groups, workerGroups...)
 	return previewed, nil
+}
+
+func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {
+	return provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
+		Name:   ref.Name.String(),
+		Action: provider.ActionCreate,
+		Reason: provider.DetailUnavailable,
+		Slow:   true,
+	}
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (provider.StackResult, error) {

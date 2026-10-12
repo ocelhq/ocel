@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -45,6 +46,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	manifest := ""
 	topology := ""
 	healthPath := ""
+	worker := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
@@ -59,6 +61,8 @@ func run(ctx context.Context, command []string, environ []string) int {
 			continue
 		case originguard.HealthPathVar:
 			healthPath = value
+		case processenv.WorkerEnvVar:
+			worker = value
 		}
 		env = append(env, entry)
 	}
@@ -67,6 +71,14 @@ func run(ctx context.Context, command []string, environ []string) int {
 	values, err := resolve(ctx, manifest)
 	if err != nil {
 		return fatal(err.Error())
+	}
+
+	var pinned queues.Topology
+	if worker != "" {
+		if pinned, err = readTopology(topology); err != nil {
+			return fatal(err.Error())
+		}
+		command = containerimage.WorkerCommand(fileExists, command)
 	}
 
 	internal, err := child.FreePort()
@@ -86,6 +98,10 @@ func run(ctx context.Context, command []string, environ []string) int {
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
 		return fatal(err.Error())
+	}
+
+	if worker != "" {
+		return serveWorker(ctx, worker, pinned, proc, internal)
 	}
 
 	var ready atomic.Bool

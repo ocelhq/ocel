@@ -16,6 +16,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -39,6 +40,8 @@ var pulumiTokens = map[string]string{
 	"aws:elasticache/parameterGroup:ParameterGroup":     "aws_elasticache_parameter_group",
 	"aws:elasticache/subnetGroup:SubnetGroup":           "aws_elasticache_subnet_group",
 
+	"aws:cloudwatch/metricAlarm:MetricAlarm": "aws_cloudwatch_metric_alarm",
+
 	"aws:sqs/queue:Queue":                              "aws_sqs_queue",
 	"aws:sns/topic:Topic":                              "aws_sns_topic",
 	"aws:lambda/eventSourceMapping:EventSourceMapping": "aws_lambda_event_source_mapping",
@@ -57,10 +60,12 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			Infra: naming.InfraStack("prod"),
 			Apps: []provider.AppEntry{
 				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}, Workers: []provider.WorkerSpec{{Name: "worker"}, {Name: "ledger"}}},
-				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}, Instances: provider.Instances{Min: 1, Max: 1}},
+				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}, Instances: provider.Instances{Min: 1, Max: 4}, Workers: []provider.WorkerSpec{{Name: "media", App: "api", Compute: provider.ComputeContainer}}},
 			},
 		},
 		Resources: []provider.Resource{
+			taskResource("transcode", provider.ConsumerSpec{Worker: "media"}),
+			topicResource("uploaded", provider.ConsumerSpec{Name: "thumbnails", Worker: "media"}, provider.ConsumerSpec{Name: "captions", Worker: "media"}),
 			{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
@@ -163,6 +168,22 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		region: "us-east-1", account: mockAccount, table: testStateTableARN, prefix: naming.TaskKeyPrefix("shop", "prod"), group: queues.ScheduleGroupName("shop", "prod"),
 	}
 	run("workers", hosted.run)
+	jobsCfg, jobsSpec := containerStackSpec(t)
+	jobsCfg.StateTable, jobsCfg.StateTableARN = "ocel-state", testStateTableARN
+	jobsSpec.App.Instances = provider.Instances{Min: 1, Max: 4}
+	jobsSpec.App.Workers = req.Deploy.Apps[1].Workers
+	jobsSpec.App.DeploymentWorkers = jobsSpec.App.Workers
+	jobsSpec.App.Topics = req.Resources
+	jobsRelease := releasing(t, jobsCfg)
+	jobsWeb, err := jobsRelease.containerWork(jobsSpec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerWorkers, err := jobsRelease.containerWorkersWork(jobsSpec, jobsWeb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("container-workers", containerWorkers.run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
@@ -359,4 +380,43 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestAContainerWorkerIsShapedAtNoTasksWithOneAlarmForEachNineQueuesItWatches(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	set := shaped(t, nil, req)
+
+	service := shapedNamed(t, set, "aws_ecs_service", resources.WorkerName("media"))
+	if service["desired_count"] != float64(0) {
+		t.Errorf("the worker's service is shaped at %v tasks, want none: it is billed for what it runs, and idle it runs nothing", service["desired_count"])
+	}
+	alarm := shapedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")
+	if alarm["metrics"] != float64(3) {
+		t.Errorf("the worker's alarm is shaped over %v metrics, want the 3 queues of its transcode task and uploaded topic", alarm["metrics"])
+	}
+	scopeOf := map[string]string{}
+	for _, r := range set.GetResources() {
+		scopeOf[r.GetType()+":"+r.GetName()] = r.GetScope()
+	}
+	if scope := scopeOf["aws_ecs_service:"+resources.WorkerName("media")]; scope != "project:shop/environment:prod/app:api" {
+		t.Errorf("the worker is billed in scope %q, want the app that hosts it", scope)
+	}
+}
+
+func TestAnEphemeralPreviewShapesTheContainerWorkersItDeclares(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Deploy.Tier = environment.TierPreview
+	req.Deploy.Env = "pr-7"
+	req.Deploy.Infra = naming.InfraStack("pr-7")
+	set := shaped(t, nil, req)
+
+	service := shapedNamed(t, set, "aws_ecs_service", resources.WorkerName("media"))
+	if service["desired_count"] != float64(0) {
+		t.Errorf("an ephemeral preview shapes its worker's service at %v tasks, want none, as a persistent environment does", service["desired_count"])
+	}
+	shapedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")
 }

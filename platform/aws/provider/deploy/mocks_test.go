@@ -44,6 +44,7 @@ var mockARNs = map[string]string{
 	"aws:lb/targetGroup:TargetGroup":        "targetgroup/",
 	"aws:cloudwatch/logGroup:LogGroup":      "log-group:",
 	"aws:acm/certificate:Certificate":       "certificate/",
+	"aws:appautoscaling/policy:Policy":      "scalingPolicy:",
 }
 
 type inputRecorder struct {

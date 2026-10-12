@@ -6,14 +6,17 @@ import (
 )
 
 const (
-	InfraApp        = "infra"
-	pulumiProjectNS = "ocel"
+	InfraApp              = "infra"
+	containerWorkersField = "containers"
+	pulumiProjectNS       = "ocel"
 )
 
 type StackName struct {
 	Env     string
 	App     string
 	Release ReleaseToken
+
+	containerWorkers bool
 }
 
 func InfraStack(env string) StackName {
@@ -24,13 +27,22 @@ func AppStack(env, app string, release ReleaseToken) StackName {
 	return StackName{Env: env, App: app, Release: release}
 }
 
+func ContainerWorkersStack(env, app string) StackName {
+	return StackName{Env: env, App: app, containerWorkers: true}
+}
+
 func (s StackName) IsInfra() bool { return s.App == InfraApp }
+
+func (s StackName) HoldsContainerWorkers() bool { return s.containerWorkers }
 
 func (s StackName) IsZero() bool { return s.Env == "" && s.App == "" }
 
 func (s StackName) String() string {
 	if s.IsInfra() {
 		return Join(FieldSeparator, s.Env, InfraApp)
+	}
+	if s.containerWorkers {
+		return Join(FieldSeparator, s.Env, s.App, containerWorkersField)
 	}
 	return Join(FieldSeparator, s.Env, s.App, s.Release.String())
 }

@@ -280,7 +280,7 @@ func TestAManifestTheBuildEmitsReachesTheProviderWithEveryTopicTaskAndWorker(t *
 	for _, entry := range recorded.Deploy.Apps {
 		workers = append(workers, entry.Workers...)
 	}
-	if wantWorkers := []provider.WorkerSpec{{Name: "worker"}}; !slices.Equal(workers, wantWorkers) {
+	if wantWorkers := []provider.WorkerSpec{{Name: "worker", App: "web", Compute: provider.ComputeServerless}}; !slices.Equal(workers, wantWorkers) {
 		t.Errorf("workers = %+v, want %+v", workers, wantWorkers)
 	}
 }

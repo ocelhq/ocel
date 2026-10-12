@@ -1,0 +1,429 @@
+package deploy
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
+	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+)
+
+func containerWorkerService(project, env, app, worker string) string {
+	scope := awsports.AppScope + naming.WordSeparator
+	at := naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker}
+	return scope + at.PhysicalName(maxLambdaNameLen-len(scope))
+}
+
+func containerWorkers(tier environment.Tier, project, env string, workers []provider.WorkerSpec) map[string]queues.Worker {
+	served := map[string]queues.Worker{}
+	for _, worker := range workers {
+		if worker.Compute != provider.ComputeContainer {
+			continue
+		}
+		served[worker.Name] = queues.Worker{
+			Concurrency: worker.Concurrency,
+			Service:     &queues.Service{Cluster: awsports.ContainerClusterName(tier), Name: containerWorkerService(project, env, worker.App, worker.Name)},
+		}
+	}
+	if len(served) == 0 {
+		return nil
+	}
+	return served
+}
+
+func containerServiceARNs(cfg Config, project, env string, workers []provider.WorkerSpec) []string {
+	var arns []string
+	for _, worker := range containerWorkers(cfg.Tier, project, env, workers) {
+		arns = append(arns, fmt.Sprintf("arn:aws:ecs:%s:%s:service/%s/%s", cfg.Region, accountOfARN(cfg.StateTableARN), worker.Service.Cluster, worker.Service.Name))
+	}
+	slices.Sort(arns)
+	return arns
+}
+
+const (
+	workerStopTimeoutSeconds  = 120
+	backlogAlarmQueues        = 9
+	backlogAlarmPeriodSeconds = 60
+	backlogCooldownSeconds    = 60
+	sqsNamespace              = "AWS/SQS"
+	visibleMessagesMetric     = "ApproximateNumberOfMessagesVisible"
+)
+
+type workerDefinition struct {
+	Name        string            `json:"name"`
+	Image       string            `json:"image"`
+	Essential   bool              `json:"essential"`
+	Environment []environmentPair `json:"environment"`
+	LogConfig   logConfiguration  `json:"logConfiguration"`
+	StopTimeout int               `json:"stopTimeout"`
+}
+
+type containerWorkersWork struct {
+	project     string
+	stack       naming.StackName
+	workers     []provider.WorkerSpec
+	topics      []deployedTopic
+	topology    string
+	image       string
+	arch        string
+	env         map[string]string
+	infra       containerInfra
+	instances   provider.Instances
+	tags        map[string]string
+	boundary    string
+	rolePath    string
+	region      string
+	account     string
+	table       string
+	prefix      string
+	policies    []bindingPolicy
+	values      executionRole
+	tasksPolicy string
+}
+
+func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWork) (*containerWorkersWork, error) {
+	app := spec.App
+	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
+	account := accountOfARN(r.cfg.StateTableARN)
+	topics := topicsOf(project, env, app.Topics)
+	topology, err := queueTopology(r.cfg, project, env, topics, containerWorkers(r.cfg.Tier, project, env, app.DeploymentWorkers))
+	if err != nil {
+		return nil, err
+	}
+	rendered, err := queues.Render(topology)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := tasksPolicy(r.cfg, project, env, topics, containerServiceARNs(r.cfg, project, env, app.DeploymentWorkers))
+	if err != nil {
+		return nil, err
+	}
+	workerEnv := maps.Clone(web.env)
+	delete(workerEnv, edge.OriginSecretVar)
+	delete(workerEnv, edge.OriginSecretPreviousVar)
+	workerEnv[queues.EnvVar] = string(rendered)
+	workerEnv["AWS_REGION"] = r.cfg.Region
+	return &containerWorkersWork{
+		project:     project,
+		stack:       naming.ContainerWorkersStack(env, app.App),
+		workers:     app.Workers,
+		topics:      topics,
+		topology:    string(rendered),
+		image:       web.image,
+		arch:        web.arch,
+		env:         workerEnv,
+		infra:       web.infra,
+		instances:   web.instances,
+		tags:        web.tags,
+		boundary:    web.boundary,
+		rolePath:    web.rolePath,
+		region:      r.cfg.Region,
+		account:     account,
+		table:       r.cfg.StateTableARN,
+		prefix:      naming.TaskKeyPrefix(project, env),
+		policies:    web.policies,
+		values:      web.values,
+		tasksPolicy: tasks,
+	}, nil
+}
+
+func (w *containerWorkersWork) coordinate(kind naming.Kind, name string) naming.Coordinate {
+	return naming.Coordinate{Project: w.project, Env: w.stack.Env, App: w.stack.App, Kind: kind, Name: name}
+}
+
+func (w *containerWorkersWork) served(worker string) []consumerQueue {
+	return (&workersWork{topics: w.topics}).served(worker)
+}
+
+func (w *containerWorkersWork) run(ctx *pulumi.Context) error {
+	role, granted, err := w.taskRole(ctx)
+	if err != nil {
+		return err
+	}
+	for _, worker := range w.workers {
+		if err := w.declareWorker(ctx, worker, role, granted); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
+	at := w.coordinate(naming.KindRole, "worker-role")
+	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
+		NamePrefix:          pulumi.String(rolePrefix(at)),
+		Description:         capDescription(at.Description("task role for this app's workers"), maxDescriptionLen),
+		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
+		PermissionsBoundary: pulumi.String(w.boundary),
+		Path:                pulumi.String(w.rolePath),
+		Tags:                resourceTags(naming.KindRole, "", w.tags),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	consumption, err := consumptionPolicy(w.workers, w.topics, w.region, w.account, w.table, w.prefix)
+	if err != nil {
+		return nil, nil, err
+	}
+	documents := map[string]string{"queues": consumption, "tasks": w.tasksPolicy}
+	for _, binding := range w.policies {
+		documents["binding-"+binding.Binding] = binding.Policy
+	}
+	if w.values.ValuesTableARN != "" {
+		if documents["variables"], err = variablesReadPolicy(w.values); err != nil {
+			return nil, nil, err
+		}
+	}
+	granted := make([]pulumi.Resource, 0, len(documents))
+	for _, name := range slices.Sorted(maps.Keys(documents)) {
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", name), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(documents[name]),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, policy)
+	}
+	return role, granted, nil
+}
+
+func (w *containerWorkersWork) definition(worker provider.WorkerSpec, service string) (string, error) {
+	env := maps.Clone(w.env)
+	env[processenv.WorkerEnvVar] = worker.Name
+	pairs := make([]environmentPair, 0, len(env))
+	for _, key := range slices.Sorted(maps.Keys(env)) {
+		pairs = append(pairs, environmentPair{Name: key, Value: env[key]})
+	}
+	encoded, err := json.Marshal([]workerDefinition{{
+		Name:        containerName,
+		Image:       w.image,
+		Essential:   true,
+		Environment: pairs,
+		StopTimeout: workerStopTimeoutSeconds,
+		LogConfig: logConfiguration{
+			Driver: "awslogs",
+			Options: map[string]string{
+				"awslogs-group":         w.infra.LogGroup,
+				"awslogs-region":        w.region,
+				"awslogs-stream-prefix": service,
+			},
+		},
+	}})
+	if err != nil {
+		return "", fmt.Errorf("render worker %s's container definition: %w", worker.Name, err)
+	}
+	return string(encoded), nil
+}
+
+func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, role *iam.Role, granted []pulumi.Resource) error {
+	service := containerWorkerService(w.project, w.stack.Env, w.stack.App, worker.Name)
+	tags := resourceTags(naming.KindWorker, "", w.tags)
+	definition, err := w.definition(worker, service)
+	if err != nil {
+		return err
+	}
+	task, err := ecs.NewTaskDefinition(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "task"), &ecs.TaskDefinitionArgs{
+		Family:                  pulumi.String(service),
+		Cpu:                     pulumi.String(containerCPU),
+		Memory:                  pulumi.String(containerMemory),
+		NetworkMode:             pulumi.String("awsvpc"),
+		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
+		ExecutionRoleArn:        pulumi.String(w.infra.ExecutionRole),
+		TaskRoleArn:             role.Arn,
+		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
+		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
+			OperatingSystemFamily: pulumi.String("LINUX"),
+			CpuArchitecture:       pulumi.String(fargateCPUArchitecture(w.arch)),
+		},
+		Tags: tags,
+	}, pulumi.DependsOn(granted))
+	if err != nil {
+		return err
+	}
+	running, err := ecs.NewService(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "service"), &ecs.ServiceArgs{
+		Name:           pulumi.String(service),
+		Cluster:        pulumi.String(w.infra.Cluster),
+		TaskDefinition: task.Arn,
+		DesiredCount:   pulumi.Int(0),
+		LaunchType:     pulumi.String("FARGATE"),
+		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
+			Subnets:        pulumi.ToStringArray(w.infra.Subnets),
+			SecurityGroups: pulumi.StringArray{pulumi.String(w.infra.TaskSecurity)},
+			AssignPublicIp: pulumi.Bool(true),
+		},
+		Tags: tags,
+	}, pulumi.IgnoreChanges([]string{"desiredCount"}))
+	if err != nil {
+		return err
+	}
+	if err := w.scaleOnBacklog(ctx, worker, running, tags); err != nil {
+		return err
+	}
+	ctx.Export(resources.WorkerName(worker.Name), pulumi.Map{outputKeyContainerPhysical: running.Name})
+	return nil
+}
+
+func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provider.WorkerSpec, service *ecs.Service, tags pulumi.StringMap) error {
+	clusterARN, err := arn.Parse(w.infra.Cluster)
+	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
+	if err != nil || !found {
+		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so worker %s's service has no scalable target to name", w.infra.Cluster, worker.Name)
+	}
+	target, err := appautoscaling.NewTarget(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "scaling"), &appautoscaling.TargetArgs{
+		ServiceNamespace:  pulumi.String(scalingNamespace),
+		ScalableDimension: pulumi.String(scalingDimension),
+		ResourceId:        pulumi.Sprintf("service/%s/%s", cluster, service.Name),
+		MinCapacity:       pulumi.Int(0),
+		MaxCapacity:       pulumi.Int(max(w.instances.Max, 1)),
+		Tags:              tags,
+	})
+	if err != nil {
+		return err
+	}
+	out, err := appautoscaling.NewPolicy(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "scaling", "backlog"), &appautoscaling.PolicyArgs{
+		PolicyType:        pulumi.String("StepScaling"),
+		ServiceNamespace:  target.ServiceNamespace,
+		ScalableDimension: target.ScalableDimension,
+		ResourceId:        target.ResourceId,
+		StepScalingPolicyConfiguration: &appautoscaling.PolicyStepScalingPolicyConfigurationArgs{
+			AdjustmentType:        pulumi.String("ChangeInCapacity"),
+			Cooldown:              pulumi.Int(backlogCooldownSeconds),
+			MetricAggregationType: pulumi.String("Maximum"),
+			StepAdjustments: appautoscaling.PolicyStepScalingPolicyConfigurationStepAdjustmentArray{
+				&appautoscaling.PolicyStepScalingPolicyConfigurationStepAdjustmentArgs{MetricIntervalLowerBound: pulumi.String("0"), ScalingAdjustment: pulumi.Int(1)},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	var names []string
+	for _, queue := range w.served(worker.Name) {
+		names = append(names, queue.name)
+	}
+	for at, group := range slices.Collect(slices.Chunk(names, backlogAlarmQueues)) {
+		if err := w.declareBacklogAlarm(ctx, worker, at, group, out, tags); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *containerWorkersWork) declareBacklogAlarm(ctx *pulumi.Context, worker provider.WorkerSpec, at int, queueNames []string, out *appautoscaling.Policy, tags pulumi.StringMap) error {
+	scope := awsports.AppScope + naming.WordSeparator
+	name := scope + w.coordinate(naming.KindWorker, worker.Name+"-backlog-"+strconv.Itoa(at)).PhysicalName(maxLambdaNameLen-len(scope))
+	queries := cloudwatch.MetricAlarmMetricQueryArray{}
+	ids := make([]string, 0, len(queueNames))
+	for i, queue := range queueNames {
+		id := "m" + strconv.Itoa(i)
+		ids = append(ids, id)
+		queries = append(queries, &cloudwatch.MetricAlarmMetricQueryArgs{
+			Id: pulumi.String(id),
+			Metric: &cloudwatch.MetricAlarmMetricQueryMetricArgs{
+				Namespace:  pulumi.String(sqsNamespace),
+				MetricName: pulumi.String(visibleMessagesMetric),
+				Dimensions: pulumi.StringMap{"QueueName": pulumi.String(queue)},
+				Period:     pulumi.Int(backlogAlarmPeriodSeconds),
+				Stat:       pulumi.String("Maximum"),
+			},
+		})
+	}
+	queries = append(queries, &cloudwatch.MetricAlarmMetricQueryArgs{
+		Id:         pulumi.String("backlog"),
+		Expression: pulumi.String(strings.Join(ids, "+")),
+		Label:      pulumi.String("visible messages"),
+		ReturnData: pulumi.Bool(true),
+	})
+	_, err := cloudwatch.NewMetricAlarm(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "backlog", strconv.Itoa(at)), &cloudwatch.MetricAlarmArgs{
+		Name:               pulumi.String(name),
+		AlarmDescription:   capDescription(w.coordinate(naming.KindWorker, worker.Name).Description("starts the worker when a queue it serves holds a message"), maxDescriptionLen),
+		ComparisonOperator: pulumi.String("GreaterThanThreshold"),
+		Threshold:          pulumi.Float64(0),
+		EvaluationPeriods:  pulumi.Int(1),
+		DatapointsToAlarm:  pulumi.Int(1),
+		TreatMissingData:   pulumi.String("notBreaching"),
+		MetricQueries:      queries,
+		AlarmActions:       pulumi.Array{out.Arn},
+		Tags:               tags,
+	})
+	return err
+}
+
+func (w *containerWorkersWork) decode(outputs auto.OutputMap) (provider.StackResult, error) {
+	containers := make([]provider.AppContainer, 0, len(w.workers))
+	for _, worker := range w.workers {
+		logical := resources.WorkerName(worker.Name)
+		fields, err := requireOutputFields(outputs, logical)
+		if err != nil {
+			return provider.StackResult{}, err
+		}
+		physical, err := requireStringField(fields, logical, outputKeyContainerPhysical)
+		if err != nil {
+			return provider.StackResult{}, err
+		}
+		containers = append(containers, provider.AppContainer{Name: logical, Physical: physical, Image: w.image})
+	}
+	return provider.StackResult{Containers: containers}, nil
+}
+
+func hostsContainerWorkers(spec provider.StackSpec) bool {
+	return spec.App != nil && len(spec.App.Workers) > 0 && spec.Ref.Name.Env != ""
+}
+
+func (r *release) previewContainerWorkers(ctx context.Context, spec provider.StackSpec, web *containerWork, progress progress.Log) ([]provider.ChangeGroup, error) {
+	if !hostsContainerWorkers(spec) {
+		return nil, nil
+	}
+	hosted, err := r.containerWorkersWork(spec, web)
+	if err != nil {
+		return nil, err
+	}
+	ref := containerWorkersRef(spec.Ref)
+	planned, err := r.automation.Preview(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: hosted}, progress)
+	return planned.Groups, err
+}
+
+func (r *release) provisionContainerWorkers(ctx context.Context, spec provider.StackSpec, web *containerWork, progress progress.Log) ([]provider.AppContainer, error) {
+	if !hostsContainerWorkers(spec) {
+		return nil, nil
+	}
+	hosted, err := r.containerWorkersWork(spec, web)
+	if err != nil {
+		return nil, err
+	}
+	ref := containerWorkersRef(spec.Ref)
+	if err := r.recordWorkers(ctx, ref); err != nil {
+		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
+	}
+	if r.cfg.KeyValues != nil {
+		if err := r.recordContainerInfraConsumer(ctx, ref); err != nil {
+			return nil, err
+		}
+	}
+	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: hosted}, progress)
+	if err != nil {
+		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
+	}
+	return result.Containers, nil
+}

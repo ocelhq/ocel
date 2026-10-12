@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
@@ -46,6 +48,7 @@ const (
 	tfSNSTopic           = "aws_sns_topic"
 	tfEventSourceMapping = "aws_lambda_event_source_mapping"
 	tfSchedulerSchedule  = "aws_scheduler_schedule"
+	tfMetricAlarm        = "aws_cloudwatch_metric_alarm"
 
 	lambdaDefaultMemoryMB    = 128
 	lambdaDefaultEphemeralMB = 512
@@ -177,7 +180,11 @@ func (s costShape) topics(scope string, topics []deployedTopic) {
 
 func (s costShape) workers(environment string, req provider.ShapeRequest, topics []deployedTopic) error {
 	for _, app := range req.Deploy.Apps {
-		if len(app.Workers) == 0 || app.Compute() != provider.ComputeServerless {
+		if len(app.Workers) == 0 {
+			continue
+		}
+		if app.Compute() == provider.ComputeContainer {
+			s.containerWorkers(environment, app, topics)
 			continue
 		}
 		if err := s.appWorkers(environment, req, app, topics); err != nil {
@@ -217,6 +224,28 @@ func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app
 		}
 	}
 	return nil
+}
+
+func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics []deployedTopic) {
+	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
+	hosted := &workersWork{topics: topics}
+	for _, worker := range app.Workers {
+		name := resources.WorkerName(worker.Name)
+		platform := map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"}
+		s.plain(scope, tfECSTaskDefinition, name, map[string]any{
+			"cpu": containerCPU, "memory": containerMemory, "requires_compatibilities": []any{"FARGATE"}, "runtime_platform": platform,
+		})
+		s.plain(scope, tfECSService, name, map[string]any{
+			"desired_count": 0, "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
+		})
+		var queueNames []string
+		for _, queue := range hosted.served(worker.Name) {
+			queueNames = append(queueNames, queue.name)
+		}
+		for at, group := range slices.Collect(slices.Chunk(queueNames, backlogAlarmQueues)) {
+			s.plain(scope, tfMetricAlarm, name+"/"+strconv.Itoa(at), map[string]any{"metrics": len(group)})
+		}
+	}
 }
 
 func batchSize(consumer provider.ConsumerSpec) int {
