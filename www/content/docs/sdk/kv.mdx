@@ -52,7 +52,9 @@ Install `ocel[kv]` to read and write it.
 ```rust title="src/main.rs"
 #[derive(ocel::KvKey)]
 #[ocel(pattern = "session/:id", text)]
-struct Session;
+struct Session {
+    id: String,
+}
 
 #[derive(ocel::Resources)]
 pub struct Infra {
