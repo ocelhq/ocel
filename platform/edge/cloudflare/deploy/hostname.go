@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -173,29 +174,8 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 }
 
 func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) error {
-	inZone, err := snap.inZone(ctx, zoneID)
-	if err != nil {
+	if held, err := p.repointHeldRoute(ctx, snap, zoneID, pattern, scriptName, spec); err != nil || held {
 		return err
-	}
-	for _, route := range inZone {
-		if route.Pattern != pattern {
-			continue
-		}
-		if route.Script == scriptName {
-			return nil
-		}
-		if !spec.ownsRoute(scriptName, route.Script) {
-			return fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", pattern, route.Script)
-		}
-		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
-			ZoneID:  cf.F(zoneID),
-			Pattern: cf.F(pattern),
-			Script:  cf.F(scriptName),
-		}); err != nil {
-			return fmt.Errorf("repoint worker route %q: %w", pattern, err)
-		}
-		snap.repointed(zoneID, route.ID, scriptName)
-		return nil
 	}
 
 	attached, err := p.client.Workers.Routes.New(ctx, workers.RouteNewParams{
@@ -203,11 +183,46 @@ func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneI
 		Pattern: cf.F(pattern),
 		Script:  cf.F(scriptName),
 	})
+	if hasStatus(err, http.StatusConflict) {
+		snap.discard(zoneID)
+		held, heldErr := p.repointHeldRoute(ctx, snap, zoneID, pattern, scriptName, spec)
+		if heldErr != nil || held {
+			return heldErr
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("attach worker route %q: %w", pattern, err)
 	}
 	snap.attached(zoneID, workers.RouteListResponse{ID: attached.ID, Pattern: pattern, Script: scriptName})
 	return nil
+}
+
+func (p *cloudflare) repointHeldRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) (bool, error) {
+	inZone, err := snap.inZone(ctx, zoneID)
+	if err != nil {
+		return false, err
+	}
+	for _, route := range inZone {
+		if route.Pattern != pattern {
+			continue
+		}
+		if route.Script == scriptName {
+			return true, nil
+		}
+		if !spec.ownsRoute(scriptName, route.Script) {
+			return false, fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", pattern, route.Script)
+		}
+		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
+			ZoneID:  cf.F(zoneID),
+			Pattern: cf.F(pattern),
+			Script:  cf.F(scriptName),
+		}); err != nil {
+			return false, fmt.Errorf("repoint worker route %q: %w", pattern, err)
+		}
+		snap.repointed(zoneID, route.ID, scriptName)
+		return true, nil
+	}
+	return false, nil
 }
 
 func (p *cloudflare) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
@@ -330,6 +345,10 @@ func (s *routeSnapshot) inZone(ctx context.Context, zoneID string) ([]workers.Ro
 	}
 	s.byZone[zoneID] = routes
 	return routes, nil
+}
+
+func (s *routeSnapshot) discard(zoneID string) {
+	delete(s.byZone, zoneID)
 }
 
 func (s *routeSnapshot) attached(zoneID string, route workers.RouteListResponse) {

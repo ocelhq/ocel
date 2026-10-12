@@ -45,6 +45,9 @@ type cfMock struct {
 	zoneLists  int
 	routeLists int
 
+	routesAddedAfterListing []map[string]any
+	lostRouteAttaches       int
+
 	createdRoutes        []map[string]any
 	repointedRoutes      []string
 	createdRecords       []map[string]any
@@ -144,9 +147,22 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 				m.routeLists++
 			}
 			writeResult(w, m.existingRoutes)
+			if firstPage(r) {
+				m.existingRoutes = append(m.existingRoutes, m.routesAddedAfterListing...)
+				m.routesAddedAfterListing = nil
+			}
 		case http.MethodPost:
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
+			if held := slices.IndexFunc(m.existingRoutes, func(route map[string]any) bool { return route["pattern"] == body["pattern"] }); held >= 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"success": false, "messages": []any{}, "result": nil,
+					"errors": []any{map[string]any{"code": 10020, "message": fmt.Sprintf("A route with the same pattern already exists (used by Worker: %s)", m.existingRoutes[held]["script"])}},
+				})
+				return
+			}
 			m.createdRoutes = append(m.createdRoutes, body)
 			created := map[string]any{
 				"id":      fmt.Sprintf("route-new-%d", len(m.createdRoutes)),
@@ -154,6 +170,12 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 				"script":  body["script"],
 			}
 			m.existingRoutes = append(m.existingRoutes, created)
+			if m.lostRouteAttaches > 0 {
+				m.lostRouteAttaches--
+				conn, _, _ := w.(http.Hijacker).Hijack()
+				_ = conn.Close()
+				return
+			}
 			writeResult(w, created)
 		}
 	})
@@ -1011,6 +1033,75 @@ func TestNoRouteIsCreatedForAHostnameServedElsewhere(t *testing.T) {
 	}
 	if len(m.createdRoutes) != 0 {
 		t.Errorf("created routes = %v, want none for a hostname another front serves", m.createdRoutes)
+	}
+}
+
+func (m *cfMock) providerRetryingAsDeployed(t *testing.T) *cloudflare {
+	srv := m.server(t)
+	clock := &fakeClock{at: time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)}
+	policy := apiRetryPolicy{budget: rateLimitBudget, wait: clock.wait, jitter: func() float64 { return 1 }, now: clock.now}
+	return &cloudflare{namespace: "ocel", client: policy.newClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+}
+
+func TestAttachingARouteWhoseResponseIsLostSucceedsWhenTheReplayFindsTheRouteHeld(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com", lostRouteAttaches: 1}
+	up := upload{accountID: "acct", scriptName: "ocel-prod"}
+
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v, want the route this deploy attached accepted", err)
+	}
+	if got := routePatterns(m.existingRoutes); !slices.Equal(got, []string{"app.com/*"}) {
+		t.Errorf("routes in the zone = %v, want app.com/* once", got)
+	}
+}
+
+func TestAttachingARouteAlreadyHeldByTheSameScriptSinceTheListingSucceeds(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "app.com/*", "script": "ocel-prod"}},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-prod"}
+
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v, want a route already held by this script accepted", err)
+	}
+	if len(m.createdRoutes) != 0 || len(m.repointedRoutes) != 0 {
+		t.Errorf("created %v and repointed %v, want the held route left as it is", m.createdRoutes, m.repointedRoutes)
+	}
+}
+
+func TestAttachingARouteHeldByAnotherWorkerOfTheProjectSinceTheListingRepointsIt(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel--shop--prod--root"}},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel--shop--prod--web"}
+
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v, want the project's own route repointed", err)
+	}
+	if !slices.Equal(m.repointedRoutes, []string{"late"}) {
+		t.Errorf("repointed routes = %v, want [late]", m.repointedRoutes)
+	}
+}
+
+func TestAttachingARouteHeldByAForeignWorkerSinceTheListingFails(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel-other-prod"}},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
+
+	err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil)
+	if err == nil || !strings.Contains(err.Error(), "ocel-other-prod") {
+		t.Fatalf("reconcileWorkerRoutes err = %v, want a failure naming ocel-other-prod", err)
+	}
+	if len(m.repointedRoutes) != 0 {
+		t.Errorf("repointed routes = %v, want a foreign route left in place", m.repointedRoutes)
 	}
 }
 
