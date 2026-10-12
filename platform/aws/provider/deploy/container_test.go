@@ -18,6 +18,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -25,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -466,7 +468,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
-	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
+	if !recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].IsString() {
 		t.Error("the task runs without a role, so the runtime has nothing to read the store with")
 	}
 	var policies []string
@@ -840,5 +842,134 @@ func TestAContainerReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T
 	}
 	if ran := engine.stacks(); len(ran) != 0 {
 		t.Errorf("the release ran %v, want nothing: an infrastructure stack made for an image that never landed idle-bills until the next deploy", ran)
+	}
+}
+
+func nextContainerSpec(t *testing.T) (Config, provider.StackSpec) {
+	t.Helper()
+	cfg, spec := containerStackSpec(t)
+	cfg.AssetBucket = "assets"
+	cfg.StateTable = "ocel-state"
+	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
+	spec.App.Framework = buildoutput.FrameworkNext
+	spec.App.ISR = &provider.ISRSpec{
+		Prefix:       "prod/shop/web/r3f8a1c90/isr",
+		TagNamespace: "PROJECT#shop#STACK#prod--web--r3f8a1c90#TAG#",
+	}
+	return cfg, spec
+}
+
+func TestANextContainerWithRevalidationIsHandedTheCacheItsServerPreloadReads(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+
+	for name, want := range map[string]string{
+		"OCEL_ISR_BUCKET":        "assets",
+		"OCEL_ISR_PREFIX":        "prod/shop/web/r3f8a1c90/isr",
+		"OCEL_STATE_TABLE":       "ocel-state",
+		"OCEL_ISR_TAG_NAMESPACE": "PROJECT#shop#STACK#prod--web--r3f8a1c90#TAG#",
+	} {
+		if got := work.env[name]; got != want {
+			t.Errorf("%s = %q, want %q: the preload's cache store reads it, and without it every revalidation misses the tag table", name, got, want)
+		}
+	}
+	for _, name := range []string{edge.EdgeCacheVar, edge.ReleaseTokenVar, edge.CacheTagPurgeVar, "OCEL_ISR_EDGE_READABLE"} {
+		if value, set := work.env[name]; set {
+			t.Errorf("%s = %q, want it unset: the preload keeps every storable response out of the edge, so nothing asks to cache, and no edge reads the bucket's pages", name, value)
+		}
+	}
+}
+
+func TestAContainerThatIsNotANextAppWithRevalidationIsHandedNoCache(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	other := spec
+	other.App = &provider.AppSpec{}
+	*other.App = *spec.App
+	other.App.Framework = "node"
+	unrevalidated := spec
+	unrevalidated.App = &provider.AppSpec{}
+	*unrevalidated.App = *spec.App
+	unrevalidated.App.ISR = nil
+
+	for name, candidate := range map[string]provider.StackSpec{"a node app": other, "a Next app with no revalidation": unrevalidated} {
+		work, err := releasing(t, cfg).containerWork(candidate, fixtureContainerInfra())
+		if err != nil {
+			t.Fatalf("containerWork() of %s = %v", name, err)
+		}
+		for _, variable := range []string{"OCEL_ISR_BUCKET", "OCEL_ISR_PREFIX", "OCEL_STATE_TABLE", "OCEL_ISR_TAG_NAMESPACE"} {
+			if _, set := work.env[variable]; set {
+				t.Errorf("%s is handed %s, which nothing in its container reads", name, variable)
+			}
+		}
+		if work.cache != nil {
+			t.Errorf("%s has a cache grant, and a task role reaching the bucket and the tag table for no preload", name)
+		}
+	}
+}
+
+func TestANextContainersTaskRoleWritesItsOwnCacheAndItsOwnTagsAlone(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+
+	if !recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].IsString() {
+		t.Fatal("a Next container with a cache runs without a task role, so its preload could write neither an entry nor a tag")
+	}
+	policies := rec.registered("aws:iam/rolePolicy:RolePolicy")
+	if !slices.ContainsFunc(policies, func(name string) bool { return strings.Contains(name, "isr-cache") }) {
+		t.Fatalf("the task role has policies %v, want the ISR cache policy a function's role has", policies)
+	}
+	want, err := isrPolicy(*work.cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range policies {
+		if !strings.Contains(name, "isr-cache") {
+			continue
+		}
+		if got := rec.inputs("aws:iam/rolePolicy:RolePolicy", name)["policy"].StringValue(); got != want {
+			t.Errorf("the task role's cache policy = %s, want the one a function's role has, scoped to this app's prefix and tag namespace: %s", got, want)
+		}
+	}
+}
+
+func TestANextContainersReleaseSeedsTheTagSnapshotItsPreloadSyncsFrom(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerSpec(t)
+	store := &fakeArtifactStore{}
+	cfg.Objects = store
+	cfg.KeyValues = fake.NewKeyValues()
+	cfg.BackendURL = "s3://ocel-state/conformance"
+	cfg.PulumiProject = "ocel-conformance"
+	cfg.Passphrase = "a-passphrase"
+	outputs := containerInfraOutputs()
+	outputs["web"] = auto.OutputValue{Value: map[string]any{
+		outputKeyContainerURL:      "http://" + fixtureOrigin,
+		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+	}}
+	stacks := stacksWith(cfg, &mockedEngine{outputs: outputs})
+
+	if _, err := stacks.Provision(context.Background(), spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if want := prerender.TagSnapshotKey(spec.App.ISR.Prefix); !slices.Contains(store.puts, want) {
+		t.Errorf("the release put %v, want %s: a build with no snapshot never syncs a revalidation to its use-cache entries", store.puts, want)
 	}
 }
