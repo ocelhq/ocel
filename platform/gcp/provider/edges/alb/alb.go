@@ -69,6 +69,7 @@ func (e *Edge) Hooks() edge.Hooks {
 		CheckBootstrapInstalled:       e.bootstrapInstalled,
 		ListBoundHostnames:            e.boundHostnames,
 		DescribeCredentialPermissions: e.credentialPermissions,
+		PublishPreviewGate:            e.publishPreviewGate,
 	}
 }
 

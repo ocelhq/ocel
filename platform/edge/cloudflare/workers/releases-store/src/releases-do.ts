@@ -67,4 +67,12 @@ export class ReleasesStore extends DurableObject<Env> {
   async setVersionStamp(version: string): Promise<void> {
     store.setVersionStamp(this.ctx.storage, version);
   }
+
+  async readPreviewGate(): Promise<string | undefined> {
+    return store.readPreviewGate(this.ctx.storage);
+  }
+
+  async setPreviewGate(gate: string | undefined): Promise<void> {
+    store.setPreviewGate(this.ctx.storage, gate);
+  }
 }

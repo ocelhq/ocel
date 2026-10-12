@@ -83,5 +83,8 @@ func TestABoxEdgeAndTheCloudflareProxyInFrontOfItBothGateTheirPreviews(t *testin
 		if !front.Facts().GatesPreviews {
 			t.Errorf("the %q edge declares GatesPreviews = false, want true: previews it fronts are gated by the switchboard behind it", kind)
 		}
+		if front.Hooks().PublishPreviewGate == nil {
+			t.Errorf("the %q edge publishes no preview gate, and the switchboard is where the gate lives", kind)
+		}
 	}
 }

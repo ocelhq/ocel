@@ -10,8 +10,6 @@ export interface Env {
   OCEL_PREVIEW_GLOBAL?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
   OCEL_PREVIEW_KEY?: string;
-  OCEL_PREVIEW_GATE?: string;
-  OCEL_PREVIEW_GATES?: string;
   OCEL_ASSET_BUCKET?: string;
   OCEL_AWS_REGION?: string;
   OCEL_EDGE_ACCESS_KEY_ID?: string;

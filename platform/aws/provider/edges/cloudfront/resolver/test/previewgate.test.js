@@ -51,10 +51,11 @@ function cloudfront(entries, { failing = [] } = {}) {
 }
 
 const HOST = "app-abc.preview.example.com";
-const STACK = "ocel.shop.preview";
+const SLUG = "shop";
 
 const ROUTE = {
-  stack: STACK,
+  stack: "ocel.shop.preview",
+  slug: SLUG,
   origin: "abcdef.lambda-url.eu-west-1.on.aws",
   release: "r3f8a1c9d",
   assets: "ocel-assets.s3.eu-west-1.amazonaws.com",
@@ -146,7 +147,7 @@ function answeredHeader(answered, name) {
 }
 
 async function admit(program, event, gate, { entries, options } = {}) {
-  const cf = cloudfront({ [HOST]: ROUTE, [`gate/${STACK}`]: gate, ...entries }, options);
+  const cf = cloudfront({ [HOST]: ROUTE, [`gate/${SLUG}`]: gate, ...entries }, options);
   const answered = await compile(program, cf)(event);
   return { answered, cf };
 }
@@ -206,11 +207,11 @@ describe.each(PREVIEWS)("the %s preview resolver", (_name, program) => {
       const answered = await compile(program, cf)(event);
 
       expect(answered).toBe(event.request);
-      expect(cf.reads).toEqual([HOST, `gate/${STACK}`]);
+      expect(cf.reads).toEqual([HOST, `gate/${SLUG}`]);
     });
 
     it("refuses with 503 and never caches it when the store cannot say whether a gate exists", async () => {
-      const cf = cloudfront({ [HOST]: ROUTE }, { failing: [`gate/${STACK}`] });
+      const cf = cloudfront({ [HOST]: ROUTE }, { failing: [`gate/${SLUG}`] });
 
       const answered = await compile(program, cf)(eventFor(refused));
 
@@ -243,7 +244,7 @@ describe.each(PREVIEWS)("the %s preview resolver", (_name, program) => {
     });
 
     it("refuses with the gate before it routes to a release, on a hostname with a gate", async () => {
-      const entries = { [`gate/${STACK}`]: vectors.gate };
+      const entries = { [`gate/${SLUG}`]: vectors.gate };
       const cf = cloudfront({ [HOST]: ROUTE, ...entries });
 
       const answered = await compile(program, cf)(eventFor(refused));
@@ -268,7 +269,7 @@ describe.each(PREVIEWS)("the %s preview resolver", (_name, program) => {
 
 describe("the production resolver", () => {
   it("never reads a gate", async () => {
-    const cf = cloudfront({ [HOST]: ROUTE, [`gate/${STACK}`]: vectors.gate });
+    const cf = cloudfront({ [HOST]: ROUTE, [`gate/${SLUG}`]: vectors.gate });
     const event = eventFor({ method: "GET", host: HOST, target: "/", headers: {} });
 
     const answered = await compile(PRODUCTION, cf)(event);

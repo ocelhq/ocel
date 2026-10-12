@@ -20,6 +20,12 @@ function createRecordingBinding(result: PointerRecordResult): Recording {
       binding.labels.push(args);
       return result;
     },
+    async readServedRecord() {
+      return { kind: "not-served" };
+    },
+    async readPreviewGate() {
+      return undefined;
+    },
   };
   return binding;
 }

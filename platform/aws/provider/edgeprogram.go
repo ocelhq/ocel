@@ -34,8 +34,6 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Env:                      req.Env,
 		PreviewBaseDomain:        req.PreviewBaseDomain,
 		PreviewKey:               req.PreviewKey,
-		PreviewGate:              req.PreviewGate,
-		PreviewGates:             req.PreviewGates,
 		Origin:                   values.Bindings(),
 		StoreScriptName:          params.ReleasesStore.ScriptName,
 		StoreEndpoint:            params.ReleasesStore.Endpoint,

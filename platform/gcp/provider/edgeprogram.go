@@ -35,8 +35,6 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Env:               req.Env,
 		PreviewBaseDomain: req.PreviewBaseDomain,
 		PreviewKey:        req.PreviewKey,
-		PreviewGate:       req.PreviewGate,
-		PreviewGates:      req.PreviewGates,
 		Origin: cloudflare.OriginBindings{
 			ClientCertificate: adopted.ClientCertificate.ID,
 			Variables: map[string]string{

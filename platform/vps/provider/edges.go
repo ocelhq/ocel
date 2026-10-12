@@ -25,13 +25,22 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return boxProxy{cloudflare.NewProxy(namespace.String(), decoded)}, nil
+		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), decoded), box: e.provider.box()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `provider.vps.edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
 }
 
-type boxProxy struct{ *cloudflare.Proxy }
+type boxProxy struct {
+	*cloudflare.Proxy
+	box *box.Edge
+}
+
+func (x boxProxy) Hooks() edge.Hooks {
+	hooks := x.Proxy.Hooks()
+	hooks.PublishPreviewGate = x.box.Hooks().PublishPreviewGate
+	return hooks
+}
 
 func (x boxProxy) Facts() edge.Facts {
 	facts := x.Proxy.Facts()

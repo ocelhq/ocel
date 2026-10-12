@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -119,5 +120,82 @@ func TestDestroyingAPreviewStackTakesItsPreviewGateOffTheBox(t *testing.T) {
 
 	if len(m.previewGates) != 0 {
 		t.Errorf("the box holds preview gates %v after the project was destroyed, want none", m.previewGates)
+	}
+}
+
+func TestPublishingAGateHandsTheSwitchboardItWithoutAMove(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	stack := previewStack(t, m)
+	surface := box.Surface(slug, environment.TierPreview)
+	publish := edgeOver(m, fake.NewKeyValues()).Hooks().PublishPreviewGate
+	if publish == nil {
+		t.Fatal("Hooks().PublishPreviewGate = nil, want the box to hand the switchboard a gate the moment it changes")
+	}
+
+	if err := publish(context.Background(), edge.PreviewGatePublication{State: stack.State(), Gate: &recordedPreviewGate}); err != nil {
+		t.Fatalf("PublishPreviewGate = %v", err)
+	}
+
+	if got, held := m.previewGates[surface]; !held || got.Key != recordedPreviewGate.Key {
+		t.Errorf("the box holds preview gate %+v for %s, want %+v", got, surface, recordedPreviewGate)
+	}
+}
+
+func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	state := previewStack(t, m).State()
+	surface := box.Surface(slug, environment.TierPreview)
+	publish := edgeOver(m, fake.NewKeyValues()).Hooks().PublishPreviewGate
+
+	edgeconformance.RunPublishedPreviewGate(t, edgeconformance.PublishedPreviewGate{
+		Publish: func(ctx context.Context, gate *previewgate.Gate) error {
+			return publish(ctx, edge.PreviewGatePublication{State: state, Gate: gate})
+		},
+		Read: func(context.Context) (*previewgate.Gate, error) {
+			if held, found := m.previewGates[surface]; found {
+				return &held, nil
+			}
+			return nil, nil
+		},
+	})
+}
+
+func TestReconcilingAPreviewStackHandsTheSwitchboardTheGateTheDeployRecordedBeforeAnyMove(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	surface := box.Surface(slug, environment.TierPreview)
+	front := edgeOver(m, fake.NewKeyValues())
+
+	if _, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Tier: environment.TierPreview, Slug: slug, PreviewGate: &recordedPreviewGate,
+	}, edge.StackState{GlobalPreview: previewBase}); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+	if got, held := m.previewGates[surface]; !held || got.Key != recordedPreviewGate.Key {
+		t.Fatalf("after a protected deploy's edge step the box holds preview gate %+v for %s, want %+v: a deploy that fails before it moves a pointer would leave previews already served ungated", got, surface, recordedPreviewGate)
+	}
+
+	if _, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Tier: environment.TierPreview, Slug: slug,
+	}, edge.StackState{GlobalPreview: previewBase}); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+	if got, held := m.previewGates[surface]; held {
+		t.Errorf("after an open deploy's edge step the box still holds preview gate %+v for %s, want it taken off", got, surface)
+	}
+}
+
+func TestAProductionReconcileNeverTouchesAPreviewGate(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := reconciled(t)
+
+	if indexOf(m.calls, "preview gate ") >= 0 {
+		t.Errorf("calls = %v, want a production reconcile to leave preview gates alone", m.calls)
 	}
 }

@@ -52,6 +52,7 @@ export const SCHEMA_VERSION = 4;
 
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
+const PREVIEW_GATE_KEY = "previewGate";
 const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
 const SCHEMA_KEY = "schemaVersion";
@@ -274,4 +275,16 @@ export function readVersionStamp(store: SqlStore): string | undefined {
 
 export function setVersionStamp(store: SqlStore, version: string): void {
   setMeta(store, VERSION_KEY, version);
+}
+
+export function readPreviewGate(store: SqlStore): string | undefined {
+  return getMeta(store, PREVIEW_GATE_KEY);
+}
+
+export function setPreviewGate(store: SqlStore, gate: string | undefined): void {
+  if (gate === undefined) {
+    store.sql.exec(`DELETE FROM meta WHERE key = ?`, PREVIEW_GATE_KEY);
+    return;
+  }
+  setMeta(store, PREVIEW_GATE_KEY, gate);
 }

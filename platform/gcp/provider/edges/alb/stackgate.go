@@ -72,14 +72,13 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	}
 	routed := s.listRoutedHosts()
 	newlyGated := false
-	changed, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
+	if _, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
 		if gate == nil {
 			return gateRecord{}, false
 		}
 		newlyGated = !found
 		return gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *gate}, true
-	})
-	if err != nil || !changed {
+	}); err != nil {
 		return err
 	}
 	log := sayingTo(spec.Warn)

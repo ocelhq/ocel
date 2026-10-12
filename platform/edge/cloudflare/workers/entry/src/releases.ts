@@ -42,6 +42,7 @@ export interface ReleasesBinding {
     label: string;
     knownRelease?: string;
   }): Promise<PointerRecordResult>;
+  readPreviewGate(args: { slug: string }): Promise<string | undefined>;
 }
 
 export interface ReleaseLookup {

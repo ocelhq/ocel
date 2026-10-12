@@ -328,7 +328,7 @@ async function gatePreviewRequest(
   env: Env,
   slug: string,
 ): Promise<Response | { request: Request; responseHeaders: Headers }> {
-  const read = readPreviewGate(env, slug);
+  const read = await readPreviewGate(env.RELEASES, slug);
   if (read.kind === "unreadable") return previewGateUnreadableResponse();
   if (read.kind === "open") return { request, responseHeaders: new Headers() };
   const outcome = await gatePreview(request, read.gate, Math.floor(Date.now() / 1000));

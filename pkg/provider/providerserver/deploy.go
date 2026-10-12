@@ -632,7 +632,6 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		Warn:        progress.Warn,
 	}
 	var base string
-	var gate *previewgate.Gate
 	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
@@ -646,7 +645,6 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		}
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
-		gate = r.previewGate
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
 		Tier:              r.spec.Tier,
@@ -654,15 +652,12 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		Env:               r.spec.Env,
 		PreviewBaseDomain: base,
 		PreviewKey:        r.previewKey,
-		PreviewGate:       gate,
 	})
 	if err != nil {
 		return err
 	}
 	spec.Program = program.Spec
-	if !r.front.Facts().RunsCode {
-		spec.PreviewGate = r.previewGate
-	}
+	spec.PreviewGate = r.previewGate
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		return err
