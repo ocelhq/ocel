@@ -245,3 +245,20 @@ func TestACloudflareCallThatIsRateLimitedSendsItsBodyAgainWhenItRetries(t *testi
 		t.Errorf("Cloudflare received bodies %q, want the same body on the retry", api.bodies)
 	}
 }
+
+func TestACloudflareCallDoesNotRetryAConflict(t *testing.T) {
+	t.Parallel()
+	client, api, _ := scriptedClient(t,
+		answer{status: http.StatusConflict, body: `{"success":false,"errors":[{"code":10020,"message":"A route with the same pattern already exists"}]}`},
+		answer{status: http.StatusOK, body: accountBody},
+	)
+
+	err := client.Post(context.Background(), "zones/zone1/workers/routes", map[string]string{"pattern": "app.com/*"}, nil)
+	var apiErr *cf.Error
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusConflict {
+		t.Fatalf("Post() error = %v, want Cloudflare's 409", err)
+	}
+	if api.count() != 1 {
+		t.Errorf("Cloudflare saw %d requests, want 1: a conflict is the state of the account, which waiting never changes", api.count())
+	}
+}
