@@ -58,13 +58,14 @@ await Promise.all(
   ),
 );
 
-await bundle(Bun.resolveSync("@framework/node-runtime/entrypoint", pkgDir), nodeEntrypoint, {
+await bundle(join(pkgDir, "src/node/entrypoint.mts"), nodeEntrypoint, {
   format: "esm",
 });
 
-await Promise.all(
-  bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
-);
+await Promise.all([
+  ...bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
+  rm(join(distNode, "tag-records.mjs"), { force: true }),
+]);
 
 const looseImports = {
   name: "loose-imports",
