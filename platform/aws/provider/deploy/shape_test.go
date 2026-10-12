@@ -420,3 +420,26 @@ func TestAnEphemeralPreviewShapesTheContainerWorkersItDeclares(t *testing.T) {
 	}
 	shapedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")
 }
+
+func TestAContainerWorkerAppIsShapedWithItsWorkersAtItsFloorAndNoWebService(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	for i, app := range req.Deploy.Apps {
+		if app.App == "api" {
+			req.Deploy.Apps[i].Instances = provider.Instances{Min: 2, Max: 4}
+			req.Deploy.Apps[i].Workers = []provider.WorkerSpec{{Name: "api", App: "api", Compute: provider.ComputeContainer}}
+		}
+	}
+	req.Resources = append(req.Resources, taskResource("encode", provider.ConsumerSpec{Worker: "api"}))
+	set := shaped(t, nil, req)
+
+	for _, r := range set.GetResources() {
+		if (r.GetType() == "aws_ecs_service" || r.GetType() == "aws_ecs_task_definition") && r.GetName() == "api" {
+			t.Errorf("shaped %s %s, want no web service for an app only its worker runs on", r.GetType(), r.GetName())
+		}
+	}
+	if service := shapedNamed(t, set, "aws_ecs_service", resources.WorkerName("api")); service["desired_count"] != float64(2) {
+		t.Errorf("the worker's service is shaped at %v tasks, want the app's floor of 2", service["desired_count"])
+	}
+}
