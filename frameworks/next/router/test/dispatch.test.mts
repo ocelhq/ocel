@@ -161,7 +161,7 @@ describe("dispatchResult", () => {
           routes: {},
           dispatch: {
             "/about": { kind: "static" },
-            "/blog": { kind: "prerender", id: "/blog", config: {} },
+            "/blog": { kind: "prerender", id: "/blog", parent: "/blog", config: {} },
           },
         },
         functionUrls: { "/blog": "https://fn.example.com" },
@@ -1657,7 +1657,7 @@ describe("data-request invocation pathname", () => {
         pathnames: [],
         routes: {},
         dispatch: {
-          "/[...route]": { kind: "prerender", id: "fn", config: {} },
+          "/[...route]": { kind: "prerender", id: "fn", parent: "/[...route]", config: {} },
         },
       },
       functionUrls: { fn: "https://fn.example.com" },
@@ -1755,6 +1755,7 @@ describe("data-request invocation pathname", () => {
           "/_next/data/t/index.json": {
             kind: "prerender",
             id: "fn",
+            parent: "/",
             config: {},
           },
         },
@@ -2115,7 +2116,7 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
     expect(invoked().searchParams.get("nxtPid")).toBe("something-else");
   });
 
-  it("keeps params for a prerendered concrete path of a dynamic page", async () => {
+  function blogDeps(prerenderedId: string): { deps: RouteDeps; invoked: () => URL | undefined } {
     let captured: URL | undefined;
     const deps = baseDeps({
       manifest: {
@@ -2136,20 +2137,44 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
           fallback: [],
         } as unknown as RouteDeps["manifest"]["routes"],
         dispatch: {
-          "/blog/post-1": { kind: "prerender", id: "/blog/post-1", config: {} },
+          [prerenderedId]: {
+            kind: "prerender",
+            id: prerenderedId,
+            parent: "/blog/[slug]",
+            config: {},
+          },
         },
       },
-      functionUrls: { "/blog/post-1": "https://blog.example.com" },
+      functionUrls: { [prerenderedId]: "https://blog.example.com" },
       fetch: (async (req: Request) => {
         captured = new URL(req.url);
         return new Response("rendered", { status: 200 });
       }) as unknown as typeof fetch,
     });
+    return { deps, invoked: () => captured };
+  }
+
+  it("keeps params for a prerendered concrete path of a dynamic page", async () => {
+    const { deps, invoked } = blogDeps("/blog/post-1");
 
     await serve(new Request("https://app.example/blog/post-1"), deps);
 
-    expect(captured?.searchParams.get("nxtPslug")).toBe("post-1");
+    expect(invoked()?.searchParams.get("nxtPslug")).toBe("post-1");
   });
+
+  it.each([
+    ["a prerendered concrete path", "/blog/post-1", "/blog/post-1"],
+    ["a dynamic prerender's fallback route", "/blog/new", "/blog/[slug]"],
+  ])(
+    "takes %s's nxtP params from the path, not from a visitor-supplied query",
+    async (_, path, id) => {
+      const { deps, invoked } = blogDeps(id);
+
+      await serve(new Request(`https://app.example${path}?nxtPslug=forged`), deps);
+
+      expect(invoked()?.searchParams.getAll("nxtPslug")).toEqual([path.split("/")[2]]);
+    },
+  );
 
   it("leaves the root path unaffected", async () => {
     let captured: URL | undefined;
@@ -2254,6 +2279,84 @@ describe("the origin URL under a config rewrite", () => {
     expect(invoked().pathname).toBe("/blog-post-1");
     expect(invoked().searchParams.get("ref")).toBe("home");
     expect(invoked().searchParams.has("nxtPpost")).toBe(false);
+  });
+
+  function rewritingTo(destination: string): Partial<RouteDeps["manifest"]> {
+    return {
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [{ sourceRegex: "^/rewritten$", destination }],
+        dynamicRoutes: [
+          {
+            sourceRegex: "^/blog/(?<nxtPpost>[^/]+?)(?:/)?$",
+            destination: "/blog/[post]?nxtPpost=$nxtPpost",
+          },
+        ],
+        onMatch: [],
+        fallback: [],
+      } as unknown as RouteDeps["manifest"]["routes"],
+    };
+  }
+
+  it.each(["nxtPpost", "nxtIpost"])(
+    "drops a visitor-supplied %s from a rewrite to the dynamic route that reads it",
+    async (key) => {
+      const { deps, invoked } = capturingDeps(rewritingTo("/blog/post-1"));
+
+      await serve(new Request(`https://app.example/rewritten?ref=home&${key}=forged`), deps);
+
+      expect(invoked().searchParams.get("ref")).toBe("home");
+      expect(invoked().searchParams.has(key)).toBe(false);
+    },
+  );
+
+  it("drops a visitor-supplied route param from a rewrite to a prerendered path of a dynamic route", async () => {
+    const { deps, invoked } = capturingDeps({
+      ...rewritingTo("/blog/post-1"),
+      pathnames: ["/blog/[post]", "/blog/post-1"],
+      dispatch: {
+        "/blog/[post]": { kind: "function", id: "blog" },
+        "/blog/post-1": { kind: "prerender", id: "blog", parent: "/blog/[post]", config: {} },
+      },
+    });
+
+    await serve(new Request("https://app.example/rewritten?nxtPpost=forged"), deps);
+
+    expect(invoked().searchParams.has("nxtPpost")).toBe(false);
+  });
+
+  it.each([
+    ["a function", { kind: "function", id: "target" }],
+    ["a prerender", { kind: "prerender", id: "target", parent: "/blog/featured", config: {} }],
+  ] as const)(
+    "keeps a visitor's own nxtPpost on a rewrite to a static page a dynamic route's pattern also matches, rendered by %s",
+    async (_, featured) => {
+      const { deps, invoked } = capturingDeps({
+        ...rewritingTo("/blog/featured"),
+        pathnames: ["/blog/[post]", "/blog/featured"],
+        dispatch: {
+          "/blog/[post]": { kind: "function", id: "blog" },
+          "/blog/featured": featured,
+        },
+      });
+
+      await serve(new Request("https://app.example/rewritten?nxtPpost=mine"), deps);
+
+      expect(invoked().pathname).toBe("/rewritten");
+      expect(invoked().searchParams.get("nxtPpost")).toBe("mine");
+    },
+  );
+
+  it.each([
+    ["a static page", "/rewrite-target"],
+    ["a dynamic route without that param", "/blog/post-1"],
+  ])("keeps a visitor's own nxtP-prefixed param on a rewrite to %s", async (_, destination) => {
+    const { deps, invoked } = capturingDeps(rewritingTo(destination));
+
+    await serve(new Request("https://app.example/rewritten?nxtPage=1"), deps);
+
+    expect(invoked().searchParams.get("nxtPage")).toBe("1");
   });
 
   it("still forwards the interpolated pathname for a direct dynamic-route hit", async () => {
