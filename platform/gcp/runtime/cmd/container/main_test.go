@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge/previewgate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -33,11 +35,14 @@ const (
 )
 
 type served struct {
-	Port    string `json:"port"`
-	Secret  string `json:"secret"`
-	Health  string `json:"health"`
-	Runtime string `json:"runtime"`
-	Token   string `json:"token"`
+	Port     string `json:"port"`
+	Secret   string `json:"secret"`
+	Health   string `json:"health"`
+	Runtime  string `json:"runtime"`
+	Token    string `json:"token"`
+	Gate     string `json:"gate"`
+	GateFile string `json:"gateFile"`
+	Probe    string `json:"probe"`
 }
 
 func TestContainerHelper(t *testing.T) {
@@ -101,11 +106,14 @@ func TestContainerHelper(t *testing.T) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(served{
-			Port:    os.Getenv(containerimage.PortEnvVar),
-			Secret:  os.Getenv(originguard.OriginSecretVar),
-			Health:  os.Getenv(originguard.HealthPathVar),
-			Runtime: os.Getenv(processenv.RuntimeAddressEnvVar),
-			Token:   os.Getenv(localrpc.SessionTokenEnvVar),
+			Port:     os.Getenv(containerimage.PortEnvVar),
+			Secret:   os.Getenv(originguard.OriginSecretVar),
+			Health:   os.Getenv(originguard.HealthPathVar),
+			Runtime:  os.Getenv(processenv.RuntimeAddressEnvVar),
+			Token:    os.Getenv(localrpc.SessionTokenEnvVar),
+			Gate:     os.Getenv(previewgate.MountedInlineVar),
+			GateFile: os.Getenv(previewgate.MountedFileVar),
+			Probe:    os.Getenv(originguard.ProbeTokenVar),
 		})
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(containerimage.PortEnvVar), mux); err != nil {
@@ -262,6 +270,71 @@ func TestRun(t *testing.T) {
 		if code := r.quit(t, ""); code != 0 {
 			t.Errorf("run = %d, want 0 for an app that finished cleanly", code)
 		}
+	})
+
+	t.Run("the front gates every request against the gate its service mounts and never hands the app the gate", func(t *testing.T) {
+		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
+		mounted := filepath.Join(t.TempDir(), "gate")
+		if err := os.WriteFile(mounted, []byte(gate), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		r := launch(t, "serve", previewgate.MountedFileVar+"="+mounted, originguard.HealthPathVar+"=/", originguard.ProbeTokenVar+"=probe-token")
+		signedIn := http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:pw"))}}
+		body := r.awaitFrontWith(t, "", signedIn)
+
+		if body.Probe != "" {
+			t.Errorf("the app was handed %s=%q; the token Cloud Run's probe carries is not the app's", originguard.ProbeTokenVar, body.Probe)
+		}
+		probe, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/", nil)
+		probe.Header.Set(originguard.ProbeTokenHeader, "probe-token")
+		if resp, err := http.DefaultClient.Do(probe); err != nil || resp.StatusCode != http.StatusOK {
+			t.Errorf("a probe carrying the token = %v, %v, want the app's 200", resp, err)
+		} else {
+			resp.Body.Close()
+		}
+
+		if body.GateFile != "" || body.Gate != "" {
+			t.Errorf("the app was handed %s=%q and %s=%q; where its preview gate lives is not the app's",
+				previewgate.MountedFileVar, body.GateFile, previewgate.MountedInlineVar, body.Gate)
+		}
+		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("a request with no credentials = %d, want 401: nothing else in front of this service gates its preview", resp.StatusCode)
+		}
+		req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/quit", nil)
+		req.Header = signedIn
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+		if code := r.await(t); code != 0 {
+			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
+	t.Run("a service whose mounted gate cannot be read serves no one", func(t *testing.T) {
+		sigterm := make(chan os.Signal, 1)
+		signal.Notify(sigterm, syscall.SIGTERM)
+		t.Cleanup(func() { signal.Stop(sigterm) })
+		missing := filepath.Join(t.TempDir(), "gate")
+		r := launch(t, "serve", previewgate.MountedFileVar+"="+missing)
+		deadline := time.Now().Add(30 * time.Second)
+		for resp := (*http.Response)(nil); ; time.Sleep(20 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("the front never answered")
+			}
+			var err error
+			if resp, err = http.Get("http://127.0.0.1:" + r.port + "/"); err != nil {
+				continue
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusServiceUnavailable {
+				t.Fatalf("a request with the gate unreadable = %d, want 503", resp.StatusCode)
+			}
+			break
+		}
+		if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+			t.Fatal(err)
+		}
+		r.await(t)
 	})
 
 	t.Run("the origin secret guards the front and never reaches the app", func(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -49,6 +50,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	env := make([]string, 0, len(environ))
 	manifest := ""
 	healthPath := ""
+	probeToken := ""
 	worker := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
@@ -61,12 +63,16 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 			continue
 		case originguard.HealthPathVar:
 			healthPath = value
+		case originguard.ProbeTokenVar:
+			probeToken = value
+			continue
 		case processenv.WorkerEnvVar:
 			worker = value
 		}
 		env = append(env, entry)
 	}
 	guard, env := originguard.GuardFromEnv(env)
+	gate, env := mountedgate.FromEnv(env)
 
 	pinned, err := readManifest(manifest)
 	if err != nil {
@@ -105,9 +111,11 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
 	front := originguard.Handler(originguard.Options{
-		Upstream:   upstream,
-		Guard:      guard,
-		HealthPath: healthPath,
+		Upstream:    upstream,
+		Guard:       guard,
+		HealthPath:  healthPath,
+		PreviewGate: gate,
+		ProbeToken:  probeToken,
 	})
 	if worker != "" {
 		if front, err = workerFront(pinned, worker, upstream.String()); err != nil {

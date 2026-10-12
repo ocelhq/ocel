@@ -6,6 +6,7 @@ import rawVectors from "../../../../pkg/edge/edgeconformance/previewgate.json" w
 import gateEncodings from "../fixtures/preview-gate.json" with { type: "json" };
 import {
   checkPreview,
+  decodeMountedPreviewGate,
   hashPreviewPassword,
   type PreviewGate,
   parsePreviewGate,
@@ -109,6 +110,24 @@ describe("a gate's keys read back from the JSON Go encodes them as", () => {
     const { slug, encoded } = gateEncodings.sharedEntry;
     const recorded = JSON.parse(encoded) as Record<string, unknown>;
     expect(parsePreviewGate(recorded[slug])).toEqual(gateEncodings.gates[0]?.gate);
+  });
+});
+
+describe("a mounted gate", () => {
+  for (const example of gateEncodings.gates) {
+    it(`decodes ${example.name} from the JSON Go mounts`, () => {
+      expect(decodeMountedPreviewGate(example.encoded)).toEqual(example.gate);
+    });
+  }
+
+  it("decodes a withdrawn gate to no gate", () => {
+    expect(decodeMountedPreviewGate("null\n")).toBeUndefined();
+  });
+
+  it("refuses contents it cannot read rather than opening the preview", () => {
+    for (const contents of ["", "{", "[]", "true", '{"key":"","passwordMac":"m"}']) {
+      expect(() => decodeMountedPreviewGate(contents), contents).toThrow();
+    }
   });
 });
 

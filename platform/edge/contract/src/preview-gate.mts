@@ -38,6 +38,23 @@ function isStrings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+export const PREVIEW_GATE_FILE_VAR = "OCEL_PREVIEW_GATE_FILE";
+export const PREVIEW_GATE_INLINE_VAR = "OCEL_PREVIEW_GATE";
+
+export function decodeMountedPreviewGate(contents: string): PreviewGate | undefined {
+  const trimmed = contents.trim();
+  if (trimmed === "null") return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(trimmed);
+  } catch {
+    throw new Error("the mounted preview gate is not JSON");
+  }
+  const gate = parsePreviewGate(value);
+  if (gate === undefined) throw new Error("the mounted preview gate names no key");
+  return gate;
+}
+
 export interface PreviewRequest {
   method: string;
   host: string;
