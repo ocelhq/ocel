@@ -45,6 +45,7 @@ export interface StoredEntryCall {
   fallbackPath?: string;
   revalidate?: number;
   expire?: number;
+  pathDeterminesQuery?: boolean;
 }
 
 export interface RenderRelease {

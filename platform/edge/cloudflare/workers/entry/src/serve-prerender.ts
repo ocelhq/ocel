@@ -136,6 +136,7 @@ function buildStoredEntryCall(ctx: PrerenderContext, sharedShell: boolean): Stor
     fallbackPath: resolvedPathname ?? path,
     ...(typeof initialRevalidate === "number" && { revalidate: initialRevalidate }),
     ...(typeof initialExpiration === "number" && { expire: initialExpiration }),
+    ...(target.allowQuery !== undefined && { pathDeterminesQuery: true }),
   };
 }
 

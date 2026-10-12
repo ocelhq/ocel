@@ -138,7 +138,12 @@ function readStoredEntryCall(entry: unknown): StoredEntryCall | undefined {
     fallbackPath: typeof call.fallbackPath === "string" ? call.fallbackPath : undefined,
     revalidate: count(call.revalidate),
     expire: count(call.expire),
+    ...(call.pathDeterminesQuery === true && { pathDeterminesQuery: true }),
   };
+}
+
+function isKeyedByPath(render: RenderRelease, keyedUrl: string): boolean {
+  return render.entry?.pathDeterminesQuery === true || new URL(keyedUrl).search === "";
 }
 
 function isRevalidation(request: Request): boolean {
@@ -355,7 +360,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         found.render,
       );
     }
-    if (isRevalidation(request) || new URL(keyedUrl).search !== "") return render();
+    if (isRevalidation(request) || !isKeyedByPath(found.render, keyedUrl)) return render();
     let stored: StoreAnswer | null = null;
     try {
       stored = await this.askStore(request, found.render, release);
@@ -378,7 +383,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   ): Promise<Response> {
     let shell: StoreAnswer | null = null;
     try {
-      if (new URL(call.keyedUrl).search === "") {
+      if (isKeyedByPath(render, call.keyedUrl)) {
         shell = await this.askStore(request, render, call.release);
       }
     } catch (error) {
