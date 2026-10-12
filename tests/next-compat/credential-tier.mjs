@@ -10,6 +10,7 @@ import { ocelBinary, projectSlugForRun, renderOcelConfig, withoutSkipChecks } fr
 import { linkSidecar } from "./sidecar.mjs";
 
 const TIERS = ["bootstrap", "deploy"];
+const ENVIRONMENT_TIER = "preview";
 const MODES = ["policy", "policy-parts", "run"];
 
 const MANAGED_POLICY_CHARS = 6144;
@@ -88,9 +89,11 @@ export function printPolicy(tier) {
 
 export function awsPolicyDocument(stdout) {
   const groups = JSON.parse(stdout).data?.groups ?? [];
-  const policy = groups
-    .map((group) => group.document)
-    .find((document) => Array.isArray(document?.Statement));
+  const policy = groups.find(
+    (group) =>
+      Array.isArray(group.document?.Statement) &&
+      group.heading?.endsWith(`for the ${ENVIRONMENT_TIER} tier`),
+  )?.document;
   if (!policy) {
     throw new Error(
       `ocel permissions wrote no IAM policy document, only: ${stdout.trim() || "(nothing)"}`,
@@ -101,7 +104,7 @@ export function awsPolicyDocument(stdout) {
 
 function runTier(tier) {
   if (tier === "bootstrap") {
-    ocel(["bootstrap", "preview", "--yes"], {
+    ocel(["bootstrap", ENVIRONMENT_TIER, "--yes"], {
       cwd: configuredDir("bootstrap"),
       stdio: ["ignore", "inherit", "inherit"],
       timeout: BOOTSTRAP_TIMEOUT_MS,
