@@ -10,6 +10,7 @@ import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import { type PurgeGroup, purgeHeader, readPurge } from "@platform/edge-contract/purge";
 import {
   encodeForwardedSearch,
+  isAbsoluteUrl,
   needsSlashNormalization,
   normalizeRepeatedSlashes,
   readPathAndQuery,
@@ -612,12 +613,10 @@ export async function dispatchResult(
   return tagged;
 }
 
-const ABSOLUTE_URL_ORIGIN = /^[a-z][a-z\d+.-]*:\/\/[^/]*/i;
-
 function forwardRequestQuery(headers: Headers, requestUrl: string): void {
   const location = headers.get("location");
   if (!location) return;
-  if (!location.startsWith("/") && !ABSOLUTE_URL_ORIGIN.test(location)) return;
+  if (!location.startsWith("/") && !isAbsoluteUrl(location)) return;
 
   const requestQueryIndex = requestUrl.indexOf("?");
   if (requestQueryIndex === -1) return;

@@ -2,6 +2,10 @@ const absoluteUrlOrigin = /^[a-z][a-z\d+.-]*:\/\/[^/]*/i;
 
 const repeatedSlashOrBackslash = /(\\|\/\/)/;
 
+export function isAbsoluteUrl(url: string): boolean {
+  return absoluteUrlOrigin.test(url);
+}
+
 export function readPathAndQuery(url: string): string {
   return url.replace(absoluteUrlOrigin, "");
 }

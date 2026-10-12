@@ -1,4 +1,4 @@
-import { refuseOverlappingRepeats } from "./ocel-route-pattern.mjs";
+import { refuseOverlappingRepeats, repeatBound } from "./ocel-route-pattern.mjs";
 
 export type TrailingSlash = "never" | "always" | "ignore";
 
@@ -46,7 +46,6 @@ const longestMatchedPath = 4096;
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const bypassTokenCharacters = /^[A-Za-z0-9_-]+$/;
 const groupReference = /\$(\d+)/g;
-const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
 const redirectStatuses = [301, 302, 307, 308];
 const absoluteLocation = /^https?:\/\//i;
 const sameSiteLocation = /^\/(?![/\\])/;

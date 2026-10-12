@@ -1,6 +1,6 @@
 const maxCodePoint = 0x10ffff;
 
-const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
+export const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
 
 type Range = readonly [number, number];
 
