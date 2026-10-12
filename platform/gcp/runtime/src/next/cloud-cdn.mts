@@ -1,7 +1,7 @@
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { uncacheableCacheControl } from "@platform/edge-contract/cache-control";
+import { uncacheableCacheControl } from "@framework/node-runtime/origin-cache-control";
 import { cacheTagsForCloudCdn, cloudCdnTagLimits } from "../cache/cloud-cdn-tags.mjs";
 
 const routerStateTree = "next-router-state-tree";

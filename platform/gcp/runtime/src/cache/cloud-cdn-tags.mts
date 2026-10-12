@@ -1,5 +1,5 @@
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
-import { isImmutableCacheControl } from "@platform/edge-contract/cache-control";
+import { isImmutableCacheControl } from "@framework/node-runtime/origin-cache-control";
 import { readReleaseToken } from "@platform/edge-contract/purge";
 
 const releasePattern = /^r[0-9a-f]{8}$/;

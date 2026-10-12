@@ -1,15 +1,14 @@
 import type http from "node:http";
 import {
+  isImmutableCacheControl,
+  uncacheableCacheControl,
+} from "@framework/node-runtime/origin-cache-control";
+import {
   newWriteHeadLookup,
   readWriteHeadHeaders,
   withoutWriteHeadHeaders,
 } from "@framework/node-runtime/write-head";
-import {
-  type HeaderLookup,
-  isImmutableCacheControl,
-  isStoredBySomeEdge,
-  uncacheableCacheControl,
-} from "@platform/edge-contract/cache-control";
+import { type HeaderLookup, isStoredBySomeEdge } from "@platform/edge-contract/cache-control";
 
 export function isWithheldFromSharedCache(headers: HeaderLookup, now: number): boolean {
   return !isImmutableCacheControl(headers.get("cache-control")) && isStoredBySomeEdge(headers, now);

@@ -13,6 +13,7 @@
     "./undecoded-fetch": "./src/undecoded-fetch.mts",
     "./host": "./src/host.mts",
     "./live-values": "./src/live-values.mts",
+    "./origin-cache-control": "./src/origin-cache-control.mts",
     "./preview-gate": "./src/preview-gate.mts",
     "./serve": "./src/serve.mts",
     "./tag-records": "./src/tag-records.mts",

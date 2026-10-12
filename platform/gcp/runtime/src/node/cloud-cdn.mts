@@ -1,10 +1,10 @@
 import type http from "node:http";
+import { uncacheableCacheControl } from "@framework/node-runtime/origin-cache-control";
 import {
   newWriteHeadLookup,
   readWriteHeadHeaders,
   withoutWriteHeadHeaders,
 } from "@framework/node-runtime/write-head";
-import { uncacheableCacheControl } from "@platform/edge-contract/cache-control";
 import { cacheTagsForCloudCdn } from "../cache/cloud-cdn-tags.mjs";
 
 export function withholdOverTaggedResponsesFromCloudCdn(prototype: http.ServerResponse): void {
