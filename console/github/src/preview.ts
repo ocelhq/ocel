@@ -32,6 +32,7 @@ export interface PreviewClient {
     description: string;
   }): Promise<PreviewDeployment>;
   createDeploymentStatus(input: DeploymentStatusInput): Promise<void>;
+  deleteDeployment(input: { deploymentId: number }): Promise<void>;
   listComments(input: { pr: number }): Promise<PreviewComment[]>;
   createComment(input: { pr: number; body: string }): Promise<void>;
   updateComment(input: { commentId: number; body: string }): Promise<void>;
@@ -72,6 +73,7 @@ export async function reconcile(client: PreviewClient, input: PreviewInput): Pro
     const deployments = await client.listDeployments({ environment });
     for (const deployment of deployments) {
       await client.createDeploymentStatus({ deploymentId: deployment.id, state: "inactive" });
+      await client.deleteDeployment({ deploymentId: deployment.id });
     }
   } else {
     const deployment = await ensureDeployment(client, environment, input.sha);
