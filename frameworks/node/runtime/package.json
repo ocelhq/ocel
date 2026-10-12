@@ -20,7 +20,6 @@
     "./user-app": "./src/user-app.mts"
   },
   "scripts": {
-    "build": "bun scripts/bundle-serve.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

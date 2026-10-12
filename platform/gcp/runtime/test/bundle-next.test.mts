@@ -73,6 +73,36 @@ test("the runtime directory holds the entrypoint and the server preload, with th
   ]);
 });
 
+test("the node serve entry is a module of its own that boots a function from OCEL_HANDLER and installs the edge purge", async () => {
+  const serve = join(dist, "node", "serve.mjs");
+  await init;
+  const [imports] = parse(await readFile(serve, "utf8"));
+  const bare = imports
+    .flatMap((found) => (found.n === undefined ? [] : [found.n]))
+    .filter((specifier) => !isBuiltin(specifier));
+  expect(bare).toEqual([]);
+
+  const failed = await execFileAsync(process.execPath, [serve], {
+    env: { PATH: process.env.PATH, OCEL_HANDLER: "", PORT: "8080" },
+  }).catch((err) => err);
+  expect(failed.code).toBe(1);
+  expect(failed.stderr).toContain("OCEL_HANDLER");
+});
+
+test("the node serve entry refuses to boot a service told a url map and no release to clear tags of", async () => {
+  const failed = await execFileAsync(process.execPath, [join(dist, "node", "serve.mjs")], {
+    env: {
+      PATH: process.env.PATH,
+      OCEL_HANDLER: "/app/x.mjs",
+      PORT: "8080",
+      OCEL_CDN_URL_MAP: "m",
+    },
+  }).catch((err) => err);
+
+  expect(failed.code).not.toBe(0);
+  expect(failed.stderr).toContain("OCEL_CDN_URL_MAP");
+});
+
 test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
   await init;
   const [imports] = parse(await readFile(join(dir, "entrypoint.mjs"), "utf8"));

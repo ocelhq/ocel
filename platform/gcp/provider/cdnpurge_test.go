@@ -75,10 +75,6 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 			spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 			spec.App.Guard = nil
 		},
-		"a node function": func(_ *testing.T, _ *Provider, spec *provider.StackSpec) {
-			spec.App.Framework = "node"
-			spec.App.Functions[0].Framework.Name = "node"
-		},
 		"a Next app without ISR": func(_ *testing.T, _ *Provider, spec *provider.StackSpec) { spec.App.ISR = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
