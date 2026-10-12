@@ -11,7 +11,6 @@ import (
 
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
-	scheduler "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -43,7 +42,7 @@ const (
 type workersWork struct {
 	project  string
 	stack    naming.StackName
-	topics   []deployedTopic
+	topics   deployedTopics
 	workers  []provider.WorkerSpec
 	args     functionArgs
 	artifact artifactRef
@@ -364,28 +363,6 @@ func workersCompute(stack naming.StackName) string {
 	return "functions"
 }
 
-func (w *workersWork) served(worker string) []consumerQueue {
-	var served []consumerQueue
-	for _, topic := range w.topics {
-		for _, queue := range topic.queues {
-			if queue.consumer.Worker == worker {
-				served = append(served, queue)
-			}
-		}
-	}
-	return served
-}
-
-func (w *workersWork) cronTasks(worker string) []deployedTopic {
-	var tasks []deployedTopic
-	for _, topic := range w.topics {
-		if topic.isTask() && topic.declared.Cron != "" && topic.queues[0].consumer.Worker == worker {
-			tasks = append(tasks, topic)
-		}
-	}
-	return tasks
-}
-
 func (w *workersWork) coordinate(kind naming.Kind, name string) naming.Coordinate {
 	return naming.Coordinate{Project: w.project, Env: w.stack.Env, App: w.stack.App, Kind: kind, Name: name}
 }
@@ -415,25 +392,39 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 		}
 		functions = append(functions, fn)
 		ctx.Export(resources.WorkerName(worker.Name), pulumi.Map{outputKeyFunctionName: fn.Name})
-		for _, task := range w.cronTasks(worker.Name) {
-			crons = append(crons, cronTarget{task: task, function: fn})
+		for _, task := range w.topics.cronTasks(worker.Name) {
+			crons = append(crons, cronTarget{task: task, arn: fn.Arn})
 		}
 	}
-	if len(crons) > 0 {
-		return w.declareCrons(ctx, functions, crons)
+	if len(crons) == 0 {
+		return nil
 	}
-	return nil
+	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.role.Boundary, path: w.role.Path, tags: w.role.Tags}
+	return declareCrons(ctx, assumed, w.group, invokingPolicy(functions), crons)
+}
+
+func invokingPolicy(functions []*lambda.Function) pulumi.StringOutput {
+	arns := make([]any, 0, len(functions))
+	for _, fn := range functions {
+		arns = append(arns, fn.Arn)
+	}
+	return pulumi.All(arns...).ApplyT(func(resolved []any) (string, error) {
+		targets := make([]string, 0, len(resolved))
+		for _, arn := range resolved {
+			targets = append(targets, fmt.Sprint(arn))
+		}
+		return allowing("lambda:InvokeFunction", targets)
+	}).(pulumi.StringOutput)
 }
 
 func (w *workersWork) consumptionPolicy() (string, error) {
 	return consumptionPolicy(w.workers, w.topics, w.region, w.account, w.table, w.prefix)
 }
 
-func consumptionPolicy(workers []provider.WorkerSpec, topics []deployedTopic, region, account, table, prefix string) (string, error) {
-	served := &workersWork{topics: topics}
+func consumptionPolicy(workers []provider.WorkerSpec, topics deployedTopics, region, account, table, prefix string) (string, error) {
 	var queueARNs []string
 	for _, worker := range workers {
-		for _, queue := range served.served(worker.Name) {
+		for _, queue := range topics.served(worker.Name) {
 			queueARNs = append(queueARNs, sqsQueueARN(region, account, queue.name))
 		}
 	}
@@ -496,7 +487,7 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 	if err != nil {
 		return nil, err
 	}
-	for _, queue := range w.served(worker.Name) {
+	for _, queue := range w.topics.served(worker.Name) {
 		if _, err := lambda.NewEventSourceMapping(ctx, naming.ResourceID(naming.KindWorker, worker.Name, queue.topic, queue.consumer.Name),
 			eventSourceMapping(queue, worker, fn, w.region, w.account, resourceTags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
 			return nil, err
@@ -540,71 +531,6 @@ func eventConcurrency(consumer, worker int) int {
 		return 0
 	}
 	return min(max(limit, minEventConcurrency), maxEventConcurrency)
-}
-
-type cronTarget struct {
-	task     deployedTopic
-	function *lambda.Function
-}
-
-func (w *workersWork) declareCrons(ctx *pulumi.Context, functions []*lambda.Function, crons []cronTarget) error {
-	at := w.coordinate(naming.KindRole, "scheduler")
-	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, "scheduler"), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(at)),
-		Description:         capDescription(at.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), maxDescriptionLen),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(schedulerServicePrincipal)),
-		PermissionsBoundary: pulumi.String(w.role.Boundary),
-		Path:                pulumi.String(w.role.Path),
-		Tags:                resourceTags(at.Kind, "", w.role.Tags),
-	})
-	if err != nil {
-		return err
-	}
-	arns := make([]any, 0, len(functions))
-	for _, fn := range functions {
-		arns = append(arns, fn.Arn)
-	}
-	policy := pulumi.All(arns...).ApplyT(func(resolved []any) (string, error) {
-		targets := make([]string, 0, len(resolved))
-		for _, arn := range resolved {
-			targets = append(targets, fmt.Sprint(arn))
-		}
-		encoded, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": []any{map[string]any{
-			"Effect": "Allow", "Action": "lambda:InvokeFunction", "Resource": targets,
-		}}})
-		return string(encoded), err
-	}).(pulumi.StringOutput)
-	invoking, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, "scheduler", "invoke"), &iam.RolePolicyArgs{Role: role.Name, Policy: policy})
-	if err != nil {
-		return err
-	}
-	for _, cron := range crons {
-		task := cron.task.resource.Declared
-		expressions, err := schedulerExpressions(cron.task.declared.Cron)
-		if err != nil {
-			return fmt.Errorf("task %s: %w", task, err)
-		}
-		for i, expression := range expressions {
-			name := queues.CronScheduleName(task)
-			if len(expressions) > 1 {
-				name = queues.CronScheduleName(task + "-" + strconv.Itoa(i+1))
-			}
-			if _, err := scheduler.NewSchedule(ctx, naming.ResourceID(naming.KindWorker, "cron", name), &scheduler.ScheduleArgs{
-				Name:               pulumi.String(name),
-				GroupName:          pulumi.String(w.group),
-				ScheduleExpression: pulumi.String(expression),
-				FlexibleTimeWindow: &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
-				Target: &scheduler.ScheduleTargetArgs{
-					Arn:     cron.function.Arn,
-					RoleArn: role.Arn,
-					Input:   pulumi.String(fmt.Sprintf(cronInput, task)),
-				},
-			}, pulumi.DependsOn([]pulumi.Resource{invoking})); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func scheduleGroupNeeded(topics []deployedTopic) bool {

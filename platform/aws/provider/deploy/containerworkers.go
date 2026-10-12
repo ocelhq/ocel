@@ -82,7 +82,7 @@ type containerWorkersWork struct {
 	project     string
 	stack       naming.StackName
 	workers     []provider.WorkerSpec
-	topics      []deployedTopic
+	topics      deployedTopics
 	topology    string
 	image       string
 	arch        string
@@ -100,6 +100,7 @@ type containerWorkersWork struct {
 	policies    []bindingPolicy
 	values      executionRole
 	tasksPolicy string
+	group       string
 }
 
 func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWork) (*containerWorkersWork, error) {
@@ -153,6 +154,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 		policies:    web.policies,
 		values:      web.values,
 		tasksPolicy: tasks,
+		group:       queues.ScheduleGroupName(project, env),
 	}, nil
 }
 
@@ -167,10 +169,6 @@ func (w *containerWorkersWork) coordinate(kind naming.Kind, name string) naming.
 	return naming.Coordinate{Project: w.project, Env: w.stack.Env, App: w.stack.App, Kind: kind, Name: name}
 }
 
-func (w *containerWorkersWork) served(worker string) []consumerQueue {
-	return (&workersWork{topics: w.topics}).served(worker)
-}
-
 func (w *containerWorkersWork) run(ctx *pulumi.Context) error {
 	role, granted, err := w.taskRole(ctx)
 	if err != nil {
@@ -181,7 +179,33 @@ func (w *containerWorkersWork) run(ctx *pulumi.Context) error {
 			return err
 		}
 	}
-	return nil
+	return w.declareCrons(ctx)
+}
+
+func (w *containerWorkersWork) declareCrons(ctx *pulumi.Context) error {
+	var crons []cronTarget
+	var queueARNs []string
+	for _, worker := range w.workers {
+		for _, task := range w.topics.cronTasks(worker.Name) {
+			queue := task.queues[0]
+			arn := sqsQueueARN(w.region, w.account, queue.name)
+			scheduled := cronTarget{task: task, arn: pulumi.String(arn)}
+			if queue.fifo {
+				scheduled.messageGroup = cronMessageGroup
+			}
+			crons = append(crons, scheduled)
+			queueARNs = append(queueARNs, arn)
+		}
+	}
+	if len(crons) == 0 {
+		return nil
+	}
+	policy, err := allowing("sqs:SendMessage", queueARNs)
+	if err != nil {
+		return err
+	}
+	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.boundary, path: w.rolePath, tags: w.tags}
+	return declareCrons(ctx, assumed, w.group, pulumi.String(policy), crons)
 }
 
 func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
@@ -335,7 +359,7 @@ func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provid
 		return err
 	}
 	var names []string
-	for _, queue := range w.served(worker.Name) {
+	for _, queue := range w.topics.served(worker.Name) {
 		names = append(names, queue.name)
 	}
 	for at, group := range slices.Collect(slices.Chunk(names, backlogAlarmQueues)) {

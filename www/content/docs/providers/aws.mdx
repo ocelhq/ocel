@@ -208,7 +208,7 @@ automatic attach for the functions it names.
 | task | an SQS queue of its own |
 | topic | an SNS topic delivering to one SQS queue per consumer |
 | `ordered` | FIFO queues, with `key` as the message group |
-| `cron` | an EventBridge Scheduler schedule |
+| `cron` | an EventBridge Scheduler schedule, invoking a Lambda worker or sending to a container worker's queue |
 | worker | a Lambda function built from the app's code, with no URL; on container compute, an ECS service of its own running the app's image |
 
 Every queue has a dead-letter queue; `deadLetter(consumer)` lists, redrives and purges failed
@@ -259,9 +259,10 @@ worker is billed while idle unless its app asks for it.
 
 A run working when its task stops, for a deploy or a scale-in, is queued again and the next
 task starts it. A task renews its hold on each run it works every 40 seconds, so a run whose
-task crashes is started again by the next task within about three minutes. A `cron`
-task cannot run on a worker on container compute; the deploy refuses it, naming the task and
-the worker.
+task crashes is started again by the next task within about three minutes. A `cron` task on
+a container worker has its schedule send a message to the task's queue, which wakes the
+worker like any backlog, and the worker starts the run once for each minute the schedule
+fires.
 
 A container app's workers count as a user of the `containers` part, so the cluster stays while
 their services exist. Moving an app between serverless and container compute starts its workers

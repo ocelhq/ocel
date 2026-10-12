@@ -1,14 +1,24 @@
 package deploy
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
+	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/cron"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
-const maxScheduleExpressionLen = 256
+const (
+	maxScheduleExpressionLen = 256
+	cronMessageGroup         = "cron"
+)
 
 var schedulerWeekdays = []string{"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"}
 
@@ -60,4 +70,73 @@ func weekdayField(values []int) string {
 		parts[i] = schedulerWeekdays[value]
 	}
 	return strings.Join(parts, ",")
+}
+
+type cronTarget struct {
+	task         deployedTopic
+	arn          pulumi.StringInput
+	messageGroup string
+}
+
+type schedulerRole struct {
+	at       naming.Coordinate
+	boundary string
+	path     string
+	tags     map[string]string
+}
+
+func allowing(action string, resources []string) (string, error) {
+	encoded, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": []any{map[string]any{
+		"Effect": "Allow", "Action": action, "Resource": resources,
+	}}})
+	return string(encoded), err
+}
+
+func declareCrons(ctx *pulumi.Context, role schedulerRole, group string, policy pulumi.StringInput, crons []cronTarget) error {
+	created, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, "scheduler"), &iam.RoleArgs{
+		NamePrefix:          pulumi.String(rolePrefix(role.at)),
+		Description:         capDescription(role.at.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), maxDescriptionLen),
+		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(schedulerServicePrincipal)),
+		PermissionsBoundary: pulumi.String(role.boundary),
+		Path:                pulumi.String(role.path),
+		Tags:                resourceTags(role.at.Kind, "", role.tags),
+	})
+	if err != nil {
+		return err
+	}
+	invoking, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, "scheduler", "invoke"), &iam.RolePolicyArgs{Role: created.Name, Policy: policy})
+	if err != nil {
+		return err
+	}
+	for _, scheduled := range crons {
+		task := scheduled.task.resource.Declared
+		expressions, err := schedulerExpressions(scheduled.task.declared.Cron)
+		if err != nil {
+			return fmt.Errorf("task %s: %w", task, err)
+		}
+		target := &scheduler.ScheduleTargetArgs{
+			Arn:     scheduled.arn,
+			RoleArn: created.Arn,
+			Input:   pulumi.String(fmt.Sprintf(cronInput, task)),
+		}
+		if scheduled.messageGroup != "" {
+			target.SqsParameters = &scheduler.ScheduleTargetSqsParametersArgs{MessageGroupId: pulumi.String(scheduled.messageGroup)}
+		}
+		for i, expression := range expressions {
+			name := queues.CronScheduleName(task)
+			if len(expressions) > 1 {
+				name = queues.CronScheduleName(task + "-" + strconv.Itoa(i+1))
+			}
+			if _, err := scheduler.NewSchedule(ctx, naming.ResourceID(naming.KindWorker, "cron", name), &scheduler.ScheduleArgs{
+				Name:               pulumi.String(name),
+				GroupName:          pulumi.String(group),
+				ScheduleExpression: pulumi.String(expression),
+				FlexibleTimeWindow: &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
+				Target:             target,
+			}, pulumi.DependsOn([]pulumi.Resource{invoking})); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

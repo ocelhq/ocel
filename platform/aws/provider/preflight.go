@@ -21,9 +21,6 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseContainersScaledToZero(pre); err != nil {
 		return err
 	}
-	if err := refuseCronOnContainerWorkers(pre); err != nil {
-		return err
-	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -135,27 +132,6 @@ func refusePublicBuckets(pre provider.DeployPreflight) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s asks to be public, and this provider provisions its buckets with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
-	}
-	return nil
-}
-
-func refuseCronOnContainerWorkers(pre provider.DeployPreflight) error {
-	computes := map[string]provider.Compute{}
-	for _, worker := range pre.Deploy.Workers {
-		computes[worker.Name] = worker.Compute
-	}
-	for _, resource := range pre.Resources {
-		if resource.Topic == nil || resource.Topic.Cron == "" || resource.Binding != "" {
-			continue
-		}
-		for _, consumer := range resource.Topic.Consumers {
-			if computes[consumer.Worker] != provider.ComputeContainer {
-				continue
-			}
-			return refusal.Refuse(refusal.CodeUnsupported,
-				"task %s runs on a schedule, and its worker %s runs on container compute, where nothing on this provider starts a schedule: put the task on a worker that runs on serverless compute",
-				resource.Declared, consumer.Worker)
-		}
 	}
 	return nil
 }
