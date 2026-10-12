@@ -316,13 +316,16 @@ func (e *Engine) takeSlots(ctx context.Context, deployed deployedConsumer, holde
 			e.releaseSlots(ctx, taken, holder)
 			return nil, false, err
 		}
-		taken = append(taken, takenSlot{set: set, index: index})
+		slot := takenSlot{set: set, index: index}
+		e.recordSlotLease(slot, holder)
+		taken = append(taken, slot)
 	}
 	return taken, true, nil
 }
 
 func (e *Engine) releaseSlots(ctx context.Context, taken []takenSlot, holder string) {
 	for _, slot := range taken {
+		e.releaseSlotLease(slot)
 		if err := e.store.releaseSlot(context.WithoutCancel(ctx), slot.set, slot.index, holder); err != nil {
 			slog.Warn("release a slot", "set", slot.set.name, "error", err)
 		}
@@ -342,7 +345,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got arriv
 		set: map[string]any{
 			"status":      string(provider.RunExecuting),
 			"error":       "",
-			"lease_until": invocationDeadline(ctx).Add(leaseMargin).UnixMicro(),
+			"lease_until": e.leaseUntil(ctx).UnixMicro(),
 		},
 		add:       map[string]int{"attempts": 1},
 		condition: "#delivery = :token AND (#status IN (:queued, :delayed) OR (#status = :executing AND #lease_until < :now))",
@@ -360,6 +363,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got arriv
 	if err != nil {
 		return runItem{}, false, err
 	}
+	e.recordRunLease(deployed, got)
 	if item.StartedAtMicros == 0 {
 		started, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 			set:        map[string]any{"started_at": now.UnixMicro()},
@@ -369,6 +373,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got arriv
 		if err == nil {
 			item = started
 		} else if !errors.Is(err, errConditionFailed) {
+			e.releaseLease(deployed, got.execution)
 			return runItem{}, false, err
 		}
 	}
@@ -387,7 +392,7 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 	if ready, disposition := e.setAsideUnlessRunnable(ctx, deployed, got); !ready {
 		return disposition
 	}
-	slots, taken, err := e.takeSlots(ctx, deployed, got.execution, invocationDeadline(ctx).Add(leaseMargin))
+	slots, taken, err := e.takeSlots(ctx, deployed, got.execution, e.leaseUntil(ctx))
 	if err != nil {
 		slog.Warn("take a concurrency slot", "execution", got.execution, "error", err)
 		return retained
@@ -408,6 +413,7 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 		got.run = run
 		answer := e.attempt(ctx, deployed, []arrival{got})
 		next, wait := e.finish(ctx, deployed, got, answer)
+		e.releaseLease(deployed, got.execution)
 		if next != retryInPlace {
 			return next
 		}
@@ -623,7 +629,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 		return retainedIDs
 	}
 	holder := admitted[0].execution
-	slots, taken, err := e.takeSlots(ctx, deployed, holder, invocationDeadline(ctx).Add(leaseMargin))
+	slots, taken, err := e.takeSlots(ctx, deployed, holder, e.leaseUntil(ctx))
 	if err != nil || !taken {
 		for _, got := range admitted {
 			if e.deferMessage(ctx, deployed, got, slotHold(receiveCount(got.record))) == retained {
@@ -658,6 +664,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	answer := e.attempt(ctx, deployed, claimed)
 	for _, got := range claimed {
 		next, wait := e.finish(ctx, deployed, got, answer)
+		e.releaseLease(deployed, got.execution)
 		retain := next == retained
 		if next == retryInPlace {
 			retain = e.holdInQueue(ctx, deployed, got, wait) == retained

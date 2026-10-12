@@ -252,8 +252,8 @@ The service sits at no tasks and costs nothing then:
   none. The app's `instances.min` is the floor of the app's own service, not of its workers.
 
 A run working when its task stops, for a deploy or a scale-in, is queued again and the next
-task starts it. A task that crashes holds its run until the run's `maxDuration` has passed,
-or 12 hours without one, so declare a `maxDuration` on a task that can run long. A `cron`
+task starts it. A task renews its hold on each run it works every 40 seconds, so a run whose
+task crashes is started again by the next task within about three minutes. A `cron`
 task cannot run on a worker on container compute; the deploy refuses it, naming the task and
 the worker.
 
