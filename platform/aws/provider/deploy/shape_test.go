@@ -443,3 +443,15 @@ func TestAContainerWorkerAppIsShapedWithItsWorkersAtItsFloorAndNoWebService(t *t
 		t.Errorf("the worker's service is shaped at %v tasks, want the app's floor of 2", service["desired_count"])
 	}
 }
+
+func TestACronTaskOnAContainerWorkerIsShapedWithItsSchedule(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Resources = append(req.Resources, taskResource("nightly", provider.ConsumerSpec{Worker: "media"}, cronEveryMinute))
+	set := shaped(t, nil, req)
+
+	if schedule := shapedNamed(t, set, "aws_scheduler_schedule", "nightly"); schedule["schedule_expression"] == nil {
+		t.Errorf("the nightly schedule is shaped with no expression: %v", schedule)
+	}
+}
