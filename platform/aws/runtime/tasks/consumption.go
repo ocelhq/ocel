@@ -83,11 +83,11 @@ func (c *Consumption) Run(ctx context.Context) error {
 		defer running.Done()
 		c.keepLeases(ctx)
 	}()
-	if c.engine.canScaleToNone() {
+	if c.engine.canScaleIn() {
 		running.Add(1)
 		go func() {
 			defer running.Done()
-			c.scaleToNoneWhenIdle(ctx, urls)
+			c.scaleInWhenIdle(ctx, urls)
 		}()
 	}
 	running.Wait()
@@ -107,7 +107,7 @@ func (c *Consumption) idleSince() (time.Time, bool) {
 	return c.lastBusy, c.working == 0
 }
 
-func (c *Consumption) scaleToNoneWhenIdle(ctx context.Context, urls []string) {
+func (c *Consumption) scaleInWhenIdle(ctx context.Context, urls []string) {
 	ticker := time.NewTicker(c.idleEvery)
 	defer ticker.Stop()
 	for {
@@ -128,8 +128,8 @@ func (c *Consumption) scaleToNoneWhenIdle(ctx context.Context, urls []string) {
 		if holding {
 			continue
 		}
-		if err := c.engine.scaleToNone(ctx); err != nil {
-			slog.Warn("set an idle worker's service to no tasks", "error", err)
+		if err := c.engine.scaleInToFloor(ctx); err != nil {
+			slog.Warn("scale an idle worker's service in to its floor", "error", err)
 			continue
 		}
 		c.markBusy(0)

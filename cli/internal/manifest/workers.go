@@ -84,6 +84,17 @@ func joinWorkers(apps []app, ceilings []provider.WorkerCeiling, served []declare
 	return workers, nil
 }
 
+func withoutIdleFloorsOfWorkerApps(apps []app, workers []*contractv1.ManifestWorker) []app {
+	floored := slices.Clone(apps)
+	for i, a := range floored {
+		joinedByName := slices.ContainsFunc(workers, func(w *contractv1.ManifestWorker) bool { return w.GetName() == a.Name && w.GetApp() == a.Name })
+		if joinedByName && !a.MinInstancesDeclared {
+			floored[i].Instances.Min = 0
+		}
+	}
+	return floored
+}
+
 func workerApp(apps []app, name string, declaration declaredResource, declared bool) (app, error) {
 	runsOn := ""
 	if !declared {

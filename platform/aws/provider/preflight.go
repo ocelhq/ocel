@@ -162,7 +162,7 @@ func refuseCronOnContainerWorkers(pre provider.DeployPreflight) error {
 
 func refuseContainersScaledToZero(pre provider.DeployPreflight) error {
 	for _, app := range pre.Deploy.Apps {
-		if app.Compute() != provider.ComputeContainer || app.Instances.Min > 0 {
+		if app.Compute() != provider.ComputeContainer || app.Instances.Min > 0 || provider.IsWorkerApp(app.App, app.Workers) {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,

@@ -390,18 +390,18 @@ is always the one checked. Left off:
 
 #### instances
 
-Whole numbers: `min` from 0, `max` from 1, `min` no more than `max`. Left off, `min` is 1 and
-`max` is `min` (or 1), so the app runs one instance and never scales. A serverless app takes
-no `instances`.
+Whole numbers: `min` from 0, `max` from 1, `min` no more than `max`. Left off, `min` is 1, or 0
+for an app a worker joins by name, and `max` is `min` (or 1), so an app that serves traffic
+runs one instance and never scales. A serverless app takes no `instances`.
 
 The numbers apply to every tier, so each preview keeps, and bills, the same `min` as
 production.
 
 | Provider | Between `min` and `max` |
 | --- | --- |
-| AWS | ECS starts at `min` and adds tasks above 1,000 requests a minute per task. `min` must be at least 1. |
+| AWS | ECS starts at `min` and adds tasks above 1,000 requests a minute per task. `min` must be at least 1, except on an app a worker joins by name, which deploys no web service: its `min` is the floor of its workers. |
 | Google Cloud | Cloud Run's `min-instances` and `max-instances`, scaled on concurrent requests. `min: 0` scales to zero. |
-| VPS | One container per app: both must be 1 or left off. |
+| VPS | One container per app: both must be 1 or left off, and an app a worker joins by name may set `min` to 0. |
 
 ## discovery.paths
 

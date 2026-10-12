@@ -133,7 +133,7 @@
                                 "type": "integer"
                               },
                               "min": {
-                                "description": "The fewest instances kept running, however quiet the app is. Left off, 1.",
+                                "description": "The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name.",
                                 "minimum": 0,
                                 "type": "integer"
                               }

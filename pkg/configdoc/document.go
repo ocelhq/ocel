@@ -178,7 +178,7 @@ type ImageConfig struct {
 }
 
 type InstancesConfig struct {
-	Min *int `json:"min,omitempty" minimum:"0" doc:"The fewest instances kept running, however quiet the app is. Left off, 1."`
+	Min *int `json:"min,omitempty" minimum:"0" doc:"The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name."`
 	Max *int `json:"max,omitempty" minimum:"1" doc:"The most instances run at once, however busy the app is. Left off, as many as min, or 1."`
 }
 

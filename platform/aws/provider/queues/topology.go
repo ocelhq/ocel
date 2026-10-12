@@ -39,6 +39,7 @@ type Worker struct {
 type Service struct {
 	Cluster string `json:"cluster"`
 	Name    string `json:"name"`
+	Floor   int    `json:"floor,omitempty"`
 }
 
 func Render(m Topology) ([]byte, error) {

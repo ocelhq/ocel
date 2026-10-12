@@ -469,6 +469,21 @@ func TestAWorkerWithNothingToDoSetsItsServiceToNoTasksOnceItsQueuesHaveStayedEmp
 	}
 }
 
+func TestAnIdleWorkerWhoseAppSetsAFloorScalesItsServiceInToThatFloor(t *testing.T) {
+	t.Parallel()
+
+	queue := &scriptedQueue{counts: map[string]string{"ApproximateNumberOfMessages": "0", "ApproximateNumberOfMessagesNotVisible": "0"}}
+	services := &fakeServices{desired: 3}
+	c := idleConsumption(queue, services, nothingDelivered)
+	c.engine.cfg.Topology.Workers["media"].Service.Floor = 2
+
+	runUntil(t, c, func() bool { services.mu.Lock(); defer services.mu.Unlock(); return len(services.updated) > 0 })
+
+	if got := aws.ToInt32(services.updated[0].DesiredCount); got != 2 {
+		t.Errorf("UpdateService(desired %d), want the floor of 2 its app's minInstances sets", got)
+	}
+}
+
 func TestAWorkerStaysUpWhileAnyOfItsQueuesHoldsAMessageVisibleOrInFlightAnywhere(t *testing.T) {
 	t.Parallel()
 

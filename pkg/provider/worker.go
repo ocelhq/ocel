@@ -1,6 +1,9 @@
 package provider
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 const MaxConcurrency = 1000
 
@@ -9,6 +12,10 @@ type WorkerSpec struct {
 	Concurrency int
 	App         string
 	Compute     Compute
+}
+
+func IsWorkerApp(app string, workers []WorkerSpec) bool {
+	return slices.ContainsFunc(workers, func(worker WorkerSpec) bool { return worker.Name == app && worker.App == app })
 }
 
 func RefuseConcurrency(concurrency int32) error {

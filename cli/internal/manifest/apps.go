@@ -27,6 +27,8 @@ type app struct {
 	Image           string
 	HealthCheckPath string
 	Instances       provider.Instances
+
+	MinInstancesDeclared bool
 }
 
 func appsOf(configured []project.App, usages []attribution.Usage, images map[string]string) []app {
@@ -49,6 +51,8 @@ func appsOf(configured []project.App, usages []attribution.Usage, images map[str
 			Image:           images[a.Name],
 			HealthCheckPath: healthPathOf(a),
 			Instances:       instancesOf(a),
+
+			MinInstancesDeclared: a.Container != nil && a.Container.MinInstances != nil,
 		})
 	}
 	return out

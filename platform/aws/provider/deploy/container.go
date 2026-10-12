@@ -97,6 +97,7 @@ type containerWork struct {
 	role        naming.Coordinate
 	infra       containerInfra
 	public      bool
+	workerApp   bool
 }
 
 func (w *containerWork) readListenerArn() string {
@@ -243,6 +244,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		service:     serviceCoordinate(project, stack),
 		role:        roleCoordinate(project, stack),
 		public:      isRoutedPublicly(spec),
+		workerApp:   provider.IsWorkerApp(app.App, app.Workers),
 	}, nil
 }
 
@@ -312,6 +314,9 @@ func routesContainer(rule elbv2types.Rule, physical string) bool {
 }
 
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
+	if work.workerApp {
+		return nil
+	}
 	taken, err := takenPriorities(ctx, r.cfg.Rules, work.readListenerArn(), work.physical())
 	if err != nil {
 		return err
@@ -420,6 +425,9 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 
 	if err := w.transformed.install(ctx); err != nil {
 		return err
+	}
+	if w.workerApp {
+		return nil
 	}
 
 	var taskRole pulumi.StringPtrInput
@@ -793,6 +801,9 @@ func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (provider.StackResult, error) {
+	if work.workerApp {
+		return provider.StackResult{}, nil
+	}
 	fields, err := requireOutputFields(outputs, work.app)
 	if err != nil {
 		return provider.StackResult{}, err

@@ -323,3 +323,36 @@ func TestAWorkerDeclaredTwiceIsADuplicate(t *testing.T) {
 		t.Errorf("assemble() = %v, want a DuplicateError naming both declarations", err)
 	}
 }
+
+func TestAnAppAWorkerJoinsByNameHasNoIdleFloorUnlessItDeclaresOne(t *testing.T) {
+	t.Parallel()
+
+	declarations := []declaredResource{
+		worker("media", "src/media.ts:1", nil),
+		task("resize", "src/resize.ts:3", &resourcesv1.TaskConfig{Worker: "media"}),
+	}
+	defaulted, err := assembleWorkers([]app{
+		{Name: "web", Compute: provider.ComputeContainer, Instances: provider.Instances{Min: 1, Max: 1}},
+		{Name: "media", Compute: provider.ComputeContainer, Instances: provider.Instances{Min: 1, Max: 3}},
+	}, declarations, nil)
+	if err != nil {
+		t.Fatalf("assemble() = %v", err)
+	}
+	if media := containerOf(t, defaulted, "media"); media.GetMinInstances() != 0 || media.GetMaxInstances() != 3 {
+		t.Errorf("media instances = %d..%d, want 0..3: a worker is never billed idle by default", media.GetMinInstances(), media.GetMaxInstances())
+	}
+	if web := containerOf(t, defaulted, "web"); web.GetMinInstances() != 1 {
+		t.Errorf("web min instances = %d, want the 1 an app serving traffic defaults to", web.GetMinInstances())
+	}
+
+	declared, err := assembleWorkers([]app{
+		{Name: "web", Compute: provider.ComputeContainer, Instances: provider.Instances{Min: 1, Max: 1}},
+		{Name: "media", Compute: provider.ComputeContainer, Instances: provider.Instances{Min: 1, Max: 3}, MinInstancesDeclared: true},
+	}, declarations, nil)
+	if err != nil {
+		t.Fatalf("assemble() = %v", err)
+	}
+	if media := containerOf(t, declared, "media"); media.GetMinInstances() != 1 {
+		t.Errorf("media min instances = %d, want the floor of 1 it declares", media.GetMinInstances())
+	}
+}

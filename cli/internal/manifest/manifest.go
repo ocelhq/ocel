@@ -90,7 +90,7 @@ func assemble(a assembly) (*contractv1.Manifest, error) {
 		return nil, err
 	}
 
-	manifestApps, err := manifestAppsOf(a.apps, a.functions, functionsByApp, a.values)
+	manifestApps, err := manifestAppsOf(withoutIdleFloorsOfWorkerApps(a.apps, workers), a.functions, functionsByApp, a.values)
 	if err != nil {
 		return nil, err
 	}
