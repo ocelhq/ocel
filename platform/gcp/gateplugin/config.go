@@ -86,6 +86,17 @@ func refuseLine(number int, err error) error {
 
 func (c Config) ListHosts() []string { return slices.Sorted(maps.Keys(c.hosts)) }
 
+func (c Config) FindProject(slug string) (previewgate.Gate, []string, bool) {
+	gate, gated := c.gates[slug]
+	var hosts []string
+	for _, host := range c.ListHosts() {
+		if c.hosts[host] == slug {
+			hosts = append(hosts, host)
+		}
+	}
+	return gate, hosts, gated
+}
+
 func (c Config) FindGate(host string) (previewgate.Gate, bool) {
 	slug, listed := c.hosts[normalizeHost(host)]
 	gate, gated := c.gates[slug]
