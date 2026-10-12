@@ -141,6 +141,48 @@ describe("reading a page from the durable store on a Serve miss", () => {
     expect(await answer?.response.text()).toBe("STATE<html>page</html>");
   });
 
+  it("answers a path the build did not prerender with a pages router fallback page, as a lazy fallback, to a document request", async () => {
+    const fallback = entry({ kind: "PAGES", html: "<html>fallback</html>", pageData: {} });
+    const { deps } = harness({ [key("blog/[id]")]: fallback });
+
+    const answer = await readFromStore(
+      call({ entryPath: "/blog/9", fallbackPath: "/blog/[id]", documentRequest: true }),
+      deps,
+    );
+
+    expect(await answer?.response.text()).toBe("<html>fallback</html>");
+    expect(answer?.from).toBe("lazy-fallback");
+  });
+
+  it("answers no pages router fallback page to a request that is not for the document", async () => {
+    const fallback = entry({ kind: "PAGES", html: "<html>fallback</html>", pageData: {} });
+    const { deps } = harness({ [key("blog/[id]")]: fallback });
+
+    const answer = await readFromStore(
+      call({ entryPath: "/blog/9", fallbackPath: "/blog/[id]" }),
+      deps,
+    );
+
+    expect(answer).toBeNull();
+  });
+
+  it("answers no pages router fallback page to an RSC request", async () => {
+    const fallback = entry({ kind: "PAGES", html: "<html>fallback</html>", pageData: {} });
+    const { deps } = harness({ [key("blog/[id]")]: fallback });
+
+    const answer = await readFromStore(
+      call({
+        entryPath: "/blog/9",
+        fallbackPath: "/blog/[id]",
+        documentRequest: true,
+        headers: new Headers({ rsc: "1" }),
+      }),
+      deps,
+    );
+
+    expect(answer).toBeNull();
+  });
+
   it("answers a route handler's body", async () => {
     const stored = {
       lastModified: NOW - 1_000,

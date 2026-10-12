@@ -61,6 +61,15 @@ function notStored(response: Response, options: CacheOptions): Response {
   return new Response(response.body, { status: response.status, headers });
 }
 
+export function withholdFromEdge(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", BROWSER_REVALIDATES);
+  headers.delete("etag");
+  return notStored(new Response(response.body, { status: response.status, headers }), {
+    honoursAppCacheHeaders: true,
+  });
+}
+
 function edgePolicy(headers: Headers): { source: string; directives: CacheDirectives } | undefined {
   for (const name of sharedPolicyHeaders) {
     const value = headers.get(name);

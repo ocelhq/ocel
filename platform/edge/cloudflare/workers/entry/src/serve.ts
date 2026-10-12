@@ -26,7 +26,13 @@ import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import { openInBandQueue, openPurgeQueue } from "./purge-request";
 import type { ReleaseRecord } from "./releases";
-import { BROWSER_REVALIDATES, type CachedResponse, forCache, NOT_STORED } from "./serve-headers";
+import {
+  BROWSER_REVALIDATES,
+  type CachedResponse,
+  forCache,
+  NOT_STORED,
+  withholdFromEdge,
+} from "./serve-headers";
 import {
   buildEdgeUrl,
   buildOriginUrl,
@@ -60,6 +66,8 @@ const MISSING_EDGE_CACHE = "max-age=60";
 const IMAGE_STALE_SECONDS = 86_400;
 
 const IMAGE_PATH_TAG_PATHNAME = "/_next/image";
+
+const DATA_REQUEST_PATH = /\/_next\/data\//;
 
 function readImageCall(header: string | null): ImageCall | undefined {
   if (header === null) return undefined;
@@ -368,6 +376,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read; rendering at the origin", error);
     }
     if (!stored) return render();
+    if (stored.from === "lazy-fallback") return withholdFromEdge(stored.response);
     return forCache(admitSegment(request, stored.response), cached);
   }
 
@@ -390,7 +399,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       console.error("ocel: the durable store was not read for a PPR shell", error);
     }
     if (!shell) return respondNoShell();
-    if ((shell.stale || shell.fallback) && isRevalidation(request)) {
+    if ((shell.stale || shell.from !== "own") && isRevalidation(request)) {
       const regenerating = call
         .render()
         .then((regenerated) => regenerated.body?.pipeTo(new WritableStream()))
@@ -438,6 +447,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         variant: readRenderCall(request.url).variant,
         headers: request.headers,
         sharedShell,
+        documentRequest: !DATA_REQUEST_PATH.test(new URL(buildOriginUrl(request.url)).pathname),
       },
       {
         source,

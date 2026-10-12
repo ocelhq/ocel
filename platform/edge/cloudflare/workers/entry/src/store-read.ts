@@ -34,6 +34,7 @@ export interface StoreCall {
   variant: string;
   headers: Headers;
   sharedShell?: boolean;
+  documentRequest?: boolean;
 }
 
 export interface StoreReadDeps {
@@ -45,7 +46,7 @@ export interface StoreReadDeps {
 export interface StoreAnswer {
   response: Response;
   stale: boolean;
-  fallback: boolean;
+  from: EntryFrom;
 }
 
 type Verdict = "fresh" | "stale" | "purged" | "expired";
@@ -83,22 +84,31 @@ function suitsRequest(entry: CacheEntryFile, call: StoreCall): boolean {
   return segment === null || hasSegment(entry.value, segment);
 }
 
+export type EntryFrom = "own" | "fallback" | "lazy-fallback";
+
 interface FoundEntry {
   entry: CacheEntryFile;
-  fallback: boolean;
+  from: EntryFrom;
+}
+
+function isLazyFallback(value: Record<string, any>, call: StoreCall): boolean {
+  return (
+    value.kind === "PAGES" && call.documentRequest === true && call.headers.get("RSC") === null
+  );
 }
 
 async function findEntry(deps: StoreReadDeps, call: StoreCall): Promise<FoundEntry | null> {
   const concrete = await readEntry(deps, call, call.entryPath);
-  const own = concrete && { entry: concrete, fallback: false };
+  const own = concrete && { entry: concrete, from: "own" as const };
   if (concrete && suitsRequest(concrete, call)) return own;
   if (call.fallbackPath === undefined || call.fallbackPath === call.entryPath) return own;
   const fallback = await readEntry(deps, call, call.fallbackPath);
   if (!fallback) return own;
-  const shared = { entry: fallback, fallback: true };
+  const shared = { entry: fallback, from: "fallback" as const };
   const segment = segmentOf(call.headers);
   if (segment !== null) return hasSegment(fallback.value, segment) ? shared : own;
-  return fallback.value.postponed === undefined ? own : shared;
+  if (fallback.value.postponed !== undefined) return shared;
+  return isLazyFallback(fallback.value, call) ? { ...shared, from: "lazy-fallback" } : own;
 }
 
 function judge(
@@ -247,5 +257,5 @@ export async function readFromStore(
   headers.set("etag", storeValidator(entry));
   headers.set(edgeCacheTagHeader, tags.join(","));
   headers.set(ENTRY_SOURCE_HEADER, stale ? "stale-store" : "store");
-  return { response: new Response(body, { status, headers }), stale, fallback: found.fallback };
+  return { response: new Response(body, { status, headers }), stale, from: found.from };
 }
