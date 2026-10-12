@@ -188,10 +188,10 @@ __pycache__/
 .ocel
 crates/target/
 tests/fixtures/sdk/rust/target/
-tests/fixtures/sdk/rust-workspace/target/
 tests/fixtures/deploy/rust/server/target/
-tests/fixtures/worker/rust/target/
-tests/fixtures/realtime/rust/target/
+cli/testdata/rust/target/
+cli/testdata/rust-workspace/target/
+cli/testdata/worker/rust/target/
 
 .workflow-data
 packages/cli-*/bin/

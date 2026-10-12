@@ -89,7 +89,7 @@ func fetched(t *testing.T, crate string) {
 
 func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	needsCargo(t)
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "rust"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "testdata", "rust"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 
 func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) {
 	needsCargo(t)
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "rust-workspace"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "testdata", "rust-workspace"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}

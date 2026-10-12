@@ -18,6 +18,7 @@ packages:
   - platform/edge/cloudflare/workers/*
   - platform/edge/cloudflare/lib/*
   - scripts/*
+  - cli/testdata/worker/node
   - tests/fixtures/*/*
   - tests/fixtures/*/*/apps/*
   - tests/*

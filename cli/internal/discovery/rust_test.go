@@ -123,7 +123,7 @@ func TestRustDiscoveryRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 
 func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	needsCargo(t)
-	configDir := repoFixture(t, filepath.Join("sdk", "rust"))
+	configDir := repoFixture(t, "rust")
 
 	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
 	if err != nil {
@@ -186,7 +186,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 
 func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 	needsCargo(t)
-	configDir := repoFixture(t, filepath.Join("sdk", "rust-workspace"))
+	configDir := repoFixture(t, "rust-workspace")
 
 	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{
 		{Name: "api", Path: "./apps/api"},

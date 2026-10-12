@@ -35,7 +35,7 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 }
 
 func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "python"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "testdata", "python"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}

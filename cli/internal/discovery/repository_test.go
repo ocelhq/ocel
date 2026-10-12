@@ -91,6 +91,9 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"platform/aws/provider/deploy_awslive_test.go": {
 			DefaultRootDirName: true,
 		},
+		"cli/testdata/go/server/main.go": {
+			"example.com/declares/" + DefaultRootDirName: true,
+		},
 		"tests/fixtures/sdk/go/server/realtime.go": {
 			"example.com/web/" + DefaultRootDirName: true,
 		},
@@ -161,6 +164,11 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 	repo := fixturetest.RepoDir(t)
 	ignored := gitIgnoredDirs(t, repo)
 	fixtureRoots := []string{
+		"cli/testdata/go",
+		"cli/testdata/python",
+		"cli/testdata/worker/go",
+		"cli/testdata/worker/node",
+		"cli/testdata/worker/python",
 		"tests/fixtures/iac/with-pulumi",
 		"tests/fixtures/iac/with-sst",
 		"tests/fixtures/lifecycle/next",
@@ -170,16 +178,13 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/sdk/python",
 		"tests/fixtures/sdk/sveltekit",
 		"tests/fixtures/sdk/workspace",
-		"tests/fixtures/worker/go",
-		"tests/fixtures/worker/node",
-		"tests/fixtures/worker/python",
 	}
 	for _, root := range fixtureRoots {
 		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(root), DefaultRootDirName)); err != nil {
 			t.Errorf("%s does not name its discovery directory through the shared default: %v", root, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(repo, "tests", "fixtures", "sdk", "rust-workspace", "crates", DefaultRootDirName)); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, "cli", "testdata", "rust-workspace", "crates", DefaultRootDirName)); err != nil {
 		t.Errorf("the Rust workspace fixture does not name its discovery crate through the shared default: %v", err)
 	}
 
@@ -194,7 +199,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		if rel == "www/content/docs/configuration.mdx" || rel == "console/github/src/server.ts" || strings.HasPrefix(rel, DefaultRootDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+DefaultRootDirName+"/") {
 			return true
 		}
-		for _, root := range append(fixtureRoots, "tests/fixtures/sdk/rust-workspace") {
+		for _, root := range append(fixtureRoots, "cli/testdata/rust-workspace") {
 			if strings.HasPrefix(rel, root+"/") && filepath.Ext(rel) != ".md" {
 				return true
 			}

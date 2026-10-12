@@ -83,7 +83,7 @@ func TestPythonDiscoveryRefusesARootTooDeepToNameAPackage(t *testing.T) {
 }
 
 func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
-	configDir := repoFixture(t, filepath.Join("sdk", "python"))
+	configDir := repoFixture(t, "python")
 	app, err := os.ReadFile(filepath.Join(configDir, "server", "main.py"))
 	if err != nil {
 		t.Fatalf("read the fixture app: %v", err)

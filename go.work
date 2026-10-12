@@ -2,6 +2,8 @@ go 1.27.0
 
 use (
 	./cli
+	./cli/testdata/go
+	./cli/testdata/worker/go
 	./pkg
 	./pkg/provider/pulumi
 	./platform/aws/connector
@@ -23,5 +25,4 @@ use (
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go
-	./tests/fixtures/worker/go
 )
