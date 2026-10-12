@@ -166,7 +166,7 @@ func (s costShape) functions(scope, project string, app provider.AppEntry, specs
 	return nil
 }
 
-func (s costShape) topics(scope string, topics []deployedTopic) {
+func (s costShape) topics(scope string, topics deployedTopics) {
 	for _, topic := range topics {
 		if topic.sns != "" {
 			s.plain(scope, tfSNSTopic, topic.resource.Declared, map[string]any{"fifo_topic": topic.declared.Ordered})
@@ -178,7 +178,7 @@ func (s costShape) topics(scope string, topics []deployedTopic) {
 	}
 }
 
-func (s costShape) workers(environment string, req provider.ShapeRequest, topics []deployedTopic) error {
+func (s costShape) workers(environment string, req provider.ShapeRequest, topics deployedTopics) error {
 	for _, app := range req.Deploy.Apps {
 		if len(app.Workers) == 0 {
 			continue
@@ -194,13 +194,12 @@ func (s costShape) workers(environment string, req provider.ShapeRequest, topics
 	return nil
 }
 
-func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app provider.AppEntry, topics []deployedTopic) error {
+func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app provider.AppEntry, topics deployedTopics) error {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
 	args, err := workerFunctionArgs(app, req.Functions[app.App])
 	if err != nil {
 		return err
 	}
-	hosted := &workersWork{topics: topics}
 	for _, worker := range app.Workers {
 		s.plain(scope, tfLambdaFunction, worker.Name, map[string]any{
 			"runtime":           args.Runtime,
@@ -210,10 +209,10 @@ func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app
 			"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
 		})
 		s.plain(scope, tfLogGroup, worker.Name, map[string]any{"retention_in_days": lambdaLogRetentionDays})
-		for _, queue := range hosted.served(worker.Name) {
+		for _, queue := range topics.served(worker.Name) {
 			s.plain(scope, tfEventSourceMapping, queue.topic+"/"+queue.consumer.Name, map[string]any{"batch_size": batchSize(queue.consumer)})
 		}
-		for _, task := range hosted.cronTasks(worker.Name) {
+		for _, task := range topics.cronTasks(worker.Name) {
 			expressions, err := schedulerExpressions(task.declared.Cron)
 			if err != nil {
 				return fmt.Errorf("task %s: %w", task.resource.Declared, err)
@@ -226,9 +225,8 @@ func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app
 	return nil
 }
 
-func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics []deployedTopic) {
+func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics deployedTopics) {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
-	hosted := &workersWork{topics: topics}
 	for _, worker := range app.Workers {
 		name := resources.WorkerName(worker.Name)
 		platform := map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"}
@@ -239,7 +237,7 @@ func (s costShape) containerWorkers(environment string, app provider.AppEntry, t
 			"desired_count": workerFloor(app.App, app.Instances, app.Workers), "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
 		})
 		var queueNames []string
-		for _, queue := range hosted.served(worker.Name) {
+		for _, queue := range topics.served(worker.Name) {
 			queueNames = append(queueNames, queue.name)
 		}
 		for at, group := range slices.Collect(slices.Chunk(queueNames, backlogAlarmQueues)) {

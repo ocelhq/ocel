@@ -49,7 +49,7 @@ type deployedTopic struct {
 
 func (t deployedTopic) isTask() bool { return t.resource.Type == provider.BindingTask }
 
-func topicsOf(project, env string, resources []provider.Resource) []deployedTopic {
+func topicsOf(project, env string, resources []provider.Resource) deployedTopics {
 	var topics []deployedTopic
 	for _, resource := range resources {
 		if resource.Topic == nil || resource.Binding != "" {
@@ -108,6 +108,30 @@ func sqsQueueARN(region, account, name string) string {
 	return fmt.Sprintf("arn:aws:sqs:%s:%s:%s", region, account, name)
 }
 
+type deployedTopics []deployedTopic
+
+func (topics deployedTopics) served(worker string) []consumerQueue {
+	var served []consumerQueue
+	for _, topic := range topics {
+		for _, queue := range topic.queues {
+			if queue.consumer.Worker == worker {
+				served = append(served, queue)
+			}
+		}
+	}
+	return served
+}
+
+func (topics deployedTopics) cronTasks(worker string) []deployedTopic {
+	var tasks []deployedTopic
+	for _, topic := range topics {
+		if topic.isTask() && topic.declared.Cron != "" && topic.queues[0].consumer.Worker == worker {
+			tasks = append(tasks, topic)
+		}
+	}
+	return tasks
+}
+
 func queueTopology(cfg Config, project, env string, topics []deployedTopic, workers map[string]queues.Worker) (queues.Topology, error) {
 	topology := queues.Topology{Table: cfg.StateTable, KeyPrefix: naming.TaskKeyPrefix(project, env), Topics: map[string]queues.Topic{}, Workers: workers}
 	if len(topics) == 0 {
@@ -161,12 +185,13 @@ func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(wor
 			return string(encoded), err
 		}).(pulumi.StringOutput)
 		created, err := sqs.NewQueue(ctx, naming.ResourceID(naming.KindTopic, at, consumer), &sqs.QueueArgs{
-			Name:                     pulumi.String(queue.name),
-			FifoQueue:                pulumi.Bool(queue.fifo),
-			VisibilityTimeoutSeconds: pulumi.Int(visibility(queue.consumer.Worker)),
-			MessageRetentionSeconds:  pulumi.Int(queueRetentionSecs),
-			RedrivePolicy:            redrive,
-			Tags:                     tags,
+			Name:                      pulumi.String(queue.name),
+			FifoQueue:                 pulumi.Bool(queue.fifo),
+			ContentBasedDeduplication: pulumi.Bool(queue.fifo && topic.isTask() && topic.declared.Cron != ""),
+			VisibilityTimeoutSeconds:  pulumi.Int(visibility(queue.consumer.Worker)),
+			MessageRetentionSeconds:   pulumi.Int(queueRetentionSecs),
+			RedrivePolicy:             redrive,
+			Tags:                      tags,
 		}, pulumi.DeleteBeforeReplace(true))
 		if err != nil {
 			return err

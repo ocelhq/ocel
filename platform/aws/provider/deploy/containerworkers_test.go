@@ -66,6 +66,11 @@ func TestAContainerWorkersServiceNameIsOneForEachWorkerOfEachAppAndEnvironment(t
 
 func hostingContainerWorkers(t *testing.T, workers ...provider.WorkerSpec) (*release, provider.StackSpec, *containerWorkersWork) {
 	t.Helper()
+	return hostingContainerWorkersBeside(t, nil, workers...)
+}
+
+func hostingContainerWorkersBeside(t *testing.T, more []provider.Resource, workers ...provider.WorkerSpec) (*release, provider.StackSpec, *containerWorkersWork) {
+	t.Helper()
 	cfg, spec := containerStackSpec(t)
 	cfg.StateTable, cfg.StateTableARN = "ocel-state", testStateTableARN
 	spec.Ref.Name = naming.AppStack("prod", "web", fixedRelease(t))
@@ -77,6 +82,7 @@ func hostingContainerWorkers(t *testing.T, workers ...provider.WorkerSpec) (*rel
 		taskResource("thumbnail", provider.ConsumerSpec{Worker: "media"}),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
 	}
+	spec.App.Topics = append(spec.App.Topics, more...)
 	opened := releasing(t, cfg)
 	work, err := opened.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
@@ -740,6 +746,84 @@ func TestAContainerWorkerAppsMinInstancesIsItsWorkersFloorAndAWebAppsIsNot(t *te
 		}
 		if served := topology.Workers[tc.worker.Name].Service; served == nil || float64(served.Floor) != tc.floor {
 			t.Errorf("worker %s's topology names service %+v, want a floor of %v for the worker to scale itself in to", tc.worker.Name, served, tc.floor)
+		}
+	}
+}
+
+func TestACronTaskOnAContainerWorkerIsScheduledOntoItsQueueByARoleThatMaySendThereAlone(t *testing.T) {
+	t.Parallel()
+
+	nightly := taskResource("nightly", provider.ConsumerSpec{Worker: "media"}, cronEveryMinute)
+	_, _, hosted := hostingContainerWorkersBeside(t, []provider.Resource{nightly}, mediaOnContainers)
+	rec := programRecorded(t, hosted)
+
+	queue := "arn:aws:sqs:us-east-1:" + mockAccount + ":" + topicsOf("shop", "prod", []provider.Resource{nightly})[0].queues[0].name
+	schedules := rec.registered("aws:scheduler/schedule:Schedule")
+	if len(schedules) != 1 {
+		t.Fatalf("declared %d schedules, want one for the nightly task", len(schedules))
+	}
+	schedule := rec.inputs("aws:scheduler/schedule:Schedule", schedules[0])
+	target := schedule["target"].ObjectValue()
+	if target["arn"].StringValue() != queue {
+		t.Errorf("the schedule targets %v, want the task's queue %s: the worker reads its queue, and nothing else starts it", target["arn"], queue)
+	}
+	if input := target["input"].StringValue(); !strings.Contains(input, `"ocelCron":"nightly"`) || !strings.Contains(input, "<aws.scheduler.scheduled-time>") {
+		t.Errorf("the schedule sends %q, want the cron marker naming the task and the time it fired for", input)
+	}
+	if schedule["groupName"].StringValue() != queues.ScheduleGroupName("shop", "prod") {
+		t.Errorf("the schedule is in group %v, want the deployment's", schedule["groupName"])
+	}
+
+	var granted bool
+	for _, name := range rec.registered("aws:iam/rolePolicy:RolePolicy") {
+		policy := rec.inputs("aws:iam/rolePolicy:RolePolicy", name)["policy"].StringValue()
+		if !strings.Contains(policy, "sqs:SendMessage") || strings.Contains(policy, "sqs:ReceiveMessage") {
+			continue
+		}
+		if strings.Contains(policy, "dynamodb") {
+			continue
+		}
+		granted = true
+		var document struct {
+			Statement []struct {
+				Action   any `json:"Action"`
+				Resource any `json:"Resource"`
+			} `json:"Statement"`
+		}
+		if err := json.Unmarshal([]byte(policy), &document); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := json.Marshal(document.Statement[0].Resource); len(document.Statement) != 1 || string(got) != `["`+queue+`"]` {
+			t.Errorf("the scheduler may send to %s, want the nightly queue alone", got)
+		}
+	}
+	if !granted {
+		t.Error("no role policy lets the scheduler send to the task's queue")
+	}
+}
+
+func TestAnOrderedCronTaskOnAContainerWorkerIsScheduledIntoOneMessageGroupOfAQueueThatDeduplicatesByContent(t *testing.T) {
+	t.Parallel()
+
+	nightly := taskResource("nightly", provider.ConsumerSpec{Worker: "media"}, cronEveryMinute, orderedTopic)
+	_, _, hosted := hostingContainerWorkersBeside(t, []provider.Resource{nightly}, mediaOnContainers)
+	rec := programRecorded(t, hosted)
+	schedule := recordedOf(t, rec, "aws:scheduler/schedule:Schedule")
+	if group := schedule["target"].ObjectValue()["sqsParameters"].ObjectValue()["messageGroupId"].StringValue(); group == "" {
+		t.Errorf("the schedule sends to a FIFO queue with no message group, which SQS refuses")
+	}
+
+	declared := &inputRecorder{}
+	opened := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error {
+		return opened.declareTopics(pctx, "shop", "prod", []provider.Resource{nightly})
+	}, pulumi.WithMocks("shop", "prod--infra", declared)); err != nil {
+		t.Fatalf("declare the topics: %v", err)
+	}
+	for _, name := range declared.registered("aws:sqs/queue:Queue") {
+		queue := declared.inputs("aws:sqs/queue:Queue", name)
+		if queue["name"].StringValue() == queues.QueueName("shop", "prod", "nightly", "nightly", true) && !queue["contentBasedDeduplication"].BoolValue() {
+			t.Errorf("the nightly queue does not deduplicate by content, so a schedule's send, which names no deduplication id, is refused")
 		}
 	}
 }

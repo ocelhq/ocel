@@ -17,7 +17,6 @@ import (
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
-	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
@@ -63,6 +62,13 @@ func (e *Engine) Deliver(ctx context.Context, event events.SQSEvent) events.SQSE
 	batches := map[string][]events.SQSMessage{}
 	var order []string
 	for _, record := range event.Records {
+		if marker, scheduled := readCronMarker(record.Body); scheduled {
+			if err := e.FireCron(ctx, marker.Cron, marker.scheduledAt()); err != nil {
+				slog.Warn("start a task on its schedule", "task", marker.Cron, "error", err)
+				resp.BatchItemFailures = append(resp.BatchItemFailures, events.SQSBatchItemFailure{ItemIdentifier: record.MessageId})
+			}
+			continue
+		}
 		queue := queueOf(record.EventSourceARN)
 		if _, seen := batches[queue]; !seen {
 			order = append(order, queue)
@@ -674,18 +680,4 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 		}
 	}
 	return retainedIDs
-}
-
-func (e *Engine) FireCron(ctx context.Context, task string, scheduled time.Time) error {
-	deployed, found := e.taskConsumer(task)
-	if !found {
-		return fmt.Errorf("no task named %q is deployed to run on its schedule", task)
-	}
-	stamp := scheduled.UTC().Truncate(time.Minute).Format(time.RFC3339)
-	payload, err := json.Marshal(map[string]string{"timestamp": stamp})
-	if err != nil {
-		return err
-	}
-	_, err = e.Tasks().trigger(ctx, deployed, payload, &taskv1.TriggerOptions{IdempotencyKey: "cron-" + stamp})
-	return err
 }
