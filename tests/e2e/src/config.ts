@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripJsonComments from "strip-json-comments";
+import { migrates } from "./checks";
 import { appHostname } from "./identity";
 import type {
   Cell,
@@ -13,6 +14,7 @@ import type {
 } from "./matrix/types";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
+import { migrateCommand } from "./workspace";
 
 type PlannedCell = Pick<CellUnderTest, "name" | "slug" | "fixture" | "variant">;
 
@@ -48,6 +50,7 @@ export type Overlay = TargetConfigDelta & {
   variablesKey?: string;
   registry?: RegistryConfig;
   proxy?: unknown;
+  preBuild?: string;
 };
 
 const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
@@ -110,6 +113,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         slug: cell.slug,
         ...cell.fixture.configOn?.aws,
         ...cell.variant.config,
+        ...(migrates(cell.fixture.checks) ? { preBuild: migrateCommand().join(" ") } : {}),
         ...dnsOf(env),
         ...(forwarded && zone ? { dns: "cloudflare" as const } : {}),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
@@ -280,6 +284,9 @@ export function renderConfig(base: string, overlay: Overlay): string {
   if (overlay.allowDegraded) {
     fields.push(`  allowDegraded: ${JSON.stringify(overlay.allowDegraded)},`);
   }
+  if (overlay.preBuild) {
+    fields.push(`  lifecycle: { preBuild: ${JSON.stringify(overlay.preBuild)} },`);
+  }
   if (overlay.previewDomain) {
     fields.push(
       `  domains: { ...base.domains, preview: ${JSON.stringify(overlay.previewDomain)} },`,
@@ -381,6 +388,9 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
   }
   if (overlay.allowDegraded) {
     written.allowDegraded = overlay.allowDegraded;
+  }
+  if (overlay.preBuild) {
+    written.lifecycle = { preBuild: overlay.preBuild };
   }
   if (overlay.previewDomain) {
     written.domains = { ...(read.domains as object | undefined), preview: overlay.previewDomain };

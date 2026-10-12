@@ -193,21 +193,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "migrate-needs-binding",
-    reason:
-      "the aws journey migrates through ocel run, which migrates the local dev database rather than the deployed one",
-    issue: 911,
-    where: [
-      { on: ["aws"], fixtures: [sdk.node], fails: [step.deploy], skipsCell: true },
-      {
-        on: ["aws.floci"],
-        fixtures: [sdk.node],
-        variants: [apiGateway],
-        fails: [check(todoAndDocumentChecks)],
-      },
-    ],
-  },
-  {
     id: "destroy-keeps-a-full-bucket",
     reason:
       "ocel destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",

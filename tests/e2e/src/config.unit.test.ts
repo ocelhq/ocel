@@ -119,12 +119,21 @@ describe("overlayFor", () => {
       target: "aws",
       slug: "j-1-sdk-workspace",
       edge: "cloudflare",
+      preBuild: "pnpm run migrate",
       dns: "cloudflare",
       hostnames: {
         next: "next-j-1-sdk-workspace.j.example",
         express: "express-j-1-sdk-workspace.j.example",
       },
     });
+  });
+
+  it("migrates an aws cell whose checks need a migration in its pre-build, against the deployed database", () => {
+    expect(overlayFor(cell(sdk.node), "aws", {}).preBuild).toBe("pnpm run migrate");
+  });
+
+  it("gives an aws cell whose checks need no migration no pre-build", () => {
+    expect(overlayFor(cell(deploy.node), "aws", {}).preBuild).toBeUndefined();
   });
 
   it("takes the compute a container variant names", () => {
@@ -470,6 +479,23 @@ export default defineConfig({
 });
 `,
     );
+  });
+
+  it("declares the pre-build the cell migrates in", () => {
+    expect(
+      renderConfig(TS_BASE, { target: "aws", slug: "j-1-node", preBuild: "pnpm run migrate" }),
+    ).toContain(`  lifecycle: { preBuild: "pnpm run migrate" },`);
+  });
+
+  it("declares a pre-build in a JSON config", () => {
+    const written = JSON.parse(
+      renderJsonConfig(`{"slug":"node","apps":[{"name":"web","path":"."}]}`, {
+        target: "aws",
+        slug: "j-1-node",
+        preBuild: "pnpm run migrate",
+      }),
+    );
+    expect(written.lifecycle).toEqual({ preBuild: "pnpm run migrate" });
   });
 
   it("leaves the provider alone when no key is brought", () => {
