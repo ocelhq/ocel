@@ -138,18 +138,57 @@ func TestAnEphemeralDeployProvisionsTheResourcesItDeclaresInAnInfraStackOfItsOwn
 	}
 }
 
-func TestAPublishedRecordNamedForAResourceBindsAnEphemeralPreviewAsItBindsAPersistentOne(t *testing.T) {
-	for name, preview := range map[string]string{"at the preview": "pr-7", "tier-wide": ""} {
-		t.Run(name, func(t *testing.T) {
-			var said []string
-			for _, lifecycle := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
-				client, vendor := servePreview(t)
-				publishPreviewRecord(t, vendor, preview, postgresRecord("orders", "terraform"))
-				result, _ := deploy(t, client, newPreviewRequest(lifecycle))
-				said = append(said, result.GetError())
+func TestAPreviewResourceNamedLikeAnotherPublishersRecordIsRefusedBeforeAnythingIsProvisioned(t *testing.T) {
+	records := map[string]*bindingsv1.Binding{"of the same type": postgresRecord("orders", "terraform"), "of another type": bucketRecord("orders", "terraform")}
+	for _, lifecycle := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
+		for at, preview := range map[string]string{"at the preview": "pr-7", "tier-wide": "", "at another preview": "pr-9"} {
+			for kind, record := range records {
+				for operation, refused := range map[string]func(*testing.T, contractv1connect.ProviderServiceClient, *contractv1.DeployRequest) string{
+					"Deploy": expectDeployRefused,
+					"ProvisionInfra": func(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.DeployRequest) string {
+						return infraRefusal(t, client, infraRequest(req))
+					},
+				} {
+					t.Run(strings.Join([]string{lifecycle.String(), at, kind, operation}, "/"), func(t *testing.T) {
+						client, vendor := servePreview(t)
+						publishPreviewRecord(t, vendor, preview, record)
+
+						said := refused(t, client, newPreviewRequest(lifecycle))
+
+						for _, want := range []string{`"orders"`, "publisher terraform", "rename"} {
+							if !strings.Contains(said, want) {
+								t.Errorf("%s() said %q, want it to contain %q", operation, said, want)
+							}
+						}
+						if got := len(vendor.FakeStacks().Provisioned()); got != 0 {
+							t.Errorf("the refused %s provisioned %d stacks, want none: publishing orders afterwards is refused, so its infra would be left behind", operation, got)
+						}
+					})
+				}
 			}
-			if said[0] != said[1] || !strings.Contains(said[1], "already published by publisher terraform") {
-				t.Errorf("a persistent preview said %q and an ephemeral one %q, want the same refusal naming the publisher that holds orders", said[0], said[1])
+		}
+	}
+}
+
+func TestARefusalOfAPreviewResourceNamedLikeAnotherPublishersRecordShowsTheBindingThatConsumesIt(t *testing.T) {
+	client, vendor := servePreview(t)
+	publishPreviewRecord(t, vendor, "", postgresRecord("orders", "terraform"))
+
+	said := expectDeployRefused(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
+
+	if want := `"bindings": { "postgres": { "orders": "@orders" } }`; !strings.Contains(said, want) {
+		t.Errorf("Deploy() said %q, want it to show %s, the binding written as config accepts it", said, want)
+	}
+}
+
+func TestAPreviewRedeploysOverTheRecordsItsOwnLastDeployPublished(t *testing.T) {
+	for _, lifecycle := range []environmentv1.Lifecycle{environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL} {
+		t.Run(lifecycle.String(), func(t *testing.T) {
+			client, _ := servePreview(t)
+			for deploys := range 2 {
+				if result, _ := deploy(t, client, newPreviewRequest(lifecycle)); !result.GetSuccess() {
+					t.Fatalf("deploy %d = %q, want it to succeed: orders is published by ocel itself", deploys+1, result.GetError())
+				}
 			}
 		})
 	}

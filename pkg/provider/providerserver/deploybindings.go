@@ -29,6 +29,9 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		published[binding.Name] = binding
 		names = append(names, binding.Name)
 	}
+	if err := r.refuseClaimedNames(ctx, resources, published); err != nil {
+		return err
+	}
 	r.warnShadowed(progress, resources, published)
 
 	var missing []string
@@ -122,6 +125,42 @@ func (r *deployRun) publishingTiers(ctx context.Context, missing []string) map[s
 		}
 	}
 	return found
+}
+
+func (r *deployRun) refuseClaimedNames(ctx context.Context, resources []provider.Resource, published map[string]provider.Binding) error {
+	var provisioned []string
+	for _, resource := range resources {
+		if resource.Binding == "" {
+			provisioned = append(provisioned, resource.Name)
+		}
+	}
+	held, err := r.values.FindClaimsByOthers(ctx, r.scope, variablestore.OwnerOcel, provisioned)
+	if err != nil {
+		return err
+	}
+	var refusals []string
+	for _, resource := range resources {
+		by, taken := held[resource.Name]
+		if resource.Binding != "" || !taken {
+			continue
+		}
+		said := fmt.Sprintf(
+			"%s %s provisions a binding named %q, and publisher %s already publishes a record under that name to %s. "+
+				"One binding name belongs to one publisher, so this deploy would provision %s and then be refused publishing it. ",
+			resource.Type, resource.Declared, resource.Name, by.Owner, describeCoordinate(string(r.spec.Tier), by.Environment), resource.Declared)
+		if namesake, here := published[resource.Name]; here && RefuseMismatchedBinding(namesake, resource.Declared, resource.Type) == nil {
+			said += fmt.Sprintf(
+				"Consume the published record instead — \"bindings\": { %q: { %q: %q } } — or rename %s",
+				string(resource.Type), resource.Declared, "@"+resource.Name, resource.Declared)
+		} else {
+			said += fmt.Sprintf("Remove the published record, or rename %s", resource.Declared)
+		}
+		refusals = append(refusals, said)
+	}
+	if len(refusals) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid, "%s", strings.Join(refusals, "\n\n"))
 }
 
 func (r *deployRun) warnShadowed(progress progress.Log, resources []provider.Resource, published map[string]provider.Binding) {
