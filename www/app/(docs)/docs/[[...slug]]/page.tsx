@@ -11,6 +11,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CompareWith } from "@/components/docs/compare";
 import { getMDXComponents } from "@/components/docs/mdx";
+import { markdownUrl } from "@/lib/llms";
 import { source } from "@/lib/source";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -65,9 +66,9 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
       <div className="flex items-center gap-2">
-        <MarkdownCopyButton markdownUrl={`${page.url}.md`} />
+        <MarkdownCopyButton markdownUrl={markdownUrl(page.url)} />
         <ViewOptionsPopover
-          markdownUrl={`${page.url}.md`}
+          markdownUrl={markdownUrl(page.url)}
           githubUrl={`https://github.com/ocelhq/ocel/blob/main/www/content/docs/${page.path}`}
         />
       </div>
