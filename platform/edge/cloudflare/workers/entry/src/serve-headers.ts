@@ -3,6 +3,8 @@ import {
   isStoredLifetime,
   readCacheDirectives,
   readDirectiveSeconds,
+  readExpiresSeconds,
+  readSharedLifetime,
   refusesSharedStore,
   sharedPolicyHeaders,
 } from "@platform/edge-contract/cache-control";
@@ -95,18 +97,28 @@ export function forCache(
   ) {
     return notStored(response, options);
   }
-  const policy = edgePolicy(response.headers);
+  const policy =
+    edgePolicy(response.headers) ??
+    (options.honoursAppCacheHeaders
+      ? { source: "cache-control", directives: new Map() }
+      : undefined);
   if (!policy || refusesSharedStore(readCacheDirectives(response.headers.get("cache-control")))) {
     return notStored(response, options);
   }
   const { directives } = policy;
   if (refusesSharedStore(directives)) return notStored(response, options);
 
-  const lifetime =
-    readDirectiveSeconds(directives, "s-maxage") ??
-    (policy.source === "cache-control" && !options.honoursAppCacheHeaders
-      ? undefined
-      : readDirectiveSeconds(directives, "max-age"));
+  const lifetime = options.honoursAppCacheHeaders
+    ? readSharedLifetime(
+        directives,
+        policy.source === "cache-control"
+          ? readExpiresSeconds(response.headers, Date.now())
+          : undefined,
+      )
+    : (readDirectiveSeconds(directives, "s-maxage") ??
+      (policy.source === "cache-control"
+        ? undefined
+        : readDirectiveSeconds(directives, "max-age")));
   const staleWhileRevalidate = readDirectiveSeconds(directives, "stale-while-revalidate");
   if (lifetime === undefined || !isStoredLifetime(lifetime, staleWhileRevalidate)) {
     return notStored(response, options);

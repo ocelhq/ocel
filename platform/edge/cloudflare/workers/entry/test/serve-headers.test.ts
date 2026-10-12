@@ -233,6 +233,50 @@ describe("the headers a node app's response leaves Serve with", () => {
     );
   });
 
+  it.each([
+    ["no Cache-Control", {}],
+    ["a Cache-Control that names no lifetime", { "cache-control": "public" }],
+  ])(
+    "takes a future Expires under %s as the edge lifetime, as CloudFront and Cloud CDN do",
+    (_name, headers) => {
+      const response = fromNodeApp({
+        status: 200,
+        headers: {
+          ...headers,
+          date: "Mon, 12 Oct 2026 12:00:00 GMT",
+          expires: "Mon, 12 Oct 2026 12:02:00 GMT",
+        },
+      });
+
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+        "max-age=120, stale-if-error=86400",
+      );
+      expect(response.headers.get("expires")).toBe("Mon, 12 Oct 2026 12:02:00 GMT");
+    },
+  );
+
+  it("takes a max-age over an Expires", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: {
+        "cache-control": "max-age=0",
+        date: "Mon, 12 Oct 2026 12:00:00 GMT",
+        expires: "Mon, 12 Oct 2026 12:02:00 GMT",
+      },
+    });
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+  });
+
+  it("does not store an Expires in the past", () => {
+    const response = fromNodeApp({
+      status: 200,
+      headers: { date: "Mon, 12 Oct 2026 12:00:00 GMT", expires: "Mon, 12 Oct 2026 11:00:00 GMT" },
+    });
+
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe("no-store");
+  });
+
   it("prefers an s-maxage to a max-age", () => {
     const response = fromNodeApp({
       status: 200,
@@ -312,6 +356,15 @@ describe("the headers a node app's response leaves Serve with", () => {
 describe("a Next prerender keeps taking only an s-maxage as its lifetime", () => {
   it("does not store a max-age with no s-maxage", () => {
     const response = shaped({ status: 200, headers: { "cache-control": "public, max-age=120" } });
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("does not store an Expires with no s-maxage", () => {
+    const response = shaped({
+      status: 200,
+      headers: { date: "Mon, 12 Oct 2026 12:00:00 GMT", expires: "Mon, 12 Oct 2026 12:02:00 GMT" },
+    });
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
