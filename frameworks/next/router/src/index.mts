@@ -434,7 +434,10 @@ async function serveRequest(request: Request, deps: RouteDeps): Promise<Response
   return dispatchResult(
     {
       ...withSourceInvocationTarget(
-        dropShadowedDynamicParams(preferExactPathname(result, deps.manifest), deps.manifest),
+        dropShadowedDynamicParams(
+          preferExactPathname(withoutForgedRouteParams(result), deps.manifest),
+          deps.manifest,
+        ),
         routingUrl,
         deps.manifest,
       ),
@@ -480,6 +483,16 @@ function preferExactPathname(result: RouteResult, manifest: NextRouteTable): Rou
     }
   }
   return result;
+}
+
+function withoutForgedRouteParams(result: RouteResult): RouteResult {
+  const target = result.invocationTarget;
+  if (!target?.query || !result.routeMatches) return result;
+  const matched = Object.keys(result.routeMatches);
+  return {
+    ...result,
+    invocationTarget: { ...target, query: withoutParamsNamedBy(target.query, matched, matched) },
+  };
 }
 
 function dropShadowedDynamicParams(result: RouteResult, manifest: NextRouteTable): RouteResult {
@@ -591,12 +604,13 @@ function routeParamName(key: string): string | undefined {
 function withoutParamsNamedBy(
   query: Record<string, string | string[]>,
   paramKeys: readonly string[],
+  keptKeys: readonly string[] = [],
 ): Record<string, string | string[]> {
   const names = new Set(paramKeys.map(routeParamName));
   return Object.fromEntries(
     Object.entries(query).filter(([key]) => {
       const name = routeParamName(key);
-      return name === undefined || !names.has(name);
+      return name === undefined || !names.has(name) || keptKeys.includes(key);
     }),
   );
 }

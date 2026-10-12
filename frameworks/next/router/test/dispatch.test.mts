@@ -2349,6 +2349,28 @@ describe("the origin URL under a config rewrite", () => {
   );
 
   it.each([
+    ["a direct hit", "/blog/post-2", false],
+    ["a data request", "/_next/data/t/blog/post-2.json", true],
+  ])(
+    "takes the dynamic route's param from the path on %s, not from a visitor's other-prefixed key",
+    async (_, path, shouldNormalizeNextData) => {
+      const { routes } = rewritingTo("/blog/post-1");
+      const { deps, invoked } = capturingDeps({
+        routes: { ...(routes as object), shouldNormalizeNextData },
+      });
+
+      await serve(
+        new Request(`https://app.example${path}?nxtPpost=x&nxtIpost=forged&nxtPage=1`),
+        deps,
+      );
+
+      expect(invoked().searchParams.getAll("nxtPpost")).toEqual(["post-2"]);
+      expect(invoked().searchParams.has("nxtIpost")).toBe(false);
+      expect(invoked().searchParams.get("nxtPage")).toBe("1");
+    },
+  );
+
+  it.each([
     ["a static page", "/rewrite-target"],
     ["a dynamic route without that param", "/blog/post-1"],
   ])("keeps a visitor's own nxtP-prefixed param on a rewrite to %s", async (_, destination) => {
