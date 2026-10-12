@@ -45,7 +45,16 @@
     },
     "test/e2e/app-dir/app-static/app-static.test.ts": {
       "failed": [
+        "app-dir static/dynamic handling it should revalidate correctly with edge route handler",
+        "app-dir static/dynamic handling it should revalidate tag correctly with edge route handler",
+        "app-dir static/dynamic handling should cache correctly handle JSON body",
+        "app-dir static/dynamic handling should cache correctly with utf8 encoding edge",
+        "app-dir static/dynamic handling should honor fetch cache correctly (edge)",
+        "app-dir static/dynamic handling should stream properly for /stale-cache-serving-edge/app-page",
+        "app-dir static/dynamic handling should stream properly for /stale-cache-serving-edge/route-handler",
+        "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-edge",
         "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
+        "app-dir static/dynamic handling unstable-cache should work in pages/unstable-cache-edge",
         "app-dir static/dynamic handling updateTag/revalidateTag should successfully update tag when called from server action"
       ],
       "flakey": [
