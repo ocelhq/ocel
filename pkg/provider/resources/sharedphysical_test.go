@@ -56,6 +56,7 @@ type serviceEveryReleaseRevises struct {
 	mu               sync.Mutex
 	revision         string
 	latest           string
+	ignoresGate      bool
 	failProvision    error
 	onProvision      func()
 	onRemove         func()
@@ -109,7 +110,7 @@ func (s *serviceEveryReleaseRevises) removals() (removed, revisions []string) {
 func (s *serviceEveryReleaseRevises) nameFunctions(_ context.Context, spec provider.StackSpec) ([]provider.Function, error) {
 	var functions []provider.Function
 	for _, fn := range spec.App.Functions {
-		functions = append(functions, provider.Function{Name: fn.Name, Physical: "shop-prod-web-" + fn.Name})
+		functions = append(functions, provider.Function{Name: fn.Name, Physical: "shop-prod-web-" + fn.Name, IgnoresPreviewGate: s.ignoresGate})
 	}
 	return functions, nil
 }
@@ -560,6 +561,28 @@ func TestAHolderWhoseStackRecordIsGoneIsRecordedAgainSoATeardownReachesIt(t *tes
 	}
 	if left := sharedEntries(t, store); len(left) != 0 {
 		t.Errorf("the teardown left %v behind", left)
+	}
+}
+
+func TestARestoredHolderRecordStillSaysItsFunctionIgnoresThePreviewGate(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	service := &serviceEveryReleaseRevises{revision: "shop-prod-web-api-00001", ignoresGate: true}
+	released := newReleases(t, store, service.hooks())
+	lost := releaseRef("d1")
+	released.provision(lost, functionApp())
+	released.forget(lost)
+
+	if _, err := resources.RecordUnrecordedHolders(context.Background(), store, environment.TierProduction, "shop", func(naming.StackName) bool { return true }); err != nil {
+		t.Fatalf("RecordUnrecordedHolders() = %v", err)
+	}
+	restored, _, err := stackrecords.Read(context.Background(), store, lost.Tier, lost.Project, lost.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.Functions) != 1 || !restored.Functions[0].IgnoresPreviewGate {
+		t.Errorf("the restored record holds %+v, want function api recorded as ignoring the preview gate", restored.Functions)
 	}
 }
 
