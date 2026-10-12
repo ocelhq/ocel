@@ -291,6 +291,38 @@ describe("a request on a route no cache rule governs", () => {
     });
   });
 
+  it("answers a HEAD from the entry a GET fills, with its headers and no body", async () => {
+    const { serve, calls, forwarded } = setup(
+      () => new Response("page", { headers: { "cf-cache-status": "HIT", etag: '"e1"' } }),
+    );
+
+    const res = await serve(new Request("https://shop.example.com/account", { method: "HEAD" }));
+
+    expect(forwarded).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.request.method).toBe("GET");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBe('"e1"');
+    expect(res.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await res.text()).toBe("");
+  });
+
+  it("sends a HEAD with a cookie to the origin as a HEAD when there is no entry", async () => {
+    const { serve, forwarded } = setup(
+      () => new Response(null, { status: 404, headers: { [SERVE_MISS_HEADER]: "1" } }),
+    );
+
+    await serve(
+      new Request("https://shop.example.com/account", {
+        method: "HEAD",
+        headers: { cookie: "s=1" },
+      }),
+    );
+
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]!.method).toBe("HEAD");
+  });
+
   it("fills the entry for a visitor with no cookie who names the lookup-only header", async () => {
     const { serve, calls } = setup();
 
