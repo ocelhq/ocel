@@ -184,7 +184,9 @@ func (s costShape) workers(environment string, req provider.ShapeRequest, topics
 			continue
 		}
 		if app.Compute() == provider.ComputeContainer {
-			s.containerWorkers(environment, app, topics)
+			if err := s.containerWorkers(environment, app, topics); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := s.appWorkers(environment, req, app, topics); err != nil {
@@ -212,20 +214,27 @@ func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app
 		for _, queue := range topics.served(worker.Name) {
 			s.plain(scope, tfEventSourceMapping, queue.topic+"/"+queue.consumer.Name, map[string]any{"batch_size": batchSize(queue.consumer)})
 		}
-		for _, task := range topics.cronTasks(worker.Name) {
-			expressions, err := schedulerExpressions(task.declared.Cron)
-			if err != nil {
-				return fmt.Errorf("task %s: %w", task.resource.Declared, err)
-			}
-			for _, expression := range expressions {
-				s.plain(scope, tfSchedulerSchedule, task.resource.Declared, map[string]any{"schedule_expression": expression})
-			}
+		if err := s.cronSchedules(scope, topics, worker.Name); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics deployedTopics) {
+func (s costShape) cronSchedules(scope string, topics deployedTopics, worker string) error {
+	for _, task := range topics.cronTasks(worker) {
+		expressions, err := schedulerExpressions(task.declared.Cron)
+		if err != nil {
+			return fmt.Errorf("task %s: %w", task.resource.Declared, err)
+		}
+		for _, expression := range expressions {
+			s.plain(scope, tfSchedulerSchedule, task.resource.Declared, map[string]any{"schedule_expression": expression})
+		}
+	}
+	return nil
+}
+
+func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics deployedTopics) error {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
 	for _, worker := range app.Workers {
 		name := resources.WorkerName(worker.Name)
@@ -243,7 +252,11 @@ func (s costShape) containerWorkers(environment string, app provider.AppEntry, t
 		for at, group := range slices.Collect(slices.Chunk(queueNames, backlogAlarmQueues)) {
 			s.plain(scope, tfMetricAlarm, name+"/"+strconv.Itoa(at), map[string]any{"metrics": len(group)})
 		}
+		if err := s.cronSchedules(scope, topics, worker.Name); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func batchSize(consumer provider.ConsumerSpec) int {
