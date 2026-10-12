@@ -10,6 +10,7 @@ import { CompareWith } from "@/components/docs/compare";
 import { CompareChips } from "@/components/docs/compare/chips";
 import { DevTerminal } from "@/components/docs/dev-terminal";
 import { Hero } from "@/components/docs/hero";
+import { ResourceCards } from "@/components/docs/resource-cards";
 import { StartCards } from "@/components/docs/start-cards";
 
 function Tile({ className, ...props }: ComponentProps<typeof Card>) {
@@ -76,6 +77,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Cards: TileGrid,
     Hero,
     StartCards,
+    ResourceCards,
     DevTerminal,
     Tabs,
     Tab,
