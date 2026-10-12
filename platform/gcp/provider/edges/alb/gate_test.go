@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 var shopGate = previewgate.Gate{Key: "shop-key", PasswordMAC: "shop-mac", BypassSecrets: []string{"shop-bypass"}}
@@ -236,6 +237,42 @@ func TestAGatedPreviewIsWarmedWithASessionTheGateAdmits(t *testing.T) {
 	verdict := shopGate.Check(previewgate.Request{Method: "HEAD", Host: bound, Target: "/", Header: previewgate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
 	if verdict.Response != nil {
 		t.Errorf("the warm carried %q, which the gate refuses with %d, so it warms nothing", cookies[len(cookies)-1], verdict.Response.Status)
+	}
+}
+
+func TestAProtectedPreviewBehindAShieldedLoadBalancerIsWarmedWithASessionTheEdgeInFrontAdmits(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := balancing(t)
+	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
+	if err := stackrecords.ChangePreviewGates(ctx, balancer.deps.KeyValues, balancer.deps.Cipher, func(records map[string]stackrecords.PreviewGateRecord) error {
+		records["shop"] = stackrecords.PreviewGateRecord{Gate: shopGate, Enabled: true}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reconciledStack, err := balancer.Shielded().Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &shopGate}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile = %v", err)
+	}
+	const bound = "pr-7-web.preview.example.com"
+	if err := reconciledStack.BindDomain(ctx, edge.DomainBinding{Hostname: bound, App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	reconciledStack.(*stack).recorded.LoadBalancer.Shielded = true
+	stage(t, reconciledStack, previewRecord("b1"))
+	promote(t, reconciledStack, "p1", "b1")
+
+	w.mu.Lock()
+	cookies := slices.Clone(w.warmCookies)
+	w.mu.Unlock()
+	if len(cookies) == 0 {
+		t.Fatal("the promotion warmed nothing")
+	}
+	verdict := shopGate.Check(previewgate.Request{Method: "HEAD", Host: bound, Target: "/", Header: previewgate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
+	if verdict.Response != nil {
+		t.Errorf("the warm carried %q, which the edge in front refuses with %d, so it never reaches the revision", cookies[len(cookies)-1], verdict.Response.Status)
 	}
 }
 

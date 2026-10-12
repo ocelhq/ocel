@@ -8,8 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type notices struct {
@@ -152,8 +154,15 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 }
 
 func (s *stack) signGateSession(ctx context.Context, hostname string) (string, error) {
-	if !s.isGated() {
+	if s.state.Tier != environment.TierPreview {
 		return "", nil
+	}
+	if !s.isGated() {
+		inForce, err := stackrecords.ReadPreviewGate(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Slug)
+		if err != nil || inForce == nil {
+			return "", err
+		}
+		return previewgate.CookieName + "=" + inForce.SignSession(hostname, time.Now()), nil
 	}
 	recorded, gated, err := s.e.readGateRecord(ctx, s.state.Slug)
 	if err != nil || !gated {
