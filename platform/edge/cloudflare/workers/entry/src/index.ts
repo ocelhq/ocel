@@ -13,6 +13,7 @@ import {
   originImagePath,
 } from "@framework/next-router/image";
 import { readReleaseToken } from "@platform/edge-contract/purge";
+import type { CompiledRoutes } from "@platform/edge-contract/routes";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -42,7 +43,7 @@ import {
   respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
-import { ownRouteTableKey, readRouteTable } from "./route-table";
+import { ownRouteTableKey, readOcelRoutes, readRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
 import { serveNodeOrigin } from "./serve-node";
 import { type ServeFactory, serveObjects } from "./serve-objects";
@@ -116,6 +117,7 @@ export type ServeFetch = (request: Request) => Promise<Response>;
 interface ServedRelease {
   record: ReleaseRecord;
   routeTable?: NextRouteTable;
+  routes?: CompiledRoutes;
 }
 
 interface ServeRuntime {
@@ -132,7 +134,7 @@ const routedRuntime: ServeRuntime = {
 };
 
 const originRuntime: ServeRuntime = {
-  serve: ({ record }, releases, base) => {
+  serve: ({ record, routes }, releases, base) => {
     const app = releases.app ?? record.app;
     const forward = nodeOrigin({
       app,
@@ -142,12 +144,12 @@ const originRuntime: ServeRuntime = {
     const serving = newReleaseServing(base.serving, record, releases, app);
     const urls = Object.values(record.functionUrls);
     if (!serving || urls.length !== 1) return forward;
-    return serveNodeOrigin({ serving, app, origin: urls[0], rules: record.cache ?? [], forward });
+    return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
   },
 };
 
 function runtimeFor(record: ReleaseRecord): ServeRuntime {
-  return record.routeTable ? routedRuntime : originRuntime;
+  return record.routeTable?.format === "next" ? routedRuntime : originRuntime;
 }
 
 async function resolveServedRelease(
@@ -173,7 +175,9 @@ async function resolveServedRelease(
     return refuse(`the key lies outside the route tables of ${releases.slug}`);
   }
   try {
-    return { record, routeTable: await readRouteTable(base.routeTableStore, key) };
+    return record.routeTable.format === "ocel"
+      ? { record, routes: await readOcelRoutes(base.routeTableStore, key) }
+      : { record, routeTable: await readRouteTable(base.routeTableStore, key) };
   } catch (error) {
     return refuse(error);
   }

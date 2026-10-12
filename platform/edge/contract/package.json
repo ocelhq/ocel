@@ -7,7 +7,6 @@
   "license": "Apache-2.0",
   "exports": {
     "./bypass": "./src/bypass.mts",
-    "./cache-rules": "./src/cache-rules.mts",
     "./cache-tags": "./src/cache-tags.mts",
     "./client-address": "./src/client-address.mts",
     "./client-authorization": "./src/client-authorization.mts",
@@ -18,7 +17,6 @@
     "./routes": "./src/routes.mts",
     "./hosting": "./src/hosting.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
-    "./fixtures/cache-rules": "./fixtures/cache-rules.json",
     "./fixtures/preview-gate": "./fixtures/preview-gate.json",
     "./fixtures/routes": "./fixtures/routes.json",
     "./static": "./src/static.mts",
