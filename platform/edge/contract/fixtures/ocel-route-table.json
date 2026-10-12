@@ -1428,6 +1428,301 @@
           "function": "index"
         }
       }
+    },
+    {
+      "reason": "a cache expire of zero",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": {
+              "revalidate": 60,
+              "expire": 0
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a bypass token that is empty",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": {
+              "revalidate": 60,
+              "bypassToken": ""
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache rule that is null",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": null
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "cache tags that are null",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": {
+              "revalidate": 60,
+              "tags": null
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache allow-list that is null",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": {
+              "revalidate": 60,
+              "allowQuery": null
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a base path that is null",
+      "table": {
+        "version": 1,
+        "basePath": null,
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header value that is null",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "x-note": null
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a cache field named in another case",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index",
+            "cache": {
+              "Revalidate": 60
+            }
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a route field named in another case",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "Function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a fallback field named in another case",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "Function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header value with a control character",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "x-note": "a\u0001b"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header value with a delete character",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "x-note": "ab"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
+    },
+    {
+      "reason": "a header value with a character past one byte",
+      "table": {
+        "version": 1,
+        "basePath": "",
+        "trailingSlash": "ignore",
+        "headers": [
+          {
+            "src": "/(.*)",
+            "headers": {
+              "x-note": "cafĀ"
+            }
+          }
+        ],
+        "redirects": [],
+        "routes": [
+          {
+            "src": "/(.*)",
+            "function": "index"
+          }
+        ],
+        "fallback": {
+          "function": "index"
+        }
+      }
     }
   ]
 }

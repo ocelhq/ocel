@@ -56,10 +56,10 @@ type Fallback struct {
 
 type CacheRule struct {
 	Revalidate  int      `json:"revalidate"`
-	Expire      int      `json:"expire,omitempty"`
+	Expire      *int     `json:"expire,omitempty"`
 	AllowQuery  []string `json:"allowQuery,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	BypassToken string   `json:"bypassToken,omitempty"`
+	BypassToken *string  `json:"bypassToken,omitempty"`
 }
 
 const (
@@ -85,10 +85,46 @@ func ReadOcelRouteTable(raw []byte) (OcelRouteTable, error) {
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return OcelRouteTable{}, errors.New("parse the route table: it holds more than one JSON document")
 	}
+	var document any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return OcelRouteTable{}, fmt.Errorf("parse the route table: %w", err)
+	}
+	if err := refuseNullOrMiscasedField(document, ""); err != nil {
+		return OcelRouteTable{}, fmt.Errorf("parse the route table: %w", err)
+	}
 	if err := routes.refuse(); err != nil {
 		return OcelRouteTable{}, err
 	}
 	return routes, nil
+}
+
+var ocelRouteTableFields = []string{
+	"version", "basePath", "trailingSlash", "headers", "redirects", "routes", "fallback",
+	"src", "location", "status", "function", "cache",
+	"revalidate", "expire", "allowQuery", "tags", "bypassToken",
+}
+
+func refuseNullOrMiscasedField(value any, field string) error {
+	switch v := value.(type) {
+	case nil:
+		return fmt.Errorf("%s is null, and a field the table does not state is left out", field)
+	case []any:
+		for _, item := range v {
+			if err := refuseNullOrMiscasedField(item, field+"[]"); err != nil {
+				return err
+			}
+		}
+	case map[string]any:
+		for key, item := range v {
+			if field != "headers" && !slices.Contains(ocelRouteTableFields, key) {
+				return fmt.Errorf("%q is not a field of the route table, whose fields are named in exactly this case: %s", key, strings.Join(ocelRouteTableFields, ", "))
+			}
+			if err := refuseNullOrMiscasedField(item, key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (r OcelRouteTable) HasCachedRoute() bool {
@@ -136,13 +172,13 @@ func (r OcelRouteTable) refuseRoutes() error {
 		if err := route.refuse(); err != nil {
 			return fmt.Errorf("route %d (%q): %w", i, route.Src, err)
 		}
-		if route.Cache == nil || route.Cache.BypassToken == "" {
+		if route.Cache == nil || route.Cache.BypassToken == nil {
 			continue
 		}
-		if token != "" && token != route.Cache.BypassToken {
+		if token != "" && token != *route.Cache.BypassToken {
 			return fmt.Errorf("route %d (%q): a table has one bypassToken, and this route states another", i, route.Src)
 		}
-		token = route.Cache.BypassToken
+		token = *route.Cache.BypassToken
 	}
 	return nil
 }
@@ -158,11 +194,15 @@ func (r HeaderRule) refuse() error {
 		if !headerName.MatchString(name) {
 			return fmt.Errorf("%q is not a header name", name)
 		}
-		if strings.ContainsAny(value, "\r\n\x00") {
-			return fmt.Errorf("the value of %s holds a line break", name)
+		if strings.ContainsFunc(value, isUnsendableInHeader) {
+			return fmt.Errorf("the value of %s is a string of tabs, visible ASCII and Latin-1 characters", name)
 		}
 	}
 	return nil
+}
+
+func isUnsendableInHeader(r rune) bool {
+	return r != '\t' && (r < 0x20 || r == 0x7f || r > 0xff)
 }
 
 func (r RedirectRule) refuse() error {
@@ -208,13 +248,13 @@ func (c CacheRule) refuse() error {
 	switch {
 	case c.Revalidate < 1:
 		return errors.New("revalidate is a whole number of seconds, at least 1")
-	case c.Expire != 0 && c.Expire <= c.Revalidate:
+	case c.Expire != nil && *c.Expire <= c.Revalidate:
 		return errors.New("expire is a whole number of seconds longer than revalidate")
 	case slices.Contains(c.AllowQuery, ""):
 		return errors.New("allowQuery names no empty parameter")
 	case slices.Contains(c.Tags, ""):
 		return errors.New("a tag is not empty")
-	case c.BypassToken != "" && (len(c.BypassToken) < minBypassToken || !bypassTokenCharacters.MatchString(c.BypassToken)):
+	case c.BypassToken != nil && (len(*c.BypassToken) < minBypassToken || !bypassTokenCharacters.MatchString(*c.BypassToken)):
 		return fmt.Errorf("bypassToken is at least %d letters, digits, dashes or underscores", minBypassToken)
 	}
 	return nil
