@@ -1825,6 +1825,21 @@ func TestABootstrapCredentialMakesAndTagsVariablesKeysOnlyAsItsOwnTiers(t *testi
 	}
 }
 
+func TestEveryCredentialReadsTheTagsOfTheObjectsItUploadsToTheArtifactBucket(t *testing.T) {
+	for _, tier := range bothTiers {
+		core, err := defaultNamespace.StackNameFor(tier)
+		if err != nil {
+			t.Fatal(err)
+		}
+		object := "arn:aws:s3:::" + strings.ToLower(core) + "-artifactbucket-abc123/preview/shop/app/r1a2b3c4d/fn/fn-app-bundle-0/h.zip"
+		for purpose, document := range credentialsOfTier(t, tier) {
+			if !reaches(t, document, "s3:GetObjectTagging", object) {
+				t.Errorf("the %s %s credential cannot read the tags of %s, so the provider's read after the upload is refused", tier, purpose, object)
+			}
+		}
+	}
+}
+
 func TestEveryCredentialTagsTheObjectsItPutsInTheAssetBucket(t *testing.T) {
 	core, err := defaultNamespace.StackNameFor(environment.TierProduction)
 	if err != nil {
