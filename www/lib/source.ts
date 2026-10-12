@@ -1,5 +1,6 @@
 import {
   ArrowDownTrayIcon,
+  BeakerIcon,
   BoltIcon,
   BookOpenIcon,
   CommandLineIcon,
@@ -11,6 +12,7 @@ import type * as PageTree from "fumadocs-core/page-tree";
 import { type InferPageType, loader } from "fumadocs-core/source";
 import { defineDocs } from "fumadocs-mdx/macro";
 import { createElement } from "react";
+import { BotIcon } from "@/components/docs/bot-icon";
 import { withoutCodeAnnotations } from "./llms";
 
 const docs = defineDocs({
@@ -32,11 +34,13 @@ const docs = defineDocs({
 
 const icons = {
   ArrowDownTrayIcon,
+  BeakerIcon,
   BoltIcon,
   BookOpenIcon,
   CommandLineIcon,
   Squares2X2Icon,
   ScaleIcon,
+  BotIcon,
 };
 
 export const source = loader({

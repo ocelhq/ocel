@@ -19,7 +19,9 @@ export type Tool = {
   rows: Row[];
 };
 
-export const DEFAULT = "vercel";
+export const ACTIVE = ["sst"];
+
+export const DEFAULT = "sst";
 
 const QUESTIONS = {
   account: "Whose account does it run in?",
@@ -1223,9 +1225,11 @@ volumes:
   },
 ];
 
+export const active: Tool[] = tools.filter((tool) => ACTIVE.includes(tool.slug));
+
 export function find(slug: string | null | undefined): Tool {
   return (
-    tools.find((tool) => tool.slug === slug) ??
-    (tools.find((tool) => tool.slug === DEFAULT) as Tool)
+    active.find((tool) => tool.slug === slug) ??
+    (active.find((tool) => tool.slug === DEFAULT) as Tool)
   );
 }

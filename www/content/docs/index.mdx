@@ -8,7 +8,7 @@ icon: BookOpenIcon
 
 ## Zero infrastructure code
 
-You write one config. It names a target, a cloud or a server, and nothing about how to build there. Your app does not know or care which, nor should it have to. Swapping targets changes the provider and nothing else:
+You write minimal config naming the platform to deploy to via a provider, never infra code for deploying your app. Swapping providers is easy:
 
 <Compare>
 <div>
@@ -59,7 +59,7 @@ export default defineConfig({
 </div>
 </Compare>
 
-Compute is a setting too. On providers that support it, the same app runs as functions or as one container:
+Compute becomes another thing you can swap out on providers that support it (like AWS, GCP):
 
 <Compare>
 <div>
@@ -71,7 +71,13 @@ import awsProvider from "ocel/providers/aws";
 export default defineConfig({
   slug: "acme",
   provider: awsProvider(),
-  apps: [{ name: "web", path: ".", compute: "serverless" }], // [!code --]
+  apps: [
+    {
+      name: "web",
+      path: ".",
+      compute: "serverless", // [!code --]
+    },
+  ],
 });
 ```
 
@@ -80,7 +86,13 @@ export default defineConfig({
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": "aws",
-  "apps": [{ "name": "web", "path": ".", "compute": "serverless" }] // [!code --]
+  "apps": [
+    { 
+      "name": "web", 
+      "path": ".", 
+      "compute": "serverless" // [!code --]
+    }
+  ]
 }
 ```
 
@@ -94,7 +106,13 @@ import awsProvider from "ocel/providers/aws";
 export default defineConfig({
   slug: "acme",
   provider: awsProvider(),
-  apps: [{ name: "web", path: ".", compute: "container" }], // [!code ++]
+  apps: [
+    {
+      name: "web",
+      path: ".",
+      compute: "container", // [!code ++]
+    },
+  ],
 });
 ```
 
@@ -103,18 +121,34 @@ export default defineConfig({
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "acme",
   "provider": "aws",
-  "apps": [{ "name": "web", "path": ".", "compute": "container" }] // [!code ++]
+  "apps": [
+    { 
+      "name": "web", 
+      "path": ".", 
+      "compute": "serverless" // [!code ++]
+    }
+  ]
 }
 ```
 
 </div>
 </Compare>
 
+That config is the whole setup. Drop it into an app, e.g. [Next.js, SvelteKit, Django, Go or Rust](/docs/frameworks/nextjs), and ship it:
+
+```bash
+ocel deploy
+```
+
 <CompareChips />
 
 ## Application defined infrastructure
 
-A database or a bucket is a function call in your app. Declare it once in a [discovery folder](/docs/configuration#discoverypaths), import it where you use it, and the call is what provisions it. There is no other definition of it anywhere.
+A resource (database, bucket) is a function call in your app. Declare it once in a [discovery folder](/docs/configuration#discoverypaths), import it where you use it.
+
+<Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
 
 ```ts title="resources/index.ts"
 import { postgres } from "ocel/postgres";
@@ -129,6 +163,7 @@ import { db } from "../resources";
 const app = express();
 
 app.get("/documents", async (_req, res) => {
+  // Use it directly in your app code! 
   const { rows } = await db.query("select * from documents");
   res.json(rows);
 });
@@ -136,15 +171,96 @@ app.get("/documents", async (_req, res) => {
 app.listen(3000);
 ```
 
-This works whether you deploy to a cloud like AWS or VPS. [Learn more about the SDK](/docs/sdk).
+</Tab>
 
-## The stack comes up with dev
+<Tab value="Go">
+
+```go title="resources/resources.go"
+package resources
+
+import "ocel.dev"
+
+var DB = ocel.Postgres("main")
+```
+
+```go title="main.go"
+package main
+
+import (
+	"net/http"
+
+	"acme.dev/web/resources"
+)
+
+func documents(w http.ResponseWriter, r *http.Request) {
+	pool, _ := resources.DB.Pool(r.Context())
+	rows, _ := pool.Query(r.Context(), "select * from documents")
+	// ...
+}
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+import ocel
+
+db = ocel.postgres("main")
+```
+
+```python title="main.py"
+from fastapi import FastAPI
+from resources import db
+
+app = FastAPI()
+
+
+@app.get("/documents")
+async def documents():
+    rows = await db.fetch("select * from documents")
+    return [dict(row) for row in rows]
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+#[derive(ocel::Resources)]
+struct Infra {
+    main: ocel::Postgres,
+}
+
+#[ocel::main]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let infra = Infra::load()?;
+    let rows = sqlx::query("select * from documents")
+        .fetch_all(infra.main.pool().await?)
+        .await?;
+    // ...
+    Ok(())
+}
+```
+
+</Tab>
+
+</Tabs>
+
+Every SDK exposes the following primitives:
+
+<ResourceCards />
+
+The provider deploys the resources in your platform (AWS, GCP, VPS!). [Learn more about the SDK](/docs/sdk).
+
+{/* ## The stack comes up with dev
 
 One command: `ocel dev` starts the postgres and buckets your code declares alongside your app, on your machine. Docker is the only prerequisite, and only when the app declares a resource.
 
 <DevTerminal />
 
-[Learn more about dev mode](/docs/cli/dev).
+[Learn more about dev mode](/docs/cli/dev). */}
 
 ## Continue exploring
 

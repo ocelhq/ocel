@@ -2,7 +2,7 @@ import { highlight } from "fumadocs-core/highlight";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { Fragment, type ReactNode } from "react";
 import type { Facts, Pane } from "./data";
-import { families, find, tools } from "./data";
+import { active, families, find } from "./data";
 import { LABEL } from "./label";
 import type { PickerFamily, RenderedPane, RenderedRow } from "./picker";
 import { Picker } from "./picker";
@@ -93,7 +93,7 @@ async function renderPane(pane: Pane, owner: string): Promise<RenderedPane> {
 
 export async function CompareWith({ initial }: { initial?: string }) {
   const entries = await Promise.all(
-    tools.map(async (tool) => {
+    active.map(async (tool) => {
       const rows: RenderedRow[] = await Promise.all(
         tool.rows.map(async (row) => ({
           key: row.key,
@@ -114,16 +114,18 @@ export async function CompareWith({ initial }: { initial?: string }) {
     }),
   );
 
-  const categories: PickerFamily[] = families.map((family) => ({
-    slug: family.slug,
-    name: family.name,
-    lede: family.lede,
-    tools: tools
-      .filter((tool) => tool.family === family.slug)
-      .map((tool) => ({ slug: tool.slug, name: tool.name })),
-  }));
+  const categories: PickerFamily[] = families
+    .map((family) => ({
+      slug: family.slug,
+      name: family.name,
+      lede: family.lede,
+      tools: active
+        .filter((tool) => tool.family === family.slug)
+        .map((tool) => ({ slug: tool.slug, name: tool.name })),
+    }))
+    .filter((family) => family.tools.length > 0);
 
-  const names = Object.fromEntries(tools.map((tool) => [tool.slug, tool.name]));
+  const names = Object.fromEntries(active.map((tool) => [tool.slug, tool.name]));
 
   return (
     <main className="w-full">
