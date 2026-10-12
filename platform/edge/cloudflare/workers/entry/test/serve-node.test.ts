@@ -345,6 +345,23 @@ describe("a redirect the route table states", () => {
     expect(write.status).toBe(200);
     expect(forwarded).toHaveLength(1);
   });
+
+  it("sends a path that begins with two slashes to a location on its own site", async () => {
+    const { serve } = setup(
+      undefined,
+      undefined,
+      newRouteTable({
+        trailingSlash: "never",
+        redirects: [{ src: "/go/(.*)", location: "/$1", status: 307 }],
+      }),
+    );
+
+    const slash = await serve(new Request("https://shop.example.com//evil.com/"));
+    const substituted = await serve(new Request("https://shop.example.com/go//evil.com"));
+
+    expect(slash.headers.get("location")).toBe("/evil.com");
+    expect(substituted.headers.get("location")).toBe("/evil.com");
+  });
 });
 
 describe("a purge the origin announces on a response Serve did not cache", () => {

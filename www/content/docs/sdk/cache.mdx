@@ -88,8 +88,9 @@ own route table and does not use this one.
 - `headers` rules all apply, in order, over the headers your handler set. A rule may not set
   `cache-control` on a cached route: its cache rule does.
 - `redirects` are tried in order, and the first match is answered without reaching your
-  handler. `location` may read the groups of `src` as `$1`, and the request's query carries
-  over unless the location has its own.
+  handler. `location` is a path that begins with one slash, or an `http` or `https` URL, and may
+  read the groups of `src` as `$1`. A path stays on your site: slashes a group puts at its start
+  collapse into one. The request's query carries over unless the location has its own.
 - `trailingSlash` is `never`, `always` or `ignore`. A `GET` or `HEAD` for the other form is
   redirected with a `308`, and a path whose last segment has a dot is left alone.
 - A cache rule's `revalidate` is the whole seconds a response stays fresh, at least 1, and

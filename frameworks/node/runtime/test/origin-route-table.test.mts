@@ -167,6 +167,19 @@ describe("an origin handed a route table", () => {
     expect((await always("/logo.svg")).status).toBe(200);
   });
 
+  test("redirects a path that begins with two slashes to a location on its own site", async () => {
+    const never = await serve(newRouteTable({ trailingSlash: "never" }), page);
+    const always = await serve(newRouteTable({ trailingSlash: "always" }), page);
+    const substituted = await serve(
+      newRouteTable({ redirects: [{ src: "/(.*)", location: "/$1", status: 307 }] }),
+      page,
+    );
+
+    expect((await never("//evil.com/")).headers.get("location")).toBe("/evil.com");
+    expect((await always("//evil")).headers.get("location")).toBe("/evil/");
+    expect((await substituted("//evil.com")).headers.get("location")).toBe("/evil.com");
+  });
+
   test("redirects no write for its trailing slash, which would drop the body", async () => {
     const get = await serve(newRouteTable({ trailingSlash: "never" }), page);
 

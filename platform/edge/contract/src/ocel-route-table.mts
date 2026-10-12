@@ -46,6 +46,9 @@ const bypassTokenCharacters = /^[A-Za-z0-9_-]+$/;
 const groupRead = /\$(\d+)/g;
 const repeatBound = /^\{(\d+)(?:,(\d*))?\}/;
 const redirectStatuses = [301, 302, 307, 308];
+const absoluteLocation = /^https?:\/\//i;
+const sameSiteLocation = /^\/(?![/\\])/;
+const leadingSlashes = /^[/\\\s]+/;
 
 type Refusal = string | undefined;
 
@@ -222,6 +225,9 @@ function refuseRedirect(rule: unknown): Refusal {
   }
   if (typeof rule.location !== "string" || rule.location === "")
     return "a redirect names a location";
+  if (!absoluteLocation.test(rule.location) && !sameSiteLocation.test(rule.location)) {
+    return "a location is a path that begins with one slash, or an http or https URL";
+  }
   for (const read of rule.location.matchAll(groupRead)) {
     const group = Number(read[1]);
     if (group < 1 || group > pattern.groups) {
@@ -365,9 +371,13 @@ export function findRedirect(
     if (!match) continue;
     const { location, status } = compiled.table.redirects[index]!;
     const groups = readGroups(match);
+    const substituted = location.replace(
+      groupRead,
+      (_, group: string) => groups[Number(group) - 1] ?? "",
+    );
     return {
       status,
-      location: location.replace(groupRead, (_, group: string) => groups[Number(group) - 1] ?? ""),
+      location: absoluteLocation.test(location) ? substituted : collapseLeadingSlashes(substituted),
     };
   }
   return undefined;
@@ -389,6 +399,10 @@ export function findHeaders(
   return found;
 }
 
+function collapseLeadingSlashes(location: string): string {
+  return location.replace(leadingSlashes, "/");
+}
+
 export function findSlashRedirect(
   compiled: CompiledRouteTable,
   pathname: string,
@@ -399,11 +413,11 @@ export function findSlashRedirect(
     return undefined;
   if (trailingSlash === "never") {
     if (!pathname.endsWith("/") || pathname === "/") return undefined;
-    return pathname.replace(/\/+$/, "") || "/";
+    return collapseLeadingSlashes(pathname.replace(/\/+$/, "") || "/");
   }
   if (pathname.endsWith("/")) return undefined;
   const lastSegment = pathname.slice(pathname.lastIndexOf("/") + 1);
-  return lastSegment.includes(".") ? undefined : `${pathname}/`;
+  return lastSegment.includes(".") ? undefined : collapseLeadingSlashes(`${pathname}/`);
 }
 
 export function formatCacheControl({ revalidate, expire }: CacheRule): string {
