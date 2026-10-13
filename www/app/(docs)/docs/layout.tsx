@@ -38,7 +38,10 @@ const archivo = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ocel.dev"),
   title: { default: "Ocel Docs", template: "%s - Ocel Docs" },
+  openGraph: { type: "website", siteName: "Ocel" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function Layout({ children }: { children: ReactNode }) {
