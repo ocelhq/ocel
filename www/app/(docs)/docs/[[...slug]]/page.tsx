@@ -88,8 +88,25 @@ export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): P
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  const title = page.url === "/docs" ? "Ocel Docs" : `${page.data.title} - Ocel Docs`;
+  const image = `/og/docs/${[...page.slugs, "image.png"].join("/")}`;
   return {
-    title: page.url === "/docs" ? { absolute: "Ocel Docs" } : page.data.title,
+    title: page.url === "/docs" ? { absolute: title } : page.data.title,
     description: page.data.description,
+    alternates: { canonical: page.url },
+    openGraph: {
+      type: "website",
+      siteName: "Ocel",
+      url: page.url,
+      title,
+      description: page.data.description,
+      images: image,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: page.data.description,
+      images: image,
+    },
   };
 }
