@@ -8,47 +8,10 @@ ocel deploy
 ```
 
 That is the whole setup. The CLI carries Ocel's Next.js adapter, so there is nothing to install
-and nothing to add to `next.config`. It needs Next.js 16.2.10 or later.
+and nothing to add to `next.config`. It needs Next.js 16.2.10 or later. `ocel deploy` recognises
+the app by a `next.config.*` or a `next` dependency and runs its `build` script with the adapter.
 
-`ocel deploy` recognises the app by a `next.config.*` or a `next` dependency, and runs its
-`build` script with the adapter. [Quick start](/docs/quick-start) walks a first deploy.
-
-## What works
-
-| Next.js feature | On AWS |
-| --- | --- |
-| App Router and Pages Router, route handlers and API routes | Yes |
-| Server Actions | Yes |
-| Streaming | Yes |
-| Static and prerendered pages, ISR with `revalidate` | Yes, cached at the edge |
-| `revalidatePath` and `revalidateTag` | Yes, purges the edge by tag |
-| `use cache` and `cacheComponents` | Yes |
-| Partial prerendering (the static shell of a `cacheComponents` page) | [Cloudflare edge](#edges), or degraded |
-| `proxy.ts` and other Node.js middleware | Yes, in the app's function |
-| Edge-runtime middleware and `runtime = "edge"` routes | [Cloudflare edge](#edges), or degraded |
-| `next/image` | Yes, through a shared optimizer |
-| Redirects, rewrites and headers in `next.config`, `basePath`, `i18n`, `trailingSlash` | Yes |
-| Draft mode | Yes |
-
-Next.js's own [deployment adapter test suite](https://nextjs.org/docs/app/api-reference/adapters/testing-adapters)
-runs against Ocel on AWS behind Cloudflare. The cases it still fails are listed in
-[`tests/next-compat/baseline-manifest.json`](https://github.com/ocelhq/ocel/blob/main/tests/next-compat/baseline-manifest.json).
-
-## Edges
-
-What a page needs from the edge in front of it decides where it can be served. The build records
-each need, and the deploy checks it against the edge:
-
-| The app has | Need | CloudFront (default) | API Gateway | [Cloudflare](/docs/providers/cloudflare) |
-| --- | --- | --- | --- | --- |
-| Prerendered or cached pages | `edge-cache` | Yes | No | Yes |
-| App Router pages | `streaming` | Yes | Yes | Yes |
-| Partially prerendered pages | `ppr-resume` | No | No | Yes |
-| Edge-runtime middleware | `edge-middleware` | No | No | Yes |
-| `runtime = "edge"` routes | `edge-runtime` | No | No | Yes |
-
-A deploy that needs something its edge does not serve is refused, naming the routes it affects.
-Move to the Cloudflare edge:
+## Recommended: Cloudflare in front of AWS
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -70,7 +33,43 @@ export default defineConfig({
 }
 ```
 
-Or keep the edge and accept the degraded behaviour with `allowDegraded`:
+The app runs on AWS and Cloudflare serves it: a worker runs in front of the cache, so every
+Next.js feature in the table below is served from the edge. It is the most tested setup: Next.js's
+own [deployment adapter test suite](https://nextjs.org/docs/app/api-reference/adapters/testing-adapters)
+runs against it, and the cases it still fails are listed in
+[`tests/next-compat/baseline-manifest.json`](https://github.com/ocelhq/ocel/blob/main/tests/next-compat/baseline-manifest.json).
+
+It needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in your environment and your domain's
+zone on Cloudflare; see [Cloudflare edge](/docs/providers/cloudflare#setup) for the token's
+permissions. Edge middleware and `runtime = "edge"` routes also need the Workers Paid plan. [Quick start](/docs/quick-start#put-cloudflare-in-front)
+walks the switch from the default edge.
+
+You can also keep CloudFront, the default: leave `edge` and `dns` off. CloudFront serves
+everything except partial prerendering and edge-runtime code, which then
+[run degraded](#on-cloudfront) or stop the deploy.
+
+## What works
+
+| Next.js feature | Cloudflare edge | CloudFront |
+| --- | --- | --- |
+| App Router and Pages Router, route handlers and API routes | Yes | Yes |
+| Server Actions | Yes | Yes |
+| Streaming | Yes | Yes |
+| Static and prerendered pages, ISR with `revalidate` | Yes, cached at the edge | Yes, cached at the edge |
+| `revalidatePath` and `revalidateTag` | Yes, purges the edge by tag | Yes, purges the edge by tag |
+| `use cache` and `cacheComponents` | Yes | Yes |
+| Partial prerendering (the static shell of a `cacheComponents` page) | Yes | [Degraded](#on-cloudfront) |
+| `proxy.ts` and other Node.js middleware | Yes, in the app's function | Yes, in the app's function |
+| Edge-runtime middleware and `runtime = "edge"` routes | Yes, on Workers Paid | [Degraded](#on-cloudfront) |
+| `next/image` | Yes, through a shared optimizer | Yes, through a shared optimizer |
+| Redirects, rewrites and headers in `next.config`, `basePath`, `i18n`, `trailingSlash` | Yes | Yes |
+| Draft mode | Yes | Yes |
+
+## On CloudFront
+
+A deploy whose app uses something CloudFront does not serve is refused, naming the routes it
+affects. Either move to the Cloudflare edge above, or accept the degraded behaviour with
+`allowDegraded`:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -97,8 +96,6 @@ export default defineConfig({
 | `ppr-resume` | The shell and the resumed stream both come from the origin, so the shell no longer arrives first |
 | `edge-middleware` | Middleware runs in the origin's function, so every request makes the round trip before it is routed |
 | `edge-runtime` | Edge routes run in the origin's function, answering from one region |
-| `edge-cache` | Responses are cached at the origin only, so every hit crosses the network |
-| `streaming` | Responses are buffered, so the first byte waits on the last |
 
 ## Functions
 

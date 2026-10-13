@@ -6,7 +6,7 @@
   "pages": [
     "index",
     "---Resources---",
-    "database",
+    "postgres",
     "bucket",
     "kv",
     "realtime",

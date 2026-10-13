@@ -13,9 +13,9 @@ export function ResourceCards() {
     <Cards className="gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <Card
         icon={<CircleStackIcon />}
-        title="Database"
-        href="/docs/sdk/database"
-        description="Postgres, handed to your app as a connected pool."
+        title="Postgres"
+        href="/docs/sdk/postgres"
+        description="A database, handed to your app as a connected pool."
       />
       <Card
         icon={<ArchiveBoxIcon />}

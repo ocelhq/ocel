@@ -9,7 +9,6 @@
     "frameworks",
     "configuration",
     "environments",
-    "env-sources",
     "transforms",
     "---Providers---",
     "providers/index",
