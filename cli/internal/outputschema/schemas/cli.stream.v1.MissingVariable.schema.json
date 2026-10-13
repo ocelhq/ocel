@@ -31,7 +31,7 @@
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.MissingVariable.schema.json",
+  "$id": "https://ocel.dev/schema/0.0.2/cli/cli.stream.v1.MissingVariable.schema.json",
   "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }
