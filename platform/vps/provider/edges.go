@@ -1,6 +1,8 @@
 package vps
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -40,6 +42,13 @@ func (x boxProxy) Hooks() edge.Hooks {
 	hooks := x.Proxy.Hooks()
 	hooks.PublishPreviewGate = x.box.Hooks().PublishPreviewGate
 	return hooks
+}
+
+func (x boxProxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	if err := x.box.PutPreviewGate(ctx, spec); err != nil {
+		return nil, err
+	}
+	return x.Proxy.Reconcile(ctx, spec, prior)
 }
 
 func (x boxProxy) Facts() edge.Facts {

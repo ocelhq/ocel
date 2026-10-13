@@ -4,10 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -69,3 +72,7 @@ func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier
 }
 
 var NewPreviewGateReader = newPreviewGateReader
+
+func BoxProxyOver(machine box.Machine) edge.Edge {
+	return boxProxy{Proxy: cloudflare.NewProxy("staging", cloudflare.Options{}), box: box.New(machine, nil, "", nil, nil)}
+}
