@@ -4,7 +4,8 @@ description: A Next.js app in your AWS account.
 icon: BoltIcon
 ---
 
-By the end of this page a Next.js app is running in your AWS account, on a hostname you own.
+By the end of this page a Next.js app is running in your AWS account on a hostname you own, and
+`ocel deploy` is the only command it takes.
 
 ## Before you start
 
@@ -12,7 +13,7 @@ By the end of this page a Next.js app is running in your AWS account, on a hostn
 | --- | --- |
 | Node 20.9 or newer | Next.js 16 needs it, and Ocel builds the app with it |
 | An AWS account, with credentials in your shell | The app runs there, and Ocel provisions with those credentials |
-| A domain you can add DNS records to | CloudFront, which serves the app, answers on a hostname you own |
+| A domain you can add DNS records to | The app answers on a hostname you own |
 
 Check the credentials are visible:
 
@@ -31,36 +32,60 @@ ocel --version
 
 ## Deploy
 
+Ocel needs Next.js 16.2.10 or later.
+
 ```bash
 npx create-next-app@latest my-app
 cd my-app
 ocel deploy
 ```
 
-Ocel needs Next.js 16.2.10 or later. The first deploy sets up what the project is missing, asking
-before each step:
+There's nothing to set up first: the deploy asks for what the project is missing, one question
+at a time.
 
-1. **The config.** It asks where `my-app` should deploy. Pick `aws`. It writes `ocel.config.ts`
-   and adds the `ocel` package to your dependencies.
-2. **The hostname.** It prints the line to add to `ocel.config.ts` and waits for you to save it.
-   Use a hostname on your domain.
-3. **The shared infrastructure.** The account has none yet, so it offers to run
-   `ocel bootstrap production`. Later deploys, and other projects, reuse it.
+1. `Set up a project here? [y/N]`: it writes `ocel.config.ts` and adds the `ocel` package.
+2. `Where should my-app deploy?`: pick `aws`.
+3. `Add this to ocel.config.ts:` followed by `domains: { production: "my-app.example.com" },`.
+   Save it with a hostname on your domain, then press Enter.
+4. `Run ocel bootstrap production now? [y/N]`: it sets up the infrastructure every project in
+   the account shares, once.
 
-Answer no to any step and the deploy stops and names the command to run when you're ready.
+Answer no to any of them and nothing changes; the deploy names the command to run when you're
+ready. Then it builds and provisions, prints the DNS records for your hostname and waits up to 15
+minutes while you add them, and prints the URL: that is your app, in your account.
 
-Then it builds and provisions. The hostname needs DNS records: the deploy prints them and waits
-up to 15 minutes while you add them at your DNS provider. If the domain's zone is in Route 53,
-add `dns: route53()` and Ocel writes them itself. The config ends up like this:
+Every resource Ocel creates is keyed on the slug, so keep it once you've deployed. In a script or
+in CI nothing is asked, so run the setup steps first:
+
+```bash
+ocel init --provider aws
+# add domains.production to ocel.config.ts
+ocel bootstrap production --yes
+ocel deploy --yes
+```
+
+## Put Cloudflare in front
+
+This deploy runs behind CloudFront, the default edge. For Next.js, Cloudflare in front of AWS is
+the [recommended setup](/docs/frameworks/nextjs#recommended-cloudflare-in-front-of-aws): it
+serves partial prerendering and edge-runtime code from the edge, and it is the most tested.
+
+| You need | Why |
+| --- | --- |
+| Your domain's zone on Cloudflare, with SSL mode **Full (strict)** | Cloudflare answers on it, and Ocel writes the DNS records there itself |
+| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in your shell | Ocel deploys the worker and records with them; the token's permissions are in [Cloudflare edge](/docs/providers/cloudflare#setup) |
+
+Add the edge and its DNS to the provider:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
 import awsProvider from "ocel/providers/aws";
-import { route53 } from "ocel/providers/aws/dns";
 
 export default defineConfig({
   slug: "my-app",
-  provider: awsProvider({ dns: route53() }),
+  provider: awsProvider({ edge: cloudflare(), dns: cloudflareDns() }),
   domains: { production: "my-app.example.com" },
 });
 ```
@@ -69,22 +94,13 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "aws": { "dns": "route53" } },
+  "provider": { "aws": { "edge": "cloudflare", "dns": "cloudflare" } },
   "domains": { "production": "my-app.example.com" }
 }
 ```
 
-Every resource Ocel creates is keyed on the slug, so keep it once you've deployed.
-
-The deploy prints the URL when it finishes. Open it: that is your app, in your account.
-
-In a script or in CI nothing is asked, so set the project up first:
-
 ```bash
-ocel init --provider aws
-# add domains.production to ocel.config.ts
-ocel bootstrap production --yes
-ocel deploy --yes
+ocel deploy
 ```
 
 ## Change something and deploy again
@@ -109,9 +125,13 @@ A preview needs a wildcard to be served under. Add one beside the production hos
 ```ts title="ocel.config.ts"
 domains: {
   production: "my-app.example.com",
-  preview: "*.preview.example.com",
+  preview: "*.my-app-previews.com",
 },
 ```
+
+Behind Cloudflare, its free certificate covers one label below a zone, so a wildcard in a zone
+of its own needs nothing more. A deeper one, such as `*.preview.example.com`, needs Cloudflare's paid
+[Advanced Certificate Manager](https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/).
 
 ```bash
 git switch -c checkout
@@ -140,8 +160,8 @@ ocel bootstrap destroy preview
 ## Next steps
 
 <Cards>
-  <Card title="Next.js" href="/docs/frameworks/nextjs" description="What Ocel supports, and on which edge." />
-  <Card title="Add a database" href="/docs/sdk/database" description="One function call declares it, and the app is connected." />
+  <Card title="Next.js" href="/docs/frameworks/nextjs" description="What Ocel supports, on Cloudflare and on CloudFront." />
+  <Card title="Add Postgres" href="/docs/sdk/postgres" description="One function call declares it, and the app is connected." />
   <Card title="Variables and secrets" href="/docs/environments" description="Typed in code, stored in your account." />
   <Card title="Deploy to a VPS" href="/docs/providers/vps" description="The same config, pointed at a server over SSH." />
   <Card title="Configuration" href="/docs/configuration" description="Every option the config takes." />
