@@ -1,6 +1,6 @@
 {
   "name": "@ocel/sveltekit",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": false,
   "type": "module",
   "description": "The SvelteKit adapter that builds an app into what ocel deploys",
