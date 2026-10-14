@@ -512,16 +512,16 @@ first deploys. A preview without one falls back to a preview-tier record, or is 
 - run: ocel preview up pr-${{ github.event.number }}
 ```
 
-## previews
+## protection
 
-How your project's previews are served. It takes one field today.
+Which tiers ask for a password before they answer. Each tier is its own switch:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
 
 export default defineConfig({
   slug: "my-app",
-  previews: { protection: true },
+  protection: { production: true, preview: true },
 });
 ```
 
@@ -529,25 +529,28 @@ export default defineConfig({
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "my-app",
-  "previews": { "protection": true }
+  "protection": { "production": true, "preview": true }
 }
 ```
 
-`protection` asks every preview of the project for a password before it answers. It is a switch
-and nothing else: every preview deploy enforces it. With it on, the first preview deploy creates
-the password and a key that signs sessions, and a later deploy keeps them. With it off or left out,
-a preview deploy opens the project's previews again and warns that it does, and keeps the password
-and bypass secrets so that turning it back on restores them. Turning it on never
-prints the password; [`ocel preview protection`](/docs/cli/preview/protection) shows it, rotates it,
-sets one you choose and manages the secrets a test can send instead. An edge that cannot run the gate
-refuses the deploy rather than serve a protected preview to anyone. On GCP with no edge in front,
-each Cloud Run service checks every request itself against the project's gate, which it reads
-from a secret it mounts even while protection is off, so turning protection on reaches the previews
-already running. Only Node, Next and SvelteKit functions and containers can check it, so a protected
-preview of a Go, Python or Rust function there is refused. While an unprotected preview of one is
-still deployed, a protected preview deploy warns, naming those functions, and changing the
-credentials or running `ocel preview protection sync` writes the gate and then exits with an error
-naming them, until those previews are destroyed.
+`protection.production` protects production and `protection.preview` protects every preview of the
+project. A switch is nothing else: every deploy of its tier enforces it. With it on, the first
+deploy of the tier creates the password and a key that signs sessions, and a later deploy keeps
+them. With it off or left out, a deploy of the tier opens it again and warns that it does, and keeps
+the password and bypass secrets so that turning it back on restores them. Turning it on never prints
+the password; [`ocel protection`](/docs/cli/protection) shows it, rotates it, sets one you choose
+and manages the secrets a test can send instead.
+
+The tiers are separate: production and previews each hold a password and bypass secrets of their
+own, and a preview password never opens production. An edge that cannot run the gate refuses the
+deploy rather than serve a protected tier to anyone. On GCP with no edge in front, each Cloud Run
+service checks every request itself against its tier's gate, which it reads from a secret it mounts
+even while protection is off, so turning protection on reaches the services already running. Only
+Node, Next and SvelteKit functions and containers can check it, so a protected tier with a Go,
+Python or Rust function there is refused. While an unprotected one is still deployed, a protected
+deploy warns, naming those functions, and changing the credentials or running
+`ocel protection sync` writes the gate and then exits with an error naming them, until they are
+destroyed.
 
 ## lifecycle
 

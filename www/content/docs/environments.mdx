@@ -25,6 +25,9 @@ A preview never reads production's values or touches production's resources:
   production's. `ocel preview up --persistent` gives one preview resources of its own.
 - **Domains.** Production serves the hostnames under `domains.production`. Each preview gets a
   hostname under the `domains.preview` wildcard, ending in a random token.
+- **Protection.** [`protection`](/docs/configuration#protection) switches the password per tier,
+  and each tier holds a password and bypass secrets of its own: a preview password never opens
+  production.
 
 A hostname nobody can guess is not access control, so keep production secrets out of previews.
 
