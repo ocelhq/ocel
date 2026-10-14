@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	gateRecordsSegment  = "gates"
-	gatePublicationName = "gate-publication"
+	gateRecordsSegment  = "gate-records"
+	gatePublicationName = "gate-plugin"
 	gateRecordAttempts  = 10
 )
 

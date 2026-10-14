@@ -2,6 +2,7 @@ package alb
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -968,5 +970,58 @@ func TestDestroyingAProtectedProductionProjectRemovesItsGateFromTheProductionPlu
 
 	if config := w.gateConfig(GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
 		t.Errorf("the production plugin still holds the destroyed project's keys:\n%s", config)
+	}
+}
+
+func recordSealedFor(t *testing.T, balancer *Edge, key keyvalue.Key, bound seal.AssociatedData, record any) {
+	t.Helper()
+	plaintext, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := balancer.deps.Cipher.Seal(context.Background(), environment.TierPreview, bound, plaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := json.Marshal(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := balancer.deps.KeyValues.Write(context.Background(), keyvalue.Entry{Key: key, Value: value}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func withPreviewOnlyGateRecords(t *testing.T) (*Edge, *world) {
+	t.Helper()
+	balancer, w := balancing(t)
+	partition := stackrecords.EdgeStacksPartition(environment.TierPreview)
+	recordSealedFor(t, balancer, partition.Key(string(Kind), "gate-publication"),
+		seal.AssociatedData{{Name: "record", Value: "alb-preview-gate-publication"}}, gatePublication{Confirmed: true})
+	recordSealedFor(t, balancer, partition.Key(string(Kind), "gates", "blog"),
+		seal.AssociatedData{{Name: "record", Value: "alb-preview-gate"}, {Name: "slug", Value: "blog"}}, gateRecord{Gate: blogGate})
+	return balancer, w
+}
+
+func TestAnUnprotectedPreviewDeploysOnATierWhoseGateRecordsWereSealedForPreviewsAlone(t *testing.T) {
+	t.Parallel()
+	balancer, _ := withPreviewOnlyGateRecords(t)
+
+	if _, err := balancer.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierPreview}, edge.StackState{}); err != nil {
+		t.Errorf("Reconcile = %v, want an unprotected preview to need nothing of the gate records sealed before gates were per tier", err)
+	}
+}
+
+func TestBootstrappingAPreviewTierWhoseGateRecordsWereSealedForPreviewsAloneAttachesTheGate(t *testing.T) {
+	t.Parallel()
+	balancer, w := withPreviewOnlyGateRecords(t)
+
+	if _, err := balancer.Bootstrap(context.Background(), environment.TierPreview); err != nil {
+		t.Fatalf("Bootstrap = %v, want the tier bootstrapped past the gate records sealed before gates were per tier", err)
+	}
+	reconcileGated(t, balancer, "shop", &shopGate)
+
+	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+		t.Errorf("the preview plugin holds %s, want the protected preview's keys", config)
 	}
 }
