@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 var shopGate = gate.Gate{
@@ -147,6 +149,68 @@ func TestAPrunedGlobalPreviewStackStillPublishesItsGate(t *testing.T) {
 
 	if got := held.heldGate(); got == nil {
 		t.Error("the shared preview entry reads the gate from the project's releases store, and the deploy left it none")
+	}
+}
+
+func TestAnUnprotectedDeployReconcilesAgainstAReleasesStoreWithoutTheGateRoute(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	globalPreviewSpec := func(endpoint, version string) edge.StackSpec {
+		spec := pruneOnlySpec(endpoint, version)
+		spec.GlobalPreview = "preview.app.com"
+		return spec
+	}
+	for _, tc := range []struct {
+		name    string
+		specFor func(endpoint, version string) edge.StackSpec
+	}{
+		{"production", productionSpec},
+		{"preview", previewSpec},
+		{"global preview", globalPreviewSpec},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, held := fakeStoreFor(t, "")
+			held.withoutGateRoute()
+			p := previewZoneMock().provider(t)
+
+			if _, err := p.Reconcile(t.Context(), tc.specFor(srv.URL, "v1"), edge.StackState{}); err != nil {
+				t.Errorf("Reconcile = %v, want an unprotected deploy to need nothing of the gate route", err)
+			}
+		})
+	}
+}
+
+func TestAProtectedDeployAgainstAReleasesStoreWithoutTheGateRouteIsRefusedNamingTheBootstrap(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	srv, held := fakeStoreFor(t, "")
+	held.withoutGateRoute()
+	p := previewZoneMock().provider(t)
+	spec := pruneOnlySpec(srv.URL, "v1")
+	spec.GlobalPreview = "preview.app.com"
+	spec.Gate = &shopGate
+
+	_, err := p.Reconcile(t.Context(), spec, edge.StackState{})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "`ocel bootstrap preview`") {
+		t.Errorf("Reconcile = %v, want a not-ready refusal naming `ocel bootstrap preview`", err)
+	}
+}
+
+func TestPublishingAGateToAReleasesStoreWithoutTheGateRouteIsRefusedNamingTheBootstrap(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	srv, held := fakeStoreFor(t, "")
+	p := previewZoneMock().provider(t)
+	reconciled, err := p.Reconcile(t.Context(), productionSpec(srv.URL, "v1"), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	held.withoutGateRoute()
+
+	err = p.Hooks().PublishGate(t.Context(), edge.GatePublication{State: reconciled.State(), Gate: &productionGate})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "`ocel bootstrap production`") {
+		t.Errorf("PublishGate = %v, want a not-ready refusal naming `ocel bootstrap production`", err)
 	}
 }
 

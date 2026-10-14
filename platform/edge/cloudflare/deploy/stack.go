@@ -161,7 +161,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
-	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: id.secret}
+	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: id.secret, Tier: spec.Tier}
 	if err := p.putGate(ctx, held, spec.Gate); err != nil {
 		return nil, fmt.Errorf("publish the %s gate of %s: %w", spec.Tier, slug, err)
 	}
