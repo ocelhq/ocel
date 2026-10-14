@@ -33,6 +33,7 @@ type fakeStore struct {
 	moves    []pointerMoveBody
 	version  *string
 	gate     *gate.Gate
+	gateless bool
 	owner    string
 	live     string
 }
@@ -197,10 +198,18 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.version = &body.Version
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("GET /{slug}/gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /{slug}/gate", authed(func(w http.ResponseWriter, r *http.Request) {
+		if f.gateless {
+			http.NotFound(w, r)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]*gate.Gate{"gate": f.gate})
 	}))
 	mux.HandleFunc("PUT /{slug}/gate", authed(func(w http.ResponseWriter, r *http.Request) {
+		if f.gateless {
+			http.NotFound(w, r)
+			return
+		}
 		var published gate.Gate
 		if err := json.NewDecoder(r.Body).Decode(&published); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -209,7 +218,11 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.gate = &published
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("DELETE /{slug}/gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("DELETE /{slug}/gate", authed(func(w http.ResponseWriter, r *http.Request) {
+		if f.gateless {
+			http.NotFound(w, r)
+			return
+		}
 		f.gate = nil
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -503,6 +516,12 @@ func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
 	if served := store.findServedBuild("pr-42-aaaaaaaaaaaaaaaabbbbbbbb"); served != "" {
 		t.Errorf("the preview label serves %q after its pointer was removed, want nothing", served)
 	}
+}
+
+func (f *fakeStore) withoutGateRoute() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gateless = true
 }
 
 func (f *fakeStore) heldGate() *gate.Gate {
