@@ -364,13 +364,13 @@ describe("a cell run", () => {
         const headers = new Headers(init?.headers);
         asked.push(url);
         const credentialed =
-          headers.get("x-ocel-preview-bypass") === "bp" ||
+          headers.get("x-ocel-bypass") === "bp" ||
           headers.get("authorization") === `Basic ${btoa("ocel:pw")}` ||
-          headers.get("cookie") === "__Host-ocel-preview=session";
-        if (new URL(url).pathname === "/.ocel/preview/login") {
+          headers.get("cookie") === "__Host-ocel-session=session";
+        if (new URL(url).pathname === "/.ocel/login") {
           return new Response(null, {
             status: 204,
-            headers: { "set-cookie": "__Host-ocel-preview=session; Path=/" },
+            headers: { "set-cookie": "__Host-ocel-session=session; Path=/" },
           });
         }
         return credentialed

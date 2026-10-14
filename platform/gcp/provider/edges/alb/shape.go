@@ -60,12 +60,8 @@ func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricin
 			"network_tier":          premiumTier,
 			"port_range":            httpsPortRange,
 		}},
-	}
-	if isGated(tier, false) {
-		shaped = append(shaped,
-			pricing.Shaped{Name: balancer.GatePlugin, Type: tfWasmPlugin, Properties: map[string]any{}},
-			pricing.Shaped{Name: balancer.GateExtension, Type: tfLBEdgeExtension, Properties: map[string]any{"load_balancing_scheme": externalManaged}},
-		)
+		{Name: balancer.GatePlugin, Type: tfWasmPlugin, Properties: map[string]any{}},
+		{Name: balancer.GateExtension, Type: tfLBEdgeExtension, Properties: map[string]any{"load_balancing_scheme": externalManaged}},
 	}
 	if previewBaseDomain != "" {
 		shaped = append(shaped,

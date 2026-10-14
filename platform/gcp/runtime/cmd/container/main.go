@@ -111,11 +111,11 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
 	front := originguard.Handler(originguard.Options{
-		Upstream:    upstream,
-		Guard:       guard,
-		HealthPath:  healthPath,
-		PreviewGate: gate,
-		ProbeToken:  probeToken,
+		Upstream:   upstream,
+		Guard:      guard,
+		HealthPath: healthPath,
+		Gate:       gate,
+		ProbeToken: probeToken,
 	})
 	if worker != "" {
 		if front, err = workerFront(pinned, worker, upstream.String()); err != nil {

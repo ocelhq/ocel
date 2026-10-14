@@ -1128,31 +1128,28 @@ func (x *PreviewSummary) GetAliasUrls() []string {
 	return nil
 }
 
-type PreviewProtectionResult struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Slug            string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Enabled         bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Recorded        bool                   `protobuf:"varint,3,opt,name=recorded,proto3" json:"recorded,omitempty"`
-	BypassSecretIds []string               `protobuf:"bytes,4,rep,name=bypass_secret_ids,json=bypassSecretIds,proto3" json:"bypass_secret_ids,omitempty"`
-	Edges           []*PreviewEdgeResult   `protobuf:"bytes,5,rep,name=edges,proto3" json:"edges,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+type ProtectionResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Tiers         []*TierProtection      `protobuf:"bytes,2,rep,name=tiers,proto3" json:"tiers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewProtectionResult) Reset() {
-	*x = PreviewProtectionResult{}
+func (x *ProtectionResult) Reset() {
+	*x = ProtectionResult{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewProtectionResult) String() string {
+func (x *ProtectionResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewProtectionResult) ProtoMessage() {}
+func (*ProtectionResult) ProtoMessage() {}
 
-func (x *PreviewProtectionResult) ProtoReflect() protoreflect.Message {
+func (x *ProtectionResult) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1164,69 +1161,125 @@ func (x *PreviewProtectionResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewProtectionResult.ProtoReflect.Descriptor instead.
-func (*PreviewProtectionResult) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProtectionResult.ProtoReflect.Descriptor instead.
+func (*ProtectionResult) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *PreviewProtectionResult) GetSlug() string {
+func (x *ProtectionResult) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PreviewProtectionResult) GetEnabled() bool {
+func (x *ProtectionResult) GetTiers() []*TierProtection {
+	if x != nil {
+		return x.Tiers
+	}
+	return nil
+}
+
+type TierProtection struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Tier            v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Enabled         bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Recorded        bool                   `protobuf:"varint,3,opt,name=recorded,proto3" json:"recorded,omitempty"`
+	BypassSecretIds []string               `protobuf:"bytes,4,rep,name=bypass_secret_ids,json=bypassSecretIds,proto3" json:"bypass_secret_ids,omitempty"`
+	Edges           []*EdgeResult          `protobuf:"bytes,5,rep,name=edges,proto3" json:"edges,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *TierProtection) Reset() {
+	*x = TierProtection{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TierProtection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TierProtection) ProtoMessage() {}
+
+func (x *TierProtection) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TierProtection.ProtoReflect.Descriptor instead.
+func (*TierProtection) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *TierProtection) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *TierProtection) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
 	}
 	return false
 }
 
-func (x *PreviewProtectionResult) GetRecorded() bool {
+func (x *TierProtection) GetRecorded() bool {
 	if x != nil {
 		return x.Recorded
 	}
 	return false
 }
 
-func (x *PreviewProtectionResult) GetBypassSecretIds() []string {
+func (x *TierProtection) GetBypassSecretIds() []string {
 	if x != nil {
 		return x.BypassSecretIds
 	}
 	return nil
 }
 
-func (x *PreviewProtectionResult) GetEdges() []*PreviewEdgeResult {
+func (x *TierProtection) GetEdges() []*EdgeResult {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-type PreviewBypassSecretListResult struct {
+type BypassSecretListResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Ids           []string               `protobuf:"bytes,2,rep,name=ids,proto3" json:"ids,omitempty"`
+	Tier          v11.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Ids           []string               `protobuf:"bytes,3,rep,name=ids,proto3" json:"ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewBypassSecretListResult) Reset() {
-	*x = PreviewBypassSecretListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+func (x *BypassSecretListResult) Reset() {
+	*x = BypassSecretListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewBypassSecretListResult) String() string {
+func (x *BypassSecretListResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewBypassSecretListResult) ProtoMessage() {}
+func (*BypassSecretListResult) ProtoMessage() {}
 
-func (x *PreviewBypassSecretListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+func (x *BypassSecretListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1237,49 +1290,57 @@ func (x *PreviewBypassSecretListResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewBypassSecretListResult.ProtoReflect.Descriptor instead.
-func (*PreviewBypassSecretListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{14}
+// Deprecated: Use BypassSecretListResult.ProtoReflect.Descriptor instead.
+func (*BypassSecretListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *PreviewBypassSecretListResult) GetSlug() string {
+func (x *BypassSecretListResult) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PreviewBypassSecretListResult) GetIds() []string {
+func (x *BypassSecretListResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *BypassSecretListResult) GetIds() []string {
 	if x != nil {
 		return x.Ids
 	}
 	return nil
 }
 
-type PreviewPasswordResult struct {
+type PasswordResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	Edges         []*PreviewEdgeResult   `protobuf:"bytes,3,rep,name=edges,proto3" json:"edges,omitempty"`
+	Tier          v11.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Password      string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	Edges         []*EdgeResult          `protobuf:"bytes,4,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewPasswordResult) Reset() {
-	*x = PreviewPasswordResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+func (x *PasswordResult) Reset() {
+	*x = PasswordResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewPasswordResult) String() string {
+func (x *PasswordResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewPasswordResult) ProtoMessage() {}
+func (*PasswordResult) ProtoMessage() {}
 
-func (x *PreviewPasswordResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+func (x *PasswordResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1290,57 +1351,65 @@ func (x *PreviewPasswordResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewPasswordResult.ProtoReflect.Descriptor instead.
-func (*PreviewPasswordResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{15}
+// Deprecated: Use PasswordResult.ProtoReflect.Descriptor instead.
+func (*PasswordResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *PreviewPasswordResult) GetSlug() string {
+func (x *PasswordResult) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PreviewPasswordResult) GetPassword() string {
+func (x *PasswordResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *PasswordResult) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-func (x *PreviewPasswordResult) GetEdges() []*PreviewEdgeResult {
+func (x *PasswordResult) GetEdges() []*EdgeResult {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-type PreviewBypassSecretResult struct {
+type BypassSecretResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	Secret        string                 `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
-	Edges         []*PreviewEdgeResult   `protobuf:"bytes,4,rep,name=edges,proto3" json:"edges,omitempty"`
+	Tier          v11.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Id            string                 `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	Secret        string                 `protobuf:"bytes,4,opt,name=secret,proto3" json:"secret,omitempty"`
+	Edges         []*EdgeResult          `protobuf:"bytes,5,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewBypassSecretResult) Reset() {
-	*x = PreviewBypassSecretResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+func (x *BypassSecretResult) Reset() {
+	*x = BypassSecretResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewBypassSecretResult) String() string {
+func (x *BypassSecretResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewBypassSecretResult) ProtoMessage() {}
+func (*BypassSecretResult) ProtoMessage() {}
 
-func (x *PreviewBypassSecretResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+func (x *BypassSecretResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1351,62 +1420,70 @@ func (x *PreviewBypassSecretResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewBypassSecretResult.ProtoReflect.Descriptor instead.
-func (*PreviewBypassSecretResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{16}
+// Deprecated: Use BypassSecretResult.ProtoReflect.Descriptor instead.
+func (*BypassSecretResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *PreviewBypassSecretResult) GetSlug() string {
+func (x *BypassSecretResult) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PreviewBypassSecretResult) GetId() string {
+func (x *BypassSecretResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *BypassSecretResult) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *PreviewBypassSecretResult) GetSecret() string {
+func (x *BypassSecretResult) GetSecret() string {
 	if x != nil {
 		return x.Secret
 	}
 	return ""
 }
 
-func (x *PreviewBypassSecretResult) GetEdges() []*PreviewEdgeResult {
+func (x *BypassSecretResult) GetEdges() []*EdgeResult {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-type PreviewPublicationResult struct {
+type PublicationResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Edges         []*PreviewEdgeResult   `protobuf:"bytes,2,rep,name=edges,proto3" json:"edges,omitempty"`
+	Tier          v11.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Edges         []*EdgeResult          `protobuf:"bytes,3,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewPublicationResult) Reset() {
-	*x = PreviewPublicationResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[17]
+func (x *PublicationResult) Reset() {
+	*x = PublicationResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewPublicationResult) String() string {
+func (x *PublicationResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewPublicationResult) ProtoMessage() {}
+func (*PublicationResult) ProtoMessage() {}
 
-func (x *PreviewPublicationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[17]
+func (x *PublicationResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1417,26 +1494,33 @@ func (x *PreviewPublicationResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewPublicationResult.ProtoReflect.Descriptor instead.
-func (*PreviewPublicationResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{17}
+// Deprecated: Use PublicationResult.ProtoReflect.Descriptor instead.
+func (*PublicationResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *PreviewPublicationResult) GetSlug() string {
+func (x *PublicationResult) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PreviewPublicationResult) GetEdges() []*PreviewEdgeResult {
+func (x *PublicationResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *PublicationResult) GetEdges() []*EdgeResult {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-type PreviewEdgeResult struct {
+type EdgeResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Published     bool                   `protobuf:"varint,2,opt,name=published,proto3" json:"published,omitempty"`
@@ -1445,21 +1529,21 @@ type PreviewEdgeResult struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewEdgeResult) Reset() {
-	*x = PreviewEdgeResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[18]
+func (x *EdgeResult) Reset() {
+	*x = EdgeResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewEdgeResult) String() string {
+func (x *EdgeResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewEdgeResult) ProtoMessage() {}
+func (*EdgeResult) ProtoMessage() {}
 
-func (x *PreviewEdgeResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[18]
+func (x *EdgeResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1470,26 +1554,26 @@ func (x *PreviewEdgeResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewEdgeResult.ProtoReflect.Descriptor instead.
-func (*PreviewEdgeResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{18}
+// Deprecated: Use EdgeResult.ProtoReflect.Descriptor instead.
+func (*EdgeResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *PreviewEdgeResult) GetKind() string {
+func (x *EdgeResult) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *PreviewEdgeResult) GetPublished() bool {
+func (x *EdgeResult) GetPublished() bool {
 	if x != nil {
 		return x.Published
 	}
 	return false
 }
 
-func (x *PreviewEdgeResult) GetError() string {
+func (x *EdgeResult) GetError() string {
 	if x != nil {
 		return x.Error
 	}
@@ -1505,7 +1589,7 @@ type DomainListResult struct {
 
 func (x *DomainListResult) Reset() {
 	*x = DomainListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[19]
+	mi := &file_cli_result_v1_result_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1517,7 +1601,7 @@ func (x *DomainListResult) String() string {
 func (*DomainListResult) ProtoMessage() {}
 
 func (x *DomainListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[19]
+	mi := &file_cli_result_v1_result_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1530,7 +1614,7 @@ func (x *DomainListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainListResult.ProtoReflect.Descriptor instead.
 func (*DomainListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{19}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DomainListResult) GetHosts() []*DomainHostStatus {
@@ -1553,7 +1637,7 @@ type PreviewDomainResult struct {
 
 func (x *PreviewDomainResult) Reset() {
 	*x = PreviewDomainResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[20]
+	mi := &file_cli_result_v1_result_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1565,7 +1649,7 @@ func (x *PreviewDomainResult) String() string {
 func (*PreviewDomainResult) ProtoMessage() {}
 
 func (x *PreviewDomainResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[20]
+	mi := &file_cli_result_v1_result_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1578,7 +1662,7 @@ func (x *PreviewDomainResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewDomainResult.ProtoReflect.Descriptor instead.
 func (*PreviewDomainResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{20}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *PreviewDomainResult) GetBaseDomain() string {
@@ -1625,7 +1709,7 @@ type ConnectorStatusResult struct {
 
 func (x *ConnectorStatusResult) Reset() {
 	*x = ConnectorStatusResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[21]
+	mi := &file_cli_result_v1_result_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1637,7 +1721,7 @@ func (x *ConnectorStatusResult) String() string {
 func (*ConnectorStatusResult) ProtoMessage() {}
 
 func (x *ConnectorStatusResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[21]
+	mi := &file_cli_result_v1_result_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1650,7 +1734,7 @@ func (x *ConnectorStatusResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorStatusResult.ProtoReflect.Descriptor instead.
 func (*ConnectorStatusResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{21}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ConnectorStatusResult) GetConnectors() []*ConnectorStatus {
@@ -1679,7 +1763,7 @@ type ConnectorStatus struct {
 
 func (x *ConnectorStatus) Reset() {
 	*x = ConnectorStatus{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[22]
+	mi := &file_cli_result_v1_result_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1691,7 +1775,7 @@ func (x *ConnectorStatus) String() string {
 func (*ConnectorStatus) ProtoMessage() {}
 
 func (x *ConnectorStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[22]
+	mi := &file_cli_result_v1_result_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1704,7 +1788,7 @@ func (x *ConnectorStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorStatus.ProtoReflect.Descriptor instead.
 func (*ConnectorStatus) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{22}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ConnectorStatus) GetTarget() string {
@@ -1795,7 +1879,7 @@ type ConnectorDenial struct {
 
 func (x *ConnectorDenial) Reset() {
 	*x = ConnectorDenial{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[23]
+	mi := &file_cli_result_v1_result_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1807,7 +1891,7 @@ func (x *ConnectorDenial) String() string {
 func (*ConnectorDenial) ProtoMessage() {}
 
 func (x *ConnectorDenial) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[23]
+	mi := &file_cli_result_v1_result_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1820,7 +1904,7 @@ func (x *ConnectorDenial) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorDenial.ProtoReflect.Descriptor instead.
 func (*ConnectorDenial) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{23}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ConnectorDenial) GetVerb() string {
@@ -1856,7 +1940,7 @@ type DoctorResult struct {
 
 func (x *DoctorResult) Reset() {
 	*x = DoctorResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[24]
+	mi := &file_cli_result_v1_result_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1952,7 @@ func (x *DoctorResult) String() string {
 func (*DoctorResult) ProtoMessage() {}
 
 func (x *DoctorResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[24]
+	mi := &file_cli_result_v1_result_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1965,7 @@ func (x *DoctorResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DoctorResult.ProtoReflect.Descriptor instead.
 func (*DoctorResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{24}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DoctorResult) GetVerdict() DoctorVerdict {
@@ -1923,7 +2007,7 @@ type DoctorSection struct {
 
 func (x *DoctorSection) Reset() {
 	*x = DoctorSection{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[25]
+	mi := &file_cli_result_v1_result_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1935,7 +2019,7 @@ func (x *DoctorSection) String() string {
 func (*DoctorSection) ProtoMessage() {}
 
 func (x *DoctorSection) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[25]
+	mi := &file_cli_result_v1_result_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1948,7 +2032,7 @@ func (x *DoctorSection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DoctorSection.ProtoReflect.Descriptor instead.
 func (*DoctorSection) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{25}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DoctorSection) GetName() string {
@@ -1984,7 +2068,7 @@ type DoctorCheck struct {
 
 func (x *DoctorCheck) Reset() {
 	*x = DoctorCheck{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[26]
+	mi := &file_cli_result_v1_result_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1996,7 +2080,7 @@ func (x *DoctorCheck) String() string {
 func (*DoctorCheck) ProtoMessage() {}
 
 func (x *DoctorCheck) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[26]
+	mi := &file_cli_result_v1_result_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2009,7 +2093,7 @@ func (x *DoctorCheck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DoctorCheck.ProtoReflect.Descriptor instead.
 func (*DoctorCheck) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{26}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DoctorCheck) GetVerdict() DoctorVerdict {
@@ -2052,7 +2136,7 @@ type EnvCoordinate struct {
 
 func (x *EnvCoordinate) Reset() {
 	*x = EnvCoordinate{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[27]
+	mi := &file_cli_result_v1_result_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2148,7 @@ func (x *EnvCoordinate) String() string {
 func (*EnvCoordinate) ProtoMessage() {}
 
 func (x *EnvCoordinate) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[27]
+	mi := &file_cli_result_v1_result_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2161,7 @@ func (x *EnvCoordinate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvCoordinate.ProtoReflect.Descriptor instead.
 func (*EnvCoordinate) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{27}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *EnvCoordinate) GetProject() string {
@@ -2118,7 +2202,7 @@ type EnvListResult struct {
 
 func (x *EnvListResult) Reset() {
 	*x = EnvListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[28]
+	mi := &file_cli_result_v1_result_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2130,7 +2214,7 @@ func (x *EnvListResult) String() string {
 func (*EnvListResult) ProtoMessage() {}
 
 func (x *EnvListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[28]
+	mi := &file_cli_result_v1_result_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2143,7 +2227,7 @@ func (x *EnvListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvListResult.ProtoReflect.Descriptor instead.
 func (*EnvListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{28}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *EnvListResult) GetTier() v11.Tier {
@@ -2177,7 +2261,7 @@ type EnvValueSummary struct {
 
 func (x *EnvValueSummary) Reset() {
 	*x = EnvValueSummary{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[29]
+	mi := &file_cli_result_v1_result_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2189,7 +2273,7 @@ func (x *EnvValueSummary) String() string {
 func (*EnvValueSummary) ProtoMessage() {}
 
 func (x *EnvValueSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[29]
+	mi := &file_cli_result_v1_result_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2202,7 +2286,7 @@ func (x *EnvValueSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvValueSummary.ProtoReflect.Descriptor instead.
 func (*EnvValueSummary) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{29}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *EnvValueSummary) GetCoordinate() *EnvCoordinate {
@@ -2284,7 +2368,7 @@ type EnvGetResult struct {
 
 func (x *EnvGetResult) Reset() {
 	*x = EnvGetResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[30]
+	mi := &file_cli_result_v1_result_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2296,7 +2380,7 @@ func (x *EnvGetResult) String() string {
 func (*EnvGetResult) ProtoMessage() {}
 
 func (x *EnvGetResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[30]
+	mi := &file_cli_result_v1_result_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2309,7 +2393,7 @@ func (x *EnvGetResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvGetResult.ProtoReflect.Descriptor instead.
 func (*EnvGetResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{30}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *EnvGetResult) GetTier() v11.Tier {
@@ -2379,7 +2463,7 @@ type EnvRefsResult struct {
 
 func (x *EnvRefsResult) Reset() {
 	*x = EnvRefsResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[31]
+	mi := &file_cli_result_v1_result_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2391,7 +2475,7 @@ func (x *EnvRefsResult) String() string {
 func (*EnvRefsResult) ProtoMessage() {}
 
 func (x *EnvRefsResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[31]
+	mi := &file_cli_result_v1_result_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2404,7 +2488,7 @@ func (x *EnvRefsResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvRefsResult.ProtoReflect.Descriptor instead.
 func (*EnvRefsResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{31}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *EnvRefsResult) GetTier() v11.Tier {
@@ -2439,7 +2523,7 @@ type EnvHistoryResult struct {
 
 func (x *EnvHistoryResult) Reset() {
 	*x = EnvHistoryResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[32]
+	mi := &file_cli_result_v1_result_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2451,7 +2535,7 @@ func (x *EnvHistoryResult) String() string {
 func (*EnvHistoryResult) ProtoMessage() {}
 
 func (x *EnvHistoryResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[32]
+	mi := &file_cli_result_v1_result_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2464,7 +2548,7 @@ func (x *EnvHistoryResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvHistoryResult.ProtoReflect.Descriptor instead.
 func (*EnvHistoryResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{32}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EnvHistoryResult) GetTier() v11.Tier {
@@ -2499,7 +2583,7 @@ type EnvVersion struct {
 
 func (x *EnvVersion) Reset() {
 	*x = EnvVersion{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[33]
+	mi := &file_cli_result_v1_result_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2595,7 @@ func (x *EnvVersion) String() string {
 func (*EnvVersion) ProtoMessage() {}
 
 func (x *EnvVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[33]
+	mi := &file_cli_result_v1_result_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2608,7 @@ func (x *EnvVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvVersion.ProtoReflect.Descriptor instead.
 func (*EnvVersion) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{33}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *EnvVersion) GetVersion() int64 {
@@ -2570,7 +2654,7 @@ type EnvSourceResult struct {
 
 func (x *EnvSourceResult) Reset() {
 	*x = EnvSourceResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[34]
+	mi := &file_cli_result_v1_result_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2582,7 +2666,7 @@ func (x *EnvSourceResult) String() string {
 func (*EnvSourceResult) ProtoMessage() {}
 
 func (x *EnvSourceResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[34]
+	mi := &file_cli_result_v1_result_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2595,7 +2679,7 @@ func (x *EnvSourceResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceResult.ProtoReflect.Descriptor instead.
 func (*EnvSourceResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{34}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EnvSourceResult) GetTier() v11.Tier {
@@ -2706,7 +2790,7 @@ type EnvSourceLink struct {
 
 func (x *EnvSourceLink) Reset() {
 	*x = EnvSourceLink{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[35]
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2718,7 +2802,7 @@ func (x *EnvSourceLink) String() string {
 func (*EnvSourceLink) ProtoMessage() {}
 
 func (x *EnvSourceLink) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[35]
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2731,7 +2815,7 @@ func (x *EnvSourceLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceLink.ProtoReflect.Descriptor instead.
 func (*EnvSourceLink) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{35}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *EnvSourceLink) GetFolder() string {
@@ -2757,7 +2841,7 @@ type PermissionsResult struct {
 
 func (x *PermissionsResult) Reset() {
 	*x = PermissionsResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2769,7 +2853,7 @@ func (x *PermissionsResult) String() string {
 func (*PermissionsResult) ProtoMessage() {}
 
 func (x *PermissionsResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2782,7 +2866,7 @@ func (x *PermissionsResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionsResult.ProtoReflect.Descriptor instead.
 func (*PermissionsResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{36}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PermissionsResult) GetGroups() []*PermissionGroup {
@@ -2802,7 +2886,7 @@ type PermissionGroup struct {
 
 func (x *PermissionGroup) Reset() {
 	*x = PermissionGroup{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2814,7 +2898,7 @@ func (x *PermissionGroup) String() string {
 func (*PermissionGroup) ProtoMessage() {}
 
 func (x *PermissionGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2827,7 +2911,7 @@ func (x *PermissionGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionGroup.ProtoReflect.Descriptor instead.
 func (*PermissionGroup) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{37}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PermissionGroup) GetHeading() string {
@@ -2854,7 +2938,7 @@ type LoginResult struct {
 
 func (x *LoginResult) Reset() {
 	*x = LoginResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2866,7 +2950,7 @@ func (x *LoginResult) String() string {
 func (*LoginResult) ProtoMessage() {}
 
 func (x *LoginResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2879,7 +2963,7 @@ func (x *LoginResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResult.ProtoReflect.Descriptor instead.
 func (*LoginResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{38}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *LoginResult) GetEmail() string {
@@ -2906,7 +2990,7 @@ type LogoutResult struct {
 
 func (x *LogoutResult) Reset() {
 	*x = LogoutResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2918,7 +3002,7 @@ func (x *LogoutResult) String() string {
 func (*LogoutResult) ProtoMessage() {}
 
 func (x *LogoutResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2931,7 +3015,7 @@ func (x *LogoutResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResult.ProtoReflect.Descriptor instead.
 func (*LogoutResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{39}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *LogoutResult) GetLoggedOut() bool {
@@ -2958,7 +3042,7 @@ type LinkResult struct {
 
 func (x *LinkResult) Reset() {
 	*x = LinkResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2970,7 +3054,7 @@ func (x *LinkResult) String() string {
 func (*LinkResult) ProtoMessage() {}
 
 func (x *LinkResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2983,7 +3067,7 @@ func (x *LinkResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkResult.ProtoReflect.Descriptor instead.
 func (*LinkResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{40}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *LinkResult) GetOrganization() *ConsoleOrganization {
@@ -3011,7 +3095,7 @@ type ConsoleOrganization struct {
 
 func (x *ConsoleOrganization) Reset() {
 	*x = ConsoleOrganization{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3023,7 +3107,7 @@ func (x *ConsoleOrganization) String() string {
 func (*ConsoleOrganization) ProtoMessage() {}
 
 func (x *ConsoleOrganization) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3036,7 +3120,7 @@ func (x *ConsoleOrganization) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleOrganization.ProtoReflect.Descriptor instead.
 func (*ConsoleOrganization) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{41}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ConsoleOrganization) GetId() string {
@@ -3071,7 +3155,7 @@ type ConsoleProject struct {
 
 func (x *ConsoleProject) Reset() {
 	*x = ConsoleProject{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3083,7 +3167,7 @@ func (x *ConsoleProject) String() string {
 func (*ConsoleProject) ProtoMessage() {}
 
 func (x *ConsoleProject) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3096,7 +3180,7 @@ func (x *ConsoleProject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleProject.ProtoReflect.Descriptor instead.
 func (*ConsoleProject) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ConsoleProject) GetId() string {
@@ -3129,7 +3213,7 @@ type UnlinkResult struct {
 
 func (x *UnlinkResult) Reset() {
 	*x = UnlinkResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	mi := &file_cli_result_v1_result_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3141,7 +3225,7 @@ func (x *UnlinkResult) String() string {
 func (*UnlinkResult) ProtoMessage() {}
 
 func (x *UnlinkResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	mi := &file_cli_result_v1_result_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3154,7 +3238,7 @@ func (x *UnlinkResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkResult.ProtoReflect.Descriptor instead.
 func (*UnlinkResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *UnlinkResult) GetUnlinked() bool {
@@ -3176,7 +3260,7 @@ type LockResult struct {
 
 func (x *LockResult) Reset() {
 	*x = LockResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[44]
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3188,7 +3272,7 @@ func (x *LockResult) String() string {
 func (*LockResult) ProtoMessage() {}
 
 func (x *LockResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[44]
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3201,7 +3285,7 @@ func (x *LockResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LockResult.ProtoReflect.Descriptor instead.
 func (*LockResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{44}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *LockResult) GetPath() string {
@@ -3242,7 +3326,7 @@ type PinnedExecutable struct {
 
 func (x *PinnedExecutable) Reset() {
 	*x = PinnedExecutable{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3254,7 +3338,7 @@ func (x *PinnedExecutable) String() string {
 func (*PinnedExecutable) ProtoMessage() {}
 
 func (x *PinnedExecutable) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3267,7 +3351,7 @@ func (x *PinnedExecutable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinnedExecutable.ProtoReflect.Descriptor instead.
 func (*PinnedExecutable) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{45}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PinnedExecutable) GetName() string {
@@ -3293,7 +3377,7 @@ type GenerateResult struct {
 
 func (x *GenerateResult) Reset() {
 	*x = GenerateResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	mi := &file_cli_result_v1_result_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3305,7 +3389,7 @@ func (x *GenerateResult) String() string {
 func (*GenerateResult) ProtoMessage() {}
 
 func (x *GenerateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	mi := &file_cli_result_v1_result_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3318,7 +3402,7 @@ func (x *GenerateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateResult.ProtoReflect.Descriptor instead.
 func (*GenerateResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{46}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GenerateResult) GetFiles() []string {
@@ -3343,7 +3427,7 @@ type InitResult struct {
 
 func (x *InitResult) Reset() {
 	*x = InitResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[47]
+	mi := &file_cli_result_v1_result_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3355,7 +3439,7 @@ func (x *InitResult) String() string {
 func (*InitResult) ProtoMessage() {}
 
 func (x *InitResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[47]
+	mi := &file_cli_result_v1_result_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3368,7 +3452,7 @@ func (x *InitResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitResult.ProtoReflect.Descriptor instead.
 func (*InitResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{47}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *InitResult) GetConfigPath() string {
@@ -3429,7 +3513,7 @@ type SchemaListResult struct {
 
 func (x *SchemaListResult) Reset() {
 	*x = SchemaListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[48]
+	mi := &file_cli_result_v1_result_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3441,7 +3525,7 @@ func (x *SchemaListResult) String() string {
 func (*SchemaListResult) ProtoMessage() {}
 
 func (x *SchemaListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[48]
+	mi := &file_cli_result_v1_result_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3454,7 +3538,7 @@ func (x *SchemaListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaListResult.ProtoReflect.Descriptor instead.
 func (*SchemaListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{48}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *SchemaListResult) GetCommands() []*ListedCommand {
@@ -3473,7 +3557,7 @@ type SchemaResult struct {
 
 func (x *SchemaResult) Reset() {
 	*x = SchemaResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[49]
+	mi := &file_cli_result_v1_result_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3485,7 +3569,7 @@ func (x *SchemaResult) String() string {
 func (*SchemaResult) ProtoMessage() {}
 
 func (x *SchemaResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[49]
+	mi := &file_cli_result_v1_result_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3498,7 +3582,7 @@ func (x *SchemaResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaResult.ProtoReflect.Descriptor instead.
 func (*SchemaResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{49}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SchemaResult) GetSchema() *structpb.Struct {
@@ -3518,7 +3602,7 @@ type ListedCommand struct {
 
 func (x *ListedCommand) Reset() {
 	*x = ListedCommand{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[50]
+	mi := &file_cli_result_v1_result_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3530,7 +3614,7 @@ func (x *ListedCommand) String() string {
 func (*ListedCommand) ProtoMessage() {}
 
 func (x *ListedCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[50]
+	mi := &file_cli_result_v1_result_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3543,7 +3627,7 @@ func (x *ListedCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListedCommand.ProtoReflect.Descriptor instead.
 func (*ListedCommand) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{50}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListedCommand) GetPath() string {
@@ -3571,7 +3655,7 @@ type SkillInstallResult struct {
 
 func (x *SkillInstallResult) Reset() {
 	*x = SkillInstallResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[51]
+	mi := &file_cli_result_v1_result_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3583,7 +3667,7 @@ func (x *SkillInstallResult) String() string {
 func (*SkillInstallResult) ProtoMessage() {}
 
 func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[51]
+	mi := &file_cli_result_v1_result_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3596,7 +3680,7 @@ func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInstallResult.ProtoReflect.Descriptor instead.
 func (*SkillInstallResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{51}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *SkillInstallResult) GetWritten() bool {
@@ -3630,7 +3714,7 @@ type SkillTarget struct {
 
 func (x *SkillTarget) Reset() {
 	*x = SkillTarget{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[52]
+	mi := &file_cli_result_v1_result_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3642,7 +3726,7 @@ func (x *SkillTarget) String() string {
 func (*SkillTarget) ProtoMessage() {}
 
 func (x *SkillTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[52]
+	mi := &file_cli_result_v1_result_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3655,7 +3739,7 @@ func (x *SkillTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillTarget.ProtoReflect.Descriptor instead.
 func (*SkillTarget) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{52}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *SkillTarget) GetDir() string {
@@ -3745,29 +3829,37 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"alias_urls\x18\x05 \x03(\tR\taliasUrls\"\xc7\x01\n" +
-	"\x17PreviewProtectionResult\x12\x12\n" +
-	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x18\n" +
+	"alias_urls\x18\x05 \x03(\tR\taliasUrls\"[\n" +
+	"\x10ProtectionResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x123\n" +
+	"\x05tiers\x18\x02 \x03(\v2\x1d.cli.result.v1.TierProtectionR\x05tiers\"\xd4\x01\n" +
+	"\x0eTierProtection\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\x12\x1a\n" +
 	"\brecorded\x18\x03 \x01(\bR\brecorded\x12*\n" +
-	"\x11bypass_secret_ids\x18\x04 \x03(\tR\x0fbypassSecretIds\x126\n" +
-	"\x05edges\x18\x05 \x03(\v2 .cli.result.v1.PreviewEdgeResultR\x05edges\"E\n" +
-	"\x1dPreviewBypassSecretListResult\x12\x12\n" +
-	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x10\n" +
-	"\x03ids\x18\x02 \x03(\tR\x03ids\"\x7f\n" +
-	"\x15PreviewPasswordResult\x12\x12\n" +
-	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\x126\n" +
-	"\x05edges\x18\x03 \x03(\v2 .cli.result.v1.PreviewEdgeResultR\x05edges\"\x8f\x01\n" +
-	"\x19PreviewBypassSecretResult\x12\x12\n" +
-	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x12\x16\n" +
-	"\x06secret\x18\x03 \x01(\tR\x06secret\x126\n" +
-	"\x05edges\x18\x04 \x03(\v2 .cli.result.v1.PreviewEdgeResultR\x05edges\"f\n" +
-	"\x18PreviewPublicationResult\x12\x12\n" +
-	"\x04slug\x18\x01 \x01(\tR\x04slug\x126\n" +
-	"\x05edges\x18\x02 \x03(\v2 .cli.result.v1.PreviewEdgeResultR\x05edges\"[\n" +
-	"\x11PreviewEdgeResult\x12\x12\n" +
+	"\x11bypass_secret_ids\x18\x04 \x03(\tR\x0fbypassSecretIds\x12/\n" +
+	"\x05edges\x18\x05 \x03(\v2\x19.cli.result.v1.EdgeResultR\x05edges\"o\n" +
+	"\x16BypassSecretListResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x12/\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x10\n" +
+	"\x03ids\x18\x03 \x03(\tR\x03ids\"\xa2\x01\n" +
+	"\x0ePasswordResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x12/\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x1a\n" +
+	"\bpassword\x18\x03 \x01(\tR\bpassword\x12/\n" +
+	"\x05edges\x18\x04 \x03(\v2\x19.cli.result.v1.EdgeResultR\x05edges\"\xb2\x01\n" +
+	"\x12BypassSecretResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x12/\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\x12\x16\n" +
+	"\x06secret\x18\x04 \x01(\tR\x06secret\x12/\n" +
+	"\x05edges\x18\x05 \x03(\v2\x19.cli.result.v1.EdgeResultR\x05edges\"\x89\x01\n" +
+	"\x11PublicationResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x12/\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12/\n" +
+	"\x05edges\x18\x03 \x03(\v2\x19.cli.result.v1.EdgeResultR\x05edges\"T\n" +
+	"\n" +
+	"EdgeResult\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1c\n" +
 	"\tpublished\x18\x02 \x01(\bR\tpublished\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\"I\n" +
@@ -4008,132 +4100,139 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_cli_result_v1_result_proto_goTypes = []any{
-	(PromotionState)(0),                   // 0: cli.result.v1.PromotionState
-	(ConnectorLiveness)(0),                // 1: cli.result.v1.ConnectorLiveness
-	(DoctorVerdict)(0),                    // 2: cli.result.v1.DoctorVerdict
-	(ConfigFormat)(0),                     // 3: cli.result.v1.ConfigFormat
-	(CommandOutput)(0),                    // 4: cli.result.v1.CommandOutput
-	(*BindingSetResult)(nil),              // 5: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),           // 6: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),             // 7: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil),         // 8: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),                // 9: cli.result.v1.BindingSummary
-	(*DomainStatusResult)(nil),            // 10: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),              // 11: cli.result.v1.DomainHostStatus
-	(*Certificate)(nil),                   // 12: cli.result.v1.Certificate
-	(*CostScanResult)(nil),                // 13: cli.result.v1.CostScanResult
-	(*PromotionListResult)(nil),           // 14: cli.result.v1.PromotionListResult
-	(*PromotionSummary)(nil),              // 15: cli.result.v1.PromotionSummary
-	(*PreviewListResult)(nil),             // 16: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),                // 17: cli.result.v1.PreviewSummary
-	(*PreviewProtectionResult)(nil),       // 18: cli.result.v1.PreviewProtectionResult
-	(*PreviewBypassSecretListResult)(nil), // 19: cli.result.v1.PreviewBypassSecretListResult
-	(*PreviewPasswordResult)(nil),         // 20: cli.result.v1.PreviewPasswordResult
-	(*PreviewBypassSecretResult)(nil),     // 21: cli.result.v1.PreviewBypassSecretResult
-	(*PreviewPublicationResult)(nil),      // 22: cli.result.v1.PreviewPublicationResult
-	(*PreviewEdgeResult)(nil),             // 23: cli.result.v1.PreviewEdgeResult
-	(*DomainListResult)(nil),              // 24: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),           // 25: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil),         // 26: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),               // 27: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),               // 28: cli.result.v1.ConnectorDenial
-	(*DoctorResult)(nil),                  // 29: cli.result.v1.DoctorResult
-	(*DoctorSection)(nil),                 // 30: cli.result.v1.DoctorSection
-	(*DoctorCheck)(nil),                   // 31: cli.result.v1.DoctorCheck
-	(*EnvCoordinate)(nil),                 // 32: cli.result.v1.EnvCoordinate
-	(*EnvListResult)(nil),                 // 33: cli.result.v1.EnvListResult
-	(*EnvValueSummary)(nil),               // 34: cli.result.v1.EnvValueSummary
-	(*EnvGetResult)(nil),                  // 35: cli.result.v1.EnvGetResult
-	(*EnvRefsResult)(nil),                 // 36: cli.result.v1.EnvRefsResult
-	(*EnvHistoryResult)(nil),              // 37: cli.result.v1.EnvHistoryResult
-	(*EnvVersion)(nil),                    // 38: cli.result.v1.EnvVersion
-	(*EnvSourceResult)(nil),               // 39: cli.result.v1.EnvSourceResult
-	(*EnvSourceLink)(nil),                 // 40: cli.result.v1.EnvSourceLink
-	(*PermissionsResult)(nil),             // 41: cli.result.v1.PermissionsResult
-	(*PermissionGroup)(nil),               // 42: cli.result.v1.PermissionGroup
-	(*LoginResult)(nil),                   // 43: cli.result.v1.LoginResult
-	(*LogoutResult)(nil),                  // 44: cli.result.v1.LogoutResult
-	(*LinkResult)(nil),                    // 45: cli.result.v1.LinkResult
-	(*ConsoleOrganization)(nil),           // 46: cli.result.v1.ConsoleOrganization
-	(*ConsoleProject)(nil),                // 47: cli.result.v1.ConsoleProject
-	(*UnlinkResult)(nil),                  // 48: cli.result.v1.UnlinkResult
-	(*LockResult)(nil),                    // 49: cli.result.v1.LockResult
-	(*PinnedExecutable)(nil),              // 50: cli.result.v1.PinnedExecutable
-	(*GenerateResult)(nil),                // 51: cli.result.v1.GenerateResult
-	(*InitResult)(nil),                    // 52: cli.result.v1.InitResult
-	(*SchemaListResult)(nil),              // 53: cli.result.v1.SchemaListResult
-	(*SchemaResult)(nil),                  // 54: cli.result.v1.SchemaResult
-	(*ListedCommand)(nil),                 // 55: cli.result.v1.ListedCommand
-	(*SkillInstallResult)(nil),            // 56: cli.result.v1.SkillInstallResult
-	(*SkillTarget)(nil),                   // 57: cli.result.v1.SkillTarget
-	nil,                                   // 58: cli.result.v1.PromotionSummary.BuildsEntry
-	nil,                                   // 59: cli.result.v1.PinnedExecutable.DigestsEntry
-	(*v1.ResourceSet)(nil),                // 60: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),                   // 61: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),                    // 62: common.environment.v1.Lifecycle
-	(v11.Tier)(0),                         // 63: common.environment.v1.Tier
-	(*structpb.Value)(nil),                // 64: google.protobuf.Value
-	(*structpb.Struct)(nil),               // 65: google.protobuf.Struct
+	(PromotionState)(0),            // 0: cli.result.v1.PromotionState
+	(ConnectorLiveness)(0),         // 1: cli.result.v1.ConnectorLiveness
+	(DoctorVerdict)(0),             // 2: cli.result.v1.DoctorVerdict
+	(ConfigFormat)(0),              // 3: cli.result.v1.ConfigFormat
+	(CommandOutput)(0),             // 4: cli.result.v1.CommandOutput
+	(*BindingSetResult)(nil),       // 5: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),    // 6: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),      // 7: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil),  // 8: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),         // 9: cli.result.v1.BindingSummary
+	(*DomainStatusResult)(nil),     // 10: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),       // 11: cli.result.v1.DomainHostStatus
+	(*Certificate)(nil),            // 12: cli.result.v1.Certificate
+	(*CostScanResult)(nil),         // 13: cli.result.v1.CostScanResult
+	(*PromotionListResult)(nil),    // 14: cli.result.v1.PromotionListResult
+	(*PromotionSummary)(nil),       // 15: cli.result.v1.PromotionSummary
+	(*PreviewListResult)(nil),      // 16: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),         // 17: cli.result.v1.PreviewSummary
+	(*ProtectionResult)(nil),       // 18: cli.result.v1.ProtectionResult
+	(*TierProtection)(nil),         // 19: cli.result.v1.TierProtection
+	(*BypassSecretListResult)(nil), // 20: cli.result.v1.BypassSecretListResult
+	(*PasswordResult)(nil),         // 21: cli.result.v1.PasswordResult
+	(*BypassSecretResult)(nil),     // 22: cli.result.v1.BypassSecretResult
+	(*PublicationResult)(nil),      // 23: cli.result.v1.PublicationResult
+	(*EdgeResult)(nil),             // 24: cli.result.v1.EdgeResult
+	(*DomainListResult)(nil),       // 25: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),    // 26: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil),  // 27: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),        // 28: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),        // 29: cli.result.v1.ConnectorDenial
+	(*DoctorResult)(nil),           // 30: cli.result.v1.DoctorResult
+	(*DoctorSection)(nil),          // 31: cli.result.v1.DoctorSection
+	(*DoctorCheck)(nil),            // 32: cli.result.v1.DoctorCheck
+	(*EnvCoordinate)(nil),          // 33: cli.result.v1.EnvCoordinate
+	(*EnvListResult)(nil),          // 34: cli.result.v1.EnvListResult
+	(*EnvValueSummary)(nil),        // 35: cli.result.v1.EnvValueSummary
+	(*EnvGetResult)(nil),           // 36: cli.result.v1.EnvGetResult
+	(*EnvRefsResult)(nil),          // 37: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),       // 38: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),             // 39: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),        // 40: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),          // 41: cli.result.v1.EnvSourceLink
+	(*PermissionsResult)(nil),      // 42: cli.result.v1.PermissionsResult
+	(*PermissionGroup)(nil),        // 43: cli.result.v1.PermissionGroup
+	(*LoginResult)(nil),            // 44: cli.result.v1.LoginResult
+	(*LogoutResult)(nil),           // 45: cli.result.v1.LogoutResult
+	(*LinkResult)(nil),             // 46: cli.result.v1.LinkResult
+	(*ConsoleOrganization)(nil),    // 47: cli.result.v1.ConsoleOrganization
+	(*ConsoleProject)(nil),         // 48: cli.result.v1.ConsoleProject
+	(*UnlinkResult)(nil),           // 49: cli.result.v1.UnlinkResult
+	(*LockResult)(nil),             // 50: cli.result.v1.LockResult
+	(*PinnedExecutable)(nil),       // 51: cli.result.v1.PinnedExecutable
+	(*GenerateResult)(nil),         // 52: cli.result.v1.GenerateResult
+	(*InitResult)(nil),             // 53: cli.result.v1.InitResult
+	(*SchemaListResult)(nil),       // 54: cli.result.v1.SchemaListResult
+	(*SchemaResult)(nil),           // 55: cli.result.v1.SchemaResult
+	(*ListedCommand)(nil),          // 56: cli.result.v1.ListedCommand
+	(*SkillInstallResult)(nil),     // 57: cli.result.v1.SkillInstallResult
+	(*SkillTarget)(nil),            // 58: cli.result.v1.SkillTarget
+	nil,                            // 59: cli.result.v1.PromotionSummary.BuildsEntry
+	nil,                            // 60: cli.result.v1.PinnedExecutable.DigestsEntry
+	(*v1.ResourceSet)(nil),         // 61: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),            // 62: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),             // 63: common.environment.v1.Lifecycle
+	(v11.Tier)(0),                  // 64: common.environment.v1.Tier
+	(*structpb.Value)(nil),         // 65: google.protobuf.Value
+	(*structpb.Struct)(nil),        // 66: google.protobuf.Struct
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	9,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	11, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	12, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	60, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	61, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	61, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	62, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	15, // 6: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
-	58, // 7: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
+	59, // 7: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
 	0,  // 8: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	17, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	62, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
-	23, // 11: cli.result.v1.PreviewProtectionResult.edges:type_name -> cli.result.v1.PreviewEdgeResult
-	23, // 12: cli.result.v1.PreviewPasswordResult.edges:type_name -> cli.result.v1.PreviewEdgeResult
-	23, // 13: cli.result.v1.PreviewBypassSecretResult.edges:type_name -> cli.result.v1.PreviewEdgeResult
-	23, // 14: cli.result.v1.PreviewPublicationResult.edges:type_name -> cli.result.v1.PreviewEdgeResult
-	11, // 15: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	12, // 16: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
-	27, // 17: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
-	1,  // 18: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
-	28, // 19: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
-	2,  // 20: cli.result.v1.DoctorResult.verdict:type_name -> cli.result.v1.DoctorVerdict
-	30, // 21: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
-	31, // 22: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
-	2,  // 23: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	63, // 24: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
-	34, // 25: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
-	32, // 26: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	32, // 27: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	63, // 28: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
-	32, // 29: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	32, // 30: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	63, // 31: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
-	32, // 32: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	32, // 33: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	63, // 34: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
-	32, // 35: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	38, // 36: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	63, // 37: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
-	40, // 38: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
-	42, // 39: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
-	64, // 40: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
-	46, // 41: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
-	47, // 42: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
-	50, // 43: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
-	50, // 44: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	59, // 45: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
-	3,  // 46: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
-	55, // 47: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
-	65, // 48: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
-	4,  // 49: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
-	57, // 50: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
-	51, // [51:51] is the sub-list for method output_type
-	51, // [51:51] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	63, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	19, // 11: cli.result.v1.ProtectionResult.tiers:type_name -> cli.result.v1.TierProtection
+	64, // 12: cli.result.v1.TierProtection.tier:type_name -> common.environment.v1.Tier
+	24, // 13: cli.result.v1.TierProtection.edges:type_name -> cli.result.v1.EdgeResult
+	64, // 14: cli.result.v1.BypassSecretListResult.tier:type_name -> common.environment.v1.Tier
+	64, // 15: cli.result.v1.PasswordResult.tier:type_name -> common.environment.v1.Tier
+	24, // 16: cli.result.v1.PasswordResult.edges:type_name -> cli.result.v1.EdgeResult
+	64, // 17: cli.result.v1.BypassSecretResult.tier:type_name -> common.environment.v1.Tier
+	24, // 18: cli.result.v1.BypassSecretResult.edges:type_name -> cli.result.v1.EdgeResult
+	64, // 19: cli.result.v1.PublicationResult.tier:type_name -> common.environment.v1.Tier
+	24, // 20: cli.result.v1.PublicationResult.edges:type_name -> cli.result.v1.EdgeResult
+	11, // 21: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	12, // 22: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
+	28, // 23: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	1,  // 24: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
+	29, // 25: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	2,  // 26: cli.result.v1.DoctorResult.verdict:type_name -> cli.result.v1.DoctorVerdict
+	31, // 27: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
+	32, // 28: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
+	2,  // 29: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
+	64, // 30: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	35, // 31: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
+	33, // 32: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	33, // 33: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
+	64, // 34: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	33, // 35: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	33, // 36: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
+	64, // 37: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	33, // 38: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	33, // 39: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
+	64, // 40: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	33, // 41: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	39, // 42: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
+	64, // 43: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	41, // 44: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
+	43, // 45: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
+	65, // 46: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	47, // 47: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
+	48, // 48: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
+	51, // 49: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
+	51, // 50: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
+	60, // 51: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	3,  // 52: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
+	56, // 53: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
+	66, // 54: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
+	4,  // 55: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
+	58, // 56: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
+	57, // [57:57] is the sub-list for method output_type
+	57, // [57:57] is the sub-list for method input_type
+	57, // [57:57] is the sub-list for extension type_name
+	57, // [57:57] is the sub-list for extension extendee
+	0,  // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -4141,16 +4240,16 @@ func file_cli_result_v1_result_proto_init() {
 	if File_cli_result_v1_result_proto != nil {
 		return
 	}
-	file_cli_result_v1_result_proto_msgTypes[29].OneofWrappers = []any{}
 	file_cli_result_v1_result_proto_msgTypes[30].OneofWrappers = []any{}
-	file_cli_result_v1_result_proto_msgTypes[47].OneofWrappers = []any{}
+	file_cli_result_v1_result_proto_msgTypes[31].OneofWrappers = []any{}
+	file_cli_result_v1_result_proto_msgTypes[48].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   55,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

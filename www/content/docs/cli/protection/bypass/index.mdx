@@ -1,0 +1,20 @@
+---
+title: "ocel protection bypass"
+description: "Manage the secrets that let a request past protection."
+---
+
+```bash
+ocel protection bypass
+```
+
+Manage the secrets that let a request past this project's protection.
+
+A bypass secret is for a machine, such as a CI job or a monitor, that can't enter a password. A request that sends it in the x-ocel-bypass header is let through. Production and previews hold their own, at most eight each, and a secret of one tier never passes the other. A secret is shown once, when it is created; after that it is named by an id.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel protection bypass create`](/docs/cli/protection/bypass/create) | Create a bypass secret, and print it once |
+| [`ocel protection bypass ls`](/docs/cli/protection/bypass/ls) | List the ids of the bypass secrets, without revealing them |
+| [`ocel protection bypass revoke`](/docs/cli/protection/bypass/revoke) | Revoke one of the bypass secrets |

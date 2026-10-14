@@ -1,0 +1,29 @@
+---
+title: "ocel protection password set"
+description: "Replace the password with one read from stdin."
+---
+
+```bash
+ocel protection password set [flags]
+```
+
+Replace this project's production password, or its preview password with `--preview`, with one read from stdin.
+
+The password is read from stdin, never from an argument, so it stays out of shell history and process listings. It needs at least 12 characters and at most 256 bytes. The old password and every login session end, as with `rotate`:
+
+```bash
+printf '%s' "$PASSWORD" | ocel protection password set
+```
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints one result envelope on stdout, whose JSON Schema `ocel schema protection password set` prints.

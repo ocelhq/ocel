@@ -51,11 +51,11 @@ service ProviderService {
 
     rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse);
 
-    rpc GetPreviewProtection(GetPreviewProtectionRequest) returns (GetPreviewProtectionResponse);
+    rpc GetProtection(GetProtectionRequest) returns (GetProtectionResponse);
 
-    rpc ChangePreviewProtection(ChangePreviewProtectionRequest) returns (ChangePreviewProtectionResponse);
+    rpc ChangeProtection(ChangeProtectionRequest) returns (ChangeProtectionResponse);
 
-    rpc PublishPreviewProtection(PublishPreviewProtectionRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc PublishProtection(PublishProtectionRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc Preflight(PreflightRequest) returns (stream PreflightEvent);
 
@@ -381,7 +381,7 @@ message DeployRequest {
 
   string lease_token = 10 [(buf.validate.field).string.pattern = "^([a-f0-9]{32})?$"];
 
-  bool protect_previews = 11;
+  bool protect = 11;
 }
 
 message ProvisionInfraRequest {
@@ -652,45 +652,49 @@ message ForgetPreviewAliasRequest {
 
 message ForgetPreviewAliasResponse {}
 
-message GetPreviewProtectionRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+message GetProtectionRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
-  bool reveal_password = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  EdgeSelection edge = 3;
+  bool reveal_password = 3;
+
+  EdgeSelection edge = 4;
 }
 
-message GetPreviewProtectionResponse {
+message GetProtectionResponse {
   bool recorded = 1;
 
   string password = 2 [debug_redact = true];
 
   repeated string bypass_secret_ids = 3;
 
-  repeated common.progress.v1.PreviewEdgePublication edges = 4;
+  repeated common.progress.v1.EdgePublication edges = 4;
 
   bool enabled = 5;
 }
 
-message ChangePreviewProtectionRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+message ChangeProtectionRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
-  EdgeSelection edge = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 3;
 
   oneof change {
     option (buf.validate.oneof).required = true;
 
-    RotatePreviewPassword rotate_password = 3;
+    RotatePassword rotate_password = 4;
 
-    SetPreviewPassword set_password = 4;
+    SetPassword set_password = 5;
 
-    CreatePreviewBypassSecret create_bypass_secret = 5;
+    CreateBypassSecret create_bypass_secret = 6;
 
-    RevokePreviewBypassSecret revoke_bypass_secret = 6;
+    RevokeBypassSecret revoke_bypass_secret = 7;
   }
 }
 
-message ChangePreviewProtectionResponse {
+message ChangeProtectionResponse {
   string password = 1 [debug_redact = true];
 
   string bypass_secret = 2 [debug_redact = true];
@@ -698,21 +702,23 @@ message ChangePreviewProtectionResponse {
   string bypass_secret_id = 3;
 }
 
-message PublishPreviewProtectionRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+message PublishProtectionRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
-  EdgeSelection edge = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 3;
 }
 
-message RotatePreviewPassword {}
+message RotatePassword {}
 
-message SetPreviewPassword {
+message SetPassword {
   string password = 1 [(buf.validate.field).string = {min_len: 12, max_bytes: 256}];
 }
 
-message CreatePreviewBypassSecret {}
+message CreateBypassSecret {}
 
-message RevokePreviewBypassSecret {
+message RevokeBypassSecret {
   string id = 1 [(buf.validate.field).string.pattern = "^[0-9a-f]{12}$"];
 }
 

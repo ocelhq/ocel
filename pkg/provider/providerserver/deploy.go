@@ -22,7 +22,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -178,19 +178,19 @@ type deployRun struct {
 	spec         provider.DeploySpec
 	spans        deploySpans
 
-	wildcard        stackrecords.Wildcard
-	previewOn       string
-	previewKey      edge.PreviewKey
-	previewKeys     *openedPreviewKeys
-	previewGate     *previewgate.Gate
-	protectPreviews bool
-	builtAlias      string
-	aliasToken      string
-	aliases         []edge.PreviewHost
-	deployment      []edge.PreviewHost
-	selection       *contractv1.EdgeSelection
-	configured      []ConfiguredHost
-	pending         []string
+	wildcard    stackrecords.Wildcard
+	previewOn   string
+	previewKey  edge.PreviewKey
+	previewKeys *openedPreviewKeys
+	protection  *gate.Gate
+	protect     bool
+	builtAlias  string
+	aliasToken  string
+	aliases     []edge.PreviewHost
+	deployment  []edge.PreviewHost
+	selection   *contractv1.EdgeSelection
+	configured  []ConfiguredHost
+	pending     []string
 
 	values    variablestore.Store
 	scope     variablestore.Scope
@@ -310,9 +310,9 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 
 		infraProvisioned: req.GetInfraProvisioned(),
 
-		dry:             req.GetDry(),
-		allowDegraded:   req.GetEdge().GetAllowDegraded(),
-		protectPreviews: req.GetProtectPreviews(),
+		dry:           req.GetDry(),
+		allowDegraded: req.GetEdge().GetAllowDegraded(),
+		protect:       req.GetProtect(),
 	}
 	if err := run.openImages(ctx, req.GetProjectRegistry()); err != nil {
 		return nil, err
@@ -394,7 +394,7 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.ensureSignedPreviewHosts(ctx, progress); err != nil {
 		return err
 	}
-	if err := r.enforcePreviewProtection(ctx, progress); err != nil {
+	if err := r.enforceProtection(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.readInlineRecords(ctx); err != nil {
@@ -659,24 +659,24 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Program = program.Spec
-	disabled, err := r.disablePreviewGate(ctx)
+	disabled, err := r.disableGate(ctx)
 	if err != nil {
 		return err
 	}
-	written, err := r.readPreviewGateInForce(ctx)
+	written, err := r.readGateInForce(ctx)
 	if err != nil {
 		return err
 	}
-	spec.PreviewGate = written
+	spec.Gate = written
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		if disabled {
-			return errors.Join(err, r.restorePreviewGate(ctx))
+			return errors.Join(err, r.restoreGate(ctx))
 		}
 		return err
 	}
 	r.setEdgeStack(stack)
-	if err := r.settlePreviewGate(ctx, written, progress); err != nil {
+	if err := r.settleGate(ctx, written, progress); err != nil {
 		return err
 	}
 	if err := recordInvalidationTarget(ctx, r.provider.KeyValues(), r.spec.Tier, r.front.Kind(), r.spec.Slug, r.state.Edge.PurgeURL, stack.State().PurgeURL); err != nil {
@@ -1219,7 +1219,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					AssetPrefix:               facts.AssetPrefix,
 					Static:                    facts.Static,
 					Guard:                     facts.Guard,
-					PreviewGate:               r.appPreviewGate(),
+					Gate:                      r.appGate(),
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
 					Topics:                    topics,
@@ -1250,7 +1250,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordAppStack(ctx, entry, images, result); err != nil {
 				return err
 			}
-			if err := r.warnPreviewGateTurnedOn(ctx, result.Functions, progress); err != nil {
+			if err := r.warnGateTurnedOn(ctx, result.Functions, progress); err != nil {
 				return err
 			}
 			if _, err := pushRemovedImages(ctx, images, progress); err != nil {

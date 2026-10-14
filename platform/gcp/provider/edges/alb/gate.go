@@ -24,9 +24,9 @@ const (
 )
 
 type PluginImages interface {
-	Ensure(ctx context.Context, plugin []byte) (string, error)
+	Ensure(ctx context.Context, tier environment.Tier, plugin []byte) (string, error)
 
-	Delete(ctx context.Context) error
+	Delete(ctx context.Context, tier environment.Tier) error
 }
 
 type gateVersion struct {
@@ -50,10 +50,6 @@ func GateStack(tier environment.Tier) string {
 	return dashed(string(Kind), "gate", string(tier))
 }
 
-func isGated(tier environment.Tier, shielded bool) bool {
-	return tier == environment.TierPreview && !shielded
-}
-
 func gateProgram(spec gateSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		versions := networkservices.WasmPluginVersionArray{declareGateVersion(spec.Main)}
@@ -64,7 +60,7 @@ func gateProgram(spec gateSpec) Program {
 			Name:          pulumi.String(spec.Names.GatePlugin),
 			Project:       pulumi.String(project),
 			Location:      pulumi.String(gateLocation),
-			Description:   pulumi.String("runs the preview gate in front of Cloud CDN, so a gated preview is cached and behaves as production does"),
+			Description:   pulumi.String("runs the gate in front of Cloud CDN, so a protected project is cached and no cached response reaches a visitor the gate refuses"),
 			MainVersionId: pulumi.String(spec.Main.ID),
 			Versions:      versions,
 		})

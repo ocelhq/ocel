@@ -14,6 +14,6 @@ func TestAServiceBehindTheLoadBalancerIsNotReachableOnItsRunAppURL(t *testing.T)
 
 	if got := gcp.IngressFor(facts); got != "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" {
 		t.Errorf("a service behind the %s edge takes ingress %q, want internal and cloud load balancing: "+
-			"the preview gate runs on the load balancer, and a service answering its run.app url would be a way round it", alb.Kind, got)
+			"the gate runs on the load balancer, and a service answering its run.app url would be a way round it", alb.Kind, got)
 	}
 }

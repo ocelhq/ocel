@@ -50,8 +50,8 @@ export interface OcelConfig {
   envSource?: EnvSourceConfig;
   /** Commands ocel runs on this machine at points of a deploy. */
   lifecycle?: LifecycleConfig;
-  /** How this project's previews are served. */
-  previews?: PreviewsConfig;
+  /** Which tiers ask for a password before they answer. */
+  protection?: ProtectionConfig;
   /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
@@ -320,10 +320,12 @@ export interface LifecycleCommand {
   timeout?: string;
 }
 
-/** How this project's previews are served. */
-export interface PreviewsConfig {
-  /** Whether every preview of this project asks for a password before it answers. Every deploy of a preview enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again. The password is shown and rotated with ocel preview protection. Left off, false. */
-  protection?: boolean;
+/** Which tiers ask for a password before they answer. */
+export interface ProtectionConfig {
+  /** Whether every preview of this project asks for a password before it answers. Every preview deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again while keeping the password. A preview password never opens production. The password is shown with ocel protection password --preview and rotated with ocel protection password rotate --preview. Left off, false. */
+  preview?: boolean;
+  /** Whether production asks for a password before it answers. Every production deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens production again while keeping the password, so turning it back on restores it. The password is shown with ocel protection password and rotated with ocel protection password rotate. Left off, false. */
+  production?: boolean;
 }
 
 /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */

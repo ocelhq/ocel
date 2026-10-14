@@ -32,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -123,8 +124,9 @@ func (w *world) edge() *cloudFront {
 }
 
 type fakeCFN struct {
-	absent    bool
-	otherEdge bool
+	absent               bool
+	otherEdge            bool
+	resolverPredatesGate bool
 }
 
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
@@ -148,6 +150,9 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 			return &cloudformation.DescribeStacksOutput{}, nil
 		}
 		outputs = fakeEdgeOutputs(tier)
+		if f.resolverPredatesGate {
+			delete(outputs, bootstrap.OutputEdgeGateDigest)
+		}
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
@@ -252,6 +257,7 @@ func fakeEdgeOutputs(tier environment.Tier) map[string]string {
 		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(tier),
 		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(tier),
 		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(tier),
+		bootstrap.OutputEdgeGateDigest:     resolver.GateDigest(),
 	}
 }
 

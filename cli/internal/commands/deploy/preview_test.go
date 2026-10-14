@@ -140,9 +140,10 @@ func TestAPreviewDeployCarriesTheAliasItsBuildWasGivenAndNotTheOneThisRunMinted(
 
 func TestAPreviewDeploySendsWhetherTheConfigProtectsPreviews(t *testing.T) {
 	for name, fields := range map[string]string{
-		"previews.protection on":  `  previews: { protection: true },` + "\n",
-		"previews.protection off": `  previews: { protection: false },` + "\n",
-		"no previews setting":     "",
+		"protection.preview on":      `  protection: { preview: true },` + "\n",
+		"protection.preview off":     `  protection: { preview: false },` + "\n",
+		"only protection.production": `  protection: { production: true },` + "\n",
+		"no protection setting":      "",
 	} {
 		t.Run(name, func(t *testing.T) {
 			fixture := setUpPreviewProject(t)
@@ -153,9 +154,9 @@ func TestAPreviewDeploySendsWhetherTheConfigProtectsPreviews(t *testing.T) {
 
 			previewUp(t, fixture, dependencies, previewUpOptions{})
 
-			want := strings.Contains(fields, "protection: true")
-			if got := sentDeploy(t, fixture).GetProtectPreviews(); got != want {
-				t.Errorf("the deploy carried protect_previews = %t, want %t: every preview deploy enforces the config", got, want)
+			want := strings.Contains(fields, "preview: true")
+			if got := sentDeploy(t, fixture).GetProtect(); got != want {
+				t.Errorf("the deploy carried protect = %t, want %t: every preview deploy enforces protection.preview alone", got, want)
 			}
 		})
 	}

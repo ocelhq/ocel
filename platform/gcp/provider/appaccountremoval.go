@@ -9,7 +9,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -83,10 +82,8 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if revoked.buckets, err = c.revokeBucketAccess(ctx, recorded, member, nil); err != nil {
 		return err
 	}
-	if ref.Tier == environment.TierPreview {
-		if revoked.gate, err = c.bindPreviewGateReader(ctx, ref.Project, member, false); err != nil {
-			return err
-		}
+	if revoked.gate, err = c.bindGateReader(ctx, ref.Tier, ref.Project, member, false); err != nil {
+		return err
 	}
 	recordedNow, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
 	if err != nil {
@@ -137,7 +134,7 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 		}
 	}
 	if revoked.gate {
-		if _, err := c.bindPreviewGateReader(ctx, ref.Project, member, true); err != nil {
+		if _, err := c.bindGateReader(ctx, ref.Tier, ref.Project, member, true); err != nil {
 			return err
 		}
 	}

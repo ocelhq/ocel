@@ -1,0 +1,23 @@
+---
+title: "ocel protection"
+description: "Show, and manage the credentials of, the password that protects production and previews."
+---
+
+```bash
+ocel protection
+```
+
+<include>../../../cli/protection.mdx</include>
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel protection bypass`](/docs/cli/protection/bypass) | Manage the secrets that let a request past protection |
+| [`ocel protection password`](/docs/cli/protection/password) | Show the password that protects production, or the previews with `--preview` |
+| [`ocel protection sync`](/docs/cli/protection/sync) | Publish the recorded credentials to the edge again |
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema protection` prints.

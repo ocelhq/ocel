@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 func (b *Board) DialConnectorAt(socket string) { b.connector = socket }
 
 func (b *Board) Admit() http.Handler { return b.admit() }
 
-func CheckPreviewGateOverHTTP(t *testing.T, gate previewgate.Gate, req previewgate.Request, now time.Time) previewgate.Verdict {
+func CheckGateOverHTTP(t *testing.T, held gate.Gate, req gate.Request, now time.Time) gate.Verdict {
 	r, err := http.ReadRequest(bufio.NewReader(strings.NewReader(req.Method + " " + req.Target + " HTTP/1.1\r\nHost: " + req.Host + "\r\n\r\n")))
 	if err != nil {
 		t.Fatalf("the vector's request does not parse as HTTP: %v", err)
@@ -29,15 +29,15 @@ func CheckPreviewGateOverHTTP(t *testing.T, gate previewgate.Gate, req previewga
 		}
 	}
 	answered := httptest.NewRecorder()
-	keepPrivate, passed := answerPreviewGate(answered, r, &gate, func(http.Header) {}, now)
+	keepPrivate, passed := answerGate(answered, r, &held, func(http.Header) {}, now)
 	if !passed {
-		return previewgate.Verdict{Response: &previewgate.Response{
+		return gate.Verdict{Response: &gate.Response{
 			Status: answered.Code,
-			Header: previewgate.Header(answered.Header()),
+			Header: gate.Header(answered.Header()),
 			Body:   answered.Body.String(),
 		}}
 	}
 	response := http.Header{}
 	keepPrivate(response)
-	return previewgate.Verdict{Forward: previewgate.Header(r.Header), ResponseHeader: previewgate.Header(response)}
+	return gate.Verdict{Forward: gate.Header(r.Header), ResponseHeader: gate.Header(response)}
 }

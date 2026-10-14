@@ -71,7 +71,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 		ProxiedRecordNote:     declared.ProxiedRecordNote,
 		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
 		CachesResponses:       declared.CachesResponses,
-		GatesPreviews:         true,
+		Gates:                 true,
 	}
 }
 

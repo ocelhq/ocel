@@ -110,7 +110,7 @@ func (s *serviceEveryReleaseRevises) removals() (removed, revisions []string) {
 func (s *serviceEveryReleaseRevises) nameFunctions(_ context.Context, spec provider.StackSpec) ([]provider.Function, error) {
 	var functions []provider.Function
 	for _, fn := range spec.App.Functions {
-		functions = append(functions, provider.Function{Name: fn.Name, Physical: "shop-prod-web-" + fn.Name, IgnoresPreviewGate: s.ignoresGate})
+		functions = append(functions, provider.Function{Name: fn.Name, Physical: "shop-prod-web-" + fn.Name, IgnoresGate: s.ignoresGate})
 	}
 	return functions, nil
 }
@@ -564,7 +564,7 @@ func TestAHolderWhoseStackRecordIsGoneIsRecordedAgainSoATeardownReachesIt(t *tes
 	}
 }
 
-func TestARestoredHolderRecordStillSaysItsFunctionIgnoresThePreviewGate(t *testing.T) {
+func TestARestoredHolderRecordStillSaysItsFunctionIgnoresTheGate(t *testing.T) {
 	t.Parallel()
 
 	store := fake.NewKeyValues()
@@ -581,8 +581,8 @@ func TestARestoredHolderRecordStillSaysItsFunctionIgnoresThePreviewGate(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(restored.Functions) != 1 || !restored.Functions[0].IgnoresPreviewGate {
-		t.Errorf("the restored record holds %+v, want function api recorded as ignoring the preview gate", restored.Functions)
+	if len(restored.Functions) != 1 || !restored.Functions[0].IgnoresGate {
+		t.Errorf("the restored record holds %+v, want function api recorded as ignoring the gate", restored.Functions)
 	}
 }
 

@@ -93,7 +93,7 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 
 func (w routeStore) write(ctx context.Context, written []kvstypes.PutKeyRequestListItem, dropped []kvstypes.DeleteKeyRequestListItem) error {
 	if w.arn == "" {
-		return fmt.Errorf("the %q edge names no key value store to write routes and preview gates into; bootstrap the account first", Kind)
+		return fmt.Errorf("the %q edge names no key value store to write routes and gates into; bootstrap the account first", Kind)
 	}
 	if len(written) == 0 && len(dropped) == 0 {
 		return nil

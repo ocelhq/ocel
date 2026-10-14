@@ -346,6 +346,14 @@
       "monthlyUsage": "0.08"
     },
     {
+      "resource": "project:shop/shared:production/google_network_services_wasm_plugin:ocel-alb-production-gate",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_network_services_lb_edge_extension:ocel-alb-production-gate-edge",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/environment:prod/app:web/google_cloud_run_v2_service:ocel-shop-prod-web-entry-d0cb45",
       "status": "STATUS_PRICED",
       "components": [
@@ -503,7 +511,7 @@
   ],
   "coverage": {
     "supported": 14,
-    "free": 13,
+    "free": 15,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -520,6 +528,8 @@
       "google_firestore_database",
       "google_kms_crypto_key",
       "google_kms_key_ring",
+      "google_network_services_lb_edge_extension",
+      "google_network_services_wasm_plugin",
       "google_project_iam_custom_role",
       "google_project_iam_member",
       "google_secret_manager_secret",

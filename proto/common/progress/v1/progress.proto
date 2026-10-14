@@ -157,14 +157,14 @@ message OperationResult {
 
   int64 promoted_at_seconds = 12;
 
-  PreviewProtectionPublished protection = 13;
+  ProtectionPublished protection = 13;
 }
 
-message PreviewProtectionPublished {
-  repeated PreviewEdgePublication edges = 1;
+message ProtectionPublished {
+  repeated EdgePublication edges = 1;
 }
 
-message PreviewEdgePublication {
+message EdgePublication {
   string kind = 1;
 
   bool published = 2;

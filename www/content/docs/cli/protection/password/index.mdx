@@ -1,0 +1,32 @@
+---
+title: "ocel protection password"
+description: "Show the password that protects production, or the previews with --preview."
+---
+
+```bash
+ocel protection password [flags]
+```
+
+Show the password that protects this project's production, or its previews with `--preview`.
+
+The password is created by the first deploy of a tier whose config turns protection on, and it is kept so it can be shown again. Production and previews have a password each. Only the password is printed on stdout, so it can be piped. `ocel protection password rotate` replaces it with a generated one, and `ocel protection password set` with one you choose.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`ocel protection password rotate`](/docs/cli/protection/password/rotate) | Replace the password with a generated one, and print it |
+| [`ocel protection password set`](/docs/cli/protection/password/set) | Replace the password with one read from stdin |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema protection password` prints.

@@ -68,4 +68,4 @@ func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier
 	return p.refuseServingPortsClosedFromOutside(ctx, tier)
 }
 
-var NewPreviewGateReader = newPreviewGateReader
+var NewRecordedGate = newRecordedGate

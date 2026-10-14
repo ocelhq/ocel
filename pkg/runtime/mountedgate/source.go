@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 const (
@@ -15,10 +15,10 @@ const (
 	ReadTimeout = 2 * time.Second
 )
 
-var ErrReadTimedOut = errors.New("the mounted preview gate was not read in time")
+var ErrReadTimedOut = errors.New("the mounted gate was not read in time")
 
 type reading struct {
-	gate *previewgate.Gate
+	held *gate.Gate
 	err  error
 }
 
@@ -44,9 +44,9 @@ func FromEnv(env []string) (*Source, []string) {
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case previewgate.MountedFileVar:
+		case gate.MountedFileVar:
 			file = New(func() ([]byte, error) { return os.ReadFile(value) }, time.Now)
-		case previewgate.MountedInlineVar:
+		case gate.MountedInlineVar:
 			inline = New(func() ([]byte, error) { return []byte(value), nil }, time.Now)
 		default:
 			kept = append(kept, entry)
@@ -58,13 +58,13 @@ func FromEnv(env []string) (*Source, []string) {
 	return inline, kept
 }
 
-func (s *Source) Current() (*previewgate.Gate, error) {
+func (s *Source) Current() (*gate.Gate, error) {
 	s.mu.Lock()
 	now := s.now()
 	if s.loaded && now.Sub(s.at) < CacheFor {
 		current := s.current
 		s.mu.Unlock()
-		return current.gate, current.err
+		return current.held, current.err
 	}
 	loading := s.loading
 	if loading == nil {
@@ -80,25 +80,25 @@ func (s *Source) Current() (*previewgate.Gate, error) {
 	case <-loading:
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		return s.current.gate, s.current.err
+		return s.current.held, s.current.err
 	case <-timer.C:
 		return nil, ErrReadTimedOut
 	}
 }
 
 func (s *Source) refresh(started time.Time, done chan struct{}) {
-	gate, err := s.load()
+	held, err := s.load()
 	s.mu.Lock()
-	s.current = reading{gate: gate, err: err}
+	s.current = reading{held: held, err: err}
 	s.loaded, s.at, s.loading = true, started, nil
 	s.mu.Unlock()
 	close(done)
 }
 
-func (s *Source) load() (*previewgate.Gate, error) {
+func (s *Source) load() (*gate.Gate, error) {
 	contents, err := s.read()
 	if err != nil {
 		return nil, err
 	}
-	return previewgate.DecodeMounted(contents)
+	return gate.DecodeMounted(contents)
 }

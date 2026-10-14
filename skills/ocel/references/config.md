@@ -27,6 +27,7 @@ The JSON Schema is at `https://ocel.dev/schema/ocel.schema.json`, and an editor 
   - `compute` is `serverless` or `container`, named alone or keyed with its options.
   - Optional per-app keys: `domains.production` and `arch`.
 - **`domains`:** the project's production domain and the preview wildcard (`*.preview.example.com`).
+- **`protection`:** `{ "production": true, "preview": true }` makes that tier ask for a password before it answers; each tier has a password of its own, and `ocel protection password` shows it and `ocel protection password rotate` rotates it (add `--preview` for previews). The human's call: it locks visitors out.
 - **`bindings`:** binds a declared `postgres`, `bucket` or `kv` to something that already exists instead of provisioning it.
 - **`discovery.paths`:** where declarations live, when not in the default discovery folder.
 - **`envSource`:** where variable values come from per tier: `dotenv` in dev, Ocel's own store when deployed, or an `exec` command or Infisical.

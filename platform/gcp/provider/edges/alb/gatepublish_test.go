@@ -29,7 +29,7 @@ func (c *recordOpens) Open(ctx context.Context, tier environment.Tier, bound sea
 func (c *recordOpens) openedRecordOf(slug string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return slices.Contains(c.opened, string(gateRecordData(slug).Bytes()))
+	return slices.Contains(c.opened, string(gateRecordData(environment.TierPreview, slug).Bytes()))
 }
 
 func TestADeployThatChangesNoGateTheConfirmedPluginRunsOpensNoOtherProjectsGateRecord(t *testing.T) {
@@ -59,24 +59,24 @@ func TestPublishingAgainAfterAFailedRolloutRollsTheGateOutAndOnlyThenConfirmsIt(
 	ctx := context.Background()
 	balancer, w := gatedEdge(t)
 	state := reconcileGated(t, balancer, "shop", nil).State()
-	publish := balancer.Hooks().PublishPreviewGate
+	publish := balancer.Hooks().PublishGate
 	w.failUps(GateStack(environment.TierPreview), errors.New("the rollout failed"))
 
-	if err := publish(ctx, edge.PreviewGatePublication{State: state, Gate: &shopGate}); err == nil {
-		t.Fatal("PublishPreviewGate = nil, want the failed rollout")
+	if err := publish(ctx, edge.GatePublication{State: state, Gate: &shopGate}); err == nil {
+		t.Fatal("PublishGate = nil, want the failed rollout")
 	}
 	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
 		t.Fatalf("the plugin runs %q after a failed rollout, want the old config", config)
 	}
 
-	if err := publish(ctx, edge.PreviewGatePublication{State: state, Gate: &shopGate}); err != nil {
-		t.Fatalf("PublishPreviewGate (retry) = %v", err)
+	if err := publish(ctx, edge.GatePublication{State: state, Gate: &shopGate}); err != nil {
+		t.Fatalf("PublishGate (retry) = %v", err)
 	}
 
 	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin runs %q after the retry, want the gate the failed rollout never carried", config)
 	}
-	if recorded, found, err := balancer.readGatePublication(ctx); err != nil || !found || !recorded.Confirmed {
+	if recorded, found, err := balancer.readGatePublication(ctx, environment.TierPreview); err != nil || !found || !recorded.Confirmed {
 		t.Errorf("publication = %+v, %t, %v, want it confirmed once the retry rolled out", recorded, found, err)
 	}
 }

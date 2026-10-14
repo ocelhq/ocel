@@ -23,17 +23,17 @@ import {
   ownBundleKey,
 } from "./edge";
 import type { Env } from "./env";
+import {
+  gateRequest,
+  gateUnreadableResponse,
+  readGate,
+  withResponseHeaders,
+  withRobotsTag,
+} from "./gate";
 import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { findPreviewTarget } from "./preview";
-import {
-  gatePreview,
-  previewGateUnreadableResponse,
-  readPreviewGate,
-  withResponseHeaders,
-  withRobotsTag,
-} from "./preview-gate";
 import {
   answerPurgeOnWorker,
   isControlHost,
@@ -323,19 +323,19 @@ function unavailableResponse(): Response {
   });
 }
 
-async function gatePreviewRequest(
+async function passGate(
   request: Request,
   env: Env,
   slug: string,
-): Promise<Response | { request: Request; responseHeaders: Headers }> {
-  const read = await readPreviewGate(env.RELEASES, slug);
-  if (read.kind === "unreadable") return previewGateUnreadableResponse();
-  if (read.kind === "open") return { request, responseHeaders: new Headers() };
-  const outcome = await gatePreview(request, read.gate, Math.floor(Date.now() / 1000));
+): Promise<Response | { request: Request; responseHeaders?: Headers }> {
+  const read = await readGate(env.RELEASES, slug);
+  if (read.kind === "unreadable") return gateUnreadableResponse();
+  if (read.kind === "open") return { request };
+  const outcome = await gateRequest(request, read.gate, Math.floor(Date.now() / 1000));
   return outcome.kind === "respond" ? outcome.response : outcome;
 }
 
-function withPreviewHeaders(response: Response, headers: Headers | undefined): Response {
+function withGateHeaders(response: Response, headers: Headers | undefined): Response {
   return headers ? withResponseHeaders(response, headers) : response;
 }
 
@@ -346,12 +346,7 @@ export default {
       if (isPurgeRequest(request)) return answerPurgeOnWorker(request, env, ctx);
       if (env.OCEL_SERVES_WORKERS_DEV !== "1") return respondOnControlHost();
     }
-    const serve = ctx.exports?.Serve as ServeFactory | undefined;
-    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : undefined;
-    const originFetch = originFetchFor(env);
 
-    let visitor: Request = request;
-    let previewHeaders: Headers | undefined;
     let releases: ReleaseLookup = {
       binding: env.RELEASES,
       slug: env.OCEL_SLUG,
@@ -366,12 +361,16 @@ export default {
       });
       if (target === null) return withRobotsTag(deploymentNotFoundResponse());
       releases = { binding: env.RELEASES, host, slug: target.slug, label: target.label };
-      const gated = await gatePreviewRequest(request, env, target.slug);
-      if (gated instanceof Response) return gated;
-      previewHeaders = gated.responseHeaders;
-      visitor = gated.request;
     }
-    if (!releases.slug) return withPreviewHeaders(deploymentNotFoundResponse(), previewHeaders);
+    if (!releases.slug) return deploymentNotFoundResponse();
+
+    const gated = await passGate(request, env, releases.slug);
+    if (gated instanceof Response) return gated;
+    const { request: visitor, responseHeaders: gateHeaders } = gated;
+
+    const serve = ctx.exports?.Serve as ServeFactory | undefined;
+    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : undefined;
+    const originFetch = originFetchFor(env);
 
     const serveRequest = await resolveServe(releases, {
       fetch,
@@ -403,8 +402,8 @@ export default {
             }
           : undefined,
     });
-    if (serveRequest instanceof Response) return withPreviewHeaders(serveRequest, previewHeaders);
+    if (serveRequest instanceof Response) return withGateHeaders(serveRequest, gateHeaders);
 
-    return withPreviewHeaders(await serveRequest(withClientAddress(visitor)), previewHeaders);
+    return withGateHeaders(await serveRequest(withClientAddress(visitor)), gateHeaders);
   },
 } satisfies ExportedHandler<Env>;

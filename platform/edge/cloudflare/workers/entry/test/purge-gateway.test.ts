@@ -51,6 +51,7 @@ const raise = {
 let raised: { name: string; mode: PurgeMode; tags: RaisedTag[] }[];
 let appReads: number;
 let servedReads: { slug: string; isrPrefix: string }[];
+let heldGate: string | undefined;
 
 function binding(): ReleasesBinding {
   const answer = async (): Promise<PointerRecordResult> => {
@@ -74,6 +75,7 @@ function binding(): ReleasesBinding {
           }
         : { kind: "not-served" };
     },
+    readGate: async () => heldGate,
   };
 }
 
@@ -97,6 +99,7 @@ beforeEach(() => {
   raised = [];
   appReads = 0;
   servedReads = [];
+  heldGate = undefined;
 });
 
 describe("the gateway answering a purge on its workers.dev host", () => {
@@ -240,6 +243,23 @@ describe("the gateway keeping app traffic off its workers.dev host", () => {
     );
 
     expect(appReads).toBeGreaterThan(0);
+  });
+
+  it("answers a purge there on a worker whose project is protected", async () => {
+    heldGate = JSON.stringify({
+      key: "gate-key",
+      passwordMac: "password-mac",
+      bypassSecrets: [],
+      allowOptions: [],
+    });
+    const response = await worker.fetch(
+      await purgeRequest(WORKERS_DEV),
+      envWith({ OCEL_SERVES_WORKERS_DEV: "1" }),
+      contextWithQueue(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(raised).toHaveLength(1);
   });
 
   it("still answers a purge there when the worker serves the app there too", async () => {

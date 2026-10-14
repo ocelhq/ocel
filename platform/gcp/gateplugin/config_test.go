@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
 func TestAConfigRoundTripsEveryGateItHolds(t *testing.T) {
 	t.Parallel()
 
-	gates := map[string]previewgate.Gate{
+	gates := map[string]gate.Gate{
 		"shop": {Key: "k 1,2=%", PasswordMAC: "abc", BypassSecrets: []string{"a b", "-", "c,d"}, AllowOptions: []string{"/api", "/é"}},
 		"blog": {Key: "plain"},
 	}
@@ -43,32 +43,32 @@ func TestAConfigFindsOneProjectsGateAndTheHostsItGates(t *testing.T) {
 
 	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"pr-2-shop.example.dev": "shop", "pr-1-shop.example.dev": "shop", "main-blog.example.dev": "blog"},
-		map[string]previewgate.Gate{"shop": {Key: "shop-key"}, "blog": {Key: "blog-key"}, "docs": {Key: "docs-key"}},
+		map[string]gate.Gate{"shop": {Key: "shop-key"}, "blog": {Key: "blog-key"}, "docs": {Key: "docs-key"}},
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	gate, hosts, found := parsed.FindProject("shop")
-	if !found || gate.Key != "shop-key" || !reflect.DeepEqual(hosts, []string{"pr-1-shop.example.dev", "pr-2-shop.example.dev"}) {
-		t.Errorf("FindProject(shop) = %+v, %v, %t, want shop's gate and its two hosts", gate, hosts, found)
+	held, hosts, found := parsed.FindProject("shop")
+	if !found || held.Key != "shop-key" || !reflect.DeepEqual(hosts, []string{"pr-1-shop.example.dev", "pr-2-shop.example.dev"}) {
+		t.Errorf("FindProject(shop) = %+v, %v, %t, want shop's gate and its two hosts", held, hosts, found)
 	}
-	if gate, hosts, found := parsed.FindProject("docs"); !found || gate.Key != "docs-key" || len(hosts) != 0 {
-		t.Errorf("FindProject(docs) = %+v, %v, %t, want docs' gate and no hosts", gate, hosts, found)
+	if held, hosts, found := parsed.FindProject("docs"); !found || held.Key != "docs-key" || len(hosts) != 0 {
+		t.Errorf("FindProject(docs) = %+v, %v, %t, want docs' gate and no hosts", held, hosts, found)
 	}
 	if _, _, found := parsed.FindProject("ghost"); found {
 		t.Error("FindProject(ghost) found a gate the config does not hold")
 	}
 }
 
-func normalized(gate previewgate.Gate) previewgate.Gate {
-	if len(gate.BypassSecrets) == 0 {
-		gate.BypassSecrets = nil
+func normalized(held gate.Gate) gate.Gate {
+	if len(held.BypassSecrets) == 0 {
+		held.BypassSecrets = nil
 	}
-	if len(gate.AllowOptions) == 0 {
-		gate.AllowOptions = nil
+	if len(held.AllowOptions) == 0 {
+		held.AllowOptions = nil
 	}
-	return gate
+	return held
 }
 
 func TestAHostMatchesWhateverCapitalisationTheRequestArrivesIn(t *testing.T) {
@@ -76,7 +76,7 @@ func TestAHostMatchesWhateverCapitalisationTheRequestArrivesIn(t *testing.T) {
 
 	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"pr-1-shop.example.dev": "shop"},
-		map[string]previewgate.Gate{"shop": {Key: "k"}},
+		map[string]gate.Gate{"shop": {Key: "k"}},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestEncodingTheSameRecordsAlwaysYieldsTheSameText(t *testing.T) {
 	t.Parallel()
 
 	hosts := map[string]string{"b.example.dev": "shop", "a.example.dev": "shop", "c.example.dev": "blog"}
-	gates := map[string]previewgate.Gate{"shop": {Key: "1"}, "blog": {Key: "2"}}
+	gates := map[string]gate.Gate{"shop": {Key: "1"}, "blog": {Key: "2"}}
 
 	first := gateplugin.EncodeConfig(hosts, gates)
 	for range 20 {
@@ -123,7 +123,7 @@ func TestEncodingTheSameRecordsAlwaysYieldsTheSameText(t *testing.T) {
 func TestAConfigNamingAHostWithNoGateIsRefusedWhole(t *testing.T) {
 	t.Parallel()
 
-	_, err := gateplugin.ParseConfig("ocel-preview-gate 1\nh pr-1.example.dev shop\n")
+	_, err := gateplugin.ParseConfig("ocel-gate 1\nh pr-1.example.dev shop\n")
 	if err == nil {
 		t.Fatal("ParseConfig accepted a host whose slug has no gate, and that host would pass ungated")
 	}
@@ -135,10 +135,10 @@ func TestATextThatIsNoConfigIsRefused(t *testing.T) {
 	for name, text := range map[string]string{
 		"empty":           "",
 		"a missing title": "h a b\n",
-		"another version": "ocel-preview-gate 2\n",
-		"an unknown line": "ocel-preview-gate 1\nz what\n",
-		"a short gate":    "ocel-preview-gate 1\ng shop key\n",
-		"a bad escape":    "ocel-preview-gate 1\ng shop %zz mac - -\n",
+		"another version": "ocel-gate 2\n",
+		"an unknown line": "ocel-gate 1\nz what\n",
+		"a short gate":    "ocel-gate 1\ng shop key\n",
+		"a bad escape":    "ocel-gate 1\ng shop %zz mac - -\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := gateplugin.ParseConfig(text); err == nil {
@@ -151,7 +151,7 @@ func TestATextThatIsNoConfigIsRefused(t *testing.T) {
 func TestAConfigIsPlainLinesSoItStaysSmallAndReadable(t *testing.T) {
 	t.Parallel()
 
-	text := gateplugin.EncodeConfig(map[string]string{"a.example.dev": "shop"}, map[string]previewgate.Gate{"shop": {Key: "k"}})
+	text := gateplugin.EncodeConfig(map[string]string{"a.example.dev": "shop"}, map[string]gate.Gate{"shop": {Key: "k"}})
 	if strings.ContainsAny(text, "{}\"") {
 		t.Errorf("the config carries JSON syntax: %q", text)
 	}
@@ -162,11 +162,11 @@ func TestAConfigErrorNamesTheLineAndFieldButNeverWhatTheyHold(t *testing.T) {
 
 	const secret = "s3cret-gate-key"
 	for name, text := range map[string]string{
-		"an unknown line":             "ocel-preview-gate 1\nz " + secret + "\n",
-		"a short gate":                "ocel-preview-gate 1\ng shop " + secret + "\n",
-		"a bad escape in the key":     "ocel-preview-gate 1\ng shop " + secret + "%zz mac - -\n",
-		"a truncated bypass secret":   "ocel-preview-gate 1\ng shop key mac " + secret + "% -\n",
-		"a bad escape in a host line": "ocel-preview-gate 1\nh " + secret + "%z shop\n",
+		"an unknown line":             "ocel-gate 1\nz " + secret + "\n",
+		"a short gate":                "ocel-gate 1\ng shop " + secret + "\n",
+		"a bad escape in the key":     "ocel-gate 1\ng shop " + secret + "%zz mac - -\n",
+		"a truncated bypass secret":   "ocel-gate 1\ng shop key mac " + secret + "% -\n",
+		"a bad escape in a host line": "ocel-gate 1\nh " + secret + "%z shop\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := gateplugin.ParseConfig(text)

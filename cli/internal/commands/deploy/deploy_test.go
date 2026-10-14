@@ -716,3 +716,34 @@ func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T)
 		t.Error("a --prebuilt deploy built the app")
 	}
 }
+
+func TestAProductionDeploySendsWhetherTheConfigProtectsProduction(t *testing.T) {
+	for name, fields := range map[string]string{
+		"protection.production on":   `  protection: { production: true },` + "\n",
+		"protection.production off":  `  protection: { production: false },` + "\n",
+		"only protection.preview on": `  protection: { preview: true },` + "\n",
+		"no protection setting":      "",
+		"both tiers on":              `  protection: { production: true, preview: true },` + "\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, []build.Function{
+				{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			})
+			fixture := setUpDeployProject(t)
+			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],`+"\n"+fields)
+			clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
+
+			var stdout, stderr bytes.Buffer
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			want := strings.Contains(fields, "production: true")
+			if got := sentDeploy(t, fixture).GetProtect(); got != want {
+				t.Errorf("the production deploy carried protect = %t, want %t: every production deploy enforces protection.production alone", got, want)
+			}
+		})
+	}
+}

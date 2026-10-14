@@ -34,7 +34,7 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
 			"the one bootstrap item with a recurring cost, about $18 a month plus egress, " +
 			"a custom role that may only clear Cloud CDN, which Next apps behind it are granted, " +
-			"and, on the preview tier, the preview gate as a Service Extensions plugin that runs in front of Cloud CDN, " +
+			"and the gate as a Service Extensions plugin that runs in front of Cloud CDN on each tier, " +
 			"kept as a generic artifact in a repository in Artifact Registry",
 		Edges: []edge.Kind{alb.Kind},
 	}, {

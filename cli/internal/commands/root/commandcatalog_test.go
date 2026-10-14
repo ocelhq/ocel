@@ -222,10 +222,10 @@ func TestHelpJSONSaysWhichCommandsPrintData(t *testing.T) {
 		"env set":     true,
 		"bindings ls": true,
 
-		"preview protection password rotate": true,
-		"preview protection password set":    false,
-		"preview protection bypass revoke":   false,
-		"preview protection sync":            false,
+		"protection password rotate": true,
+		"protection password set":    false,
+		"protection bypass revoke":   false,
+		"protection sync":            false,
 	} {
 		if got := described[path].GetPrintsData(); got != want {
 			t.Errorf("%s prints_data = %v, want %v", path, got, want)

@@ -748,6 +748,26 @@
       "title": "Dns Record",
       "type": "object"
     },
+    "common.progress.v1.EdgePublication.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "default": "",
+          "type": "string"
+        },
+        "published": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Edge Publication",
+      "type": "object"
+    },
     "common.progress.v1.Ended.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -1072,7 +1092,7 @@
           "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.json"
         },
         "protection": {
-          "$ref": "#/$defs/common.progress.v1.PreviewProtectionPublished.jsonschema.json"
+          "$ref": "#/$defs/common.progress.v1.ProtectionPublished.jsonschema.json"
         },
         "refused": {
           "default": false,
@@ -1122,40 +1142,6 @@
       "title": "Output",
       "type": "object"
     },
-    "common.progress.v1.PreviewEdgePublication.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "properties": {
-        "error": {
-          "default": "",
-          "type": "string"
-        },
-        "kind": {
-          "default": "",
-          "type": "string"
-        },
-        "published": {
-          "default": false,
-          "type": "boolean"
-        }
-      },
-      "title": "Preview Edge Publication",
-      "type": "object"
-    },
-    "common.progress.v1.PreviewProtectionPublished.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "properties": {
-        "edges": {
-          "items": {
-            "$ref": "#/$defs/common.progress.v1.PreviewEdgePublication.jsonschema.json"
-          },
-          "type": "array"
-        }
-      },
-      "title": "Preview Protection Published",
-      "type": "object"
-    },
     "common.progress.v1.Propagation.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -1192,6 +1178,20 @@
         }
       },
       "title": "Propagation",
+      "type": "object"
+    },
+    "common.progress.v1.ProtectionPublished.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.EdgePublication.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Protection Published",
       "type": "object"
     },
     "common.progress.v1.SpanAttribute.jsonschema.json": {

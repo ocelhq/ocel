@@ -14,15 +14,15 @@ import (
 
 const (
 	genericArtifacts = "GENERIC"
-	pluginPackage    = "previewgate"
-	pluginFile       = "previewgate.wasm"
+	pluginPackage    = "gate"
+	pluginFile       = "gate.wasm"
 	pluginVersionLen = 12
 	pluginRepository = "-gate"
 )
 
 type pluginImages struct{ p *Provider }
 
-func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error) {
+func (i pluginImages) Ensure(ctx context.Context, tier environment.Tier, plugin []byte) (string, error) {
 	c, err := i.p.openClients(ctx)
 	if err != nil {
 		return "", err
@@ -31,7 +31,7 @@ func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error)
 	if err != nil {
 		return "", err
 	}
-	repository := c.Repository(environment.TierPreview) + pluginRepository
+	repository := c.Repository(tier) + pluginRepository
 	path := repositoryPath(c, repository)
 	if err := ensurePluginRepository(ctx, c, service, repository, path); err != nil {
 		return "", err
@@ -40,7 +40,7 @@ func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error)
 	version := hex.EncodeToString(digest[:])[:pluginVersionLen]
 	_, err = attempted(ctx, service.Projects.Locations.Repositories.Packages.Versions.Get(path+"/packages/"+pluginPackage+"/versions/"+version).Context(ctx).Do)
 	if err != nil && !absent(err) {
-		return "", fmt.Errorf("look for version %s of the preview gate plugin in %s: %w", version, repository, err)
+		return "", fmt.Errorf("look for version %s of the gate plugin in %s: %w", version, repository, err)
 	}
 	if err != nil {
 		if _, err := attempted(ctx, service.Projects.Locations.Repositories.GenericArtifacts.Upload(path, &artifactregistry.UploadGenericArtifactRequest{
@@ -48,13 +48,13 @@ func (i pluginImages) Ensure(ctx context.Context, plugin []byte) (string, error)
 			PackageId: pluginPackage,
 			VersionId: version,
 		}).Media(bytes.NewReader(plugin)).Context(ctx).Do); err != nil {
-			return "", fmt.Errorf("upload the preview gate plugin to %s: %w", repository, err)
+			return "", fmt.Errorf("upload the gate plugin to %s: %w", repository, err)
 		}
 	}
 	return path + "/genericArtifacts/" + pluginPackage + ":" + version, nil
 }
 
-func (i pluginImages) Delete(ctx context.Context) error {
+func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 	c, err := i.p.openClients(ctx)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func (i pluginImages) Delete(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	repository := c.Repository(environment.TierPreview) + pluginRepository
+	repository := c.Repository(tier) + pluginRepository
 	deleting, err := attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(c, repository)).Context(ctx).Do)
 	if absent(err) {
 		return nil
@@ -84,7 +84,7 @@ func ensurePluginRepository(ctx context.Context, c *clients, service *artifactre
 	}
 	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(c), &artifactregistry.Repository{
 		Format:      genericArtifacts,
-		Description: "the plugin that runs the preview gate on the load balancer",
+		Description: "the plugin that runs the gate on the load balancer",
 	}).RepositoryId(name).Context(ctx).Do)
 	if taken(err) {
 		return nil

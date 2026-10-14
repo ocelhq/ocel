@@ -10,6 +10,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -26,6 +27,22 @@ const (
 	probeReminderEveryAttempts = 15
 )
 
+func (e *Edge) publishGate(ctx context.Context, publication edge.GatePublication) error {
+	if publication.Say != nil {
+		publication.Say("Rolling the " + string(publication.State.Tier) + " gate of " + publication.State.Slug + " out to the load balancer's gate plugin, which takes a few minutes")
+	}
+	opened, err := e.Open(publication.State)
+	if err != nil {
+		return err
+	}
+	return opened.(*stack).syncGate(ctx, edge.StackSpec{
+		Slug: publication.State.Slug,
+		Tier: publication.State.Tier,
+		Gate: publication.Gate,
+		Warn: publication.Say,
+	})
+}
+
 type gateProof struct {
 	Hosts   []string
 	Address string
@@ -36,36 +53,36 @@ type writtenPublication struct {
 	publication gatePublication
 }
 
-func (e *Edge) gateTarget() Target {
-	return Target{Tier: environment.TierPreview, Gate: true}
+func (e *Edge) gateTarget(tier environment.Tier) Target {
+	return Target{Tier: tier, Gate: true}
 }
 
-func (e *Edge) publishGates(ctx context.Context, proof gateProof, log progress.Log) error {
-	image, err := e.deps.Images.Ensure(ctx, e.deps.GatePlugin)
+func (e *Edge) publishGates(ctx context.Context, tier environment.Tier, proof gateProof, log progress.Log) error {
+	image, err := e.deps.Images.Ensure(ctx, tier, e.deps.GatePlugin)
 	if err != nil {
 		return err
 	}
-	config, err := e.encodeGateConfig(ctx)
+	config, err := e.encodeGateConfig(ctx, tier)
 	if err != nil {
 		return err
 	}
-	if err := e.refuseOversizedConfig(config); err != nil {
+	if err := e.refuseOversizedConfig(tier, config); err != nil {
 		return err
 	}
-	recorded, found, err := e.readGatePublication(ctx)
+	recorded, found, err := e.readGatePublication(ctx, tier)
 	if err != nil {
 		return err
 	}
 	if !found || !recorded.Confirmed || recorded.Main != newGateVersion(image, config) {
-		if err := e.raiseGate(ctx, image, log); err != nil {
+		if err := e.raiseGate(ctx, tier, image, log); err != nil {
 			return err
 		}
 	}
 	return e.proveGated(ctx, proof, log)
 }
 
-func (e *Edge) runsRecordedGate(ctx context.Context, slug string, record gateRecord, gated bool) (bool, error) {
-	publication, published, err := e.readGatePublication(ctx)
+func (e *Edge) runsRecordedGate(ctx context.Context, tier environment.Tier, slug string, record gateRecord, gated bool) (bool, error) {
+	publication, published, err := e.readGatePublication(ctx, tier)
 	if err != nil || !published {
 		return !gated, err
 	}
@@ -76,39 +93,46 @@ func (e *Edge) runsRecordedGate(ctx context.Context, slug string, record gateRec
 	if err != nil {
 		return false, nil
 	}
-	gate, hosts, running := config.FindProject(slug)
+	held, hosts, running := config.FindProject(slug)
 	if !gated || !running {
 		return !gated && !running, nil
 	}
-	return sameGateRecord(gateRecord{Hosts: hosts, Gate: gate}, record), nil
+	return sameGateRecord(gateRecord{Hosts: hosts, Gate: held}, record), nil
 }
 
-func (e *Edge) refuseOversizedConfig(config string) error {
+func (e *Edge) refuseOversizedConfig(tier environment.Tier, config string) error {
 	if total := len(e.deps.GatePlugin) + len(config); total > gateplugin.PackageLimitBytes {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the keys that gate previews take %d bytes, and Google allows a load balancer plugin and its config %d together, of which the plugin takes %d. "+
-				"Revoke bypass secrets with `ocel preview protection bypass revoke`, or destroy the previews of projects that no longer need a gate",
-			len(config), gateplugin.PackageLimitBytes, len(e.deps.GatePlugin))
+			"the keys that gate the %s tier take %d bytes, and Google allows a load balancer plugin and its config %d together, of which the plugin takes %d. "+
+				"Revoke bypass secrets with `%s`, or turn protection.%s off for projects that no longer need a gate",
+			tier, len(config), gateplugin.PackageLimitBytes, len(e.deps.GatePlugin), revokeBypassCommand(tier), tier)
 	}
 	return nil
 }
 
-func (e *Edge) raiseGate(ctx context.Context, image string, log progress.Log) error {
+func revokeBypassCommand(tier environment.Tier) string {
+	if tier == environment.TierPreview {
+		return "ocel protection bypass revoke --preview"
+	}
+	return "ocel protection bypass revoke"
+}
+
+func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image string, log progress.Log) error {
 	var written writtenPublication
 	program := func(ctx *pulumi.Context, project string) error {
-		publication, entry, err := e.recordGatePublication(ctx.Context(), image, !ctx.DryRun())
+		publication, entry, err := e.recordGatePublication(ctx.Context(), tier, image, !ctx.DryRun())
 		if err != nil {
 			return err
 		}
 		written = writtenPublication{entry: entry, publication: publication}
 		return gateProgram(gateSpec{
-			Names:  loadBalancerNames(environment.TierPreview, false),
+			Names:  loadBalancerNames(tier, false),
 			Main:   publication.Main,
 			Before: publication.Before,
 		})(ctx, project)
 	}
 	for attempt := 1; ; attempt++ {
-		_, err := e.deps.Stacks.Up(ctx, e.gateTarget(), program, log)
+		_, err := e.deps.Stacks.Up(ctx, e.gateTarget(tier), program, log)
 		if err == nil {
 			break
 		}
@@ -117,19 +141,19 @@ func (e *Edge) raiseGate(ctx context.Context, image string, log progress.Log) er
 			return err
 		}
 	}
-	return e.confirmGatePublication(ctx, written)
+	return e.confirmGatePublication(ctx, tier, written)
 }
 
-func (e *Edge) recordGatePublication(ctx context.Context, image string, write bool) (gatePublication, keyvalue.Entry, error) {
+func (e *Edge) recordGatePublication(ctx context.Context, tier environment.Tier, image string, write bool) (gatePublication, keyvalue.Entry, error) {
 	for range maxGateRecordReads {
-		config, err := e.encodeGateConfig(ctx)
+		config, err := e.encodeGateConfig(ctx, tier)
 		if err != nil {
 			return gatePublication{}, keyvalue.Entry{}, err
 		}
-		if err := e.refuseOversizedConfig(config); err != nil {
+		if err := e.refuseOversizedConfig(tier, config); err != nil {
 			return gatePublication{}, keyvalue.Entry{}, err
 		}
-		entry, recorded, found, err := e.readGatePublicationEntry(ctx)
+		entry, recorded, found, err := e.readGatePublicationEntry(ctx, tier)
 		if err != nil {
 			return gatePublication{}, keyvalue.Entry{}, err
 		}
@@ -140,13 +164,13 @@ func (e *Edge) recordGatePublication(ctx context.Context, image string, write bo
 		if !write {
 			return publication, entry, nil
 		}
-		entry, err = e.writeGatePublication(ctx, entry, publication)
+		entry, err = e.writeGatePublication(ctx, tier, entry, publication)
 		if !errors.Is(err, keyvalue.ErrStale) {
 			return publication, entry, err
 		}
 	}
 	return gatePublication{}, keyvalue.Entry{}, refusal.Refuse(refusal.CodeBusy,
-		"what the %s edge's gate plugin runs was rewritten between every read of it and the write that followed: run this again once other deploys have finished", Kind)
+		"what the gate plugin of the %s edge's %s load balancer runs was rewritten between every read of it and the write that followed: run this again once other deploys have finished", Kind, tier)
 }
 
 func listRunnableVersions(recorded gatePublication, next gateVersion) []gateVersion {
@@ -166,12 +190,12 @@ func listRunnableVersions(recorded gatePublication, next gateVersion) []gateVers
 	return runnable
 }
 
-func (e *Edge) confirmGatePublication(ctx context.Context, written writtenPublication) error {
+func (e *Edge) confirmGatePublication(ctx context.Context, tier environment.Tier, written writtenPublication) error {
 	if len(written.entry.Value) == 0 {
 		return nil
 	}
 	written.publication.Confirmed = true
-	_, err := e.writeGatePublication(ctx, written.entry, written.publication)
+	_, err := e.writeGatePublication(ctx, tier, written.entry, written.publication)
 	if errors.Is(err, keyvalue.ErrStale) {
 		return nil
 	}
@@ -186,7 +210,7 @@ func (e *Edge) proveGated(ctx context.Context, proof gateProof, log progress.Log
 	for _, host := range proof.Hosts {
 		pending[host] = 0
 	}
-	log.Say("Waiting for the load balancer to enforce the preview gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", ") +
+	log.Say("Waiting for the load balancer to enforce the gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", ") +
 		": Google takes a few minutes to carry a new gate to every location that serves requests")
 	var last error
 	for attempt := 1; ; attempt++ {
@@ -210,7 +234,7 @@ func (e *Edge) proveGated(ctx context.Context, proof gateProof, log progress.Log
 			return refuseUnenforced(slices.Sorted(maps.Keys(pending)), last)
 		}
 		if attempt%probeReminderEveryAttempts == 0 {
-			log.Say("Still waiting for the preview gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", "))
+			log.Say("Still waiting for the gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", "))
 		}
 		if !e.deps.WaitBeforeRetry(ctx, attempt) {
 			return ctx.Err()
@@ -223,7 +247,7 @@ func refuseUnenforced(hosts []string, last error) error {
 	if last != nil {
 		reason = "could not be reached: " + last.Error()
 	}
-	return fmt.Errorf("the preview gate was published but %s %s after %d requests over several minutes, "+
-		"and a host the gate does not reach would serve its preview to anyone, so it is left unrouted: run the deploy again once the load balancer has taken the gate",
+	return fmt.Errorf("the gate was published but %s %s after %d requests over several minutes, "+
+		"and a host the gate does not reach would serve its protected project to anyone, so it is left unrouted: run the deploy again once the load balancer has taken the gate",
 		strings.Join(hosts, ", "), reason, maxGateProbes)
 }

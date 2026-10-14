@@ -1004,17 +1004,17 @@ func (x *AppResult) GetRelease() string {
 }
 
 type OperationResult struct {
-	state             protoimpl.MessageState      `protogen:"open.v1"`
-	Success           bool                        `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error             string                      `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	PromotionId       string                      `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	Propagation       *Propagation                `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
-	UrlNotes          []string                    `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	Apps              []*AppResult                `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
-	Refused           bool                        `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
-	Connector         *ConnectorInstalled         `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
-	PromotedAtSeconds int64                       `protobuf:"varint,12,opt,name=promoted_at_seconds,json=promotedAtSeconds,proto3" json:"promoted_at_seconds,omitempty"`
-	Protection        *PreviewProtectionPublished `protobuf:"bytes,13,opt,name=protection,proto3" json:"protection,omitempty"`
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Success           bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error             string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	PromotionId       string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Propagation       *Propagation           `protobuf:"bytes,7,opt,name=propagation,proto3" json:"propagation,omitempty"`
+	UrlNotes          []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
+	Apps              []*AppResult           `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
+	Refused           bool                   `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
+	Connector         *ConnectorInstalled    `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
+	PromotedAtSeconds int64                  `protobuf:"varint,12,opt,name=promoted_at_seconds,json=promotedAtSeconds,proto3" json:"promoted_at_seconds,omitempty"`
+	Protection        *ProtectionPublished   `protobuf:"bytes,13,opt,name=protection,proto3" json:"protection,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1112,34 +1112,34 @@ func (x *OperationResult) GetPromotedAtSeconds() int64 {
 	return 0
 }
 
-func (x *OperationResult) GetProtection() *PreviewProtectionPublished {
+func (x *OperationResult) GetProtection() *ProtectionPublished {
 	if x != nil {
 		return x.Protection
 	}
 	return nil
 }
 
-type PreviewProtectionPublished struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	Edges         []*PreviewEdgePublication `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
+type ProtectionPublished struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Edges         []*EdgePublication     `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewProtectionPublished) Reset() {
-	*x = PreviewProtectionPublished{}
+func (x *ProtectionPublished) Reset() {
+	*x = ProtectionPublished{}
 	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewProtectionPublished) String() string {
+func (x *ProtectionPublished) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewProtectionPublished) ProtoMessage() {}
+func (*ProtectionPublished) ProtoMessage() {}
 
-func (x *PreviewProtectionPublished) ProtoReflect() protoreflect.Message {
+func (x *ProtectionPublished) ProtoReflect() protoreflect.Message {
 	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1151,19 +1151,19 @@ func (x *PreviewProtectionPublished) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewProtectionPublished.ProtoReflect.Descriptor instead.
-func (*PreviewProtectionPublished) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProtectionPublished.ProtoReflect.Descriptor instead.
+func (*ProtectionPublished) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *PreviewProtectionPublished) GetEdges() []*PreviewEdgePublication {
+func (x *ProtectionPublished) GetEdges() []*EdgePublication {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-type PreviewEdgePublication struct {
+type EdgePublication struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Published     bool                   `protobuf:"varint,2,opt,name=published,proto3" json:"published,omitempty"`
@@ -1172,20 +1172,20 @@ type PreviewEdgePublication struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PreviewEdgePublication) Reset() {
-	*x = PreviewEdgePublication{}
+func (x *EdgePublication) Reset() {
+	*x = EdgePublication{}
 	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PreviewEdgePublication) String() string {
+func (x *EdgePublication) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PreviewEdgePublication) ProtoMessage() {}
+func (*EdgePublication) ProtoMessage() {}
 
-func (x *PreviewEdgePublication) ProtoReflect() protoreflect.Message {
+func (x *EdgePublication) ProtoReflect() protoreflect.Message {
 	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1197,26 +1197,26 @@ func (x *PreviewEdgePublication) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PreviewEdgePublication.ProtoReflect.Descriptor instead.
-func (*PreviewEdgePublication) Descriptor() ([]byte, []int) {
+// Deprecated: Use EdgePublication.ProtoReflect.Descriptor instead.
+func (*EdgePublication) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *PreviewEdgePublication) GetKind() string {
+func (x *EdgePublication) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *PreviewEdgePublication) GetPublished() bool {
+func (x *EdgePublication) GetPublished() bool {
 	if x != nil {
 		return x.Published
 	}
 	return false
 }
 
-func (x *PreviewEdgePublication) GetError() string {
+func (x *EdgePublication) GetError() string {
 	if x != nil {
 		return x.Error
 	}
@@ -1387,7 +1387,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04urls\x18\x04 \x03(\tR\x04urls\x12%\n" +
 	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\x12%\n" +
 	"\x0estorage_prefix\x18\x06 \x01(\tR\rstoragePrefix\x12\x18\n" +
-	"\arelease\x18\a \x01(\tR\arelease\"\xd7\x03\n" +
+	"\arelease\x18\a \x01(\tR\arelease\"\xd0\x03\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
@@ -1398,13 +1398,13 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\arefused\x18\n" +
 	" \x01(\bR\arefused\x12D\n" +
 	"\tconnector\x18\v \x01(\v2&.common.progress.v1.ConnectorInstalledR\tconnector\x12.\n" +
-	"\x13promoted_at_seconds\x18\f \x01(\x03R\x11promotedAtSeconds\x12N\n" +
+	"\x13promoted_at_seconds\x18\f \x01(\x03R\x11promotedAtSeconds\x12G\n" +
 	"\n" +
-	"protection\x18\r \x01(\v2..common.progress.v1.PreviewProtectionPublishedR\n" +
-	"protection\"^\n" +
-	"\x1aPreviewProtectionPublished\x12@\n" +
-	"\x05edges\x18\x01 \x03(\v2*.common.progress.v1.PreviewEdgePublicationR\x05edges\"`\n" +
-	"\x16PreviewEdgePublication\x12\x12\n" +
+	"protection\x18\r \x01(\v2'.common.progress.v1.ProtectionPublishedR\n" +
+	"protection\"P\n" +
+	"\x13ProtectionPublished\x129\n" +
+	"\x05edges\x18\x01 \x03(\v2#.common.progress.v1.EdgePublicationR\x05edges\"Y\n" +
+	"\x0fEdgePublication\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1c\n" +
 	"\tpublished\x18\x02 \x01(\bR\tpublished\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\"_\n" +
@@ -1484,27 +1484,27 @@ func file_common_progress_v1_progress_proto_rawDescGZIP() []byte {
 var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_common_progress_v1_progress_proto_goTypes = []any{
-	(Stream)(0),                        // 0: common.progress.v1.Stream
-	(Level)(0),                         // 1: common.progress.v1.Level
-	(Phase)(0),                         // 2: common.progress.v1.Phase
-	(SpanStatus)(0),                    // 3: common.progress.v1.SpanStatus
-	(AttributeKey)(0),                  // 4: common.progress.v1.AttributeKey
-	(AppOutcome)(0),                    // 5: common.progress.v1.AppOutcome
-	(*OperationEvent)(nil),             // 6: common.progress.v1.OperationEvent
-	(*Started)(nil),                    // 7: common.progress.v1.Started
-	(*Ended)(nil),                      // 8: common.progress.v1.Ended
-	(*Output)(nil),                     // 9: common.progress.v1.Output
-	(*SpanAttribute)(nil),              // 10: common.progress.v1.SpanAttribute
-	(*DnsRecord)(nil),                  // 11: common.progress.v1.DnsRecord
-	(*DnsManualRecordsEvent)(nil),      // 12: common.progress.v1.DnsManualRecordsEvent
-	(*AppResult)(nil),                  // 13: common.progress.v1.AppResult
-	(*OperationResult)(nil),            // 14: common.progress.v1.OperationResult
-	(*PreviewProtectionPublished)(nil), // 15: common.progress.v1.PreviewProtectionPublished
-	(*PreviewEdgePublication)(nil),     // 16: common.progress.v1.PreviewEdgePublication
-	(*ConnectorInstalled)(nil),         // 17: common.progress.v1.ConnectorInstalled
-	(*Propagation)(nil),                // 18: common.progress.v1.Propagation
-	(*timestamppb.Timestamp)(nil),      // 19: google.protobuf.Timestamp
-	(*v1.ChangePlan)(nil),              // 20: common.plan.v1.ChangePlan
+	(Stream)(0),                   // 0: common.progress.v1.Stream
+	(Level)(0),                    // 1: common.progress.v1.Level
+	(Phase)(0),                    // 2: common.progress.v1.Phase
+	(SpanStatus)(0),               // 3: common.progress.v1.SpanStatus
+	(AttributeKey)(0),             // 4: common.progress.v1.AttributeKey
+	(AppOutcome)(0),               // 5: common.progress.v1.AppOutcome
+	(*OperationEvent)(nil),        // 6: common.progress.v1.OperationEvent
+	(*Started)(nil),               // 7: common.progress.v1.Started
+	(*Ended)(nil),                 // 8: common.progress.v1.Ended
+	(*Output)(nil),                // 9: common.progress.v1.Output
+	(*SpanAttribute)(nil),         // 10: common.progress.v1.SpanAttribute
+	(*DnsRecord)(nil),             // 11: common.progress.v1.DnsRecord
+	(*DnsManualRecordsEvent)(nil), // 12: common.progress.v1.DnsManualRecordsEvent
+	(*AppResult)(nil),             // 13: common.progress.v1.AppResult
+	(*OperationResult)(nil),       // 14: common.progress.v1.OperationResult
+	(*ProtectionPublished)(nil),   // 15: common.progress.v1.ProtectionPublished
+	(*EdgePublication)(nil),       // 16: common.progress.v1.EdgePublication
+	(*ConnectorInstalled)(nil),    // 17: common.progress.v1.ConnectorInstalled
+	(*Propagation)(nil),           // 18: common.progress.v1.Propagation
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(*v1.ChangePlan)(nil),         // 20: common.plan.v1.ChangePlan
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	19, // 0: common.progress.v1.OperationEvent.time:type_name -> google.protobuf.Timestamp
@@ -1525,8 +1525,8 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	18, // 15: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
 	13, // 16: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
 	17, // 17: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
-	15, // 18: common.progress.v1.OperationResult.protection:type_name -> common.progress.v1.PreviewProtectionPublished
-	16, // 19: common.progress.v1.PreviewProtectionPublished.edges:type_name -> common.progress.v1.PreviewEdgePublication
+	15, // 18: common.progress.v1.OperationResult.protection:type_name -> common.progress.v1.ProtectionPublished
+	16, // 19: common.progress.v1.ProtectionPublished.edges:type_name -> common.progress.v1.EdgePublication
 	20, // [20:20] is the sub-list for method output_type
 	20, // [20:20] is the sub-list for method input_type
 	20, // [20:20] is the sub-list for extension type_name

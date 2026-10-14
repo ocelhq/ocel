@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -115,28 +115,28 @@ func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
 		state.Shields = DropShields(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
 		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Owner == owner })
-		state.PreviewGates = dropPreviewGates(state.PreviewGates, owner)
+		state.Gates = dropGates(state.Gates, owner)
 		return state, nil
 	})
 }
 
-func (h *Host) PutPreviewGate(ctx context.Context, owner string, previewGate *previewgate.Gate) error {
-	if previewGate != nil {
-		if err := validTable(RoutingTable{PreviewGates: []PreviewGate{{Owner: owner, PreviewGate: *previewGate}}}); err != nil {
+func (h *Host) PutGate(ctx context.Context, owner string, held *gate.Gate) error {
+	if held != nil {
+		if err := validTable(RoutingTable{Gates: []OwnedGate{{Owner: owner, Gate: *held}}}); err != nil {
 			return err
 		}
 	}
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		state.PreviewGates = dropPreviewGates(state.PreviewGates, owner)
-		if previewGate != nil {
-			state.PreviewGates = append(state.PreviewGates, PreviewGate{Owner: owner, PreviewGate: *previewGate})
+		state.Gates = dropGates(state.Gates, owner)
+		if held != nil {
+			state.Gates = append(state.Gates, OwnedGate{Owner: owner, Gate: *held})
 		}
 		return state, nil
 	})
 }
 
-func dropPreviewGates(previewGates []PreviewGate, owner string) []PreviewGate {
-	return slices.DeleteFunc(slices.Clone(previewGates), func(held PreviewGate) bool { return held.Owner == owner })
+func dropGates(gates []OwnedGate, owner string) []OwnedGate {
+	return slices.DeleteFunc(slices.Clone(gates), func(held OwnedGate) bool { return held.Owner == owner })
 }
 
 func (h *Host) PutShield(ctx context.Context, shield Shield) (Shield, error) {

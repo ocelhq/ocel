@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
 )
 
@@ -91,9 +91,9 @@ type Options struct {
 	HealthPath string
 	Ready      func() bool
 
-	PreviewGate *mountedgate.Source
-	ProbeToken  string
-	Now         func() time.Time
+	Gate       *mountedgate.Source
+	ProbeToken string
+	Now        func() time.Time
 }
 
 func Handler(opts Options) http.Handler {
@@ -130,27 +130,27 @@ func Handler(opts Options) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		if opts.PreviewGate != nil && !admitPreview(w, r, opts, proxy) {
+		if opts.Gate != nil && !admitGate(w, r, opts, proxy) {
 			return
 		}
 		proxy.ServeHTTP(w, r)
 	})
 }
 
-func admitPreview(w http.ResponseWriter, r *http.Request, opts Options, proxy http.Handler) bool {
-	gate, err := opts.PreviewGate.Current()
+func admitGate(w http.ResponseWriter, r *http.Request, opts Options, proxy http.Handler) bool {
+	held, err := opts.Gate.Current()
 	if err != nil {
 		answerUnavailable(w, r, opts, proxy)
 		return false
 	}
-	if gate == nil {
+	if held == nil {
 		return true
 	}
-	verdict := gate.Check(previewgate.Request{
+	verdict := held.Check(gate.Request{
 		Method: r.Method,
 		Host:   r.Host,
 		Target: r.URL.RequestURI(),
-		Header: previewgate.Header(r.Header),
+		Header: gate.Header(r.Header),
 	}, now(opts))
 	switch {
 	case verdict.Response == nil:
@@ -179,8 +179,8 @@ func answerUnavailable(w http.ResponseWriter, r *http.Request, opts Options, pro
 		answerStatusAlone(w, r, proxy)
 		return
 	}
-	w.Header().Set("Cache-Control", previewgate.CacheControl)
-	w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
+	w.Header().Set("Cache-Control", gate.CacheControl)
+	w.Header().Set("X-Robots-Tag", gate.RobotsTag)
 	http.Error(w, "Service temporarily unavailable.", http.StatusServiceUnavailable)
 }
 
@@ -202,8 +202,8 @@ func (s *statusAlone) WriteHeader(status int) {
 func answerStatusAlone(w http.ResponseWriter, r *http.Request, proxy http.Handler) {
 	answered := &statusAlone{header: http.Header{}}
 	proxy.ServeHTTP(answered, r)
-	w.Header().Set("Cache-Control", previewgate.CacheControl)
-	w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
+	w.Header().Set("Cache-Control", gate.CacheControl)
+	w.Header().Set("X-Robots-Tag", gate.RobotsTag)
 	w.WriteHeader(cmp.Or(answered.status, http.StatusOK))
 }
 

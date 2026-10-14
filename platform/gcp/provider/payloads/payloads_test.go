@@ -105,28 +105,28 @@ func TestTheRealtimeGatewayIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns
 
 const minimumConfigRoomBytes = 1 << 20
 
-func TestThePreviewGatePluginIsAWasmModuleWithRoomLeftForItsConfig(t *testing.T) {
-	body := PreviewGatePlugin()
+func TestTheGatePluginIsAWasmModuleWithRoomLeftForItsConfig(t *testing.T) {
+	body := GatePlugin()
 	if !bytes.HasPrefix(body, []byte("\x00asm")) {
-		t.Fatal("PreviewGatePlugin() is no WebAssembly module")
+		t.Fatal("GatePlugin() is no WebAssembly module")
 	}
 	if room := gateplugin.PackageLimitBytes - len(body); room < minimumConfigRoomBytes {
-		t.Errorf("PreviewGatePlugin() leaves %d bytes of the %d a plugin and its config may take together, want at least %d for the gates it holds",
+		t.Errorf("GatePlugin() leaves %d bytes of the %d a plugin and its config may take together, want at least %d for the gates it holds",
 			room, gateplugin.PackageLimitBytes, minimumConfigRoomBytes)
 	}
 }
 
-func TestThePreviewGatePluginIsAReactorExportingTheProxyWasmABI(t *testing.T) {
-	exports, err := readWasmExports(PreviewGatePlugin())
+func TestTheGatePluginIsAReactorExportingTheProxyWasmABI(t *testing.T) {
+	exports, err := readWasmExports(GatePlugin())
 	if err != nil {
-		t.Fatalf("PreviewGatePlugin() exports cannot be read: %v", err)
+		t.Fatalf("GatePlugin() exports cannot be read: %v", err)
 	}
 	if exports["_start"] {
-		t.Error("PreviewGatePlugin() exports _start: a command module runs main and exits, and the load balancer refuses to load it")
+		t.Error("GatePlugin() exports _start: a command module runs main and exits, and the load balancer refuses to load it")
 	}
 	for _, name := range []string{"_initialize", "proxy_abi_version_0_2_0", "proxy_on_context_create", "proxy_on_vm_start", "proxy_on_configure", "proxy_on_request_headers"} {
 		if !exports[name] {
-			t.Errorf("PreviewGatePlugin() does not export %s, which the load balancer calls to run a proxy-wasm plugin", name)
+			t.Errorf("GatePlugin() does not export %s, which the load balancer calls to run a proxy-wasm plugin", name)
 		}
 	}
 }

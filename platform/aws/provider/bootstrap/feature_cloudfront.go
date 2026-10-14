@@ -21,6 +21,7 @@ const (
 	OutputEdgeCachePolicy    = "EdgeCachePolicyId"
 	OutputEdgeHeadersPolicy  = "EdgeHeadersPolicyId"
 	OutputEdgeAssetAccess    = "EdgeAssetAccessId"
+	OutputEdgeGateDigest     = "EdgeGateDigest"
 
 	EdgeCacheTagHeader = "cache-tag"
 
@@ -86,14 +87,7 @@ func resolverResource(ns Namespace, tier environment.Tier) string {
         KeyValueStoreAssociations:
           - KeyValueStoreARN: !GetAtt EdgeRoutes.Arn
       FunctionCode: |
-%s`, ns.EdgeResolverName(tier), indent(string(resolverCodeFor(tier)), 8))
-}
-
-func resolverCodeFor(tier environment.Tier) []byte {
-	if tier == environment.TierPreview {
-		return resolver.PreviewCode()
-	}
-	return resolver.Code()
+%s`, ns.EdgeResolverName(tier), indent(string(resolver.Code()), 8))
 }
 
 func emptyBodyResource(ns Namespace, tier environment.Tier) string {
@@ -208,7 +202,11 @@ func cloudFrontEdgeOutputs() string {
   %s:
     Description: "Origin access control every distribution this account fronts signs its asset-bucket reads with."
     Value: !Ref EdgeAssetAccess
-`, OutputEdgeRoutesStoreARN, OutputEdgeResolverARN, OutputEdgeEmptyBodyARN, OutputEdgeCachePolicy, OutputEdgeHeadersPolicy, OutputEdgeAssetAccess)
+  %s:
+    Description: "Digest of the gate the resolver function runs. A protected deploy is refused unless it is the gate the deploying CLI publishes."
+    Value: %q
+`, OutputEdgeRoutesStoreARN, OutputEdgeResolverARN, OutputEdgeEmptyBodyARN, OutputEdgeCachePolicy, OutputEdgeHeadersPolicy, OutputEdgeAssetAccess,
+		OutputEdgeGateDigest, resolver.GateDigest())
 }
 
 func noPayloads(context.Context, ObjectStore, string) (stackPayloads, error) {

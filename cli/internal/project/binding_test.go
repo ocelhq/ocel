@@ -234,21 +234,39 @@ func TestAKVStoreBindsToARecordPublishedElsewhere(t *testing.T) {
 	}
 }
 
-func TestPreviewProtectionIsOffUntilTheConfigTurnsItOn(t *testing.T) {
-	for config, want := range map[string]bool{
-		`{"slug":"shop"}`:                                 false,
-		`{"slug":"shop","previews":{}}`:                   false,
-		`{"slug":"shop","previews":{"protection":false}}`: false,
-		`{"slug":"shop","previews":{"protection":true}}`:  true,
+func TestProtectionIsOffForEachTierUntilTheConfigTurnsItOn(t *testing.T) {
+	for config, want := range map[string]Protection{
+		`{"slug":"shop"}`:                                                 {},
+		`{"slug":"shop","protection":{}}`:                                 {},
+		`{"slug":"shop","protection":{"production":false}}`:               {},
+		`{"slug":"shop","protection":{"production":true}}`:                {Production: true},
+		`{"slug":"shop","protection":{"preview":true}}`:                   {Preview: true},
+		`{"slug":"shop","protection":{"production":true,"preview":true}}`: {Production: true, Preview: true},
 	} {
-		if got := mustLoadJSON(t, config).ProtectPreviews; got != want {
-			t.Errorf("%s: ProtectPreviews = %t, want %t", config, got, want)
+		if got := mustLoadJSON(t, config).Protection; got != want {
+			t.Errorf("%s: Protection = %+v, want %+v", config, got, want)
 		}
 	}
 }
 
-func TestPreviewProtectionIsRefusedWhenItIsNotABoolean(t *testing.T) {
-	if _, err := loadJSON(t, `{"slug":"shop","previews":{"protection":"yes"}}`); err == nil {
-		t.Error("loading previews.protection: \"yes\" = nil error, want it refused: it is a boolean")
+func TestProtectionAnswersForTheTierItIsAskedAbout(t *testing.T) {
+	protection := Protection{Production: true}
+
+	if !protection.Protects(environmentv1.Tier_TIER_PRODUCTION) || protection.Protects(environmentv1.Tier_TIER_PREVIEW) || protection.Protects(environmentv1.Tier_TIER_UNSPECIFIED) {
+		t.Errorf("%+v protects production %t, preview %t, want production alone", protection, protection.Protects(environmentv1.Tier_TIER_PRODUCTION), protection.Protects(environmentv1.Tier_TIER_PREVIEW))
+	}
+}
+
+func TestProtectionIsRefusedWhenATierIsNotABoolean(t *testing.T) {
+	for _, config := range []string{
+		`{"slug":"shop","protection":{"production":"yes"}}`,
+		`{"slug":"shop","protection":{"preview":"yes"}}`,
+		`{"slug":"shop","protection":true}`,
+		`{"slug":"shop","protection":{"staging":true}}`,
+		`{"slug":"shop","previews":{"protection":true}}`,
+	} {
+		if _, err := loadJSON(t, config); err == nil {
+			t.Errorf("loading %s = nil error, want it refused", config)
+		}
 	}
 }

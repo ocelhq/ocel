@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 const (
-	configFormat = "ocel-preview-gate 1"
+	configFormat = "ocel-gate 1"
 	hostLine     = "h"
 	gateLine     = "g"
 	emptyField   = "-"
@@ -20,17 +20,17 @@ const (
 
 type Config struct {
 	hosts map[string]string
-	gates map[string]previewgate.Gate
+	gates map[string]gate.Gate
 }
 
-func EncodeConfig(hosts map[string]string, gates map[string]previewgate.Gate) string {
+func EncodeConfig(hosts map[string]string, gates map[string]gate.Gate) string {
 	var text strings.Builder
 	text.WriteString(configFormat + "\n")
 	for _, slug := range slices.Sorted(maps.Keys(gates)) {
-		gate := gates[slug]
+		held := gates[slug]
 		text.WriteString(strings.Join([]string{
-			gateLine, escapeField(slug), escapeField(gate.Key), escapeField(gate.PasswordMAC),
-			escapeList(gate.BypassSecrets), escapeList(gate.AllowOptions),
+			gateLine, escapeField(slug), escapeField(held.Key), escapeField(held.PasswordMAC),
+			escapeList(held.BypassSecrets), escapeList(held.AllowOptions),
 		}, " ") + "\n")
 	}
 	for _, host := range slices.Sorted(maps.Keys(hosts)) {
@@ -44,7 +44,7 @@ func ParseConfig(text string) (Config, error) {
 	if lines[0] != configFormat {
 		return Config{}, errors.New("the plugin config does not start with " + configFormat)
 	}
-	config := Config{hosts: map[string]string{}, gates: map[string]previewgate.Gate{}}
+	config := Config{hosts: map[string]string{}, gates: map[string]gate.Gate{}}
 	for i, line := range lines[1:] {
 		if line == "" {
 			continue
@@ -53,11 +53,11 @@ func ParseConfig(text string) (Config, error) {
 		fields := strings.Split(line, " ")
 		switch {
 		case fields[0] == gateLine && len(fields) == 6:
-			gate, slug, err := parseGate(fields[1:])
+			held, slug, err := parseGate(fields[1:])
 			if err != nil {
 				return Config{}, refuseLine(number, err)
 			}
-			config.gates[slug] = gate
+			config.gates[slug] = held
 		case fields[0] == hostLine && len(fields) == 3:
 			host, err := unescapeField(fields[1], "host")
 			if err != nil {
@@ -86,21 +86,21 @@ func refuseLine(number int, err error) error {
 
 func (c Config) ListHosts() []string { return slices.Sorted(maps.Keys(c.hosts)) }
 
-func (c Config) FindProject(slug string) (previewgate.Gate, []string, bool) {
-	gate, gated := c.gates[slug]
+func (c Config) FindProject(slug string) (gate.Gate, []string, bool) {
+	held, gated := c.gates[slug]
 	var hosts []string
 	for _, host := range c.ListHosts() {
 		if c.hosts[host] == slug {
 			hosts = append(hosts, host)
 		}
 	}
-	return gate, hosts, gated
+	return held, hosts, gated
 }
 
-func (c Config) FindGate(host string) (previewgate.Gate, bool) {
+func (c Config) FindGate(host string) (gate.Gate, bool) {
 	slug, listed := c.hosts[normalizeHost(host)]
-	gate, gated := c.gates[slug]
-	return gate, listed && gated
+	held, gated := c.gates[slug]
+	return held, listed && gated
 }
 
 func normalizeHost(host string) string {
@@ -108,28 +108,28 @@ func normalizeHost(host string) string {
 	return strings.TrimSuffix(host, ".")
 }
 
-func parseGate(fields []string) (previewgate.Gate, string, error) {
+func parseGate(fields []string) (gate.Gate, string, error) {
 	slug, err := unescapeField(fields[0], "slug")
 	if err != nil {
-		return previewgate.Gate{}, "", err
+		return gate.Gate{}, "", err
 	}
 	key, err := unescapeField(fields[1], "key")
 	if err != nil {
-		return previewgate.Gate{}, "", err
+		return gate.Gate{}, "", err
 	}
 	mac, err := unescapeField(fields[2], "password MAC")
 	if err != nil {
-		return previewgate.Gate{}, "", err
+		return gate.Gate{}, "", err
 	}
 	bypass, err := unescapeList(fields[3], "bypass secrets")
 	if err != nil {
-		return previewgate.Gate{}, "", err
+		return gate.Gate{}, "", err
 	}
 	options, err := unescapeList(fields[4], "allowed OPTIONS prefixes")
 	if err != nil {
-		return previewgate.Gate{}, "", err
+		return gate.Gate{}, "", err
 	}
-	return previewgate.Gate{Key: key, PasswordMAC: mac, BypassSecrets: bypass, AllowOptions: options}, slug, nil
+	return gate.Gate{Key: key, PasswordMAC: mac, BypassSecrets: bypass, AllowOptions: options}, slug, nil
 }
 
 func escapeList(values []string) string {

@@ -1,0 +1,25 @@
+---
+title: "ocel protection sync"
+description: "Publish the recorded credentials to the edge again."
+---
+
+```bash
+ocel protection sync [flags]
+```
+
+Publish this project's recorded production credentials, or its preview ones with `--preview`, to its edge again.
+
+Every change is recorded first and then published to the edge that serves the tier. When an edge could not be reached the change stays recorded, `ocel protection` shows the edge as pending, and this publishes the record again. It is safe to run any time, and changes nothing the edge already holds.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints one result envelope on stdout, whose JSON Schema `ocel schema protection sync` prints.

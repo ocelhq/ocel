@@ -111,7 +111,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		RunsCode:              true,
 		CachesResponses:       true,
 		InvalidatesByCacheTag: true,
-		GatesPreviews:         true,
+		Gates:                 true,
 		Entry:                 workerModule(entryBundle),
 		ServesUnbound:         true,
 		ProxiesRecords:        true,
@@ -131,7 +131,7 @@ func (p *cloudflare) Hooks() edge.Hooks {
 		VerifyCredentials:             p.verifyCredentials,
 		CheckCodeEntitlement:          p.codeEntitlement,
 		DescribeCredentialPermissions: p.describeCredentialPermissions,
-		PublishPreviewGate:            p.publishPreviewGate,
+		PublishGate:                   p.publishGate,
 		ClientCertificates: &edge.ClientCertificateHooks{
 			Ensure:  p.ensureClientCertificates,
 			Present: p.presentClientCertificates,

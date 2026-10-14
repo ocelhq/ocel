@@ -115,7 +115,7 @@ func (p *Provider) Facts() provider.Facts {
 		StoresArtifacts: true,
 		WorkerCeilings:  slices.Clone(workerCeilings),
 
-		RunsPreviewGates: true,
+		RunsGates: true,
 	}
 }
 

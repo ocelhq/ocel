@@ -6,41 +6,41 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
-type PublishedPreviewGate struct {
-	Publish func(ctx context.Context, gate *previewgate.Gate) error
-	Read    func(ctx context.Context) (*previewgate.Gate, error)
+type PublishedGate struct {
+	Publish func(ctx context.Context, published *gate.Gate) error
+	Read    func(ctx context.Context) (*gate.Gate, error)
 }
 
-func RunPublishedPreviewGate(t *testing.T, published PublishedPreviewGate) {
+func RunPublishedGate(t *testing.T, published PublishedGate) {
 	t.Helper()
 
 	const (
-		host     = "shop-abc.preview.example.com"
+		host     = "shop.example.com"
 		password = "correct horse battery"
 	)
 	now := time.Unix(1700000000, 0)
-	gateWithKey := func(key string) previewgate.Gate {
-		return previewgate.Gate{Key: key, PasswordMAC: previewgate.HashPassword(key, password), BypassSecrets: []string{}, AllowOptions: []string{}}
+	gateWithKey := func(key string) gate.Gate {
+		return gate.Gate{Key: key, PasswordMAC: gate.HashPassword(key, password), BypassSecrets: []string{}, AllowOptions: []string{}}
 	}
-	publish := func(t *testing.T, gate *previewgate.Gate) {
+	publish := func(t *testing.T, toPublish *gate.Gate) {
 		t.Helper()
-		if err := published.Publish(t.Context(), gate); err != nil {
+		if err := published.Publish(t.Context(), toPublish); err != nil {
 			t.Fatalf("Publish = %v", err)
 		}
 	}
-	read := func(t *testing.T) *previewgate.Gate {
+	read := func(t *testing.T) *gate.Gate {
 		t.Helper()
-		gate, err := published.Read(t.Context())
+		held, err := published.Read(t.Context())
 		if err != nil {
 			t.Fatalf("Read = %v", err)
 		}
-		return gate
+		return held
 	}
-	ask := func(gate *previewgate.Gate, header previewgate.Header) previewgate.Verdict {
-		return gate.Check(previewgate.Request{Method: "GET", Host: host, Target: "/", Header: header}, now)
+	ask := func(held *gate.Gate, header gate.Header) gate.Verdict {
+		return held.Check(gate.Request{Method: "GET", Host: host, Target: "/", Header: header}, now)
 	}
 
 	t.Run("a published gate is the one a request is checked against", func(t *testing.T) {
@@ -51,11 +51,11 @@ func RunPublishedPreviewGate(t *testing.T, published PublishedPreviewGate) {
 		if got == nil || !reflect.DeepEqual(*got, first) {
 			t.Fatalf("the edge holds %+v, want the published gate, %+v", got, first)
 		}
-		if verdict := ask(got, previewgate.Header{}); verdict.Response == nil || verdict.Response.Status != 401 {
+		if verdict := ask(got, gate.Header{}); verdict.Response == nil || verdict.Response.Status != 401 {
 			t.Errorf("a request with no credentials = %+v, want it refused with 401", verdict.Response)
 		}
 		signed := first.SignSession(host, now)
-		if verdict := ask(got, previewgate.Header{"Cookie": {previewgate.CookieName + "=" + signed}}); verdict.Response != nil {
+		if verdict := ask(got, gate.Header{"Cookie": {gate.CookieName + "=" + signed}}); verdict.Response != nil {
 			t.Errorf("a session signed with the published key was refused with %d", verdict.Response.Status)
 		}
 	})
@@ -63,34 +63,34 @@ func RunPublishedPreviewGate(t *testing.T, published PublishedPreviewGate) {
 	t.Run("publishing a rotated key refuses the sessions the old key signed", func(t *testing.T) {
 		first, rotated := gateWithKey("first-key"), gateWithKey("rotated-key")
 		publish(t, &first)
-		oldSession := previewgate.CookieName + "=" + first.SignSession(host, now)
+		oldSession := gate.CookieName + "=" + first.SignSession(host, now)
 		publish(t, &rotated)
 
 		got := read(t)
 		if got == nil || got.Key != rotated.Key {
 			t.Fatalf("the edge holds %+v, want the rotated gate, %+v", got, rotated)
 		}
-		if verdict := ask(got, previewgate.Header{"Cookie": {oldSession}}); verdict.Response == nil {
+		if verdict := ask(got, gate.Header{"Cookie": {oldSession}}); verdict.Response == nil {
 			t.Error("the session the old key signed still passes after the rotated gate was published")
 		}
-		if verdict := ask(got, previewgate.Header{"Cookie": {previewgate.CookieName + "=" + rotated.SignSession(host, now)}}); verdict.Response != nil {
+		if verdict := ask(got, gate.Header{"Cookie": {gate.CookieName + "=" + rotated.SignSession(host, now)}}); verdict.Response != nil {
 			t.Errorf("a session signed with the rotated key was refused with %d", verdict.Response.Status)
 		}
 	})
 
 	t.Run("publishing the same gate twice changes nothing", func(t *testing.T) {
-		gate := gateWithKey("first-key")
-		publish(t, &gate)
-		publish(t, &gate)
+		same := gateWithKey("first-key")
+		publish(t, &same)
+		publish(t, &same)
 
-		if got := read(t); got == nil || !reflect.DeepEqual(*got, gate) {
-			t.Errorf("the edge holds %+v after two publications, want %+v", got, gate)
+		if got := read(t); got == nil || !reflect.DeepEqual(*got, same) {
+			t.Errorf("the edge holds %+v after two publications, want %+v", got, same)
 		}
 	})
 
-	t.Run("publishing no gate opens the preview", func(t *testing.T) {
-		gate := gateWithKey("first-key")
-		publish(t, &gate)
+	t.Run("publishing no gate opens the host", func(t *testing.T) {
+		withdrawn := gateWithKey("first-key")
+		publish(t, &withdrawn)
 		publish(t, nil)
 
 		if got := read(t); got != nil {

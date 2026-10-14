@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -111,8 +111,8 @@ func TestContainerHelper(t *testing.T) {
 			Health:   os.Getenv(originguard.HealthPathVar),
 			Runtime:  os.Getenv(processenv.RuntimeAddressEnvVar),
 			Token:    os.Getenv(localrpc.SessionTokenEnvVar),
-			Gate:     os.Getenv(previewgate.MountedInlineVar),
-			GateFile: os.Getenv(previewgate.MountedFileVar),
+			Gate:     os.Getenv(gate.MountedInlineVar),
+			GateFile: os.Getenv(gate.MountedFileVar),
 			Probe:    os.Getenv(originguard.ProbeTokenVar),
 		})
 	})
@@ -273,12 +273,12 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("the front gates every request against the gate its service mounts and never hands the app the gate", func(t *testing.T) {
-		gate := `{"key":"k","passwordMac":"` + previewgate.HashPassword("k", "pw") + `"}`
+		held := `{"key":"k","passwordMac":"` + gate.HashPassword("k", "pw") + `"}`
 		mounted := filepath.Join(t.TempDir(), "gate")
-		if err := os.WriteFile(mounted, []byte(gate), 0o600); err != nil {
+		if err := os.WriteFile(mounted, []byte(held), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		r := launch(t, "serve", previewgate.MountedFileVar+"="+mounted, originguard.HealthPathVar+"=/", originguard.ProbeTokenVar+"=probe-token")
+		r := launch(t, "serve", gate.MountedFileVar+"="+mounted, originguard.HealthPathVar+"=/", originguard.ProbeTokenVar+"=probe-token")
 		signedIn := http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:pw"))}}
 		body := r.awaitFrontWith(t, "", signedIn)
 
@@ -294,8 +294,8 @@ func TestRun(t *testing.T) {
 		}
 
 		if body.GateFile != "" || body.Gate != "" {
-			t.Errorf("the app was handed %s=%q and %s=%q; where its preview gate lives is not the app's",
-				previewgate.MountedFileVar, body.GateFile, previewgate.MountedInlineVar, body.Gate)
+			t.Errorf("the app was handed %s=%q and %s=%q; where its gate lives is not the app's",
+				gate.MountedFileVar, body.GateFile, gate.MountedInlineVar, body.Gate)
 		}
 		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("a request with no credentials = %d, want 401: nothing else in front of this service gates its preview", resp.StatusCode)
@@ -315,7 +315,7 @@ func TestRun(t *testing.T) {
 		signal.Notify(sigterm, syscall.SIGTERM)
 		t.Cleanup(func() { signal.Stop(sigterm) })
 		missing := filepath.Join(t.TempDir(), "gate")
-		r := launch(t, "serve", previewgate.MountedFileVar+"="+missing)
+		r := launch(t, "serve", gate.MountedFileVar+"="+missing)
 		deadline := time.Now().Add(30 * time.Second)
 		for resp := (*http.Response)(nil); ; time.Sleep(20 * time.Millisecond) {
 			if time.Now().After(deadline) {

@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	bootstrapKey       = "settings"
-	wildcardKey        = "preview"
-	previewKeyRecord   = "previewkey"
-	previewGatesRecord = "previewgates"
+	bootstrapKey     = "settings"
+	wildcardKey      = "preview"
+	previewKeyRecord = "previewkey"
+	gatesRecord      = "gates"
 )
 
 func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
@@ -29,8 +29,8 @@ func NewPreviewKeyRecordKey() keyvalue.Key {
 	return keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootBootstrap}.Key(previewKeyRecord)
 }
 
-func NewPreviewGatesRecordKey() keyvalue.Key {
-	return keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootBootstrap}.Key(previewGatesRecord)
+func NewGatesRecordKey(tier environment.Tier) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(gatesRecord)
 }
 
 func StacksPartition(tier environment.Tier, slug string) keyvalue.Partition {

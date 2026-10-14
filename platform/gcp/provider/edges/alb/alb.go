@@ -58,7 +58,7 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
-		GatesPreviews:         true,
+		Gates:                 true,
 		ShieldsOrigin:         true,
 		CredentialScope:       e.deps.Project,
 	}
@@ -69,7 +69,7 @@ func (e *Edge) Hooks() edge.Hooks {
 		CheckBootstrapInstalled:       e.bootstrapInstalled,
 		ListBoundHostnames:            e.boundHostnames,
 		DescribeCredentialPermissions: e.credentialPermissions,
-		PublishPreviewGate:            e.publishPreviewGate,
+		PublishGate:                   e.publishGate,
 	}
 }
 
@@ -81,8 +81,8 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 	if _, err := e.raise(ctx, tier, progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	if isGated(tier, e.deps.Shielded) {
-		if err := e.publishGates(ctx, gateProof{}, progress.Discard()); err != nil {
+	if !e.deps.Shielded {
+		if err := e.publishGates(ctx, tier, gateProof{}, progress.Discard()); err != nil {
 			return edge.BootstrapOutput{}, err
 		}
 	}
@@ -179,8 +179,8 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	if isGated(tier, e.deps.Shielded) {
-		if err := e.removeGate(ctx); err != nil {
+	if !e.deps.Shielded {
+		if err := e.removeGate(ctx, tier); err != nil {
 			return err
 		}
 	}

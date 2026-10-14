@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -13,8 +13,8 @@ import (
 )
 
 type Gates interface {
-	Publish(ctx context.Context, slug string, gate *previewgate.Gate) error
-	Remove(ctx context.Context, slug string) error
+	Publish(ctx context.Context, tier environment.Tier, slug string, held *gate.Gate) error
+	Remove(ctx context.Context, tier environment.Tier, slug string) error
 }
 
 type Edge struct {
@@ -30,14 +30,14 @@ func (e *Edge) Kind() edge.Kind { return edge.None }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:             []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
-		GatesPreviews:         true,
-		GatesPreviewsAtOrigin: true,
+		Supported:     []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
+		Gates:         true,
+		GatesAtOrigin: true,
 	}
 }
 
 func (e *Edge) Hooks() edge.Hooks {
-	return edge.Hooks{PublishPreviewGate: e.publishPreviewGate}
+	return edge.Hooks{PublishGate: e.publishGate}
 }
 
 func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
@@ -58,10 +58,8 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next := prior
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
-	if spec.Tier == environment.TierPreview {
-		if err := e.gates.Publish(ctx, spec.Slug, spec.PreviewGate); err != nil {
-			return nil, err
-		}
+	if err := e.gates.Publish(ctx, spec.Tier, spec.Slug, spec.Gate); err != nil {
+		return nil, err
 	}
 	return &stack{e: e, state: next}, nil
 }
@@ -140,8 +138,5 @@ func (s *stack) UnbindDomain(_ context.Context, hostname string) error {
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
-	if s.state.Tier != environment.TierPreview {
-		return nil
-	}
-	return s.e.gates.Remove(ctx, s.state.Slug)
+	return s.e.gates.Remove(ctx, s.state.Tier, s.state.Slug)
 }

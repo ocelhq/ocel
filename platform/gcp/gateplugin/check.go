@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 const cookieHeader = "cookie"
 
-func ReadRequest(pairs [][2]string) previewgate.Request {
-	req := previewgate.Request{Header: previewgate.Header{}}
+func ReadRequest(pairs [][2]string) gate.Request {
+	req := gate.Request{Header: gate.Header{}}
 	for _, pair := range pairs {
 		name, value := pair[0], pair[1]
 		switch {
@@ -63,15 +63,15 @@ func isCookieNameByte(b byte) bool {
 	return 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || b != 0 && b < 0x7f && strings.IndexByte("!#$%&'*+-.^_`|~", b) >= 0
 }
 
-func (c Config) Check(req previewgate.Request, now time.Time) previewgate.Verdict {
-	gate, gated := c.FindGate(req.Host)
+func (c Config) Check(req gate.Request, now time.Time) gate.Verdict {
+	held, gated := c.FindGate(req.Host)
 	if !gated {
-		return previewgate.Verdict{Forward: req.Header}
+		return gate.Verdict{Forward: req.Header}
 	}
-	return gate.Check(req, now)
+	return held.Check(req, now)
 }
 
-func ListHeaderEdits(original, forward previewgate.Header) (remove []string, replace map[string]string) {
+func ListHeaderEdits(original, forward gate.Header) (remove []string, replace map[string]string) {
 	replace = map[string]string{}
 	for _, name := range slices.Sorted(maps.Keys(original)) {
 		values := forward.Values(name)
@@ -88,5 +88,5 @@ func ListHeaderEdits(original, forward previewgate.Header) (remove []string, rep
 }
 
 func changesCookie(name string, values []string) bool {
-	return strings.EqualFold(name, cookieHeader) && strings.Contains(strings.Join(values, ";"), previewgate.CookieName+"=")
+	return strings.EqualFold(name, cookieHeader) && strings.Contains(strings.Join(values, ";"), gate.CookieName+"=")
 }

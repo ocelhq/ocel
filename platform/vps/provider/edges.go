@@ -1,6 +1,8 @@
 package vps
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -38,18 +40,25 @@ type boxProxy struct {
 
 func (x boxProxy) Hooks() edge.Hooks {
 	hooks := x.Proxy.Hooks()
-	hooks.PublishPreviewGate = x.box.Hooks().PublishPreviewGate
+	hooks.PublishGate = x.box.PublishGateBehind(hooks.PurgeHostnames)
 	return hooks
+}
+
+func (x boxProxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	if err := x.box.ReconcileGateBehind(ctx, spec, prior, x.Proxy.Hooks().PurgeHostnames); err != nil {
+		return nil, err
+	}
+	return x.Proxy.Reconcile(ctx, spec, prior)
 }
 
 func (x boxProxy) Facts() edge.Facts {
 	facts := x.Proxy.Facts()
-	facts.GatesPreviews = true
+	facts.Gates = true
 	return facts
 }
 
 func (p *Provider) box() *box.Edge {
-	return box.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newPreviewGateReader(p.keyValues, p.cipher))
+	return box.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newRecordedGate(p.keyValues, p.cipher))
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {

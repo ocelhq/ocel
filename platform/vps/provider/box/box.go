@@ -2,12 +2,11 @@ package box
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -37,7 +36,7 @@ type Machine interface {
 	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
 	PutShield(ctx context.Context, shield host.Shield) (host.Shield, error)
 	RemoveShield(ctx context.Context, hostname, owner string) error
-	PutPreviewGate(ctx context.Context, owner string, previewGate *previewgate.Gate) error
+	PutGate(ctx context.Context, owner string, held *gate.Gate) error
 	RefuseUnshielded(ctx context.Context, hostname string) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
@@ -56,20 +55,20 @@ type Machine interface {
 
 type Origins func(ctx context.Context, project string, tier environment.Tier) error
 
-type PreviewGateReader func(ctx context.Context, project string) (*previewgate.Gate, error)
+type RecordedGate func(ctx context.Context, tier environment.Tier, project string) (*gate.Gate, error)
 
 type Edge struct {
-	machine         Machine
-	origins         Origins
-	scope           string
-	tunnels         Tunnels
-	readPreviewGate PreviewGateReader
+	machine  Machine
+	origins  Origins
+	scope    string
+	tunnels  Tunnels
+	readGate RecordedGate
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, scope string, tunnels Tunnels, readPreviewGate PreviewGateReader) *Edge {
-	return &Edge{machine: machine, origins: origins, scope: scope, tunnels: tunnels, readPreviewGate: readPreviewGate}
+func New(machine Machine, origins Origins, scope string, tunnels Tunnels, readGate RecordedGate) *Edge {
+	return &Edge{machine: machine, origins: origins, scope: scope, tunnels: tunnels, readGate: readGate}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }
@@ -77,13 +76,13 @@ func (e *Edge) Kind() edge.Kind { return edge.None }
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:       []edge.Need{edge.NeedStreaming, edge.NeedRevalidation},
-		GatesPreviews:   true,
+		Gates:           true,
 		CredentialScope: e.scope,
 	}
 }
 
 func (e *Edge) Hooks() edge.Hooks {
-	return edge.Hooks{PublishPreviewGate: e.publishPreviewGate}
+	return edge.Hooks{PublishGate: e.publishGate}
 }
 
 func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
@@ -105,10 +104,8 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	next.PreviewBase = declaredPreviewBase(spec)
-	if spec.Tier == environment.TierPreview {
-		if err := e.machine.PutPreviewGate(ctx, Surface(spec.Slug, spec.Tier), spec.PreviewGate); err != nil {
-			return nil, fmt.Errorf("hand the switchboard the preview gate of %s: %w", spec.Slug, err)
-		}
+	if err := e.putGate(ctx, spec.Slug, spec.Tier, spec.Gate); err != nil {
+		return nil, err
 	}
 	return &stack{e: e, state: next}, nil
 }

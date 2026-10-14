@@ -34,13 +34,13 @@ type sharedPhysical struct {
 	Kept     []string          `json:"kept,omitempty"`
 	Removing *wholeRemoval     `json:"removing,omitempty"`
 
-	IgnoringPreviewGate []string `json:"ignoringPreviewGate,omitempty"`
+	IgnoringGate []string `json:"ignoringGate,omitempty"`
 }
 
-func (s *sharedPhysical) recordIgnoresPreviewGate(stack string, ignores bool) {
-	s.IgnoringPreviewGate = slices.DeleteFunc(s.IgnoringPreviewGate, func(each string) bool { return each == stack })
+func (s *sharedPhysical) recordIgnoresGate(stack string, ignores bool) {
+	s.IgnoringGate = slices.DeleteFunc(s.IgnoringGate, func(each string) bool { return each == stack })
 	if ignores {
-		s.IgnoringPreviewGate = append(s.IgnoringPreviewGate, stack)
+		s.IgnoringGate = append(s.IgnoringGate, stack)
 	}
 }
 
@@ -54,10 +54,10 @@ func (s sharedPhysical) isRemovedByAnother(stack string, now time.Time) bool {
 }
 
 type heldItem struct {
-	name               string
-	physical           string
-	revision           string
-	ignoresPreviewGate bool
+	name        string
+	physical    string
+	revision    string
+	ignoresGate bool
 }
 
 type compute[T any] struct {
@@ -75,10 +75,10 @@ func functionCompute(hooks *FunctionHooks) compute[provider.Function] {
 		remove: hooks.Remove,
 		shared: hooks.Shared,
 		held: func(function provider.Function) heldItem {
-			return heldItem{name: function.Name, physical: function.Physical, revision: function.Revision, ignoresPreviewGate: function.IgnoresPreviewGate}
+			return heldItem{name: function.Name, physical: function.Physical, revision: function.Revision, ignoresGate: function.IgnoresGate}
 		},
 		item: func(held heldItem) provider.Function {
-			return provider.Function{Name: held.name, Physical: held.physical, Revision: held.revision, IgnoresPreviewGate: held.ignoresPreviewGate}
+			return provider.Function{Name: held.name, Physical: held.physical, Revision: held.revision, IgnoresGate: held.ignoresGate}
 		},
 		field: func(stack *stackrecords.Stack) *[]provider.Function { return &stack.Functions },
 	}
@@ -251,7 +251,7 @@ func (f *hookStacks) claim(ctx context.Context, ref provider.StackRef, kind stri
 		if _, holds := entry.Holders[stack]; !holds {
 			entry.Holders[stack] = ""
 		}
-		entry.recordIgnoresPreviewGate(stack, held.ignoresPreviewGate)
+		entry.recordIgnoresGate(stack, held.ignoresGate)
 		return false
 	})
 	return err
@@ -263,7 +263,7 @@ func (f *hookStacks) recordRevision(ctx context.Context, ref provider.StackRef, 
 	_, err := f.changeShared(ctx, ref, held.physical, func(entry *sharedPhysical, _ time.Time) bool {
 		entry.Kind, entry.Name = kind, held.name
 		entry.Holders[stack] = held.revision
-		entry.recordIgnoresPreviewGate(stack, held.ignoresPreviewGate)
+		entry.recordIgnoresGate(stack, held.ignoresGate)
 		retry = unheldKept(*entry, held.physical, "")
 		return false
 	})
@@ -282,7 +282,7 @@ func (f *hookStacks) release(ctx context.Context, ref provider.StackRef, kind st
 		delete(entry.Holders, stack)
 		switch {
 		case len(entry.Holders) > 0:
-			entry.recordIgnoresPreviewGate(stack, false)
+			entry.recordIgnoresGate(stack, false)
 			retry = unheldKept(*entry, held.physical, held.revision)
 		case entry.isRemovedByAnother(stack, now):
 		default:
@@ -314,11 +314,11 @@ func (f *hookStacks) finishRemoval(ctx context.Context, ref provider.StackRef, h
 		}
 		if removed {
 			entry.Kept = nil
-			entry.recordIgnoresPreviewGate(stack, false)
+			entry.recordIgnoresGate(stack, false)
 			return false
 		}
 		entry.Holders[stack] = held.revision
-		entry.recordIgnoresPreviewGate(stack, held.ignoresPreviewGate)
+		entry.recordIgnoresGate(stack, held.ignoresGate)
 		return false
 	})
 	return err
@@ -432,7 +432,7 @@ func RecordUnrecordedHolders(ctx context.Context, store keyvalue.Store, tier env
 				restored = &stackrecords.Stack{Kind: provider.StackApp, App: name.App}
 				unrecorded[name] = restored
 			}
-			held := heldItem{name: entry.Name, physical: stored.Key.Path[0], revision: revision, ignoresPreviewGate: slices.Contains(entry.IgnoringPreviewGate, stack)}
+			held := heldItem{name: entry.Name, physical: stored.Key.Path[0], revision: revision, ignoresGate: slices.Contains(entry.IgnoringGate, stack)}
 			switch entry.Kind {
 			case kindFunction:
 				restored.Functions = append(restored.Functions, functionCompute(&FunctionHooks{}).item(held))

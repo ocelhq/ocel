@@ -385,7 +385,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(errs) == 0 && s.provisioned() {
-		if err := s.reconcilePreviewGate(ctx, c, nil); err != nil {
+		if err := s.reconcileGate(ctx, c, nil); err != nil {
 			errs = append(errs, fmt.Errorf("take down the keys that gate %s after destroying what served it: %w", s.slug(), err))
 		}
 	}

@@ -149,7 +149,7 @@ async function handler(event) {
   if (!route || !route.origin || !route.release) return unknownHost();
 
   stripClientControl(request.headers);
-  var refused = await gatePreview(request, route, host);
+  var refused = await enforceGate(request, route, host);
   if (refused) return refused;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
   request.headers[CACHE_KEY_HEADER] = {

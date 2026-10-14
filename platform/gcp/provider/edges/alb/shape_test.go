@@ -61,6 +61,7 @@ func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	}
 
 	registered = declaredCounts(t, loadBalancerProgram(frontSpec()))
+	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: frontSpec().Names, Main: newGateVersion("image", "config")})))
 	shaped = shapedCounts(ShapeLoadBalancer(environment.TierProduction, ""))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("without a preview base the balancer program registers %v, the shape lists %v", registered, shaped)
@@ -105,19 +106,18 @@ func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 	}
 }
 
-func TestOnlyThePreviewTiersBalancerShapesTheGatePlugin(t *testing.T) {
+func TestEveryTiersBalancerShapesTheGatePlugin(t *testing.T) {
 	t.Parallel()
 
-	preview := shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com"))
-	for _, typ := range []string{tfWasmPlugin, tfLBEdgeExtension} {
-		if preview[typ] != 1 {
-			t.Errorf("the preview tier's balancer shape lists %v, want one %s: the gate runs as a plugin on it", preview, typ)
-		}
+	shapes := map[environment.Tier]map[string]int{
+		environment.TierPreview:    shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com")),
+		environment.TierProduction: shapedCounts(ShapeLoadBalancer(environment.TierProduction, "")),
 	}
-	production := shapedCounts(ShapeLoadBalancer(environment.TierProduction, ""))
-	for _, typ := range []string{tfWasmPlugin, tfLBEdgeExtension} {
-		if production[typ] != 0 {
-			t.Errorf("the production tier's balancer shape lists %v, want no %s", production, typ)
+	for tier, shape := range shapes {
+		for _, typ := range []string{tfWasmPlugin, tfLBEdgeExtension} {
+			if shape[typ] != 1 {
+				t.Errorf("the %s tier's balancer shape lists %v, want one %s: the gate runs as a plugin on it", tier, shape, typ)
+			}
 		}
 	}
 }
