@@ -25,11 +25,11 @@ func TestAStatusReadBeforeABootstrapWriteIsNotKeptAfterIt(t *testing.T) {
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	held := heldDescribe{Bootstrap: vendor.FakeBootstrap(), entered: make(chan struct{}), release: make(chan struct{})}
 	statuses := &BootstrapStatuses{}
-	gate := Gate{Bootstrap: held, KeyValues: vendor.KeyValues(), Statuses: statuses}
+	readiness := Readiness{Bootstrap: held, KeyValues: vendor.KeyValues(), Statuses: statuses}
 
 	read := make(chan error)
 	go func() {
-		_, err := gate.SessionStatus(context.Background(), environment.TierProduction)
+		_, err := readiness.SessionStatus(context.Background(), environment.TierProduction)
 		read <- err
 	}()
 	<-held.entered

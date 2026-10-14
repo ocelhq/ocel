@@ -54,16 +54,16 @@ func (s *BootstrapStatuses) forget() {
 	s.generation++
 }
 
-func (g Gate) SessionStatus(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
-	key := bootstrapStatusKey{tier: tier, edge: g.Edge}
-	status, readAt, found := g.Statuses.find(key)
+func (r Readiness) SessionStatus(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
+	key := bootstrapStatusKey{tier: tier, edge: r.Edge}
+	status, readAt, found := r.Statuses.find(key)
 	if found {
 		return status, nil
 	}
-	status, err := g.Status(ctx, tier)
+	status, err := r.Status(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
-	g.Statuses.keep(key, status, readAt)
+	r.Statuses.keep(key, status, readAt)
 	return status, nil
 }

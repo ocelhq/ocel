@@ -18,17 +18,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
+func (h *handlers) readiness(requested string) (provider.Provider, Readiness, error) {
 	p, err := h.session.use()
 	if err != nil {
-		return nil, Gate{}, err
+		return nil, Readiness{}, err
 	}
 	kind := edgeKind(p, requested)
 	bootstrap, err := p.Bootstrap(kind)
 	if err != nil {
-		return nil, Gate{}, provider.RefusalError(err)
+		return nil, Readiness{}, provider.RefusalError(err)
 	}
-	return p, Gate{
+	return p, Readiness{
 		Bootstrap: bootstrap,
 		KeyValues: p.KeyValues(),
 		WrittenBy: h.session.writer,
@@ -42,7 +42,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	p, gate, err := h.gate(req.GetEdge().GetKind())
+	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
@@ -54,11 +54,11 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return nil, err
 		}
 		if req.GetConsented() == nil {
-			status, err := gate.Status(ctx, tier)
+			status, err := readiness.Status(ctx, tier)
 			if err != nil {
 				return nil, provider.RefusalError(err)
 			}
-			if plan, err = gate.PlanFrom(ctx, status, intent); err != nil {
+			if plan, err = readiness.PlanFrom(ctx, status, intent); err != nil {
 				return nil, provider.RefusalError(err)
 			}
 			sender.send(planEvent(ChangePlanProto(plan, string(tier), string(edgeKind(p, req.GetEdge().GetKind())))))
@@ -69,7 +69,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		root := RootSpan(naming.SpanEnvironment, string(tier), bootstrapTitle(progress.Updating, plan), progressv1.Phase_PHASE_PROVISION)
 		err = inSpan(sender, root,
 			func(_ *eventStream, progress progress.Log) error {
-				return gate.Apply(ctx, plan, tier, intent, progress)
+				return readiness.Apply(ctx, plan, tier, intent, progress)
 			})
 		if err != nil {
 			return nil, err
@@ -93,17 +93,17 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	_, gate, err := h.gate(req.GetEdge().GetKind())
+	_, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
-	status, err := gate.Status(ctx, tier)
+	status, err := readiness.Status(ctx, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	recorded := map[string][]string{}
 	if req.GetWithDependents() {
-		if recorded, err = gate.RecordedFeatures(ctx, tier); err != nil {
+		if recorded, err = readiness.RecordedFeatures(ctx, tier); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}
@@ -111,7 +111,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	resp := &contractv1.DescribeBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Features),
 	}
-	for _, f := range gate.Bootstrap.Catalogue() {
+	for _, f := range readiness.Bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,
 			Summary:    f.Summary,
@@ -236,14 +236,14 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	_, gate, err := h.gate(req.GetEdge().GetKind())
+	_, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
-	if err := gate.RefuseIfInUse(ctx, tier); err != nil {
+	if err := readiness.RefuseIfInUse(ctx, tier); err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	plan, err := gate.Bootstrap.PlanRemove(ctx, tier)
+	plan, err := readiness.Bootstrap.PlanRemove(ctx, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -271,7 +271,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	if err != nil {
 		return err
 	}
-	_, gate, err := h.gate(req.GetEdge().GetKind())
+	_, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		if shownErr != nil {
 			return shownErr
 		}
-		return gate.Remove(ctx, shown, tier, progress)
+		return readiness.Remove(ctx, shown, tier, progress)
 	})
 }
 

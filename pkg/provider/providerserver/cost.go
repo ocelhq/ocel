@@ -16,7 +16,7 @@ import (
 )
 
 func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
-	p, gate, err := h.gate(req.GetEdge().GetKind())
+	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -40,13 +40,13 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, err
 	}
-	features, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), uses, gate.Edge)
+	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), uses, readiness.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	set, err := cost.Shape(ctx, provider.ShapeRequest{
 		Deploy:     spec,
-		Edge:       gate.Edge,
+		Edge:       readiness.Edge,
 		Features:   features,
 		Resources:  resources,
 		Functions:  shapedFunctions(req.GetManifest()),
