@@ -168,7 +168,7 @@ func joinNames(names []string) string {
 
 type deployRun struct {
 	*edgeSession
-	gate         Gate
+	readiness    Readiness
 	features     []string
 	transforms   []string
 	artifactRoot string
@@ -259,7 +259,7 @@ func newDeploySpec(req *contractv1.DeployRequest) (provider.DeploySpec, error) {
 }
 
 func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, spec provider.DeploySpec, sender *eventStream) (*deployRun, error) {
-	p, gate, err := h.gate(req.GetEdge().GetKind())
+	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), uses, gate.Edge)
+	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), uses, readiness.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -290,7 +290,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 			store:       edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
 			tunnel:      readTunnelToOrigin(front),
 		},
-		gate:           gate,
+		readiness:      readiness,
 		previewKeys:    &h.session.previewKeys,
 		features:       features,
 		transforms:     h.session.transforms(),
@@ -450,7 +450,7 @@ func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
-	_, err := r.gate.EnsureReady(ctx, r.spec.Tier, r.features, !r.dry, progress)
+	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, r.features, !r.dry, progress)
 	return err
 }
 
@@ -958,7 +958,7 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 		Grants:            grants,
 		Apps:              apps,
 		Progress:          progress,
-		WrittenBy:         r.gate.WrittenBy,
+		WrittenBy:         r.readiness.WrittenBy,
 		Dry:               r.dry,
 	})
 }

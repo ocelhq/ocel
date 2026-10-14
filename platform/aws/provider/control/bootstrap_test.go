@@ -602,9 +602,9 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
-	gate := providerserver.Gate{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
+	readiness := providerserver.Readiness{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
 
-	status, err := gate.Status(context.Background(), environment.TierProduction)
+	status, err := readiness.Status(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		t.Fatal("Status described no stack at all")
 	}
 
-	if _, err := gate.PlanFrom(context.Background(), status, providerserver.ApplyRequest{
+	if _, err := readiness.PlanFrom(context.Background(), status, providerserver.ApplyRequest{
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)

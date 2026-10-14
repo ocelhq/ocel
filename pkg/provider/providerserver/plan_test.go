@@ -17,11 +17,11 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, p := gated(t, "1.2.3")
+	readiness, p := newReadiness(t, "1.2.3")
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache)
 
 	req := providerserver.ApplyRequest{Features: []string{fake.FeatureCache}}
-	shown, err := gate.Plan(ctx, environment.TierProduction, req)
+	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -31,7 +31,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 
 	p.FakeBootstrap().MarkStale(fake.FeatureCache)
 
-	err = gate.Apply(ctx, shown, environment.TierProduction, req, nil)
+	err = readiness.Apply(ctx, shown, environment.TierProduction, req, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Apply() over work that appeared after the plan was drawn = %v, want an invalid refusal", err)
@@ -45,14 +45,14 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, vendor := gated(t, "1.2.3")
+	readiness, vendor := newReadiness(t, "1.2.3")
 
 	req := providerserver.ApplyRequest{Features: []string{fake.FeatureCache}}
-	shown, err := gate.Plan(ctx, environment.TierProduction, req)
+	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if err := gate.Apply(ctx, shown, environment.TierProduction, req, nil); err != nil {
+	if err := readiness.Apply(ctx, shown, environment.TierProduction, req, nil); err != nil {
 		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
 	}
 	if len(vendor.FakeBootstrap().Applied()) == 0 {
@@ -75,8 +75,8 @@ func groupFor(t *testing.T, plan provider.Plan, feature string) provider.ChangeG
 func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 	t.Parallel()
 
-	gate, _ := gated(t, "1.2.3")
-	plan, err := gate.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
+	readiness, _ := newReadiness(t, "1.2.3")
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
 		Features: []string{fake.FeatureImages},
 	})
 	if err != nil {
@@ -101,11 +101,11 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	t.Parallel()
 
-	gate, p := gated(t, "1.2.3")
+	readiness, p := newReadiness(t, "1.2.3")
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 	p.FakeBootstrap().MarkStale(fake.FeatureImages)
 
-	plan, err := gate.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
 		Features: []string{fake.FeatureImages},
 	})
 	if err != nil {
@@ -127,12 +127,12 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, p := gated(t, "1.2.3")
+	readiness, p := newReadiness(t, "1.2.3")
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 	recordProject(t, p, "shop", fake.FeatureImages)
 
 	req := providerserver.ApplyRequest{Remove: []string{fake.FeatureImages}}
-	plan, err := gate.Plan(ctx, environment.TierProduction, req)
+	plan, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v, want a plan that shows the removal rather than refusing it", err)
 	}
@@ -143,7 +143,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	if !strings.Contains(removed.Reason, "shop") {
 		t.Errorf("the images group reads %q, want it to name the project deployed against it", removed.Reason)
 	}
-	if err := gate.Apply(ctx, plan, environment.TierProduction, req, nil); err == nil {
+	if err := readiness.Apply(ctx, plan, environment.TierProduction, req, nil); err == nil {
 		t.Error("Apply() took the removal the plan warned about without --force")
 	}
 }
@@ -152,10 +152,10 @@ func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, vendor := gated(t, "1.2.3")
+	readiness, vendor := newReadiness(t, "1.2.3")
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := gate.Plan(ctx, environment.TierProduction, providerserver.ApplyRequest{Features: []string{fake.FeatureCache}})
+	plan, err := readiness.Plan(ctx, environment.TierProduction, providerserver.ApplyRequest{Features: []string{fake.FeatureCache}})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -170,10 +170,10 @@ func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
 func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
 	t.Parallel()
 
-	gate, vendor := gated(t, "1.2.3")
+	readiness, vendor := newReadiness(t, "1.2.3")
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 
-	_, err := gate.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
+	_, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureCache},
 	})
