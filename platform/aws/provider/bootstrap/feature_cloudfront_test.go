@@ -87,8 +87,8 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if !fn.Properties.AutoPublish {
 				t.Error("AutoPublish = false; an unpublished resolver runs on no distribution")
 			}
-			if got, want := strings.TrimRight(fn.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolverFor(tier)), "\n"); got != want {
-				t.Error("the function contains something other than the resolver this build embeds for the tier")
+			if got, want := strings.TrimRight(fn.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolver.Code()), "\n"); got != want {
+				t.Error("the function contains something other than the resolver this build embeds, so this tier's gate is not the one the edge reads")
 			}
 			if got := fn.Properties.FunctionConfig.Runtime; got != "cloudfront-js-2.0" {
 				t.Errorf("resolver runtime = %q, want cloudfront-js-2.0: no earlier runtime reads a key value store", got)
@@ -191,6 +191,9 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 					t.Errorf("template does not output %s, which every CloudFront deploy reads off this stack", key)
 				}
 			}
+			if got, want := tmpl.Outputs[OutputEdgeGateDigest].Value, resolver.GateDigest(); got != want {
+				t.Errorf("output %s = %q, want %q: a protected deploy is refused unless the resolver this stack installs runs the gate this build publishes", OutputEdgeGateDigest, got, want)
+			}
 		})
 	}
 }
@@ -258,11 +261,4 @@ func yamlValuesAt(node *yaml.Node, key string) []string {
 		values = append(values, yamlValuesAt(child, key)...)
 	}
 	return values
-}
-
-func resolverFor(tier environment.Tier) []byte {
-	if tier == environment.TierPreview {
-		return resolver.PreviewCode()
-	}
-	return resolver.Code()
 }

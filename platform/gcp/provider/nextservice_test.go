@@ -223,6 +223,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
+			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
 			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
@@ -270,6 +271,7 @@ func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
+			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
 			spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}

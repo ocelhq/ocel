@@ -91,22 +91,22 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "GET" && sub === "/preview-gate") {
-      const gate = await store.readPreviewGate();
+    if (request.method === "GET" && sub === "/gate") {
+      const gate = await store.readGate();
       return Response.json({ gate: gate === undefined ? null : JSON.parse(gate) });
     }
 
-    if (request.method === "PUT" && sub === "/preview-gate") {
+    if (request.method === "PUT" && sub === "/gate") {
       const body = await readJson<unknown>(request);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         return new Response("Bad Request", { status: 400 });
       }
-      await store.setPreviewGate(JSON.stringify(body));
+      await store.setGate(JSON.stringify(body));
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "DELETE" && sub === "/preview-gate") {
-      await store.setPreviewGate(undefined);
+    if (request.method === "DELETE" && sub === "/gate") {
+      await store.setGate(undefined);
       return new Response(null, { status: 204 });
     }
 
@@ -145,7 +145,7 @@ export default class extends WorkerEntrypoint<Env> {
     return stub(this.env, args.slug).readServedRecord(args.isrPrefix);
   }
 
-  async readPreviewGate(args: { slug: string }): Promise<string | undefined> {
-    return stub(this.env, args.slug).readPreviewGate();
+  async readGate(args: { slug: string }): Promise<string | undefined> {
+    return stub(this.env, args.slug).readGate();
   }
 }

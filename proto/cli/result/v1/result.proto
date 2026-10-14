@@ -134,8 +134,14 @@ message PreviewSummary {
   repeated string alias_urls = 5;
 }
 
-message PreviewProtectionResult {
+message ProtectionResult {
   string slug = 1;
+
+  repeated TierProtection tiers = 2;
+}
+
+message TierProtection {
+  common.environment.v1.Tier tier = 1;
 
   bool enabled = 2;
 
@@ -143,40 +149,48 @@ message PreviewProtectionResult {
 
   repeated string bypass_secret_ids = 4;
 
-  repeated PreviewEdgeResult edges = 5;
+  repeated EdgeResult edges = 5;
 }
 
-message PreviewBypassSecretListResult {
+message BypassSecretListResult {
   string slug = 1;
 
-  repeated string ids = 2;
+  common.environment.v1.Tier tier = 2;
+
+  repeated string ids = 3;
 }
 
-message PreviewPasswordResult {
+message PasswordResult {
   string slug = 1;
 
-  string password = 2;
+  common.environment.v1.Tier tier = 2;
 
-  repeated PreviewEdgeResult edges = 3;
+  string password = 3;
+
+  repeated EdgeResult edges = 4;
 }
 
-message PreviewBypassSecretResult {
+message BypassSecretResult {
   string slug = 1;
 
-  string id = 2;
+  common.environment.v1.Tier tier = 2;
 
-  string secret = 3;
+  string id = 3;
 
-  repeated PreviewEdgeResult edges = 4;
+  string secret = 4;
+
+  repeated EdgeResult edges = 5;
 }
 
-message PreviewPublicationResult {
+message PublicationResult {
   string slug = 1;
 
-  repeated PreviewEdgeResult edges = 2;
+  common.environment.v1.Tier tier = 2;
+
+  repeated EdgeResult edges = 3;
 }
 
-message PreviewEdgeResult {
+message EdgeResult {
   string kind = 1;
 
   bool published = 2;

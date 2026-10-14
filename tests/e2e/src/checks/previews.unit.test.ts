@@ -124,12 +124,12 @@ describe("checkPreviewGate", () => {
         if (init?.method === "POST") {
           return new Response(null, {
             status: 204,
-            headers: { location: "/", "set-cookie": "__Host-ocel-preview=1.ab; Path=/" },
+            headers: { location: "/", "set-cookie": "__Host-ocel-session=1.ab; Path=/" },
           });
         }
-        const sentCookie = headers.get("cookie")?.startsWith("__Host-ocel-preview=");
+        const sentCookie = headers.get("cookie")?.startsWith("__Host-ocel-session=");
         const sentBasic = headers.get("authorization") === `Basic ${btoa("ocel:pw")}`;
-        const sentBypass = headers.get("x-ocel-preview-bypass") === "bp";
+        const sentBypass = headers.get("x-ocel-bypass") === "bp";
         if ((sentCookie && cookie) || (sentBasic && basic) || (sentBypass && bypass)) {
           return served(id);
         }

@@ -23,7 +23,7 @@ function createRecordingBinding(result: PointerRecordResult): Recording {
     async readServedRecord() {
       return { kind: "not-served" };
     },
-    async readPreviewGate() {
+    async readGate() {
       return undefined;
     },
   };

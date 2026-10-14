@@ -1,0 +1,31 @@
+---
+title: "ocel protection bypass revoke"
+description: "Revoke one of the bypass secrets."
+---
+
+```bash
+ocel protection bypass revoke <id> [flags]
+```
+
+Revoke one of this project's production bypass secrets, or its preview ones with `--preview`.
+
+`ocel protection bypass ls` lists the ids. The secret stops working, and so does every login session opened on the tier, by password or by bypass: visitors enter the password again. The tier stays protected by the password, so nothing is asked first.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `<id>` | Required |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Under `--json` it prints one result envelope on stdout, whose JSON Schema `ocel schema protection bypass revoke` prints.

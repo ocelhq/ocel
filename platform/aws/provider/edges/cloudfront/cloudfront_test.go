@@ -854,7 +854,7 @@ func TestResolverCodeShipsInline(t *testing.T) {
 	if len(code) > 10*1024 {
 		t.Errorf("the resolver is %d bytes, more than the 10 KB CloudFront takes inline", len(code))
 	}
-	for _, want := range []string{"import cf from 'cloudfront'", "cf.kvs()", "cf.updateRequestOrigin", "async function handler(event)"} {
+	for _, want := range []string{"import cf from 'cloudfront'", "cf.kvs()", "cf.updateRequestOrigin", "async function handler("} {
 		if !strings.Contains(code, want) {
 			t.Errorf("the resolver does not contain %q", want)
 		}
@@ -880,7 +880,7 @@ func TestEveryOriginServingTheAppWaitsOnItForTheRequestTimeout(t *testing.T) {
 		t.Errorf("the container origin waits %ds, want %ds", got, want)
 	}
 
-	named := regexp.MustCompile(`var ORIGIN_READ_TIMEOUT_SECONDS = (\d+);`).FindSubmatch(resolver.Code())
+	named := regexp.MustCompile(`ORIGIN_READ_TIMEOUT_SECONDS=(\d+)[,;]`).FindSubmatch(resolver.Code())
 	if named == nil {
 		t.Fatal("the resolver names no read timeout for the function origin, so CloudFront cuts a function at its own 30s default")
 	}

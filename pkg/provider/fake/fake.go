@@ -114,7 +114,7 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
 
-		RunsPreviewGates: true,
+		RunsGates: true,
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

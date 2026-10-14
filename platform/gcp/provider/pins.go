@@ -13,7 +13,7 @@ import (
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -205,7 +205,7 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 		return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
 	}
 	defer answered.Body.Close()
-	if answeredByPreviewGate(answered) {
+	if answeredByGate(answered) {
 		return nil
 	}
 	if answered.StatusCode == http.StatusUnauthorized || answered.StatusCode == http.StatusForbidden || answered.StatusCode >= http.StatusInternalServerError {
@@ -214,10 +214,10 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 	return nil
 }
 
-func answeredByPreviewGate(answered *http.Response) bool {
+func answeredByGate(answered *http.Response) bool {
 	return answered.StatusCode == http.StatusUnauthorized &&
-		answered.Header.Get("Cache-Control") == previewgate.CacheControl &&
-		answered.Header.Get("X-Robots-Tag") == previewgate.RobotsTag
+		answered.Header.Get("Cache-Control") == gate.CacheControl &&
+		answered.Header.Get("X-Robots-Tag") == gate.RobotsTag
 }
 
 func warmAddress(current *run.GoogleCloudRunV2Service, revision string) string {

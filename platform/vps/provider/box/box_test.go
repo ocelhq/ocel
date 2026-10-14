@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -57,9 +57,9 @@ type machine struct {
 	tunnelsReserved int
 	tunnelEvents    tunnelEvents
 
-	recordedPreviewGates map[string]previewgate.Gate
-	previewGates         map[string]previewgate.Gate
-	previewGateReads     int
+	recordedGates map[string]gate.Gate
+	gates         map[string]gate.Gate
+	gateReads     []environment.Tier
 }
 
 func aMachine() *machine {
@@ -68,8 +68,8 @@ func aMachine() *machine {
 		swept:    map[string]bool{},
 		refusals: map[string]error{},
 
-		recordedPreviewGates: map[string]previewgate.Gate{},
-		previewGates:         map[string]previewgate.Gate{},
+		recordedGates: map[string]gate.Gate{},
+		gates:         map[string]gate.Gate{},
 	}
 }
 
@@ -239,7 +239,7 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
-	delete(m.previewGates, owner)
+	delete(m.gates, owner)
 	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Owner == owner })
 	return nil
 }
@@ -253,28 +253,32 @@ func (m *machine) PutShield(_ context.Context, shield host.Shield) (host.Shield,
 	return m.shields[len(m.shields)-1], nil
 }
 
-func (m *machine) PutPreviewGate(_ context.Context, owner string, previewGate *previewgate.Gate) error {
-	m.calls = append(m.calls, "preview gate "+owner)
-	if err := m.refuse("PutPreviewGate"); err != nil {
+func (m *machine) PutGate(_ context.Context, owner string, held *gate.Gate) error {
+	m.calls = append(m.calls, "gate "+owner)
+	if err := m.refuse("PutGate"); err != nil {
 		return err
 	}
-	delete(m.previewGates, owner)
-	if previewGate != nil {
-		m.previewGates[owner] = *previewGate
+	delete(m.gates, owner)
+	if held != nil {
+		m.gates[owner] = *held
 	}
 	return nil
 }
 
-func (m *machine) readPreviewGate(_ context.Context, project string) (*previewgate.Gate, error) {
-	m.previewGateReads++
-	if err := m.refuse("ReadPreviewGate"); err != nil {
+func (m *machine) record(tier environment.Tier, project string, held gate.Gate) {
+	m.recordedGates[box.Surface(project, tier)] = held
+}
+
+func (m *machine) readGate(_ context.Context, tier environment.Tier, project string) (*gate.Gate, error) {
+	m.gateReads = append(m.gateReads, tier)
+	if err := m.refuse("ReadGate"); err != nil {
 		return nil, err
 	}
-	previewGate, recorded := m.recordedPreviewGates[project]
+	held, recorded := m.recordedGates[box.Surface(project, tier)]
 	if !recorded {
 		return nil, nil
 	}
-	return &previewGate, nil
+	return &held, nil
 }
 
 func (m *machine) RefuseUnshielded(context.Context, string) error {
@@ -296,7 +300,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *machine, store keyvalue.Store) boxEdge {
-	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readPreviewGate), keyValues: store}
+	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readGate), keyValues: store}
 }
 
 type boxStack struct {
@@ -428,6 +432,7 @@ func reconciled(t *testing.T) (*machine, boxEdge, boxStack) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
+	m.calls = nil
 	stack := stackOn(front, stackEdge)
 	return m, front, stack
 }
@@ -512,7 +517,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
+	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then cuts over", m.calls, want)
 	}
@@ -557,6 +562,7 @@ func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 	}
 
 	want := []string{
+		"gate " + box.Surface(slug, environment.TierProduction),
 		"run shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
 		"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
 		"release api onto shop-api-1111:" + containerimage.PortText + ", web onto shop-web-1111:" + containerimage.PortText,
@@ -700,7 +706,7 @@ func TestARollbackRestartsThePreviousContainerAndCutsOverToIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
+	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", m.calls, want)
 	}

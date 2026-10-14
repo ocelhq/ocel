@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -32,7 +32,7 @@ type fakeStore struct {
 	labels   map[string]labelTarget
 	moves    []pointerMoveBody
 	version  *string
-	gate     *previewgate.Gate
+	gate     *gate.Gate
 	owner    string
 	live     string
 }
@@ -197,19 +197,19 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.version = &body.Version
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("GET /{slug}/preview-gate", authed(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]*previewgate.Gate{"gate": f.gate})
+	mux.HandleFunc("GET /{slug}/gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]*gate.Gate{"gate": f.gate})
 	}))
-	mux.HandleFunc("PUT /{slug}/preview-gate", authed(func(w http.ResponseWriter, r *http.Request) {
-		var gate previewgate.Gate
-		if err := json.NewDecoder(r.Body).Decode(&gate); err != nil {
+	mux.HandleFunc("PUT /{slug}/gate", authed(func(w http.ResponseWriter, r *http.Request) {
+		var published gate.Gate
+		if err := json.NewDecoder(r.Body).Decode(&published); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		f.gate = &gate
+		f.gate = &published
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("DELETE /{slug}/preview-gate", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("DELETE /{slug}/gate", authed(func(w http.ResponseWriter, _ *http.Request) {
 		f.gate = nil
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -505,7 +505,7 @@ func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
 	}
 }
 
-func (f *fakeStore) heldGate() *previewgate.Gate {
+func (f *fakeStore) heldGate() *gate.Gate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.gate

@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/naming"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -31,22 +32,45 @@ type DNS struct {
 }
 
 type Project struct {
-	Slug            string
-	Transforms      []string
-	DiscoveryPaths  []string
-	Provider        *Provider
-	Edge            *Edge
-	DNS             *DNS
-	AllowDegraded   []edge.Need
-	Apps            []App
-	Bindings        []Binding
-	Domains         Domains
-	Registry        *Registry
-	Lifecycle       Lifecycle
-	ProtectPreviews bool
-	EnvSource       envsource.Tiers
-	Dir             string
-	Path            string
+	Slug           string
+	Transforms     []string
+	DiscoveryPaths []string
+	Provider       *Provider
+	Edge           *Edge
+	DNS            *DNS
+	AllowDegraded  []edge.Need
+	Apps           []App
+	Bindings       []Binding
+	Domains        Domains
+	Registry       *Registry
+	Lifecycle      Lifecycle
+	Protection     Protection
+	EnvSource      envsource.Tiers
+	Dir            string
+	Path           string
+}
+
+type Protection struct {
+	Production bool
+	Preview    bool
+}
+
+func normalizeProtection(raw *configdoc.ProtectionConfig) Protection {
+	if raw == nil {
+		return Protection{}
+	}
+	return Protection{Production: raw.Production, Preview: raw.Preview}
+}
+
+func (p Protection) Protects(tier environmentv1.Tier) bool {
+	switch tier {
+	case environmentv1.Tier_TIER_PRODUCTION:
+		return p.Production
+	case environmentv1.Tier_TIER_PREVIEW:
+		return p.Preview
+	default:
+		return false
+	}
 }
 
 func (p *Project) EdgeKind() edge.Kind {
@@ -140,7 +164,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid %w", configPath, err), "lifecycle")
 	}
 
-	protectPreviews := doc.Previews != nil && doc.Previews.Protection
+	protection := normalizeProtection(doc.Protection)
 
 	var discoveryPaths []string
 	if doc.Discovery != nil {
@@ -148,22 +172,22 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	}
 
 	return &Project{
-		Slug:            doc.Slug,
-		Transforms:      doc.Transforms,
-		DiscoveryPaths:  discoveryPaths,
-		Provider:        provider,
-		Edge:            front,
-		DNS:             normalizeDNS(dns),
-		AllowDegraded:   allowDegraded,
-		Apps:            apps,
-		Bindings:        bindings,
-		Domains:         domains,
-		Registry:        registry,
-		Lifecycle:       lifecycle,
-		ProtectPreviews: protectPreviews,
-		EnvSource:       doc.EnvSource.Tiers(),
-		Dir:             filepath.Dir(configPath),
-		Path:            configPath,
+		Slug:           doc.Slug,
+		Transforms:     doc.Transforms,
+		DiscoveryPaths: discoveryPaths,
+		Provider:       provider,
+		Edge:           front,
+		DNS:            normalizeDNS(dns),
+		AllowDegraded:  allowDegraded,
+		Apps:           apps,
+		Bindings:       bindings,
+		Domains:        domains,
+		Registry:       registry,
+		Lifecycle:      lifecycle,
+		Protection:     protection,
+		EnvSource:      doc.EnvSource.Tiers(),
+		Dir:            filepath.Dir(configPath),
+		Path:           configPath,
 	}, nil
 }
 

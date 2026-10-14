@@ -31,11 +31,11 @@ func (p *Provider) revisionTag(spec provider.StackSpec) string {
 	return spec.Ref.Name.Release.String()
 }
 
-const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it and previews.protection is off, so no preview gate checks its requests. " +
-	"Turn previews.protection on, front previews with an edge that shields the origin, or keep their urls to yourselves"
+const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it and protection.preview is off, so no gate checks its requests. " +
+	"Turn protection.preview on, front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
-	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin || isGatedPreview(spec) {
+	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin || isGated(spec) {
 		return
 	}
 	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
@@ -87,8 +87,8 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, err
 	}
 	var gated gatedServing
-	if slices.ContainsFunc(app.Functions, func(fn provider.FunctionSpec) bool { return !ignoresPreviewGate(spec, fn) }) {
-		if gated, err = p.provisionPreviewGate(ctx, c, spec, account); err != nil {
+	if slices.ContainsFunc(app.Functions, func(fn provider.FunctionSpec) bool { return !ignoresGate(spec, fn) }) {
+		if gated, err = p.provisionGate(ctx, c, spec, account); err != nil {
 			return nil, err
 		}
 	}
@@ -157,9 +157,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		served.env = values
-		ignoresGate := ignoresPreviewGate(spec, fn)
-		if !ignoresGate {
-			if err := c.applyPreviewGate(ctx, gated, fn.Name, &served); err != nil {
+		gateIgnored := ignoresGate(spec, fn)
+		if !gateIgnored {
+			if err := c.applyGate(ctx, gated, fn.Name, &served); err != nil {
 				return nil, err
 			}
 		}
@@ -178,7 +178,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			}
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision, IgnoresPreviewGate: ignoresGate,
+			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision, IgnoresGate: gateIgnored,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -233,7 +233,7 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 		if err != nil {
 			return nil, err
 		}
-		functions = append(functions, provider.Function{Name: fn.Name, Physical: service, IgnoresPreviewGate: ignoresPreviewGate(spec, fn)})
+		functions = append(functions, provider.Function{Name: fn.Name, Physical: service, IgnoresGate: ignoresGate(spec, fn)})
 	}
 	return append(functions, workerFunctions(nameWorkers(names, spec))...), nil
 }
@@ -307,7 +307,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	gated, err := p.provisionPreviewGate(ctx, c, spec, account)
+	gated, err := p.provisionGate(ctx, c, spec, account)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 			return nil, err
 		}
 	}
-	if err := c.applyPreviewGate(ctx, gated, app.App, &served); err != nil {
+	if err := c.applyGate(ctx, gated, app.App, &served); err != nil {
 		return nil, err
 	}
 	ran, err := p.deployService(ctx, served, progress)
@@ -540,7 +540,7 @@ const (
 	nextValues           = "the Next runtime"
 	cdnPurgeValues       = "Cloud CDN purging"
 	nodePurgeValues      = "the revalidation of a node service"
-	previewGateValues    = "the preview gate it mounts"
+	gateValues           = "the gate it mounts"
 )
 
 func mergeValues(what, source string, set, added map[string]string) (map[string]string, error) {

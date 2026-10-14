@@ -141,7 +141,7 @@ export async function checkPruned(
 
 export type PreviewGateCredentials = { password: string; bypassSecret: string };
 
-const GATE_LOGIN_PATH = "/.ocel/preview/login";
+const GATE_LOGIN_PATH = "/.ocel/login";
 const GATE_BASIC_USER = "ocel";
 
 async function requireGateRefusal(clock: Clock, url: string): Promise<void> {
@@ -190,7 +190,7 @@ export async function checkPreviewGate(
     headers: { authorization: `Basic ${btoa(`${GATE_BASIC_USER}:${credentials.password}`)}` },
   });
   await requireGateServing(clock, url, release.buildId, "the bypass header", {
-    headers: { "x-ocel-preview-bypass": credentials.bypassSecret },
+    headers: { "x-ocel-bypass": credentials.bypassSecret },
   });
   const login = await clock.fetch(`${release.deploymentUrl}${GATE_LOGIN_PATH}`, {
     method: "POST",
@@ -198,7 +198,7 @@ export async function checkPreviewGate(
     redirect: "manual",
   });
   const cookie = (login.headers.get("set-cookie") ?? "").split(";", 1)[0];
-  if (login.status !== 204 || !cookie.startsWith("__Host-ocel-preview=")) {
+  if (login.status !== 204 || !cookie.startsWith("__Host-ocel-session=")) {
     throw new Error(
       `${release.deploymentUrl}${GATE_LOGIN_PATH} answered ${login.status} to the password, want 204 with the session cookie`,
     );

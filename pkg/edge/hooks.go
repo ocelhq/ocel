@@ -3,7 +3,7 @@ package edge
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
@@ -21,7 +21,7 @@ type Hooks struct {
 	OriginCertificates            *OriginCertificateHooks
 	PurgeHostnames                func(ctx context.Context, hostnames []string) error
 	Tunnels                       *TunnelHooks
-	PublishPreviewGate            func(ctx context.Context, publication PreviewGatePublication) error
+	PublishGate                   func(ctx context.Context, publication GatePublication) error
 }
 
 type ClientCertificateHooks struct {
@@ -46,8 +46,8 @@ type TunnelHooks struct {
 	Delete    func(ctx context.Context, id string) error
 }
 
-type PreviewGatePublication struct {
+type GatePublication struct {
 	State StackState
-	Gate  *previewgate.Gate
+	Gate  *gate.Gate
 	Say   func(string)
 }

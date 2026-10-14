@@ -13,33 +13,44 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
-var gatePluginBytes = []byte("\x00asm-the-preview-gate")
+var gatePluginBytes = []byte("\x00asm-the-gate")
 
 type gateWorld struct {
 	mu        sync.Mutex
 	events    []string
-	uploads   int
-	deletes   int
+	uploads   map[environment.Tier]int
+	deletes   map[environment.Tier]int
 	unenforce map[string]int
 	probes    map[string]int
 	probeErr  error
 }
 
-func (w *world) Ensure(_ context.Context, plugin []byte) (string, error) {
-	w.gate.mu.Lock()
-	defer w.gate.mu.Unlock()
-	w.gate.uploads++
-	digest := sha256.Sum256(plugin)
-	return "projects/acme-prod/locations/europe-west1/repositories/ocel-gate/genericArtifacts/previewgate:" + hex.EncodeToString(digest[:6]), nil
+func pluginRepository(tier environment.Tier) string {
+	return "projects/acme-prod/locations/europe-west1/repositories/ocel-" + string(tier) + "-gate/genericArtifacts/gate:"
 }
 
-func (w *world) Delete(context.Context) error {
+func (w *world) Ensure(_ context.Context, tier environment.Tier, plugin []byte) (string, error) {
 	w.gate.mu.Lock()
 	defer w.gate.mu.Unlock()
-	w.gate.deletes++
+	if w.gate.uploads == nil {
+		w.gate.uploads = map[environment.Tier]int{}
+	}
+	w.gate.uploads[tier]++
+	digest := sha256.Sum256(plugin)
+	return pluginRepository(tier) + hex.EncodeToString(digest[:6]), nil
+}
+
+func (w *world) Delete(_ context.Context, tier environment.Tier) error {
+	w.gate.mu.Lock()
+	defer w.gate.mu.Unlock()
+	if w.gate.deletes == nil {
+		w.gate.deletes = map[environment.Tier]int{}
+	}
+	w.gate.deletes[tier]++
 	return nil
 }
 

@@ -122,12 +122,12 @@ func (p *cloudFront) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
-		GatesPreviews:         true,
+		Gates:                 true,
 	}
 }
 
 func (p *cloudFront) Hooks() edge.Hooks {
-	return edge.Hooks{PublishPreviewGate: p.publishPreviewGate}
+	return edge.Hooks{PublishGate: p.publishGate}
 }
 
 func CertificateRegion(string) string { return certs.CloudFrontRegion }
@@ -290,6 +290,11 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
+	if spec.Gate != nil {
+		if err := refuseResolverWithoutGate(deployed, spec.Tier, spec.Slug); err != nil {
+			return nil, err
+		}
+	}
 
 	next := prior
 	next.Slug = spec.Slug
@@ -309,7 +314,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	s := &stack{p: p, state: next, own: own}
-	if err := s.reconcilePreviewGate(ctx, c, spec.PreviewGate); err != nil {
+	if err := s.reconcileGate(ctx, c, spec.Gate); err != nil {
 		return nil, err
 	}
 	if spec.PruneOnly {

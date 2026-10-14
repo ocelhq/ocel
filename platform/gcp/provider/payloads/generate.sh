@@ -29,6 +29,6 @@ cp -R "$runtime_dir/dist/next" "$dist/next"
 (
   cd "$gateplugin_dir"
   CGO_ENABLED=0 GOOS=wasip1 GOARCH=wasm \
-    go build -buildmode=c-shared -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/previewgate.wasm" ./cmd/plugin
+    go build -buildmode=c-shared -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/gate.wasm" ./cmd/plugin
 )
 chmod 755 "$dist/container-runtime-amd64" "$dist/envsourcesync-amd64" "$dist/bastion-amd64" "$dist/realtime-gateway-amd64"

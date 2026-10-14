@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 func TestAProbeCountsNoOtherAnswerAsEnforced(t *testing.T) {
@@ -22,7 +22,7 @@ func TestAProbeCountsNoOtherAnswerAsEnforced(t *testing.T) {
 	}{
 		"the app answering 200":               {http.StatusOK, "", "", false},
 		"the app's own 401":                   {http.StatusUnauthorized, "", "", false},
-		"a 401 that is cacheable":             {http.StatusUnauthorized, "public, max-age=60", previewgate.RobotsTag, false},
+		"a 401 that is cacheable":             {http.StatusUnauthorized, "public, max-age=60", gate.RobotsTag, false},
 		"the load balancer's 404 for no host": {http.StatusNotFound, "", "", false},
 		"a 503 from a plugin that crashed":    {http.StatusServiceUnavailable, "", "", false},
 	} {
@@ -61,19 +61,19 @@ func TestAProbeCountsOnlyTheGatesLoginFormForItsOwnRequestAsEnforced(t *testing.
 		enforced bool
 	}{
 		"the gate's login form": {func(w http.ResponseWriter, r *http.Request) {
-			verdict := previewgate.Gate{Key: "k"}.Check(previewgate.Request{Method: r.Method, Host: r.Host, Target: r.URL.RequestURI(), Header: previewgate.Header(r.Header)}, time.Now())
+			verdict := gate.Gate{Key: "k"}.Check(gate.Request{Method: r.Method, Host: r.Host, Target: r.URL.RequestURI(), Header: gate.Header(r.Header)}, time.Now())
 			maps.Copy(w.Header(), http.Header(verdict.Response.Header))
 			w.WriteHeader(verdict.Response.Status)
 			io.WriteString(w, verdict.Response.Body)
 		}, true},
 		"the app's own 401 marked private and the load balancer's noindex": {func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Cache-Control", previewgate.CacheControl)
-			w.Header().Set("X-Robots-Tag", previewgate.RobotsTag)
+			w.Header().Set("Cache-Control", gate.CacheControl)
+			w.Header().Set("X-Robots-Tag", gate.RobotsTag)
 			w.WriteHeader(http.StatusUnauthorized)
 			io.WriteString(w, "sign in to the app")
 		}, false},
 		"a login form for another request": {func(w http.ResponseWriter, _ *http.Request) {
-			verdict := previewgate.Gate{Key: "k"}.Check(previewgate.Request{Method: http.MethodGet, Target: "/"}, time.Now())
+			verdict := gate.Gate{Key: "k"}.Check(gate.Request{Method: http.MethodGet, Target: "/"}, time.Now())
 			maps.Copy(w.Header(), http.Header(verdict.Response.Header))
 			w.WriteHeader(verdict.Response.Status)
 			io.WriteString(w, verdict.Response.Body)

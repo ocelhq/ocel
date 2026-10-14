@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -67,12 +67,12 @@ func DropShields(shields []Shield, dropped func(Shield) bool) []Shield {
 	return slices.DeleteFunc(slices.Clone(shields), dropped)
 }
 
-type PreviewGate struct {
-	Owner       string           `json:"owner"`
-	PreviewGate previewgate.Gate `json:"previewGate"`
+type OwnedGate struct {
+	Owner string    `json:"owner"`
+	Gate  gate.Gate `json:"gate"`
 }
 
-func byPreviewGateOwner(a, b PreviewGate) int { return strings.Compare(a.Owner, b.Owner) }
+func byGateOwner(a, b OwnedGate) int { return strings.Compare(a.Owner, b.Owner) }
 
 type Pin struct {
 	Hostname string `json:"hostname"`

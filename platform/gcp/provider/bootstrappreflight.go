@@ -117,9 +117,9 @@ var deployRoles = []string{
 }
 
 const (
-	realtimeSecretsRole    = "roles/secretmanager.editor"
-	previewGateSecretsRole = "roles/secretmanager.admin"
-	projectNumberHole      = "PROJECT_NUMBER"
+	realtimeSecretsRole = "roles/secretmanager.editor"
+	gateSecretsRole     = "roles/secretmanager.admin"
+	projectNumberHole   = "PROJECT_NUMBER"
 )
 
 func prefixedSecretsGrant(role, prefix string) string {
@@ -127,8 +127,8 @@ func prefixedSecretsGrant(role, prefix string) string {
 		role, "projects/"+projectNumberHole+"/secrets/"+prefix)
 }
 
-func previewGateSecretsGrant(names Names) string {
-	return prefixedSecretsGrant(previewGateSecretsRole, names.PreviewGateSecretPrefix())
+func gateSecretsGrant(names Names) string {
+	return prefixedSecretsGrant(gateSecretsRole, names.GateSecretPrefix())
 }
 
 func realtimeSecretsGrant(names Names) string {

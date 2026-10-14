@@ -1,0 +1,25 @@
+---
+title: "ocel protection bypass create"
+description: "Create a bypass secret, and print it once."
+---
+
+```bash
+ocel protection bypass create [flags]
+```
+
+Create a bypass secret for this project's production, or its previews with `--preview`, and print it once.
+
+Only the secret is printed on stdout, so it can be piped into a CI secret store. Nothing shows it again. Send it in the x-ocel-bypass header; `ocel protection bypass revoke` ends it. Creating a secret leaves the password and the login sessions it opened alone.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema protection bypass create` prints.

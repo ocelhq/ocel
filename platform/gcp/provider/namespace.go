@@ -144,14 +144,18 @@ func (n Names) RealtimeGateway(project, env string) string {
 	return readable + "-" + serviceHash(string(n.namespace), project, env, realtimeInfix)
 }
 
-const previewGateInfix = "preview-gate"
+const gateInfix = "gate"
 
-func (n Names) PreviewGateSecretPrefix() string {
-	return string(n.namespace) + namespaceSecretSep + previewGateInfix + "-"
+func (n Names) GateSecretPrefix() string {
+	return string(n.namespace) + namespaceSecretSep + gateInfix + "-"
 }
 
-func (n Names) PreviewGateSecret(slug string) string {
-	return hashedSecretID(n.PreviewGateSecretPrefix(), []string{slug}, string(n.namespace), previewGateInfix, slug)
+func (n Names) GateTierSecretPrefix(tier environment.Tier) string {
+	return n.GateSecretPrefix() + string(tier) + "-"
+}
+
+func (n Names) GateSecret(tier environment.Tier, slug string) string {
+	return hashedSecretID(n.GateTierSecretPrefix(tier), []string{slug}, string(n.namespace), string(tier), gateInfix, slug)
 }
 
 func (n Names) RealtimeSecretPrefix() string {

@@ -891,12 +891,12 @@ func TestAWarmTheServiceTurnsAwayOrFailsToServeIsReportedAndAnAnswerFromTheAppIs
 		headers map[string]string
 		wantErr bool
 	}{
-		"the proxy refusing the token":                 {http.StatusForbidden, nil, true},
-		"the proxy finding no token":                   {http.StatusUnauthorized, nil, true},
-		"an app failing to start":                      {http.StatusServiceUnavailable, nil, true},
-		"an app with nothing at its health path":       {http.StatusNotFound, nil, false},
-		"the preview gate asking the app's visitor in": {http.StatusUnauthorized, gateRefusal, false},
-		"a 401 that only claims noindex":               {http.StatusUnauthorized, map[string]string{"X-Robots-Tag": "noindex"}, true},
+		"the proxy refusing the token":           {http.StatusForbidden, nil, true},
+		"the proxy finding no token":             {http.StatusUnauthorized, nil, true},
+		"an app failing to start":                {http.StatusServiceUnavailable, nil, true},
+		"an app with nothing at its health path": {http.StatusNotFound, nil, false},
+		"the gate asking the app's visitor in":   {http.StatusUnauthorized, gateRefusal, false},
+		"a 401 that only claims noindex":         {http.StatusUnauthorized, map[string]string{"X-Robots-Tag": "noindex"}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

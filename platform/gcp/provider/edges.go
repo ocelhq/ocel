@@ -46,7 +46,7 @@ func (p *Provider) edges() edges {
 		namespace: p.namespace,
 		keyValues: p.KeyValues(),
 		pins:      p,
-		gates:     previewGateSecrets{p: p},
+		gates:     gateSecrets{p: p},
 		stacks:    albStacks{p: p},
 		routes:    p,
 		entries:   p,
@@ -78,7 +78,7 @@ func (e edges) openALB() *alb.Edge {
 		Region:    e.region,
 
 		Cipher:     e.cipher,
-		GatePlugin: payloads.PreviewGatePlugin(),
+		GatePlugin: payloads.GatePlugin(),
 		Images:     e.images,
 		ProbeGate:  e.probeGate,
 

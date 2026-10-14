@@ -9,16 +9,23 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type registryServer struct {
-	mu         sync.Mutex
-	repository bool
-	versions   map[string]bool
-	created    []string
-	uploads    []string
-	bodies     []string
-	deleted    []string
+	mu           sync.Mutex
+	repositories map[string]bool
+	versions     map[string]bool
+	created      []string
+	uploads      []string
+	bodies       []string
+	deleted      []string
+}
+
+func repositoryOf(rest string) string {
+	id, _, _ := strings.Cut(rest, "/")
+	return id
 }
 
 func (s *registryServer) serve(t *testing.T) *httptest.Server {
@@ -26,6 +33,9 @@ func (s *registryServer) serve(t *testing.T) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.repositories == nil {
+			s.repositories = map[string]bool{}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		const repository = "/v1/projects/acme-prod/locations/europe-west1/repositories"
 		path := r.URL.Path
@@ -39,7 +49,7 @@ func (s *registryServer) serve(t *testing.T) *httptest.Server {
 			}
 			_, _ = io.WriteString(w, `{}`)
 		case r.Method == http.MethodGet && strings.HasPrefix(path, repository+"/"):
-			if !s.repository {
+			if !s.repositories[repositoryOf(path[len(repository)+1:])] {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = io.WriteString(w, `{"error":{"code":404,"status":"NOT_FOUND","message":"no such repository"}}`)
 				return
@@ -50,17 +60,19 @@ func (s *registryServer) serve(t *testing.T) *httptest.Server {
 				Format string `json:"format"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			s.created = append(s.created, r.URL.Query().Get("repositoryId")+" "+body.Format)
-			s.repository = true
+			id := r.URL.Query().Get("repositoryId")
+			s.created = append(s.created, id+" "+body.Format)
+			s.repositories[id] = true
 			_, _ = io.WriteString(w, `{"name":"operations/make","done":true}`)
 		case r.Method == http.MethodDelete && strings.HasPrefix(path, repository+"/"):
-			if !s.repository {
+			id := repositoryOf(path[len(repository)+1:])
+			if !s.repositories[id] {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = io.WriteString(w, `{"error":{"code":404,"status":"NOT_FOUND","message":"no such repository"}}`)
 				return
 			}
-			s.repository = false
-			s.deleted = append(s.deleted, path[len(repository)+1:])
+			delete(s.repositories, id)
+			s.deleted = append(s.deleted, id)
 			_, _ = io.WriteString(w, `{"name":"operations/remove","done":true}`)
 		case r.Method == http.MethodPost && strings.Contains(path, "/genericArtifacts:create"):
 			body, _ := io.ReadAll(r.Body)
@@ -87,7 +99,7 @@ func TestThePluginImageIsUploadedToAGenericRepositoryTheBootstrapCreates(t *test
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 
-	image, err := (pluginImages{p: p}).Ensure(context.Background(), []byte("\x00asm-gate"))
+	image, err := (pluginImages{p: p}).Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate"))
 	if err != nil {
 		t.Fatalf("Ensure = %v", err)
 	}
@@ -99,8 +111,32 @@ func TestThePluginImageIsUploadedToAGenericRepositoryTheBootstrapCreates(t *test
 		t.Fatalf("the plugin was uploaded %d times, want once", len(registry.uploads))
 	}
 	const prefix = "projects/acme-prod/locations/europe-west1/repositories/"
-	if !strings.HasPrefix(image, prefix) || !strings.Contains(image, "/genericArtifacts/previewgate:") {
-		t.Errorf("the image is %q, want the resource-name form %s<repository>/genericArtifacts/previewgate:<version>: the docker.pkg.dev form is refused", image, prefix)
+	if !strings.HasPrefix(image, prefix) || !strings.Contains(image, "/genericArtifacts/gate:") {
+		t.Errorf("the image is %q, want the resource-name form %s<repository>/genericArtifacts/gate:<version>: the docker.pkg.dev form is refused", image, prefix)
+	}
+}
+
+func TestEachTiersPluginLivesInARepositoryOfItsOwn(t *testing.T) {
+	registry := &registryServer{}
+	p := pushing(t, registry.serve(t).URL)
+	images := pluginImages{p: p}
+	preview, err := images.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	production, err := images.Ensure(context.Background(), environment.TierProduction, []byte("\x00asm-gate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(registry.created) != 2 || preview == production {
+		t.Fatalf("created %v with images %q and %q, want a repository and an image per tier", registry.created, preview, production)
+	}
+	if err := images.Delete(context.Background(), environment.TierProduction); err != nil {
+		t.Fatal(err)
+	}
+	if len(registry.deleted) != 1 || !strings.Contains(registry.deleted[0], string(environment.TierProduction)) {
+		t.Errorf("deleting production's plugin deleted %v, want the production repository alone: the preview tier's plugin still runs from its own", registry.deleted)
 	}
 }
 
@@ -108,12 +144,12 @@ func TestAPluginAlreadyInTheRegistryIsNotUploadedAgain(t *testing.T) {
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 	ensure := pluginImages{p: p}
-	first, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate"))
+	first, err := ensure.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	again, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate"))
+	again, err := ensure.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,12 +166,12 @@ func TestANewPluginBuildIsUploadedAsANewVersion(t *testing.T) {
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 	ensure := pluginImages{p: p}
-	first, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate-one"))
+	first, err := ensure.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate-one"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	second, err := ensure.Ensure(context.Background(), []byte("\x00asm-gate-two"))
+	second, err := ensure.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate-two"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,18 +185,18 @@ func TestDeletingThePluginImagesRemovesTheRepositoryTheyWereUploadedTo(t *testin
 	registry := &registryServer{}
 	p := pushing(t, registry.serve(t).URL)
 	images := pluginImages{p: p}
-	if _, err := images.Ensure(context.Background(), []byte("\x00asm-gate")); err != nil {
+	if _, err := images.Ensure(context.Background(), environment.TierPreview, []byte("\x00asm-gate")); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := images.Delete(context.Background()); err != nil {
+	if err := images.Delete(context.Background(), environment.TierPreview); err != nil {
 		t.Fatalf("Delete = %v", err)
 	}
 
 	if len(registry.deleted) != 1 || !strings.HasSuffix(registry.deleted[0], "-gate") {
 		t.Errorf("deleted %v, want the plugin's own repository", registry.deleted)
 	}
-	if err := images.Delete(context.Background()); err != nil {
+	if err := images.Delete(context.Background(), environment.TierPreview); err != nil {
 		t.Errorf("Delete of a repository already gone = %v, want nil: a teardown that is run again finishes", err)
 	}
 }

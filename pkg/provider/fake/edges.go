@@ -193,9 +193,9 @@ type edgeAccount struct {
 	serves          *[]edge.Need
 	forwards        map[string]edge.Origin
 	addressesItself bool
-	gatesPreviews   *bool
+	gates           *bool
 	gatesAtOrigin   bool
-	publications    []edge.PreviewGatePublication
+	publications    []edge.GatePublication
 	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
 
@@ -603,14 +603,14 @@ func (e *Edge) Facts() edge.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	facts := edge.Facts{
-		Supported:             edge.AllNeeds(),
-		RunsCode:              e.kind == KindRelay,
-		ProxiesRecords:        e.proxies,
-		CachesResponses:       e.caches,
-		CredentialScope:       "fake-account",
-		TunnelsToOrigin:       e.options.Tunnel,
-		GatesPreviews:         e.gatesPreviews == nil || *e.gatesPreviews,
-		GatesPreviewsAtOrigin: e.gatesAtOrigin,
+		Supported:       edge.AllNeeds(),
+		RunsCode:        e.kind == KindRelay,
+		ProxiesRecords:  e.proxies,
+		CachesResponses: e.caches,
+		CredentialScope: "fake-account",
+		TunnelsToOrigin: e.options.Tunnel,
+		Gates:           e.gates == nil || *e.gates,
+		GatesAtOrigin:   e.gatesAtOrigin,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
@@ -629,19 +629,19 @@ func (e *Edge) Facts() edge.Facts {
 	return facts
 }
 
-func (e *Edge) GatesPreviews(gates bool) {
+func (e *Edge) Gates(gates bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.gatesPreviews = &gates
+	e.gates = &gates
 }
 
-func (e *Edge) GatesPreviewsAtOrigin(gates bool) {
+func (e *Edge) GatesAtOrigin(gates bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.gatesAtOrigin = gates
 }
 
-func (e *Edge) Publications() []edge.PreviewGatePublication {
+func (e *Edge) Publications() []edge.GatePublication {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return slices.Clone(e.publications)
@@ -653,7 +653,7 @@ func (e *Edge) RefusePublication(err error) {
 	e.publishRefusal = err
 }
 
-func (e *Edge) publishPreviewGate(_ context.Context, publication edge.PreviewGatePublication) error {
+func (e *Edge) publishGate(_ context.Context, publication edge.GatePublication) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.publishRefusal != nil {
@@ -661,7 +661,7 @@ func (e *Edge) publishPreviewGate(_ context.Context, publication edge.PreviewGat
 	}
 	e.publications = append(e.publications, publication)
 	if publication.Say != nil {
-		publication.Say("The fake edge published the preview gate")
+		publication.Say("The fake edge published the gate")
 	}
 	return nil
 }
@@ -681,8 +681,8 @@ func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	hooks := edge.Hooks{VerifyCredentials: e.verify}
-	if e.gatesPreviews == nil || *e.gatesPreviews {
-		hooks.PublishPreviewGate = e.publishPreviewGate
+	if e.gates == nil || *e.gates {
+		hooks.PublishGate = e.publishGate
 	}
 	if e.proxies {
 		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}

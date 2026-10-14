@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
 func fieldNames(typ reflect.Type) []string {
@@ -29,7 +29,7 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"DomainApps", "Domains", "GlobalPreview", "PreviewGate", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Version", "Warn",
+				"DomainApps", "Domains", "Gate", "GlobalPreview", "Program", "PruneOnly", "PruneRoutes", "ServedElsewhere", "Slug", "Tier", "Version", "Warn",
 			},
 		},
 		{
@@ -137,14 +137,14 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview gate does not restamp the spec: it is published to the releases store, not deployed in the script", func(t *testing.T) {
+	t.Run("a gate does not restamp the spec: it is published to the releases store, not deployed in the script", func(t *testing.T) {
 		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
 		generic, err := genericWorker(spec, spec.Slug, "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
-		stampOf := func(gate *previewgate.Gate) string {
-			spec.PreviewGate = gate
+		stampOf := func(published *gate.Gate) string {
+			spec.Gate = published
 			stamp, err := specStamp(spec, generic)
 			if err != nil {
 				t.Fatalf("specStamp: %v", err)
@@ -152,7 +152,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 			return stamp
 		}
 
-		if ungated, gated := stampOf(nil), stampOf(&previewgate.Gate{Key: "k1", PasswordMAC: "m1"}); ungated != gated {
+		if ungated, gated := stampOf(nil), stampOf(&gate.Gate{Key: "k1", PasswordMAC: "m1"}); ungated != gated {
 			t.Errorf("stamps = %q, %q, want one: a rotated gate must not redeploy the worker, and one that never reaches the script cannot leave it stale", ungated, gated)
 		}
 	})

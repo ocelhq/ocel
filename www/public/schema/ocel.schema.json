@@ -2126,16 +2126,20 @@
       "title": "LifecycleConfig",
       "type": "object"
     },
-    "previews": {
+    "protection": {
       "additionalProperties": false,
-      "description": "How this project's previews are served.",
+      "description": "Which tiers ask for a password before they answer.",
       "properties": {
-        "protection": {
-          "description": "Whether every preview of this project asks for a password before it answers. Every deploy of a preview enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again. The password is shown and rotated with ocel preview protection. Left off, false.",
+        "preview": {
+          "description": "Whether every preview of this project asks for a password before it answers. Every preview deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again while keeping the password. A preview password never opens production. The password is shown with ocel protection password --preview and rotated with ocel protection password rotate --preview. Left off, false.",
+          "type": "boolean"
+        },
+        "production": {
+          "description": "Whether production asks for a password before it answers. Every production deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens production again while keeping the password, so turning it back on restores it. The password is shown with ocel protection password and rotated with ocel protection password rotate. Left off, false.",
           "type": "boolean"
         }
       },
-      "title": "PreviewsConfig",
+      "title": "ProtectionConfig",
       "type": "object"
     },
     "provider": {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
 )
 
@@ -27,8 +27,8 @@ func TestAGateIsReadFromTheMountedFileAgainOnceTheCacheLapses(t *testing.T) {
 	source := mountedgate.New(func() ([]byte, error) { reads++; return []byte(contents), nil }, clk.now)
 
 	for range 3 {
-		if gate, err := source.Current(); err != nil || gate == nil || gate.Key != "first" {
-			t.Fatalf("Current = %+v, %v, want the first gate", gate, err)
+		if held, err := source.Current(); err != nil || held == nil || held.Key != "first" {
+			t.Fatalf("Current = %+v, %v, want the first gate", held, err)
 		}
 	}
 	if reads != 1 {
@@ -37,8 +37,8 @@ func TestAGateIsReadFromTheMountedFileAgainOnceTheCacheLapses(t *testing.T) {
 
 	contents = `{"key":"rotated","passwordMac":"m"}`
 	clk.at = clk.at.Add(mountedgate.CacheFor)
-	if gate, err := source.Current(); err != nil || gate == nil || gate.Key != "rotated" {
-		t.Errorf("Current after the cache lapsed = %+v, %v, want the rotated gate", gate, err)
+	if held, err := source.Current(); err != nil || held == nil || held.Key != "rotated" {
+		t.Errorf("Current after the cache lapsed = %+v, %v, want the rotated gate", held, err)
 	}
 }
 
@@ -54,13 +54,13 @@ func TestAMountThatCannotBeReadIsAnErrorAndRecoversWhenItCan(t *testing.T) {
 		return []byte(`{"key":"k","passwordMac":"m"}`), nil
 	}, clk.now)
 
-	if gate, err := source.Current(); err == nil || gate != nil {
-		t.Fatalf("Current = %+v, %v, want an error: a gated service with no readable gate serves no one", gate, err)
+	if held, err := source.Current(); err == nil || held != nil {
+		t.Fatalf("Current = %+v, %v, want an error: a gated service with no readable gate serves no one", held, err)
 	}
 	failure = nil
 	clk.at = clk.at.Add(mountedgate.CacheFor)
-	if gate, err := source.Current(); err != nil || gate == nil {
-		t.Errorf("Current once the mount reads = %+v, %v, want the gate", gate, err)
+	if held, err := source.Current(); err != nil || held == nil {
+		t.Errorf("Current once the mount reads = %+v, %v, want the gate", held, err)
 	}
 }
 
@@ -69,8 +69,8 @@ func TestAMalformedMountIsAnError(t *testing.T) {
 
 	source := mountedgate.New(func() ([]byte, error) { return []byte("{"), nil }, time.Now)
 
-	if gate, err := source.Current(); !errors.Is(err, previewgate.ErrMountedGateUnreadable) || gate != nil {
-		t.Errorf("Current = %+v, %v, want the unreadable error", gate, err)
+	if held, err := source.Current(); !errors.Is(err, gate.ErrMountedGateUnreadable) || held != nil {
+		t.Errorf("Current = %+v, %v, want the unreadable error", held, err)
 	}
 }
 
@@ -79,8 +79,8 @@ func TestAWithdrawnMountIsNoGate(t *testing.T) {
 
 	source := mountedgate.New(func() ([]byte, error) { return []byte("null\n"), nil }, time.Now)
 
-	if gate, err := source.Current(); err != nil || gate != nil {
-		t.Errorf("Current = %+v, %v, want no gate and no error", gate, err)
+	if held, err := source.Current(); err != nil || held != nil {
+		t.Errorf("Current = %+v, %v, want no gate and no error", held, err)
 	}
 }
 
@@ -92,7 +92,7 @@ func TestTheEnvironmentNamesTheMountedFileAndTheServiceIsGatedFromIt(t *testing.
 		t.Fatal(err)
 	}
 
-	source, kept := mountedgate.FromEnv([]string{"A=1", previewgate.MountedFileVar + "=" + path, "B=2"})
+	source, kept := mountedgate.FromEnv([]string{"A=1", gate.MountedFileVar + "=" + path, "B=2"})
 
 	if source == nil {
 		t.Fatal("FromEnv = nil, want a source for the named file")
@@ -100,21 +100,21 @@ func TestTheEnvironmentNamesTheMountedFileAndTheServiceIsGatedFromIt(t *testing.
 	if len(kept) != 2 || kept[0] != "A=1" || kept[1] != "B=2" {
 		t.Errorf("kept = %v, want the variables the app may see, without the gate's", kept)
 	}
-	if gate, err := source.Current(); err != nil || gate == nil || gate.Key != "k" {
-		t.Errorf("Current = %+v, %v, want the file's gate", gate, err)
+	if held, err := source.Current(); err != nil || held == nil || held.Key != "k" {
+		t.Errorf("Current = %+v, %v, want the file's gate", held, err)
 	}
 }
 
 func TestAnInlineGateIsTheGateWhenNoFileIsNamed(t *testing.T) {
 	t.Parallel()
 
-	source, kept := mountedgate.FromEnv([]string{previewgate.MountedInlineVar + `={"key":"inline","passwordMac":"m"}`})
+	source, kept := mountedgate.FromEnv([]string{gate.MountedInlineVar + `={"key":"inline","passwordMac":"m"}`})
 
 	if len(kept) != 0 {
 		t.Errorf("kept = %v, want the gate withheld from the app", kept)
 	}
-	if gate, err := source.Current(); err != nil || gate == nil || gate.Key != "inline" {
-		t.Errorf("Current = %+v, %v, want the inline gate", gate, err)
+	if held, err := source.Current(); err != nil || held == nil || held.Key != "inline" {
+		t.Errorf("Current = %+v, %v, want the inline gate", held, err)
 	}
 }
 
@@ -128,8 +128,8 @@ func TestAReadThatHangsFailsClosedOnceItsTimeoutPasses(t *testing.T) {
 
 	answered := make(chan error, 1)
 	go func() {
-		gate, err := source.Current()
-		if gate != nil {
+		held, err := source.Current()
+		if held != nil {
 			err = errors.New("a gate was served from a read that never finished")
 		}
 		answered <- err
@@ -161,12 +161,12 @@ func TestRequestsThatArriveDuringARefreshShareOneRead(t *testing.T) {
 	keys := make(chan string, 5)
 	for range 5 {
 		wg.Go(func() {
-			gate, err := source.Current()
-			if err != nil || gate == nil {
+			held, err := source.Current()
+			if err != nil || held == nil {
 				keys <- fmt.Sprint(err)
 				return
 			}
-			keys <- gate.Key
+			keys <- held.Key
 		})
 	}
 	for reads.Load() == 0 {
@@ -200,8 +200,8 @@ func TestAReadThatTimedOutServesItsGateOnceItFinishes(t *testing.T) {
 	close(unblock)
 	source.SetReadTimeout(5 * time.Second)
 
-	if gate, err := source.Current(); err != nil || gate == nil || gate.Key != "k" {
-		t.Errorf("Current once the read finished = %+v, %v, want the gate", gate, err)
+	if held, err := source.Current(); err != nil || held == nil || held.Key != "k" {
+		t.Errorf("Current once the read finished = %+v, %v, want the gate", held, err)
 	}
 }
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (name) => readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-const source = `${read("resolver.js")}\n${read("ungated.js")}`;
+const source = `${read("resolver.js")}\n${read("gate.js")}`;
 
 function load(cf) {
   const body = source.replace(/^import cf from 'cloudfront';\n/m, "");
@@ -49,6 +49,7 @@ const ASSET_PREFIX = "production/proj1/web/r3f8a1c9d/assets";
 
 const ROUTE = {
   stack: "ocel.proj1.production",
+  slug: "proj1",
   origin: "abcdef.lambda-url.eu-west-1.on.aws",
   release: RELEASE,
   assets: "ocel-assets.s3.eu-west-1.amazonaws.com",

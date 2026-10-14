@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -20,71 +20,123 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var shopGate = previewgate.Gate{Key: "shop-key", PasswordMAC: "shop-mac", BypassSecrets: []string{"shop-bypass"}}
+var shopGate = gate.Gate{Key: "shop-key", PasswordMAC: "shop-mac", BypassSecrets: []string{"shop-bypass"}}
 
-var blogGate = previewgate.Gate{Key: "blog-key", PasswordMAC: "blog-mac"}
+var blogGate = gate.Gate{Key: "blog-key", PasswordMAC: "blog-mac"}
+
+var tiers = []environment.Tier{environment.TierPreview, environment.TierProduction}
 
 func gatedEdge(t *testing.T) (*Edge, *world) {
 	t.Helper()
+	return gatedEdgeOn(t, environment.TierPreview)
+}
+
+func gatedEdgeOn(t *testing.T, tiers ...environment.Tier) (*Edge, *world) {
+	t.Helper()
 	balancer, w := balancing(t)
-	if _, err := balancer.Bootstrap(context.Background(), environment.TierPreview); err != nil {
-		t.Fatalf("Bootstrap(preview) = %v", err)
+	for _, tier := range tiers {
+		if _, err := balancer.Bootstrap(context.Background(), tier); err != nil {
+			t.Fatalf("Bootstrap(%s) = %v", tier, err)
+		}
 	}
 	return balancer, w
 }
 
-func reconcileGated(t *testing.T, balancer *Edge, slug string, gate *previewgate.Gate) *stack {
+func reconcileGated(t *testing.T, balancer *Edge, slug string, held *gate.Gate) *stack {
+	t.Helper()
+	return reconcileGatedOn(t, balancer, environment.TierPreview, slug, held)
+}
+
+func reconcileGatedOn(t *testing.T, balancer *Edge, tier environment.Tier, slug string, held *gate.Gate) *stack {
 	t.Helper()
 	reconciled, err := balancer.Reconcile(context.Background(),
-		edge.StackSpec{Slug: slug, Tier: environment.TierPreview, PreviewGate: gate}, edge.StackState{})
+		edge.StackSpec{Slug: slug, Tier: tier, Gate: held}, edge.StackState{})
 	if err != nil {
-		t.Fatalf("Reconcile(%s) = %v", slug, err)
+		t.Fatalf("Reconcile(%s, %s) = %v", tier, slug, err)
 	}
 	return reconciled.(*stack)
 }
 
-func TestBootstrappingThePreviewTierAttachesAFailClosedGateExtensionToItsForwardingRule(t *testing.T) {
+func TestBootstrappingEachTierAttachesAFailClosedGateExtensionToItsForwardingRule(t *testing.T) {
 	t.Parallel()
+	for _, tier := range tiers {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
 
-	_, w := gatedEdge(t)
+			_, w := gatedEdgeOn(t, tier)
 
-	declared := w.declarations(GateStack(environment.TierPreview))
-	extension, found := declared["ocel-alb-preview-gate-edge"]
-	if !found || extension.Token != lbEdgeExtensionToken {
-		t.Fatalf("the gate stack declares %v, want a load balancer edge extension: it runs before the url map and before Cloud CDN, on every request", keys(declared))
-	}
-	rules, _ := extension.Args["forwardingRules"].([]any)
-	if len(rules) != 1 || !strings.HasSuffix(rules[0].(string), "/global/forwardingRules/ocel-alb-preview-forward") {
-		t.Errorf("the extension attaches to %v, want the tier's https forwarding rule", rules)
-	}
-	chains, _ := extension.Args["extensionChains"].([]any)
-	chain, _ := chains[0].(map[string]any)
-	extensions, _ := chain["extensions"].([]any)
-	gate, _ := extensions[0].(map[string]any)
-	if gate["failOpen"] != false {
-		t.Errorf("the extension has failOpen = %v, want false: a plugin that crashes refuses requests rather than passing them ungated", gate["failOpen"])
-	}
-	if events, _ := gate["supportedEvents"].([]any); len(events) != 1 || events[0] != "REQUEST_HEADERS" {
-		t.Errorf("the extension runs on %v, want REQUEST_HEADERS alone", events)
-	}
-	if got := chain["matchCondition"].(map[string]any)["celExpression"]; got != "true" {
-		t.Errorf("the extension chain matches %v, want every request", got)
+			declared := w.declarations(GateStack(tier))
+			extension, found := declared["ocel-alb-"+string(tier)+"-gate-edge"]
+			if !found || extension.Token != lbEdgeExtensionToken {
+				t.Fatalf("the gate stack declares %v, want a load balancer edge extension: it runs before the url map and before Cloud CDN, on every request", keys(declared))
+			}
+			rules, _ := extension.Args["forwardingRules"].([]any)
+			if len(rules) != 1 || !strings.HasSuffix(rules[0].(string), "/global/forwardingRules/ocel-alb-"+string(tier)+"-forward") {
+				t.Errorf("the extension attaches to %v, want the tier's https forwarding rule", rules)
+			}
+			chains, _ := extension.Args["extensionChains"].([]any)
+			chain, _ := chains[0].(map[string]any)
+			extensions, _ := chain["extensions"].([]any)
+			plugin, _ := extensions[0].(map[string]any)
+			if plugin["failOpen"] != false {
+				t.Errorf("the extension has failOpen = %v, want false: a plugin that crashes refuses requests rather than passing them ungated", plugin["failOpen"])
+			}
+			if events, _ := plugin["supportedEvents"].([]any); len(events) != 1 || events[0] != "REQUEST_HEADERS" {
+				t.Errorf("the extension runs on %v, want REQUEST_HEADERS alone", events)
+			}
+			if got := chain["matchCondition"].(map[string]any)["celExpression"]; got != "true" {
+				t.Errorf("the extension chain matches %v, want every request", got)
+			}
+		})
 	}
 }
 
-func TestThePluginIsUploadedOnceToTheRegistryAndTheTierRunsThatImage(t *testing.T) {
+func TestEveryForwardingRuleThatServesContentRunsTheGateBeforeCloudCDN(t *testing.T) {
 	t.Parallel()
+	for _, tier := range tiers {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
 
-	_, w := gatedEdge(t)
+			_, w := gatedEdgeOn(t, tier)
 
-	if w.gate.uploads != 1 {
-		t.Errorf("the bootstrap ensured the plugin image %d times, want once", w.gate.uploads)
+			front := w.declarations(LoadBalancerStack(tier))
+			extension := w.declarations(GateStack(tier))["ocel-alb-"+string(tier)+"-gate-edge"]
+			attached, _ := extension.Args["forwardingRules"].([]any)
+			rules := 0
+			for name, declared := range front {
+				if declared.Token != "gcp:compute/globalForwardingRule:GlobalForwardingRule" {
+					continue
+				}
+				rules++
+				if !slices.ContainsFunc(attached, func(rule any) bool { return strings.HasSuffix(rule.(string), "/forwardingRules/"+name) }) {
+					t.Errorf("forwarding rule %s reaches the url map and its Cloud CDN backends without the gate extension, which runs before the cache lookup: a cached response would reach a visitor the gate refuses", name)
+				}
+			}
+			if rules == 0 {
+				t.Fatal("the load balancer declares no forwarding rule, and this test proves nothing")
+			}
+		})
 	}
-	declared := w.declarations(GateStack(environment.TierPreview))
-	versions, _ := declared["ocel-alb-preview-gate"].Args["versions"].([]any)
-	version, _ := versions[0].(map[string]any)
-	if image, _ := version["imageUri"].(string); !strings.HasPrefix(image, "projects/acme-prod/locations/europe-west1/repositories/ocel-gate/genericArtifacts/previewgate:") {
-		t.Errorf("the plugin runs image %q, want the generic artifact in the project's own repository, in resource-name form", image)
+}
+
+func TestThePluginIsUploadedOnceToTheTiersRegistryAndTheTierRunsThatImage(t *testing.T) {
+	t.Parallel()
+	for _, tier := range tiers {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
+
+			_, w := gatedEdgeOn(t, tier)
+
+			if w.gate.uploads[tier] != 1 || len(w.gate.uploads) != 1 {
+				t.Errorf("the bootstrap ensured the plugin images %v, want once in the %s tier's repository", w.gate.uploads, tier)
+			}
+			declared := w.declarations(GateStack(tier))
+			versions, _ := declared["ocel-alb-"+string(tier)+"-gate"].Args["versions"].([]any)
+			version, _ := versions[0].(map[string]any)
+			if image, _ := version["imageUri"].(string); !strings.HasPrefix(image, pluginRepository(tier)) {
+				t.Errorf("the plugin runs image %q, want the generic artifact in the tier's own repository, in resource-name form", image)
+			}
+		})
 	}
 }
 
@@ -98,22 +150,6 @@ func TestAnEmptyGateSetStillAttachesThePluginSoGatingLaterIsAVersionSwapAlone(t 
 	}
 	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); len(hosts) != 0 {
 		t.Errorf("the plugin gates %v on a tier no project gates", hosts)
-	}
-}
-
-func TestTheProductionTierAttachesNoGateExtension(t *testing.T) {
-	t.Parallel()
-
-	balancer, w := balancing(t)
-	if _, err := balancer.Bootstrap(context.Background(), environment.TierProduction); err != nil {
-		t.Fatal(err)
-	}
-
-	if declared := w.declarations(GateStack(environment.TierProduction)); len(declared) != 0 {
-		t.Errorf("the production tier declares %v for a gate, and only previews are gated", keys(declared))
-	}
-	if w.gate.uploads != 0 {
-		t.Errorf("the production bootstrap uploaded the plugin %d times", w.gate.uploads)
 	}
 }
 
@@ -132,12 +168,12 @@ func TestAShieldedPreviewBalancerAttachesNoGateExtensionBecauseTheEdgeInFrontOfI
 	}
 }
 
-func TestTheALBEdgeGatesPreviews(t *testing.T) {
+func TestTheALBEdgeGates(t *testing.T) {
 	t.Parallel()
 
 	balancer, _ := balancing(t)
-	if !balancer.Facts().GatesPreviews {
-		t.Error("Facts().GatesPreviews = false, and a gated preview is refused on an edge that does not run the gate")
+	if !balancer.Facts().Gates {
+		t.Error("Facts().Gates = false, and a gated preview is refused on an edge that does not run the gate")
 	}
 }
 
@@ -234,7 +270,7 @@ func TestAGatedPreviewIsWarmedWithASessionTheGateAdmits(t *testing.T) {
 	if len(cookies) == 0 {
 		t.Fatal("the promotion warmed nothing")
 	}
-	verdict := shopGate.Check(previewgate.Request{Method: "HEAD", Host: bound, Target: "/", Header: previewgate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
+	verdict := shopGate.Check(gate.Request{Method: "HEAD", Host: bound, Target: "/", Header: gate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
 	if verdict.Response != nil {
 		t.Errorf("the warm carried %q, which the gate refuses with %d, so it warms nothing", cookies[len(cookies)-1], verdict.Response.Status)
 	}
@@ -246,13 +282,13 @@ func TestAProtectedPreviewBehindAShieldedLoadBalancerIsWarmedWithASessionTheEdge
 	ctx := context.Background()
 	balancer, w := balancing(t)
 	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
-	if err := stackrecords.ChangePreviewGates(ctx, balancer.deps.KeyValues, balancer.deps.Cipher, func(records map[string]stackrecords.PreviewGateRecord) error {
-		records["shop"] = stackrecords.PreviewGateRecord{Gate: shopGate, Enabled: true}
+	if err := stackrecords.ChangeGates(ctx, balancer.deps.KeyValues, balancer.deps.Cipher, environment.TierPreview, func(records map[string]stackrecords.GateRecord) error {
+		records["shop"] = stackrecords.GateRecord{Gate: shopGate, Enabled: true}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	reconciledStack, err := balancer.Shielded().Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &shopGate}, edge.StackState{})
+	reconciledStack, err := balancer.Shielded().Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &shopGate}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile = %v", err)
 	}
@@ -270,7 +306,7 @@ func TestAProtectedPreviewBehindAShieldedLoadBalancerIsWarmedWithASessionTheEdge
 	if len(cookies) == 0 {
 		t.Fatal("the promotion warmed nothing")
 	}
-	verdict := shopGate.Check(previewgate.Request{Method: "HEAD", Host: bound, Target: "/", Header: previewgate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
+	verdict := shopGate.Check(gate.Request{Method: "HEAD", Host: bound, Target: "/", Header: gate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
 	if verdict.Response != nil {
 		t.Errorf("the warm carried %q, which the edge in front refuses with %d, so it never reaches the revision", cookies[len(cookies)-1], verdict.Response.Status)
 	}
@@ -390,7 +426,7 @@ func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
 	failed.BypassSecrets = []string{"failed"}
 	w.failUps(GateStack(environment.TierPreview), errors.New("the update was interrupted"))
 	if _, err := balancer.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &failed}, edge.StackState{}); err == nil {
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &failed}, edge.StackState{}); err == nil {
 		t.Fatal("Reconcile succeeded through a failed raise")
 	}
 	next := shopGate
@@ -413,9 +449,9 @@ func TestPublishingManyTimesNeverKeepsMoreThanTwoVersions(t *testing.T) {
 
 	balancer, w := gatedEdge(t)
 	for i := range 6 {
-		gate := shopGate
-		gate.BypassSecrets = []string{strings.Repeat("x", i+1)}
-		reconcileGated(t, balancer, "shop", &gate)
+		rotated := shopGate
+		rotated.BypassSecrets = []string{strings.Repeat("x", i+1)}
+		reconcileGated(t, balancer, "shop", &rotated)
 	}
 
 	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["versions"].([]any)
@@ -485,7 +521,7 @@ func TestAPublicationThatLostARaceRecordsThePluginVersionThatIsRunning(t *testin
 	shopWrote, blogWrote, blogUp := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var closeShopWrote, closeBlogWrote sync.Once
 	balancer.deps.KeyValues = watchedKeyValues{Store: balancer.deps.KeyValues, onWrite: func(key keyvalue.Key) {
-		if key.String() != gatePublicationKey().String() || !shopPublishing.Load() {
+		if key.String() != gatePublicationKey(environment.TierPreview).String() || !shopPublishing.Load() {
 			return
 		}
 		select {
@@ -503,7 +539,7 @@ func TestAPublicationThatLostARaceRecordsThePluginVersionThatIsRunning(t *testin
 			<-shopWrote
 		})
 		go func() {
-			_, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: "blog", Tier: environment.TierPreview, PreviewGate: &blogGate}, edge.StackState{})
+			_, err := balancer.Reconcile(ctx, edge.StackSpec{Slug: "blog", Tier: environment.TierPreview, Gate: &blogGate}, edge.StackState{})
 			blogDone <- err
 		}()
 		<-blogUp
@@ -532,7 +568,7 @@ func TestAGateThatOutgrowsThePluginPackageIsRefusedWithWhatToTrim(t *testing.T) 
 	huge.BypassSecrets = []string{strings.Repeat("s", 6*1024*1024)}
 
 	_, err := balancer.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &huge}, edge.StackState{})
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &huge}, edge.StackState{})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
@@ -549,7 +585,7 @@ func TestAGatedDeployOnATierWhoseLoadBalancerRunsNoPluginIsRefusedUntilItIsBoots
 	balancer, _ := balancing(t)
 
 	_, err := balancer.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PreviewGate: &shopGate}, edge.StackState{})
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &shopGate}, edge.StackState{})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
@@ -560,17 +596,25 @@ func TestAGatedDeployOnATierWhoseLoadBalancerRunsNoPluginIsRefusedUntilItIsBoots
 	}
 }
 
-func TestTearingDownThePreviewTierDeletesTheRepositoryThePluginWasUploadedTo(t *testing.T) {
+func TestTearingDownATierDeletesOnlyItsOwnPluginRepositoryAndGates(t *testing.T) {
 	t.Parallel()
 
-	balancer, w := gatedEdge(t)
+	ctx := context.Background()
+	balancer, w := gatedEdgeOn(t, tiers...)
+	reconcileGatedOn(t, balancer, environment.TierPreview, "shop", &shopGate)
 
-	if err := balancer.Teardown(context.Background(), environment.TierPreview); err != nil {
-		t.Fatalf("Teardown(preview) = %v", err)
+	if err := balancer.Teardown(ctx, environment.TierProduction); err != nil {
+		t.Fatalf("Teardown(production) = %v", err)
 	}
 
-	if w.gate.deletes != 1 {
-		t.Errorf("the teardown deleted the plugin's repository %d times, want once: what a bootstrap uploads its teardown removes", w.gate.deletes)
+	if w.gate.deletes[environment.TierProduction] != 1 || w.gate.deletes[environment.TierPreview] != 0 {
+		t.Errorf("the teardown deleted the plugin repositories %v, want the production tier's alone: what a bootstrap uploads its teardown removes, and the preview tier still runs its plugin", w.gate.deletes)
+	}
+	if _, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found {
+		t.Errorf("the preview gate of shop = %t, %v after production was torn down, want it kept", found, err)
+	}
+	if len(w.declarations(GateStack(environment.TierPreview))) == 0 {
+		t.Error("tearing production down took the preview tier's gate stack with it")
 	}
 }
 
@@ -641,7 +685,7 @@ func TestThePluginConfigIsNeverHeldInThePlainByTheKeyValueStore(t *testing.T) {
 	balancer, _ := gatedEdge(t)
 	reconcileGated(t, balancer, "shop", &shopGate)
 
-	entries, err := balancer.deps.KeyValues.List(context.Background(), gatePartition())
+	entries, err := balancer.deps.KeyValues.List(context.Background(), gatePartition(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -709,7 +753,7 @@ func TestThePluginConfigIsMarkedSecretInThePulumiState(t *testing.T) {
 
 	secret, err := pluginConfigIsSecret(gateProgram(gateSpec{
 		Names: loadBalancerNames(environment.TierPreview, false),
-		Main:  gateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-preview-gate 1\n"},
+		Main:  gateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-gate 1\n"},
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -740,15 +784,15 @@ func TestPublishingAGateSendsItToThePluginWithoutAnotherDeploy(t *testing.T) {
 	state := reconcileGated(t, balancer, "shop", nil).State()
 	var said []string
 
-	err := balancer.Hooks().PublishPreviewGate(ctx, edge.PreviewGatePublication{State: state, Gate: &shopGate, Say: func(line string) { said = append(said, line) }})
+	err := balancer.Hooks().PublishGate(ctx, edge.GatePublication{State: state, Gate: &shopGate, Say: func(line string) { said = append(said, line) }})
 
 	if err != nil {
-		t.Fatalf("PublishPreviewGate = %v", err)
+		t.Fatalf("PublishGate = %v", err)
 	}
 	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin runs %q, want a config holding the published gate's key", config)
 	}
-	if recorded, found, err := balancer.readGateRecord(ctx, "shop"); err != nil || !found || recorded.Gate.Key != shopGate.Key {
+	if recorded, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found || recorded.Gate.Key != shopGate.Key {
 		t.Errorf("recorded gate = %+v, %t, %v, want the published one", recorded.Gate, found, err)
 	}
 	if len(said) == 0 {
@@ -763,12 +807,12 @@ func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
 	balancer, _ := gatedEdge(t)
 	state := reconcileGated(t, balancer, "shop", nil).State()
 
-	edgeconformance.RunPublishedPreviewGate(t, edgeconformance.PublishedPreviewGate{
-		Publish: func(ctx context.Context, gate *previewgate.Gate) error {
-			return balancer.Hooks().PublishPreviewGate(ctx, edge.PreviewGatePublication{State: state, Gate: gate})
+	edgeconformance.RunPublishedGate(t, edgeconformance.PublishedGate{
+		Publish: func(ctx context.Context, held *gate.Gate) error {
+			return balancer.Hooks().PublishGate(ctx, edge.GatePublication{State: state, Gate: held})
 		},
-		Read: func(context.Context) (*previewgate.Gate, error) {
-			recorded, found, err := balancer.readGateRecord(ctx, "shop")
+		Read: func(context.Context) (*gate.Gate, error) {
+			recorded, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop")
 			if err != nil || !found {
 				return nil, err
 			}
@@ -798,5 +842,131 @@ func TestDestroyingAGatedProjectAgainAfterAFailedWithdrawalRollsTheGateOutOfTheP
 
 	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin still holds the destroyed project's keys after the retry:\n%s", config)
+	}
+}
+
+var productionGate = gate.Gate{Key: "shop-production-key", PasswordMAC: "shop-production-mac"}
+
+func TestAProtectedProductionHostIsInTheProductionPluginAndProvenGatedBeforeItIsRouted(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := gatedEdgeOn(t, environment.TierProduction)
+	shop := reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+	bindShop(t, shop)
+
+	stage(t, shop, staticRecord("b1"))
+	promote(t, shop, "p1", "b1")
+
+	if hosts := w.gatedHosts(GateStack(environment.TierProduction)); !slices.Equal(hosts, []string{"shop.example.com"}) {
+		t.Errorf("the production plugin gates %v, want shop.example.com", hosts)
+	}
+	events := w.happened()
+	probedAt, routedAt := indexOf(events, "probe shop.example.com"), indexOf(events, "route shop.example.com")
+	if probedAt < 0 || routedAt < 0 || probedAt > routedAt {
+		t.Errorf("events %v, want shop.example.com proven gated before it was routed: a host the gate does not reach would serve production to anyone", events)
+	}
+}
+
+func TestAProtectedProductionIsWarmedWithASessionItsOwnGateAdmits(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := gatedEdgeOn(t, environment.TierProduction)
+	shop := reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+	bindShop(t, shop)
+	stage(t, shop, staticRecord("b1"))
+	promote(t, shop, "p1", "b1")
+	stage(t, shop, staticRecord("b2"))
+	promote(t, shop, "p2", "b2")
+
+	w.mu.Lock()
+	cookies := slices.Clone(w.warmCookies)
+	w.mu.Unlock()
+	if len(cookies) == 0 {
+		t.Fatal("the promotion warmed nothing")
+	}
+	last := cookies[len(cookies)-1]
+	if verdict := productionGate.Check(gate.Request{Method: "HEAD", Host: "shop.example.com", Target: "/", Header: gate.Header{"Cookie": {last}}}, time.Now()); verdict.Response != nil {
+		t.Errorf("the warm carried %q, which the production gate refuses with %d, so it warms nothing", last, verdict.Response.Status)
+	}
+}
+
+func TestAProjectsProductionAndPreviewGatesNeverShareAPluginOrARecord(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdgeOn(t, tiers...)
+	reconcileGatedOn(t, balancer, environment.TierPreview, "shop", &shopGate)
+	reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+
+	production, preview := w.gateConfig(GateStack(environment.TierProduction)), w.gateConfig(GateStack(environment.TierPreview))
+	if !strings.Contains(production, productionGate.Key) || strings.Contains(production, shopGate.Key) {
+		t.Errorf("the production plugin runs\n%s\nwant the production key alone: a preview password must never open production", production)
+	}
+	if !strings.Contains(preview, shopGate.Key) || strings.Contains(preview, productionGate.Key) {
+		t.Errorf("the preview plugin runs\n%s\nwant the preview key alone", preview)
+	}
+	entry, err := keyvalue.ReadOrEmpty(ctx, balancer.deps.KeyValues, gateRecordKey(environment.TierProduction, "shop"))
+	if err != nil || len(entry.Value) == 0 {
+		t.Fatalf("the production gate record = %v, %v, want it kept", entry, err)
+	}
+	var opened gateRecord
+	if err := balancer.openRecord(ctx, environment.TierPreview, gateRecordData(environment.TierPreview, "shop"), entry.Value, &opened); err == nil {
+		t.Error("the production gate record opens as the preview tier's, and one tier's records would pass for the other's")
+	}
+}
+
+func TestTurningProductionProtectionOffOpensProductionAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdgeOn(t, tiers...)
+	reconcileGatedOn(t, balancer, environment.TierPreview, "shop", &shopGate)
+	reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+
+	reconcileGatedOn(t, balancer, environment.TierProduction, "shop", nil)
+
+	if config := w.gateConfig(GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
+		t.Errorf("the production plugin still runs shop's gate after protection.production was turned off:\n%s", config)
+	}
+	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+		t.Errorf("the preview plugin lost shop's gate when production was opened:\n%s", config)
+	}
+	if _, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found {
+		t.Errorf("the preview gate record = %t, %v, want it kept", found, err)
+	}
+}
+
+func TestPublishingAProductionGateSendsItToTheProductionPluginAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdgeOn(t, tiers...)
+	state := reconcileGatedOn(t, balancer, environment.TierProduction, "shop", nil).State()
+
+	if err := balancer.Hooks().PublishGate(ctx, edge.GatePublication{State: state, Gate: &productionGate}); err != nil {
+		t.Fatalf("PublishGate = %v", err)
+	}
+
+	if config := w.gateConfig(GateStack(environment.TierProduction)); !strings.Contains(config, productionGate.Key) {
+		t.Errorf("the production plugin runs %q, want the published gate", config)
+	}
+	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, productionGate.Key) {
+		t.Errorf("the preview plugin runs the production gate:\n%s", config)
+	}
+}
+
+func TestDestroyingAProtectedProductionProjectRemovesItsGateFromTheProductionPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdgeOn(t, environment.TierProduction)
+	shop := reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+
+	if err := shop.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy = %v", err)
+	}
+
+	if config := w.gateConfig(GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
+		t.Errorf("the production plugin still holds the destroyed project's keys:\n%s", config)
 	}
 }

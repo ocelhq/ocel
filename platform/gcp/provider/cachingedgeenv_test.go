@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -66,6 +67,7 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 		t.Run(name, func(t *testing.T) {
 			server := &runServer{}
 			p := server.open(t)
+			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
 
@@ -108,6 +110,7 @@ func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			server := &runServer{}
 			p := server.open(t)
+			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
 

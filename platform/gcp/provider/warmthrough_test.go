@@ -17,13 +17,13 @@ func TestWarmingThroughALoadBalancerDialsItsAddressAndAsksForTheHostname(t *test
 	roots := x509.NewCertPool()
 	roots.AddCert(balancer.Certificate())
 
-	if err := (&Provider{warmRoots: roots}).warmThrough(context.Background(), "https://example.com/healthz", balancer.Listener.Addr().String(), "__Host-ocel-preview=1.ab"); err != nil {
+	if err := (&Provider{warmRoots: roots}).warmThrough(context.Background(), "https://example.com/healthz", balancer.Listener.Addr().String(), "__Host-ocel-session=1.ab"); err != nil {
 		t.Fatalf("warmThrough() = %v", err)
 	}
 
 	select {
 	case got := <-asked:
-		if got != "HEAD example.com/healthz __Host-ocel-preview=1.ab" {
+		if got != "HEAD example.com/healthz __Host-ocel-session=1.ab" {
 			t.Errorf("the load balancer was asked %q, want HEAD example.com/healthz with the session the gate admits: its url map routes by hostname", got)
 		}
 	default:

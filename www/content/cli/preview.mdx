@@ -48,59 +48,10 @@ request comments, chat previews and `Referer` headers, so keep secrets out of pr
 
 ## Protecting previews
 
-```bash
-ocel preview protection
-ocel preview protection password
-ocel preview protection password rotate
-printf '%s' "$PREVIEW_PASSWORD" | ocel preview protection password set
-ocel preview protection bypass create
-ocel preview protection bypass ls
-ocel preview protection bypass revoke <id>
-ocel preview protection sync
-```
-
-Whether a project's previews ask for a password is one switch in its config,
-[`previews.protection`](/docs/configuration#previews), and every preview deploy enforces it. With
-it on, the first preview deploy creates a password and never prints it; with it off or left out,
-the next preview deploy opens the previews again and says so. It keeps the password and the bypass
-secrets, so turning protection back on restores them. The commands above never turn protection on or
-off. They show the password, replace it, and manage the bypass secrets a machine can send in its
-place. Each refuses while the config does not protect previews, and while the last preview deploy
-left them open, until a preview deploy with protection on restores them.
-
-A visitor to a protected preview gets a login page; entering the password opens a session for
-seven days. A request that carries the password as HTTP Basic credentials, with any user name, or
-a bypass secret in the `x-ocel-preview-bypass` header, passes without a session, and a bypass
-request that also sends `x-ocel-set-bypass-cookie: true` is answered with a redirect that opens one.
-A request that fails never reaches your app, and neither does the password. Without JavaScript the
-login page offers the browser's own password prompt.
-
-`ocel preview protection` says whether protection is on and why, whether a password is set, which
-bypass secrets exist by id, and for the edge that serves the project's previews whether it holds the
-current credentials. `password` prints the password alone, so it pipes. `password rotate` replaces it
-with a generated one and prints it; `password set` takes one you choose from standard input, of at
-least 12 characters and at most 256 bytes. Both end every login session. `bypass create` prints a
-secret once; a project holds at most eight, and `bypass revoke` ends one along with every session.
-Creating a bypass secret leaves sessions alone.
-
-A change is recorded and then published to the edge, so it takes effect without a deploy. The
-Cloudflare worker may serve the old credentials for up to five seconds, and a GCP load balancer
-takes a few minutes to roll its gate plugin out. A Cloud Run service with no edge in front
-reads its gate from a mounted secret at most five seconds after it last read it, and
-[Configure secrets for services](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
-says Cloud Run fetches a mounted secret from Secret Manager each time it is read. If an edge cannot be reached the command still
-prints any secret it generated, exits with an error, and leaves the edge shown as pending until
-`ocel preview protection sync` publishes the recorded credentials again.
-
-An edge has to run the gate for a project to be protected on it, and a deploy through one that does
-not is refused. On GCP a preview served on its own Cloud Run URL is gated by its own service: the
-gate lives in a Secret Manager secret that every container and Node, Next or SvelteKit function of
-the project's previews mounts, even while protection is off, so turning it on or changing the
-credentials reaches the running instances without a deploy. A Go, Python or Rust function checks no
-gate: a protected preview with one is refused, and while an unprotected one is still deployed,
-`ocel preview protection` names it rather than calling the previews protected. A change or
-`ocel preview protection sync` then still writes the gate to every service that checks it, and
-exits with an error naming those functions, until those previews are destroyed.
+Previews can ask for a password before they answer, switched on by
+[`protection.preview`](/docs/configuration#protection) and managed with the subcommands of
+[`ocel protection`](/docs/cli/protection) given `--preview`, such as
+`ocel protection password --preview`. A preview password never opens production.
 
 ## Ephemeral and persistent
 

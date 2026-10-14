@@ -1,0 +1,25 @@
+---
+title: "ocel protection password rotate"
+description: "Replace the password with a generated one, and print it."
+---
+
+```bash
+ocel protection password rotate [flags]
+```
+
+Replace this project's production password, or its preview password with `--preview`, with a generated one, and print it.
+
+The old password stops working, and so does every login session it opened: a visitor enters the new password. Bypass secrets keep working, and every login session ends with the old password, including those a bypass secret opened. The other tier's password is untouched. The change is published to the edge that serves the tier without a deploy. Only the password is printed on stdout.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--preview` | `bool` | `false` | Act on the previews instead of production |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema protection password rotate` prints.

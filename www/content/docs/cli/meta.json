@@ -19,6 +19,7 @@
     "---Configure---",
     "env",
     "domain",
+    "protection",
     "bindings",
     "generate",
     "lock",

@@ -179,6 +179,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 
 			ProjectRegistry:  registry,
 			InlineBindings:   inline,
+			Protect:          cfg.Protection.Protects(env.GetTier()),
 			InfraProvisioned: infra.isProvisioned(),
 			LeaseToken:       infra.readLeaseToken(),
 		}

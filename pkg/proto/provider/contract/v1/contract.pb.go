@@ -2215,7 +2215,7 @@ type DeployRequest struct {
 	AliasToken       string                 `protobuf:"bytes,8,opt,name=alias_token,json=aliasToken,proto3" json:"alias_token,omitempty"`
 	InfraProvisioned bool                   `protobuf:"varint,9,opt,name=infra_provisioned,json=infraProvisioned,proto3" json:"infra_provisioned,omitempty"`
 	LeaseToken       string                 `protobuf:"bytes,10,opt,name=lease_token,json=leaseToken,proto3" json:"lease_token,omitempty"`
-	ProtectPreviews  bool                   `protobuf:"varint,11,opt,name=protect_previews,json=protectPreviews,proto3" json:"protect_previews,omitempty"`
+	Protect          bool                   `protobuf:"varint,11,opt,name=protect,proto3" json:"protect,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2320,9 +2320,9 @@ func (x *DeployRequest) GetLeaseToken() string {
 	return ""
 }
 
-func (x *DeployRequest) GetProtectPreviews() bool {
+func (x *DeployRequest) GetProtect() bool {
 	if x != nil {
-		return x.ProtectPreviews
+		return x.Protect
 	}
 	return false
 }
@@ -4196,29 +4196,30 @@ func (*ForgetPreviewAliasResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{55}
 }
 
-type GetPreviewProtectionRequest struct {
+type GetProtectionRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Slug           string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	RevealPassword bool                   `protobuf:"varint,2,opt,name=reveal_password,json=revealPassword,proto3" json:"reveal_password,omitempty"`
-	Edge           *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
+	Tier           v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Slug           string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	RevealPassword bool                   `protobuf:"varint,3,opt,name=reveal_password,json=revealPassword,proto3" json:"reveal_password,omitempty"`
+	Edge           *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *GetPreviewProtectionRequest) Reset() {
-	*x = GetPreviewProtectionRequest{}
+func (x *GetProtectionRequest) Reset() {
+	*x = GetProtectionRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetPreviewProtectionRequest) String() string {
+func (x *GetProtectionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetPreviewProtectionRequest) ProtoMessage() {}
+func (*GetProtectionRequest) ProtoMessage() {}
 
-func (x *GetPreviewProtectionRequest) ProtoReflect() protoreflect.Message {
+func (x *GetProtectionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4230,57 +4231,64 @@ func (x *GetPreviewProtectionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetPreviewProtectionRequest.ProtoReflect.Descriptor instead.
-func (*GetPreviewProtectionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetProtectionRequest.ProtoReflect.Descriptor instead.
+func (*GetProtectionRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{56}
 }
 
-func (x *GetPreviewProtectionRequest) GetSlug() string {
+func (x *GetProtectionRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *GetProtectionRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *GetPreviewProtectionRequest) GetRevealPassword() bool {
+func (x *GetProtectionRequest) GetRevealPassword() bool {
 	if x != nil {
 		return x.RevealPassword
 	}
 	return false
 }
 
-func (x *GetPreviewProtectionRequest) GetEdge() *EdgeSelection {
+func (x *GetProtectionRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
 	return nil
 }
 
-type GetPreviewProtectionResponse struct {
-	state           protoimpl.MessageState        `protogen:"open.v1"`
-	Recorded        bool                          `protobuf:"varint,1,opt,name=recorded,proto3" json:"recorded,omitempty"`
-	Password        string                        `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	BypassSecretIds []string                      `protobuf:"bytes,3,rep,name=bypass_secret_ids,json=bypassSecretIds,proto3" json:"bypass_secret_ids,omitempty"`
-	Edges           []*v15.PreviewEdgePublication `protobuf:"bytes,4,rep,name=edges,proto3" json:"edges,omitempty"`
-	Enabled         bool                          `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+type GetProtectionResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Recorded        bool                   `protobuf:"varint,1,opt,name=recorded,proto3" json:"recorded,omitempty"`
+	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	BypassSecretIds []string               `protobuf:"bytes,3,rep,name=bypass_secret_ids,json=bypassSecretIds,proto3" json:"bypass_secret_ids,omitempty"`
+	Edges           []*v15.EdgePublication `protobuf:"bytes,4,rep,name=edges,proto3" json:"edges,omitempty"`
+	Enabled         bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *GetPreviewProtectionResponse) Reset() {
-	*x = GetPreviewProtectionResponse{}
+func (x *GetProtectionResponse) Reset() {
+	*x = GetProtectionResponse{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetPreviewProtectionResponse) String() string {
+func (x *GetProtectionResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetPreviewProtectionResponse) ProtoMessage() {}
+func (*GetProtectionResponse) ProtoMessage() {}
 
-func (x *GetPreviewProtectionResponse) ProtoReflect() protoreflect.Message {
+func (x *GetProtectionResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4292,75 +4300,76 @@ func (x *GetPreviewProtectionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetPreviewProtectionResponse.ProtoReflect.Descriptor instead.
-func (*GetPreviewProtectionResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetProtectionResponse.ProtoReflect.Descriptor instead.
+func (*GetProtectionResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{57}
 }
 
-func (x *GetPreviewProtectionResponse) GetRecorded() bool {
+func (x *GetProtectionResponse) GetRecorded() bool {
 	if x != nil {
 		return x.Recorded
 	}
 	return false
 }
 
-func (x *GetPreviewProtectionResponse) GetPassword() string {
+func (x *GetProtectionResponse) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-func (x *GetPreviewProtectionResponse) GetBypassSecretIds() []string {
+func (x *GetProtectionResponse) GetBypassSecretIds() []string {
 	if x != nil {
 		return x.BypassSecretIds
 	}
 	return nil
 }
 
-func (x *GetPreviewProtectionResponse) GetEdges() []*v15.PreviewEdgePublication {
+func (x *GetProtectionResponse) GetEdges() []*v15.EdgePublication {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-func (x *GetPreviewProtectionResponse) GetEnabled() bool {
+func (x *GetProtectionResponse) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
 	}
 	return false
 }
 
-type ChangePreviewProtectionRequest struct {
+type ChangeProtectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Slug  string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Edge  *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
+	Tier  v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Slug  string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Edge  *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
 	// Types that are valid to be assigned to Change:
 	//
-	//	*ChangePreviewProtectionRequest_RotatePassword
-	//	*ChangePreviewProtectionRequest_SetPassword
-	//	*ChangePreviewProtectionRequest_CreateBypassSecret
-	//	*ChangePreviewProtectionRequest_RevokeBypassSecret
-	Change        isChangePreviewProtectionRequest_Change `protobuf_oneof:"change"`
+	//	*ChangeProtectionRequest_RotatePassword
+	//	*ChangeProtectionRequest_SetPassword
+	//	*ChangeProtectionRequest_CreateBypassSecret
+	//	*ChangeProtectionRequest_RevokeBypassSecret
+	Change        isChangeProtectionRequest_Change `protobuf_oneof:"change"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChangePreviewProtectionRequest) Reset() {
-	*x = ChangePreviewProtectionRequest{}
+func (x *ChangeProtectionRequest) Reset() {
+	*x = ChangeProtectionRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChangePreviewProtectionRequest) String() string {
+func (x *ChangeProtectionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChangePreviewProtectionRequest) ProtoMessage() {}
+func (*ChangeProtectionRequest) ProtoMessage() {}
 
-func (x *ChangePreviewProtectionRequest) ProtoReflect() protoreflect.Message {
+func (x *ChangeProtectionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4372,97 +4381,104 @@ func (x *ChangePreviewProtectionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChangePreviewProtectionRequest.ProtoReflect.Descriptor instead.
-func (*ChangePreviewProtectionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChangeProtectionRequest.ProtoReflect.Descriptor instead.
+func (*ChangeProtectionRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{58}
 }
 
-func (x *ChangePreviewProtectionRequest) GetSlug() string {
+func (x *ChangeProtectionRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *ChangeProtectionRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *ChangePreviewProtectionRequest) GetEdge() *EdgeSelection {
+func (x *ChangeProtectionRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
 	return nil
 }
 
-func (x *ChangePreviewProtectionRequest) GetChange() isChangePreviewProtectionRequest_Change {
+func (x *ChangeProtectionRequest) GetChange() isChangeProtectionRequest_Change {
 	if x != nil {
 		return x.Change
 	}
 	return nil
 }
 
-func (x *ChangePreviewProtectionRequest) GetRotatePassword() *RotatePreviewPassword {
+func (x *ChangeProtectionRequest) GetRotatePassword() *RotatePassword {
 	if x != nil {
-		if x, ok := x.Change.(*ChangePreviewProtectionRequest_RotatePassword); ok {
+		if x, ok := x.Change.(*ChangeProtectionRequest_RotatePassword); ok {
 			return x.RotatePassword
 		}
 	}
 	return nil
 }
 
-func (x *ChangePreviewProtectionRequest) GetSetPassword() *SetPreviewPassword {
+func (x *ChangeProtectionRequest) GetSetPassword() *SetPassword {
 	if x != nil {
-		if x, ok := x.Change.(*ChangePreviewProtectionRequest_SetPassword); ok {
+		if x, ok := x.Change.(*ChangeProtectionRequest_SetPassword); ok {
 			return x.SetPassword
 		}
 	}
 	return nil
 }
 
-func (x *ChangePreviewProtectionRequest) GetCreateBypassSecret() *CreatePreviewBypassSecret {
+func (x *ChangeProtectionRequest) GetCreateBypassSecret() *CreateBypassSecret {
 	if x != nil {
-		if x, ok := x.Change.(*ChangePreviewProtectionRequest_CreateBypassSecret); ok {
+		if x, ok := x.Change.(*ChangeProtectionRequest_CreateBypassSecret); ok {
 			return x.CreateBypassSecret
 		}
 	}
 	return nil
 }
 
-func (x *ChangePreviewProtectionRequest) GetRevokeBypassSecret() *RevokePreviewBypassSecret {
+func (x *ChangeProtectionRequest) GetRevokeBypassSecret() *RevokeBypassSecret {
 	if x != nil {
-		if x, ok := x.Change.(*ChangePreviewProtectionRequest_RevokeBypassSecret); ok {
+		if x, ok := x.Change.(*ChangeProtectionRequest_RevokeBypassSecret); ok {
 			return x.RevokeBypassSecret
 		}
 	}
 	return nil
 }
 
-type isChangePreviewProtectionRequest_Change interface {
-	isChangePreviewProtectionRequest_Change()
+type isChangeProtectionRequest_Change interface {
+	isChangeProtectionRequest_Change()
 }
 
-type ChangePreviewProtectionRequest_RotatePassword struct {
-	RotatePassword *RotatePreviewPassword `protobuf:"bytes,3,opt,name=rotate_password,json=rotatePassword,proto3,oneof"`
+type ChangeProtectionRequest_RotatePassword struct {
+	RotatePassword *RotatePassword `protobuf:"bytes,4,opt,name=rotate_password,json=rotatePassword,proto3,oneof"`
 }
 
-type ChangePreviewProtectionRequest_SetPassword struct {
-	SetPassword *SetPreviewPassword `protobuf:"bytes,4,opt,name=set_password,json=setPassword,proto3,oneof"`
+type ChangeProtectionRequest_SetPassword struct {
+	SetPassword *SetPassword `protobuf:"bytes,5,opt,name=set_password,json=setPassword,proto3,oneof"`
 }
 
-type ChangePreviewProtectionRequest_CreateBypassSecret struct {
-	CreateBypassSecret *CreatePreviewBypassSecret `protobuf:"bytes,5,opt,name=create_bypass_secret,json=createBypassSecret,proto3,oneof"`
+type ChangeProtectionRequest_CreateBypassSecret struct {
+	CreateBypassSecret *CreateBypassSecret `protobuf:"bytes,6,opt,name=create_bypass_secret,json=createBypassSecret,proto3,oneof"`
 }
 
-type ChangePreviewProtectionRequest_RevokeBypassSecret struct {
-	RevokeBypassSecret *RevokePreviewBypassSecret `protobuf:"bytes,6,opt,name=revoke_bypass_secret,json=revokeBypassSecret,proto3,oneof"`
+type ChangeProtectionRequest_RevokeBypassSecret struct {
+	RevokeBypassSecret *RevokeBypassSecret `protobuf:"bytes,7,opt,name=revoke_bypass_secret,json=revokeBypassSecret,proto3,oneof"`
 }
 
-func (*ChangePreviewProtectionRequest_RotatePassword) isChangePreviewProtectionRequest_Change() {}
+func (*ChangeProtectionRequest_RotatePassword) isChangeProtectionRequest_Change() {}
 
-func (*ChangePreviewProtectionRequest_SetPassword) isChangePreviewProtectionRequest_Change() {}
+func (*ChangeProtectionRequest_SetPassword) isChangeProtectionRequest_Change() {}
 
-func (*ChangePreviewProtectionRequest_CreateBypassSecret) isChangePreviewProtectionRequest_Change() {}
+func (*ChangeProtectionRequest_CreateBypassSecret) isChangeProtectionRequest_Change() {}
 
-func (*ChangePreviewProtectionRequest_RevokeBypassSecret) isChangePreviewProtectionRequest_Change() {}
+func (*ChangeProtectionRequest_RevokeBypassSecret) isChangeProtectionRequest_Change() {}
 
-type ChangePreviewProtectionResponse struct {
+type ChangeProtectionResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Password       string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
 	BypassSecret   string                 `protobuf:"bytes,2,opt,name=bypass_secret,json=bypassSecret,proto3" json:"bypass_secret,omitempty"`
@@ -4471,20 +4487,20 @@ type ChangePreviewProtectionResponse struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *ChangePreviewProtectionResponse) Reset() {
-	*x = ChangePreviewProtectionResponse{}
+func (x *ChangeProtectionResponse) Reset() {
+	*x = ChangeProtectionResponse{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChangePreviewProtectionResponse) String() string {
+func (x *ChangeProtectionResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChangePreviewProtectionResponse) ProtoMessage() {}
+func (*ChangeProtectionResponse) ProtoMessage() {}
 
-func (x *ChangePreviewProtectionResponse) ProtoReflect() protoreflect.Message {
+func (x *ChangeProtectionResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4496,54 +4512,55 @@ func (x *ChangePreviewProtectionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChangePreviewProtectionResponse.ProtoReflect.Descriptor instead.
-func (*ChangePreviewProtectionResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChangeProtectionResponse.ProtoReflect.Descriptor instead.
+func (*ChangeProtectionResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{59}
 }
 
-func (x *ChangePreviewProtectionResponse) GetPassword() string {
+func (x *ChangeProtectionResponse) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-func (x *ChangePreviewProtectionResponse) GetBypassSecret() string {
+func (x *ChangeProtectionResponse) GetBypassSecret() string {
 	if x != nil {
 		return x.BypassSecret
 	}
 	return ""
 }
 
-func (x *ChangePreviewProtectionResponse) GetBypassSecretId() string {
+func (x *ChangeProtectionResponse) GetBypassSecretId() string {
 	if x != nil {
 		return x.BypassSecretId
 	}
 	return ""
 }
 
-type PublishPreviewProtectionRequest struct {
+type PublishProtectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Edge          *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Edge          *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PublishPreviewProtectionRequest) Reset() {
-	*x = PublishPreviewProtectionRequest{}
+func (x *PublishProtectionRequest) Reset() {
+	*x = PublishProtectionRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PublishPreviewProtectionRequest) String() string {
+func (x *PublishProtectionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PublishPreviewProtectionRequest) ProtoMessage() {}
+func (*PublishProtectionRequest) ProtoMessage() {}
 
-func (x *PublishPreviewProtectionRequest) ProtoReflect() protoreflect.Message {
+func (x *PublishProtectionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4555,45 +4572,52 @@ func (x *PublishPreviewProtectionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PublishPreviewProtectionRequest.ProtoReflect.Descriptor instead.
-func (*PublishPreviewProtectionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use PublishProtectionRequest.ProtoReflect.Descriptor instead.
+func (*PublishProtectionRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{60}
 }
 
-func (x *PublishPreviewProtectionRequest) GetSlug() string {
+func (x *PublishProtectionRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *PublishProtectionRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *PublishPreviewProtectionRequest) GetEdge() *EdgeSelection {
+func (x *PublishProtectionRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
 	return nil
 }
 
-type RotatePreviewPassword struct {
+type RotatePassword struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RotatePreviewPassword) Reset() {
-	*x = RotatePreviewPassword{}
+func (x *RotatePassword) Reset() {
+	*x = RotatePassword{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RotatePreviewPassword) String() string {
+func (x *RotatePassword) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RotatePreviewPassword) ProtoMessage() {}
+func (*RotatePassword) ProtoMessage() {}
 
-func (x *RotatePreviewPassword) ProtoReflect() protoreflect.Message {
+func (x *RotatePassword) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4605,32 +4629,32 @@ func (x *RotatePreviewPassword) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RotatePreviewPassword.ProtoReflect.Descriptor instead.
-func (*RotatePreviewPassword) Descriptor() ([]byte, []int) {
+// Deprecated: Use RotatePassword.ProtoReflect.Descriptor instead.
+func (*RotatePassword) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{61}
 }
 
-type SetPreviewPassword struct {
+type SetPassword struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetPreviewPassword) Reset() {
-	*x = SetPreviewPassword{}
+func (x *SetPassword) Reset() {
+	*x = SetPassword{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetPreviewPassword) String() string {
+func (x *SetPassword) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetPreviewPassword) ProtoMessage() {}
+func (*SetPassword) ProtoMessage() {}
 
-func (x *SetPreviewPassword) ProtoReflect() protoreflect.Message {
+func (x *SetPassword) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4642,38 +4666,38 @@ func (x *SetPreviewPassword) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetPreviewPassword.ProtoReflect.Descriptor instead.
-func (*SetPreviewPassword) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetPassword.ProtoReflect.Descriptor instead.
+func (*SetPassword) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{62}
 }
 
-func (x *SetPreviewPassword) GetPassword() string {
+func (x *SetPassword) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-type CreatePreviewBypassSecret struct {
+type CreateBypassSecret struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreatePreviewBypassSecret) Reset() {
-	*x = CreatePreviewBypassSecret{}
+func (x *CreateBypassSecret) Reset() {
+	*x = CreateBypassSecret{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreatePreviewBypassSecret) String() string {
+func (x *CreateBypassSecret) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreatePreviewBypassSecret) ProtoMessage() {}
+func (*CreateBypassSecret) ProtoMessage() {}
 
-func (x *CreatePreviewBypassSecret) ProtoReflect() protoreflect.Message {
+func (x *CreateBypassSecret) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4685,32 +4709,32 @@ func (x *CreatePreviewBypassSecret) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreatePreviewBypassSecret.ProtoReflect.Descriptor instead.
-func (*CreatePreviewBypassSecret) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreateBypassSecret.ProtoReflect.Descriptor instead.
+func (*CreateBypassSecret) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{63}
 }
 
-type RevokePreviewBypassSecret struct {
+type RevokeBypassSecret struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RevokePreviewBypassSecret) Reset() {
-	*x = RevokePreviewBypassSecret{}
+func (x *RevokeBypassSecret) Reset() {
+	*x = RevokeBypassSecret{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RevokePreviewBypassSecret) String() string {
+func (x *RevokeBypassSecret) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RevokePreviewBypassSecret) ProtoMessage() {}
+func (*RevokeBypassSecret) ProtoMessage() {}
 
-func (x *RevokePreviewBypassSecret) ProtoReflect() protoreflect.Message {
+func (x *RevokeBypassSecret) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4722,12 +4746,12 @@ func (x *RevokePreviewBypassSecret) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RevokePreviewBypassSecret.ProtoReflect.Descriptor instead.
-func (*RevokePreviewBypassSecret) Descriptor() ([]byte, []int) {
+// Deprecated: Use RevokeBypassSecret.ProtoReflect.Descriptor instead.
+func (*RevokeBypassSecret) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{64}
 }
 
-func (x *RevokePreviewBypassSecret) GetId() string {
+func (x *RevokeBypassSecret) GetId() string {
 	if x != nil {
 		return x.Id
 	}
@@ -7313,7 +7337,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vconcurrency\x18\x05 \x01(\x05R\vconcurrency\x12<\n" +
 	"\fmax_duration\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\vmaxDuration\x12(\n" +
 	"\x05lanes\x18\a \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n" +
-	"\x05batch\x18\b \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\"\xf6\x04\n" +
+	"\x05batch\x18\b \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\"\xe5\x04\n" +
 	"\rDeployRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
@@ -7327,8 +7351,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x11infra_provisioned\x18\t \x01(\bR\x10infraProvisioned\x129\n" +
 	"\vlease_token\x18\n" +
 	" \x01(\tB\x18\xbaH\x15r\x132\x11^([a-f0-9]{32})?$R\n" +
-	"leaseToken\x12)\n" +
-	"\x10protect_previews\x18\v \x01(\bR\x0fprotectPreviews\"\x93\x03\n" +
+	"leaseToken\x12\x18\n" +
+	"\aprotect\x18\v \x01(\bR\aprotect\"\x93\x03\n" +
 	"\x15ProvisionInfraRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
@@ -7474,38 +7498,44 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12+\n" +
 	"\x05token\x18\x03 \x01(\tB\x15\xbaH\x12r\x102\x0e^[a-z2-7]{16}$R\x05token\"\x1c\n" +
-	"\x1aForgetPreviewAliasResponse\"\xb6\x01\n" +
-	"\x1bGetPreviewProtectionRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12'\n" +
-	"\x0freveal_password\x18\x02 \x01(\bR\x0erevealPassword\x127\n" +
-	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xe3\x01\n" +
-	"\x1cGetPreviewProtectionResponse\x12\x1a\n" +
+	"\x1aForgetPreviewAliasResponse\"\xec\x01\n" +
+	"\x14GetProtectionRequest\x12;\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12'\n" +
+	"\x0freveal_password\x18\x03 \x01(\bR\x0erevealPassword\x127\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xd5\x01\n" +
+	"\x15GetProtectionResponse\x12\x1a\n" +
 	"\brecorded\x18\x01 \x01(\bR\brecorded\x12\x1f\n" +
 	"\bpassword\x18\x02 \x01(\tB\x03\x80\x01\x01R\bpassword\x12*\n" +
-	"\x11bypass_secret_ids\x18\x03 \x03(\tR\x0fbypassSecretIds\x12@\n" +
-	"\x05edges\x18\x04 \x03(\v2*.common.progress.v1.PreviewEdgePublicationR\x05edges\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\"\x92\x04\n" +
-	"\x1eChangePreviewProtectionRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
-	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12V\n" +
-	"\x0frotate_password\x18\x03 \x01(\v2+.provider.contract.v1.RotatePreviewPasswordH\x00R\x0erotatePassword\x12M\n" +
-	"\fset_password\x18\x04 \x01(\v2(.provider.contract.v1.SetPreviewPasswordH\x00R\vsetPassword\x12c\n" +
-	"\x14create_bypass_secret\x18\x05 \x01(\v2/.provider.contract.v1.CreatePreviewBypassSecretH\x00R\x12createBypassSecret\x12c\n" +
-	"\x14revoke_bypass_secret\x18\x06 \x01(\v2/.provider.contract.v1.RevokePreviewBypassSecretH\x00R\x12revokeBypassSecretB\x0f\n" +
-	"\x06change\x12\x05\xbaH\x02\b\x01\"\x96\x01\n" +
-	"\x1fChangePreviewProtectionResponse\x12\x1f\n" +
+	"\x11bypass_secret_ids\x18\x03 \x03(\tR\x0fbypassSecretIds\x129\n" +
+	"\x05edges\x18\x04 \x03(\v2#.common.progress.v1.EdgePublicationR\x05edges\x12\x18\n" +
+	"\aenabled\x18\x05 \x01(\bR\aenabled\"\xac\x04\n" +
+	"\x17ChangeProtectionRequest\x12;\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
+	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12O\n" +
+	"\x0frotate_password\x18\x04 \x01(\v2$.provider.contract.v1.RotatePasswordH\x00R\x0erotatePassword\x12F\n" +
+	"\fset_password\x18\x05 \x01(\v2!.provider.contract.v1.SetPasswordH\x00R\vsetPassword\x12\\\n" +
+	"\x14create_bypass_secret\x18\x06 \x01(\v2(.provider.contract.v1.CreateBypassSecretH\x00R\x12createBypassSecret\x12\\\n" +
+	"\x14revoke_bypass_secret\x18\a \x01(\v2(.provider.contract.v1.RevokeBypassSecretH\x00R\x12revokeBypassSecretB\x0f\n" +
+	"\x06change\x12\x05\xbaH\x02\b\x01\"\x8f\x01\n" +
+	"\x18ChangeProtectionResponse\x12\x1f\n" +
 	"\bpassword\x18\x01 \x01(\tB\x03\x80\x01\x01R\bpassword\x12(\n" +
 	"\rbypass_secret\x18\x02 \x01(\tB\x03\x80\x01\x01R\fbypassSecret\x12(\n" +
-	"\x10bypass_secret_id\x18\x03 \x01(\tR\x0ebypassSecretId\"\x91\x01\n" +
-	"\x1fPublishPreviewProtectionRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
-	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x17\n" +
-	"\x15RotatePreviewPassword\"<\n" +
-	"\x12SetPreviewPassword\x12&\n" +
+	"\x10bypass_secret_id\x18\x03 \x01(\tR\x0ebypassSecretId\"\xc7\x01\n" +
+	"\x18PublishProtectionRequest\x12;\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
+	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x10\n" +
+	"\x0eRotatePassword\"5\n" +
+	"\vSetPassword\x12&\n" +
 	"\bpassword\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\f(\x80\x02R\bpassword\"\x1b\n" +
-	"\x19CreatePreviewBypassSecret\"B\n" +
-	"\x19RevokePreviewBypassSecret\x12%\n" +
+	"\xbaH\ar\x05\x10\f(\x80\x02R\bpassword\"\x14\n" +
+	"\x12CreateBypassSecret\";\n" +
+	"\x12RevokeBypassSecret\x12%\n" +
 	"\x02id\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{12}$R\x02id\"\x9e\x04\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
@@ -7737,7 +7767,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
-	"\x11LOG_STREAM_STDERR\x10\x022\xbc\x1f\n" +
+	"\x11LOG_STREAM_STDERR\x10\x022\x83\x1f\n" +
 	"\x0fProviderService\x12\\\n" +
 	"\tConfigure\x12&.provider.contract.v1.ConfigureRequest\x1a'.provider.contract.v1.ConfigureResponse\x12c\n" +
 	"\x0eProvisionInfra\x12+.provider.contract.v1.ProvisionInfraRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12q\n" +
@@ -7755,10 +7785,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x10ListEnvironments\x12-.provider.contract.v1.ListEnvironmentsRequest\x1a..provider.contract.v1.ListEnvironmentsResponse\x12k\n" +
 	"\x0eGetEnvironment\x12+.provider.contract.v1.GetEnvironmentRequest\x1a,.provider.contract.v1.GetEnvironmentResponse\x12w\n" +
 	"\x12EnsurePreviewAlias\x12/.provider.contract.v1.EnsurePreviewAliasRequest\x1a0.provider.contract.v1.EnsurePreviewAliasResponse\x12w\n" +
-	"\x12ForgetPreviewAlias\x12/.provider.contract.v1.ForgetPreviewAliasRequest\x1a0.provider.contract.v1.ForgetPreviewAliasResponse\x12}\n" +
-	"\x14GetPreviewProtection\x121.provider.contract.v1.GetPreviewProtectionRequest\x1a2.provider.contract.v1.GetPreviewProtectionResponse\x12\x86\x01\n" +
-	"\x17ChangePreviewProtection\x124.provider.contract.v1.ChangePreviewProtectionRequest\x1a5.provider.contract.v1.ChangePreviewProtectionResponse\x12w\n" +
-	"\x18PublishPreviewProtection\x125.provider.contract.v1.PublishPreviewProtectionRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
+	"\x12ForgetPreviewAlias\x12/.provider.contract.v1.ForgetPreviewAliasRequest\x1a0.provider.contract.v1.ForgetPreviewAliasResponse\x12h\n" +
+	"\rGetProtection\x12*.provider.contract.v1.GetProtectionRequest\x1a+.provider.contract.v1.GetProtectionResponse\x12q\n" +
+	"\x10ChangeProtection\x12-.provider.contract.v1.ChangeProtectionRequest\x1a..provider.contract.v1.ChangeProtectionResponse\x12i\n" +
+	"\x11PublishProtection\x12..provider.contract.v1.PublishProtectionRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
 	"\tPreflight\x12&.provider.contract.v1.PreflightRequest\x1a$.provider.contract.v1.PreflightEvent0\x01\x12k\n" +
 	"\x0eListPromotions\x12+.provider.contract.v1.ListPromotionsRequest\x1a,.provider.contract.v1.ListPromotionsResponse\x12W\n" +
 	"\bRollback\x12%.provider.contract.v1.RollbackRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12q\n" +
@@ -7855,15 +7885,15 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*EnsurePreviewAliasResponse)(nil),      // 59: provider.contract.v1.EnsurePreviewAliasResponse
 	(*ForgetPreviewAliasRequest)(nil),       // 60: provider.contract.v1.ForgetPreviewAliasRequest
 	(*ForgetPreviewAliasResponse)(nil),      // 61: provider.contract.v1.ForgetPreviewAliasResponse
-	(*GetPreviewProtectionRequest)(nil),     // 62: provider.contract.v1.GetPreviewProtectionRequest
-	(*GetPreviewProtectionResponse)(nil),    // 63: provider.contract.v1.GetPreviewProtectionResponse
-	(*ChangePreviewProtectionRequest)(nil),  // 64: provider.contract.v1.ChangePreviewProtectionRequest
-	(*ChangePreviewProtectionResponse)(nil), // 65: provider.contract.v1.ChangePreviewProtectionResponse
-	(*PublishPreviewProtectionRequest)(nil), // 66: provider.contract.v1.PublishPreviewProtectionRequest
-	(*RotatePreviewPassword)(nil),           // 67: provider.contract.v1.RotatePreviewPassword
-	(*SetPreviewPassword)(nil),              // 68: provider.contract.v1.SetPreviewPassword
-	(*CreatePreviewBypassSecret)(nil),       // 69: provider.contract.v1.CreatePreviewBypassSecret
-	(*RevokePreviewBypassSecret)(nil),       // 70: provider.contract.v1.RevokePreviewBypassSecret
+	(*GetProtectionRequest)(nil),            // 62: provider.contract.v1.GetProtectionRequest
+	(*GetProtectionResponse)(nil),           // 63: provider.contract.v1.GetProtectionResponse
+	(*ChangeProtectionRequest)(nil),         // 64: provider.contract.v1.ChangeProtectionRequest
+	(*ChangeProtectionResponse)(nil),        // 65: provider.contract.v1.ChangeProtectionResponse
+	(*PublishProtectionRequest)(nil),        // 66: provider.contract.v1.PublishProtectionRequest
+	(*RotatePassword)(nil),                  // 67: provider.contract.v1.RotatePassword
+	(*SetPassword)(nil),                     // 68: provider.contract.v1.SetPassword
+	(*CreateBypassSecret)(nil),              // 69: provider.contract.v1.CreateBypassSecret
+	(*RevokeBypassSecret)(nil),              // 70: provider.contract.v1.RevokeBypassSecret
 	(*PreflightRequest)(nil),                // 71: provider.contract.v1.PreflightRequest
 	(*ContainerApp)(nil),                    // 72: provider.contract.v1.ContainerApp
 	(*PreflightEvent)(nil),                  // 73: provider.contract.v1.PreflightEvent
@@ -7919,7 +7949,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*v13.Binding)(nil),                     // 123: common.bindings.v1.Binding
 	(*v14.ChangePlan)(nil),                  // 124: common.plan.v1.ChangePlan
 	(v1.Lifecycle)(0),                       // 125: common.environment.v1.Lifecycle
-	(*v15.PreviewEdgePublication)(nil),      // 126: common.progress.v1.PreviewEdgePublication
+	(*v15.EdgePublication)(nil),             // 126: common.progress.v1.EdgePublication
 	(*v15.OperationEvent)(nil),              // 127: common.progress.v1.OperationEvent
 	(*v15.Propagation)(nil),                 // 128: common.progress.v1.Propagation
 	(*timestamppb.Timestamp)(nil),           // 129: google.protobuf.Timestamp
@@ -8012,142 +8042,145 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	122, // 83: provider.contract.v1.EnsurePreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
 	107, // 84: provider.contract.v1.EnsurePreviewAliasResponse.hostnames:type_name -> provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
 	122, // 85: provider.contract.v1.ForgetPreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
-	49,  // 86: provider.contract.v1.GetPreviewProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	126, // 87: provider.contract.v1.GetPreviewProtectionResponse.edges:type_name -> common.progress.v1.PreviewEdgePublication
-	49,  // 88: provider.contract.v1.ChangePreviewProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	67,  // 89: provider.contract.v1.ChangePreviewProtectionRequest.rotate_password:type_name -> provider.contract.v1.RotatePreviewPassword
-	68,  // 90: provider.contract.v1.ChangePreviewProtectionRequest.set_password:type_name -> provider.contract.v1.SetPreviewPassword
-	69,  // 91: provider.contract.v1.ChangePreviewProtectionRequest.create_bypass_secret:type_name -> provider.contract.v1.CreatePreviewBypassSecret
-	70,  // 92: provider.contract.v1.ChangePreviewProtectionRequest.revoke_bypass_secret:type_name -> provider.contract.v1.RevokePreviewBypassSecret
-	49,  // 93: provider.contract.v1.PublishPreviewProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	111, // 94: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
-	49,  // 95: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	72,  // 96: provider.contract.v1.PreflightRequest.containers:type_name -> provider.contract.v1.ContainerApp
-	38,  // 97: provider.contract.v1.PreflightRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
-	127, // 98: provider.contract.v1.PreflightEvent.progress:type_name -> common.progress.v1.OperationEvent
-	74,  // 99: provider.contract.v1.PreflightEvent.response:type_name -> provider.contract.v1.PreflightResponse
-	111, // 100: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
-	79,  // 101: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
-	81,  // 102: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
-	78,  // 103: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
-	76,  // 104: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
-	43,  // 105: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	77,  // 106: provider.contract.v1.PreflightResponse.host_checks:type_name -> provider.contract.v1.HostCheck
-	108, // 107: provider.contract.v1.PreflightResponse.container_archs:type_name -> provider.contract.v1.PreflightResponse.ContainerArchsEntry
-	119, // 108: provider.contract.v1.WorkerCeiling.max_duration:type_name -> google.protobuf.Duration
-	16,  // 109: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
-	3,   // 110: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
-	4,   // 111: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
-	80,  // 112: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
-	109, // 113: provider.contract.v1.Promotion.releases:type_name -> provider.contract.v1.Promotion.ReleasesEntry
-	128, // 114: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
-	82,  // 115: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
-	49,  // 116: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	83,  // 117: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
-	49,  // 118: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	38,  // 119: provider.contract.v1.RollbackRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
-	122, // 120: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
-	49,  // 121: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	38,  // 122: provider.contract.v1.RemoveStalePromotionsRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
-	1,   // 123: provider.contract.v1.Refusal.code:type_name -> provider.contract.v1.RefusalCode
-	94,  // 124: provider.contract.v1.DescribeConnectorTargetResponse.installed:type_name -> provider.contract.v1.InstalledConnector
-	122, // 125: provider.contract.v1.ReadLogsRequest.environment:type_name -> common.environment.v1.Environment
-	49,  // 126: provider.contract.v1.ReadLogsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	129, // 127: provider.contract.v1.ReadLogsRequest.since:type_name -> google.protobuf.Timestamp
-	129, // 128: provider.contract.v1.ReadLogsRequest.until:type_name -> google.protobuf.Timestamp
-	99,  // 129: provider.contract.v1.ReadLogsResponse.batch:type_name -> provider.contract.v1.LogBatch
-	101, // 130: provider.contract.v1.ReadLogsResponse.notice:type_name -> provider.contract.v1.LogNotice
-	100, // 131: provider.contract.v1.LogBatch.entries:type_name -> provider.contract.v1.LogEntry
-	129, // 132: provider.contract.v1.LogEntry.time:type_name -> google.protobuf.Timestamp
-	2,   // 133: provider.contract.v1.LogEntry.stream:type_name -> provider.contract.v1.LogStream
-	5,   // 134: provider.contract.v1.LogNotice.kind:type_name -> provider.contract.v1.LogNotice.Kind
-	122, // 135: provider.contract.v1.ForwardPortsRequest.environment:type_name -> common.environment.v1.Environment
-	103, // 136: provider.contract.v1.ForwardPortsRequest.grants:type_name -> provider.contract.v1.ForwardPortsGrant
-	127, // 137: provider.contract.v1.ForwardPortsEvent.progress:type_name -> common.progress.v1.OperationEvent
-	105, // 138: provider.contract.v1.ForwardPortsEvent.response:type_name -> provider.contract.v1.ForwardPortsResponse
-	123, // 139: provider.contract.v1.ForwardPortsResponse.bindings:type_name -> common.bindings.v1.Binding
-	106, // 140: provider.contract.v1.ForwardPortsResponse.binding_proxies:type_name -> provider.contract.v1.BindingProxy
-	7,   // 141: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
-	32,  // 142: provider.contract.v1.ProviderService.ProvisionInfra:input_type -> provider.contract.v1.ProvisionInfraRequest
-	33,  // 143: provider.contract.v1.ProviderService.RenewDeployLease:input_type -> provider.contract.v1.RenewDeployLeaseRequest
-	35,  // 144: provider.contract.v1.ProviderService.AbandonDeploy:input_type -> provider.contract.v1.AbandonDeployRequest
-	31,  // 145: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
-	39,  // 146: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
-	40,  // 147: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
-	44,  // 148: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
-	50,  // 149: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	50,  // 150: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	51,  // 151: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
-	52,  // 152: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	52,  // 153: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	53,  // 154: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
-	55,  // 155: provider.contract.v1.ProviderService.GetEnvironment:input_type -> provider.contract.v1.GetEnvironmentRequest
-	58,  // 156: provider.contract.v1.ProviderService.EnsurePreviewAlias:input_type -> provider.contract.v1.EnsurePreviewAliasRequest
-	60,  // 157: provider.contract.v1.ProviderService.ForgetPreviewAlias:input_type -> provider.contract.v1.ForgetPreviewAliasRequest
-	62,  // 158: provider.contract.v1.ProviderService.GetPreviewProtection:input_type -> provider.contract.v1.GetPreviewProtectionRequest
-	64,  // 159: provider.contract.v1.ProviderService.ChangePreviewProtection:input_type -> provider.contract.v1.ChangePreviewProtectionRequest
-	66,  // 160: provider.contract.v1.ProviderService.PublishPreviewProtection:input_type -> provider.contract.v1.PublishPreviewProtectionRequest
-	71,  // 161: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
-	84,  // 162: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
-	86,  // 163: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
-	87,  // 164: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
-	10,  // 165: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
-	11,  // 166: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	11,  // 167: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	11,  // 168: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	14,  // 169: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
-	14,  // 170: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
-	14,  // 171: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
-	92,  // 172: provider.contract.v1.ProviderService.DescribeConnectorTarget:input_type -> provider.contract.v1.DescribeConnectorTargetRequest
-	95,  // 173: provider.contract.v1.ProviderService.InstallConnector:input_type -> provider.contract.v1.InstallConnectorRequest
-	96,  // 174: provider.contract.v1.ProviderService.RemoveConnector:input_type -> provider.contract.v1.RemoveConnectorRequest
-	37,  // 175: provider.contract.v1.ProviderService.Shape:input_type -> provider.contract.v1.ShapeRequest
-	89,  // 176: provider.contract.v1.ProviderService.Confirm:input_type -> provider.contract.v1.ConfirmRequest
-	97,  // 177: provider.contract.v1.ProviderService.ReadLogs:input_type -> provider.contract.v1.ReadLogsRequest
-	102, // 178: provider.contract.v1.ProviderService.ForwardPorts:input_type -> provider.contract.v1.ForwardPortsRequest
-	8,   // 179: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
-	127, // 180: provider.contract.v1.ProviderService.ProvisionInfra:output_type -> common.progress.v1.OperationEvent
-	34,  // 181: provider.contract.v1.ProviderService.RenewDeployLease:output_type -> provider.contract.v1.RenewDeployLeaseResponse
-	36,  // 182: provider.contract.v1.ProviderService.AbandonDeploy:output_type -> provider.contract.v1.AbandonDeployResponse
-	127, // 183: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
-	127, // 184: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
-	41,  // 185: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
-	45,  // 186: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
-	127, // 187: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
-	124, // 188: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> common.plan.v1.ChangePlan
-	127, // 189: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
-	127, // 190: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
-	124, // 191: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> common.plan.v1.ChangePlan
-	54,  // 192: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
-	56,  // 193: provider.contract.v1.ProviderService.GetEnvironment:output_type -> provider.contract.v1.GetEnvironmentResponse
-	59,  // 194: provider.contract.v1.ProviderService.EnsurePreviewAlias:output_type -> provider.contract.v1.EnsurePreviewAliasResponse
-	61,  // 195: provider.contract.v1.ProviderService.ForgetPreviewAlias:output_type -> provider.contract.v1.ForgetPreviewAliasResponse
-	63,  // 196: provider.contract.v1.ProviderService.GetPreviewProtection:output_type -> provider.contract.v1.GetPreviewProtectionResponse
-	65,  // 197: provider.contract.v1.ProviderService.ChangePreviewProtection:output_type -> provider.contract.v1.ChangePreviewProtectionResponse
-	127, // 198: provider.contract.v1.ProviderService.PublishPreviewProtection:output_type -> common.progress.v1.OperationEvent
-	73,  // 199: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightEvent
-	85,  // 200: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
-	127, // 201: provider.contract.v1.ProviderService.Rollback:output_type -> common.progress.v1.OperationEvent
-	127, // 202: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
-	127, // 203: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	12,  // 204: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
-	124, // 205: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> common.plan.v1.ChangePlan
-	127, // 206: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	127, // 207: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
-	127, // 208: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
-	15,  // 209: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
-	93,  // 210: provider.contract.v1.ProviderService.DescribeConnectorTarget:output_type -> provider.contract.v1.DescribeConnectorTargetResponse
-	127, // 211: provider.contract.v1.ProviderService.InstallConnector:output_type -> common.progress.v1.OperationEvent
-	127, // 212: provider.contract.v1.ProviderService.RemoveConnector:output_type -> common.progress.v1.OperationEvent
-	130, // 213: provider.contract.v1.ProviderService.Shape:output_type -> provider.cost.v1.ResourceSet
-	90,  // 214: provider.contract.v1.ProviderService.Confirm:output_type -> provider.contract.v1.ConfirmResponse
-	98,  // 215: provider.contract.v1.ProviderService.ReadLogs:output_type -> provider.contract.v1.ReadLogsResponse
-	104, // 216: provider.contract.v1.ProviderService.ForwardPorts:output_type -> provider.contract.v1.ForwardPortsEvent
-	179, // [179:217] is the sub-list for method output_type
-	141, // [141:179] is the sub-list for method input_type
-	141, // [141:141] is the sub-list for extension type_name
-	141, // [141:141] is the sub-list for extension extendee
-	0,   // [0:141] is the sub-list for field type_name
+	111, // 86: provider.contract.v1.GetProtectionRequest.tier:type_name -> common.environment.v1.Tier
+	49,  // 87: provider.contract.v1.GetProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	126, // 88: provider.contract.v1.GetProtectionResponse.edges:type_name -> common.progress.v1.EdgePublication
+	111, // 89: provider.contract.v1.ChangeProtectionRequest.tier:type_name -> common.environment.v1.Tier
+	49,  // 90: provider.contract.v1.ChangeProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	67,  // 91: provider.contract.v1.ChangeProtectionRequest.rotate_password:type_name -> provider.contract.v1.RotatePassword
+	68,  // 92: provider.contract.v1.ChangeProtectionRequest.set_password:type_name -> provider.contract.v1.SetPassword
+	69,  // 93: provider.contract.v1.ChangeProtectionRequest.create_bypass_secret:type_name -> provider.contract.v1.CreateBypassSecret
+	70,  // 94: provider.contract.v1.ChangeProtectionRequest.revoke_bypass_secret:type_name -> provider.contract.v1.RevokeBypassSecret
+	111, // 95: provider.contract.v1.PublishProtectionRequest.tier:type_name -> common.environment.v1.Tier
+	49,  // 96: provider.contract.v1.PublishProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	111, // 97: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
+	49,  // 98: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	72,  // 99: provider.contract.v1.PreflightRequest.containers:type_name -> provider.contract.v1.ContainerApp
+	38,  // 100: provider.contract.v1.PreflightRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
+	127, // 101: provider.contract.v1.PreflightEvent.progress:type_name -> common.progress.v1.OperationEvent
+	74,  // 102: provider.contract.v1.PreflightEvent.response:type_name -> provider.contract.v1.PreflightResponse
+	111, // 103: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
+	79,  // 104: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
+	81,  // 105: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
+	78,  // 106: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
+	76,  // 107: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
+	43,  // 108: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
+	77,  // 109: provider.contract.v1.PreflightResponse.host_checks:type_name -> provider.contract.v1.HostCheck
+	108, // 110: provider.contract.v1.PreflightResponse.container_archs:type_name -> provider.contract.v1.PreflightResponse.ContainerArchsEntry
+	119, // 111: provider.contract.v1.WorkerCeiling.max_duration:type_name -> google.protobuf.Duration
+	16,  // 112: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
+	3,   // 113: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
+	4,   // 114: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
+	80,  // 115: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
+	109, // 116: provider.contract.v1.Promotion.releases:type_name -> provider.contract.v1.Promotion.ReleasesEntry
+	128, // 117: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
+	82,  // 118: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
+	49,  // 119: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	83,  // 120: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
+	49,  // 121: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	38,  // 122: provider.contract.v1.RollbackRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
+	122, // 123: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
+	49,  // 124: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	38,  // 125: provider.contract.v1.RemoveStalePromotionsRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
+	1,   // 126: provider.contract.v1.Refusal.code:type_name -> provider.contract.v1.RefusalCode
+	94,  // 127: provider.contract.v1.DescribeConnectorTargetResponse.installed:type_name -> provider.contract.v1.InstalledConnector
+	122, // 128: provider.contract.v1.ReadLogsRequest.environment:type_name -> common.environment.v1.Environment
+	49,  // 129: provider.contract.v1.ReadLogsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	129, // 130: provider.contract.v1.ReadLogsRequest.since:type_name -> google.protobuf.Timestamp
+	129, // 131: provider.contract.v1.ReadLogsRequest.until:type_name -> google.protobuf.Timestamp
+	99,  // 132: provider.contract.v1.ReadLogsResponse.batch:type_name -> provider.contract.v1.LogBatch
+	101, // 133: provider.contract.v1.ReadLogsResponse.notice:type_name -> provider.contract.v1.LogNotice
+	100, // 134: provider.contract.v1.LogBatch.entries:type_name -> provider.contract.v1.LogEntry
+	129, // 135: provider.contract.v1.LogEntry.time:type_name -> google.protobuf.Timestamp
+	2,   // 136: provider.contract.v1.LogEntry.stream:type_name -> provider.contract.v1.LogStream
+	5,   // 137: provider.contract.v1.LogNotice.kind:type_name -> provider.contract.v1.LogNotice.Kind
+	122, // 138: provider.contract.v1.ForwardPortsRequest.environment:type_name -> common.environment.v1.Environment
+	103, // 139: provider.contract.v1.ForwardPortsRequest.grants:type_name -> provider.contract.v1.ForwardPortsGrant
+	127, // 140: provider.contract.v1.ForwardPortsEvent.progress:type_name -> common.progress.v1.OperationEvent
+	105, // 141: provider.contract.v1.ForwardPortsEvent.response:type_name -> provider.contract.v1.ForwardPortsResponse
+	123, // 142: provider.contract.v1.ForwardPortsResponse.bindings:type_name -> common.bindings.v1.Binding
+	106, // 143: provider.contract.v1.ForwardPortsResponse.binding_proxies:type_name -> provider.contract.v1.BindingProxy
+	7,   // 144: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
+	32,  // 145: provider.contract.v1.ProviderService.ProvisionInfra:input_type -> provider.contract.v1.ProvisionInfraRequest
+	33,  // 146: provider.contract.v1.ProviderService.RenewDeployLease:input_type -> provider.contract.v1.RenewDeployLeaseRequest
+	35,  // 147: provider.contract.v1.ProviderService.AbandonDeploy:input_type -> provider.contract.v1.AbandonDeployRequest
+	31,  // 148: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
+	39,  // 149: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
+	40,  // 150: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
+	44,  // 151: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
+	50,  // 152: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	50,  // 153: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	51,  // 154: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
+	52,  // 155: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	52,  // 156: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	53,  // 157: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
+	55,  // 158: provider.contract.v1.ProviderService.GetEnvironment:input_type -> provider.contract.v1.GetEnvironmentRequest
+	58,  // 159: provider.contract.v1.ProviderService.EnsurePreviewAlias:input_type -> provider.contract.v1.EnsurePreviewAliasRequest
+	60,  // 160: provider.contract.v1.ProviderService.ForgetPreviewAlias:input_type -> provider.contract.v1.ForgetPreviewAliasRequest
+	62,  // 161: provider.contract.v1.ProviderService.GetProtection:input_type -> provider.contract.v1.GetProtectionRequest
+	64,  // 162: provider.contract.v1.ProviderService.ChangeProtection:input_type -> provider.contract.v1.ChangeProtectionRequest
+	66,  // 163: provider.contract.v1.ProviderService.PublishProtection:input_type -> provider.contract.v1.PublishProtectionRequest
+	71,  // 164: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
+	84,  // 165: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
+	86,  // 166: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
+	87,  // 167: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
+	10,  // 168: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
+	11,  // 169: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	11,  // 170: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	11,  // 171: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	14,  // 172: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
+	14,  // 173: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
+	14,  // 174: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
+	92,  // 175: provider.contract.v1.ProviderService.DescribeConnectorTarget:input_type -> provider.contract.v1.DescribeConnectorTargetRequest
+	95,  // 176: provider.contract.v1.ProviderService.InstallConnector:input_type -> provider.contract.v1.InstallConnectorRequest
+	96,  // 177: provider.contract.v1.ProviderService.RemoveConnector:input_type -> provider.contract.v1.RemoveConnectorRequest
+	37,  // 178: provider.contract.v1.ProviderService.Shape:input_type -> provider.contract.v1.ShapeRequest
+	89,  // 179: provider.contract.v1.ProviderService.Confirm:input_type -> provider.contract.v1.ConfirmRequest
+	97,  // 180: provider.contract.v1.ProviderService.ReadLogs:input_type -> provider.contract.v1.ReadLogsRequest
+	102, // 181: provider.contract.v1.ProviderService.ForwardPorts:input_type -> provider.contract.v1.ForwardPortsRequest
+	8,   // 182: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
+	127, // 183: provider.contract.v1.ProviderService.ProvisionInfra:output_type -> common.progress.v1.OperationEvent
+	34,  // 184: provider.contract.v1.ProviderService.RenewDeployLease:output_type -> provider.contract.v1.RenewDeployLeaseResponse
+	36,  // 185: provider.contract.v1.ProviderService.AbandonDeploy:output_type -> provider.contract.v1.AbandonDeployResponse
+	127, // 186: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
+	127, // 187: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
+	41,  // 188: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
+	45,  // 189: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
+	127, // 190: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
+	124, // 191: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> common.plan.v1.ChangePlan
+	127, // 192: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
+	127, // 193: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
+	124, // 194: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> common.plan.v1.ChangePlan
+	54,  // 195: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
+	56,  // 196: provider.contract.v1.ProviderService.GetEnvironment:output_type -> provider.contract.v1.GetEnvironmentResponse
+	59,  // 197: provider.contract.v1.ProviderService.EnsurePreviewAlias:output_type -> provider.contract.v1.EnsurePreviewAliasResponse
+	61,  // 198: provider.contract.v1.ProviderService.ForgetPreviewAlias:output_type -> provider.contract.v1.ForgetPreviewAliasResponse
+	63,  // 199: provider.contract.v1.ProviderService.GetProtection:output_type -> provider.contract.v1.GetProtectionResponse
+	65,  // 200: provider.contract.v1.ProviderService.ChangeProtection:output_type -> provider.contract.v1.ChangeProtectionResponse
+	127, // 201: provider.contract.v1.ProviderService.PublishProtection:output_type -> common.progress.v1.OperationEvent
+	73,  // 202: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightEvent
+	85,  // 203: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
+	127, // 204: provider.contract.v1.ProviderService.Rollback:output_type -> common.progress.v1.OperationEvent
+	127, // 205: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
+	127, // 206: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	12,  // 207: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
+	124, // 208: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> common.plan.v1.ChangePlan
+	127, // 209: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	127, // 210: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
+	127, // 211: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
+	15,  // 212: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
+	93,  // 213: provider.contract.v1.ProviderService.DescribeConnectorTarget:output_type -> provider.contract.v1.DescribeConnectorTargetResponse
+	127, // 214: provider.contract.v1.ProviderService.InstallConnector:output_type -> common.progress.v1.OperationEvent
+	127, // 215: provider.contract.v1.ProviderService.RemoveConnector:output_type -> common.progress.v1.OperationEvent
+	130, // 216: provider.contract.v1.ProviderService.Shape:output_type -> provider.cost.v1.ResourceSet
+	90,  // 217: provider.contract.v1.ProviderService.Confirm:output_type -> provider.contract.v1.ConfirmResponse
+	98,  // 218: provider.contract.v1.ProviderService.ReadLogs:output_type -> provider.contract.v1.ReadLogsResponse
+	104, // 219: provider.contract.v1.ProviderService.ForwardPorts:output_type -> provider.contract.v1.ForwardPortsEvent
+	182, // [182:220] is the sub-list for method output_type
+	144, // [144:182] is the sub-list for method input_type
+	144, // [144:144] is the sub-list for extension type_name
+	144, // [144:144] is the sub-list for extension extendee
+	0,   // [0:144] is the sub-list for field type_name
 }
 
 func init() { file_provider_contract_v1_contract_proto_init() }
@@ -8168,10 +8201,10 @@ func file_provider_contract_v1_contract_proto_init() {
 	}
 	file_provider_contract_v1_contract_proto_msgTypes[33].OneofWrappers = []any{}
 	file_provider_contract_v1_contract_proto_msgTypes[58].OneofWrappers = []any{
-		(*ChangePreviewProtectionRequest_RotatePassword)(nil),
-		(*ChangePreviewProtectionRequest_SetPassword)(nil),
-		(*ChangePreviewProtectionRequest_CreateBypassSecret)(nil),
-		(*ChangePreviewProtectionRequest_RevokeBypassSecret)(nil),
+		(*ChangeProtectionRequest_RotatePassword)(nil),
+		(*ChangeProtectionRequest_SetPassword)(nil),
+		(*ChangeProtectionRequest_CreateBypassSecret)(nil),
+		(*ChangeProtectionRequest_RevokeBypassSecret)(nil),
 	}
 	file_provider_contract_v1_contract_proto_msgTypes[67].OneofWrappers = []any{
 		(*PreflightEvent_Progress)(nil),

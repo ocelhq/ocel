@@ -86,15 +86,15 @@ const (
 	// ProviderServiceForgetPreviewAliasProcedure is the fully-qualified name of the ProviderService's
 	// ForgetPreviewAlias RPC.
 	ProviderServiceForgetPreviewAliasProcedure = "/provider.contract.v1.ProviderService/ForgetPreviewAlias"
-	// ProviderServiceGetPreviewProtectionProcedure is the fully-qualified name of the ProviderService's
-	// GetPreviewProtection RPC.
-	ProviderServiceGetPreviewProtectionProcedure = "/provider.contract.v1.ProviderService/GetPreviewProtection"
-	// ProviderServiceChangePreviewProtectionProcedure is the fully-qualified name of the
-	// ProviderService's ChangePreviewProtection RPC.
-	ProviderServiceChangePreviewProtectionProcedure = "/provider.contract.v1.ProviderService/ChangePreviewProtection"
-	// ProviderServicePublishPreviewProtectionProcedure is the fully-qualified name of the
-	// ProviderService's PublishPreviewProtection RPC.
-	ProviderServicePublishPreviewProtectionProcedure = "/provider.contract.v1.ProviderService/PublishPreviewProtection"
+	// ProviderServiceGetProtectionProcedure is the fully-qualified name of the ProviderService's
+	// GetProtection RPC.
+	ProviderServiceGetProtectionProcedure = "/provider.contract.v1.ProviderService/GetProtection"
+	// ProviderServiceChangeProtectionProcedure is the fully-qualified name of the ProviderService's
+	// ChangeProtection RPC.
+	ProviderServiceChangeProtectionProcedure = "/provider.contract.v1.ProviderService/ChangeProtection"
+	// ProviderServicePublishProtectionProcedure is the fully-qualified name of the ProviderService's
+	// PublishProtection RPC.
+	ProviderServicePublishProtectionProcedure = "/provider.contract.v1.ProviderService/PublishProtection"
 	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
 	// RPC.
 	ProviderServicePreflightProcedure = "/provider.contract.v1.ProviderService/Preflight"
@@ -168,9 +168,9 @@ type ProviderServiceClient interface {
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
-	GetPreviewProtection(context.Context, *v1.GetPreviewProtectionRequest) (*v1.GetPreviewProtectionResponse, error)
-	ChangePreviewProtection(context.Context, *v1.ChangePreviewProtectionRequest) (*v1.ChangePreviewProtectionResponse, error)
-	PublishPreviewProtection(context.Context, *v1.PublishPreviewProtectionRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	GetProtection(context.Context, *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error)
+	ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error)
+	PublishProtection(context.Context, *v1.PublishProtectionRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Preflight(context.Context, *v1.PreflightRequest) (*connect.ServerStreamForClient[v1.PreflightEvent], error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
@@ -304,22 +304,22 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 			connect.WithClientOptions(opts...),
 		),
-		getPreviewProtection: connect.NewClient[v1.GetPreviewProtectionRequest, v1.GetPreviewProtectionResponse](
+		getProtection: connect.NewClient[v1.GetProtectionRequest, v1.GetProtectionResponse](
 			httpClient,
-			baseURL+ProviderServiceGetPreviewProtectionProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("GetPreviewProtection")),
+			baseURL+ProviderServiceGetProtectionProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetProtection")),
 			connect.WithClientOptions(opts...),
 		),
-		changePreviewProtection: connect.NewClient[v1.ChangePreviewProtectionRequest, v1.ChangePreviewProtectionResponse](
+		changeProtection: connect.NewClient[v1.ChangeProtectionRequest, v1.ChangeProtectionResponse](
 			httpClient,
-			baseURL+ProviderServiceChangePreviewProtectionProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("ChangePreviewProtection")),
+			baseURL+ProviderServiceChangeProtectionProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ChangeProtection")),
 			connect.WithClientOptions(opts...),
 		),
-		publishPreviewProtection: connect.NewClient[v1.PublishPreviewProtectionRequest, v11.OperationEvent](
+		publishProtection: connect.NewClient[v1.PublishProtectionRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServicePublishPreviewProtectionProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PublishPreviewProtection")),
+			baseURL+ProviderServicePublishProtectionProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PublishProtection")),
 			connect.WithClientOptions(opts...),
 		),
 		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightEvent](
@@ -452,9 +452,9 @@ type providerServiceClient struct {
 	getEnvironment            *connect.Client[v1.GetEnvironmentRequest, v1.GetEnvironmentResponse]
 	ensurePreviewAlias        *connect.Client[v1.EnsurePreviewAliasRequest, v1.EnsurePreviewAliasResponse]
 	forgetPreviewAlias        *connect.Client[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse]
-	getPreviewProtection      *connect.Client[v1.GetPreviewProtectionRequest, v1.GetPreviewProtectionResponse]
-	changePreviewProtection   *connect.Client[v1.ChangePreviewProtectionRequest, v1.ChangePreviewProtectionResponse]
-	publishPreviewProtection  *connect.Client[v1.PublishPreviewProtectionRequest, v11.OperationEvent]
+	getProtection             *connect.Client[v1.GetProtectionRequest, v1.GetProtectionResponse]
+	changeProtection          *connect.Client[v1.ChangeProtectionRequest, v1.ChangeProtectionResponse]
+	publishProtection         *connect.Client[v1.PublishProtectionRequest, v11.OperationEvent]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightEvent]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback                  *connect.Client[v1.RollbackRequest, v11.OperationEvent]
@@ -604,27 +604,27 @@ func (c *providerServiceClient) ForgetPreviewAlias(ctx context.Context, req *v1.
 	return nil, err
 }
 
-// GetPreviewProtection calls provider.contract.v1.ProviderService.GetPreviewProtection.
-func (c *providerServiceClient) GetPreviewProtection(ctx context.Context, req *v1.GetPreviewProtectionRequest) (*v1.GetPreviewProtectionResponse, error) {
-	response, err := c.getPreviewProtection.CallUnary(ctx, connect.NewRequest(req))
+// GetProtection calls provider.contract.v1.ProviderService.GetProtection.
+func (c *providerServiceClient) GetProtection(ctx context.Context, req *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error) {
+	response, err := c.getProtection.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// ChangePreviewProtection calls provider.contract.v1.ProviderService.ChangePreviewProtection.
-func (c *providerServiceClient) ChangePreviewProtection(ctx context.Context, req *v1.ChangePreviewProtectionRequest) (*v1.ChangePreviewProtectionResponse, error) {
-	response, err := c.changePreviewProtection.CallUnary(ctx, connect.NewRequest(req))
+// ChangeProtection calls provider.contract.v1.ProviderService.ChangeProtection.
+func (c *providerServiceClient) ChangeProtection(ctx context.Context, req *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error) {
+	response, err := c.changeProtection.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// PublishPreviewProtection calls provider.contract.v1.ProviderService.PublishPreviewProtection.
-func (c *providerServiceClient) PublishPreviewProtection(ctx context.Context, req *v1.PublishPreviewProtectionRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.publishPreviewProtection.CallServerStream(ctx, connect.NewRequest(req))
+// PublishProtection calls provider.contract.v1.ProviderService.PublishProtection.
+func (c *providerServiceClient) PublishProtection(ctx context.Context, req *v1.PublishProtectionRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.publishProtection.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // Preflight calls provider.contract.v1.ProviderService.Preflight.
@@ -764,9 +764,9 @@ type ProviderServiceHandler interface {
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
-	GetPreviewProtection(context.Context, *v1.GetPreviewProtectionRequest) (*v1.GetPreviewProtectionResponse, error)
-	ChangePreviewProtection(context.Context, *v1.ChangePreviewProtectionRequest) (*v1.ChangePreviewProtectionResponse, error)
-	PublishPreviewProtection(context.Context, *v1.PublishPreviewProtectionRequest, *connect.ServerStream[v11.OperationEvent]) error
+	GetProtection(context.Context, *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error)
+	ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error)
+	PublishProtection(context.Context, *v1.PublishProtectionRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest, *connect.ServerStream[v11.OperationEvent]) error
@@ -896,22 +896,22 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceGetPreviewProtectionHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceGetPreviewProtectionProcedure,
-		svc.GetPreviewProtection,
-		connect.WithSchema(providerServiceMethods.ByName("GetPreviewProtection")),
+	providerServiceGetProtectionHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetProtectionProcedure,
+		svc.GetProtection,
+		connect.WithSchema(providerServiceMethods.ByName("GetProtection")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceChangePreviewProtectionHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceChangePreviewProtectionProcedure,
-		svc.ChangePreviewProtection,
-		connect.WithSchema(providerServiceMethods.ByName("ChangePreviewProtection")),
+	providerServiceChangeProtectionHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceChangeProtectionProcedure,
+		svc.ChangeProtection,
+		connect.WithSchema(providerServiceMethods.ByName("ChangeProtection")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePublishPreviewProtectionHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServicePublishPreviewProtectionProcedure,
-		svc.PublishPreviewProtection,
-		connect.WithSchema(providerServiceMethods.ByName("PublishPreviewProtection")),
+	providerServicePublishProtectionHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServicePublishProtectionProcedure,
+		svc.PublishProtection,
+		connect.WithSchema(providerServiceMethods.ByName("PublishProtection")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServicePreflightHandler := connect.NewServerStreamHandlerSimple(
@@ -1058,12 +1058,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceEnsurePreviewAliasHandler.ServeHTTP(w, r)
 		case ProviderServiceForgetPreviewAliasProcedure:
 			providerServiceForgetPreviewAliasHandler.ServeHTTP(w, r)
-		case ProviderServiceGetPreviewProtectionProcedure:
-			providerServiceGetPreviewProtectionHandler.ServeHTTP(w, r)
-		case ProviderServiceChangePreviewProtectionProcedure:
-			providerServiceChangePreviewProtectionHandler.ServeHTTP(w, r)
-		case ProviderServicePublishPreviewProtectionProcedure:
-			providerServicePublishPreviewProtectionHandler.ServeHTTP(w, r)
+		case ProviderServiceGetProtectionProcedure:
+			providerServiceGetProtectionHandler.ServeHTTP(w, r)
+		case ProviderServiceChangeProtectionProcedure:
+			providerServiceChangeProtectionHandler.ServeHTTP(w, r)
+		case ProviderServicePublishProtectionProcedure:
+			providerServicePublishProtectionHandler.ServeHTTP(w, r)
 		case ProviderServicePreflightProcedure:
 			providerServicePreflightHandler.ServeHTTP(w, r)
 		case ProviderServiceListPromotionsProcedure:
@@ -1177,16 +1177,16 @@ func (UnimplementedProviderServiceHandler) ForgetPreviewAlias(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForgetPreviewAlias is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) GetPreviewProtection(context.Context, *v1.GetPreviewProtectionRequest) (*v1.GetPreviewProtectionResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetPreviewProtection is not implemented"))
+func (UnimplementedProviderServiceHandler) GetProtection(context.Context, *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetProtection is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) ChangePreviewProtection(context.Context, *v1.ChangePreviewProtectionRequest) (*v1.ChangePreviewProtectionResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ChangePreviewProtection is not implemented"))
+func (UnimplementedProviderServiceHandler) ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ChangeProtection is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PublishPreviewProtection(context.Context, *v1.PublishPreviewProtectionRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PublishPreviewProtection is not implemented"))
+func (UnimplementedProviderServiceHandler) PublishProtection(context.Context, *v1.PublishProtectionRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PublishProtection is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error {

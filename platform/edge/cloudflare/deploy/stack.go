@@ -161,11 +161,9 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
-	if spec.Tier == environment.TierPreview {
-		held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: id.secret}
-		if err := p.putPreviewGate(ctx, held, spec.PreviewGate); err != nil {
-			return nil, fmt.Errorf("publish the preview gate of %s: %w", slug, err)
-		}
+	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: id.secret}
+	if err := p.putGate(ctx, held, spec.Gate); err != nil {
+		return nil, fmt.Errorf("publish the %s gate of %s: %w", spec.Tier, slug, err)
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
 		own := private{EnvelopeKey: envelopeKey}

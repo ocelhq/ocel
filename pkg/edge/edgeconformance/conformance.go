@@ -50,18 +50,18 @@ func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 		}
 	})
 
-	t.Run("an edge that runs code gates previews", func(t *testing.T) {
+	t.Run("an edge that runs code gates", func(t *testing.T) {
 		e := newEdge(t)
-		if facts := e.Facts(); facts.RunsCode && !facts.GatesPreviews {
-			t.Error("Facts().RunsCode = true but Facts().GatesPreviews = false; an edge that runs code answers previews itself, so it must run the preview gate that a deploy and `ocel preview protection` publish to it")
+		if facts := e.Facts(); facts.RunsCode && !facts.Gates {
+			t.Error("Facts().RunsCode = true but Facts().Gates = false; an edge that runs code answers requests itself, so it must run the gate that a deploy and `ocel protection` publish to it")
 		}
 	})
 
-	t.Run("an edge that has its origin gate previews also publishes the gate", func(t *testing.T) {
+	t.Run("an edge that has its origin gate also publishes the gate", func(t *testing.T) {
 		e := newEdge(t)
-		if facts := e.Facts(); facts.GatesPreviewsAtOrigin && (!facts.GatesPreviews || e.Hooks().PublishPreviewGate == nil || facts.RunsCode) {
-			t.Errorf("Facts().GatesPreviewsAtOrigin = true with GatesPreviews = %v, RunsCode = %v and PublishPreviewGate set = %v; an edge whose origin runs the gate runs no code and must publish the gate to the origin",
-				facts.GatesPreviews, facts.RunsCode, e.Hooks().PublishPreviewGate != nil)
+		if facts := e.Facts(); facts.GatesAtOrigin && (!facts.Gates || e.Hooks().PublishGate == nil || facts.RunsCode) {
+			t.Errorf("Facts().GatesAtOrigin = true with Gates = %v, RunsCode = %v and PublishGate set = %v; an edge whose origin runs the gate runs no code and must publish the gate to the origin",
+				facts.Gates, facts.RunsCode, e.Hooks().PublishGate != nil)
 		}
 	})
 

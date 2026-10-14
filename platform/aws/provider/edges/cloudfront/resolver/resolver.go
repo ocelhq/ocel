@@ -1,24 +1,26 @@
 package resolver
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"slices"
 )
 
-//go:embed src/resolver.js
+//go:embed minified/resolver.js
 var code []byte
 
-//go:embed src/ungated.js
-var ungated []byte
-
-//go:embed minified/preview.js
-var preview []byte
+//go:embed src/gate.js
+var gateSource []byte
 
 //go:embed src/emptybody.js
 var emptyBody []byte
 
-func Code() []byte { return slices.Concat(code, []byte("\n"), ungated) }
+func Code() []byte { return slices.Clone(code) }
 
-func PreviewCode() []byte { return slices.Clone(preview) }
+func GateDigest() string {
+	sum := sha256.Sum256(gateSource)
+	return hex.EncodeToString(sum[:])
+}
 
 func EmptyBodyCode() []byte { return slices.Clone(emptyBody) }

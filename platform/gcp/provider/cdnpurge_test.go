@@ -80,6 +80,7 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			server := &runServer{}
 			p := server.open(t)
+			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := behindTheALB(t, p)
 			change(t, p, &spec)
 			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {

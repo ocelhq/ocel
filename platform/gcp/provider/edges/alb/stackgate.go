@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/previewgate"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -28,23 +28,23 @@ func sayingTo(say func(string)) progress.Log {
 	return notices{Log: progress.Discard(), notify: say}
 }
 
-func (e *Edge) removeGate(ctx context.Context) error {
-	_, attached, err := e.readGatePublication(ctx)
+func (e *Edge) removeGate(ctx context.Context, tier environment.Tier) error {
+	_, attached, err := e.readGatePublication(ctx, tier)
 	if err != nil {
 		return err
 	}
 	if attached {
-		if err := e.deps.Stacks.Destroy(ctx, e.gateTarget(), progress.Discard()); err != nil {
+		if err := e.deps.Stacks.Destroy(ctx, e.gateTarget(tier), progress.Discard()); err != nil {
 			return err
 		}
 	}
-	if err := e.forgetGates(ctx); err != nil {
+	if err := e.forgetGates(ctx, tier); err != nil {
 		return err
 	}
-	return e.deps.Images.Delete(ctx)
+	return e.deps.Images.Delete(ctx, tier)
 }
 
-func (s *stack) isGated() bool { return isGated(s.state.Tier, s.e.deps.Shielded) }
+func (s *stack) isGated() bool { return !s.e.deps.Shielded }
 
 func (s *stack) listRoutedHosts() []string {
 	var hosts []string
@@ -60,34 +60,35 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	if !s.isGated() {
 		return nil
 	}
-	gate := spec.PreviewGate
-	if gate != nil {
-		_, attached, err := s.e.readGatePublication(ctx)
+	tier := s.state.Tier
+	held := spec.Gate
+	if held != nil {
+		_, attached, err := s.e.readGatePublication(ctx, tier)
 		if err != nil {
 			return err
 		}
 		if !attached {
 			return refusal.Refuse(refusal.CodeNotReady,
-				"%s has a preview gate recorded, and the %s load balancer of this project's preview tier runs no gate plugin: run `ocel bootstrap` for the preview tier to attach it, then deploy again",
-				spec.Slug, Kind)
+				"%s has a %s gate recorded, and the %s load balancer of this project's %s tier runs no gate plugin: run `ocel bootstrap` for the %s tier to attach it, then deploy again",
+				spec.Slug, tier, Kind, tier, tier)
 		}
 	}
 	routed := s.listRoutedHosts()
 	newlyGated := false
 	var record gateRecord
-	changed, err := s.e.changeGateRecord(ctx, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
-		if gate == nil {
+	changed, err := s.e.changeGateRecord(ctx, tier, spec.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
+		if held == nil {
 			return gateRecord{}, false
 		}
 		newlyGated = !found
-		record = gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *gate}
+		record = gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *held}
 		return record, true
 	})
 	if err != nil {
 		return err
 	}
 	if !changed {
-		running, err := s.e.runsRecordedGate(ctx, spec.Slug, record, gate != nil)
+		running, err := s.e.runsRecordedGate(ctx, tier, spec.Slug, record, held != nil)
 		if err != nil || running {
 			return err
 		}
@@ -97,7 +98,7 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	if newlyGated {
 		proof.Hosts = routed
 	}
-	return s.e.publishGates(ctx, proof, log)
+	return s.e.publishGates(ctx, tier, proof, log)
 }
 
 func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progress.Log) error {
@@ -107,24 +108,25 @@ func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progres
 	if log == nil {
 		log = progress.Discard()
 	}
-	_, gated, err := s.e.readGateRecord(ctx, s.state.Slug)
+	tier := s.state.Tier
+	_, gated, err := s.e.readGateRecord(ctx, tier, s.state.Slug)
 	if err != nil || !gated {
 		return err
 	}
-	if _, err := s.e.changeGateRecord(ctx, s.state.Slug, func(recorded gateRecord, _ bool) (gateRecord, bool) {
+	if _, err := s.e.changeGateRecord(ctx, tier, s.state.Slug, func(recorded gateRecord, _ bool) (gateRecord, bool) {
 		recorded.Hosts = slices.Sorted(maps.Keys(toSet(recorded.Hosts, hosts)))
 		return recorded, true
 	}); err != nil {
 		return err
 	}
-	return s.e.publishGates(ctx, gateProof{Hosts: hosts, Address: s.recorded.LoadBalancer.Address}, log)
+	return s.e.publishGates(ctx, tier, gateProof{Hosts: hosts, Address: s.recorded.LoadBalancer.Address}, log)
 }
 
 func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progress.Log) {
 	if !s.isGated() || len(hosts) == 0 {
 		return
 	}
-	_, err := s.e.changeGateRecord(ctx, s.state.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
+	_, err := s.e.changeGateRecord(ctx, s.state.Tier, s.state.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
 		if !found {
 			return recorded, false
 		}
@@ -132,7 +134,7 @@ func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progre
 		return recorded, true
 	})
 	if err != nil {
-		log.Warn("The preview gate still lists " + hosts[0] + ", which is no longer served: " + err.Error())
+		log.Warn("The " + string(s.state.Tier) + " gate still lists " + hosts[0] + ", which is no longer served: " + err.Error())
 	}
 }
 
@@ -140,35 +142,33 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 	if !s.isGated() {
 		return nil
 	}
-	changed, err := s.e.changeGateRecord(ctx, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false })
+	tier := s.state.Tier
+	changed, err := s.e.changeGateRecord(ctx, tier, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false })
 	if err != nil {
 		return err
 	}
 	if !changed {
-		running, err := s.e.runsRecordedGate(ctx, s.state.Slug, gateRecord{}, false)
+		running, err := s.e.runsRecordedGate(ctx, tier, s.state.Slug, gateRecord{}, false)
 		if err != nil || running {
 			return err
 		}
 	}
-	return s.e.publishGates(ctx, gateProof{}, progress.Discard())
+	return s.e.publishGates(ctx, tier, gateProof{}, progress.Discard())
 }
 
 func (s *stack) signGateSession(ctx context.Context, hostname string) (string, error) {
-	if s.state.Tier != environment.TierPreview {
-		return "", nil
-	}
 	if !s.isGated() {
-		inForce, err := stackrecords.ReadPreviewGate(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Slug)
+		inForce, err := stackrecords.ReadGate(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Tier, s.state.Slug)
 		if err != nil || inForce == nil {
 			return "", err
 		}
-		return previewgate.CookieName + "=" + inForce.SignSession(hostname, time.Now()), nil
+		return gate.CookieName + "=" + inForce.SignSession(hostname, time.Now()), nil
 	}
-	recorded, gated, err := s.e.readGateRecord(ctx, s.state.Slug)
+	recorded, gated, err := s.e.readGateRecord(ctx, s.state.Tier, s.state.Slug)
 	if err != nil || !gated {
 		return "", err
 	}
-	return previewgate.CookieName + "=" + recorded.Gate.SignSession(hostname, time.Now()), nil
+	return gate.CookieName + "=" + recorded.Gate.SignSession(hostname, time.Now()), nil
 }
 
 func toSet(lists ...[]string) map[string]struct{} {
