@@ -3,11 +3,14 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -100,6 +103,77 @@ func TestAHostThatCannotBeReachedIsNotReadyRatherThanDenied(t *testing.T) {
 				t.Errorf("Open() over %s is refused %q, want %q: a host that never answered refused no credential", name, got, tc.want)
 			}
 		})
+	}
+}
+
+func closedPort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func resolvedTo(port int) string {
+	return fmt.Sprintf("printf 'hostname 127.0.0.1\\nuser ubuntu\\nport %d\\n'; exit 0", port)
+}
+
+func TestAPortThatRefusesTheConnectionIsReportedAsRefusedRatherThanSilent(t *testing.T) {
+	port := closedPort(t)
+	sshSaying(t, resolvedTo(port), "exit 1", "exit 0")
+
+	_, err := Open(context.Background(), Target{Host: "box.invalid", User: "ubuntu"})
+	want := fmt.Sprintf("127.0.0.1 port %d refused the connection: nothing accepts ssh there", port)
+	if err == nil || err.Error() != want {
+		t.Errorf("Open() over a port that refused the connection = %v, want %q: ssh-keyscan says nothing when refused, and a refusal read as a timeout sends the reader waiting on a box that answered at once", err, want)
+	}
+}
+
+func listening(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+func TestAProbeThatSpentItsWholeWindowSilentlyIsReportedAsATimeout(t *testing.T) {
+	t.Parallel()
+
+	port := listening(t)
+	dest := Destination{Address: "127.0.0.1", Port: port}
+	err := refuseUnanswered(context.Background(), dest, failure{}, time.Now().Add(-time.Second))
+	want := fmt.Sprintf("127.0.0.1 port %d did not answer within 10s", port)
+	if err == nil || err.Error() != want {
+		t.Errorf("refuseUnanswered() after ssh-keyscan waited out the limit = %v, want %q", err, want)
+	}
+}
+
+func TestAPortThatAcceptsTheConnectionButOffersNoHostKeyIsReportedAsSuch(t *testing.T) {
+	port := listening(t)
+	sshSaying(t, resolvedTo(port), "exit 1", "exit 0")
+
+	_, err := Open(context.Background(), Target{Host: "box.invalid", User: "ubuntu"})
+	want := fmt.Sprintf("127.0.0.1 port %d accepted the connection but offered no ssh host key", port)
+	if err == nil || err.Error() != want {
+		t.Errorf("Open() over a port that accepts but never speaks ssh = %v, want %q", err, want)
+	}
+}
+
+func TestAProbeFailureSSHKeyscanExplainedCarriesItsOwnWords(t *testing.T) {
+	sshSaying(t, resolved, "echo 'getaddrinfo box.invalid: Name or service not known' >&2; exit 1", "exit 0")
+
+	_, err := Open(context.Background(), Target{Host: "box.invalid", User: "ubuntu"})
+	want := "203.0.113.10 port 22 is unreachable: getaddrinfo box.invalid: Name or service not known"
+	if err == nil || err.Error() != want {
+		t.Errorf("Open() = %v, want %q: what ssh-keyscan said is the diagnosis", err, want)
 	}
 }
 

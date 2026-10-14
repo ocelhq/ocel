@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -41,10 +43,10 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"ssh cannot make sense of %q: %s", target.Destination(), terse(err))
 	}
+	started := time.Now()
 	keys, err := offered(ctx, dest)
 	if err != nil {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s port %d did not answer within %s: %s", dest.Address, dest.Port, reach, terse(err))
+		return nil, refuseUnanswered(ctx, dest, err, started.Add(reach))
 	}
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
@@ -61,6 +63,38 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 		return nil, err
 	}
 	return session, nil
+}
+
+func refuseUnanswered(ctx context.Context, dest Destination, scanned error, by time.Time) error {
+	var said failure
+	if errors.As(scanned, &said) && said.stderr != "" {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d is unreachable: %s", dest.Address, dest.Port, terse(scanned))
+	}
+	dialCtx, cancel := context.WithDeadline(ctx, by)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", net.JoinHostPort(dest.Address, strconv.Itoa(dest.Port)))
+	switch {
+	case err == nil:
+		conn.Close()
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d accepted the connection but offered no ssh host key", dest.Address, dest.Port)
+	case isRefused(err):
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d refused the connection: nothing accepts ssh there", dest.Address, dest.Port)
+	case errors.Is(err, context.DeadlineExceeded):
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d did not answer within %s", dest.Address, dest.Port, reach)
+	default:
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d is unreachable: %s", dest.Address, dest.Port, terse(err))
+	}
+}
+
+const wsaConnectionRefused = syscall.Errno(10061)
+
+func isRefused(err error) bool {
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, wsaConnectionRefused)
 }
 
 func (s *Session) HostKey() HostKey { return s.anchor }
