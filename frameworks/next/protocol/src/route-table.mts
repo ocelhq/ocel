@@ -50,13 +50,13 @@ export type DispatchTarget =
       kind: "function";
       id: string;
       entryKey?: string;
-      parent?: string;
       revalidate?: unknown;
       page?: boolean;
     }
   | {
       kind: "prerender";
       id?: string;
+      parent: string;
       entryKey?: string;
       tags?: string[];
       allowQuery?: string[];

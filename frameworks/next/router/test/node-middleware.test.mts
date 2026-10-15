@@ -132,6 +132,124 @@ describe("node middleware matchers", () => {
   });
 });
 
+describe("node middleware matchers on a localized base path", () => {
+  const aboutMatcher = {
+    source: "/about/:path*",
+    sourceRegex:
+      "^\\/base(?:\\/(_next\\/data\\/[^/]{1,}))?(?:\\/((?!_next\\/)[^/.]{1,}))\\/about(?:\\/((?:[^\\/#\\?]+?)(?:\\/(?:[^\\/#\\?]+?))*))?(\\.json|\\.rsc|\\.segments\\/.+\\.segment\\.rsc)?[\\/#\\?]?$",
+    missing: [{ type: "header", key: "x-prerender-revalidate", value: "preview-id" }],
+  };
+
+  function localizedDeps(fetching: typeof fetch, trailingSlash = false): RouteDeps {
+    const pathnames = [
+      "/base/en/about",
+      "/base/fr/about",
+      "/base/en/about/deep",
+      "/base/en/other",
+      "/base/_next/data/t/en/about.json",
+    ];
+    return deps({
+      manifest: {
+        buildId: "t",
+        basePath: "/base",
+        trailingSlash,
+        i18n: { locales: ["en", "fr"], defaultLocale: "en" },
+        pathnames,
+        routes: {
+          ...emptyRoutes,
+          middlewareMatchers: [aboutMatcher],
+          shouldNormalizeNextData: true,
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: Object.fromEntries(pathnames.map((p) => [p, { kind: "static" as const }])),
+        middleware: nodeMiddleware([aboutMatcher]),
+      },
+      functionUrls: { [MW_ID]: MW_URL },
+      fetch: fetching,
+    } as TestRouteDeps);
+  }
+
+  it.each([
+    ["/base/about", false],
+    ["/base/fr/about", false],
+    ["/base/en/about/deep", false],
+    ["/base/_next/data/t/en/about.json", false],
+    ["/base/en/about/", true],
+    ["/base/_next/data/t/en/about.json", true],
+  ])("invokes middleware for %s (trailingSlash: %s)", async (path, trailingSlash) => {
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
+
+    await serve(
+      new Request(`https://app.example${path}`),
+      localizedDeps(origin.fetch, trailingSlash),
+    );
+
+    expect(origin.requests.length).toBe(1);
+  });
+
+  it.each(["/base/en/other", "/base/en/ABOUT"])(
+    "does not invoke middleware for %s",
+    async (path) => {
+      const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
+
+      await serve(new Request(`https://app.example${path}`), localizedDeps(origin.fetch));
+
+      expect(origin.requests.length).toBe(0);
+    },
+  );
+
+  it("invokes middleware for a path its matcher names only once decoded, as next start does", async () => {
+    const cafeMatcher = {
+      source: "/café",
+      sourceRegex:
+        "^\\/base(?:\\/(_next\\/data\\/[^/]{1,}))?(?:\\/((?!_next\\/)[^/.]{1,}))\\/café(\\.json)?[\\/#\\?]?$",
+    };
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
+    const cafeDeps = localizedDeps(origin.fetch);
+    cafeDeps.manifest.pathnames = [...cafeDeps.manifest.pathnames, "/base/en/caf%C3%A9"];
+    cafeDeps.manifest.routes = {
+      ...(cafeDeps.manifest.routes as object),
+      middlewareMatchers: [cafeMatcher],
+    } as RouteDeps["manifest"]["routes"];
+    cafeDeps.manifest.middleware = nodeMiddleware([
+      cafeMatcher,
+    ]) as RouteDeps["manifest"]["middleware"];
+
+    await serve(new Request("https://app.example/base/en/caf%C3%A9"), cafeDeps);
+
+    expect(origin.requests.length).toBe(1);
+  });
+
+  it("invokes middleware whose matcher requires x-nextjs-data for a data request that omits the header, as next start does", async () => {
+    const dataMatcher = { ...aboutMatcher, has: [{ type: "header", key: "x-nextjs-data" }] };
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
+    const dataDeps = localizedDeps(origin.fetch);
+    dataDeps.manifest.routes = {
+      ...(dataDeps.manifest.routes as object),
+      middlewareMatchers: [dataMatcher],
+    } as RouteDeps["manifest"]["routes"];
+    dataDeps.manifest.middleware = nodeMiddleware([
+      dataMatcher,
+    ]) as RouteDeps["manifest"]["middleware"];
+
+    await serve(new Request("https://app.example/base/_next/data/t/en/about.json"), dataDeps);
+
+    expect(origin.requests.length).toBe(1);
+  });
+
+  it("skips middleware for an on-demand revalidation", async () => {
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
+
+    await serve(
+      new Request("https://app.example/base/en/about", {
+        headers: { "x-prerender-revalidate": "preview-id" },
+      }),
+      localizedDeps(origin.fetch),
+    );
+
+    expect(origin.requests.length).toBe(0);
+  });
+});
+
 describe("node middleware forwarding", () => {
   it("sends x-ocel-entry: /_middleware and reaches the bundle named by middleware.id", async () => {
     const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));

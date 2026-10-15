@@ -161,7 +161,7 @@ describe("dispatchResult", () => {
           routes: {},
           dispatch: {
             "/about": { kind: "static" },
-            "/blog": { kind: "prerender", id: "/blog", config: {} },
+            "/blog": { kind: "prerender", id: "/blog", parent: "/blog", config: {} },
           },
         },
         functionUrls: { "/blog": "https://fn.example.com" },
@@ -1657,7 +1657,7 @@ describe("data-request invocation pathname", () => {
         pathnames: [],
         routes: {},
         dispatch: {
-          "/[...route]": { kind: "prerender", id: "fn", config: {} },
+          "/[...route]": { kind: "prerender", id: "fn", parent: "/[...route]", config: {} },
         },
       },
       functionUrls: { fn: "https://fn.example.com" },
@@ -1755,6 +1755,7 @@ describe("data-request invocation pathname", () => {
           "/_next/data/t/index.json": {
             kind: "prerender",
             id: "fn",
+            parent: "/",
             config: {},
           },
         },
@@ -2115,42 +2116,6 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
     expect(invoked().searchParams.get("nxtPid")).toBe("something-else");
   });
 
-  it("keeps params for a prerendered concrete path of a dynamic page", async () => {
-    let captured: URL | undefined;
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: ["/blog/post-1", "/blog/[slug]"],
-        routes: {
-          beforeMiddleware: [],
-          beforeFiles: [],
-          afterFiles: [],
-          dynamicRoutes: [
-            {
-              sourceRegex: "^[/]?/blog/(?<nxtPslug>[^/]+?)$",
-              destination: "/blog/[slug]?nxtPslug=$nxtPslug",
-            },
-          ],
-          onMatch: [],
-          fallback: [],
-        } as unknown as RouteDeps["manifest"]["routes"],
-        dispatch: {
-          "/blog/post-1": { kind: "prerender", id: "/blog/post-1", config: {} },
-        },
-      },
-      functionUrls: { "/blog/post-1": "https://blog.example.com" },
-      fetch: (async (req: Request) => {
-        captured = new URL(req.url);
-        return new Response("rendered", { status: 200 });
-      }) as unknown as typeof fetch,
-    });
-
-    await serve(new Request("https://app.example/blog/post-1"), deps);
-
-    expect(captured?.searchParams.get("nxtPslug")).toBe("post-1");
-  });
-
   it("leaves the root path unaffected", async () => {
     let captured: URL | undefined;
     const deps = baseDeps({
@@ -2184,6 +2149,177 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
 
     expect(res.status).toBe(200);
     expect(captured?.searchParams.has("nxtPid")).toBe(false);
+  });
+});
+
+describe("a prerender under a dynamic route", () => {
+  const collapsedBlogRoute = {
+    source: "/blog/[slug]",
+    sourceRegex: "^[/]?/blog/(?<nxtPslug>[^/]+?)(\\.rsc|\\.segments/.+\\.segment\\.rsc|)(?:/)?$",
+    destination: "/blog/[slug]$2?nxtPslug=$nxtPslug",
+  };
+  const plainBlogRoute = {
+    source: "/blog/[slug]",
+    sourceRegex: "^[/]?/blog/(?<nxtPslug>[^/]+?)(?:/)?$",
+    destination: "/blog/[slug]?nxtPslug=$nxtPslug",
+  };
+  const blogRewrite = {
+    source: "/blog/:slug",
+    sourceRegex: "^\\/blog(?:\\/([^\\/]+?))(?:\\/)?$",
+    destination: "/other?slug=$1",
+  };
+
+  function blogDeps(dynamicRoute: Route, afterFiles: Route[] = []) {
+    const invoked: URL[] = [];
+    const prerender = (parent: string) =>
+      ({ kind: "prerender", id: "blog", parent, config: {} }) as const;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [
+          "/blog/hello",
+          "/blog/hello.rsc",
+          "/blog/hello.segments/_tree.segment.rsc",
+          "/blog/static",
+          "/blog/static.rsc",
+          "/blog/[slug]",
+          "/blog/[slug].rsc",
+          "/other",
+        ],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles,
+          dynamicRoutes: [dynamicRoute],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/blog/hello": prerender("/blog/[slug]"),
+          "/blog/hello.rsc": prerender("/blog/[slug]"),
+          "/blog/hello.segments/_tree.segment.rsc": prerender("/blog/[slug]"),
+          "/blog/static": prerender("/blog/static"),
+          "/blog/static.rsc": prerender("/blog/static"),
+          "/blog/[slug]": prerender("/blog/[slug]"),
+          "/blog/[slug].rsc": prerender("/blog/[slug]"),
+          "/other": { kind: "function", id: "other" },
+        },
+      },
+      functionUrls: { blog: "https://blog.example.com", other: "https://other.example.com" },
+      fetch: (async (req: Request) => {
+        invoked.push(new URL(req.url));
+        return new Response("rendered", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, invoked };
+  }
+
+  it("keeps the params of a concrete path the dynamic route prerendered", async () => {
+    const { deps, invoked } = blogDeps(collapsedBlogRoute);
+
+    const res = await serve(new Request("https://app.example/blog/hello"), deps);
+
+    expect(res.headers.get("x-matched-path")).toBe("/blog/hello");
+    expect(invoked[0]?.searchParams.get("nxtPslug")).toBe("hello");
+  });
+
+  it("keeps the params of a concrete path's flight payload", async () => {
+    const { deps, invoked } = blogDeps(collapsedBlogRoute);
+
+    const res = await serve(new Request("https://app.example/blog/hello.rsc"), deps);
+
+    expect(res.headers.get("x-matched-path")).toBe("/blog/hello.rsc");
+    expect(invoked[0]?.searchParams.get("nxtPslug")).toBe("hello");
+  });
+
+  it("serves a concrete path's segment as itself when the dynamic route resolves it to no build pathname", async () => {
+    const { deps } = blogDeps(collapsedBlogRoute);
+
+    const res = await serve(
+      new Request("https://app.example/blog/hello.segments/_tree.segment.rsc"),
+      deps,
+    );
+
+    expect(res.headers.get("x-matched-path")).toBe("/blog/hello.segments/_tree.segment.rsc");
+  });
+
+  it("serves a static page the dynamic route also matches as itself, ahead of an afterFiles rewrite", async () => {
+    const { deps, invoked } = blogDeps(plainBlogRoute, [blogRewrite]);
+
+    const res = await serve(new Request("https://app.example/blog/static"), deps);
+
+    expect(res.headers.get("x-matched-path")).toBe("/blog/static");
+    expect(invoked[0]?.pathname).toBe("/blog/static");
+    expect(invoked[0]?.searchParams.has("slug")).toBe(false);
+    expect(invoked[0]?.searchParams.has("nxtPslug")).toBe(false);
+  });
+
+  it("applies an afterFiles rewrite to a concrete path the dynamic route prerendered, as next start does", async () => {
+    const { deps } = blogDeps(plainBlogRoute, [blogRewrite]);
+
+    const res = await serve(new Request("https://app.example/blog/hello"), deps);
+
+    expect(res.headers.get("x-matched-path")).toBe("/other");
+  });
+});
+
+describe("the forwarded query of an unfilled dynamic param", () => {
+  function catchAllDeps() {
+    const invoked: URL[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/docs/[[...path]]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              source: "/docs/[[...path]]",
+              sourceRegex: "^[/]?/docs(?:/(?<nxtPpath>.+?))?(?:/)?$",
+              destination: "/docs/[[...path]]?nxtPpath=$nxtPpath",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: { "/docs/[[...path]]": { kind: "function", id: "docs" } },
+      },
+      functionUrls: { docs: "https://docs.example.com" },
+      fetch: (async (req: Request) => {
+        invoked.push(new URL(req.url));
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, invoked };
+  }
+
+  it("drops an optional catch-all param the request left unfilled", async () => {
+    const { deps, invoked } = catchAllDeps();
+
+    await serve(new Request("https://app.example/docs"), deps);
+
+    expect(invoked[0]?.searchParams.has("nxtPpath")).toBe(false);
+  });
+
+  it("keeps a filled optional catch-all param", async () => {
+    const { deps, invoked } = catchAllDeps();
+
+    await serve(new Request("https://app.example/docs/a/b"), deps);
+
+    expect(invoked[0]?.searchParams.get("nxtPpath")).toBe("a/b");
+  });
+
+  it("keeps a visitor's own empty query whose name looks like a param", async () => {
+    const { deps, invoked } = catchAllDeps();
+
+    await serve(new Request("https://app.example/docs/a?nxtPfoo=&nxtIbar="), deps);
+
+    expect(invoked[0]?.searchParams.get("nxtPfoo")).toBe("");
+    expect(invoked[0]?.searchParams.get("nxtIbar")).toBe("");
   });
 });
 

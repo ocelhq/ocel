@@ -400,13 +400,15 @@ const adapter = {
 
     const publicDispatch = publicFiles.map((p) => [p.pathname, { kind: "static" }]);
 
+    const routeKeyByOutputId = new Map(allRoutes.map((o) => [o.id, routeKeyOf(o, basePath)]));
     const prerenderDispatch = outputs.prerenders.map((p) => {
       const routeKey = p.pathname;
+      const parent = routeKeyByOutputId.get(p.parentOutputId);
       const allowQuery = p.config?.allowQuery;
       const tags = cacheTags(p, programmableEdge);
       const entryKey = entryKeyByRouteId.get(p.parentOutputId);
       const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
-      if (entryKey === undefined && edgeEntryKey === undefined) {
+      if (parent === undefined || (entryKey === undefined && edgeEntryKey === undefined)) {
         throw new Error(
           `ocel: prerender "${routeKey}" is parented by output "${p.parentOutputId}", which renders on neither a function nor the edge — nothing can regenerate it`,
         );
@@ -417,6 +419,7 @@ const adapter = {
         {
           kind: "prerender",
           id: entryKey === undefined ? p.parentOutputId : bundleNameOf(entryKey, routeKey),
+          parent,
           config: p.config,
           fallback: {
             initialRevalidate: p.fallback?.initialRevalidate,
@@ -1215,12 +1218,23 @@ interface NextConfigProjection {
   clientAssetSuffix: string;
 }
 
-function clientAssetSuffix(config: {
+interface ClientAssetConfig {
   deploymentId?: string;
-  experimental?: { immutableAssetToken?: string };
-}): string {
-  const token = config.experimental?.immutableAssetToken || config.deploymentId;
-  return token ? `?dpl=${token}` : "";
+  supportsImmutableAssets?: boolean;
+  experimental?: object;
+}
+
+function clientAssetSuffix(config: ClientAssetConfig): string {
+  const token = immutableAssetTokenOf(config.experimental);
+  if (token) return `?dpl=${token}`;
+  if (config.supportsImmutableAssets || !config.deploymentId) return "";
+  return `?dpl=${config.deploymentId}`;
+}
+
+function immutableAssetTokenOf(experimental: object | undefined): string | undefined {
+  if (experimental === undefined || !("immutableAssetToken" in experimental)) return undefined;
+  const token = experimental.immutableAssetToken;
+  return typeof token === "string" ? token : undefined;
 }
 
 function renderLauncher(

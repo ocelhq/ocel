@@ -1,5 +1,5 @@
 {
-  "next": "16.2.10",
+  "next": "16.4.0",
   "variants": [
     {
       "variant": "default",
@@ -672,7 +672,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -690,7 +690,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -708,7 +708,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -760,7 +760,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -777,7 +777,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -874,9 +874,9 @@
             "search": "url=%2F_fixtures%2Fabsent.png&w=640&q=75",
             "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
           },
-          "status": 400,
+          "status": 404,
           "body": {
-            "text": "The requested resource isn't a valid image."
+            "text": "\"url\" parameter is valid but internal response is invalid"
           },
           "contentType": null,
           "cacheControl": null,
@@ -911,7 +911,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=315360000, immutable",
@@ -1592,7 +1592,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -1610,7 +1610,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -1628,7 +1628,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -1680,7 +1680,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -1697,7 +1697,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=14400, must-revalidate",
@@ -1795,9 +1795,9 @@
             "search": "url=%2F_fixtures%2Fabsent.png&w=640&q=75",
             "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
           },
-          "status": 400,
+          "status": 404,
           "body": {
-            "text": "The requested resource isn't a valid image."
+            "text": "\"url\" parameter is valid but internal response is invalid"
           },
           "contentType": null,
           "cacheControl": null,
@@ -1832,7 +1832,7 @@
           "status": 200,
           "body": {
             "bytes": 149,
-            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+            "sha256": "355f63d62d4ffcd567aea006ad358f6f26ada9ade0cb3fbd63731620a9f52285"
           },
           "contentType": "image/png",
           "cacheControl": "public, max-age=315360000, immutable",

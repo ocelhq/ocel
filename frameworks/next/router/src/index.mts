@@ -125,7 +125,7 @@ export interface RouteResult {
     query?: Record<string, string | string[]>;
   } | null;
   resolvedQuery?: Record<string, string | string[]>;
-  routeMatches?: Record<string, string | string[]>;
+  routeMatches?: Record<string, string | string[] | undefined>;
   resolvedHeaders?: Headers;
   middleware?: MiddlewareOutcome;
   middlewareLocation?: string;
@@ -207,6 +207,8 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
 }
 
 type RoutingTable = Parameters<typeof resolveRoutes>[0]["routes"];
+
+type Route = RoutingTable["dynamicRoutes"][number];
 
 type BeforeMiddlewareRule = RoutingTable["beforeMiddleware"][number] & {
   priority?: boolean;
@@ -350,13 +352,16 @@ async function serveRequest(request: Request, deps: RouteDeps): Promise<Response
     i18n: undefined,
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
-    pathnames: deps.manifest.pathnames,
-    routes: withoutInternalRedirects(
-      deps.manifest.routes,
-      routingUrl.pathname,
-      deps.manifest.basePath,
-      deps.manifest.buildId,
-    ),
+    pathnames: routingTableOf(deps.manifest).pathnames,
+    routes: {
+      ...withoutInternalRedirects(
+        deps.manifest.routes,
+        routingUrl.pathname,
+        deps.manifest.basePath,
+        deps.manifest.buildId,
+      ),
+      middlewareMatchers: undefined,
+    },
 
     invokeMiddleware: async (ctx) => {
       const middleware = deps.manifest.middleware;
@@ -480,6 +485,83 @@ function preferExactPathname(result: RouteResult, manifest: NextRouteTable): Rou
   return result;
 }
 
+interface DestinationParam {
+  key: string;
+  group: string;
+}
+
+interface RoutingTableView {
+  pathnames: string[];
+  destinationParams: DestinationParam[][];
+}
+
+const routingTableViews = new WeakMap<NextRouteTable, RoutingTableView>();
+
+function routingTableOf(manifest: NextRouteTable): RoutingTableView {
+  let view = routingTableViews.get(manifest);
+  if (!view) {
+    const dynamicRoutes = (manifest.routes as RoutingTable).dynamicRoutes ?? [];
+    view = {
+      pathnames: pathnamesForRouting(manifest, dynamicRoutes),
+      destinationParams: dynamicRoutes.map(destinationParamsOf),
+    };
+    routingTableViews.set(manifest, view);
+  }
+  return view;
+}
+
+function routeOwning(pathname: string, manifest: NextRouteTable): string {
+  const target = manifest.dispatch[pathname];
+  return target?.kind === "prerender" ? target.parent : pathname;
+}
+
+function pathnamesForRouting(manifest: NextRouteTable, dynamicRoutes: Route[]): string[] {
+  const pathnames = new Set(manifest.pathnames);
+  const unconditional = dynamicRoutes.flatMap((route) => {
+    if (route.destination === undefined || route.has || route.missing) return [];
+    const sourceRegex = compileSourceRegex(route.sourceRegex);
+    return sourceRegex ? [{ sourceRegex, destination: route.destination }] : [];
+  });
+  const isResolvedByOwner = (pathname: string): boolean => {
+    const target = manifest.dispatch[pathname];
+    if (target?.kind !== "prerender") return false;
+    return unconditional.some(({ sourceRegex, destination }) => {
+      const resolved = destinationPathnameOf(sourceRegex, destination, pathname);
+      return (
+        resolved !== undefined &&
+        resolved !== pathname &&
+        pathnames.has(resolved) &&
+        routeOwning(resolved, manifest) === target.parent
+      );
+    });
+  };
+  return manifest.pathnames.filter((pathname) => !isResolvedByOwner(pathname));
+}
+
+function destinationParamsOf(route: Route): DestinationParam[] {
+  if (route.destination === undefined) return [];
+  const params: DestinationParam[] = [];
+  for (const [key, value] of new URL(route.destination, "http://n").searchParams) {
+    if (value.startsWith("$")) params.push({ key, group: value.slice(1) });
+  }
+  return params;
+}
+
+function unfilledParamKeys(result: RouteResult, manifest: NextRouteTable): Set<string> {
+  const unfilled = new Set<string>();
+  const routeMatches = result.routeMatches;
+  if (!routeMatches) return unfilled;
+  for (const params of routingTableOf(manifest).destinationParams) {
+    if (params.length === 0 || !params.every(({ group }) => Object.hasOwn(routeMatches, group))) {
+      continue;
+    }
+    for (const { key, group } of params) {
+      if (routeMatches[group] === undefined) unfilled.add(key);
+    }
+  }
+  return unfilled;
+}
+
 function dropShadowedDynamicParams(result: RouteResult, manifest: NextRouteTable): RouteResult {
   const target = result.invocationTarget;
   if (
@@ -512,12 +594,24 @@ export function ruleDestinationPathname(
   destination: string,
   pathname: string,
 ): string | undefined {
-  let match: RegExpMatchArray | null;
+  const compiled = compileSourceRegex(sourceRegex);
+  return compiled && destinationPathnameOf(compiled, destination, pathname);
+}
+
+function compileSourceRegex(sourceRegex: string): RegExp | undefined {
   try {
-    match = pathname.match(new RegExp(sourceRegex));
+    return new RegExp(sourceRegex);
   } catch {
     return undefined;
   }
+}
+
+function destinationPathnameOf(
+  sourceRegex: RegExp,
+  destination: string,
+  pathname: string,
+): string | undefined {
+  const match = pathname.match(sourceRegex);
   if (!match) return undefined;
   let out = destination.split("?")[0] ?? "";
   for (let i = match.length - 1; i >= 1; i--) {
@@ -949,11 +1043,10 @@ async function substituteErrorPage(
   });
 }
 
-function hasUndecodableRouteMatch(
-  routeMatches: Record<string, string | string[]> | undefined,
-): boolean {
+function hasUndecodableRouteMatch(routeMatches: RouteResult["routeMatches"]): boolean {
   if (!routeMatches) return false;
   for (const value of Object.values(routeMatches)) {
+    if (value === undefined) continue;
     for (const v of Array.isArray(value) ? value : [value]) {
       try {
         decodeURIComponent(v);
@@ -1016,13 +1109,11 @@ function dataPathname(pathname: string, url: URL, manifest: NextRouteTable): str
   return `${prefix}${route || "/index"}.json`;
 }
 
-function searchFromQuery(query: Record<string, string | string[]>): string {
+function searchFromQuery(query: Record<string, string | string[]>, unfilled: Set<string>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    for (const v of Array.isArray(value) ? value : [value]) {
-      if (v === `$${key}`) continue;
-      params.append(key, v);
-    }
+    if (unfilled.has(key)) continue;
+    for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
   }
   const search = params.toString();
   return search ? `?${search}` : "";
@@ -1031,7 +1122,7 @@ function searchFromQuery(query: Record<string, string | string[]>): string {
 function originUrl(fnUrl: string, url: URL, result: RouteResult, manifest: NextRouteTable): URL {
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
   const query = result.invocationTarget?.query;
-  const search = query ? searchFromQuery(query) : url.search;
+  const search = query ? searchFromQuery(query, unfilledParamKeys(result, manifest)) : url.search;
   const target = canonicalPathname(dataPathname(pathname, url, manifest), manifest);
   return new URL(encodeRequestTarget(target) + encodeForwardedSearch(search), fnUrl);
 }
@@ -1219,9 +1310,12 @@ function middlewareMatches(
   headers: Headers,
 ): boolean {
   if (!matchers || matchers.length === 0) return true;
+  const pathnames = [url.pathname];
+  const decoded = decodedPathname(url.pathname);
+  if (decoded !== undefined && decoded !== url.pathname) pathnames.push(decoded);
   return matchers.some(
     (matcher) =>
-      new RegExp(matcher.sourceRegex).test(url.pathname) &&
+      pathnames.some((pathname) => new RegExp(matcher.sourceRegex).test(pathname)) &&
       (matcher.has ?? []).every((has) => matchesHas(has, headers, url)) &&
       !(matcher.missing ?? []).some((has) => matchesHas(has, headers, url)),
   );
