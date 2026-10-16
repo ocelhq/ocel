@@ -175,6 +175,7 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {buckets: map[string]string{
 			outputStateBucket:    "ocel-state",
+			outputStateTable:     fixtureStateTable,
 			outputArtifactBucket: "ocel-artifacts",
 			outputAssetBucket:    "ocel-assets",
 			outputAppBoundaryARN: testAppBoundaryARN,
@@ -196,6 +197,8 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 	}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           stacks,
 		SSM:           ssmc,
 		IAM:           &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
@@ -421,6 +424,8 @@ func TestTeardownReclaimsTheTierOriginSecret(t *testing.T) {
 			}
 			apis := TeardownAPIs{
 				RemoveBastion: removeNoBastion,
+				Layers:        newFakeLayers(),
+				Records:       newFakeRecords().in,
 				CFN:           stacks,
 				SSM:           ssmc,
 				IAM:           &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
@@ -465,6 +470,8 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 	cfnc := &teardownCFN{stacks: stacks}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           cfnc,
 		SSM:           newFakeSSM(),
 		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
@@ -497,6 +504,8 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           stacks,
 		SSM:           newFakeSSM(),
 		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
@@ -521,6 +530,8 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           stacks,
 		SSM:           newFakeSSM(),
 		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
@@ -540,15 +551,15 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	t.Parallel()
 
 	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
-	runtime := defaultNamespace.runtimeStackName(environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {status: cfntypes.StackStatusRollbackComplete},
 		feature:       {},
-		runtime:       {},
 	}}
 	iamc := &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           stacks,
 		SSM:           newFakeSSM(),
 		IAM:           iamc,
@@ -558,7 +569,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{feature, runtime, coreStackName}
+	want := []string{feature, coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v: a core that never finished creating names nothing, and everything beside it still has to go", stacks.deleted, want)
 	}
@@ -574,6 +585,8 @@ func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	stacks := &teardownCFN{stacks: map[string]teardownStack{feature: {}}}
 	apis := TeardownAPIs{
 		RemoveBastion: removeNoBastion,
+		Layers:        newFakeLayers(),
+		Records:       newFakeRecords().in,
 		CFN:           stacks,
 		SSM:           newFakeSSM(),
 		IAM:           &teardownIAM{keys: map[string][]string{}},

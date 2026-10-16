@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
@@ -30,6 +31,12 @@ func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (boo
 func (p *Provider) readBootstrap(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
 	return p.deployed.resolve(tier, func() (bootstrap.Reading, error) {
 		return bootstrap.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
+	})
+}
+
+func (p *Provider) runtimeLayers(ctx context.Context, tier environment.Tier) (map[string]string, error) {
+	return p.layers.resolve(tier, func() (map[string]string, error) {
+		return bootstrap.ReadRuntimeLayers(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
 	})
 }
 

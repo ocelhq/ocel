@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/statedir"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 func TestTranslateFunctionSpec(t *testing.T) {
@@ -204,6 +205,48 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	}
 	if got, ok := inputs[resource.PropertyKey("handler")]; !ok || got.StringValue() != providedHandler {
 		t.Errorf("handler = %v, want %q: %s boots the executable of that name", got, providedHandler, providedFunctionRuntime)
+	}
+}
+
+func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error {
+		stack := testStack(t, "prod", "api")
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+		if err != nil {
+			return err
+		}
+		args, err := translateFunctionSpec(buildoutput.FrameworkGo, provider.FunctionSpec{
+			Framework: buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: arch.X8664},
+			EntryFile: "web",
+		})
+		if err != nil {
+			return err
+		}
+		stackFunctions := appStackFunctions{
+			Project:   "shop",
+			Stack:     stack,
+			Functions: []appFunction{{Logical: "fn--api--users", RouteID: "/users"}},
+			Args:      func(appFunction) functionArgs { return args },
+			Layers:    map[string]string{arch.X8664: awsports.RuntimeLayerToPublish},
+			Artifacts: map[string]artifactRef{"fn--api--users": {Bucket: "artifacts", Key: "fn.zip"}},
+			RoleArn:   role.Arn,
+		}
+		return stackFunctions.register(pctx)
+	}
+	dryRun := func(info *pulumi.RunInfo) { info.DryRun = true }
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec), dryRun); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	layers, ok := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")[resource.PropertyKey("layers")]
+	if !ok || !layers.IsArray() || len(layers.ArrayValue()) != 1 {
+		t.Fatalf("the function's layers = %v, want the one runtime layer the deploy would publish", layers)
+	}
+	if layer := layers.ArrayValue()[0]; layer.IsString() {
+		t.Errorf("the function's layer = %q, want it unknown until the deploy publishes it", layer.StringValue())
 	}
 }
 

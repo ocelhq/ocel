@@ -384,11 +384,6 @@ func TestCheckDeployed(t *testing.T) {
 			AssetBucket:    "assets-xyz",
 			Tier:           environment.TierProduction,
 			Outputs:        core,
-			RuntimeLayers:  map[string]string{},
-			RuntimeStack: StackStamp{
-				Name:     defaultNamespace.runtimeStackName(environment.TierProduction),
-				Intended: runtimeLayerDigestFor(t, environment.TierProduction, "artifacts-xyz"),
-			},
 			Stacks: []StackStamp{
 				{
 					Name:      coreStackName,

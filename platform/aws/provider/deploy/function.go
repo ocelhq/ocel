@@ -489,6 +489,13 @@ func lambdaLogging(group *cloudwatch.LogGroup) lambda.FunctionLoggingConfigPtrIn
 	}
 }
 
+func runtimeLayerInput(arn string) pulumi.StringArrayInput {
+	if arn == awsports.RuntimeLayerToPublish {
+		return pulumi.StringArray{pulumi.UnsafeUnknownOutput(nil).ApplyT(func(any) string { return "" }).(pulumi.StringOutput)}
+	}
+	return pulumi.StringArray{pulumi.String(arn)}
+}
+
 func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 

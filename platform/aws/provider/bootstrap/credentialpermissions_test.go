@@ -77,6 +77,7 @@ var bootstrapOnlyActions = []string{
 	"kms:CreateKey",
 	"kms:PutKeyPolicy",
 	"kms:ScheduleKeyDeletion",
+	"lambda:DeleteLayerVersion",
 }
 
 func parsePolicy(t *testing.T, document string) parsedPolicy {
@@ -300,38 +301,10 @@ func TestTheDeployCredentialWithholdsWhatDefinesTheBootstrapCredential(t *testin
 	}
 }
 
-func TestTheDeployCredentialPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
-	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	r := defaultNamespace.ScopedARNs(environment.TierProduction)
-	unconditional := conditionJSON(t, nil)
-
-	for _, action := range []string{
-		"cloudformation:CreateChangeSet",
-		"cloudformation:CreateStack",
-		"cloudformation:DescribeStackEvents",
-	} {
-		if !grants[grant{action: action, resource: r.runtimeStack, condition: unconditional}] {
-			t.Errorf("the deploy credential does not grant %s on %s, so a deploy onto an account an older build bootstrapped cannot publish the runtime its functions boot through", action, r.runtimeStack)
-		}
-	}
-	for _, action := range []string{
-		"cloudformation:DeleteChangeSet",
-		"cloudformation:DescribeChangeSet",
-		"cloudformation:ExecuteChangeSet",
-	} {
-		for _, resource := range []string{r.runtimeStack, r.runtimeChangeSet} {
-			if !grants[grant{action: action, resource: resource, condition: unconditional}] {
-				t.Errorf("the deploy credential does not grant %s on %s, so the runtime it publishes is planned and never executed", action, resource)
-			}
-		}
-	}
-
-	for g := range grants {
-		if !strings.HasPrefix(g.action, "cloudformation:") || readOnly(g.action) {
-			continue
-		}
-		if g.resource != r.runtimeStack && g.resource != r.runtimeChangeSet {
-			t.Errorf("the deploy credential grants %s on %s, which is a bootstrap stack a deploy never writes", g.action, g.resource)
+func TestTheDeployCredentialWritesNoCloudFormationStack(t *testing.T) {
+	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
+		if strings.HasPrefix(g.action, "cloudformation:") && !readOnly(g.action) {
+			t.Errorf("the deploy credential grants %s on %s, and a deploy writes no CloudFormation stack", g.action, g.resource)
 		}
 	}
 }
@@ -796,7 +769,7 @@ func TestEveryCredentialMayGrantLambdaTheVariablesKeyOfItsTierAndNoOther(t *test
 	}
 }
 
-func TestEveryCredentialPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
+func TestEveryCredentialPublishesOnlyTheRuntimeLayers(t *testing.T) {
 	for _, tier := range bothTiers {
 		r := defaultNamespace.ScopedARNs(tier)
 		for purpose, document := range credentialsOfTier(t, tier) {
@@ -805,18 +778,46 @@ func TestEveryCredentialPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
 	}
 }
 
-func testRuntimeLayerGrants(t *testing.T, purpose, document string, r ScopedARNs) {
-	t.Helper()
-	grants := grantsOf(t, document)
-	for _, action := range []string{"lambda:PublishLayerVersion", "lambda:DeleteLayerVersion", "lambda:GetLayerVersion"} {
+func TestOnlyTheBootstrapCredentialReclaimsTheRuntimeLayers(t *testing.T) {
+	for _, tier := range bothTiers {
+		r := defaultNamespace.ScopedARNs(tier)
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		bootstrapGrants := grantsOf(t, bootstrapDoc)
 		for _, version := range r.runtimeLayerVersions {
-			if !grants[grant{action: action, resource: version, condition: conditionJSON(t, nil)}] {
-				t.Errorf("the %s credential does not grant %s on %s, so the runtime stack cannot publish or reclaim a layer version", purpose, action, version)
+			if !bootstrapGrants[grant{action: "lambda:DeleteLayerVersion", resource: version, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s bootstrap credential does not grant lambda:DeleteLayerVersion on %s, so a destroy leaves the tier's runtime layers behind", tier, version)
+			}
+		}
+		for _, document := range []string{bootstrapDoc, deployDoc} {
+			for g := range grantsOf(t, document) {
+				if g.action == "lambda:ListLayers" {
+					t.Errorf("a %s credential grants lambda:ListLayers on %s, and a destroy reaches the tier's runtime layers by the names it recorded", tier, g.resource)
+				}
+			}
+		}
+		for g := range grantsOf(t, deployDoc) {
+			if g.action == "lambda:DeleteLayerVersion" {
+				t.Errorf("the %s deploy credential grants lambda:DeleteLayerVersion on %s, and a deploy never deletes a runtime another release boots through", tier, g.resource)
 			}
 		}
 	}
+}
+
+func testRuntimeLayerGrants(t *testing.T, purpose, document string, r ScopedARNs) {
+	t.Helper()
+	grants := grantsOf(t, document)
+	for _, action := range []string{"lambda:PublishLayerVersion", "lambda:GetLayerVersion"} {
+		for _, version := range r.runtimeLayerVersions {
+			if !grants[grant{action: action, resource: version, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s credential does not grant %s on %s, so a deploy cannot publish or boot through this build's runtime", purpose, action, version)
+			}
+		}
+	}
+	if !grants[grant{action: "lambda:ListLayerVersions", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
+		t.Errorf("the %s credential does not grant lambda:ListLayerVersions on %q, the only resource IAM evaluates it against, so a deploy cannot find the runtime already published", purpose, UnscopedResource)
+	}
 	for g := range grants {
-		if !strings.Contains(g.action, "LayerVersion") {
+		if !strings.Contains(g.action, "LayerVersion") || g.action == "lambda:ListLayerVersions" {
 			continue
 		}
 		if !slices.Contains(r.runtimeLayers, g.resource) && !slices.Contains(r.runtimeLayerVersions, g.resource) {

@@ -29,10 +29,6 @@ func (n Namespace) StackNameFor(tier environment.Tier) (string, error) {
 	}
 }
 
-func (n Namespace) runtimeStackName(tier environment.Tier) string {
-	return suffixed(tier, n.CoreStackName()+"-runtime")
-}
-
 func (n Namespace) featureStackName(feature string, tier environment.Tier) string {
 	return suffixed(tier, n.CoreStackName()+"-"+feature)
 }

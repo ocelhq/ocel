@@ -32,7 +32,7 @@ func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription
 
 const planFanOut = 4
 
-func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request, groups []provider.ChangeGroup) ([]provider.ChangeGroup, error) {
+func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Reading, req Request, groups []provider.ChangeGroup) ([]provider.ChangeGroup, error) {
 	target, err := bootstrapFor(read.ns, read.tier)
 	if err != nil {
 		return nil, err
@@ -83,12 +83,12 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 		}
 	}
 	work.Wait()
-	return append(planned, planRuntimeLayers(ctx, stacks, read, req)), nil
+	return append(planned, planRuntimeLayers(ctx, layers, read)), nil
 }
 
-func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.ChangeGroup, error) {
+func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, records RecordStore, read Reading) ([]provider.ChangeGroup, error) {
 	if !read.Deployed.Present {
-		return planRemoveLeftStacks(ctx, stacks, read)
+		return planRemoveLeftStacks(ctx, stacks, layers, records, read)
 	}
 	target, err := bootstrapFor(read.ns, read.tier)
 	if err != nil {
@@ -111,7 +111,9 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 	groups := make([]provider.ChangeGroup, 0, len(order)+2)
 	for _, feature := range append(order, "") {
 		if feature == "" {
-			groups = append(groups, removeRuntimeLayers(ctx, stacks, read))
+			if group, found := removeRuntimeLayers(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
+				groups = append(groups, group)
+			}
 		}
 		name := coreStack
 		if feature != "" {
@@ -142,7 +144,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 	return groups, nil
 }
 
-func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, read Reading) ([]provider.ChangeGroup, error) {
+func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, records RecordStore, read Reading) ([]provider.ChangeGroup, error) {
 	coreStack, err := read.ns.StackNameFor(read.tier)
 	if err != nil {
 		return nil, err
@@ -159,10 +161,15 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, read Reading) ([]
 	for _, feature := range order {
 		left = append(left, provider.ChangeGroup{Name: read.ns.FeatureStackName(feature, read.tier), Feature: feature})
 	}
-	left = append(left, provider.ChangeGroup{Name: read.ns.runtimeStackName(read.tier)}, provider.ChangeGroup{Name: coreStack})
+	left = append(left, provider.ChangeGroup{Name: coreStack})
 
 	var groups []provider.ChangeGroup
 	for _, group := range left {
+		if group.Name == coreStack {
+			if runtime, found := removeRuntimeLayers(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
+				groups = append(groups, runtime)
+			}
+		}
 		stack, err := cfn.DescribeStack(ctx, stacks, group.Name)
 		if err != nil {
 			return nil, err

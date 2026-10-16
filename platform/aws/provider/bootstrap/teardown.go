@@ -36,6 +36,8 @@ type TeardownAPIs struct {
 	CFN     cfn.TeardownAPI
 	SSM     SSMAPI
 	IAM     IAMTeardownAPI
+	Layers  LayerTeardownAPI
+	Records RecordStore
 	Buckets cfn.BucketEmptierAPI
 
 	RemoveBastion func(ctx context.Context, tier environment.Tier) error
@@ -157,8 +159,8 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		}
 	}
 
-	progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(tier)))
-	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, tier, progress); err != nil {
+	progress.Say(fmt.Sprintf("Deleting the %s tier's runtime layers (Lambda)", tier))
+	if err := deleteRuntimeLayers(ctx, apis.Layers, apis.Records(deployed.StateTable), tier, progress); err != nil {
 		return err
 	}
 

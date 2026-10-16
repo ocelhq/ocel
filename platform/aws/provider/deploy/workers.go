@@ -290,7 +290,7 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 		LoggingConfig: lambdaLogging(logs),
 		Tags:          resourceTags(at.Kind, "", args.Tags),
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
-		Layers:        pulumi.StringArray{pulumi.String(w.layer)},
+		Layers:        runtimeLayerInput(w.layer),
 	})
 	if err != nil {
 		return nil, err

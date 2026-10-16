@@ -2,14 +2,12 @@ package bootstrap
 
 import (
 	"strconv"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type ShapeOption func(*featureInputs)
@@ -49,7 +47,7 @@ func Shape(ns Namespace, tier environment.Tier, features []string, options ...Sh
 	for _, name := range features {
 		in.alongside[name] = true
 	}
-	bodies := []string{coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey)), runtimeLayerTemplate(ns, tier, shapedLayerPlacements())}
+	shaped := append(shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey))), shapedRuntimeLayers()...)
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {
@@ -59,21 +57,9 @@ func Shape(ns Namespace, tier environment.Tier, features []string, options ...Sh
 		if err != nil {
 			return nil, err
 		}
-		bodies = append(bodies, stack.body)
-	}
-	var shaped []pricing.Shaped
-	for _, body := range bodies {
-		shaped = append(shaped, shapeTemplate(body)...)
+		shaped = append(shaped, shapeTemplate(stack.body)...)
 	}
 	return shaped, nil
-}
-
-func shapedLayerPlacements() map[string]payloads.Placement {
-	placed := map[string]payloads.Placement{}
-	for _, arch := range runtimeArches() {
-		placed[arch] = payloads.Placement{Bucket: shapedArtifactBucket, Key: "runtime/" + arch, SHA256: strings.Repeat("0", 64)}
-	}
-	return placed
 }
 
 func shapeTemplate(body string) []pricing.Shaped {
