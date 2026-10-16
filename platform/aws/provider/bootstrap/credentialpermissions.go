@@ -625,6 +625,11 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
+			Resources: []string{UnscopedResource},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"cloudfront:TagResource"},
 			Resources: []string{containerVPCOriginARN},
 			Condition: taggedOnCreate(),
 		},

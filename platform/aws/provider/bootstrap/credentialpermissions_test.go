@@ -2041,3 +2041,32 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 		}
 	}
 }
+
+func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *testing.T) {
+	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
+	tagged := func(managedBy string) requestContext {
+		if managedBy == "" {
+			return requestContext{}
+		}
+		return requestContext{"aws:RequestTag/" + managedByTagKey: managedBy}
+	}
+	onCreate := map[string]string{
+		"cloudfront:CreateVpcOrigin": UnscopedResource,
+		"cloudfront:TagResource":     vpcOrigin,
+	}
+	for purpose, document := range bothCredentials(t) {
+		for action, resource := range onCreate {
+			if !allows(t, document, action, resource, tagged(managedByTagValue)) {
+				t.Errorf("the %s credential cannot call %s on %q for a VPC origin it creates tagged as Ocel's", purpose, action, resource)
+			}
+			for name, request := range map[string]requestContext{
+				"untagged":                 tagged(""),
+				"tagged as someone else's": tagged("someone-else"),
+			} {
+				if allows(t, document, action, resource, request) {
+					t.Errorf("the %s credential can call %s on %q for a VPC origin %s", purpose, action, resource, name)
+				}
+			}
+		}
+	}
+}
