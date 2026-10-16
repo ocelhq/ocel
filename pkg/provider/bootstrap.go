@@ -85,6 +85,8 @@ type BootstrapRequest struct {
 
 	Remove []string
 
+	Force bool
+
 	RefuseReplacements bool
 
 	WrittenBy WrittenBy

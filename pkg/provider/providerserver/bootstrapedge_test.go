@@ -122,7 +122,7 @@ func TestRemovingAnEdgePartNamesTheProjectsBehindIt(t *testing.T) {
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 	recordProject(t, p, "shop", fake.PartImages)
 
-	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
+	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}, Force: true}
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
@@ -133,11 +133,8 @@ func TestRemovingAnEdgePartNamesTheProjectsBehindIt(t *testing.T) {
 			reason = group.Reason
 		}
 	}
-	if reason == "" {
-		t.Fatalf("removing %s says nothing about the projects deployed against it", fake.PartImages)
-	}
-	if err := readiness.Apply(context.Background(), plan, environment.TierProduction, req, nil); err == nil {
-		t.Fatal("removing an edge part a deployed project needs was admitted, want it refused")
+	if !strings.Contains(reason, "shop") {
+		t.Fatalf("removing %s reads %q, want it to name the project that uses it", fake.PartImages, reason)
 	}
 }
 

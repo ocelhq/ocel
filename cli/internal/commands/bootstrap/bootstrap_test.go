@@ -677,6 +677,20 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			t.Errorf("provider was asked to apply %v, want a run that was only a removal of nothing to apply nothing", intents(t, project))
 		}
 	})
+
+	t.Run("--remove of a name the provider does not offer is refused, naming what it offers", func(t *testing.T) {
+		project, invocation := bootstrapProject(t, "", partISR)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stdout)
+		err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: "imge-optimization"}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), `"imge-optimization"`) || !strings.Contains(err.Error(), partImageOptimization) {
+			t.Fatalf("Run() = %v, want the typo refused naming the parts the provider offers; stdout=%s", err, stdout.String())
+		}
+		if got := applies(t, project); len(got) != 0 {
+			t.Errorf("provider was asked to apply %v, want a refused removal to apply nothing", intents(t, project))
+		}
+	})
 }
 
 func TestBootstrapYesMeansYes(t *testing.T) {
@@ -717,8 +731,8 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		if strings.Contains(stdout.String(), "Remove it anyway?") {
 			t.Errorf("stdout = %q, want the plan's own delete group to be the question, asked once", stdout.String())
 		}
-		if got := intents(t, project); len(got) != 1 || got[0] != "remove=isr force=true acceptReplacements=true" {
-			t.Errorf("provider was asked to apply %v, want the add and the removal in the one apply the plan covered", got)
+		if got := intents(t, project); len(got) != 1 || got[0] != "remove=isr force=false acceptReplacements=true" {
+			t.Errorf("provider was asked to apply %v, want the add and the removal in the one apply the plan covered, and no --force the run was not given", got)
 		}
 	})
 
