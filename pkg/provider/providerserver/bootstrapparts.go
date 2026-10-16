@@ -259,7 +259,7 @@ func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, featu
 	return nil
 }
 
-func (r Readiness) forgetMetWants(ctx context.Context, tier environment.Tier, wants map[string][]string) error {
+func (r Readiness) forgetWants(ctx context.Context, tier environment.Tier, wants map[string][]string) error {
 	for _, part := range slices.Sorted(maps.Keys(wants)) {
 		if err := stackrecords.ForgetBootstrapWants(ctx, r.KeyValues, tier, part); err != nil {
 			return err
@@ -278,5 +278,12 @@ func (r Readiness) forgetParts(ctx context.Context, tier environment.Tier) error
 			return err
 		}
 	}
-	return nil
+	wants, err := stackrecords.ListBootstrapWants(ctx, r.KeyValues, tier)
+	if storeAbsent(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return r.forgetWants(ctx, tier, wants)
 }

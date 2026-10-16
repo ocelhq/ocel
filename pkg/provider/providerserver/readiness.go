@@ -300,7 +300,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if err := r.recordParts(ctx, tier, change.requested, change.removing); err != nil {
 		return err
 	}
-	if err := r.forgetMetWants(ctx, tier, change.wants); err != nil {
+	if err := r.forgetWants(ctx, tier, change.wants); err != nil {
 		return err
 	}
 	return r.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
