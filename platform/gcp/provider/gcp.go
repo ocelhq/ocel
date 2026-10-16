@@ -42,8 +42,9 @@ type Provider struct {
 
 	originRoutes originRouting
 
-	mu       sync.Mutex
-	resolved *clients
+	mu            sync.Mutex
+	resolved      *clients
+	regionChecked bool
 
 	bases  map[string]base
 	pull   func(ctx context.Context, ref string) (v1.Image, error)

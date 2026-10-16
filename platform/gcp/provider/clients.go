@@ -58,6 +58,7 @@ type clients struct {
 	accounts      memo[*iam.Service]
 	runs          memo[*run.Service]
 	runsV1        memo[*runv1.APIService]
+	runLocations  memo[*runv1.APIService]
 	schedules     memo[*cloudscheduler.Service]
 	loggingREST   memo[*loggingrest.Service]
 	compute       memo[*compute.Service]
@@ -135,6 +136,12 @@ func (c *clients) RunV1() (*runv1.APIService, error) {
 			options = []option.ClientOption{option.WithEndpoint("https://" + c.region + "-run.googleapis.com/")}
 		}
 		return runv1.NewService(context.Background(), options...)
+	})
+}
+
+func (c *clients) RunLocations() (*runv1.APIService, error) {
+	return opened(c, &c.runLocations, "Cloud Run locations", func() (*runv1.APIService, error) {
+		return runv1.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 

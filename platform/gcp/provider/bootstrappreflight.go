@@ -78,6 +78,7 @@ var bootstrapPermissions = []string{
 	"run.services.getIamPolicy",
 	"run.services.setIamPolicy",
 	"run.operations.get",
+	runLocationsPermission,
 	"cloudscheduler.jobs.create",
 	"cloudscheduler.jobs.get",
 	"cloudscheduler.jobs.update",

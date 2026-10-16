@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -517,19 +518,19 @@ func TestProjectATiersTagsDatabasePartIsProtectedIndexedAndGoneOnceTheTierIsRemo
 	}
 }
 
-func TestProjectARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *testing.T) {
+func TestProjectAZoneIsRefusedBeforeItsBootstrapIsReadNamingTheRegionItSitsIn(t *testing.T) {
 	live(t)
 	onRealGoogleCloud(t)
 
-	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "no-such-region1"})
+	zone := liveRegion() + "-f"
+	inAZone := newProvider(t, gcp.Options{Project: liveProject(), Region: zone})
 	var refused refusal.Refusal
-	_, err := bootstrapOf(t, elsewhere).Plan(context.Background(),
-		provider.BootstrapRequest{Tier: environment.TierProduction})
+	_, err := bootstrapOf(t, inAZone).Describe(context.Background(), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Plan() in a region Firestore does not serve = %v, want an %s refusal", err, refusal.CodeInvalid)
+		t.Fatalf("Describe() in the zone %s = %v, want an %s refusal", zone, err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refused.Message, liveRegion()) {
-		t.Errorf("Plan() refused with %q, want it to list the regions Firestore does serve", refused.Message)
+	if !strings.Contains(refused.Message, fmt.Sprintf("Did you mean %q?", liveRegion())) {
+		t.Errorf("Describe() refused with %q, want it to name %s", refused.Message, liveRegion())
 	}
 }
 
