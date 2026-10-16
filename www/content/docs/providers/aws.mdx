@@ -57,6 +57,18 @@ rest is added by the first deploy that needs it, with the deploy credential, and
 A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
 again, and `ocel bootstrap destroy production` removes them with the rest.
 
+Two parts only the bootstrap credential may make, so no deploy adds them:
+
+| Part | Wanted by |
+| --- | --- |
+| `variables-key` | the first command in a tier that seals a value: `ocel env set`, `ocel env ui`, or a deploy that registers a scheduled env source or reads live values. It is the KMS key values are sealed under, about $1 a month |
+| `cloudflare-edge` | the first deploy through [Cloudflare](/docs/providers/cloudflare): the IAM user the edge signs its calls with, its access key, and the worker that keeps the tier's releases |
+
+The command that wants one records that its project does, and stops. In a terminal Ocel offers to
+add it there and then; a script or CI is refused with `ocel bootstrap production`, which adds every
+part a project here was refused for. `ocel bootstrap status` shows such a part as wanted by those
+projects until then. A `--dry` deploy records nothing.
+
 **Scope image deletes to one project.** Untagged, the deploy user or role may delete container
 images in every Ocel ECR repository of the account. Tag it `ocel:project` with the project's
 slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, each run of other characters
@@ -67,7 +79,7 @@ a single `-`), and it may create, tag and delete images only in that project's r
 | Option | What it does |
 | --- | --- |
 | `region` | The region to deploy into. |
-| `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap --features variables-key` makes a key ocel owns. |
+| `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap` makes a key ocel owns, once a project here first seals a value. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
 | `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no gaps between polls, billed per session-minute past the free tier, at most 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
 | `edge` | `cloudfront` (default), `api-gateway` or [`cloudflare`](/docs/providers/cloudflare). See [Edge](#edge). |

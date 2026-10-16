@@ -33,4 +33,4 @@ The JSON Schema is at `https://ocel.dev/schema/ocel.schema.json`, and an editor 
 - **`envSource`:** where variable values come from per tier: `dotenv` in dev, Ocel's own store when deployed, or an `exec` command or Infisical.
 - **`lifecycle.preBuild`:** a command run before each build, such as a migration.
 
-Before the first deploy to an account, its shared infrastructure must exist: `ocel bootstrap production` (and `ocel bootstrap preview` for previews). `bootstrap` changes the user's account, so it is the human's call. `bootstrap.missing` means it hasn't been run.
+Before the first deploy to an account, its shared infrastructure must exist: `ocel bootstrap production` (and `ocel bootstrap preview` for previews). `bootstrap` changes the user's account, so it is the human's call. `bootstrap.missing` means it hasn't been run. `bootstrap.features_missing` means the bootstrap lacks a part only the bootstrap credential may add, such as the variables key or a Cloudflare edge's; the refused command recorded that the project wants it, and `ocel bootstrap <tier>` adds it. A `--dry` run records nothing, so its hint says to run the command without `--dry` first.

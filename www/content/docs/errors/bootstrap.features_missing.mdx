@@ -3,8 +3,10 @@ title: bootstrap.features_missing
 description: The bootstrap lacks something the project needs.
 ---
 
-The account's bootstrap exists, but it was set up without a feature this project uses. Nothing deploys until the bootstrap includes it.
+The account's bootstrap exists, but it lacks a part this project uses, and only the bootstrap credential may add that part: a KMS key, or what a Cloudflare edge needs inside the account. The command that was refused recorded that this project wants it. Nothing deploys until the bootstrap includes it.
 
 ## Fix
 
-Run the command in the error's `hint`, which is `ocel bootstrap <tier> --features <list>`, then run the command again.
+Run the command in the error's `hint`, which is `ocel bootstrap <tier>`, with the bootstrap credential, then run the command again. It adds every part a project in that tier was refused for, as added by the project that wanted it first. In a terminal, Ocel offers to do this for you.
+
+A dry run records nothing, so the bootstrap would have nothing to add: its `hint` says to deploy without `--dry` first, then run `ocel bootstrap <tier>`.
