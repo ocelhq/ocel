@@ -30,7 +30,7 @@ type realtimeVectors struct {
 	} `json:"tokens"`
 }
 
-func readRealtimeVectors(t *testing.T) realtimeVectors {
+func readVectors(t *testing.T) realtimeVectors {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "proto", "realtime", "vectors.json"))
 	if err != nil {
@@ -44,7 +44,7 @@ func readRealtimeVectors(t *testing.T) realtimeVectors {
 }
 
 func TestEveryWireVectorEncodesToItsChannelOrIsRefusedForItsReason(t *testing.T) {
-	for _, vector := range readRealtimeVectors(t).Wire {
+	for _, vector := range readVectors(t).Wire {
 		pattern, err := parseChannelPattern(vector.Pattern)
 		if err != nil {
 			t.Fatalf("%s: parse %q: %v", vector.Name, vector.Pattern, err)

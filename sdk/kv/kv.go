@@ -66,13 +66,13 @@ func Memory(size string) Option {
 	return func(c *resourcesv1.KvConfig) { c.Memory = size }
 }
 
-var kvEntryNameGrammar = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
+var entryNameGrammar = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
 
-var reservedKVEntryNames = map[string]bool{"client": true, "connectionString": true, "connection_string": true, "then": true, "constructor": true}
+var reservedEntryNames = map[string]bool{"client": true, "connectionString": true, "connection_string": true, "then": true, "constructor": true}
 
-type kvDeclaredEntry struct {
+type declaredEntry struct {
 	name    string
-	pattern kvPattern
+	pattern keyPattern
 	source  string
 }
 
@@ -84,7 +84,7 @@ type Store struct {
 
 	mu       sync.Mutex
 	config   *resourcesv1.KvConfig
-	declared []kvDeclaredEntry
+	declared []declaredEntry
 
 	client *redis.Client
 }
@@ -122,32 +122,32 @@ func (s *Store) declare() {
 	}
 }
 
-func (s *Store) addEntry(entry kvDeclaredEntry, shape resourcesv1.KvShape) {
+func (s *Store) addEntry(declared declaredEntry, shape resourcesv1.KvShape) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !kvEntryNameGrammar.MatchString(entry.name) {
-		panic(fmt.Sprintf("ocel: kv %q: entry name %q is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters", s.name, entry.name))
+	if !entryNameGrammar.MatchString(declared.name) {
+		panic(fmt.Sprintf("ocel: kv %q: entry name %q is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters", s.name, declared.name))
 	}
-	if reservedKVEntryNames[entry.name] {
-		panic(fmt.Sprintf("ocel: kv %q: entry name %q is reserved, since a store already has a member of that name in some SDK: name the entry otherwise", s.name, entry.name))
+	if reservedEntryNames[declared.name] {
+		panic(fmt.Sprintf("ocel: kv %q: entry name %q is reserved, since a store already has a member of that name in some SDK: name the entry otherwise", s.name, declared.name))
 	}
 	for _, prior := range s.declared {
-		if prior.name == entry.name {
-			panic(fmt.Sprintf("ocel: kv %q: entry %q is declared already at %s, and a store names each entry once", s.name, entry.name, prior.source))
+		if prior.name == declared.name {
+			panic(fmt.Sprintf("ocel: kv %q: entry %q is declared already at %s, and a store names each entry once", s.name, declared.name, prior.source))
 		}
-		if prior.pattern.overlaps(entry.pattern) {
+		if prior.pattern.overlaps(declared.pattern) {
 			panic(fmt.Sprintf(
 				"ocel: kv %q: entry %q declared at %s has pattern %q, which overlaps pattern %q of entry %q declared at %s: some key would match both, so neither entry could tell its keys from the other's",
-				s.name, entry.name, entry.source, entry.pattern.written, prior.pattern.written, prior.name, prior.source,
+				s.name, declared.name, declared.source, declared.pattern.written, prior.pattern.written, prior.name, prior.source,
 			))
 		}
 	}
-	s.declared = append(s.declared, entry)
+	s.declared = append(s.declared, declared)
 	s.config.Entries = append(s.config.Entries, &resourcesv1.KvEntry{
-		Name:    entry.name,
-		Pattern: entry.pattern.written,
+		Name:    declared.name,
+		Pattern: declared.pattern.written,
 		Shape:   shape,
-		Source:  entry.source,
+		Source:  declared.source,
 	})
 	s.declare()
 }

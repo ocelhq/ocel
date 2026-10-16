@@ -11,7 +11,7 @@ type realtimeTransport struct {
 	answersHost bool
 }
 
-func findRealtimeTransport(transport bindingsv1.RealtimeTransport) (realtimeTransport, error) {
+func findTransport(transport bindingsv1.RealtimeTransport) (realtimeTransport, error) {
 	switch transport {
 	case bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS:
 		return realtimeTransport{name: "appsync-events", answersHost: true}, nil

@@ -8,12 +8,12 @@ import (
 // An EntryOption tunes an entry [NewText], [NewCounter], [NewJSON], [NewList] or [NewSet]
 // declares.
 type EntryOption interface {
-	applyKVEntry(*kvEntrySettings)
+	applyEntry(*entrySettings)
 }
 
 // A WriteOption tunes how one write treats its key's TTL.
 type WriteOption interface {
-	applyKVWrite(*kvTTL)
+	applyWrite(*writeTTL)
 }
 
 // An EntryWriteOption tunes an entry's declaration, or one write to it.
@@ -22,76 +22,76 @@ type EntryWriteOption interface {
 	WriteOption
 }
 
-type kvTTLMode int
+type ttlMode int
 
 const (
-	kvTTLDeclared kvTTLMode = iota
-	kvTTLExpire
-	kvTTLKeep
-	kvTTLClear
+	ttlDeclared ttlMode = iota
+	ttlExpire
+	ttlKeep
+	ttlClear
 )
 
-type kvTTL struct {
-	mode  kvTTLMode
+type writeTTL struct {
+	mode  ttlMode
 	after time.Duration
 }
 
-type kvEntrySettings struct {
+type entrySettings struct {
 	ttl           time.Duration
 	missOnInvalid bool
 }
 
-type kvTTLOption struct{ ttl kvTTL }
+type ttlOption struct{ ttl writeTTL }
 
-func (o kvTTLOption) applyKVEntry(s *kvEntrySettings) { s.ttl = o.ttl.after }
-func (o kvTTLOption) applyKVWrite(t *kvTTL)           { *t = o.ttl }
+func (o ttlOption) applyEntry(s *entrySettings) { s.ttl = o.ttl.after }
+func (o ttlOption) applyWrite(t *writeTTL)      { *t = o.ttl }
 
 // TTL is how long a key lives after a write. On an entry it applies to every write; on
 // one write it replaces the entry's own. It is at least a millisecond, written with its
 // unit, such as 30*time.Second: a bare 30 is 30 nanoseconds, and refused.
 func TTL(after time.Duration) EntryWriteOption {
-	return kvTTLOption{kvTTL{mode: kvTTLExpire, after: after}}
+	return ttlOption{writeTTL{mode: ttlExpire, after: after}}
 }
 
 // KeepTTL leaves the key's TTL as it is, so a write neither extends nor clears it.
 func KeepTTL() WriteOption {
-	return kvTTLOption{kvTTL{mode: kvTTLKeep}}
+	return ttlOption{writeTTL{mode: ttlKeep}}
 }
 
 // NoTTL clears the key's TTL, so the key lives until it is deleted or evicted.
 func NoTTL() WriteOption {
-	return kvTTLOption{kvTTL{mode: kvTTLClear}}
+	return ttlOption{writeTTL{mode: ttlClear}}
 }
 
-type kvMissOnInvalidOption struct{}
+type missOnInvalidOption struct{}
 
-func (kvMissOnInvalidOption) applyKVEntry(s *kvEntrySettings) { s.missOnInvalid = true }
+func (missOnInvalidOption) applyEntry(s *entrySettings) { s.missOnInvalid = true }
 
 // MissOnInvalid makes a [NewJSON] entry read a stored value that does not decode into
 // its type as a miss, [ErrMiss], instead of an [InvalidValueError].
 func MissOnInvalid() EntryOption {
-	return kvMissOnInvalidOption{}
+	return missOnInvalidOption{}
 }
 
-func resolveKVTTL(declared time.Duration, opts []WriteOption) (kvTTL, error) {
-	written := kvTTL{mode: kvTTLDeclared}
+func resolveTTL(declared time.Duration, opts []WriteOption) (writeTTL, error) {
+	written := writeTTL{mode: ttlDeclared}
 	for _, opt := range opts {
-		opt.applyKVWrite(&written)
+		opt.applyWrite(&written)
 	}
 	switch {
-	case written.mode == kvTTLDeclared && declared == 0:
-		return kvTTL{mode: kvTTLClear}, nil
-	case written.mode == kvTTLDeclared:
-		return kvTTL{mode: kvTTLExpire, after: declared}, nil
-	case written.mode == kvTTLExpire:
-		if err := refuseShortKVTTL(written.after); err != nil {
-			return kvTTL{}, fmt.Errorf("ocel: kv %w", err)
+	case written.mode == ttlDeclared && declared == 0:
+		return writeTTL{mode: ttlClear}, nil
+	case written.mode == ttlDeclared:
+		return writeTTL{mode: ttlExpire, after: declared}, nil
+	case written.mode == ttlExpire:
+		if err := refuseShortTTL(written.after); err != nil {
+			return writeTTL{}, fmt.Errorf("ocel: kv %w", err)
 		}
 	}
 	return written, nil
 }
 
-func refuseShortKVTTL(ttl time.Duration) error {
+func refuseShortTTL(ttl time.Duration) error {
 	switch {
 	case ttl >= time.Millisecond:
 		return nil

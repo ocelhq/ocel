@@ -36,7 +36,7 @@ type realtimeFixture struct {
 	} `json:"realtime"`
 }
 
-func readRealtimeFixture(t *testing.T) realtimeFixture {
+func readFixture(t *testing.T) realtimeFixture {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "proto", "common", "bindings", "v1", "fixtures", "realtime.json"))
 	if err != nil {
@@ -49,7 +49,7 @@ func readRealtimeFixture(t *testing.T) realtimeFixture {
 	return fixture
 }
 
-func deliverRealtime(t *testing.T, name string, fixture realtimeFixture) {
+func deliver(t *testing.T, name string, fixture realtimeFixture) {
 	t.Helper()
 	raw, err := json.Marshal(fixture)
 	if err != nil {
@@ -102,7 +102,7 @@ type publishedEvent struct {
 	}
 }
 
-type fakeRealtimeRuntime struct {
+type fakeRuntime struct {
 	t           *testing.T
 	mutex       sync.Mutex
 	published   []publishedEvent
@@ -112,7 +112,7 @@ type fakeRealtimeRuntime struct {
 	maxInFlight int
 }
 
-func (r *fakeRealtimeRuntime) Publish(ctx context.Context, req *realtimev1.PublishRequest) (*realtimev1.PublishResponse, error) {
+func (r *fakeRuntime) Publish(ctx context.Context, req *realtimev1.PublishRequest) (*realtimev1.PublishResponse, error) {
 	event := publishedEvent{Realtime: req.GetRealtime(), Channel: req.GetChannel()}
 	if err := json.Unmarshal([]byte(req.GetEvent()), &event.Envelope); err != nil {
 		r.t.Errorf("the runtime received %q, which is no envelope: %v", req.GetEvent(), err)
@@ -136,33 +136,33 @@ func (r *fakeRealtimeRuntime) Publish(ctx context.Context, req *realtimev1.Publi
 	return &realtimev1.PublishResponse{}, nil
 }
 
-func (r *fakeRealtimeRuntime) listEvents() []publishedEvent {
+func (r *fakeRuntime) listEvents() []publishedEvent {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	return append([]publishedEvent(nil), r.published...)
 }
 
-func (r *fakeRealtimeRuntime) answerSlowly(delay time.Duration) {
+func (r *fakeRuntime) answerSlowly(delay time.Duration) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.delay = delay
 }
 
-func (r *fakeRealtimeRuntime) refuse(err error) {
+func (r *fakeRuntime) refuse(err error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.refusal = err
 }
 
-func (r *fakeRealtimeRuntime) readMaxInFlight() int {
+func (r *fakeRuntime) readMaxInFlight() int {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	return r.maxInFlight
 }
 
-func serveFakeRealtimeRuntime(t *testing.T, name string) (*fakeRealtimeRuntime, realtimeFixture) {
+func serveFakeRuntime(t *testing.T, name string) (*fakeRuntime, realtimeFixture) {
 	t.Helper()
-	runtime := &fakeRealtimeRuntime{t: t}
+	runtime := &fakeRuntime{t: t}
 	path, handler := realtimev1connect.NewRealtimeServiceHandler(runtime)
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -176,11 +176,11 @@ func serveFakeRealtimeRuntime(t *testing.T, name string) (*fakeRealtimeRuntime, 
 	t.Cleanup(server.Close)
 	t.Setenv("OCEL_RUNTIME_ADDRESS", server.URL)
 	t.Setenv("OCEL_SESSION_TOKEN", sdktest.SessionToken)
-	fixture := readRealtimeFixture(t)
+	fixture := readFixture(t)
 	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
 	fixture.Realtime.Host = "realtime.shop.example"
 	fixture.Realtime.URL = "wss://realtime.shop.example/event/realtime"
-	deliverRealtime(t, name, fixture)
+	deliver(t, name, fixture)
 	return runtime, fixture
 }
 
@@ -203,7 +203,7 @@ type realtimeAnswer struct {
 	} `json:"denied"`
 }
 
-func postRealtime(handler http.Handler, body string, headers map[string]string) *httptest.ResponseRecorder {
+func post(handler http.Handler, body string, headers map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "https://shop.example/api/realtime", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	for name, value := range headers {
@@ -266,11 +266,11 @@ func newHandlerRules() *handlerRules {
 }
 
 func TestTheHandlerNamesTheTransportAndMintsAConnectTokenWhenAsked(t *testing.T) {
-	fixture := readRealtimeFixture(t)
-	deliverRealtime(t, "app", fixture)
+	fixture := readFixture(t)
+	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"connect":true,"ops":[]}`, nil))
+	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[]}`, nil))
 
 	if answer.Transport != "appsync-events" || answer.URL != fixture.Realtime.URL || answer.Host != fixture.Realtime.Host {
 		t.Errorf("answer = %+v, want appsync-events at the fixture's url and host", answer)
@@ -289,28 +289,28 @@ func TestTheHandlerNamesTheTransportAndMintsAConnectTokenWhenAsked(t *testing.T)
 }
 
 func TestTheHandlerAnswersASocketPathOnTheOriginTheRequestReachedItAt(t *testing.T) {
-	fixture := readRealtimeFixture(t)
+	fixture := readFixture(t)
 	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
 	fixture.Realtime.URL = "/.well-known/ocel-realtime"
 	fixture.Realtime.Host = "gateway:8080"
-	deliverRealtime(t, "app", fixture)
+	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	if answer := readAnswer(t, postRealtime(handler, `{"ops":[]}`, nil)); answer.URL != "wss://shop.example/.well-known/ocel-realtime" {
+	if answer := readAnswer(t, post(handler, `{"ops":[]}`, nil)); answer.URL != "wss://shop.example/.well-known/ocel-realtime" {
 		t.Errorf("url = %q, want the socket path on the https origin the request reached", answer.URL)
 	}
 	forwarded := map[string]string{"X-Forwarded-Proto": "http", "X-Forwarded-Host": "web.localhost"}
-	if answer := readAnswer(t, postRealtime(handler, `{"ops":[]}`, forwarded)); answer.URL != "ws://web.localhost/.well-known/ocel-realtime" {
+	if answer := readAnswer(t, post(handler, `{"ops":[]}`, forwarded)); answer.URL != "ws://web.localhost/.well-known/ocel-realtime" {
 		t.Errorf("url = %q, want the socket path on the forwarded http origin", answer.URL)
 	}
 }
 
 func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
-	fixture := readRealtimeFixture(t)
-	deliverRealtime(t, "app", fixture)
+	fixture := readFixture(t)
+	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
+	answer := readAnswer(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
 
 	if answer.Connect != nil || len(answer.Denied) != 0 || len(answer.Grants) != 1 || answer.Grants[0].Wire != "/app/status" {
 		t.Fatalf("answer = %+v, want one grant for /app/status", answer)
@@ -322,12 +322,12 @@ func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
 }
 
 func TestTheHandlerRunsTheSubscribeRuleWithTheAuthParamsAndRequest(t *testing.T) {
-	fixture := readRealtimeFixture(t)
-	deliverRealtime(t, "app", fixture)
+	fixture := readFixture(t)
+	deliver(t, "app", fixture)
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"connect":true,"ops":[
+	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[
 		{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-1"}},
 		{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-2"}}]}`, map[string]string{"X-User": "u1"}))
 
@@ -351,11 +351,11 @@ func TestTheHandlerRunsTheSubscribeRuleWithTheAuthParamsAndRequest(t *testing.T)
 }
 
 func TestTheHandlerDeniesARuledOpToNobodyWithoutRunningTheRule(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-1"}}]}`, nil))
+	answer := readAnswer(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-1"}}]}`, nil))
 
 	if len(answer.Denied) != 1 || answer.Denied[0].Code != "unauthenticated" {
 		t.Errorf("denied = %+v, want unauthenticated", answer.Denied)
@@ -366,10 +366,10 @@ func TestTheHandlerDeniesARuledOpToNobodyWithoutRunningTheRule(t *testing.T) {
 }
 
 func TestTheHandlerGrantsAWildcardSubscribeAsThePrefixAndStar(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"subscribe","pattern":"projects/:projectId/deploys/:deployId","params":{"projectId":"p_1"}}]}`, map[string]string{"X-User": "u1"}))
+	answer := readAnswer(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"projects/:projectId/deploys/:deployId","params":{"projectId":"p_1"}}]}`, map[string]string{"X-User": "u1"}))
 
 	if len(answer.Grants) != 1 || answer.Grants[0].Wire != "/app/projects/0zobptc/deploys/*" {
 		t.Errorf("grants = %+v, want the encoded prefix and /*", answer.Grants)
@@ -377,10 +377,10 @@ func TestTheHandlerGrantsAWildcardSubscribeAsThePrefixAndStar(t *testing.T) {
 }
 
 func TestTheHandlerDeniesEachOpItCannotServeWithItsCode(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[
+	answer := readAnswer(t, post(handler, `{"ops":[
 		{"op":"subscribe","pattern":"nope","params":{}},
 		{"op":"subscribe","pattern":"orders/:orderId","params":{}},
 		{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":7}},
@@ -400,12 +400,12 @@ func TestTheHandlerDeniesEachOpItCannotServeWithItsCode(t *testing.T) {
 }
 
 func TestTheHandlerDeniesAnOpWhoseRuleFailsAndServesTheRest(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	rules := newHandlerRules()
 	rules.failNextSubscribe = true
 	handler := declareHandlerResource(rules).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[
+	answer := readAnswer(t, post(handler, `{"ops":[
 		{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-1"}},
 		{"op":"subscribe","pattern":"status","params":{}}]}`, map[string]string{"X-User": "u1"}))
 
@@ -415,10 +415,10 @@ func TestTheHandlerDeniesAnOpWhoseRuleFailsAndServesTheRest(t *testing.T) {
 }
 
 func TestTheHandlerAnswersUncacheableAndSetsNoCookie(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	res := postRealtime(handler, `{"connect":true,"ops":[]}`, nil)
+	res := post(handler, `{"connect":true,"ops":[]}`, nil)
 
 	if res.Header().Get("Cache-Control") != "no-store" || res.Header().Get("Set-Cookie") != "" {
 		t.Errorf("headers = %v, want no-store and no cookie", res.Header())
@@ -426,7 +426,7 @@ func TestTheHandlerAnswersUncacheableAndSetsNoCookie(t *testing.T) {
 }
 
 func TestTheHandlerRefusesWhatIsNoBatchOfJSON(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	get := httptest.NewRecorder()
@@ -434,26 +434,26 @@ func TestTheHandlerRefusesWhatIsNoBatchOfJSON(t *testing.T) {
 	if get.Code != http.StatusMethodNotAllowed || get.Header().Get("Allow") != "POST" || get.Header().Get("Cache-Control") != "no-store" {
 		t.Errorf("GET = %d %v, want 405 allowing POST", get.Code, get.Header())
 	}
-	if res := postRealtime(handler, `{}`, map[string]string{"Content-Type": "text/plain"}); res.Code != http.StatusUnsupportedMediaType {
+	if res := post(handler, `{}`, map[string]string{"Content-Type": "text/plain"}); res.Code != http.StatusUnsupportedMediaType {
 		t.Errorf("text/plain = %d, want 415", res.Code)
 	}
 	for _, body := range []string{`{`, `{"ops":"x"}`, `{}`} {
-		if res := postRealtime(handler, body, nil); res.Code != http.StatusBadRequest {
+		if res := post(handler, body, nil); res.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d, want 400", body, res.Code)
 		}
 	}
 	ops := strings.Repeat(`{"op":"subscribe","pattern":"status"},`, 51)
-	if res := postRealtime(handler, `{"ops":[`+strings.TrimSuffix(ops, ",")+`]}`, nil); res.Code != http.StatusBadRequest {
+	if res := post(handler, `{"ops":[`+strings.TrimSuffix(ops, ",")+`]}`, nil); res.Code != http.StatusBadRequest {
 		t.Errorf("51 ops = %d, want 400", res.Code)
 	}
 }
 
 func TestTheHandlerServesItsOwnOriginAndRefusesAnotherWithoutCORS(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	same := postRealtime(handler, `{"ops":[]}`, map[string]string{"Origin": "https://shop.example"})
-	other := postRealtime(handler, `{"ops":[]}`, map[string]string{"Origin": "https://evil.example"})
+	same := post(handler, `{"ops":[]}`, map[string]string{"Origin": "https://shop.example"})
+	other := post(handler, `{"ops":[]}`, map[string]string{"Origin": "https://evil.example"})
 	forwarded := httptest.NewRequest(http.MethodPost, "http://10.0.0.5:3000/api/realtime", strings.NewReader(`{"ops":[]}`))
 	forwarded.Header.Set("Content-Type", "application/json")
 	forwarded.Header.Set("Origin", "https://shop.example")
@@ -474,10 +474,10 @@ func TestTheHandlerServesItsOwnOriginAndRefusesAnotherWithoutCORS(t *testing.T) 
 }
 
 func TestTheHandlerRefusesItsOwnHostUnderAnotherScheme(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	plain := postRealtime(handler, `{"ops":[]}`, map[string]string{"Origin": "http://shop.example"})
+	plain := post(handler, `{"ops":[]}`, map[string]string{"Origin": "http://shop.example"})
 	forwarded := httptest.NewRequest(http.MethodPost, "https://10.0.0.5:3000/api/realtime", strings.NewReader(`{"ops":[]}`))
 	forwarded.Header.Set("Content-Type", "application/json")
 	forwarded.Header.Set("Origin", "https://shop.example")
@@ -485,7 +485,7 @@ func TestTheHandlerRefusesItsOwnHostUnderAnotherScheme(t *testing.T) {
 	forwarded.Header.Set("X-Forwarded-Proto", "http")
 	behindProxy := httptest.NewRecorder()
 	handler.ServeHTTP(behindProxy, forwarded)
-	opaque := postRealtime(handler, `{"ops":[]}`, map[string]string{"Origin": "null"})
+	opaque := post(handler, `{"ops":[]}`, map[string]string{"Origin": "null"})
 
 	for name, res := range map[string]*httptest.ResponseRecorder{"http origin": plain, "forwarded http": behindProxy, "null origin": opaque} {
 		if res.Code != http.StatusForbidden || res.Header().Get("Cache-Control") != "no-store" {
@@ -495,10 +495,10 @@ func TestTheHandlerRefusesItsOwnHostUnderAnotherScheme(t *testing.T) {
 }
 
 func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler(realtime.AllowedOrigins("https://app.example"))
 
-	res := postRealtime(handler, `{`, map[string]string{"Origin": "https://app.example"})
+	res := post(handler, `{`, map[string]string{"Origin": "https://app.example"})
 
 	if res.Code != http.StatusBadRequest || res.Header().Get("Access-Control-Allow-Origin") != "https://app.example" {
 		t.Errorf("= %d %v, want 400 with CORS", res.Code, res.Header())
@@ -506,19 +506,19 @@ func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
 }
 
 func TestTheHandlerAnswers500WhenTheBindingNamesATransportItDoesNotSpeak(t *testing.T) {
-	fixture := readRealtimeFixture(t)
+	fixture := readFixture(t)
 	fixture.Realtime.Transport = "REALTIME_TRANSPORT_UNSPECIFIED"
-	deliverRealtime(t, "app", fixture)
+	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	assertServerFailure(t, postRealtime(handler, `{"ops":[{"op":"subscribe","pattern":"status"}]}`, nil))
+	assertServerFailure(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status"}]}`, nil))
 }
 
 func TestTheHandlerAnswers500WhenAuthorizePanics(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	resource := realtime.New("app", realtime.Authorize(func(*http.Request) (*caller, error) { panic("secret detail") }))
 
-	res := postRealtime(resource.Handler(), `{"ops":[]}`, nil)
+	res := post(resource.Handler(), `{"ops":[]}`, nil)
 
 	assertServerFailure(t, res)
 	if strings.Contains(res.Body.String(), "secret detail") {
@@ -527,7 +527,7 @@ func TestTheHandlerAnswers500WhenAuthorizePanics(t *testing.T) {
 }
 
 func TestAuthorizeAndEveryRuleReadTheWholeRequestBody(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	var mutex sync.Mutex
 	var bodies []string
 	readBody := func(r *http.Request) {
@@ -547,7 +547,7 @@ func TestAuthorizeAndEveryRuleReadTheWholeRequestBody(t *testing.T) {
 		}))
 	body := `{"ops":[` + strings.TrimSuffix(strings.Repeat(`{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-1"}},`, 8), ",") + `]}`
 
-	answer := readAnswer(t, postRealtime(resource.Handler(), body, nil))
+	answer := readAnswer(t, post(resource.Handler(), body, nil))
 
 	if len(answer.Grants) != 8 || len(bodies) != 9 {
 		t.Fatalf("grants %d, bodies read %d, want 8 grants and authorize and 8 rules reading", len(answer.Grants), len(bodies))
@@ -560,21 +560,21 @@ func TestAuthorizeAndEveryRuleReadTheWholeRequestBody(t *testing.T) {
 }
 
 func TestTheHandlerRefusesABatchWhoseShapeIsNotExactly400(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	for _, body := range []string{
 		`null`, `[]`, `{"ops":null}`, `{"ops":{}}`, `{"Ops":[]}`, `{"ops":[],"extra":1}`,
 		`{"ops":[],"connect":null}`, `{"ops":[],"connect":"yes"}`, `{"ops":[],"Connect":true}`,
 	} {
-		if res := postRealtime(handler, body, nil); res.Code != http.StatusBadRequest || res.Header().Get("Cache-Control") != "no-store" {
+		if res := post(handler, body, nil); res.Code != http.StatusBadRequest || res.Header().Get("Cache-Control") != "no-store" {
 			t.Errorf("%s = %d %v, want 400 no-store", body, res.Code, res.Header())
 		}
 	}
 }
 
 func TestTheHandlerDeniesEachMalformedOpOnItsOwnInSpecOrder(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 	cases := []struct{ op, code string }{
 		{`7`, "invalid-op"},
@@ -599,7 +599,7 @@ func TestTheHandlerDeniesEachMalformedOpOnItsOwnInSpecOrder(t *testing.T) {
 		ops[i] = c.op
 	}
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[`+strings.Join(ops, ",")+`]}`, map[string]string{"X-User": "u1"}))
+	answer := readAnswer(t, post(handler, `{"ops":[`+strings.Join(ops, ",")+`]}`, map[string]string{"X-User": "u1"}))
 
 	codes := map[int]string{}
 	for _, denial := range answer.Denied {
@@ -616,7 +616,7 @@ func TestTheHandlerDeniesEachMalformedOpOnItsOwnInSpecOrder(t *testing.T) {
 }
 
 func TestRelayedPublishesReachTheRuntimeOneAtATimeInBatchOrder(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	runtime.answerSlowly(10 * time.Millisecond)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 	var ops []string
@@ -625,7 +625,7 @@ func TestRelayedPublishesReachTheRuntimeOneAtATimeInBatchOrder(t *testing.T) {
 			`{"op":"subscribe","pattern":"status"}`)
 	}
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[`+strings.Join(ops, ",")+`]}`, map[string]string{"X-User": "u1"}))
+	answer := readAnswer(t, post(handler, `{"ops":[`+strings.Join(ops, ",")+`]}`, map[string]string{"X-User": "u1"}))
 
 	if len(answer.Grants) != 16 {
 		t.Fatalf("answer = %+v, want every op granted", answer)
@@ -642,13 +642,13 @@ func TestRelayedPublishesReachTheRuntimeOneAtATimeInBatchOrder(t *testing.T) {
 }
 
 func TestARelayedPublishOfAnEventOutsideTheChannelSchemaIsDenied(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	resource := realtime.New("app", realtime.Authorize(authorizeByHeader))
 	realtime.NewChannel[chatMessage, roomParams](resource, "rooms/:roomId", realtime.ChannelSubscribePublic(),
 		realtime.Schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":3}}}`),
 		realtime.ChannelPublish(func(c *realtime.PublishContext[caller, roomParams, chatMessage]) (bool, error) { return true, nil }))
 
-	answer := readAnswer(t, postRealtime(resource.Handler(), `{"ops":[
+	answer := readAnswer(t, post(resource.Handler(), `{"ops":[
 		{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"toolong"}},
 		{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"ok"}}]}`, map[string]string{"X-User": "u1"}))
 
@@ -661,16 +661,16 @@ func TestARelayedPublishOfAnEventOutsideTheChannelSchemaIsDenied(t *testing.T) {
 }
 
 func TestTheHandlerServesAnAllowedOriginWithCORSAndAnswersItsPreflight(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	resource := declareHandlerResource(newHandlerRules())
 	cors := resource.Handler(realtime.AllowedOrigins("https://app.example"))
 
-	res := postRealtime(cors, `{"ops":[]}`, map[string]string{"Origin": "https://app.example"})
+	res := post(cors, `{"ops":[]}`, map[string]string{"Origin": "https://app.example"})
 	preflightReq := httptest.NewRequest(http.MethodOptions, "https://shop.example/api/realtime", nil)
 	preflightReq.Header.Set("Origin", "https://app.example")
 	preflight := httptest.NewRecorder()
 	cors.ServeHTTP(preflight, preflightReq)
-	refused := postRealtime(cors, `{"ops":[]}`, map[string]string{"Origin": "https://evil.example"})
+	refused := post(cors, `{"ops":[]}`, map[string]string{"Origin": "https://evil.example"})
 	plain := httptest.NewRecorder()
 	resource.Handler().ServeHTTP(plain, preflightReq)
 
@@ -690,10 +690,10 @@ func TestTheHandlerServesAnAllowedOriginWithCORSAndAnswersItsPreflight(t *testin
 }
 
 func TestTheHandlerAnswers500WithoutTheCauseWhenAuthorizeFails(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	resource := realtime.New("app", realtime.Authorize(func(*http.Request) (*caller, error) { return nil, errors.New("secret detail") }))
 
-	res := postRealtime(resource.Handler(), `{"ops":[]}`, nil)
+	res := post(resource.Handler(), `{"ops":[]}`, nil)
 
 	if res.Code != http.StatusInternalServerError || strings.Contains(res.Body.String(), "secret detail") {
 		t.Errorf("= %d %s, want 500 without the cause", res.Code, res.Body)
@@ -701,11 +701,11 @@ func TestTheHandlerAnswers500WithoutTheCauseWhenAuthorizeFails(t *testing.T) {
 }
 
 func TestARelayedPublishRunsThePublishRuleThenPublishesFromTheServer(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
+	answer := readAnswer(t, post(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
 
 	if answer.Transport != "ocel-gateway" || answer.Host != "" {
 		t.Errorf("answer = %+v, want ocel-gateway without a host", answer)
@@ -723,11 +723,11 @@ func TestARelayedPublishRunsThePublishRuleThenPublishesFromTheServer(t *testing.
 }
 
 func TestARelayedPublishIsDeniedWhenItsRuleOrItsBodyRefusesIt(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	invalid := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":1}}]}`, map[string]string{"X-User": "u1"}))
-	forbidden := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"x"}}]}`, map[string]string{"X-User": "u2"}))
+	invalid := readAnswer(t, post(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":1}}]}`, map[string]string{"X-User": "u1"}))
+	forbidden := readAnswer(t, post(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"x"}}]}`, map[string]string{"X-User": "u2"}))
 
 	if len(invalid.Denied) != 1 || invalid.Denied[0].Code != "invalid-body" {
 		t.Errorf("denied = %+v, want invalid-body", invalid.Denied)
@@ -741,11 +741,11 @@ func TestARelayedPublishIsDeniedWhenItsRuleOrItsBodyRefusesIt(t *testing.T) {
 }
 
 func TestARelayedPublishTheRuntimeRefusesIsDenied(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	runtime.refuse(connect.NewError(connect.CodeUnavailable, errors.New("the gateway refused it with status 401")))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
+	answer := readAnswer(t, post(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
 
 	if len(answer.Denied) != 1 || answer.Denied[0].Code != "publish-failed" {
 		t.Errorf("denied = %+v, want publish-failed", answer.Denied)
@@ -764,10 +764,10 @@ func assertServerFailure(t *testing.T, res *httptest.ResponseRecorder) {
 }
 
 func TestTheHandlerAnswers500WhenAGrantTokenCannotBeMinted(t *testing.T) {
-	fixture := readRealtimeFixture(t)
+	fixture := readFixture(t)
 	fixture.Realtime.SigningKey = []byte("short")
-	deliverRealtime(t, "app", fixture)
+	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
-	assertServerFailure(t, postRealtime(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
+	assertServerFailure(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
 }

@@ -309,7 +309,7 @@ func TestAConsumerOfSingleMessagesRefusesABatchWith400(t *testing.T) {
 	}
 }
 
-func TestRunFromReadsTheAttemptTheEnvelopeDescribes(t *testing.T) {
+func TestFromContextReadsTheAttemptTheEnvelopeDescribes(t *testing.T) {
 	var run runs.Context
 	var ok bool
 	task.New("resize-context", func(ctx context.Context, _ image) (thumbnail, error) {
@@ -605,7 +605,7 @@ func TestAWorkersConcurrencyCapsTheRunsInFlightAcrossItsTasksAndConsumers(t *tes
 	}
 }
 
-func TestRunFromReportsAttemptOneOfOneWhenTheEnvelopeCarriesNoAttempt(t *testing.T) {
+func TestFromContextReportsAttemptOneOfOneWhenTheEnvelopeCarriesNoAttempt(t *testing.T) {
 	var run runs.Context
 	task.New("resize-no-attempt", func(ctx context.Context, _ image) (thumbnail, error) {
 		run, _ = runs.FromContext(ctx)

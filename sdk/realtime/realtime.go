@@ -22,25 +22,25 @@ import (
 )
 
 const (
-	minRealtimeTokenTTL     = 10 * time.Second
-	maxRealtimeTokenTTL     = 5 * time.Minute
-	defaultRealtimeTokenTTL = 60 * time.Second
+	minTokenTTL     = 10 * time.Second
+	maxTokenTTL     = 5 * time.Minute
+	defaultTokenTTL = 60 * time.Second
 )
 
 // An Option tunes the realtime resource [New] declares.
 type Option interface {
-	applyRealtime(*realtimeSettings)
+	applyRealtime(*settings)
 }
 
-type realtimeSettings struct {
+type settings struct {
 	ttl       time.Duration
 	authorize func(*http.Request) (any, error)
 	authType  reflect.Type
 }
 
-type realtimeOption func(*realtimeSettings)
+type option func(*settings)
 
-func (o realtimeOption) applyRealtime(s *realtimeSettings) { o(s) }
+func (o option) applyRealtime(s *settings) { o(s) }
 
 // Authorize identifies the caller of the realtime handler from its request,
 // with whatever auth the app already uses. It answers nil for nobody; an error or a
@@ -48,7 +48,7 @@ func (o realtimeOption) applyRealtime(s *realtimeSettings) { o(s) }
 // a rule's context names as A, and the auth's "id" field as JSON, when a string or a
 // number, is the sub of every token minted for the caller.
 func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
-	return realtimeOption(func(s *realtimeSettings) {
+	return option(func(s *settings) {
 		s.authType = reflect.TypeFor[A]()
 		s.authorize = func(r *http.Request) (any, error) {
 			auth, err := authorize(r)
@@ -63,7 +63,7 @@ func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
 // TokenTTL is how long each token the handler mints lives, 10s to 5m in whole
 // seconds; without it, 60s.
 func TokenTTL(ttl time.Duration) Option {
-	return realtimeOption(func(s *realtimeSettings) { s.ttl = ttl })
+	return option(func(s *settings) { s.ttl = ttl })
 }
 
 // A Realtime is a realtime resource an app declares: typed channels that
@@ -72,7 +72,7 @@ func TokenTTL(ttl time.Duration) Option {
 type Realtime struct {
 	name     string
 	source   string
-	settings realtimeSettings
+	settings settings
 
 	mutex      sync.Mutex
 	channels   []*declaredChannel
@@ -89,7 +89,7 @@ func New(name string, opts ...Option) *Realtime {
 	d := &Realtime{
 		name:     name,
 		source:   fmt.Sprintf("%s:%d", file, line),
-		settings: realtimeSettings{ttl: defaultRealtimeTokenTTL},
+		settings: settings{ttl: defaultTokenTTL},
 	}
 	for _, opt := range opts {
 		opt.applyRealtime(&d.settings)
@@ -97,8 +97,8 @@ func New(name string, opts ...Option) *Realtime {
 	if !channelSegment.MatchString(name) {
 		d.refuse("the name begins every channel, so it is a channel namespace: %s", channelSegmentRule)
 	}
-	if ttl := d.settings.ttl; ttl < minRealtimeTokenTTL || ttl > maxRealtimeTokenTTL || ttl%time.Second != 0 {
-		d.refuse("token ttl %s is outside %s to %s in whole seconds: a token lives long enough to open a socket and no longer", ttl, minRealtimeTokenTTL, maxRealtimeTokenTTL)
+	if ttl := d.settings.ttl; ttl < minTokenTTL || ttl > maxTokenTTL || ttl%time.Second != 0 {
+		d.refuse("token ttl %s is outside %s to %s in whole seconds: a token lives long enough to open a socket and no longer", ttl, minTokenTTL, maxTokenTTL)
 	}
 	d.declare()
 	return d
@@ -162,7 +162,7 @@ func (d *Realtime) readBinding(access string) (realtimeBinding, error) {
 		return realtimeBinding{}, err
 	}
 	properties := delivered.GetRealtime()
-	transport, err := findRealtimeTransport(properties.GetTransport())
+	transport, err := findTransport(properties.GetTransport())
 	if err != nil {
 		return realtimeBinding{}, fmt.Errorf("ocel: realtime %q: %w", d.name, err)
 	}

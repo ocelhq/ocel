@@ -6,7 +6,7 @@ import (
 )
 
 func TestEveryMintVectorSignsToItsTokenByteForByte(t *testing.T) {
-	tokens := readRealtimeVectors(t).Tokens
+	tokens := readVectors(t).Tokens
 	for _, vector := range tokens.Mint {
 		token, err := signToken(tokens.SigningKey, vector.Header, vector.Claims)
 		if err != nil {
@@ -20,7 +20,7 @@ func TestEveryMintVectorSignsToItsTokenByteForByte(t *testing.T) {
 
 func TestATokenSignsLineAndParagraphSeparatorsUnescapedAsTheTypeScriptSDKDoes(t *testing.T) {
 	const signedInput = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJydC5leGFtcGxlIiwiZXhwIjoxNzAwMDAwMDYwLCJpYXQiOjE3MDAwMDAwMDAsImlzcyI6Im9jZWw6cnQ6YXBwIiwianRpIjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsIm9jZWwiOnsiY2giOiIvYXBwL3giLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6ImxpbmXigKhwYXJh4oCpZW5kIn0"
-	token, err := signToken(readRealtimeVectors(t).Tokens.SigningKey, map[string]any{"alg": "EdDSA", "typ": "JWT"}, map[string]any{
+	token, err := signToken(readVectors(t).Tokens.SigningKey, map[string]any{"alg": "EdDSA", "typ": "JWT"}, map[string]any{
 		"iss":  "ocel:rt:app",
 		"aud":  "rt.example",
 		"sub":  "line\xe2\x80\xa8para\xe2\x80\xa9end",
