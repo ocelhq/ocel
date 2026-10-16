@@ -183,6 +183,56 @@ func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	}
 }
 
+type repairedParts struct {
+	tiers []environment.Tier
+	names []string
+}
+
+type saying struct {
+	progress.Log
+	said []string
+}
+
+func (s *saying) Say(message string) { s.said = append(s.said, message) }
+
+func (r *repairedParts) repair(_ context.Context, tier environment.Tier) ([]string, error) {
+	r.tiers = append(r.tiers, tier)
+	return r.names, nil
+}
+
+func TestBootstrapApplyRemakesTheRecordedPartsOfItsTierOnceTheBaseIsApplied(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	repaired := &repairedParts{names: []string{"env-source-sync"}}
+
+	log := &saying{Log: progress.Discard()}
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed, repairParts: repaired.repair}).
+		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, log); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(repaired.tiers) != 1 || repaired.tiers[0] != environment.TierPreview {
+		t.Errorf("Apply() repaired the parts of %v, want the preview tier's once", repaired.tiers)
+	}
+	if !strings.Contains(strings.Join(log.said, "\n"), "env-source-sync") {
+		t.Errorf("Apply() said %q, want it to name the part it made again", log.said)
+	}
+}
+
+func TestAFailedBootstrapApplyRemakesNoPart(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	repaired := &repairedParts{}
+
+	refused := errors.New("refused")
+	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed, repairParts: repaired.repair}).
+		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, nil); !errors.Is(err, refused) {
+		t.Fatalf("Apply() = %v, want the refusal it was given", err)
+	}
+
+	if len(repaired.tiers) != 0 {
+		t.Errorf("a failed Apply repaired the parts of %v, want none", repaired.tiers)
+	}
+}
+
 func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")

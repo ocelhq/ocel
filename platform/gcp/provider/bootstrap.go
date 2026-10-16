@@ -301,7 +301,14 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if _, err := b.stampWith(ctx, read, written, generation); err != nil {
 		return err
 	}
-	return b.deleteUnusedAccounts(ctx, req, progress)
+	if err := b.deleteUnusedAccounts(ctx, req, progress); err != nil {
+		return err
+	}
+	repaired, err := b.repairParts(ctx, req.Tier)
+	for _, part := range repaired {
+		ensureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
+	}
+	return err
 }
 
 func stampItem(items []item, stampBucket item) item {

@@ -154,32 +154,56 @@ var (
 )
 
 func EnsureBootstrapPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, work PartWork) error {
+	_, err := ensurePart(ctx, store, tier, work, false)
+	return err
+}
+
+func RepairBootstrapParts(ctx context.Context, store keyvalue.Store, tier environment.Tier, works []PartWork) ([]string, error) {
+	var repaired []string
+	for _, work := range works {
+		made, err := ensurePart(ctx, store, tier, work, true)
+		if err != nil {
+			return repaired, err
+		}
+		if made {
+			repaired = append(repaired, work.Name)
+		}
+	}
+	return repaired, nil
+}
+
+func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier, work PartWork, repairing bool) (bool, error) {
 	key := BootstrapPartKey(tier, work.Name)
 	var seen keyvalue.Revision
 	var since time.Time
+	waited := false
 	for attempt := 0; ; attempt++ {
 		recorded, err := keyvalue.ReadOrEmpty(ctx, store, key)
 		if err != nil {
-			return fmt.Errorf("read the %s bootstrap part %s: %w", tier, work.Name, err)
+			return false, fmt.Errorf("read the %s bootstrap part %s: %w", tier, work.Name, err)
+		}
+		if repairing && len(recorded.Value) == 0 {
+			return false, nil
 		}
 		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedAt: time.Now().UTC()}
 		var prior []byte
 		if len(recorded.Value) > 0 {
 			part, err := decodeBootstrapPart(recorded)
 			if err != nil {
-				return err
+				return false, err
 			}
 			switch {
-			case part.CurrentFor(work.WrittenBy, work.Digest):
-				return nil
+			case part.settledFor(work, repairing && !waited):
+				return false, nil
 			case part.State != PartReady:
 				if recorded.Revision != seen {
 					seen, since = recorded.Revision, time.Now()
 				}
 				if time.Since(since) < partLease {
 					if err := pausePart(ctx, attempt); err != nil {
-						return fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
+						return false, fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
 					}
+					waited = true
 					continue
 				}
 			default:
@@ -188,24 +212,31 @@ func EnsureBootstrapPart(ctx context.Context, store keyvalue.Store, tier environ
 			claim.AddedBy, claim.AddedAt = part.AddedBy, part.AddedAt
 		}
 		if recorded.Value, err = json.Marshal(claim); err != nil {
-			return fmt.Errorf("record the %s bootstrap part %s: %w", tier, work.Name, err)
+			return false, fmt.Errorf("record the %s bootstrap part %s: %w", tier, work.Name, err)
 		}
 		revision, err := store.Write(ctx, recorded)
 		if errors.Is(err, keyvalue.ErrStale) {
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("claim the %s bootstrap part %s: %w", tier, work.Name, err)
+			return false, fmt.Errorf("claim the %s bootstrap part %s: %w", tier, work.Name, err)
 		}
 		resources, err := work.Make(ctx)
 		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), partSettleTimeout)
 		defer cancel()
 		if err != nil {
-			return errors.Join(err, releaseClaim(settle, store, keyvalue.Entry{Key: key, Value: prior, Revision: revision}))
+			return false, errors.Join(err, releaseClaim(settle, store, keyvalue.Entry{Key: key, Value: prior, Revision: revision}))
 		}
 		claim.Resources = resources
-		return MarkBootstrapPartReady(settle, store, tier, work.Name, claim)
+		return true, MarkBootstrapPartReady(settle, store, tier, work.Name, claim)
 	}
+}
+
+func (p BootstrapPart) settledFor(work PartWork, remaking bool) bool {
+	if remaking {
+		return p.State == PartReady && provider.WrittenBy(p.WrittenBy).Newer(provider.WrittenBy(work.WrittenBy))
+	}
+	return p.CurrentFor(work.WrittenBy, work.Digest)
 }
 
 const partSettleTimeout = 30 * time.Second

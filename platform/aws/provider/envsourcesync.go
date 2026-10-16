@@ -32,14 +32,22 @@ func (p *Provider) envSourceSyncSpec(ctx context.Context, tier environment.Tier)
 }
 
 func (p *Provider) EnsureEnvSourceSync(ctx context.Context, tier environment.Tier, project string) error {
-	spec, err := p.envSourceSyncSpec(ctx, tier)
+	work, keyed, err := p.envSourceSyncWork(ctx, tier, project)
 	if err != nil {
 		return err
 	}
-	if spec.Key == "" {
+	if !keyed {
 		return awsports.RefuseUnkeyed(tier)
 	}
-	return stackrecords.EnsureBootstrapPart(ctx, p.KeyValues(), tier, stackrecords.PartWork{
+	return stackrecords.EnsureBootstrapPart(ctx, p.KeyValues(), tier, work)
+}
+
+func (p *Provider) envSourceSyncWork(ctx context.Context, tier environment.Tier, project string) (stackrecords.PartWork, bool, error) {
+	spec, err := p.envSourceSyncSpec(ctx, tier)
+	if err != nil || spec.Key == "" {
+		return stackrecords.PartWork{}, false, err
+	}
+	return stackrecords.PartWork{
 		Name:      envsourcesync.Part,
 		WrittenBy: string(p.writtenBy),
 		Digest:    envsourcesync.Digest(spec),
@@ -47,7 +55,7 @@ func (p *Provider) EnsureEnvSourceSync(ctx context.Context, tier environment.Tie
 		Make: func(ctx context.Context) ([]provider.PartResource, error) {
 			return envsourcesync.Ensure(ctx, envsourcesync.NewClients(p.aws), spec)
 		},
-	})
+	}, true, nil
 }
 
 func (p *Provider) envSourceSyncPart(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {

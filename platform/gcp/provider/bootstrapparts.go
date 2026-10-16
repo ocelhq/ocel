@@ -3,8 +3,10 @@ package gcp
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -13,6 +15,10 @@ const (
 	baseSummary    = "the database, buckets, keys, secrets, accounts and roles every deploy in this tier runs on"
 	bastionSummary = "the service a port forward runs inside the tier's network"
 )
+
+func (b bootstrap) repairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
+	return stackrecords.RepairBootstrapParts(ctx, b.records, tier, []stackrecords.PartWork{b.envSourceSyncWork(tier, "")})
+}
 
 func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
 	b, err := g.openBootstrap(ctx)

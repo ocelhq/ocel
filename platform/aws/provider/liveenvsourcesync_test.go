@@ -48,6 +48,20 @@ func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemo
 		t.Errorf("part record = %+v, %v, %v, want it ready and added by shop", recorded, present, err)
 	}
 
+	functions := lambda.NewFromConfig(a.aws)
+	if _, err := functions.UpdateFunctionConfiguration(ctx, &lambda.UpdateFunctionConfigurationInput{
+		FunctionName: awssdk.String(function),
+		Timeout:      awssdk.Int32(handEditedTimeout),
+	}); err != nil {
+		t.Fatalf("UpdateFunctionConfiguration(%s) = %v", function, err)
+	}
+	if err := boot.Apply(ctx, req, nil); err != nil {
+		t.Fatalf("Apply(%s) again = %v", tier, err)
+	}
+	if config, err := functions.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{FunctionName: awssdk.String(function)}); err != nil || awssdk.ToInt32(config.Timeout) == handEditedTimeout {
+		t.Errorf("the env source sync edited by hand still times out after %v (%v) once ocel bootstrap ran, want it made again", config, err)
+	}
+
 	if err := boot.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
@@ -55,6 +69,8 @@ func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemo
 		t.Errorf("the env source sync %s outlived the tier it synced", function)
 	}
 }
+
+const handEditedTimeout = 300
 
 func (a account) stackResources(t *testing.T, stack string) map[string]string {
 	t.Helper()
