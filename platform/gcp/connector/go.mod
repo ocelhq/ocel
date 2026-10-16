@@ -43,6 +43,7 @@ require (
 	github.com/lestrrat-go/jwx/v3 v3.3.0 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

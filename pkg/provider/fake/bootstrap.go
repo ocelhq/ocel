@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -34,6 +35,7 @@ type Bootstrap struct {
 	planRefusal error
 	removal     *provider.Plan
 	described   int
+	parts       map[environment.Tier][]provider.BootstrapPart
 }
 
 func NewBootstrap() *Bootstrap {
@@ -42,6 +44,7 @@ func NewBootstrap() *Bootstrap {
 		stale:      map[string]bool{},
 		unreadable: map[string]string{},
 		writer:     "1.0.0",
+		parts:      map[environment.Tier][]provider.BootstrapPart{},
 	}
 }
 
@@ -189,6 +192,34 @@ func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.Bootst
 	}
 }
 
+func (b *Bootstrap) AddPart(tier environment.Tier, part provider.BootstrapPart) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.parts[tier] = append(b.parts[tier], part)
+}
+
+func (b *Bootstrap) DescribeParts(_ context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var parts []provider.BootstrapPart
+	for _, stack := range described.Stacks {
+		name := stack.Feature
+		if name == "" {
+			name = provider.BasePart
+		}
+		parts = append(parts, provider.BootstrapPart{
+			Name:      name,
+			Current:   stack.DigestCurrent,
+			Resources: []provider.PartResource{{Kind: "Fake::Stack", ID: stack.Name}},
+			Shape: &provider.PartShape{
+				Vendor:    string(Vendor),
+				Resources: []pricing.Shaped{{Name: stack.Name, Type: TypeBucket, Properties: map[string]any{}}},
+			},
+		})
+	}
+	return append(parts, b.parts[described.Tier]...), nil
+}
+
 func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	b.mu.Lock()
 	planned, refusal := b.planned, b.planRefusal
@@ -294,6 +325,7 @@ func (b *Bootstrap) Remove(_ context.Context, tier environment.Tier, progress pr
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.applied, tier)
+	delete(b.parts, tier)
 	if progress != nil {
 		progress.Say("Removed the " + string(tier) + " bootstrap")
 	}

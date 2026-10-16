@@ -258,9 +258,15 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if req.RepairOnDeploy != nil {
 		repairOnDeploy = *req.RepairOnDeploy
 	}
+	if err := r.claimParts(ctx, change.status, change.requested); err != nil {
+		return err
+	}
 	err = r.Bootstrap.Apply(ctx, change.request(tier, req, r.WrittenBy), progress)
 	r.Statuses.forget()
 	if err != nil {
+		return err
+	}
+	if err := r.recordParts(ctx, tier, change.requested, change.removing); err != nil {
 		return err
 	}
 	return r.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
@@ -282,6 +288,9 @@ func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environ
 	err := r.Bootstrap.Remove(ctx, tier, progress)
 	r.Statuses.forget()
 	if err != nil {
+		return err
+	}
+	if err := r.forgetParts(ctx, tier); err != nil {
 		return err
 	}
 	if tier == environment.TierPreview {

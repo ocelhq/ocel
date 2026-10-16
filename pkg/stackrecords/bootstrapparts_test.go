@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -75,7 +76,7 @@ func TestMarkingAClaimedPartReadyKeepsWhoAddedItAndWhen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resources := []stackrecords.PartResource{{Kind: "AWS::ECS::Cluster", ID: "ocel-containers-production"}}
+	resources := []provider.PartResource{{Kind: "AWS::ECS::Cluster", ID: "ocel-containers-production"}}
 	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, "containers", stackrecords.BootstrapPart{
 		WrittenBy: "1.2.0", Digest: "d1", AddedBy: "api", AddedAt: addedAt.Add(time.Hour), Resources: resources,
 	}); err != nil {

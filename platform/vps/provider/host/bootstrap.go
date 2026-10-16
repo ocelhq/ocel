@@ -19,6 +19,7 @@ import (
 const (
 	reasonCurrent = "already current"
 	bootstrapDocs = "https://ocel.dev/docs/providers/vps#bootstrap"
+	baseSummary   = "the directories, files, services and engine the box runs every deploy of this tier with"
 )
 
 type Bootstrap struct {
@@ -66,6 +67,28 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 			WrittenBy:     read.Stamp.Writer,
 		}},
 	}, nil
+}
+
+func (b Bootstrap) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+	read, passed := described.VendorState.(Reading)
+	if !passed || read.Tier != described.Tier {
+		var err error
+		if described, err = b.Describe(ctx, described.Tier); err != nil {
+			return nil, err
+		}
+		read = described.VendorState.(Reading)
+	}
+	if !read.Present {
+		return nil, nil
+	}
+	base := provider.BootstrapPart{Name: provider.BasePart, Summary: baseSummary}
+	for _, stack := range described.Stacks {
+		base.Current = stack.DigestCurrent
+	}
+	for _, item := range read.Items() {
+		base.Resources = append(base.Resources, provider.PartResource{Kind: item.Kind, ID: item.Name})
+	}
+	return []provider.BootstrapPart{base}, nil
 }
 
 func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {

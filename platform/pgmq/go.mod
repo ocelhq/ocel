@@ -33,6 +33,7 @@ require (
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect

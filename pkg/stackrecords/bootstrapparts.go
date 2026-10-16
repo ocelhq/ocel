@@ -20,17 +20,12 @@ const (
 )
 
 type BootstrapPart struct {
-	State     PartState      `json:"state"`
-	WrittenBy string         `json:"written_by,omitempty"`
-	Digest    string         `json:"digest,omitempty"`
-	AddedBy   string         `json:"added_by,omitempty"`
-	AddedAt   time.Time      `json:"added_at"`
-	Resources []PartResource `json:"resources,omitempty"`
-}
-
-type PartResource struct {
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
+	State     PartState               `json:"state"`
+	WrittenBy string                  `json:"written_by,omitempty"`
+	Digest    string                  `json:"digest,omitempty"`
+	AddedBy   string                  `json:"added_by,omitempty"`
+	AddedAt   time.Time               `json:"added_at"`
+	Resources []provider.PartResource `json:"resources,omitempty"`
 }
 
 func ClaimBootstrapPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, name string, claim BootstrapPart) (BootstrapPart, bool, error) {

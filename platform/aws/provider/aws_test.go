@@ -74,6 +74,10 @@ func (s stubBootstrap) Remove(context.Context, environment.Tier, progress.Log) e
 	return s.err
 }
 
+func (stubBootstrap) DescribeParts(context.Context, provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+	return nil, nil
+}
+
 func unkeyed(context.Context, environment.Tier) (string, error) { return "", nil }
 
 func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, error) {
