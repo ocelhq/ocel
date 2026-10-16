@@ -19,7 +19,7 @@ await orders.send(order, { delay: "5s", idempotencyKey: order.id });
 ```
 
 ```go
-var Orders = ocel.Topic[Order]("orders")
+var Orders = topic.New[Order]("orders")
 var Receipts = Orders.Consumer("send-receipt", func(ctx context.Context, o Order) error { /* … */ })
 
 id, err := infra.Orders.Send(ctx, order)

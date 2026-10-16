@@ -16,7 +16,7 @@ const { rows } = await db.query("SELECT * FROM orders WHERE id = $1", [id]);
 
 ```go
 // a package in the discovery folder
-var DB = ocel.Postgres("main", ocel.PostgresVersion("17"))
+var DB = postgres.New("main", postgres.Version("17"))
 
 // app code: hand the string to pgx, database/sql or an ORM
 dsn, err := infra.DB.ConnectionString()

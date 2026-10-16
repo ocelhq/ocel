@@ -19,10 +19,10 @@ export const env = defineEnv({
 ```
 
 ```go
-var Env = ocel.Env[struct {
-    Port   int         `ocel:"PORT,default=3000"`
-    APIKey string      `ocel:"API_KEY,sensitive"`
-    Stripe ocel.Secret `ocel:"STRIPE_KEY"`
+var Env = env.Define[struct {
+    Port   int        `ocel:"PORT,default=3000"`
+    APIKey string     `ocel:"API_KEY,sensitive"`
+    Stripe env.Secret `ocel:"STRIPE_KEY"`
 }]()
 
 key := Env.Stripe.Value()

@@ -178,9 +178,9 @@ app.listen(3000);
 ```go title="resources/resources.go"
 package resources
 
-import "ocel.dev"
+import "ocel.dev/postgres"
 
-var DB = ocel.Postgres("main")
+var DB = postgres.New("main")
 ```
 
 ```go title="main.go"

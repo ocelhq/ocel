@@ -1,12 +1,16 @@
 package infra
 
-import "ocel.dev"
+import (
+	"ocel.dev/bucket"
+	"ocel.dev/env"
+	"ocel.dev/postgres"
+)
 
-var DB = ocel.Postgres("main")
+var DB = postgres.New("main")
 
-var Env = ocel.Env[struct {
-	Greeting     string      `ocel:"GREETING,default=hello"`
-	JourneyNonce ocel.Secret `ocel:"JOURNEY_NONCE"`
+var Env = env.Define[struct {
+	Greeting     string     `ocel:"GREETING,default=hello"`
+	JourneyNonce env.Secret `ocel:"JOURNEY_NONCE"`
 }]()
 
-var Uploads = ocel.Bucket("uploads")
+var Uploads = bucket.New("uploads")

@@ -21,11 +21,11 @@ const url = await uploads.signedUrl("reports/q3.pdf");
 
 ```go
 // a package in the discovery folder
-var Uploads = ocel.Bucket("uploads") // ocel.BucketPublic(), ocel.BucketAllowedOrigins(...)
+var Uploads = bucket.New("uploads") // bucket.Public(), bucket.AllowedOrigins(...)
 
 // app code
 err := infra.Uploads.WriteAll(ctx, "reports/q3.pdf", data)
-data, err := infra.Uploads.ReadAll(ctx, "reports/q3.pdf") // errors.Is(err, ocel.ErrObjectNotFound)
+data, err := infra.Uploads.ReadAll(ctx, "reports/q3.pdf") // errors.Is(err, bucket.ErrObjectNotFound)
 for obj, err := range infra.Uploads.List(ctx) { /* … */ }
 url, err := infra.Uploads.SignedURL(ctx, "reports/q3.pdf")
 // NewWriter / NewReader stream large objects

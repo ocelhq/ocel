@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"ocel.dev"
+	"ocel.dev/realtime"
 )
 
 type Caller struct {
@@ -41,7 +41,7 @@ func readCaller(r *http.Request) (*Caller, error) {
 	}, nil
 }
 
-var Live = ocel.Realtime("app", ocel.RealtimeAuthorize(readCaller))
+var Live = realtime.New("app", realtime.Authorize(readCaller))
 
 type OrderEvent struct {
 	Status string `json:"status"`
@@ -51,8 +51,8 @@ type OrderParams struct {
 	OrderID string `realtime:"orderId"`
 }
 
-var Orders = ocel.Channel[OrderEvent, OrderParams](Live, "orders/:orderId",
-	ocel.ChannelSubscribe(func(ctx *ocel.SubscribeContext[Caller, OrderParams]) (bool, error) {
+var Orders = realtime.NewChannel[OrderEvent, OrderParams](Live, "orders/:orderId",
+	realtime.ChannelSubscribe(func(ctx *realtime.SubscribeContext[Caller, OrderParams]) (bool, error) {
 		return slices.Contains(ctx.Auth.Orders, ctx.Params.OrderID), nil
 	}),
 )
@@ -66,9 +66,9 @@ type DeployParams struct {
 	DeployID  string `realtime:"deployId"`
 }
 
-var Deploys = ocel.Channel[DeployEvent, DeployParams](Live, "projects/:projectId/deploys/:deployId",
-	ocel.ChannelWildcard(),
-	ocel.ChannelSubscribe(func(ctx *ocel.SubscribeContext[Caller, DeployParams]) (bool, error) {
+var Deploys = realtime.NewChannel[DeployEvent, DeployParams](Live, "projects/:projectId/deploys/:deployId",
+	realtime.ChannelWildcard(),
+	realtime.ChannelSubscribe(func(ctx *realtime.SubscribeContext[Caller, DeployParams]) (bool, error) {
 		return ctx.Params.ProjectID != "" && slices.Contains(ctx.Auth.Projects, ctx.Params.ProjectID), nil
 	}),
 )
@@ -79,17 +79,17 @@ type RoomParams struct {
 
 const noteSchema = `{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`
 
-var Rooms = ocel.Channel[json.RawMessage, RoomParams](Live, "rooms/:roomId",
-	ocel.Schema(noteSchema),
-	ocel.ChannelSubscribe(func(*ocel.SubscribeContext[Caller, RoomParams]) (bool, error) {
+var Rooms = realtime.NewChannel[json.RawMessage, RoomParams](Live, "rooms/:roomId",
+	realtime.Schema(noteSchema),
+	realtime.ChannelSubscribe(func(*realtime.SubscribeContext[Caller, RoomParams]) (bool, error) {
 		return true, nil
 	}),
-	ocel.ChannelPublish(func(ctx *ocel.PublishContext[Caller, RoomParams, json.RawMessage]) (bool, error) {
+	realtime.ChannelPublish(func(ctx *realtime.PublishContext[Caller, RoomParams, json.RawMessage]) (bool, error) {
 		return ctx.Auth.MayPublish, nil
 	}),
 )
 
-var Status = ocel.Channel[json.RawMessage, struct{}](Live, "status",
-	ocel.Schema(noteSchema),
-	ocel.ChannelSubscribePublic(),
+var Status = realtime.NewChannel[json.RawMessage, struct{}](Live, "status",
+	realtime.Schema(noteSchema),
+	realtime.ChannelSubscribePublic(),
 )

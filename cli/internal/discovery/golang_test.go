@@ -122,8 +122,8 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		name string
 		line string
 	}{
-		{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main", ":5"},
-		{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads", ":11"},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main", ":9"},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads", ":15"},
 	} {
 		request, found := declared[want.kind]
 		if !found {
@@ -142,7 +142,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if len(variables) != 1 || variables[0].GetKey() != "GREETING" || variables[0].GetRequired() {
 		t.Fatalf("variables = %v, want the one defaulted GREETING", variables)
 	}
-	if want := filepath.ToSlash(filepath.Join(DefaultRootDirName, "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
+	if want := filepath.ToSlash(filepath.Join(DefaultRootDirName, "infra.go")) + ":13"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
 		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
 	}
 }

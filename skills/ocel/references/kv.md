@@ -32,11 +32,11 @@ const profile = await cache.profile.get({ userId });
 ```
 
 ```go
-var Cache = ocel.KV("cache", ocel.KVEviction("allkeys-lru"), ocel.KVMemory("256mb"))
-var Visits = ocel.KVCounter[string](Cache, "visits", "visits/:page")
+var Cache = kv.New("cache", kv.Eviction("allkeys-lru"), kv.Memory("256mb"))
+var Visits = kv.NewCounter[string](Cache, "visits", "visits/:page")
 
 n, err := infra.Visits.Increment(ctx, "home", 1)
-// a key with several params is a struct whose fields match them; ocel.ErrKVMiss on a missing key
+// a key with several params is a struct whose fields match them; kv.ErrMiss on a missing key
 ```
 
 ```python

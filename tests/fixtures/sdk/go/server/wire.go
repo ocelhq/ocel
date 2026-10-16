@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"example.com/web/infra"
-	"ocel.dev"
+	"ocel.dev/runs"
 )
 
 type runText struct {
@@ -52,7 +52,7 @@ func handleWire(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("GET /api/wire/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
-		run, err := ocel.RetrieveRun(r.Context(), r.PathValue("id"))
+		run, err := runs.Retrieve(r.Context(), r.PathValue("id"))
 		if err != nil {
 			writeRefusal(w, err)
 			return
@@ -64,7 +64,7 @@ func handleWire(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("GET /api/wire/sightings/{tag}", func(w http.ResponseWriter, r *http.Request) {
-		page, err := ocel.ListRuns(r.Context(), ocel.ForTask(infra.SightingTask.Name()), ocel.Tags(r.PathValue("tag")), ocel.Statuses(ocel.RunCompleted))
+		page, err := runs.List(r.Context(), runs.ForTask(infra.SightingTask.Name()), runs.Tags(r.PathValue("tag")), runs.Statuses(runs.Completed))
 		if err != nil {
 			writeRefusal(w, err)
 			return
