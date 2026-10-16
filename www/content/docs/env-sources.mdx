@@ -217,21 +217,14 @@ Principal ARNs**, list:
 
 - The role or user you deploy as (`aws sts get-caller-identity`). It signs in for deploys and
   `ocel env sync`.
-- The sync's role, which reads the source once a minute: `EnvSourceSyncRole` of the
-  `<namespace>-bootstrap-variables-key` stack (`-preview` suffix for preview). The namespace
-  is `ocel` unless you set `OCEL_NAMESPACE`. `ocel bootstrap production --features variables-key`
-  makes the stack.
+- The sync's role, which reads the source once a minute: list
+  `arn:aws:iam::<account>:role/<namespace>-env-sync` (`-preview` suffix for preview). The
+  namespace is `ocel` unless you set `OCEL_NAMESPACE`. The first deploy that registers a
+  scheduled source makes the role, and its name is fixed, so you can list it before then.
 - If the console writes into Infisical through a [connector](/docs/cli/connector), the
   `ConnectorRole` of the `<namespace>-connector` stack.
 
-```bash
-aws cloudformation describe-stack-resource --stack-name ocel-bootstrap-variables-key \
-  --logical-resource-id EnvSourceSyncRole \
-  --query StackResourceDetail.PhysicalResourceId --output text
-```
-
-That prints the role's name; its ARN is `arn:aws:iam::<account>:role/<name>`. Or allow every
-principal in the account with `arn:aws:iam::<account>:*`.
+Or allow every principal in the account with `arn:aws:iam::<account>:*`.
 
 #### On Google Cloud
 
@@ -262,7 +255,7 @@ gcloud auth application-default login --impersonate-service-account=deploy@my-pr
 | Where | Picks up a change |
 | --- | --- |
 | A deploy, or resuming one from the variables page | Reads the source first. |
-| Your account, between deploys | The sync `ocel bootstrap` installs reads every minute and writes what changed: a scheduled function on AWS, a Cloud Run service on Google Cloud, a systemd unit on a VPS. |
+| Your account, between deploys | The sync reads every minute and writes what changed: a scheduled function on AWS, a Cloud Run service on Google Cloud, a systemd unit on a VPS. On AWS and Google Cloud the first deploy that registers a scheduled source adds it, and `ocel bootstrap status` lists it as `env-source-sync`; `ocel bootstrap` installs it on a VPS. |
 | A running app | A secret within another 60 seconds, so about two minutes from Infisical. Any other value at the next deploy. |
 
 - Infisical down or throttling: the last values stay and the sync backs off.
