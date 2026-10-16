@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
-	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -232,94 +233,6 @@ func TestAChangeSetSomethingElseDeletedStopsAtOnce(t *testing.T) {
 	}
 }
 
-type deniedChangeSets struct{ *fakeCFN }
-
-func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
-	return nil, &smithy.GenericAPIError{Code: "AccessDenied", Message: "not authorized to perform: cloudformation:CreateChangeSet"}
-}
-
-func TestRepairRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
-	stacks, apis := installedBootstrap(t)
-	stacks.fallBehind(keyStack(environment.TierProduction))
-	apis.CFN = deniedChangeSets{stacks}
-	var log repairLog
-
-	repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
-	if !errors.Is(err, ErrRepairNotPermitted) {
-		t.Fatalf("Repair err = %v, want ErrRepairNotPermitted", err)
-	}
-	if repaired {
-		t.Error("a repair that was refused outright reported that it wrote something")
-	}
-	if log.says("Could not refresh") {
-		t.Errorf("repair said %v, want no alarming per-stack failure for a credential that simply may not write", log.Lines())
-	}
-}
-
-func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
-	waits := recordWaits(t)
-	stacks, apis := installedBootstrap(t)
-	stack := keyStack(environment.TierProduction)
-	stacks.fallBehind(stack)
-	stacks.busy(stack, idleAttempts*4)
-	var log repairLog
-
-	if _, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
-		t.Fatalf("Repair: %v", err)
-	}
-	if len(*waits) >= cfn.ChangeSetAttempts {
-		t.Errorf("waited %d times on a stack another run is writing; that budget belongs to building a change set, not to waiting on a busy stack", len(*waits))
-	}
-	if !log.says("INFO Stack " + stack + " is UPDATE_IN_PROGRESS under another run") {
-		t.Errorf("repair said %v, want it to report progress while it waited", log.Lines())
-	}
-}
-
-func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockARepair(t *testing.T) {
-	stacks, apis := installedBootstrap(t)
-	stack := edgeStack(environment.TierProduction)
-	stacks.fallBehind(stack)
-	stacks.plan(stack, cfntypes.ResourceChange{
-		Action:            cfntypes.ChangeActionModify,
-		LogicalResourceId: aws.String("EdgeUser"),
-		ResourceType:      aws.String("AWS::IAM::User"),
-		Scope:             []cfntypes.ResourceAttribute{cfntypes.ResourceAttributeTags},
-	})
-	var log repairLog
-
-	repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
-	if err != nil {
-		t.Fatalf("Repair: %v", err)
-	}
-	if !repaired {
-		t.Fatalf("the edge stack was refused a refresh: %v", log.Lines())
-	}
-	if log.says("is a AWS::IAM::User") {
-		t.Errorf("repair said %v, want a stack tag landing on the edge user to count for nothing", log.Lines())
-	}
-}
-
-func TestAPrincipalWhoseShapeChangesStillStopsARepair(t *testing.T) {
-	stacks, apis := installedBootstrap(t)
-	stack := edgeStack(environment.TierProduction)
-	stacks.fallBehind(stack)
-	stacks.plan(stack, cfntypes.ResourceChange{
-		Action:            cfntypes.ChangeActionModify,
-		LogicalResourceId: aws.String("EdgeUser"),
-		ResourceType:      aws.String("AWS::IAM::User"),
-		Scope:             []cfntypes.ResourceAttribute{cfntypes.ResourceAttributeTags, cfntypes.ResourceAttributeProperties},
-	})
-	var log repairLog
-
-	repaired, _ := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
-	if repaired {
-		t.Error("a repair rewrote the policy of the identity the edge signs its calls with")
-	}
-	if !log.says("WARN Could not refresh stack "+stack) || !log.says("EdgeUser") {
-		t.Errorf("repair said %v, want it to name what stopped it", log.Lines())
-	}
-}
-
 func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stacks.fallBehind(keyStack(environment.TierProduction))
@@ -337,4 +250,81 @@ func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 			t.Errorf("the change set planning %s is named %q, and a credential is scoped to the change sets of the stacks it may write by that name", stack, name)
 		}
 	}
+}
+
+func change(action cfntypes.ChangeAction, logicalID, resourceType string, replacement cfntypes.Replacement) cfntypes.ResourceChange {
+	return cfntypes.ResourceChange{
+		Action:            action,
+		LogicalResourceId: aws.String(logicalID),
+		ResourceType:      aws.String(resourceType),
+		Replacement:       replacement,
+	}
+}
+
+type repairLog struct{ fake.Log }
+
+func (l *repairLog) says(line string) bool {
+	return slices.ContainsFunc(l.Lines(), func(said string) bool { return strings.Contains(said, line) })
+}
+
+func installedBootstrap(t *testing.T) (*fakeCFN, APIs) {
+	t.Helper()
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	frontedBy(t, &fakeEdge{kind: "cloudflare"})
+	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
+	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return stacks, apis
+}
+
+func TestABootstrapRunLeavesAnUnmovedStackAloneAndStopsOnAReplacementUnlessAccepted(t *testing.T) {
+	t.Run("a bootstrap that has not moved plans nothing and leaves nothing behind", func(t *testing.T) {
+		stacks, apis := installedBootstrap(t)
+		before := stacks.updates
+
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if stacks.updates != before {
+			t.Errorf("a re-run applied %d change sets, want none: an unchanged bootstrap is left alone", stacks.updates-before)
+		}
+		if left := stacks.leftBehind(); len(left) != 0 {
+			t.Errorf("change sets %v were neither applied nor deleted", left)
+		}
+	})
+
+	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
+		stacks, apis := installedBootstrap(t)
+		stack := keyStack(environment.TierProduction)
+		stacks.fallBehind(stack)
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue))
+
+		err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil)
+		if err == nil {
+			t.Fatal("a bootstrap that would replace a live key was allowed through")
+		}
+		if !strings.Contains(err.Error(), "VariablesKey") {
+			t.Errorf("refusal = %q, want it to name VariablesKey", err)
+		}
+		if left := stacks.leftBehind(); len(left) != 0 {
+			t.Errorf("change sets %v were neither applied nor deleted", left)
+		}
+	})
+
+	t.Run("accepting replacements writes the stack", func(t *testing.T) {
+		stacks, apis := installedBootstrap(t)
+		stack := keyStack(environment.TierProduction)
+		stacks.fallBehind(stack)
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue))
+
+		req := everything()
+		req.AcceptReplacements = true
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if stacks.template(stack) == behindTemplate {
+			t.Error("the stack was left at the older template even though replacements were accepted")
+		}
+	})
 }

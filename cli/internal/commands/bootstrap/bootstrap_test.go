@@ -85,9 +85,14 @@ func TestBootstrapTakesTheTierAsASubcommandOrItsAlias(t *testing.T) {
 		if found.Name() != tc.want {
 			t.Errorf("Find(%q) = %q, want %q", tc.typed, found.Name(), tc.want)
 		}
-		for _, flag := range []string{"yes", "dry", "features", "force", "repair"} {
+		for _, flag := range []string{"yes", "dry", "features", "remove", "force"} {
 			if found.Flags().Lookup(flag) == nil {
 				t.Errorf("%s has no --%s", found.Name(), flag)
+			}
+		}
+		for _, flag := range []string{"repair"} {
+			if found.Flags().Lookup(flag) != nil {
+				t.Errorf("%s still takes --%s", found.Name(), flag)
 			}
 		}
 	}
@@ -239,9 +244,6 @@ func intent(req *contractv1.BootstrapRequest) string {
 		said += " remove=" + strings.Join(req.GetRemove(), ",")
 	}
 	said += " force=" + boolWord(req.GetForce()) + " acceptReplacements=" + boolWord(req.GetAcceptReplacements())
-	if req.RepairOnDeploy != nil {
-		said += " repairOnDeploy=" + boolWord(req.GetRepairOnDeploy())
-	}
 	return said
 }
 
@@ -982,32 +984,6 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 			t.Errorf("stdout = %q, want --dry to warn about the downgrade it already knows about", stdout.String())
 		}
 	})
-}
-
-func TestBootstrapSendsRepairOnDeploy(t *testing.T) {
-	tests := []struct {
-		name string
-		opts Options
-		want string
-	}{
-		{"an unset switch leaves the account as it is", Options{Yes: true}, "features=isr force=false acceptReplacements=true"},
-		{"--repair turns it on", Options{Yes: true, RepairDeclared: true, Repair: true}, "features=isr force=false acceptReplacements=true repairOnDeploy=true"},
-		{"--repair=false takes it back", Options{Yes: true, RepairDeclared: true}, "features=isr force=false acceptReplacements=true repairOnDeploy=false"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			project, invocation := bootstrapProject(t, "", featureISR)
-
-			var stdout, stderr bytes.Buffer
-			clitest.AttachTerminalSink(invocation, &stdout)
-			if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-			}
-			if got := intents(t, project); len(got) != 1 || got[0] != tt.want {
-				t.Errorf("provider was asked to apply %v, want %q", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {

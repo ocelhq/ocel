@@ -275,7 +275,7 @@ func TestAnAccountWithNoBootstrapHasNoEntries(t *testing.T) {
 	t.Parallel()
 
 	store := awsports.KeyValues{Dynamo: newFakeDynamo()}
-	name := stackrecords.BootstrapKey(environment.TierProduction)
+	name := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
 	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Read() with no bootstrap installed = %v, want ErrNotFound", err)
@@ -304,7 +304,7 @@ func TestATableDeletedMidTeardownHasNoEntries(t *testing.T) {
 	dynamo := newFakeDynamo()
 	dynamo.gone = true
 	store := awsports.KeyValues{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
-	name := stackrecords.BootstrapKey(environment.TierProduction)
+	name := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
 	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Read() against a deleted table = %v, want ErrNotFound", err)

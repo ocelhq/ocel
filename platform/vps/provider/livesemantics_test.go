@@ -147,12 +147,6 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true}, nil); err == nil {
-		t.Error("repair finished an apply it did not start")
-	} else if got := refused(t, err, refusal.CodeDenied); !strings.Contains(got.Message, host.StampPath(tier)) {
-		t.Errorf("repair over a half-applied host says %q, want it to name the stamp that says so", got.Message)
-	}
-
 	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatalf("Plan() over a half-applied host = %v", err)
@@ -255,101 +249,5 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	}
 	if got := mode(t, vm, keyValuesHelper); got != "755" {
 		t.Errorf("%s is %q after the apply that accepted the write, want 755", keyValuesHelper, got)
-	}
-}
-
-func TestLiveRepairReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing.T) {
-	vm := liveMachine(t)
-	tier := environment.TierProduction
-	p := bootstrapped(t, vm, tier)
-	ctx := context.Background()
-	bootstrap, err := p.Bootstrap("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}
-
-	vm.ssh(t, "sudo chmod 700 "+keyValuesDir)
-	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
-		t.Fatalf("repair over a drifted record tier = %v, want the state the deploy login owns reasserted", err)
-	}
-	if got := mode(t, vm, keyValuesDir); got != "750" {
-		t.Errorf("%s is %q after a repair, want 750", keyValuesDir, got)
-	}
-
-	vm.ssh(t, "sudo chmod 700 "+keyValuesDir)
-	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	got := refused(t, bootstrap.Apply(ctx, repairing, nil), refusal.CodeDenied)
-	if !strings.Contains(got.Message, helperDir) {
-		t.Errorf("repair over a mixed set says %q, want it to name %s as what repair may not write", got.Message, helperDir)
-	}
-	if got := mode(t, vm, keyValuesDir); got != "700" {
-		t.Errorf("%s is %q after a repair that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
-	}
-
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("the apply that may write both = %v", err)
-	}
-	for path, want := range map[string]string{keyValuesDir: "750", helperDir: "755"} {
-		if got := mode(t, vm, path); got != want {
-			t.Errorf("%s is %q after the apply that may write it, want %q", path, got, want)
-		}
-	}
-}
-
-func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *testing.T) {
-	vm := liveMachine(t)
-	tier := environment.TierProduction
-	p := bootstrapped(t, vm, tier)
-	ctx := context.Background()
-	bootstrap, err := p.Bootstrap("")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	aside := keyValuesDir + ".aside"
-	vm.sshAs(t, deployLogin, "mv "+keyValuesDir+" "+aside+" && ln -s /etc "+keyValuesDir)
-	defer vm.ssh(t, "sudo rm -f "+keyValuesDir+" && sudo mv "+aside+" "+keyValuesDir+" && sudo systemctl try-restart "+host.EnvSourceSyncService(tier))
-
-	got := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}, nil),
-		refusal.CodeDenied)
-	if !strings.Contains(got.Message, keyValuesDir) || !strings.Contains(got.Message, "/etc") {
-		t.Errorf("repair over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", got.Message)
-	}
-	if got := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /etc")); got != "root" {
-		t.Fatalf("/etc is owned by %q after a repair that followed a binding into it, want root", got)
-	}
-}
-
-func TestLiveRepairAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
-	vm := liveMachine(t)
-	tier := environment.TierProduction
-	bootstrapped(t, vm, tier)
-
-	bootstrap, err := vm.deploying(t).Bootstrap("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", Repair: true, RefuseReplacements: true}
-
-	vm.sshAs(t, deployLogin, "chmod 700 "+keyValuesDir)
-	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
-		t.Fatalf("repair as %s over its own drifted record tier = %v, want what that login owns reasserted without asking for root", deployLogin, err)
-	}
-	if got := mode(t, vm, keyValuesDir); got != "750" {
-		t.Errorf("%s is %q after a repair driven by the login that owns it, want 750", keyValuesDir, got)
-	}
-
-	vm.sshAs(t, deployLogin, "chmod 700 "+keyValuesDir)
-	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	defer vm.ssh(t, "sudo chmod 755 "+helperDir)
-	got := refused(t, bootstrap.Apply(ctx, repairing, nil), refusal.CodeDenied)
-	if !strings.Contains(got.Message, helperDir) {
-		t.Errorf("repair as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, got.Message, helperDir)
-	}
-	if got := mode(t, vm, keyValuesDir); got != "700" {
-		t.Errorf("%s is %q after a repair that refused, want a mixed set refused whole rather than half-done", keyValuesDir, got)
 	}
 }

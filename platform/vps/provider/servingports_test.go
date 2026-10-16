@@ -322,9 +322,6 @@ func TestABootstrapFailsAfterInstallingWhenItsPortsAreClosedFromOutside(t *testi
 	if inner.applied != 1 {
 		t.Errorf("the host was applied %d times, want once: the ports are only listened on once the proxy is installed", inner.applied)
 	}
-	if err := gated.Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Repair: true}, nil); err != nil {
-		t.Errorf("Apply(repair) = %v, want a deploy's repair let through: the deploy's own preflight warns about the ports", err)
-	}
 }
 
 func reachedFromOutside(context.Context, string) error { return nil }

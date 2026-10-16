@@ -73,35 +73,6 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 	)
 }
 
-func TestARepairSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	installed := bootstrapped(t, tier)
-	for at, item := range installed {
-		if (item.Kind == KindDir && item.Name == KeyValuesDir(tier)) || (item.Kind == KindUnit && item.Name == dockerUnit) {
-			installed[at].Mode = 0o700
-		}
-	}
-	box := machine(map[environment.Tier][]Item{tier: installed})
-	box.answer = func(command string) (session.Result, bool) {
-		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
-			return session.Result{}, false
-		}
-		return session.Result{Stdout: aKey + "\n"}, true
-	}
-	progress := &fake.Log{}
-
-	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Repair: true}, progress); err != nil {
-		t.Fatalf("repair = %v", err)
-	}
-	heardAll(t, progress,
-		"INFO Left systemd unit docker.service as it is: a refresh rewrites only what deploys own",
-		"INFO Installed directory /var/lib/ocel/production/keyvalues",
-	)
-}
-
 func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.T) {
 	t.Parallel()
 

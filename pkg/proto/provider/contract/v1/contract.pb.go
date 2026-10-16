@@ -2788,15 +2788,14 @@ type BootstrapRequest struct {
 	Tier               v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Features           []string               `protobuf:"bytes,2,rep,name=features,proto3" json:"features,omitempty"`
 	Force              bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
-	RepairOnDeploy     *bool                  `protobuf:"varint,4,opt,name=repair_on_deploy,json=repairOnDeploy,proto3,oneof" json:"repair_on_deploy,omitempty"`
-	AcceptReplacements bool                   `protobuf:"varint,5,opt,name=accept_replacements,json=acceptReplacements,proto3" json:"accept_replacements,omitempty"`
-	Edge               *EdgeSelection         `protobuf:"bytes,6,opt,name=edge,proto3" json:"edge,omitempty"`
-	Remove             []string               `protobuf:"bytes,7,rep,name=remove,proto3" json:"remove,omitempty"`
+	AcceptReplacements bool                   `protobuf:"varint,4,opt,name=accept_replacements,json=acceptReplacements,proto3" json:"accept_replacements,omitempty"`
+	Edge               *EdgeSelection         `protobuf:"bytes,5,opt,name=edge,proto3" json:"edge,omitempty"`
+	Remove             []string               `protobuf:"bytes,6,rep,name=remove,proto3" json:"remove,omitempty"`
 	// Draw the plan, emit it as a plan event and stop: the stream changes nothing.
-	Dry bool `protobuf:"varint,8,opt,name=dry,proto3" json:"dry,omitempty"`
+	Dry bool `protobuf:"varint,7,opt,name=dry,proto3" json:"dry,omitempty"`
 	// An apply that sends a consented plan emits no plan of its own and refuses
 	// work that plan never showed.
-	Consented     *v14.ChangePlan `protobuf:"bytes,9,opt,name=consented,proto3" json:"consented,omitempty"`
+	Consented     *v14.ChangePlan `protobuf:"bytes,8,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2848,13 +2847,6 @@ func (x *BootstrapRequest) GetFeatures() []string {
 func (x *BootstrapRequest) GetForce() bool {
 	if x != nil {
 		return x.Force
-	}
-	return false
-}
-
-func (x *BootstrapRequest) GetRepairOnDeploy() bool {
-	if x != nil && x.RepairOnDeploy != nil {
-		return *x.RepairOnDeploy
 	}
 	return false
 }
@@ -3307,16 +3299,15 @@ func (x *BootstrapStack) GetReadError() string {
 }
 
 type BootstrapStatus struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Tier           v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
-	Present        bool                   `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
-	RepairOnDeploy bool                   `protobuf:"varint,3,opt,name=repair_on_deploy,json=repairOnDeploy,proto3" json:"repair_on_deploy,omitempty"`
-	Stacks         []*BootstrapStack      `protobuf:"bytes,4,rep,name=stacks,proto3" json:"stacks,omitempty"`
-	Writer         string                 `protobuf:"bytes,5,opt,name=writer,proto3" json:"writer,omitempty"`
-	Downgrade      bool                   `protobuf:"varint,6,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
-	Unfinished     bool                   `protobuf:"varint,7,opt,name=unfinished,proto3" json:"unfinished,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Present       bool                   `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
+	Stacks        []*BootstrapStack      `protobuf:"bytes,3,rep,name=stacks,proto3" json:"stacks,omitempty"`
+	Writer        string                 `protobuf:"bytes,4,opt,name=writer,proto3" json:"writer,omitempty"`
+	Downgrade     bool                   `protobuf:"varint,5,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
+	Unfinished    bool                   `protobuf:"varint,6,opt,name=unfinished,proto3" json:"unfinished,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BootstrapStatus) Reset() {
@@ -3359,13 +3350,6 @@ func (x *BootstrapStatus) GetTier() v1.Tier {
 func (x *BootstrapStatus) GetPresent() bool {
 	if x != nil {
 		return x.Present
-	}
-	return false
-}
-
-func (x *BootstrapStatus) GetRepairOnDeploy() bool {
-	if x != nil {
-		return x.RepairOnDeploy
 	}
 	return false
 }
@@ -7658,18 +7642,16 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06server\x18\x01 \x01(\tR\x06server\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\"\x91\x03\n" +
+	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\"\xcd\x02\n" +
 	"\x10BootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x03(\tR\bfeatures\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\x12-\n" +
-	"\x10repair_on_deploy\x18\x04 \x01(\bH\x00R\x0erepairOnDeploy\x88\x01\x01\x12/\n" +
-	"\x13accept_replacements\x18\x05 \x01(\bR\x12acceptReplacements\x127\n" +
-	"\x04edge\x18\x06 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x16\n" +
-	"\x06remove\x18\a \x03(\tR\x06remove\x12\x10\n" +
-	"\x03dry\x18\b \x01(\bR\x03dry\x128\n" +
-	"\tconsented\x18\t \x01(\v2\x1a.common.plan.v1.ChangePlanR\tconsentedB\x13\n" +
-	"\x11_repair_on_deploy\"\xd6\x01\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\x12/\n" +
+	"\x13accept_replacements\x18\x04 \x01(\bR\x12acceptReplacements\x127\n" +
+	"\x04edge\x18\x05 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x16\n" +
+	"\x06remove\x18\x06 \x03(\tR\x06remove\x12\x10\n" +
+	"\x03dry\x18\a \x01(\bR\x03dry\x128\n" +
+	"\tconsented\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanR\tconsented\"\xd6\x01\n" +
 	"\x18DescribeBootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12'\n" +
 	"\x0fwith_dependents\x18\x02 \x01(\bR\x0ewithDependents\x127\n" +
@@ -7709,16 +7691,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"written_by\x18\x05 \x01(\tR\twrittenBy\x12\x1a\n" +
 	"\brequired\x18\x06 \x01(\bR\brequired\x12\x1d\n" +
 	"\n" +
-	"read_error\x18\a \x01(\tR\treadError\"\x9a\x02\n" +
+	"read_error\x18\a \x01(\tR\treadError\"\xf0\x01\n" +
 	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
-	"\apresent\x18\x02 \x01(\bR\apresent\x12(\n" +
-	"\x10repair_on_deploy\x18\x03 \x01(\bR\x0erepairOnDeploy\x12<\n" +
-	"\x06stacks\x18\x04 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
-	"\x06writer\x18\x05 \x01(\tR\x06writer\x12\x1c\n" +
-	"\tdowngrade\x18\x06 \x01(\bR\tdowngrade\x12\x1e\n" +
+	"\apresent\x18\x02 \x01(\bR\apresent\x12<\n" +
+	"\x06stacks\x18\x03 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
+	"\x06writer\x18\x04 \x01(\tR\x06writer\x12\x1c\n" +
+	"\tdowngrade\x18\x05 \x01(\bR\tdowngrade\x12\x1e\n" +
 	"\n" +
-	"unfinished\x18\a \x01(\bR\n" +
+	"unfinished\x18\x06 \x01(\bR\n" +
 	"unfinished\"\xe1\x01\n" +
 	"\x1cCredentialPermissionsRequest\x12K\n" +
 	"\apurpose\x18\x01 \x01(\x0e2'.provider.contract.v1.CredentialPurposeB\b\xbaH\x05\x82\x01\x02\x10\x01R\apurpose\x127\n" +
@@ -8511,7 +8492,6 @@ func file_provider_contract_v1_contract_proto_init() {
 		(*ManifestResource_Kv)(nil),
 		(*ManifestResource_Realtime)(nil),
 	}
-	file_provider_contract_v1_contract_proto_msgTypes[33].OneofWrappers = []any{}
 	file_provider_contract_v1_contract_proto_msgTypes[36].OneofWrappers = []any{}
 	file_provider_contract_v1_contract_proto_msgTypes[60].OneofWrappers = []any{
 		(*ChangeProtectionRequest_RotatePassword)(nil),

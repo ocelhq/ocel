@@ -190,9 +190,6 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, er
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Repair {
-		return b.repair(ctx, req, progress)
-	}
 	shown, err := b.reading(ctx, req)
 	if err != nil {
 		return err
@@ -298,96 +295,6 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return b.host.Stamp(ctx, req.Tier, stamp)
 }
 
-func (b Bootstrap) repair(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	read, err := b.host.Own(ctx, req.Tier)
-	if err != nil {
-		return err
-	}
-	work, left, err := repairing(read, req.RefuseReplacements)
-	if err != nil {
-		return err
-	}
-	for _, item := range left {
-		say(progress, "Left "+item.phrase()+" as it is: a refresh rewrites only what deploys own")
-	}
-	return b.writing(ctx, read, work, progress, b.host.Reassert)
-}
-
-func repairing(read Reading, refuse bool) ([]Item, []Item, error) {
-	work, left, err := repairable(read)
-	if err != nil {
-		return nil, nil, err
-	}
-	if refuse {
-		if err := refuseReplacements(read, work); err != nil {
-			return nil, nil, err
-		}
-	}
-	return work, left, nil
-}
-
-func repairable(read Reading) ([]Item, []Item, error) {
-	command := provider.BootstrapCommand(read.Tier)
-	if !read.Present {
-		return nil, nil, refusal.Refuse(refusal.CodeDenied,
-			"the %s tier is not bootstrapped on this host\nRun `%s`",
-			read.Tier, command)
-	}
-	if read.unfinished() {
-		return nil, nil, refusal.Refuse(refusal.CodeDenied,
-			"%s records an unfinished apply\nRun `%s` to finish it",
-			StampPath(read.Tier), command)
-	}
-	if err := read.adopting(); err != nil {
-		return nil, nil, err
-	}
-	var work, left []Item
-	var denied []string
-	for _, item := range read.Items() {
-		if read.current(item) {
-			continue
-		}
-		if deployOwned(item) {
-			work = append(work, item)
-			continue
-		}
-		if daemonState(item) || routingState(item) || rewrittenByDeploys(item) || !read.observed(item.Kind, item.Name) {
-			left = append(left, item)
-			continue
-		}
-		denied = append(denied, item.ID())
-	}
-	if len(denied) > 0 {
-		return nil, nil, refusal.Refuse(refusal.CodeDenied,
-			"repair cannot write %s\nRun `%s` as the login that bootstrapped this host",
-			strings.Join(denied, ", "), command)
-	}
-	return work, left, nil
-}
-
-func daemonState(item Item) bool {
-	switch item.Kind {
-	case KindEngine, KindUnit, KindNetwork, KindContainer:
-		return true
-	default:
-		return false
-	}
-}
-
-func deployOwned(item Item) bool {
-	if item.Kind != KindDir && item.Kind != KindFile {
-		return false
-	}
-	if beneath(sshDir, item.Name) || routingState(item) {
-		return false
-	}
-	return item.Owner == stateOwner && beneath(stateRoot, item.Name)
-}
-
-func routingState(item Item) bool {
-	return beneath(proxyRoot, item.Name) || beneath(live.RoutingDir, item.Name)
-}
-
 func beneath(root, name string) bool {
 	return name == root || strings.HasPrefix(name, root+"/")
 }
@@ -434,22 +341,18 @@ func (r Reading) adopting() error {
 }
 
 func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Log) error {
-	return b.writing(ctx, read, items, progress, func(ctx context.Context, item Item) error {
-		if item.Kind == KindEngine {
-			return b.host.installEngine(ctx, progress)
-		}
-		return b.host.Install(ctx, item)
-	})
-}
-
-func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress progress.Log,
-	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if read.current(item) {
 			debug(progress, capitalized(item.phrase())+" is "+reasonCurrent)
 			continue
 		}
-		if err := install(ctx, item); err != nil {
+		var err error
+		if item.Kind == KindEngine {
+			err = b.host.installEngine(ctx, progress)
+		} else {
+			err = b.host.Install(ctx, item)
+		}
+		if err != nil {
 			return err
 		}
 		say(progress, "Installed "+item.phrase())

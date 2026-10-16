@@ -1,9 +1,7 @@
 package host
 
 import (
-	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 
@@ -11,8 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const testVendor provider.Vendor = "vps"
@@ -57,208 +53,6 @@ func refusalOf(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 	return refused
 }
 
-func TestRepairReassertsTheStateTheDeployLoginOwns(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	work, _, err := repairable(read)
-	if err != nil {
-		t.Fatalf("repairable() over a drifted record tier = %v, want the deploy login's own state reasserted", err)
-	}
-	if len(work) != 1 || work[0].Name != KeyValuesDir(environment.TierProduction) {
-		t.Fatalf("repairable() = %v, want only %s", ids(work), KeyValuesDir(environment.TierProduction))
-	}
-}
-
-func TestRepairRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, drifted(t, currentHost(), KeyValuesDir(environment.TierProduction)), boxstore.KeyValuesHelper)
-	work, _, err := repairable(read)
-	refused := refusalOf(t, err, refusal.CodeDenied)
-	if !strings.Contains(refused.Message, boxstore.KeyValuesHelper) {
-		t.Errorf("the refusal says %q, want it to name %s as what repair may not write", refused.Message, boxstore.KeyValuesHelper)
-	}
-	if len(work) != 0 {
-		t.Errorf("repairable() = %v alongside its refusal, want a mixed set refused whole", ids(work))
-	}
-}
-
-func TestRepairRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	for _, name := range []string{
-		TierDir(tier), SealKeyPath(tier), boxstore.SealHelper, sudoersSeal(tier), deployUser, sshDir, authorizedKeys,
-	} {
-		read := drifted(t, currentHost(), name)
-		refused := refusalOf(t, second(repairable(read)), refusal.CodeDenied)
-		if !strings.Contains(refused.Message, name) {
-			t.Errorf("repair over a drifted %s says %q, want it named as what repair may not write", name, refused.Message)
-		}
-	}
-}
-
-func TestRepairLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	reported := []string{dockerEngine, dockerUnit, ProxyNetwork, caddy.Container, SwitchboardContainer}
-	for _, name := range reported {
-		read := drifted(t, drifted(t, currentHost(), KeyValuesDir(tier)), name)
-		work, left, err := repairing(read, true)
-		if err != nil {
-			t.Fatalf("repair over a box whose %s is not as the stamp records = %v, want it left: repair starts nothing and a daemon reports what it runs, so a stopped one is not drift repair can refuse over",
-				name, err)
-		}
-		if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
-			t.Errorf("repairing() over a drifted %s = %v, want only the record tier", name, ids(work))
-		}
-		if !slices.ContainsFunc(left, func(item Item) bool { return item.Name == name }) {
-			t.Errorf("repair left %v over a drifted %s, and a box told nothing about what repair declined is one nobody can read the exit code of", ids(left), name)
-		}
-	}
-
-	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
-		if daemonState(item) && deployOwned(item) {
-			t.Errorf("%s is both a daemon's to report and repair's to write, and the two dispositions cannot both apply", item.ID())
-		}
-	}
-}
-
-func TestRepairWillNotReassertRecordsSealedToAKeyThatIsGone(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	read.Stamp.Seal = Seal{Fingerprint: "the key every value this tier stores was sealed to"}
-	delete(read.Observed, sealKey(read.Tier).ID())
-	refused := refusalOf(t, second(repairing(read, true)), refusal.CodeInvalid)
-	if !strings.Contains(refused.Message, SealKeyPath(read.Tier)) {
-		t.Errorf("repair over a tier whose seal key vanished says %q, want it to name the key: reasserting the records and calling the bootstrap refreshed loses the failure until unseal time", refused.Message)
-	}
-}
-
-func TestRepairReadsAKeyItCannotOpenAsTheKeyInPlace(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	read.Stamp.Seal = Seal{Fingerprint: "the key the stamp records"}
-	read.Seal = Seal{}
-	if _, _, err := repairing(read, true); err != nil {
-		t.Errorf("repair driven by a login that cannot read the key's bytes = %v, want the key in place taken as the current key: nothing but root ever writes it", err)
-	}
-}
-
-func TestRepairRunsTheReplacementRefusingGateTheRestOfApplyRuns(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	work, _, err := repairing(read, true)
-	if err != nil {
-		t.Fatalf("a replacement-refusing repair over a drifted record tier = %v, want the converge to proceed", err)
-	}
-	if err := refuseReplacements(read, work); err != nil {
-		t.Errorf("the gate over what a replacement-refusing repair admitted = %v, want repair to have refused it before writing a byte", err)
-	}
-}
-
-func TestRepairIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	read := drifted(t, currentHost(), KeyValuesDir(tier))
-	var unread []string
-	for _, item := range Items(tier, read.Keys, ArchAMD64, Front{}) {
-		hidden := item.Kind == KindFile && item.Owner == rootOwner && item.Mode&0o004 == 0
-		if !hidden && item.Kind != KindUser {
-			continue
-		}
-		unread = append(unread, item.ID())
-		delete(read.Observed, item.ID())
-	}
-	for _, hidden := range []string{KindFile + " " + sudoersSeal(environment.TierProduction)} {
-		if !slices.Contains(unread, hidden) {
-			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
-		}
-	}
-	work, _, err := repairing(read, true)
-	if err != nil {
-		t.Fatalf("repair over a survey that could read none of %v = %v, want the record tier reasserted anyway", unread, err)
-	}
-	if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
-		t.Errorf("repairing() = %v, want only %s", ids(work), KeyValuesDir(tier))
-	}
-}
-
-func TestRepairAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	installed := bootstrapped(t, tier)
-	records := KeyValuesDir(tier)
-	for at, item := range installed {
-		if item.Kind == KindDir && item.Name == records {
-			installed[at].Mode = 0o700
-		}
-	}
-	box := machine(map[environment.Tier][]Item{tier: installed})
-	box.facts = session.Facts{Arch: "x86_64"}
-	box.floor = refusal.Refuse(refusal.CodeDenied,
-		"ada@ocelbox can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")
-	box.answer = func(command string) (session.Result, bool) {
-		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
-			return session.Result{}, false
-		}
-		return session.Result{Stdout: aKey + "\n"}, true
-	}
-
-	err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Repair: true, RefuseReplacements: true}, nil)
-	if err != nil {
-		t.Fatalf("repair driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
-	}
-	ran := box.commands()
-	if !slices.ContainsFunc(ran, func(command string) bool {
-		return strings.HasPrefix(command, "install -d ") && strings.HasSuffix(command, quoted(records))
-	}) {
-		t.Errorf("repair never wrote %s back:\n%s", records, strings.Join(ran, "\n"))
-	}
-	for _, command := range ran {
-		if strings.HasPrefix(command, "sudo ") {
-			t.Errorf("repair ran %q, and the login it runs as has no sudo at all", command)
-		}
-	}
-}
-
-func TestRepairNeverFinishesAnApplyThatDiedMidWay(t *testing.T) {
-	t.Parallel()
-
-	read := drifted(t, currentHost(), KeyValuesDir(environment.TierProduction))
-	read.Stamp.State = StateApplying
-	refused := refusalOf(t, second(repairable(read)), refusal.CodeDenied)
-	if !strings.Contains(refused.Message, StampPath(read.Tier)) {
-		t.Errorf("repair over an unfinished apply says %q, want it to name the stamp that says so", refused.Message)
-	}
-}
-
-func TestRepairHasNothingToReassertWhereNoBootstrapRan(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	fresh := Reading{Arch: ArchAMD64, Tier: tier, Observed: map[string]string{}}
-	refusalOf(t, second(repairable(fresh)), refusal.CodeDenied)
-}
-
-func second(_ []Item, _ []Item, err error) error { return err }
-
-func ids(items []Item) []string {
-	var out []string
-	for _, item := range items {
-		out = append(out, item.ID())
-	}
-	return out
-}
-
 func TestAReplacementRefusingApplyInstallsWhatIsAbsent(t *testing.T) {
 	t.Parallel()
 
@@ -293,17 +87,6 @@ func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t 
 		read := drifted(t, currentHost(), name)
 		if err := refuseReplacements(read, Items(read.Tier, read.Keys, ArchAMD64, Front{})); err != nil {
 			t.Errorf("a replacement-refusing apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
-		}
-	}
-}
-
-func TestNothingRepairMayWriteIsAReplacementTierChange(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
-		if deployOwned(item) && replacing(item) {
-			t.Errorf("repair may write %s and writing it replaces rather than converges, so repair, the one path that refuses replacements, would rebuild it", item.ID())
 		}
 	}
 }

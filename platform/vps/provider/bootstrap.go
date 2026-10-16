@@ -24,9 +24,6 @@ type elevating struct {
 }
 
 func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Repair {
-		return e.Bootstrap.Apply(ctx, req, progress)
-	}
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}

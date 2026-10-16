@@ -443,20 +443,18 @@ message BootstrapRequest {
 
   bool force = 3;
 
-  optional bool repair_on_deploy = 4;
+  bool accept_replacements = 4;
 
-  bool accept_replacements = 5;
+  EdgeSelection edge = 5;
 
-  EdgeSelection edge = 6;
-
-  repeated string remove = 7;
+  repeated string remove = 6;
 
   // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
-  bool dry = 8;
+  bool dry = 7;
 
   // An apply that sends a consented plan emits no plan of its own and refuses
   // work that plan never showed.
-  common.plan.v1.ChangePlan consented = 9;
+  common.plan.v1.ChangePlan consented = 8;
 }
 
 message DescribeBootstrapRequest {
@@ -542,15 +540,13 @@ message BootstrapStatus {
 
   bool present = 2;
 
-  bool repair_on_deploy = 3;
+  repeated BootstrapStack stacks = 3;
 
-  repeated BootstrapStack stacks = 4;
+  string writer = 4;
 
-  string writer = 5;
+  bool downgrade = 5;
 
-  bool downgrade = 6;
-
-  bool unfinished = 7;
+  bool unfinished = 6;
 }
 
 enum CredentialPurpose {

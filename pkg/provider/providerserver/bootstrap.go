@@ -83,7 +83,6 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 		Features:           req.GetFeatures(),
 		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
-		RepairOnDeploy:     req.RepairOnDeploy,
 		AcceptReplacements: req.GetAcceptReplacements(),
 	}
 }
@@ -214,12 +213,11 @@ func changeAction(drawn planv1.Change_Action) (provider.ChangeAction, error) {
 
 func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
-		Tier:           tier,
-		Present:        current.Present,
-		RepairOnDeploy: current.RepairOnDeploy,
-		Writer:         writing.String(),
-		Downgrade:      current.Downgrade(writing),
-		Unfinished:     current.Unfinished,
+		Tier:       tier,
+		Present:    current.Present,
+		Writer:     writing.String(),
+		Downgrade:  current.Downgrade(writing),
+		Unfinished: current.Unfinished,
 	}
 	for _, stack := range current.Stacks {
 		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{

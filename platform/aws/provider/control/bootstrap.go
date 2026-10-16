@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -302,22 +301,8 @@ func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanCha
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Repair {
-		return b.repair(ctx, req, progress)
-	}
 	err := bootstrap.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
 	if bootstrap.RefusedWrite(err) {
-		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
-	}
-	return err
-}
-
-func (b Bootstrap) repair(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	_, err := bootstrap.Repair(ctx, b.apis(), b.Namespace, req.Tier, bootstrap.RepairRequest{
-		Features: req.Features,
-		Writer:   req.WrittenBy,
-	}, progress)
-	if errors.Is(err, bootstrap.ErrRepairNotPermitted) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
 	return err

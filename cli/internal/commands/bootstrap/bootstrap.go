@@ -35,8 +35,6 @@ type Options struct {
 	Features         string
 	Remove           string
 	FeaturesDeclared bool
-	RepairDeclared   bool
-	Repair           bool
 }
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
@@ -77,8 +75,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --remove variables-key\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --repair", name),
+			fmt.Sprintf("  $ ocel bootstrap %s --dry", name),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -88,7 +85,6 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 
 			opts := opts
 			opts.FeaturesDeclared = cmd.Flags().Changed("features")
-			opts.RepairDeclared = cmd.Flags().Changed("repair")
 
 			return Run(cmd.Context(), invocation, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
@@ -100,7 +96,6 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 	_ = cmd.Flags().MarkHidden("features")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
-	cmd.Flags().BoolVar(&opts.Repair, "repair", false, "Let later deploys refresh stale features on their own; --repair=false turns it off")
 
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
@@ -219,9 +214,6 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			Remove:   going,
 			Force:    opts.Force,
 			Edge:     cfg.EdgeSelection(),
-		}
-		if opts.RepairDeclared {
-			req.RepairOnDeploy = &opts.Repair
 		}
 
 		drawn, err := drawPlan(ctx, planning, provider, req)

@@ -301,21 +301,6 @@ func TestABootstrapThatCannotDeleteOneAccountStillDeletesTheOthersAndSaysWhichFa
 	}
 }
 
-func TestARepairingDeployDeletesNoServiceAccount(t *testing.T) {
-	t.Parallel()
-	server := &serviceAccountListing{}
-	b, log := sweepingFor(t, server)
-	req := sweepRequest(environment.TierPreview)
-	req.Repair = true
-
-	if err := b.deleteUnusedAccounts(context.Background(), req, log); err != nil {
-		t.Fatalf("deleteUnusedAccounts() = %v", err)
-	}
-	if server.listed != 0 || len(server.deletes()) != 0 {
-		t.Errorf("a repair made %d list calls and %d deletes, want none: the deploy credential cannot delete accounts", server.listed, len(server.deletes()))
-	}
-}
-
 func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()

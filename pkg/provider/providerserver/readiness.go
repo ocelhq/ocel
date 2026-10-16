@@ -28,14 +28,13 @@ type Readiness struct {
 }
 
 type BootstrapStatus struct {
-	Tier           environment.Tier
-	Present        bool
-	Stacks         []provider.BootstrapStack
-	Features       []string
-	WrittenBy      provider.WrittenBy
-	RepairOnDeploy bool
-	Unfinished     bool
-	VendorState    any
+	Tier        environment.Tier
+	Present     bool
+	Stacks      []provider.BootstrapStack
+	Features    []string
+	WrittenBy   provider.WrittenBy
+	Unfinished  bool
+	VendorState any
 }
 
 func (r Readiness) Status(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
@@ -56,9 +55,6 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 		}
 	}
 	status.Features = bootstrapplan.InCatalogueOrder(r.Bootstrap.Catalogue(), present)
-	if status.RepairOnDeploy, err = r.repairOnDeploy(ctx, tier); err != nil {
-		return BootstrapStatus{}, err
-	}
 	return status, nil
 }
 
@@ -94,27 +90,12 @@ func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
 	return s.WrittenBy.Newer(writing)
 }
 
-func (s BootstrapStatus) repairable(required []string) []string {
-	var out []string
-	for _, stack := range s.Stacks {
-		if stack.Feature == "" || stack.DigestCurrent || !stack.Present || stack.ReadError != "" {
-			continue
-		}
-		if slices.Contains(required, stack.Feature) {
-			out = append(out, stack.Name)
-		}
-	}
-	return out
-}
-
 type ApplyRequest struct {
 	Features []string
 
 	Remove []string
 
 	Force bool
-
-	RepairOnDeploy *bool
 
 	AcceptReplacements bool
 }
@@ -284,10 +265,6 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 		return err
 	}
 
-	repairOnDeploy := change.status.RepairOnDeploy
-	if req.RepairOnDeploy != nil {
-		repairOnDeploy = *req.RepairOnDeploy
-	}
 	claimed, err := r.claimParts(ctx, change.status, change.requested, change.wants)
 	if err != nil {
 		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
@@ -300,10 +277,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if err := r.recordParts(ctx, tier, change.requested, change.removing); err != nil {
 		return err
 	}
-	if err := r.forgetWants(ctx, tier, change.wants); err != nil {
-		return err
-	}
-	return r.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
+	return r.forgetWants(ctx, tier, change.wants)
 }
 
 func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Log) error {
@@ -328,11 +302,9 @@ func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environ
 		return err
 	}
 	if tier == environment.TierPreview {
-		if err := keyvalue.Forget(ctx, r.KeyValues, stackrecords.NewPreviewKeyRecordKey()); err != nil {
-			return err
-		}
+		return keyvalue.Forget(ctx, r.KeyValues, stackrecords.NewPreviewKeyRecordKey())
 	}
-	return keyvalue.Forget(ctx, r.KeyValues, stackrecords.BootstrapKey(tier))
+	return nil
 }
 
 func (r Readiness) RefuseIfInUse(ctx context.Context, tier environment.Tier) error {
@@ -394,7 +366,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wantedBy string, required []string, repair bool, progress progress.Log) (BootstrapStatus, error) {
+func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wantedBy string, required []string, progress progress.Log) (BootstrapStatus, error) {
 	status, err := r.SessionStatus(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -405,11 +377,6 @@ func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wante
 	}
 	if missing := bootstrapplan.MissingFeatures(status.Features, required); len(missing) > 0 {
 		return status, errors.Join(refuseLacking(missing, command, wantedBy != ""), r.RecordWants(ctx, tier, wantedBy, missing))
-	}
-	if repair && r.repair(ctx, status, required, progress) {
-		if status, err = r.SessionStatus(ctx, tier); err != nil {
-			return BootstrapStatus{}, err
-		}
 	}
 	if stale := status.Stale(required); len(stale) > 0 {
 		warn(progress, fmt.Sprintf(
@@ -449,83 +416,9 @@ func (r Readiness) RecordWants(ctx context.Context, tier environment.Tier, proje
 	return nil
 }
 
-func (r Readiness) repair(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
-	if !status.RepairOnDeploy || len(status.repairable(required)) == 0 {
-		return false
-	}
-	if !r.WrittenBy.Release() {
-		say(progress, fmt.Sprintf(
-			"This provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", r.WrittenBy))
-		return false
-	}
-	if !status.WrittenBy.Release() {
-		say(progress, fmt.Sprintf(
-			"This account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", status.WrittenBy))
-		return false
-	}
-	err := r.Bootstrap.Apply(ctx, provider.BootstrapRequest{
-		Tier:               status.Tier,
-		Features:           status.Features,
-		RefuseReplacements: true,
-		Repair:             true,
-		WrittenBy:          r.WrittenBy,
-	}, progress)
-	r.Statuses.forget()
-	var refused refusal.Refusal
-	if errors.As(err, &refused) && refused.Code == refusal.CodeDenied {
-		warn(progress, denied(refused))
-		return false
-	}
-	if err != nil {
-		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap, so this run continues against the one in place: %s", status.Tier, err))
-		return false
-	}
-	return true
-}
-
-func denied(refused refusal.Refusal) string {
-	said := "This run may not refresh what this bootstrap has fallen behind on, so it is left in place"
-	if refused.Message == "" {
-		return said
-	}
-	return said + ": " + refused.Message
-}
-
-func (r Readiness) repairOnDeploy(ctx context.Context, tier environment.Tier) (bool, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, r.KeyValues, stackrecords.BootstrapKey(tier))
-	if err != nil && !storeAbsent(err) {
-		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
-	}
-	if len(recorded.Value) == 0 {
-		return false, nil
-	}
-	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Value, &state); err != nil {
-		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
-	}
-	return state.RepairOnDeploy, nil
-}
-
 func storeAbsent(err error) bool {
 	var refused refusal.Refusal
 	return errors.As(err, &refused) && refused.Code == refusal.CodeNotReady
-}
-
-func (r Readiness) RecordBootstrap(ctx context.Context, tier environment.Tier, state stackrecords.BootstrapSettings) error {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, r.KeyValues, stackrecords.BootstrapKey(tier))
-	if err != nil {
-		return fmt.Errorf("read the %s bootstrap record: %w", tier, err)
-	}
-	recorded.Value, err = json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
-	}
-	_, err = r.KeyValues.Write(ctx, recorded)
-	r.Statuses.forget()
-	if err != nil {
-		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
-	}
-	return nil
 }
 
 type BootstrapUsers struct {
@@ -597,12 +490,6 @@ func destroyCommand(tier environment.Tier) string {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"
-}
-
-func say(progress progress.Log, message string) {
-	if progress != nil {
-		progress.Say(message)
-	}
 }
 
 func warn(progress progress.Log, message string) {

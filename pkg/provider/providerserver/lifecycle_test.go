@@ -229,24 +229,3 @@ func TestADeployRacingTheFirstDeployOfAPreviewIsRefusedBeforeItProvisions(t *tes
 		t.Errorf("pr-7 is listed %s, want persistent", listed)
 	}
 }
-
-func TestADeployOfTheOtherLifecycleToAPreviewIsRefusedBeforeItRepairsTheBootstrap(t *testing.T) {
-	client, vendor := servePreview(t)
-	if result, _ := deploy(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT)); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want the first deploy to create pr-7", result.GetError())
-	}
-	repairing := true
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:           environmentv1.Tier_TIER_PREVIEW,
-		Features:       []string{fake.FeatureCache, fake.FeatureImages},
-		RepairOnDeploy: &repairing,
-	})
-	vendor.FakeBootstrap().MarkStale(fake.FeatureCache, fake.FeatureImages)
-	applied := len(vendor.FakeBootstrap().Applied())
-
-	expectDeployRefused(t, client, newPreviewRequest(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL))
-
-	if got := len(vendor.FakeBootstrap().Applied()); got != applied {
-		t.Errorf("the refused deploy applied the bootstrap %d times, want none: it is refused before it changes anything", got-applied)
-	}
-}

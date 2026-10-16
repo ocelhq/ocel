@@ -348,14 +348,6 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 		t.Errorf("the survey every write is planned against reports nothing for %s, and absence is a lie on the reading a plan is drawn from: what it cannot read is drift it must name, not a path that is gone",
 			sealed)
 	}
-	owned, _, err := readSurvey(sh(t, root, surveyOwned(items)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, present := owned[KindFile+" "+sealed]; present {
-		t.Errorf("the survey a repair draws reports %s, and a file the drawing login could not hash reads as one that moved: repair denies the whole set over a helper root owns and nothing else may read",
-			sealed)
-	}
 }
 
 func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.T) {

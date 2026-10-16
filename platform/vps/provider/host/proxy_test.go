@@ -631,63 +631,6 @@ func TestABootstrapOverABoxWithOnlyItsTableKeepsEveryRoute(t *testing.T) {
 	}
 }
 
-func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheRepairOfEveryOtherItem(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ArchAMD64, Front{})
-	observed := digests(items)
-	observed[proxyConfigItem().ID()] = digest(KindProxyConfig, ProxyConfig, 0o600, rootOwner, "")
-	observed[routingTableItem().ID()] = digest(KindRoutingTable, live.RoutingTable, 0o600, rootOwner, "")
-	observed[KindDir+" "+KeyValuesDir(tier)] = digest(KindDir, KeyValuesDir(tier), 0o700, stateOwner, "")
-	read := Reading{Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
-		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
-
-	work, left, err := repairable(read)
-	if err != nil {
-		t.Fatalf("repair over a box whose proxy config is as the deploy left it = %v, want every other item still repaired", err)
-	}
-	if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
-		t.Errorf("repairable() = %v, want only the record tier", ids(work))
-	}
-	for _, said := range []string{proxyConfigItem().ID(), routingTableItem().ID()} {
-		if !slices.Contains(ids(left), said) {
-			t.Errorf("repair left %v without %s, and a box told nothing about the item it declined to write is one nobody can read the exit code of", ids(left), said)
-		}
-	}
-	if err := refuseReplacements(read, work); err != nil {
-		t.Errorf("a replacement-refusing apply over the same box = %v, want the proxy's own config never counted as something a user must consent to overwrite", err)
-	}
-}
-
-func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing.T) {
-	t.Parallel()
-
-	tier := environment.TierProduction
-	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ArchAMD64, Front{})
-	observed := digests(items)
-	for _, gone := range []Item{frontItem(), proxyConfigItem(), routingTableItem()} {
-		delete(observed, gone.ID())
-	}
-	read := Reading{Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
-		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
-
-	work, left, err := repairable(read)
-	if err != nil {
-		t.Fatalf("repair over a box whose proxy is gone = %v", err)
-	}
-	if len(work) != 0 {
-		t.Errorf("repair writes %v, and repair refuses replacements, so it does not install a proxy", ids(work))
-	}
-	for _, said := range []string{frontItem().ID(), proxyConfigItem().ID(), routingTableItem().ID()} {
-		if !slices.Contains(ids(left), said) {
-			t.Errorf("repair left %v and never names %s, so a box with no proxy at all exits zero saying nothing", ids(left), said)
-		}
-	}
-}
-
 func TestANetworkAnotherWorkloadUsesIsReportedKeptRatherThanRemoved(t *testing.T) {
 	t.Parallel()
 
@@ -709,16 +652,6 @@ func TestANetworkAnotherWorkloadUsesIsReportedKeptRatherThanRemoved(t *testing.T
 		if strings.TrimSpace(string(rendered)) != want {
 			t.Errorf("a network the engine still has after the removal answers %q, want %q: a removal that always exits zero reports every kept network as removed",
 				strings.TrimSpace(string(rendered)), want)
-		}
-	}
-}
-
-func TestRepairNeverWritesOverTheConfigTheProxyIsServingFrom(t *testing.T) {
-	t.Parallel()
-
-	for _, item := range ProxyItems(ArchAMD64, Front{}) {
-		if deployOwned(item) {
-			t.Errorf("repair may write %s, and a replacement-refusing repair would then replace the routes every deployed app is reached through", item.ID())
 		}
 	}
 }
