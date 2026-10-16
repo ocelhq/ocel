@@ -12,6 +12,7 @@ const (
 	previewKeyRecord = "previewkey"
 	gatesRecord      = "gates"
 	partsSegment     = "parts"
+	wantsSegment     = "wants"
 )
 
 func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
@@ -32,6 +33,10 @@ func bootstrapPartition(tier environment.Tier) keyvalue.Partition {
 
 func BootstrapPartKey(tier environment.Tier, name string) keyvalue.Key {
 	return bootstrapPartition(tier).Key(partsSegment, name)
+}
+
+func BootstrapWantKey(tier environment.Tier, project, part string) keyvalue.Key {
+	return bootstrapPartition(tier).Key(wantsSegment, project, part)
 }
 
 func NewPreviewKeyRecordKey() keyvalue.Key {
