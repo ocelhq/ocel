@@ -76,13 +76,37 @@ func (p *cloudflare) describeCredentialPermissions(purpose edge.CredentialPurpos
 	}, nil
 }
 
-func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
-	accountID := readAccountID()
+const (
+	apiTokensPage = "https://dash.cloudflare.com/profile/api-tokens"
+	setupDocs     = "https://ocel.dev/docs/providers/cloudflare#setup"
+)
+
+func refuseUnsetCredentials(accountID string) error {
+	var unset []string
 	if accountID == "" {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
+		unset = append(unset, envAccountID)
 	}
 	if os.Getenv(envAPIToken) == "" {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
+		unset = append(unset, envAPIToken)
+	}
+	var headline string
+	switch len(unset) {
+	case 0:
+		return nil
+	case 1:
+		headline = unset[0] + " is not set"
+	default:
+		headline = strings.Join(unset, " and ") + " are not set"
+	}
+	return refusal.Refuse(refusal.CodeDenied,
+		"%s: set %s to your Cloudflare account's ID and %s to an API token created at %s with the permissions %s lists, in the environment ocel runs in, such as by exporting them in your shell",
+		headline, envAccountID, envAPIToken, apiTokensPage, setupDocs)
+}
+
+func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
+	accountID := readAccountID()
+	if err := refuseUnsetCredentials(accountID); err != nil {
+		return edge.CredentialIdentity{}, err
 	}
 	if p.skipChecks {
 		return edge.CredentialIdentity{Account: accountID}, nil

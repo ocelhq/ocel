@@ -208,3 +208,60 @@ func TestVerifyCredentialsSaysCloudflareCouldNotBeReachedWhenItKeepsFailing(t *t
 		t.Errorf("verifyCredentials() error = %q, want no claim the token was rejected", err)
 	}
 }
+
+func TestUnsetCredentialsAreRefusedNamingEveryVariableAndWhereToSetThem(t *testing.T) {
+	checks := []struct {
+		name  string
+		check func(context.Context) error
+	}{
+		{"the edge", func(ctx context.Context) error {
+			_, err := New("ocel", Options{}).Hooks().VerifyCredentials(ctx)
+			return err
+		}},
+		{"the DNS writer", func(ctx context.Context) error {
+			return NewDNS("app.com").VerifyCredentials(ctx)
+		}},
+		{"bootstrap", func(context.Context) error {
+			_, err := bootstrapCredentials()
+			return err
+		}},
+	}
+	for _, tc := range []struct {
+		name      string
+		accountID string
+		apiToken  string
+		headline  string
+	}{
+		{name: "neither set", headline: envAccountID + " and " + envAPIToken + " are not set"},
+		{name: "no account id", apiToken: "a-secret-token", headline: envAccountID + " is not set"},
+		{name: "no API token", accountID: testAccountID, headline: envAPIToken + " is not set"},
+	} {
+		for _, check := range checks {
+			t.Run(check.name+" with "+tc.name, func(t *testing.T) {
+				t.Setenv(envAccountID, tc.accountID)
+				t.Setenv(envAPIToken, tc.apiToken)
+
+				err := check.check(t.Context())
+				var refused refusal.Refusal
+				if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+					t.Fatalf("error = %#v, want a denied refusal", err)
+				}
+				for _, want := range []string{
+					tc.headline,
+					envAccountID,
+					envAPIToken,
+					"https://dash.cloudflare.com/profile/api-tokens",
+					"https://ocel.dev/docs/providers/cloudflare#setup",
+					"environment",
+				} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error = %q, want it to say %q", err, want)
+					}
+				}
+				if strings.Contains(err.Error(), "a-secret-token") {
+					t.Errorf("error = %q, want the token kept out of it", err)
+				}
+			})
+		}
+	}
+}

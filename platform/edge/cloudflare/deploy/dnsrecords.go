@@ -3,7 +3,6 @@ package cloudflare
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -59,11 +58,8 @@ func (w *dnsRecords) TTL() time.Duration {
 }
 
 func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
-	if w.accountID == "" {
-		return fmt.Errorf("%s is not set", envAccountID)
-	}
-	if os.Getenv(envAPIToken) == "" {
-		return fmt.Errorf("%s is not set", envAPIToken)
+	if err := refuseUnsetCredentials(w.accountID); err != nil {
+		return err
 	}
 	params := zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(w.accountID)}),
