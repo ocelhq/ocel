@@ -15,7 +15,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-const enabledService = "ENABLED"
+const (
+	enabledService              = "ENABLED"
+	testedPermissionsPerRequest = 100
+)
 
 var bootstrapPermissions = []string{
 	"datastore.databases.create",
@@ -290,14 +293,18 @@ func (b bootstrap) permitted(ctx context.Context, features []string) error {
 		return err
 	}
 	needed := permissionsFor(features)
-	granted, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
-		&cloudresourcemanager.TestIamPermissionsRequest{Permissions: needed}).Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
+	var granted []string
+	for asked := range slices.Chunk(needed, testedPermissionsPerRequest) {
+		answer, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
+			&cloudresourcemanager.TestIamPermissionsRequest{Permissions: asked}).Context(ctx).Do)
+		if err != nil {
+			return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
+		}
+		granted = append(granted, answer.Permissions...)
 	}
 	var missing []string
 	for _, permission := range needed {
-		if !slices.Contains(granted.Permissions, permission) {
+		if !slices.Contains(granted, permission) {
 			missing = append(missing, permission)
 		}
 	}
