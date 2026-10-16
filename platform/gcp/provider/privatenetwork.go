@@ -88,7 +88,7 @@ func (b bootstrap) networkPart(tier environment.Tier) part {
 		shape:       networkShape(b.clients.Names, tier, b.clients.region),
 		make:        func(ctx context.Context) error { return b.makeNetwork(ctx, tier) },
 		users:       func(ctx context.Context) ([]string, error) { return b.listNetworkUsers(ctx, tier) },
-		refuseInUse: func(ctx context.Context) error { return b.refuseNetworkInUse(ctx, tier) },
+		refuseInUse: func(ctx context.Context, removal partRemoval) error { return b.refuseNetworkInUse(ctx, tier, removal) },
 		remove:      func(ctx context.Context) error { return b.removeNetwork(ctx, tier) },
 	}
 }
@@ -233,7 +233,7 @@ func (b bootstrap) listNetworkUsers(ctx context.Context, tier environment.Tier) 
 	return slices.Compact(users), nil
 }
 
-func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier, removal partRemoval) error {
 	connected, err := b.listConnected(ctx, tier)
 	if err != nil || len(connected) == 0 {
 		return err
@@ -244,8 +244,8 @@ func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s are still connected to the %s network of tier %s, and taking the network down cuts every app off from them.\n"+
-			"Remove them from their projects and deploy them, or destroy their environments, then remove the %s bootstrap again",
-		strings.Join(named, ", "), b.clients.Network(tier), tier, tier)
+			"Remove them from their projects and deploy them, or destroy their environments, then run `%s` again",
+		strings.Join(named, ", "), b.clients.Network(tier), tier, removal.retry)
 }
 
 func (b bootstrap) listStoresOn(ctx context.Context, tier environment.Tier) ([]connectedResource, error) {

@@ -41,11 +41,11 @@ func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) 
 	}
 }
 
-func TestThePrivateNetworkIsAPartAndNoLongerABootstrapPart(t *testing.T) {
+func TestThePrivateNetworkIsAPartADeployAdds(t *testing.T) {
 	t.Parallel()
 
-	if slices.ContainsFunc(bootstrap{}.Parts(), func(f provider.Part) bool { return f.Name == networkPart }) {
-		t.Errorf("Parts() = %v, want no %q part: the first deploy declaring a database or a store adds the network", bootstrap{}.Parts(), networkPart)
+	if slices.ContainsFunc(credentialParts(), func(f provider.Part) bool { return f.Name == networkPart }) {
+		t.Errorf("credentialParts() = %v, want no %q part only the bootstrap credential adds: the first deploy declaring a database or a store adds the network", credentialParts(), networkPart)
 	}
 	b, _ := servingNetworks(t)
 	network := b.networkPart(environment.TierProduction)
