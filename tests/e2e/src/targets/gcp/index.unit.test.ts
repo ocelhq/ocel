@@ -92,12 +92,9 @@ describe("laneFeatures", () => {
   };
 
   it("bootstraps the load balancer on the real lane only when the run names a zone and a Cloudflare token and account", () => {
-    expect(laneFeatures({}, false)).toEqual(["private-network", "tasks"]);
-    expect(laneFeatures(zoned, false)).toEqual(["private-network", "tasks", "alb-edge"]);
-    expect(laneFeatures({ ...zoned, CLOUDFLARE_API_TOKEN: " " }, false)).toEqual([
-      "private-network",
-      "tasks",
-    ]);
+    expect(laneFeatures({}, false)).toEqual(["tasks"]);
+    expect(laneFeatures(zoned, false)).toEqual(["tasks", "alb-edge"]);
+    expect(laneFeatures({ ...zoned, CLOUDFLARE_API_TOKEN: " " }, false)).toEqual(["tasks"]);
   });
 
   it("bootstraps tasks alone on floci", () => {

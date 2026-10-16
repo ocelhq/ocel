@@ -103,6 +103,8 @@ var bootstrapRoles = []string{
 	"roles/iam.roleAdmin",
 	"roles/resourcemanager.projectIamAdmin",
 	"roles/cloudscheduler.admin",
+	"roles/compute.networkAdmin",
+	"roles/cloudsql.viewer",
 }
 
 var deployRoles = []string{
@@ -194,8 +196,12 @@ func appBucketsGrant(names Names) string {
 }
 
 func databasesGrant(names Names) string {
-	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q), where a tier installs %s",
-		databasesRole, "projects/"+names.project+"/instances/"+names.PostgresInstancePrefix(), networkFeature)
+	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
+		databasesRole, "projects/"+names.project+"/instances/"+names.PostgresInstancePrefix())
+}
+
+func partsGrant(names Names) string {
+	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity and Service Usage name no resource attribute an IAM condition could hold a part by"
 }
 
 func projectPermissionsGrant() string {
@@ -218,7 +224,7 @@ func rolesFor(purpose edge.CredentialPurpose) []string {
 }
 
 func (b bootstrap) preflight(ctx context.Context, read survey, features []string) error {
-	if err := b.servicesOn(ctx, read.Tier, features); err != nil {
+	if err := b.servicesOn(ctx, apisFor(read.Tier, features)); err != nil {
 		return err
 	}
 	if err := b.permitted(ctx, features); err != nil {
@@ -236,9 +242,6 @@ func permissionsFor(features []string) []string {
 	case slices.Contains(features, albFeature):
 		permissions = appendMissing(permissions, alb.Permissions)
 	}
-	if slices.Contains(features, networkFeature) {
-		permissions = appendMissing(permissions, networkPermissions)
-	}
 	if slices.Contains(features, tasksFeature) {
 		permissions = appendMissing(permissions, tasksPermissions)
 	}
@@ -253,22 +256,19 @@ func rolesCovering(features []string) []string {
 	case slices.Contains(features, albFeature):
 		roles = appendMissing(roles, alb.Roles())
 	}
-	if slices.Contains(features, networkFeature) {
-		roles = appendMissing(roles, networkRoles)
-	}
 	if slices.Contains(features, tasksFeature) {
 		roles = appendMissing(roles, tasksRoles)
 	}
 	return roles
 }
 
-func (b bootstrap) servicesOn(ctx context.Context, tier environment.Tier, features []string) error {
+func (b bootstrap) servicesOn(ctx context.Context, apis []string) error {
 	service, err := b.clients.Services()
 	if err != nil {
 		return err
 	}
 	var off []string
-	for _, api := range apisFor(tier, features) {
+	for _, api := range apis {
 		name := "projects/" + b.clients.project + "/services/" + api
 		apiService, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {

@@ -3,8 +3,6 @@ import { sanitize } from "../../naming";
 import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import { bearer, type Where } from "./store";
 
-export const NETWORK_FEATURE = "private-network";
-
 const MEMORYSTORE = "https://memorystore.googleapis.com";
 const POLL_MS = 15_000;
 const POLLS = 60;

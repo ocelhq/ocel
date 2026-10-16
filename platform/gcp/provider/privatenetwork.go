@@ -12,7 +12,7 @@ import (
 	"google.golang.org/api/networkconnectivity/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -46,29 +46,65 @@ var networkAPIs = []string{
 	"servicenetworking.googleapis.com",
 }
 
-var networkPermissions = []string{
+const (
+	networkPart    = "private-network"
+	networkSummary = "a network of the tier's own with one subnetwork, " + networkSubnetRange + ", and the service connection policies Memorystore and Cloud SQL reach it through: " +
+		"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own"
+
+	KindNetwork          Kind = "compute:network"
+	KindSubnetwork       Kind = "compute:subnetwork"
+	KindConnectionPolicy Kind = "networkconnectivity:serviceconnectionpolicy"
+)
+
+var networkPartPermissions = []string{
 	"compute.networks.create",
 	"compute.networks.get",
-	"compute.networks.delete",
+	"compute.networks.use",
+	"compute.networks.updatePolicy",
 	"compute.subnetworks.create",
 	"compute.subnetworks.get",
-	"compute.subnetworks.delete",
-	"compute.subnetworks.getIamPolicy",
-	"compute.subnetworks.setIamPolicy",
+	"compute.subnetworks.use",
 	"compute.globalOperations.get",
 	"compute.regionOperations.get",
 	"networkconnectivity.serviceConnectionPolicies.create",
 	"networkconnectivity.serviceConnectionPolicies.get",
-	"networkconnectivity.serviceConnectionPolicies.delete",
 	"networkconnectivity.operations.get",
-	"memorystore.instances.list",
-	"cloudsql.instances.list",
-	"resourcemanager.projects.get",
 }
 
-var networkRoles = []string{"roles/compute.networkAdmin", "roles/cloudsql.viewer"}
+func (b bootstrap) networkPart(tier environment.Tier) part {
+	resources := []provider.PartResource{
+		{Kind: string(KindNetwork), ID: b.clients.Network(tier)},
+		{Kind: string(KindSubnetwork), ID: b.clients.Subnetwork(tier)},
+	}
+	for _, policy := range connectionPolicies {
+		resources = append(resources, provider.PartResource{Kind: string(KindConnectionPolicy), ID: b.clients.ConnectionPolicy(tier, policy.name)})
+	}
+	return part{
+		name:        networkPart,
+		summary:     networkSummary,
+		content:     networkSubnetRange,
+		apis:        networkAPIs,
+		resources:   resources,
+		shape:       networkShape(b.clients.Names, tier, b.clients.region),
+		make:        func(ctx context.Context) error { return b.makeNetwork(ctx, tier) },
+		users:       func(ctx context.Context) ([]string, error) { return b.listNetworkUsers(ctx, tier) },
+		refuseInUse: func(ctx context.Context) error { return b.refuseNetworkInUse(ctx, tier) },
+		remove:      func(ctx context.Context) error { return b.removeNetwork(ctx, tier) },
+	}
+}
 
-func (b bootstrap) raiseNetwork(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+func networkShape(names Names, tier environment.Tier, region string) []pricing.Shaped {
+	shaped := []pricing.Shaped{
+		{Name: names.Network(tier), Type: tfNetwork, Properties: map[string]any{"auto_create_subnetworks": false}},
+		{Name: names.Subnetwork(tier), Type: tfSubnetwork, Properties: map[string]any{"region": region, "ip_cidr_range": networkSubnetRange}},
+	}
+	for _, policy := range connectionPolicies {
+		shaped = append(shaped, pricing.Shaped{Name: names.ConnectionPolicy(tier, policy.name), Type: tfConnectionPolicy, Properties: map[string]any{"location": region, "service_class": policy.class}})
+	}
+	return shaped
+}
+
+func (b bootstrap) makeNetwork(ctx context.Context, tier environment.Tier) error {
 	engine, err := b.clients.Compute()
 	if err != nil {
 		return err
@@ -79,15 +115,11 @@ func (b bootstrap) raiseNetwork(ctx context.Context, tier environment.Tier, prog
 	if err := b.ensureSubnetwork(ctx, engine, tier); err != nil {
 		return err
 	}
-	if err := b.grantSubnetworkUse(ctx, engine, tier); err != nil {
-		return err
-	}
 	for _, policy := range connectionPolicies {
 		if err := b.ensureConnectionPolicy(ctx, tier, policy); err != nil {
 			return err
 		}
 	}
-	ensureProgress(progress).Debug("The " + string(tier) + " network " + b.clients.Network(tier) + " connects Memorystore and Cloud SQL through " + networkSubnetRange)
 	return nil
 }
 
@@ -131,39 +163,6 @@ func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service
 	})
 }
 
-func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
-	agent, err := b.clients.ReadServiceAgent(ctx, runAgentDomain)
-	if err != nil {
-		return err
-	}
-	name := b.clients.Subnetwork(tier)
-	var refused error
-	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := attempted(ctx, engine.Subnetworks.GetIamPolicy(b.clients.project, b.clients.region, name).Context(ctx).Do)
-		if err != nil {
-			return fmt.Errorf("read who may attach services to the %s subnetwork: %w", name, err)
-		}
-		if slices.ContainsFunc(policy.Bindings, func(binding *compute.Binding) bool {
-			return binding.Role == networkUserRole && binding.Condition == nil && slices.Contains(binding.Members, agent)
-		}) {
-			return nil
-		}
-		policy.Bindings = append(policy.Bindings, &compute.Binding{Role: networkUserRole, Members: []string{agent}})
-		_, refused = attempted(ctx, engine.Subnetworks.SetIamPolicy(b.clients.project, b.clients.region, name,
-			&compute.RegionSetPolicyRequest{Policy: policy}).Context(ctx).Do)
-		if refused == nil || !stale(refused) {
-			break
-		}
-	}
-	if refused != nil {
-		return fmt.Errorf("let Cloud Run attach services to the %s subnetwork: %w", name, refused)
-	}
-	return nil
-}
-
 func (b bootstrap) connectionPolicyPath(tier environment.Tier, policy connectionPolicy) string {
 	return b.clients.location() + "/serviceConnectionPolicies/" + b.clients.ConnectionPolicy(tier, policy.name)
 }
@@ -202,29 +201,54 @@ const (
 	storePagesRead          = 10
 )
 
-func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier, features []string) error {
-	if !slices.Contains(features, networkFeature) {
-		return nil
-	}
+type connectedResource struct {
+	named   string
+	project string
+}
+
+func (b bootstrap) listConnected(ctx context.Context, tier environment.Tier) ([]connectedResource, error) {
 	stores, err := b.listStoresOn(ctx, tier)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	databases, err := b.listDatabasesOn(ctx, tier)
 	if err != nil {
+		return nil, err
+	}
+	return slices.Concat(stores, databases), nil
+}
+
+func (b bootstrap) listNetworkUsers(ctx context.Context, tier environment.Tier) ([]string, error) {
+	connected, err := b.listConnected(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	users := []string{}
+	for _, each := range connected {
+		if each.project != "" {
+			users = append(users, each.project)
+		}
+	}
+	slices.Sort(users)
+	return slices.Compact(users), nil
+}
+
+func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier) error {
+	connected, err := b.listConnected(ctx, tier)
+	if err != nil || len(connected) == 0 {
 		return err
 	}
-	connected := slices.Concat(stores, databases)
-	if len(connected) == 0 {
-		return nil
+	named := make([]string, 0, len(connected))
+	for _, each := range connected {
+		named = append(named, each.named)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s are still connected to the %s network of tier %s, and taking the network down cuts every app off from them.\n"+
-			"Remove them from their projects and deploy them, or destroy their environments, then remove feature %s again",
-		strings.Join(connected, ", "), b.clients.Network(tier), tier, networkFeature)
+			"Remove them from their projects and deploy them, or destroy their environments, then remove the %s bootstrap again",
+		strings.Join(named, ", "), b.clients.Network(tier), tier, tier)
 }
 
-func (b bootstrap) listStoresOn(ctx context.Context, tier environment.Tier) ([]string, error) {
+func (b bootstrap) listStoresOn(ctx context.Context, tier environment.Tier) ([]connectedResource, error) {
 	filter := storesFilter(b.clients.namespace, tier)
 	connected, next, err := b.stores.listInstances(ctx, b.clients.location(), filter, resourcesNamedOnNetwork, "")
 	for page := 1; err == nil && len(connected) == 0 && next != ""; page++ {
@@ -236,18 +260,21 @@ func (b bootstrap) listStoresOn(ctx context.Context, tier environment.Tier) ([]s
 	if err != nil {
 		return nil, fmt.Errorf("read which kv stores are on the %s network: %w", b.clients.Network(tier), err)
 	}
-	named := make([]string, 0, len(connected)+1)
+	named := make([]connectedResource, 0, len(connected)+1)
 	for _, instance := range connected {
-		named = append(named, fmt.Sprintf("kv %s of project %s environment %s (Memorystore instance %s)",
-			instance.Labels[kvLabel], instance.Labels[projectLabel], instance.Labels[environmentLabel], path.Base(instance.Name)))
+		named = append(named, connectedResource{
+			named: fmt.Sprintf("kv %s of project %s environment %s (Memorystore instance %s)",
+				instance.Labels[kvLabel], instance.Labels[projectLabel], instance.Labels[environmentLabel], path.Base(instance.Name)),
+			project: instance.Labels[projectLabel],
+		})
 	}
 	if next != "" {
-		named = append(named, "and more")
+		named = append(named, connectedResource{named: "and more"})
 	}
 	return named, nil
 }
 
-func (b bootstrap) listDatabasesOn(ctx context.Context, tier environment.Tier) ([]string, error) {
+func (b bootstrap) listDatabasesOn(ctx context.Context, tier environment.Tier) ([]connectedResource, error) {
 	service, err := b.clients.SQL()
 	if err != nil {
 		return nil, err
@@ -257,17 +284,20 @@ func (b bootstrap) listDatabasesOn(ctx context.Context, tier environment.Tier) (
 	if err != nil {
 		return nil, fmt.Errorf("read which databases are on the %s network: %w", b.clients.Network(tier), err)
 	}
-	named := make([]string, 0, len(listed.Items)+1)
+	named := make([]connectedResource, 0, len(listed.Items)+1)
 	for _, instance := range listed.Items {
 		labels := map[string]string{}
 		if instance.Settings != nil {
 			labels = instance.Settings.UserLabels
 		}
-		named = append(named, fmt.Sprintf("postgres %s of project %s environment %s (Cloud SQL instance %s)",
-			labels[postgresLabel], labels[projectLabel], labels[environmentLabel], instance.Name))
+		named = append(named, connectedResource{
+			named: fmt.Sprintf("postgres %s of project %s environment %s (Cloud SQL instance %s)",
+				labels[postgresLabel], labels[projectLabel], labels[environmentLabel], instance.Name),
+			project: labels[projectLabel],
+		})
 	}
 	if listed.NextPageToken != "" {
-		named = append(named, "and more")
+		named = append(named, connectedResource{named: "and more"})
 	}
 	return named, nil
 }
@@ -280,7 +310,7 @@ func databasesFilter(namespace provider.Namespace, tier environment.Tier) string
 	return fmt.Sprintf("settings.userLabels.ocel-namespace:%s settings.userLabels.ocel-tier:%s", labelValue(string(namespace)), tier)
 }
 
-func (b bootstrap) tearNetwork(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) removeNetwork(ctx context.Context, tier environment.Tier) error {
 	service, err := b.clients.Connectivity()
 	if err != nil {
 		return err
@@ -315,23 +345,6 @@ func (b bootstrap) tearNetwork(ctx context.Context, tier environment.Tier) error
 		return err
 	}
 	return nil
-}
-
-func (b bootstrap) networkInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
-	service, err := b.clients.Connectivity()
-	if err != nil {
-		return false, err
-	}
-	for _, policy := range connectionPolicies {
-		_, err = attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Get(b.connectionPolicyPath(tier, policy)).Context(ctx).Do)
-		if absent(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, fmt.Errorf("read the %s service connection policy: %w", b.clients.ConnectionPolicy(tier, policy.name), err)
-		}
-	}
-	return true, nil
 }
 
 func (b bootstrap) computeAwaited(

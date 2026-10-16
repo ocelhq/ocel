@@ -36,6 +36,7 @@ const (
 	tfPubSubTopic         = "google_pubsub_topic"
 	tfPubSubSubscription  = "google_pubsub_subscription"
 	tfCloudTasksQueue     = "google_cloud_tasks_queue"
+	tfProjectIAMMember    = "google_project_iam_member"
 )
 
 var itemTypes = map[Kind]string{
@@ -49,6 +50,7 @@ var itemTypes = map[Kind]string{
 	KindSecret:         tfSecretManagerSecret,
 	KindService:        tfCloudRunService,
 	KindSchedule:       tfSchedulerJob,
+	KindGrant:          tfProjectIAMMember,
 }
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -170,12 +172,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	if !declared {
 		return nil
 	}
-	tier := req.Deploy.Tier
-	tree.Add(shared, string(Vendor), tfNetwork, names.Network(tier), region, map[string]any{"auto_create_subnetworks": false})
-	tree.Add(shared, string(Vendor), tfSubnetwork, names.Subnetwork(tier), region, map[string]any{"region": region, "ip_cidr_range": networkSubnetRange})
-	for _, policy := range connectionPolicies {
-		tree.Add(shared, string(Vendor), tfConnectionPolicy, names.ConnectionPolicy(tier, policy.name), region, map[string]any{"location": region, "service_class": policy.class})
-	}
+	tree.AddShaped(shared, string(Vendor), region, networkShape(names, req.Deploy.Tier, region))
 	return nil
 }
 

@@ -17,7 +17,11 @@ const (
 )
 
 func (b bootstrap) repairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
-	return stackrecords.RepairBootstrapParts(ctx, b.records, tier, []stackrecords.PartWork{b.envSourceSyncWork(tier, "")})
+	works := []stackrecords.PartWork{b.envSourceSyncWork(tier, "")}
+	for _, each := range b.listDeployedParts(tier) {
+		works = append(works, b.partWork(tier, "", each))
+	}
+	return stackrecords.RepairBootstrapParts(ctx, b.records, tier, works)
 }
 
 func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
@@ -47,6 +51,11 @@ func (b bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	if present {
 		parts = append(parts, sync)
 	}
+	added, err := b.listDescribedParts(ctx, read.Tier)
+	if err != nil {
+		return nil, err
+	}
+	parts = append(parts, added...)
 	service, err := bastion{clients: b.clients}.read(ctx, read.Tier)
 	if err != nil {
 		return nil, err

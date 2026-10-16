@@ -17,6 +17,7 @@ type featureNeed struct {
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	var needs []featureNeed
+	var parts []string
 	for _, resource := range pre.Resources {
 		switch resource.Type {
 		case provider.BindingBucket:
@@ -30,14 +31,12 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			if _, err := readPostgres(resource); err != nil {
 				return err
 			}
-			needs = append(needs, featureNeed{feature: networkFeature, declares: "postgres " + resource.Name,
-				reason: "a database on gcp is reached over the tier's network, which its bootstrap has not installed"})
+			parts = appendMissing(parts, []string{networkPart})
 		case provider.BindingKV:
 			if _, err := readKVStore(resource); err != nil {
 				return err
 			}
-			needs = append(needs, featureNeed{feature: networkFeature, declares: "kv " + resource.Name,
-				reason: "a store on gcp is reached over the tier's network, which its bootstrap has not installed"})
+			parts = appendMissing(parts, []string{networkPart})
 		case provider.BindingTopic, provider.BindingTask:
 			declared := declaredTopicOf(resource).declared
 			if pre.Deploy.Infra.IsZero() {
@@ -48,6 +47,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			needs = append(needs, featureNeed{feature: tasksFeature, declares: string(resource.Type) + " " + declared,
 				reason: "topics and tasks on gcp keep their runs in the tier's task database and wait in its delay queue, which its bootstrap has not installed"})
 		}
+	}
+	if err := p.addParts(ctx, pre, parts); err != nil {
+		return err
 	}
 	if len(needs) == 0 {
 		return nil
@@ -74,4 +76,34 @@ func refuseUninstalled(tier environment.Tier, region string, need featureNeed) e
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project declares %s, and %s in %s.\nRun `%s %s`, then deploy again",
 		need.declares, need.reason, region, provider.BootstrapFeaturesCommand(tier), need.feature)
+}
+
+func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	tier := pre.Deploy.Tier
+	for _, want := range b.listDeployedParts(tier) {
+		if !slices.Contains(names, want.name) {
+			continue
+		}
+		if !pre.Dry {
+			if err := b.ensurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
+				return err
+			}
+			continue
+		}
+		group, planned, err := b.planPart(ctx, tier, want)
+		if err != nil {
+			return err
+		}
+		if planned && pre.AddToPlan != nil {
+			pre.AddToPlan(group)
+		}
+	}
+	return nil
 }

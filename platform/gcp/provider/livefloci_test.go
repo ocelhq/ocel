@@ -74,11 +74,11 @@ func TestLiveCredentials(t *testing.T) {
 func TestLiveStacks(t *testing.T) {
 	p := live(t)
 	facts := p.Facts()
+	bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
 	if emulated() {
 		facts.Bindings = slices.DeleteFunc(slices.Clone(facts.Bindings), func(b provider.BindingType) bool { return b == provider.BindingKV })
-		bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
-	} else {
-		bootstrapped(t, p, environment.TierPreview, gcp.NetworkFeature, gcp.TasksFeature)
+	} else if err := gcp.AddParts(context.Background(), p, environment.TierPreview, gcp.NetworkPart); err != nil {
+		t.Fatalf("AddParts(%s) = %v, want the network the stacks' stores and databases are reached over", gcp.NetworkPart, err)
 	}
 
 	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues())

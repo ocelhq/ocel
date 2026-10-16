@@ -120,3 +120,20 @@ func TestTheEmulatorKeepsTheTagsDatabaseItServesImplicitly(t *testing.T) {
 		}
 	}
 }
+
+func TestTheBaseGrantsCloudRunTheNetworkEveryTierSubnetworkIsUsedThrough(t *testing.T) {
+	t.Parallel()
+
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	grant := item{Kind: KindGrant, Name: networkUserRole}
+	for _, tier := range bothTiers {
+		items := bootstrapItems(names, tier, false)
+		at := slices.IndexFunc(items, func(each item) bool { return each.ID() == grant.ID() })
+		if at < 0 || !items[at].Shared {
+			t.Errorf("a %s bootstrap provisions %v, want %s shared by both tiers: a deploy adding the network may not grant the Cloud Run agent on it", tier, idsOf(items), grant.ID())
+		}
+		if slices.Contains(idsOf(bootstrapItems(names, tier, true)), grant.ID()) {
+			t.Errorf("an emulated %s bootstrap grants %s, and no emulator serves project IAM", tier, grant.ID())
+		}
+	}
+}

@@ -486,3 +486,27 @@ func TestACredentialPurposeNobodyDefinedIsRefusedRatherThanRendered(t *testing.T
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 }
+
+func TestADeployMayAddTheBootstrapPartsGoogleNamesNoConditionForThroughOneCustomRole(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	const parts = "projects/acme-prod/roles/ocel_parts, unconditioned"
+	if !strings.Contains(document.Document, parts) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant a line granting %s: a deploy adds a tier's network on first use, and Compute Engine names no condition to hold it by", document.Document, parts)
+	}
+	held := gcp.PartsRolePermissions("ocel", "acme-prod")
+	for _, permission := range []string{"compute.networks.get", "compute.networks.use", "compute.subnetworks.get", "compute.subnetworks.use"} {
+		if !slices.Contains(held, permission) {
+			t.Errorf("the parts role holds %v, want %s: Google checks it on the network and subnetwork a service connection policy names when the policy is created", held, permission)
+		}
+	}
+	for _, line := range strings.Split(document.Document, "\n") {
+		if line == "roles/compute.networkAdmin" {
+			t.Errorf("Permissions(deploy) grants roles/compute.networkAdmin, which deletes every network in the project, where a deploy only creates the tier's")
+		}
+	}
+}

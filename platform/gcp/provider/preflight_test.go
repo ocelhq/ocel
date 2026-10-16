@@ -17,6 +17,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -70,18 +71,6 @@ func declaringADatabase(version string) provider.DeployPreflight {
 	}
 }
 
-func TestADeployDeclaringADatabaseIsRefusedUntilTheTierHasItsNetwork(t *testing.T) {
-	err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), declaringADatabase("17"))
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "postgres orders") ||
-		!strings.Contains(err.Error(), "ocel bootstrap production --features "+networkFeature) {
-		t.Errorf("PreflightDeploy() = %v, want it refused naming the database and the bootstrap that installs the network", err)
-	}
-	if err := withStamp(t, stamp{State: stateComplete, Features: []string{networkFeature}}).PreflightDeploy(context.Background(), declaringADatabase("17")); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a database admitted on a tier whose network is installed", err)
-	}
-}
-
 func TestADeployDeclaringADatabaseOnAVersionCloudSQLDoesNotRunIsRefusedBeforeAnythingIsRead(t *testing.T) {
 	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		t.Errorf("preflight called %s %s before refusing a version Cloud SQL does not run", r.Method, r.URL.Path)
@@ -92,26 +81,6 @@ func TestADeployDeclaringADatabaseOnAVersionCloudSQLDoesNotRunIsRefusedBeforeAny
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("PreflightDeploy() = %v, want an %s refusal", err, refusal.CodeInvalid)
-	}
-}
-
-func TestADeployDeclaringAStoreIsAdmittedOnceTheTierHasItsNetwork(t *testing.T) {
-	if err := withStamp(t, stamp{State: stateComplete, Features: []string{networkFeature}}).PreflightDeploy(context.Background(), declaringAStore(256<<20)); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a store admitted on a tier whose network is installed", err)
-	}
-}
-
-func TestADeployDeclaringAStoreIsRefusedUntilTheTierHasItsNetwork(t *testing.T) {
-	for _, written := range []stamp{
-		{State: stateComplete},
-		{State: stateApplying, Features: []string{networkFeature}},
-	} {
-		err := withStamp(t, written).PreflightDeploy(context.Background(), declaringAStore(256<<20))
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady ||
-			!strings.Contains(err.Error(), "ocel bootstrap production --features "+networkFeature) {
-			t.Errorf("PreflightDeploy() under stamp %+v = %v, want it refused naming the bootstrap that installs the network", written, err)
-		}
 	}
 }
 
@@ -228,5 +197,51 @@ func TestADeployWithoutANextAppIsNotRefusedForAnEdgeThatCannotBeOpened(t *testin
 	pre.Edge = edge.Kind("unregistered")
 	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
 		t.Errorf("PreflightDeploy() = %v, want an app that is not Next admitted whatever edge fronts it", err)
+	}
+}
+
+func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t *testing.T) {
+	p, server := deployingNetworks(t)
+	ctx := context.Background()
+	pre := declaringADatabase("17")
+	pre.Deploy.Slug = "shop"
+
+	if err := p.PreflightDeploy(ctx, pre); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+
+	want := []string{"create network ocel-production", "create subnetwork ocel-production", "create policy ocel-production-memorystore", "create policy ocel-production-cloudsql"}
+	if got := server.wrote(); !slices.Equal(got, want) {
+		t.Errorf("the first deploy declaring a database wrote %v, want %v", got, want)
+	}
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), environment.TierProduction, networkPart)
+	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" || len(recorded.Resources) != 4 {
+		t.Errorf("the part record = %+v, %t, %v, want it ready, added by shop, holding the network, subnetwork and both policies", recorded, present, err)
+	}
+
+	if err := p.PreflightDeploy(ctx, declaringAStore(1<<30)); err != nil {
+		t.Fatalf("PreflightDeploy() of a store = %v", err)
+	}
+	if got := server.wrote(); len(got) != len(want) {
+		t.Errorf("a later deploy declaring a store wrote %v, want only its read of the part record", got[len(want):])
+	}
+}
+
+func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *testing.T) {
+	p, server := deployingNetworks(t)
+	var planned []provider.ChangeGroup
+	pre := declaringADatabase("17")
+	pre.Dry = true
+	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
+
+	if err := p.PreflightDeploy(context.Background(), pre); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+
+	if len(server.wrote()) != 0 {
+		t.Errorf("a dry deploy wrote %v, want nothing", server.wrote())
+	}
+	if len(planned) != 1 || planned[0].Feature != networkPart || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
+		t.Errorf("a dry deploy planned %+v, want the %s part created with its four resources", planned, networkPart)
 	}
 }

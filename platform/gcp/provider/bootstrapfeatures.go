@@ -19,7 +19,6 @@ import (
 const (
 	albFeature         = "alb-edge"
 	albShieldedFeature = "alb-cloudflare-origin"
-	networkFeature     = "private-network"
 )
 
 var (
@@ -43,10 +42,6 @@ func (bootstrap) Catalogue() []provider.Feature {
 			"a recurring cost, about $18 a month plus egress, " +
 			"and a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with",
 		Edges: []edge.Kind{cloudflare.Kind},
-	}, {
-		Name: networkFeature,
-		Summary: "a network of the tier's own with one subnetwork, " + networkSubnetRange + ", and the service connection policies Memorystore and Cloud SQL reach it through: " +
-			"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own",
 	}, {
 		Name:    tasksFeature,
 		Summary: tasksSummary(),
@@ -104,17 +99,11 @@ func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequ
 	if err := b.raiseCDNPurgeRole(ctx, req, progress); err != nil {
 		return err
 	}
-	if slices.Contains(req.Features, tasksFeature) {
-		ensureProgress(progress).Say("Installing feature " + tasksFeature + " for " + string(req.Tier) + ": " + b.summaryOf(tasksFeature))
-		if err := b.raiseTasks(ctx, req.Tier, progress); err != nil {
-			return err
-		}
-	}
-	if !slices.Contains(req.Features, networkFeature) {
+	if !slices.Contains(req.Features, tasksFeature) {
 		return nil
 	}
-	ensureProgress(progress).Say("Installing feature " + networkFeature + " for " + string(req.Tier) + ": " + b.summaryOf(networkFeature))
-	return b.raiseNetwork(ctx, req.Tier, progress)
+	ensureProgress(progress).Say("Installing feature " + tasksFeature + " for " + string(req.Tier) + ": " + b.summaryOf(tasksFeature))
+	return b.raiseTasks(ctx, req.Tier, progress)
 }
 
 func (b bootstrap) summaryOf(name string) string {
@@ -173,9 +162,6 @@ func (b bootstrap) dropFronts(
 }
 
 func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
-	if err := b.refuseNetworkInUse(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
-		return err
-	}
 	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return err
 	}
@@ -185,39 +171,25 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 	if slices.Contains(droppedFeatures(read.Stamp.Features, req), albFeature) {
 		ensureProgress(progress).Say("Kept custom role " + read.Names.CDNPurgeRolePath() + ": " + reasonRoleKept)
 	}
-	if slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
-		ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push account and its grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
-		if err := b.tearTasks(ctx, req.Tier); err != nil {
-			return err
-		}
-	}
-	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), networkFeature) {
+	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
 		return nil
 	}
-	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " private network: this bootstrap no longer requests feature " + networkFeature)
-	return b.tearNetwork(ctx, req.Tier)
+	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push account and its grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
+	return b.tearTasks(ctx, req.Tier)
 }
 
 func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, features []string) error {
 	if err := b.tearFronts(ctx, tier, features); err != nil {
 		return err
 	}
-	if slices.Contains(features, tasksFeature) {
-		if err := b.tearTasks(ctx, tier); err != nil {
-			return err
-		}
-	}
-	if !slices.Contains(features, networkFeature) {
+	if !slices.Contains(features, tasksFeature) {
 		return nil
 	}
-	return b.tearNetwork(ctx, tier)
+	return b.tearTasks(ctx, tier)
 }
 
 func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
-	switch feature {
-	case networkFeature:
-		return b.networkInstalled(ctx, tier)
-	case tasksFeature:
+	if feature == tasksFeature {
 		return b.tasksInstalled(ctx, tier)
 	}
 	return b.frontInstalled(ctx, tier, feature)
@@ -276,9 +248,6 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 }
 
 func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, features []string) error {
-	if err := b.refuseNetworkInUse(ctx, tier, features); err != nil {
-		return err
-	}
 	return b.frontsFree(ctx, tier, features)
 }
 
@@ -289,9 +258,6 @@ func apisFor(tier environment.Tier, features []string) []string {
 		apis = appendMissing(apis, albShieldedAPIs)
 	case slices.Contains(features, albFeature):
 		apis = appendMissing(apis, albAPIs)
-	}
-	if slices.Contains(features, networkFeature) {
-		apis = appendMissing(apis, networkAPIs)
 	}
 	if slices.Contains(features, tasksFeature) {
 		apis = appendMissing(apis, TasksAPIs)
