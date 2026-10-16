@@ -1,13 +1,14 @@
 package bootstrap
 
 import (
+	"slices"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
-	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type ShapeOption func(*featureInputs)
@@ -39,25 +40,13 @@ type shapedType struct {
 }
 
 func Shape(ns Namespace, tier environment.Tier, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
-	in := featureInputs{ns: ns, tier: tier, artifactBucket: shapedArtifactBucket}
-	for _, option := range options {
-		option(&in)
+	parts, err := ShapeParts(ns, tier, features, options...)
+	if err != nil {
+		return nil, err
 	}
-	in.alongside = FeatureSet{}
+	shaped := slices.Concat(parts[provider.BasePart], parts[RuntimeLayersPart])
 	for _, name := range features {
-		in.alongside[name] = true
-	}
-	shaped := append(shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey))), shapedRuntimeLayers()...)
-	for _, name := range features {
-		f, known := featureNamed(name)
-		if !known {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q", name)
-		}
-		stack, err := f.planned(in)
-		if err != nil {
-			return nil, err
-		}
-		shaped = append(shaped, shapeTemplate(stack.body)...)
+		shaped = append(shaped, parts[name]...)
 	}
 	return shaped, nil
 }

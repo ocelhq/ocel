@@ -33,11 +33,18 @@ const (
 	runtimeLayerStep = "Ensuring the runtime every function boots through (Lambda layers)"
 
 	runtimeLayersRecord = "runtime-layers"
+
+	RuntimeLayersPart    = "runtime-layers"
+	runtimeLayersSummary = "the runtime every function boots through, one Lambda layer per architecture and Ocel version"
 )
 
 type LayerAPI interface {
 	ListLayerVersions(ctx context.Context, in *lambda.ListLayerVersionsInput, optFns ...func(*lambda.Options)) (*lambda.ListLayerVersionsOutput, error)
 	PublishLayerVersion(ctx context.Context, in *lambda.PublishLayerVersionInput, optFns ...func(*lambda.Options)) (*lambda.PublishLayerVersionOutput, error)
+}
+
+type LayerVersionsAPI interface {
+	ListLayerVersions(ctx context.Context, in *lambda.ListLayerVersionsInput, optFns ...func(*lambda.Options)) (*lambda.ListLayerVersionsOutput, error)
 }
 
 type LayerTeardownAPI interface {
@@ -279,7 +286,7 @@ type runtimeLayerVersion struct {
 
 func (v runtimeLayerVersion) String() string { return fmt.Sprintf("%s:%d", v.name, v.version) }
 
-func runtimeLayerVersions(ctx context.Context, layers LayerTeardownAPI, records keyvalue.Store, tier environment.Tier) ([]runtimeLayerVersion, error) {
+func runtimeLayerVersions(ctx context.Context, layers LayerVersionsAPI, records keyvalue.Store, tier environment.Tier) ([]runtimeLayerVersion, error) {
 	names, err := readRecordedRuntimeLayers(ctx, records, tier)
 	if err != nil {
 		return nil, err
@@ -304,6 +311,24 @@ func runtimeLayerVersions(ctx context.Context, layers LayerTeardownAPI, records 
 		}
 	}
 	return versions, nil
+}
+
+func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, records keyvalue.Store, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	versions, err := runtimeLayerVersions(ctx, layers, records, tier)
+	if err != nil || len(versions) == 0 {
+		return provider.BootstrapPart{}, false, err
+	}
+	resources := make([]provider.PartResource, 0, len(versions))
+	for _, version := range versions {
+		resources = append(resources, provider.PartResource{Kind: runtimeLayerType, ID: version.String()})
+	}
+	return provider.BootstrapPart{
+		Name:               RuntimeLayersPart,
+		Summary:            runtimeLayersSummary,
+		Current:            true,
+		Resources:          resources,
+		UsedByEveryProject: true,
+	}, true, nil
 }
 
 func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, records keyvalue.Store, ns Namespace, tier environment.Tier) (provider.ChangeGroup, bool) {

@@ -421,6 +421,46 @@ func TestTeardownDeletesOnlyTheRuntimeLayersItsTierRecorded(t *testing.T) {
 	}
 }
 
+func TestTheRuntimeLayersPartHoldsEveryVersionOfTheLayersItsTierRecordedAndIsPriced(t *testing.T) {
+	layers, records := newFakeLayers(), newFakeRecords()
+	own, _ := seedTiersRuntimeLayers(t, layers, records)
+
+	part, found, err := ReadRuntimeLayersPart(context.Background(), layers, records.in(fixtureStateTable), environment.TierProduction)
+	if err != nil || !found {
+		t.Fatalf("ReadRuntimeLayersPart() = %v, %v, want the part the tier recorded", found, err)
+	}
+
+	var want []string
+	for _, name := range own {
+		want = append(want, name+":1", name+":2")
+	}
+	var got []string
+	for _, resource := range part.Resources {
+		if resource.Kind != runtimeLayerType {
+			t.Errorf("runtime-layers holds a %s, want only layer versions", resource.Kind)
+		}
+		got = append(got, resource.ID)
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("runtime-layers holds %v, want %v", got, want)
+	}
+	if part.Name != RuntimeLayersPart || !part.Current || !part.UsedByEveryProject {
+		t.Errorf("runtime-layers = %+v, want it current and used by every project", part)
+	}
+	shapes, err := ShapeParts(defaultNamespace, environment.TierProduction, nil)
+	if err != nil || len(shapes[RuntimeLayersPart]) == 0 {
+		t.Errorf("ShapeParts() = %v, %v, want the runtime layers shaped to be priced", shapes, err)
+	}
+}
+
+func TestATierThatRecordedNoRuntimeLayerHasNoRuntimeLayersPart(t *testing.T) {
+	if _, found, err := ReadRuntimeLayersPart(context.Background(), newFakeLayers(), newFakeRecords().in(fixtureStateTable), environment.TierProduction); err != nil || found {
+		t.Errorf("ReadRuntimeLayersPart() = %v, %v, want no part", found, err)
+	}
+}
+
 func TestADestroyPlanListsTheRuntimeLayerVersionsItsTierRecorded(t *testing.T) {
 	layers, records := newFakeLayers(), newFakeRecords()
 	own, _ := seedTiersRuntimeLayers(t, layers, records)

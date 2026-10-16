@@ -116,6 +116,19 @@ func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAShape
 	}
 }
 
+func TestAPartEveryProjectUsesIsUsedByEveryProjectRecordedInTheTier(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{Name: "runtime-layers", UsedByEveryProject: true})
+	recordProject(t, vendor, "shop")
+	recordProject(t, vendor, "blog")
+
+	if got := describedParts(t, client)["runtime-layers"].GetUsedBy(); !slices.Equal(got, []string{"blog", "shop"}) {
+		t.Errorf("runtime-layers used by %v, want every project recorded here", got)
+	}
+}
+
 func TestAPartClaimedButNotYetCreatedReadsAsCreatingByWhoeverClaimedIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
