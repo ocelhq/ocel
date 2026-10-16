@@ -149,11 +149,12 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		return found
 	}
 
-	if needed, applies := nodeCheck(ctx, cfg); applies {
+	roots, rootsErr := discovery.RootsOf(cfg)
+	if needed, applies := nodeCheck(ctx, cfg, roots, rootsErr); applies {
 		checked.checks = append(checked.checks, needed)
 	}
 	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
-	checked.checks = append(checked.checks, appsCheck(cfg))
+	checked.checks = append(checked.checks, appsCheck(cfg, roots, rootsErr))
 
 	descriptor, providerErr := cfg.RequireProvider()
 	if providerErr != nil {
@@ -274,7 +275,10 @@ func splitHint(message string) (string, string, bool) {
 	return message, "", false
 }
 
-func appsCheck(cfg *project.Project) check {
+func appsCheck(cfg *project.Project, roots []discovery.Root, rootsErr error) check {
+	if rootsErr != nil {
+		return check{verdict: verdictFail, text: "config loads — " + firstLine(rootsErr.Error())}
+	}
 	if len(cfg.Apps) > 0 {
 		names := make([]string, 0, len(cfg.Apps))
 		for _, app := range cfg.Apps {
@@ -283,11 +287,8 @@ func appsCheck(cfg *project.Project) check {
 		return check{verdict: verdictPass, text: fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))}
 	}
 	config := filepath.Base(cfg.Path)
-	undetected := "no app is detected at the project root"
-	if cfg.RootAppUndetected != nil {
-		undetected = cfg.RootAppUndetected.Error()
-	}
-	if roots, err := discovery.RootsOf(cfg); err == nil && len(roots) == 0 {
+	undetected := cfg.RootAppUndetected.Error()
+	if len(roots) == 0 {
 		return check{
 			verdict: verdictWarn,
 			text:    "config loads — nothing to deploy: no apps or resources declared, and " + undetected,
@@ -302,7 +303,15 @@ func appsCheck(cfg *project.Project) check {
 			fix:     `name the app to deploy under "apps" in ` + config + " with its name and path",
 		}
 	}
-	return check{verdict: verdictPass, text: "config loads — no apps declared"}
+	folders := make([]string, 0, len(roots))
+	for _, root := range roots {
+		folder, err := filepath.Rel(cfg.Dir, root.Dir)
+		if err != nil {
+			folder = root.Dir
+		}
+		folders = append(folders, filepath.ToSlash(folder))
+	}
+	return check{verdict: verdictPass, text: "config loads — no apps declared, so a deploy carries only the resources declared in " + english.And(folders)}
 }
 
 func providerText(descriptor *project.Provider) string {

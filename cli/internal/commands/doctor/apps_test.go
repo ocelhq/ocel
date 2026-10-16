@@ -32,13 +32,18 @@ func projectWith(t *testing.T, config string, files map[string]string) *project.
 	return cfg
 }
 
+func checkApps(cfg *project.Project) check {
+	roots, err := discovery.RootsOf(cfg)
+	return appsCheck(cfg, roots, err)
+}
+
 const declaredResources = discovery.DefaultRootDirName + "/resources.ts"
 
 func TestDoctorPassesAProjectThatNamesApps(t *testing.T) {
 	t.Parallel()
 
 	cfg := projectWith(t, `{"slug":"shop","apps":[{"name":"web","path":"web"},{"name":"api","path":"api"}]}`, map[string]string{})
-	if got := appsCheck(cfg); got.verdict != verdictPass || got.text != "config loads — 2 apps (web, api)" {
+	if got := checkApps(cfg); got.verdict != verdictPass || got.text != "config loads — 2 apps (web, api)" {
 		t.Errorf("check = %+v, want the two apps passed", got)
 	}
 }
@@ -46,7 +51,7 @@ func TestDoctorPassesAProjectThatNamesApps(t *testing.T) {
 func TestDoctorWarnsThatAProjectWithNoAppsAndNoResourcesHasNothingToDeploy(t *testing.T) {
 	t.Parallel()
 
-	got := appsCheck(projectWith(t, `{"slug":"shop"}`, map[string]string{"package.json": `{}`}))
+	got := checkApps(projectWith(t, `{"slug":"shop"}`, map[string]string{"package.json": `{}`}))
 	if got.verdict != verdictWarn {
 		t.Fatalf("verdict = %v, want a warning: a deploy of this project deploys nothing", got.verdict)
 	}
@@ -68,7 +73,7 @@ func TestDoctorWarnsWhyNoAppIsDetectedAtARootHoldingTwoApps(t *testing.T) {
 		"main.py":         "\n",
 		declaredResources: "export {}\n",
 	})
-	got := appsCheck(cfg)
+	got := checkApps(cfg)
 	if got.verdict != verdictWarn {
 		t.Fatalf("verdict = %v, want a warning", got.verdict)
 	}
@@ -84,7 +89,18 @@ func TestDoctorPassesAProjectThatDeclaresResourcesAloneBesideItsTooling(t *testi
 	t.Parallel()
 
 	cfg := projectWith(t, `{"slug":"shop"}`, map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`, declaredResources: "export {}\n"})
-	if got := appsCheck(cfg); got.verdict != verdictPass || got.text != "config loads — no apps declared" {
-		t.Errorf("check = %+v, want a pass: the resources are what it deploys", got)
+	want := "config loads — no apps declared, so a deploy carries only the resources declared in " + discovery.DefaultRootDirName
+	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
+		t.Errorf("check = %+v, want a pass saying %q: the resources are what it deploys", got, want)
+	}
+}
+
+func TestDoctorFailsAProjectWhoseDiscoveryFolderADeployCouldNotRead(t *testing.T) {
+	t.Parallel()
+
+	cfg := projectWith(t, `{"slug":"shop","discovery":{"paths":["nowhere"]}}`, map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`})
+	got := checkApps(cfg)
+	if got.verdict != verdictFail || !strings.Contains(got.text, `the configured path "nowhere" does not exist`) {
+		t.Errorf("check = %+v, want a failure naming the missing discovery path", got)
 	}
 }

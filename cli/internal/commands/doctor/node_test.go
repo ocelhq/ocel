@@ -30,10 +30,10 @@ func TestAGoProjectNeedsNoNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := goProject(t, "ocel.json")
-	if reasons := nodeReasons(cfg); len(reasons) != 0 {
-		t.Fatalf("nodeReasons() = %v, want none", reasons)
+	if reasons := reasonsFor(cfg); len(reasons) != 0 {
+		t.Fatalf("reasonsFor() = %v, want none", reasons)
 	}
-	if _, applies := nodeCheck(context.Background(), cfg); applies {
+	if _, applies := checkNode(cfg); applies {
 		t.Fatal("a Go project was checked for node")
 	}
 }
@@ -42,12 +42,12 @@ func TestATypeScriptConfigNeedsNodeAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	cfg := goProject(t, "ocel.config.ts")
-	reasons := nodeReasons(cfg)
+	reasons := reasonsFor(cfg)
 	if !slices.Contains(reasons, "ocel.config.ts is TypeScript") {
 		t.Fatalf("nodeReasons() = %v, want the TypeScript config named", reasons)
 	}
 
-	got, applies := nodeCheck(context.Background(), cfg)
+	got, applies := checkNode(cfg)
 	if !applies {
 		t.Fatal("a TypeScript config was not checked for node")
 	}
@@ -67,8 +67,8 @@ func TestAJavaScriptAppNeedsNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Apps = []project.App{{Name: "web", Path: "apps/web", Compute: provider.ComputeContainer}}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "an app is JavaScript") {
-		t.Fatalf("nodeReasons() = %v, want the JavaScript app named", reasons)
+	if reasons := reasonsFor(cfg); !slices.Contains(reasons, "an app is JavaScript") {
+		t.Fatalf("reasonsFor() = %v, want the JavaScript app named", reasons)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestADeclarationRootWrittenInJavaScriptNeedsNode(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "main.ts"), []byte("export {};"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
-		t.Fatalf("nodeReasons() = %v, want the JavaScript declarations named", reasons)
+	if reasons := reasonsFor(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
+		t.Fatalf("reasonsFor() = %v, want the JavaScript declarations named", reasons)
 	}
 }
 
@@ -93,8 +93,8 @@ func TestADiscoveryPathThatIsNotThereNeedsNodeRatherThanPassingSilently(t *testi
 
 	cfg := goProject(t, "ocel.json")
 	cfg.DiscoveryPaths = []string{"nowhere"}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
-		t.Fatalf("nodeReasons() = %v, want node checked for roots it could not read", reasons)
+	if reasons := reasonsFor(cfg); !slices.Contains(reasons, "this project declares resources in JavaScript") {
+		t.Fatalf("reasonsFor() = %v, want node checked for roots it could not read", reasons)
 	}
 }
 
@@ -106,8 +106,8 @@ func TestTheFixturesOfAnotherLanguageNeedNoNode(t *testing.T) {
 		}
 		tried++
 		t.Run(filepath.Base(filepath.Dir(dir))+"/"+filepath.Base(dir), func(t *testing.T) {
-			if reasons := nodeReasons(&project.Project{Dir: dir}); len(reasons) != 0 {
-				t.Fatalf("nodeReasons() = %v for %s, and its own language is not js", reasons, dir)
+			if reasons := reasonsFor(&project.Project{Dir: dir}); len(reasons) != 0 {
+				t.Fatalf("reasonsFor() = %v for %s, and its own language is not js", reasons, dir)
 			}
 		})
 	}
@@ -121,28 +121,38 @@ func TestConfiguredTransformsNeedNode(t *testing.T) {
 
 	cfg := goProject(t, "ocel.json")
 	cfg.Transforms = []string{"./transforms/default.transform.ts"}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project lists transforms") {
-		t.Fatalf("nodeReasons() = %v, want the transforms named", reasons)
+	if reasons := reasonsFor(cfg); !slices.Contains(reasons, "this project lists transforms") {
+		t.Fatalf("reasonsFor() = %v, want the transforms named", reasons)
 	}
 
 	cfg.Transforms = nil
-	if reasons := nodeReasons(cfg); len(reasons) != 0 {
-		t.Fatalf("nodeReasons() = %v, want none for an empty transform list", reasons)
+	if reasons := reasonsFor(cfg); len(reasons) != 0 {
+		t.Fatalf("reasonsFor() = %v, want none for an empty transform list", reasons)
 	}
 }
 
 func TestNodeMissingFromPATHFailsOnlyWhereItIsNeeded(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	if _, applies := nodeCheck(context.Background(), goProject(t, "ocel.json")); applies {
+	if _, applies := checkNode(goProject(t, "ocel.json")); applies {
 		t.Fatal("a Go project failed over node it never runs")
 	}
 
-	got, applies := nodeCheck(context.Background(), goProject(t, "ocel.config.ts"))
+	got, applies := checkNode(goProject(t, "ocel.config.ts"))
 	if !applies || got.verdict != verdictFail {
 		t.Fatalf("nodeCheck() = %+v, %v, want a failure naming the missing node", got, applies)
 	}
 	if !strings.Contains(got.text, "not on PATH") {
 		t.Fatalf("check text = %q, want it to say node is not on PATH", got.text)
 	}
+}
+
+func reasonsFor(cfg *project.Project) []string {
+	roots, err := discovery.RootsOf(cfg)
+	return nodeReasons(cfg, roots, err)
+}
+
+func checkNode(cfg *project.Project) (check, bool) {
+	roots, err := discovery.RootsOf(cfg)
+	return nodeCheck(context.Background(), cfg, roots, err)
 }
