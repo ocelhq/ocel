@@ -142,3 +142,23 @@ func TestAWantOfAPartTheProviderNoLongerOffersIsLeftOut(t *testing.T) {
 		t.Errorf("Apply() features = %v, want nothing this provider does not offer", last.Features)
 	}
 }
+
+func TestRemovingABootstrapForgetsWhatProjectsWantedOfIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	recordWant(t, vendor, fake.FeatureCache, "shop")
+
+	stream, err := client.RemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatalf("RemoveBootstrap() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveBootstrap() = %q, %v", result.GetError(), err)
+	}
+
+	if wants := wantedParts(t, vendor, environment.TierProduction); len(wants) != 0 {
+		t.Errorf("wants = %v, want none: the next bootstrap of this tier starts from nothing", wants)
+	}
+}
