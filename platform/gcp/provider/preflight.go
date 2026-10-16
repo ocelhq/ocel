@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -38,6 +39,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			}
 			parts = appendMissing(parts, []string{tasksPart})
 		}
+	}
+	if slices.ContainsFunc(pre.Uses, func(uses buildoutput.Uses) bool { return uses.Revalidation }) {
+		parts = append(parts, tagDatabasePart)
 	}
 	return p.addParts(ctx, pre, parts)
 }

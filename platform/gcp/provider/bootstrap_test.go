@@ -246,7 +246,7 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 	}
 }
 
-func TestRemovingATierTakesItsTagsDatabaseAndKeepsTheDatabaseItsSiblingShares(t *testing.T) {
+func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 	t.Parallel()
 
 	names := Names{namespace: "ocel", project: "acme-prod"}
@@ -264,8 +264,5 @@ func TestRemovingATierTakesItsTagsDatabaseAndKeepsTheDatabaseItsSiblingShares(t 
 	}
 	if got := actions[names.Database()]; got != provider.ActionKeep {
 		t.Errorf("removing a tier whose sibling is installed does %s to the shared database, want keep", got)
-	}
-	if got := actions[names.TagDatabase(tier)]; got != provider.ActionDisableThenDelete {
-		t.Errorf("removing a tier whose sibling is installed does %s to its tags database, want %s", got, provider.ActionDisableThenDelete)
 	}
 }

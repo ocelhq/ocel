@@ -61,7 +61,7 @@ func newPartDatabasesRole(names Names) customRole {
 func partDatabases(names Names) []string {
 	var databases []string
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		databases = append(databases, names.TaskDatabase(tier))
+		databases = append(databases, names.TagDatabase(tier), names.TaskDatabase(tier))
 	}
 	return databases
 }

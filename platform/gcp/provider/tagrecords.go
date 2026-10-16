@@ -14,7 +14,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -28,7 +30,8 @@ const (
 
 	tagRecordsRole = "roles/datastore.user"
 
-	reasonTagsUnindexed = "it has no index the tag records of an app are read through"
+	tagDatabasePart    = "tag-database"
+	tagDatabaseSummary = "the tag records of every Next app this tier serves: one document per revalidated tag, read by every instance of the app"
 )
 
 func tagIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
@@ -50,6 +53,42 @@ func tagDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanag
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " tag records",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TagDatabase(tier))),
 	}
+}
+
+func (b bootstrap) tagDatabasePart(tier environment.Tier) part {
+	var resources []provider.PartResource
+	if !b.clients.emulated() {
+		resources = append(resources, provider.PartResource{Kind: string(KindDatabase), ID: b.clients.TagDatabase(tier)})
+	}
+	return part{
+		name:      tagDatabasePart,
+		summary:   tagDatabaseSummary,
+		resources: resources,
+		shape:     tagDatabaseShape(b.clients.Names, tier, b.clients.region),
+		make:      func(ctx context.Context) error { return b.makeTagDatabase(ctx, tier) },
+		remove:    func(ctx context.Context) error { return b.removeTagDatabase(ctx, tier) },
+	}
+}
+
+func tagDatabaseShape(names Names, tier environment.Tier, region string) []pricing.Shaped {
+	return []pricing.Shaped{{Name: names.TagDatabase(tier), Type: tfFirestoreDatabase, Properties: map[string]any{"location_id": region, "type": nativeFirestore}}}
+}
+
+func (b bootstrap) makeTagDatabase(ctx context.Context, tier environment.Tier) error {
+	if b.clients.emulated() {
+		return nil
+	}
+	if err := b.makeDatabase(ctx, survey{Project: b.clients.project, Region: b.clients.region}, b.clients.TagDatabase(tier)); err != nil {
+		return err
+	}
+	return b.ensureTagIndexes(ctx, tier)
+}
+
+func (b bootstrap) removeTagDatabase(ctx context.Context, tier environment.Tier) error {
+	if b.clients.emulated() {
+		return nil
+	}
+	return b.takeDatabase(ctx, b.clients.TagDatabase(tier))
 }
 
 func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) error {
@@ -86,45 +125,6 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 		}
 	}
 	return nil
-}
-
-func (b bootstrap) tagDatabasePresence(ctx context.Context, id string) (presence, error) {
-	found, err := b.databasePresence(ctx, id)
-	if err != nil || !found.present || b.clients.emulated() {
-		return found, err
-	}
-	if found.mends != "" {
-		return found, nil
-	}
-	service, err := b.clients.Databases()
-	if err != nil {
-		return presence{}, err
-	}
-	listed, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.List(
-		databasePath(b.clients, id)+"/collectionGroups/"+tagCollection).Context(ctx).Do)
-	if err != nil {
-		return presence{}, fmt.Errorf("read the indexes of the tag records in %q: %w", id, err)
-	}
-	for _, index := range listed.Indexes {
-		if index.State == "READY" && readsTagsByPrefix(index) {
-			return found, nil
-		}
-	}
-	found.mends = reasonTagsUnindexed
-	return found, nil
-}
-
-func readsTagsByPrefix(index *firestoreadmin.GoogleFirestoreAdminV1Index) bool {
-	want := tagIndexes()[0]
-	if index.QueryScope != want.QueryScope || len(index.Fields) < len(want.Fields) {
-		return false
-	}
-	for i, field := range want.Fields {
-		if index.Fields[i].FieldPath != field.FieldPath || index.Fields[i].Order != field.Order {
-			return false
-		}
-	}
-	return true
 }
 
 func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, prefix string, log progress.Log) error {

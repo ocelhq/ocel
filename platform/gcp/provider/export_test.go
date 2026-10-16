@@ -10,8 +10,9 @@ import (
 var IngressFor = ingressFor
 
 const (
-	TasksPart   = tasksPart
-	NetworkPart = networkPart
+	TasksPart       = tasksPart
+	NetworkPart     = networkPart
+	TagDatabasePart = tagDatabasePart
 )
 
 func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...string) error {
