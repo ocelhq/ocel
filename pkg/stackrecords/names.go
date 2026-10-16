@@ -22,6 +22,10 @@ func ProjectKey(tier environment.Tier, slug string) keyvalue.Key {
 	return ProjectsPartition(tier).Key(slug)
 }
 
+func PartsUsedKey(tier environment.Tier, project string) keyvalue.Key {
+	return ProjectsPartition(tier).Key(project, partsSegment)
+}
+
 func bootstrapPartition(tier environment.Tier) keyvalue.Partition {
 	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}
 }

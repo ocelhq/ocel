@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -67,7 +68,7 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 			return err
 		}
 	}
-	return recordPartsUsed(ctx, p.KeyValues(), tier, pre.Deploy.Slug, used)
+	return stackrecords.RecordPartsUsed(ctx, p.KeyValues(), tier, pre.Deploy.Slug, used)
 }
 
 func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPreflight) error {
