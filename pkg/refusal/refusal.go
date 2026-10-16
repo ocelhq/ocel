@@ -1,6 +1,9 @@
 package refusal
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type Code string
 
@@ -22,4 +25,17 @@ func (r Refusal) Error() string { return r.Message }
 
 func Refuse(code Code, format string, args ...any) error {
 	return Refusal{Code: code, Message: fmt.Sprintf(format, args...)}
+}
+
+type Option struct{ Refusal }
+
+func (o Option) Unwrap() error { return o.Refusal }
+
+func RefuseOption(code Code, format string, args ...any) error {
+	return Option{Refusal: Refusal{Code: code, Message: fmt.Sprintf(format, args...)}}
+}
+
+func IsOption(err error) bool {
+	var refused Option
+	return errors.As(err, &refused)
 }

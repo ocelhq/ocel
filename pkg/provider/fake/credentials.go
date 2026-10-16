@@ -25,6 +25,12 @@ func (c *Credentials) Deny(hint string) {
 	c.refusal = refusal.Refuse(refusal.CodeDenied, "%s", hint)
 }
 
+func (c *Credentials) RejectOption(message string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refusal = refusal.RefuseOption(refusal.CodeInvalid, "%s", message)
+}
+
 func (c *Credentials) Ask(message string, question provider.Question) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

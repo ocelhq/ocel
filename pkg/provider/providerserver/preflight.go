@@ -53,7 +53,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		principal, err = p.Credentials().Whoami(ctx)
 		return err
 	})
-	if _, asked := provider.QuestionOf(err); asked {
+	if _, asked := provider.QuestionOf(err); asked || refusal.IsOption(err) {
 		return nil, provider.RefusalError(err)
 	}
 	if err != nil {
