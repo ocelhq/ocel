@@ -413,6 +413,14 @@ func TestEveryCredentialListsTheResourcesOfEveryBootstrapStackOfItsTier(t *testi
 	}
 }
 
+func TestEveryCredentialMayListTheRegionsItsRegionIsCheckedAgainst(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		if !grantsOf(t, document)[grant{action: "ec2:DescribeRegions", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s credential does not grant ec2:DescribeRegions on %q, so a mistyped region meets the cloud's own error rather than the region meant", purpose, UnscopedResource)
+		}
+	}
+}
+
 func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
