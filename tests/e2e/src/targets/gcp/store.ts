@@ -114,8 +114,6 @@ export const BOOTSTRAP_APIS = [
   "cloudtasks.googleapis.com",
 ];
 
-export const ALB_FEATURE = "alb-edge";
-
 export async function switchOn(endpoint: string, project: string): Promise<void> {
   for (const api of BOOTSTRAP_APIS) {
     const at = `${endpoint}/v1/projects/${project}/services/${api}:enable`;

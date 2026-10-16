@@ -946,3 +946,41 @@ func TestAWarmThatFailsThroughTheLoadBalancerNamesTheRevisionItWarmed(t *testing
 func hostOf(shared edge.EdgeStack, hostname string) Host {
 	return shared.(*stack).recorded.Hosts[hostname]
 }
+
+func TestThePreviewWildcardIsAUserOfTheLoadBalancerPartFromBeforeItRaisesItUntilItIsReleased(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := balancing(t)
+	var claimed, released []string
+	balancer.deps.FrontPart = &FrontPart{
+		Claim: func(_ context.Context, tier environment.Tier, user string) error {
+			claimed = append(claimed, string(tier)+"/"+user)
+			if declared := w.declarations(LoadBalancerStack(environment.TierPreview)); len(declared) != 0 {
+				t.Errorf("the wildcard claimed the load balancer part after raising it with %v, want the part to add the load balancer", keys(declared))
+			}
+			return nil
+		},
+		Release: func(_ context.Context, tier environment.Tier, user string) error {
+			released = append(released, string(tier)+"/"+user)
+			if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewEntryName(previewBase)]; declared {
+				t.Error("the wildcard released the load balancer part while its certificate is still entered on it")
+			}
+			return nil
+		},
+	}
+	user := "preview/" + edge.PreviewWildcard(previewBase)
+
+	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	if !slices.Equal(claimed, []string{user}) || len(released) != 0 {
+		t.Errorf("binding the wildcard claimed %v and released %v, want it to claim the load balancer part as %s alone", claimed, released, user)
+	}
+	if err := balancer.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+		t.Fatalf("DestroyPreviewWildcard = %v", err)
+	}
+	if !slices.Equal(released, []string{user}) {
+		t.Errorf("releasing the wildcard released %v, want the load balancer part released by %s: it may be the last user", released, user)
+	}
+}

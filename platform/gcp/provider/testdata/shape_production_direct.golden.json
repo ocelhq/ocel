@@ -99,6 +99,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:production/google_project_iam_custom_role:ocel_cdn_purge",
+      "scope": "project:shop/shared:production",
+      "vendor": "gcp",
+      "type": "google_project_iam_custom_role",
+      "name": "ocel_cdn_purge",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:production/google_project_iam_custom_role:ocel_parts",
       "scope": "project:shop/shared:production",
       "vendor": "gcp",

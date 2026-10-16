@@ -1025,3 +1025,32 @@ func TestBootstrappingAPreviewTierWhoseGateRecordsWereSealedForPreviewsAloneAtta
 		t.Errorf("the preview plugin holds %s, want the protected preview's keys", config)
 	}
 }
+
+func TestDestroyingAProjectReleasesTheLoadBalancerOnlyOnceItsHostsAreUnrouted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	var released []string
+	balancer.deps.FrontPart = &FrontPart{
+		Claim: func(context.Context, environment.Tier, string) error { return nil },
+		Release: func(_ context.Context, tier environment.Tier, slug string) error {
+			released = append(released, string(tier)+"/"+slug)
+			if hosts := w.hosts(loadBalancerNames(tier, false).URLMap); len(hosts) != 0 {
+				t.Errorf("the load balancer was released while it still routes %v", hosts)
+			}
+			return nil
+		},
+	}
+	router := routerStack{s: reconcileGated(t, balancer, "shop", &shopGate)}
+	if err := router.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := router.s.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy = %v", err)
+	}
+	if !slices.Equal(released, []string{"preview/shop"}) {
+		t.Errorf("Destroy released %v, want the preview load balancer released by shop: the last project behind it takes it down", released)
+	}
+}

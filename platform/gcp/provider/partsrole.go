@@ -37,7 +37,7 @@ func newPartsRole(names Names) customRole {
 		id:          names.PartsRole(),
 		title:       "ocel bootstrap parts (" + string(names.namespace) + ")",
 		description: "lets a deploy add the parts of a bootstrap it needs on first use, where Google offers no condition to name them by, and nothing else",
-		permissions: slices.Concat([]string{servicesReadPermission}, networkPartPermissions),
+		permissions: slices.Concat([]string{servicesReadPermission}, networkPartPermissions, albPartPermissions),
 		driftReason: "it holds other permissions than a deploy needs to add the parts of a bootstrap",
 	}
 }

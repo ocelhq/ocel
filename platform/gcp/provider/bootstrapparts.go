@@ -115,7 +115,7 @@ func (b bootstrap) surveyedParts(read survey, stacks []provider.BootstrapStack) 
 }
 
 func featureShape(read survey, feature string) *provider.PartShape {
-	if feature != albFeature && feature != albShieldedFeature {
+	if feature != albShieldedFeature {
 		return nil
 	}
 	shape, err := alb.Shape(pricing.EdgeSite{Tier: read.Tier, Region: read.Region})

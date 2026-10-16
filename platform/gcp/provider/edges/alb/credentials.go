@@ -84,7 +84,8 @@ func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.Crede
 	case edge.PurposeBootstrap:
 		does = "provisions the load balancer and takes it down"
 	case edge.PurposeDeploy:
-		does = "binds a hostname: a certificate and its map entry, a backend onto a serverless NEG, and a host rule in the url map"
+		does = "adds the load balancer with the first deploy behind it and takes it down with the last, " +
+			"and binds a hostname: a certificate and its map entry, a backend onto a serverless NEG, and a host rule in the url map"
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %s edge lists its roles for bootstrap or deploy credentials, not %q", Kind, string(purpose))

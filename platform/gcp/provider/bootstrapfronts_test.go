@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -18,17 +19,22 @@ import (
 )
 
 type frontRegistry struct {
+	mu     sync.Mutex
 	opened []edge.Kind
 	front  *countingFront
 }
 
 func (r *frontRegistry) Open(kind edge.Kind, _ provider.Options) (edge.Edge, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.opened = append(r.opened, kind)
 	return r.front, nil
 }
 
 type countingFront struct {
 	*alb.Edge
+	mu        sync.Mutex
+	tearing   func(ctx context.Context) error
 	raised    []environment.Tier
 	torn      []environment.Tier
 	installed bool
@@ -64,11 +70,18 @@ func (f *countingFront) Hooks() edge.Hooks {
 }
 
 func (f *countingFront) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.raised = append(f.raised, tier)
 	return f.out, nil
 }
 
-func (f *countingFront) Teardown(_ context.Context, tier environment.Tier) error {
+func (f *countingFront) Teardown(ctx context.Context, tier environment.Tier) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.tearing != nil {
+		return f.tearing(ctx)
+	}
 	if f.refusal != nil {
 		return f.refusal
 	}
@@ -114,13 +127,13 @@ func TestAFeatureWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *
 	b, registry := fronting(t)
 	registry.front.installed = false
 
-	described, err := b.described(context.Background(), surveyed(albFeature))
+	described, err := b.described(context.Background(), surveyed(albShieldedFeature))
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
-	stack, reported := featureStack(described, albFeature)
+	stack, reported := featureStack(described, albShieldedFeature)
 	if !reported {
-		t.Fatalf("Describe reports %+v, want a stack for the %q the stamp records", described.Stacks, albFeature)
+		t.Fatalf("Describe reports %+v, want a stack for the %q the stamp records", described.Stacks, albShieldedFeature)
 	}
 	if stack.Present {
 		t.Error("a feature the stamp records is reported installed whatever the front says, so a raise that failed after the stamp was written " +
@@ -134,11 +147,11 @@ func TestAFeatureWhoseFrontIsInstalledIsReportedPresent(t *testing.T) {
 	b, registry := fronting(t)
 	registry.front.installed = true
 
-	described, err := b.described(context.Background(), surveyed(albFeature))
+	described, err := b.described(context.Background(), surveyed(albShieldedFeature))
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
-	if stack, _ := featureStack(described, albFeature); !stack.Present {
+	if stack, _ := featureStack(described, albShieldedFeature); !stack.Present {
 		t.Error("a feature whose front reported its address and its maps is not reported installed, so every bootstrap raises it again")
 	}
 }
@@ -160,7 +173,7 @@ func TestABootstrapThatProvisionedTheLoadBalancerTakesItDownAgain(t *testing.T) 
 	t.Parallel()
 
 	b, registry := fronting(t)
-	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature}); err != nil {
+	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albShieldedFeature}); err != nil {
 		t.Fatalf("tearFronts = %v", err)
 	}
 	if !slices.Contains(registry.front.torn, environment.TierProduction) {
@@ -172,13 +185,13 @@ func TestRemovingTheFeatureTakesTheLoadBalancerDownRatherThanJustForgettingIt(t 
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
-	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err != nil {
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albShieldedFeature}}
+	if err := b.dropFronts(context.Background(), surveyed(albShieldedFeature), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
 	if !slices.Contains(registry.front.torn, environment.TierProduction) {
 		t.Errorf("removing %q tore down %v, and un-stamping a feature whose address, forwarding rule and maps are still provisioned bills "+
-			"for a front nothing will ever take down again", albFeature, registry.front.torn)
+			"for a front nothing will ever take down again", albShieldedFeature, registry.front.torn)
 	}
 }
 
@@ -187,12 +200,12 @@ func TestAFeatureWhoseFrontRefusedToComeDownStaysStamped(t *testing.T) {
 
 	b, registry := fronting(t)
 	registry.front.refusal = refusal.Refuse(refusal.CodeInvalid, "shop.example.com is still bound")
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albShieldedFeature}}
 
-	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err == nil {
+	if err := b.dropFronts(context.Background(), surveyed(albShieldedFeature), req, nil); err == nil {
 		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still installed")
 	}
-	if installed := installedFeatures(b.Catalogue(), []string{albFeature}, req); slices.Contains(installed, albFeature) {
+	if installed := installedFeatures(b.Catalogue(), []string{albShieldedFeature}, req); slices.Contains(installed, albShieldedFeature) {
 		t.Errorf("the stamp would still name %v after a removal, which is only correct because the apply stops on the refusal above", installed)
 	}
 }
@@ -202,10 +215,10 @@ func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *test
 
 	b, registry := fronting(t)
 	registry.front.bound = []string{"shop.example.com"}
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albShieldedFeature}}
 
 	var refused refusal.Refusal
-	err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
+	err := b.dropFronts(context.Background(), surveyed(albShieldedFeature), req, nil)
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "shop.example.com") {
 		t.Fatalf("dropFronts with a hostname still bound = %v, want a refusal naming it", err)
 	}
@@ -219,7 +232,7 @@ func TestAFeatureNothingInstalledIsNotTornDownOnRemoval(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albShieldedFeature}}
 	if err := b.dropFronts(context.Background(), surveyed(), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
@@ -232,11 +245,11 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsFeaturesDeclareTheyNeed(t *test
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}
 	if err := b.raiseFronts(context.Background(), req, nil); err != nil {
 		t.Fatalf("raiseFronts = %v", err)
 	}
-	if !slices.Equal(registry.opened, []edge.Kind{alb.Kind}) {
+	if !slices.Equal(registry.opened, []edge.Kind{"cloudflare"}) {
 		t.Errorf("the bootstrap opened %v, want the edge the feature's Needs name: a second edge with a front of its own must not need a branch here",
 			registry.opened)
 	}
@@ -249,14 +262,14 @@ func TestAFrontThatReportsNothingIsInstalledAndOwnsNoHostname(t *testing.T) {
 	registry.front.silent = true
 	registry.front.bound = []string{"shop.example.com"}
 
-	installed, err := b.frontInstalled(context.Background(), environment.TierProduction, albFeature)
+	installed, err := b.frontInstalled(context.Background(), environment.TierProduction, albShieldedFeature)
 	if err != nil {
 		t.Fatalf("frontInstalled = %v", err)
 	}
 	if !installed {
 		t.Error("a front that reports nothing about its bootstrap is taken for gone, so the stamp alone can no longer say the feature is installed")
 	}
-	if err := b.frontsFree(context.Background(), environment.TierProduction, []string{albFeature}); err != nil {
+	if err := b.frontsFree(context.Background(), environment.TierProduction, []string{albShieldedFeature}); err != nil {
 		t.Errorf("frontsFree = %v, want nothing owned by a front that names no bound hostname", err)
 	}
 }
@@ -266,18 +279,18 @@ func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichTier(t *testi
 
 	b, _ := fronting(t)
 	progress := &fake.Log{}
-	raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
+	raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}
 	if err := b.raiseFronts(context.Background(), raising, progress); err != nil {
 		t.Fatalf("raiseFronts = %v", err)
 	}
-	dropping := provider.BootstrapRequest{Tier: environment.TierPreview, Remove: []string{albFeature}}
-	if err := b.dropFronts(context.Background(), surveyed(albFeature), dropping, progress); err != nil {
+	dropping := provider.BootstrapRequest{Tier: environment.TierPreview, Remove: []string{albShieldedFeature}}
+	if err := b.dropFronts(context.Background(), surveyed(albShieldedFeature), dropping, progress); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
 
 	want := []string{
-		"INFO Installing feature alb-edge for production: " + b.Catalogue()[0].Summary,
-		"INFO Taking down the alb edge's front for preview: this bootstrap no longer requests feature alb-edge",
+		"INFO Installing feature alb-cloudflare-origin for production: " + b.Catalogue()[0].Summary,
+		"INFO Taking down the alb edge's front for preview: this bootstrap no longer requests feature alb-cloudflare-origin",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the bootstrap said %q, want %q", got, want)
@@ -292,18 +305,18 @@ func TestDroppingTheEdgeFeatureForgetsWhatItsBootstrapAdopted(t *testing.T) {
 		take func(b bootstrap) error
 	}{
 		{"dropFronts", func(b bootstrap) error {
-			req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
-			return b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
+			req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albShieldedFeature}}
+			return b.dropFronts(context.Background(), surveyed(albShieldedFeature), req, nil)
 		}},
 		{"tearFronts", func(b bootstrap) error {
-			return b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature})
+			return b.tearFronts(context.Background(), environment.TierProduction, []string{albShieldedFeature})
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			b, registry, h := frontingWithSecrets(t)
 			registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
-			raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
+			raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}
 			if err := b.raiseFronts(context.Background(), raising, nil); err != nil {
 				t.Fatalf("raiseFronts = %v", err)
 			}
@@ -332,11 +345,11 @@ func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
 
 	b, registry, h := frontingWithSecrets(t)
 	registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
-	if err := b.raiseFronts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}, nil); err != nil {
+	if err := b.raiseFronts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	registry.front.refusal = refusal.Refuse(refusal.CodeInvalid, "still bound")
-	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature}); err == nil {
+	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albShieldedFeature}); err == nil {
 		t.Fatal("tearFronts = nil though the front refused")
 	}
 	if !h.secrets.has(h.clients.PurgeSeedSecret(environment.TierProduction, registry.front.Kind())) {
@@ -366,11 +379,11 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 	b, registry := fronting(t)
 	registry.front.plan = []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate}}
 
-	installs, err := b.plannedFronts(context.Background(), environment.TierProduction, []string{albFeature})
+	installs, err := b.plannedFronts(context.Background(), environment.TierProduction, []string{albShieldedFeature})
 	if err != nil {
 		t.Fatal(err)
 	}
-	removes, err := b.removedFronts(context.Background(), environment.TierProduction, []string{albFeature})
+	removes, err := b.removedFronts(context.Background(), environment.TierProduction, []string{albShieldedFeature})
 	if err != nil {
 		t.Fatal(err)
 	}

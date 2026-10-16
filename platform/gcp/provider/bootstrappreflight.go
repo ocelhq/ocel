@@ -207,7 +207,7 @@ func databasesGrant(names Names) string {
 }
 
 func partsGrant(names Names) string {
-	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity and Service Usage name no resource attribute an IAM condition could hold a part by"
+	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute an IAM condition could hold a part by"
 }
 
 func partDatabasesGrant(names Names) string {
@@ -245,23 +245,17 @@ func (b bootstrap) preflight(ctx context.Context, read survey, features []string
 
 func permissionsFor(features []string) []string {
 	permissions := slices.Clone(bootstrapPermissions)
-	switch {
-	case slices.Contains(features, albShieldedFeature):
+	if slices.Contains(features, albShieldedFeature) {
 		permissions = appendMissing(permissions, alb.ShieldedPermissions)
 		permissions = appendMissing(permissions, assetStorePermissions)
-	case slices.Contains(features, albFeature):
-		permissions = appendMissing(permissions, alb.Permissions)
 	}
 	return permissions
 }
 
 func rolesCovering(features []string) []string {
 	roles := rolesFor(edge.PurposeBootstrap)
-	switch {
-	case slices.Contains(features, albShieldedFeature):
+	if slices.Contains(features, albShieldedFeature) {
 		roles = appendMissing(roles, alb.ShieldedRoles())
-	case slices.Contains(features, albFeature):
-		roles = appendMissing(roles, alb.Roles())
 	}
 	return roles
 }

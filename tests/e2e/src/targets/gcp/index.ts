@@ -54,7 +54,6 @@ import { gcpSlug, namespaceOf } from "./names";
 import { assetPrefixOf, readReleaseFile, tierBucket } from "./releaseFiles";
 import { countOriginRequests } from "./requestLog";
 import {
-  ALB_FEATURE,
   accessToken,
   deleteService,
   exposedServices,
@@ -161,29 +160,14 @@ export function gcpSweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv
   );
 }
 
-function hasCloudflareZone(env: NodeJS.ProcessEnv): boolean {
-  return ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"].every((name) =>
-    env[name]?.trim(),
-  );
-}
-
-export function laneFeatures(env: NodeJS.ProcessEnv, emulated: boolean): string[] {
-  return !emulated && hasCloudflareZone(env) ? [ALB_FEATURE] : [];
-}
-
-function featureArgs(features: string[]): string[] {
-  return features.length > 0 ? ["--features", features.join(",")] : [];
-}
-
 export function previewBootstrapArgs(
-  env: NodeJS.ProcessEnv,
   emulated: boolean,
   planned: { cells: { phases: string[] }[] },
 ): string[] | undefined {
   if (emulated || !planned.cells.some((cell) => cell.phases.includes("preview"))) {
     return undefined;
   }
-  return ["bootstrap", "preview", "--yes", ...featureArgs(laneFeatures(env, emulated))];
+  return ["bootstrap", "preview", "--yes"];
 }
 
 export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previews {
@@ -246,13 +230,8 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
         target: "gcp",
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
-      const features = laneFeatures(process.env, emulator !== undefined);
-      await ocel(
-        dir,
-        ["bootstrap", "production", "--yes", ...featureArgs(features)],
-        childEnv(dir),
-      );
-      const preview = previewBootstrapArgs(process.env, emulator !== undefined, planned);
+      await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir));
+      const preview = previewBootstrapArgs(emulator !== undefined, planned);
       if (preview) {
         await ocel(dir, preview, childEnv(dir));
       }

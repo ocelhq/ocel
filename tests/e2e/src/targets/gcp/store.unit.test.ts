@@ -11,7 +11,6 @@ import {
   TIER_LABEL,
 } from "./names";
 import {
-  ALB_FEATURE,
   accessToken,
   BOOTSTRAP_APIS,
   exposedServices,
@@ -58,17 +57,6 @@ describe("accessToken", () => {
 
     expect(token).toBeUndefined();
     expect(minted).toBe(0);
-  });
-});
-
-describe("the load balancer feature", () => {
-  it("bootstraps the load balancer under the feature name the provider catalogues for the alb edge", async () => {
-    const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "bootstrapfeatures.go"),
-      "utf8",
-    );
-
-    expect(go).toMatch(new RegExp(`albFeature\\s*=\\s*"${ALB_FEATURE}"`));
   });
 });
 

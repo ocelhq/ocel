@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -187,69 +186,5 @@ func TestAnUnknownCustomRoleIsRefusedByName(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "no custom role is named ocel_other") {
 		t.Errorf("make(unknown role) = %v, want it to say no custom role is named ocel_other", err)
-	}
-}
-
-func TestOnlyANonEmulatedAlbBootstrapKeepsTheCDNPurgeRole(t *testing.T) {
-	t.Parallel()
-
-	for name, test := range map[string]struct {
-		features []string
-		emulated bool
-		want     bool
-	}{
-		"alb against Google":       {[]string{albFeature}, false, true},
-		"alb against an emulator":  {[]string{albFeature}, true, false},
-		"no feature":               {nil, false, false},
-		"another feature":          {[]string{albShieldedFeature}, false, false},
-		"alb among other features": {[]string{albShieldedFeature, albFeature}, false, true},
-	} {
-		if got := keepsCDNPurgeRole(test.features, test.emulated); got != test.want {
-			t.Errorf("%s: keepsCDNPurgeRole = %t, want %t", name, got, test.want)
-		}
-	}
-}
-
-func TestAnEmulatedBootstrapWithTheAlbMakesNoCDNPurgeRole(t *testing.T) {
-	t.Parallel()
-	server := &roleServer{endpoint: cdnPurgeRoleEndpoint}
-	b := server.bootstrap(t)
-	progress := &fake.Log{}
-
-	err := b.raiseCDNPurgeRole(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}, progress)
-
-	if err != nil || len(server.writes) != 0 || len(progress.Lines()) != 0 {
-		t.Errorf("raiseCDNPurgeRole() = %v after writes %v and saying %q, want nothing against an emulator: floci answers 404 to every roles call", err, server.writes, progress.Lines())
-	}
-}
-
-func TestDroppingTheAlbSaysTheCDNPurgeRoleIsKept(t *testing.T) {
-	t.Parallel()
-	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: currentCDNPurgeRole()}
-	b, _ := fronting(t)
-	b.clients = server.bootstrap(t).clients
-	progress := &fake.Log{}
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
-
-	if err := b.dropFeatures(t.Context(), surveyed(albFeature), req, progress); err != nil {
-		t.Fatalf("dropFeatures = %v", err)
-	}
-
-	want := "INFO Kept custom role projects/acme-prod/roles/ocel_cdn_purge: " + reasonRoleKept
-	if !slices.Contains(progress.Lines(), want) {
-		t.Errorf("the bootstrap said %q, want a line %q", progress.Lines(), want)
-	}
-	if len(server.writes) != 0 {
-		t.Errorf("dropping the alb wrote %v to the role, want nothing: Google holds a deleted role's id for 44 days", server.writes)
-	}
-}
-
-func TestTheAlbFeatureSaysItKeepsACustomRoleThatMayOnlyClearCloudCDN(t *testing.T) {
-	t.Parallel()
-
-	summary := bootstrap{}.summaryOf(albFeature)
-
-	if !strings.Contains(summary, "a custom role that may only clear Cloud CDN, which Next apps behind it are granted") {
-		t.Errorf("the alb feature summary = %q, want it to name the purge role", summary)
 	}
 }

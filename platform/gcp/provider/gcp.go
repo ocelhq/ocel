@@ -130,6 +130,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		CheckBucket:           s3store.Check,
 		ProveIdentity:         ports.ProveIdentity,
 		EnsureEnvSourceSync:   p.EnsureEnvSourceSync,
+		RemovePartUser:        p.RemovePartUser,
 		ForwardPorts:          p.ForwardPorts,
 		ServeBindingProxy:     p.ServeBindingProxy,
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
