@@ -169,7 +169,7 @@ func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estima
 	return idle, estimated.GetCurrency(), nil
 }
 
-func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, adding []string) (map[string]stackrecords.BootstrapPart, error) {
+func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, adding []string, wants map[string][]string) (map[string]stackrecords.BootstrapPart, error) {
 	var names []string
 	if !status.Present {
 		names = append(names, provider.BasePart)
@@ -181,10 +181,11 @@ func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, addin
 	}
 	claimed := map[string]stackrecords.BootstrapPart{}
 	for _, name := range names {
-		claim, won, err := stackrecords.ClaimBootstrapPart(ctx, r.KeyValues, status.Tier, name, stackrecords.BootstrapPart{
-			WrittenBy: string(r.WrittenBy),
-			AddedAt:   time.Now().UTC(),
-		})
+		claim := stackrecords.BootstrapPart{WrittenBy: string(r.WrittenBy), AddedAt: time.Now().UTC()}
+		if wanting := wants[name]; len(wanting) > 0 {
+			claim.AddedBy = wanting[0]
+		}
+		claim, won, err := stackrecords.ClaimBootstrapPart(ctx, r.KeyValues, status.Tier, name, claim)
 		if storeAbsent(err) {
 			return claimed, nil
 		}
@@ -235,6 +236,15 @@ func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, featu
 	}
 	for _, name := range removed {
 		if err := stackrecords.ForgetBootstrapPart(ctx, r.KeyValues, tier, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Readiness) forgetMetWants(ctx context.Context, tier environment.Tier, wants map[string][]string) error {
+	for _, part := range slices.Sorted(maps.Keys(wants)) {
+		if err := stackrecords.ForgetBootstrapWants(ctx, r.KeyValues, tier, part); err != nil {
 			return err
 		}
 	}
