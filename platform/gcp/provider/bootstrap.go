@@ -338,13 +338,7 @@ func (b bootstrap) provision(ctx context.Context, read survey, target item, prog
 func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		if target.Shared {
-			return b.protectDatabase(ctx, target.Name)
-		}
-		if err := b.protectDatabase(ctx, target.Name); err != nil {
-			return err
-		}
-		return b.ensureTagIndexes(ctx, read.Tier)
+		return b.protectDatabase(ctx, target.Name)
 	case KindRepository:
 		return b.pruneRepository(ctx, target.Name)
 	case KindBucket:
@@ -357,13 +351,7 @@ func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		if err := b.makeDatabase(ctx, read, target.Name); err != nil {
-			return err
-		}
-		if target.Shared {
-			return nil
-		}
-		return b.ensureTagIndexes(ctx, read.Tier)
+		return b.makeDatabase(ctx, read, target.Name)
 	case KindBucket:
 		return b.makeBucket(ctx, read, target)
 	case KindKeyRing:

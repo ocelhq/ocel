@@ -42,44 +42,6 @@
       "monthlyUsage": "0.54"
     },
     {
-      "resource": "project:shop/shared:production/google_firestore_database:ocel-production-tags",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Document reads",
-          "unit": "reads",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0.0000003",
-          "monthlyCost": "0.30",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 reads",
-          "rateRef": "gcp/firestore/reads"
-        },
-        {
-          "name": "Document writes",
-          "unit": "writes",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0.0000009",
-          "monthlyCost": "0.09",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 writes",
-          "rateRef": "gcp/firestore/writes"
-        },
-        {
-          "name": "Storage",
-          "unit": "GiB-month",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.15",
-          "monthlyCost": "0.15",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GiB-month",
-          "rateRef": "gcp/firestore/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.54"
-    },
-    {
       "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production",
       "status": "STATUS_PRICED",
       "components": [
@@ -502,12 +464,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "68.46",
-      "monthlyUsage": "8.76"
+      "monthlyUsage": "8.22"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "18.53",
-      "monthlyUsage": "2.22"
+      "monthlyUsage": "1.68"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -526,7 +488,7 @@
     }
   ],
   "coverage": {
-    "supported": 14,
+    "supported": 13,
     "free": 19,
     "supportedTypes": [
       "google_artifact_registry_repository",
@@ -562,5 +524,5 @@
     "a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month"
   ],
   "monthlyFixed": "68.46",
-  "monthlyUsage": "8.76"
+  "monthlyUsage": "8.22"
 }

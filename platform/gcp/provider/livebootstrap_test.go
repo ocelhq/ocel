@@ -171,7 +171,6 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	}
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                 provider.StackGroupKind,
-		"firestore:database/" + liveNames(t).TagDatabase(tier):          provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(tier):                   provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(tier):              provider.StackGroupKind,
 		"kms:keyring/" + liveNames(t).KeyRing():                         provider.StackGroupKind,
@@ -475,11 +474,11 @@ func TestProjectTheDatabaseIsARowOfItsOwnProvisionedUnderDeleteProtection(t *tes
 	}
 }
 
-func TestProjectATiersTagsDatabaseIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
+func TestProjectATiersTagsDatabasePartIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	tier := environment.TierPreview
-	bootstrap := bootstrapped(t, p, tier)
+	bootstrap := bootstrappedWith(t, p, tier, gcp.TagDatabasePart)
 
 	ctx := context.Background()
 	service, err := firestoreadmin.NewService(ctx)
@@ -489,7 +488,7 @@ func TestProjectATiersTagsDatabaseIsProtectedIndexedAndGoneOnceTheTierIsRemoved(
 	path := "projects/" + liveProject() + "/databases/" + liveNames(t).TagDatabase(tier)
 	database, err := service.Projects.Databases.Get(path).Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("read the tags database the bootstrap provisioned: %v", err)
+		t.Fatalf("read the tags database the part added: %v", err)
 	}
 	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
 		t.Errorf("the tags database has delete protection %q, want it on", database.DeleteProtectionState)

@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -76,6 +77,11 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
 	}
 	tree.AddShaped(shared, string(Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
+	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
+		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
+	}) {
+		tree.AddShaped(shared, string(Vendor), region, tagDatabaseShape(names, req.Deploy.Tier, region))
+	}
 
 	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {
