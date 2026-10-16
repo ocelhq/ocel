@@ -42,6 +42,21 @@ ocel bootstrap production
 ocel deploy
 ```
 
+The bootstrap holds what every deploy needs: the state, artifact and asset buckets, the state and
+variables tables, the app boundary, and the roles the tag invalidator and API Gateway run as. The
+rest is added by the first deploy that needs it, with the deploy credential, and listed by
+`ocel bootstrap status`:
+
+| Part | Added by |
+| --- | --- |
+| `cloudfront` | the first deploy through CloudFront: the routes store, resolver and empty-body functions, cache and headers policies and asset access every distribution shares |
+| `image-optimizer` | the first deploy of an app whose build optimizes images |
+| `tag-invalidator` | the first deploy of an app that revalidates |
+| `apigateway-preview` | the first `ocel domain use --preview` behind API Gateway: the REST API that answers 404 for a preview host no preview claims |
+
+A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
+again, and `ocel bootstrap destroy production` removes them with the rest.
+
 **Scope image deletes to one project.** Untagged, the deploy user or role may delete container
 images in every Ocel ECR repository of the account. Tag it `ocel:project` with the project's
 slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, each run of other characters
