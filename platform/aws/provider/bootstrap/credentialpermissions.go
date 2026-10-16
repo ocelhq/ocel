@@ -100,6 +100,7 @@ const (
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
+	edgeDistributionARN   = "arn:aws:cloudfront::*:distribution/*"
 	edgeFunctionARNPrefix = "arn:aws:cloudfront::*:function/"
 	edgeRoutesStoreARN    = "arn:aws:cloudfront::*:key-value-store/*"
 	edgeCachePolicyARN    = "arn:aws:cloudfront::*:cache-policy/*"
@@ -638,6 +639,30 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{containerVPCOriginARN},
 			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"cloudfront:CreateDistribution"},
+			Resources: []string{UnscopedResource},
+			Condition: r.taggedOnCreateForItsTier(),
+		},
+		{
+			Actions:   []string{"cloudfront:TagResource"},
+			Resources: []string{edgeDistributionARN},
+			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
+		},
+		{
+			Actions: []string{
+				"cloudfront:DeleteDistribution",
+				"cloudfront:GetDistribution",
+				"cloudfront:GetDistributionConfig",
+				"cloudfront:UpdateDistribution",
+			},
+			Resources: []string{edgeDistributionARN},
+			Condition: r.taggedByOcelForItsTier(),
+		},
+		{
+			Actions:   []string{"cloudfront:ListDistributions"},
+			Resources: []string{UnscopedResource},
 		},
 		{
 			Actions:   []string{"ecr:GetAuthorizationToken"},
