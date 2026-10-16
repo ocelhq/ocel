@@ -29,6 +29,7 @@ type App struct {
 	Serverless        *Serverless
 	Container         *Container
 	undetected        error
+	containerStart    string
 
 	BuildsWithResources bool
 }
@@ -188,34 +189,39 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 			return newInvalidConfigError(err, "")
 		}
 		if isDir(dir) {
-			framework, _, err := language.DetectFramework(dir, "")
+			detected, _, err := language.DetectFramework(dir, "")
 			if err != nil {
 				return fmt.Errorf("app %q: %w", a.Name, err)
 			}
-			if framework == buildoutput.FrameworkNext {
-				container.Framework = framework
+			if detected.Framework == buildoutput.FrameworkNext {
+				container.Framework = detected.Framework
 			}
 		}
 		app.Container = container
 	case compute.Serverless != nil:
 		app.Compute = provider.ComputeServerless
 		named := strings.TrimSpace(compute.Serverless.Framework)
-		framework, err := frameworkOf(a.Name, dir, named, compute.Serverless.Entrypoint)
+		detected, err := frameworkOf(a.Name, dir, named, compute.Serverless.Entrypoint)
 		if err != nil {
 			return err
 		}
-		app.Serverless = &Serverless{Framework: framework, Entrypoint: compute.Serverless.Entrypoint}
+		app.Serverless = &Serverless{Framework: detected.Framework, Entrypoint: compute.Serverless.Entrypoint}
 	default:
-		framework, err := frameworkOf(a.Name, dir, "", "")
-		switch {
-		case err != nil:
-			app.undetected = err
-		case framework != "":
-			app.Serverless = &Serverless{Framework: framework}
-		}
-		app.Container = &Container{}
+		detected, err := frameworkOf(a.Name, dir, "", "")
+		app.undetected = err
+		app.shapeDetected(detected)
 	}
 	return nil
+}
+
+func (a *App) shapeDetected(detected language.App) {
+	a.Container = &Container{}
+	switch {
+	case detected.ContainerStart != "":
+		a.containerStart = detected.ContainerStart
+	case detected.Framework != "":
+		a.Serverless = &Serverless{Framework: detected.Framework}
+	}
 }
 
 type undetectedRootAppError struct {
@@ -230,7 +236,7 @@ func (e *undetectedRootAppError) Error() string {
 func (e *undetectedRootAppError) Unwrap() error { return e.cause }
 
 func rootApp(name, dir string) (apps []App, undetected error, err error) {
-	framework, err := language.DetectApp(dir)
+	detected, err := language.DetectApp(dir)
 	var ambiguity *language.AmbiguityError
 	var missing *language.NoAppError
 	switch {
@@ -241,14 +247,9 @@ func rootApp(name, dir string) (apps []App, undetected error, err error) {
 	case err != nil:
 		return nil, nil, err
 	}
-	return []App{{
-		Name:       name,
-		Path:       ".",
-		Serverless: &Serverless{Framework: framework},
-		Container:  &Container{},
-
-		BuildsWithResources: true,
-	}}, nil, nil
+	app := App{Name: name, Path: ".", BuildsWithResources: true}
+	app.shapeDetected(detected)
+	return []App{app}, nil, nil
 }
 
 func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {

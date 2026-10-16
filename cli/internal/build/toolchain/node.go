@@ -31,10 +31,7 @@ const tracingHint = "set " + PreferTracingEnv + "=1 to build this app by tracing
 
 func NodeEntrypoint(source, declared string) (string, error) {
 	if declared != "" {
-		path := filepath.FromSlash(declared)
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(source, path)
-		}
+		path := language.NodeEntrypointPath(source, declared)
 		if !regularFile(path) {
 			return "", fmt.Errorf("entrypoint %q not found in %s", declared, source)
 		}

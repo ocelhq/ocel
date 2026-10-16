@@ -22,7 +22,6 @@ func TestAProjectNamingNoAppsHasTheAppAtItsRootInEveryLanguageShapedAsIfNamedThe
 		framework string
 	}{
 		{"node", map[string]string{nodeManifest: `{"dependencies":{"express":"5"}}`, "src/server.ts": "export {}\n"}, buildoutput.FrameworkNode},
-		{"node started by its start script", map[string]string{nodeManifest: `{"scripts":{"start":"node dist/main.js"}}`, "src/main.ts": "export {}\n"}, buildoutput.FrameworkNode},
 		{"next", map[string]string{nodeManifest: `{"dependencies":{"next":"15"}}`}, buildoutput.FrameworkNext},
 		{"sveltekit", map[string]string{nodeManifest: `{"devDependencies":{"@sveltejs/kit":"2"}}`}, buildoutput.FrameworkSvelteKit},
 		{"python", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, buildoutput.FrameworkPython},
@@ -53,6 +52,42 @@ func TestAProjectNamingNoAppsHasTheAppAtItsRootInEveryLanguageShapedAsIfNamedThe
 				t.Errorf("detected root app = %+v, want it shaped as the same root named under \"apps\": %+v", detected[0], named[0])
 			}
 		})
+	}
+}
+
+func TestARootOnlyAContainerStartsRunsOnAContainerWhereverItIsNamed(t *testing.T) {
+	t.Parallel()
+
+	load := func(config string) *Project {
+		dir := t.TempDir()
+		write(t, filepath.Join(dir, DefaultFileName), config)
+		write(t, filepath.Join(dir, nodeManifest), `{"scripts":{"start":"node dist/main.js"}}`)
+		write(t, filepath.Join(dir, "src", "main.ts"), "export {}\n")
+		cfg, err := Load(context.Background(), dir, "")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		return cfg
+	}
+	detected := load(`{"slug":"shop"}`)
+	named := load(`{"slug":"shop","apps":[{"name":"shop","path":"."}]}`)
+	if len(detected.Apps) != 1 || detected.Apps[0].Serverless != nil || detected.Apps[0].Container == nil {
+		t.Fatalf("Apps = %+v, want one app shaped for a container alone: no serverless build serves a start script", detected.Apps)
+	}
+	if !reflect.DeepEqual(detected.Apps, named.Apps) {
+		t.Errorf("detected root app = %+v, want it shaped as the same root named under \"apps\": %+v", detected.Apps[0], named.Apps[0])
+	}
+
+	resolved, err := detected.ResolveComputes([]string{"serverless", "container"}, "fake")
+	if err != nil {
+		t.Fatalf("ResolveComputes() error = %v", err)
+	}
+	if got := resolved.Apps[0].Compute; got != provider.ComputeContainer {
+		t.Errorf("compute = %q, want %q: the provider runs containers, and only a container serves this app", got, provider.ComputeContainer)
+	}
+	_, err = detected.ResolveComputes([]string{"serverless"}, "fake")
+	if err == nil || !strings.Contains(err.Error(), "start script") || !strings.Contains(err.Error(), "entrypoint") {
+		t.Errorf("ResolveComputes() error = %v, want it to say only a container serves the start script, and to add an entrypoint", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -51,50 +52,63 @@ func NodeEntrypoint(dir string) (string, bool) {
 	return "", false
 }
 
+type App struct {
+	Framework      string
+	ContainerStart string
+}
+
 func Detect(dir, entrypoint string) (Language, bool, error) {
-	found := Manifested(dir)
+	app, found, err := detect(dir, entrypoint)
+	return app.language, found, err
+}
+
+func detect(dir, entrypoint string) (inspection, bool, error) {
+	found, _ := manifested(dir)
 	switch len(found) {
 	case 0:
-		return "", false, nil
+		return inspection{}, false, nil
 	case 1:
-		return found[0], true, nil
+		return inspection{language: found[0]}, true, nil
 	}
 	app, err := appAmong(dir, found, entrypoint)
 	var missing *NoAppError
 	if errors.As(err, &missing) {
-		return "", false, newAmbiguityError(dir, missing.inspections)
+		return inspection{}, false, newAmbiguityError(dir, missing.inspections)
 	}
 	if err != nil {
-		return "", false, err
+		return inspection{}, false, err
 	}
-	return app.language, true, nil
+	return app, true, nil
 }
 
-func DetectApp(dir string) (framework string, err error) {
-	found := Manifested(dir)
+func DetectApp(dir string) (App, error) {
+	found, extension := manifested(dir)
 	if len(found) == 0 {
-		return "", &NoAppError{Dir: dir, lacks: []string{"none of " + english.Or(ManifestNames())}}
+		return App{}, &NoAppError{Dir: dir, lacks: []string{"none of " + english.Or(ManifestNames())}}
 	}
 	app, err := appAmong(dir, found, "")
-	return app.framework, err
+	var missing *NoAppError
+	if extension && errors.As(err, &missing) {
+		missing.lacks = append(missing.lacks, "a "+rustManifest+" read as a native extension, not as an app")
+	}
+	return app.app(), err
 }
 
 func appAmong(dir string, found []Language, entrypoint string) (inspection, error) {
 	inspections := make([]inspection, 0, len(found))
 	for _, l := range found {
-		i, err := inspect(dir, l, entrypoint)
-		if err != nil {
-			return inspection{}, err
-		}
-		inspections = append(inspections, i)
+		inspections = append(inspections, inspect(dir, l, entrypoint))
 	}
-	apps := slices.DeleteFunc(slices.Clone(inspections), func(i inspection) bool { return i.framework == "" })
+	apps := holdingApps(inspections)
 	switch len(apps) {
 	case 1:
 		return apps[0], nil
 	case 0:
 		lacks := make([]string, 0, len(inspections))
 		for _, i := range inspections {
+			if i.err != nil {
+				return inspection{}, i.err
+			}
 			lacks = append(lacks, i.lack)
 		}
 		return inspection{}, &NoAppError{Dir: dir, lacks: lacks, inspections: inspections}
@@ -103,14 +117,23 @@ func appAmong(dir string, found []Language, entrypoint string) (inspection, erro
 	}
 }
 
+func holdingApps(inspections []inspection) []inspection {
+	served := slices.DeleteFunc(slices.Clone(inspections), func(i inspection) bool { return i.framework == "" })
+	if built := slices.DeleteFunc(slices.Clone(served), func(i inspection) bool { return i.containerStart != "" }); len(built) > 0 {
+		return built
+	}
+	return served
+}
+
 type AmbiguityError struct {
-	Dir       string
-	Languages []Language
-	holdings  []string
+	Dir        string
+	Languages  []Language
+	holdings   []string
+	candidates []inspection
 }
 
 func newAmbiguityError(dir string, candidates []inspection) *AmbiguityError {
-	e := &AmbiguityError{Dir: dir}
+	e := &AmbiguityError{Dir: dir, candidates: candidates}
 	for _, c := range candidates {
 		e.Languages = append(e.Languages, c.language)
 		e.holdings = append(e.holdings, c.holding)
@@ -144,19 +167,28 @@ func (e *NoAppError) Error() string {
 }
 
 type inspection struct {
-	language  Language
-	framework string
-	holding   string
-	lack      string
+	language       Language
+	framework      string
+	containerStart string
+	holding        string
+	lack           string
+	err            error
 }
 
-func inspect(dir string, l Language, entrypoint string) (inspection, error) {
+func (i inspection) app() App {
+	return App{Framework: i.framework, ContainerStart: i.containerStart}
+}
+
+func inspect(dir string, l Language, entrypoint string) inspection {
 	manifest := "a " + manifestOf(dir, l)
-	app := func(framework, holding string) (inspection, error) {
-		return inspection{language: l, framework: framework, holding: holding}, nil
+	app := func(framework, holding string) inspection {
+		return inspection{language: l, framework: framework, holding: holding}
 	}
-	none := func(lack string) (inspection, error) {
-		return inspection{language: l, holding: manifest, lack: lack}, nil
+	none := func(lack string) inspection {
+		return inspection{language: l, holding: manifest, lack: lack}
+	}
+	unreadable := func(err error) inspection {
+		return inspection{language: l, holding: manifest, err: err}
 	}
 	if entrypoint != "" {
 		return inspectEntrypoint(dir, l, entrypoint, manifest, app, none)
@@ -165,7 +197,7 @@ func inspect(dir string, l Language, entrypoint string) (inspection, error) {
 	case JS:
 		framework, node, err := readNodeApp(dir)
 		if err != nil {
-			return inspection{}, err
+			return unreadable(err)
 		}
 		switch framework {
 		case buildoutput.FrameworkNext:
@@ -173,8 +205,13 @@ func inspect(dir string, l Language, entrypoint string) (inspection, error) {
 		case buildoutput.FrameworkSvelteKit:
 			return app(framework, "a SvelteKit app")
 		}
-		if served, ok := node.served(dir); ok {
-			return app(buildoutput.FrameworkNode, "a node app ("+served+")")
+		if entrypoint, ok := NodeEntrypoint(dir); ok {
+			return app(buildoutput.FrameworkNode, "a node app ("+entrypoint+")")
+		}
+		if start, ok := node.containerStart(dir); ok {
+			started := app(buildoutput.FrameworkNode, "a node app ("+start+")")
+			started.containerStart = start
+			return started
 		}
 		return none(fmt.Sprintf("%s with no %s or %s dependency, no start script, no main and no entrypoint among %s", manifest, nextDependency, svelteKitDependency, strings.Join(append(slices.Clone(NodeEntrypoints), nodeIndexes...), ", ")))
 	case Python:
@@ -190,7 +227,7 @@ func inspect(dir string, l Language, entrypoint string) (inspection, error) {
 	case Rust:
 		bins, err := crateBins(dir)
 		if err != nil {
-			return inspection{}, err
+			return unreadable(err)
 		}
 		switch bins {
 		case 1:
@@ -204,16 +241,26 @@ func inspect(dir string, l Language, entrypoint string) (inspection, error) {
 	return none(manifest)
 }
 
-func inspectEntrypoint(dir string, l Language, entrypoint, manifest string, app func(string, string) (inspection, error), none func(string) (inspection, error)) (inspection, error) {
-	path := filepath.Join(dir, filepath.FromSlash(entrypoint))
+func NodeEntrypointPath(dir, declared string) string {
+	path := filepath.FromSlash(declared)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
+func inspectEntrypoint(dir string, l Language, entrypoint, manifest string, app func(string, string) inspection, none func(string) inspection) inspection {
 	switch l {
 	case JS:
-		if isRegularFile(path) && slices.Contains(nodeExtensions, filepath.Ext(path)) {
+		path := NodeEntrypointPath(dir, entrypoint)
+		if slices.Contains(nodeExtensions, filepath.Ext(path)) && (isRegularFile(path) || isMissing(path)) {
 			return app(buildoutput.FrameworkNode, "a node app ("+entrypoint+")")
 		}
 		return none(manifest + ", and entrypoint " + entrypoint + " is no JavaScript or TypeScript file")
 	case Go:
-		if isMainPackage(path) || isMainFile(path) {
+		path := filepath.Join(dir, filepath.FromSlash(entrypoint))
+		written := isMissing(path) && (filepath.Ext(path) == ".go" || filepath.Ext(path) == "")
+		if written || isMainPackage(path) || isMainFile(path) {
 			return app(buildoutput.FrameworkGo, "a go app (package main in "+entrypoint+")")
 		}
 		return none(manifest + ", and entrypoint " + entrypoint + " holds no package main")
@@ -240,7 +287,12 @@ func goBuildContext() build.Context {
 func isMainPackage(dir string) bool {
 	ctx := goBuildContext()
 	pkg, err := ctx.ImportDir(dir, 0)
-	return err == nil && pkg.Name == "main"
+	return err == nil && pkg.Name == "main" && len(pkg.GoFiles) > 0
+}
+
+func isMissing(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 func isMainFile(path string) bool {

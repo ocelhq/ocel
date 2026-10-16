@@ -143,8 +143,8 @@ func TestANextAppWinsOverAPythonProjectWithNoMainPy(t *testing.T) {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
 	}
 	framework, found, err := language.DetectFramework(dir, "")
-	if err != nil || !found || framework != "next" {
-		t.Errorf("DetectFramework = %q, %v, %v, want next", framework, found, err)
+	if err != nil || !found || framework.Framework != "next" {
+		t.Errorf("DetectFramework = %+v, %v, %v, want next", framework, found, err)
 	}
 }
 

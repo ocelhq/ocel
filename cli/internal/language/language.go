@@ -65,34 +65,39 @@ func ManifestNames() []string {
 }
 
 func Manifested(dir string) []Language {
-	var found []Language
+	found, _ := manifested(dir)
+	return found
+}
+
+func manifested(dir string) (found []Language, extension bool) {
 	for _, m := range manifests {
 		if slices.Contains(found, m.language) || !isRegularFile(filepath.Join(dir, m.name)) {
 			continue
 		}
 		if m.language == Rust && slices.ContainsFunc(found, func(l Language) bool { return slices.Contains(extendedByRust, l) }) {
+			extension = true
 			continue
 		}
 		found = append(found, m.language)
 	}
-	return found
+	return found, extension
 }
 
 func Of(dir string) (Language, bool) {
-	written, found, err := byPrecedence(dir, "")
+	app, found, err := byPrecedence(dir, "")
 	if err != nil {
 		return Manifested(dir)[0], true
 	}
-	return written, found
+	return app.language, found
 }
 
-func byPrecedence(dir, entrypoint string) (Language, bool, error) {
-	written, found, err := Detect(dir, entrypoint)
+func byPrecedence(dir, entrypoint string) (inspection, bool, error) {
+	app, found, err := detect(dir, entrypoint)
 	var ambiguity *AmbiguityError
 	if errors.As(err, &ambiguity) {
-		return ambiguity.Languages[0], true, nil
+		return ambiguity.candidates[0], true, nil
 	}
-	return written, found, err
+	return app, found, err
 }
 
 func ofFramework(framework string) (Language, bool) {
@@ -104,30 +109,39 @@ func ofFramework(framework string) (Language, bool) {
 	return "", false
 }
 
-func DetectFramework(dir, entrypoint string) (framework string, found bool, err error) {
-	written, found, err := byPrecedence(dir, entrypoint)
+func DetectFramework(dir, entrypoint string) (App, bool, error) {
+	app, found, err := byPrecedence(dir, entrypoint)
 	if err != nil || !found {
-		return "", false, err
+		return App{}, false, err
 	}
-	return FrameworkOf(dir, written)
+	if app.framework != "" {
+		return app.app(), true, nil
+	}
+	return frameworkOf(dir, app.language, entrypoint)
 }
 
-func FrameworkOf(dir string, written Language) (framework string, found bool, err error) {
+func frameworkOf(dir string, written Language, entrypoint string) (App, bool, error) {
 	if written == JS {
-		framework, _, err := readNodeApp(dir)
+		framework, node, err := readNodeApp(dir)
 		if err != nil {
-			return "", false, err
+			return App{}, false, err
 		}
 		if framework != "" {
-			return framework, true, nil
+			return App{Framework: framework}, true, nil
+		}
+		if entrypoint == "" {
+			if _, ok := NodeEntrypoint(dir); !ok {
+				start, _ := node.containerStart(dir)
+				return App{Framework: buildoutput.FrameworkNode, ContainerStart: start}, true, nil
+			}
 		}
 	}
 	for _, f := range frameworks {
 		if f.language == written {
-			return f.name, true, nil
+			return App{Framework: f.name}, true, nil
 		}
 	}
-	return "", false, nil
+	return App{}, false, nil
 }
 
 type nodePackage struct {
@@ -177,10 +191,7 @@ func (m nodePackage) framework() string {
 	return ""
 }
 
-func (m nodePackage) served(dir string) (string, bool) {
-	if entrypoint, ok := NodeEntrypoint(dir); ok {
-		return entrypoint, true
-	}
+func (m nodePackage) containerStart(dir string) (string, bool) {
 	if strings.TrimSpace(m.Scripts["start"]) != "" {
 		return "start script", true
 	}
