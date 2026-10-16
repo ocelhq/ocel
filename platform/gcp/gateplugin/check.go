@@ -9,7 +9,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 )
 
-const cookieHeader = "cookie"
+const (
+	cookieHeader = "cookie"
+	RouterHeader = "x-ocel-router"
+	RouterKind   = "alb"
+)
 
 func ReadRequest(pairs [][2]string) gate.Request {
 	req := gate.Request{Header: gate.Header{}}
@@ -68,7 +72,11 @@ func (c Config) Check(req gate.Request, now time.Time) gate.Verdict {
 	if !gated {
 		return gate.Verdict{Forward: req.Header}
 	}
-	return held.Check(req, now)
+	verdict := held.Check(req, now)
+	if verdict.Response != nil {
+		verdict.Response.Header.Set(RouterHeader, RouterKind)
+	}
+	return verdict
 }
 
 func ListHeaderEdits(original, forward gate.Header) (remove []string, replace map[string]string) {
