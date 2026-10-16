@@ -24,7 +24,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	notFound, err := p.ensureNotFoundAPI(ctx, spec.Warn)
+	notFound, err := p.ensureNotFoundAPI(ctx, spec.Say)
 	if err != nil {
 		return "", err
 	}

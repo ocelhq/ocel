@@ -154,9 +154,10 @@ func TestTheFirstPreviewWildcardTellsTheUserItAddsThe404Responder(t *testing.T) 
 	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
-	var heard []string
+	var heard, warned []string
 	spec := previewWildcardSpec()
-	spec.Warn = func(line string) { heard = append(heard, line) }
+	spec.Say = func(line string) { heard = append(heard, line) }
+	spec.Warn = func(line string) { warned = append(warned, line) }
 
 	if _, err := e.ReconcilePreviewWildcard(ctx, spec); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
@@ -164,6 +165,9 @@ func TestTheFirstPreviewWildcardTellsTheUserItAddsThe404Responder(t *testing.T) 
 
 	if want := "added the " + notfoundapi.Part + " part"; !slices.Contains(heard, want) {
 		t.Errorf("the user heard %v, want %q: adding a bootstrap part is never silent", heard, want)
+	}
+	if len(warned) != 0 {
+		t.Errorf("the user was warned %v, want adding a part said at info level: nothing is wrong", warned)
 	}
 }
 

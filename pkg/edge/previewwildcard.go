@@ -10,6 +10,7 @@ type PreviewWildcardSpec struct {
 	Version     string
 	BaseDomain  string
 	Certificate string
+	Say         func(string)
 	Warn        func(string)
 	Program     *ProgramSpec
 	Origin      *Origin

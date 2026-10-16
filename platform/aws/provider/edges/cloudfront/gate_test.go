@@ -399,11 +399,17 @@ func TestEveryPathThatAddsTheCloudFrontPartTellsTheUser(t *testing.T) {
 	t.Parallel()
 	want := "added the " + cloudfrontpart.Part + " part"
 	heard := func(lines *[]string) func(string) { return func(line string) { *lines = append(*lines, line) } }
+	refused := func(t *testing.T) func(string) {
+		return func(line string) {
+			t.Errorf("the user was warned %q, want adding a part said at info level: nothing is wrong", line)
+		}
+	}
 
 	t.Run("a reconcile", func(t *testing.T) {
 		var lines []string
 		spec := testSpec()
-		spec.Warn = heard(&lines)
+		spec.Say = heard(&lines)
+		spec.Warn = refused(t)
 		if _, err := bootstrapped(t, newWorld()).Reconcile(context.Background(), spec, edge.StackState{}); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -426,7 +432,8 @@ func TestEveryPathThatAddsTheCloudFrontPartTellsTheUser(t *testing.T) {
 	t.Run("a preview wildcard", func(t *testing.T) {
 		var lines []string
 		spec := previewWildcardSpec()
-		spec.Warn = heard(&lines)
+		spec.Say = heard(&lines)
+		spec.Warn = refused(t)
 		if _, err := previewBootstrapped(t, newWorld()).ReconcilePreviewWildcard(context.Background(), spec); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}

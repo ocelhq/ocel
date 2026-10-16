@@ -48,7 +48,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	distribution, deployed, err := p.previewWildcardSpec(ctx, c, spec.BaseDomain, spec.Warn)
+	distribution, deployed, err := p.previewWildcardSpec(ctx, c, spec.BaseDomain, spec.Say)
 	if err != nil {
 		return "", err
 	}

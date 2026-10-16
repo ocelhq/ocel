@@ -2171,3 +2171,21 @@ func TestAPreviewOnARouterThatAddressesItselfServesEachDeploymentOnItsOwnURLUnti
 		t.Errorf("%s stopped serving, want the deployment the prune kept still served", secondDeployment)
 	}
 }
+
+func TestAPartAnEdgeAddsDuringAReconcileIsSaidAtInfoLevel(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	relayEdge(vendor).OnReconcile(func(spec edge.StackSpec) {
+		if spec.Say != nil {
+			spec.Say("added the kit part")
+		}
+	})
+
+	result, events := deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if !slices.Contains(said(events, progressv1.Level_LEVEL_INFO), "added the kit part") {
+		t.Errorf("the deploy said %v at info level, want the part the edge added: adding one is news, not a warning", said(events, progressv1.Level_LEVEL_INFO))
+	}
+}

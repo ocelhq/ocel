@@ -207,6 +207,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 	spec := edge.PreviewWildcardSpec{
 		BaseDomain:  base,
 		Certificate: w.recorded.Host.Certificate.ID,
+		Say:         runProgress.Say,
 		Warn:        runProgress.Warn,
 	}
 	var claimed originClaim
