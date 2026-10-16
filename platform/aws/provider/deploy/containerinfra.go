@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -30,6 +31,9 @@ import (
 
 const (
 	ContainersSlug = awsports.ContainersSlug
+
+	ContainersPart    = "containers"
+	containersSummary = "the load balancer and cluster every container app in the tier runs behind"
 
 	consumersKey  = "consumers"
 	leaseKey      = "lease"
@@ -204,9 +208,17 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		Tags:        containerInfraTags(tier),
 		VendorState: work,
 	}
+	writer := provider.WrittenByVersion("")
+	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
+		WrittenBy: string(writer),
+		AddedBy:   ref.Project,
+		AddedAt:   time.Now().UTC(),
+	}); err != nil {
+		return containerInfra{}, err
+	}
 	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, containerInfraRef(tier).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
-		WrittenBy: provider.WrittenByVersion(""),
+		WrittenBy: writer,
 	}); err != nil {
 		return containerInfra{}, err
 	}
@@ -218,6 +230,14 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		return containerInfra{}, err
 	}
 	if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, decoded.front()); err != nil {
+		return containerInfra{}, err
+	}
+	if err := stackrecords.MarkBootstrapPartReady(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
+		WrittenBy: string(writer),
+		AddedBy:   ref.Project,
+		AddedAt:   time.Now().UTC(),
+		Resources: listContainerInfrastructureResources(tier, decoded.front()),
+	}); err != nil {
 		return containerInfra{}, err
 	}
 	return decoded, r.claimContainerInfra(ctx, ref)
@@ -324,7 +344,55 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store
 	if err := keyvalue.Forget(ctx, store, awsports.ContainerFrontKey(ref.Tier)); err != nil {
 		return err
 	}
+	if err := stackrecords.ForgetBootstrapPart(ctx, store, ref.Tier, ContainersPart); err != nil {
+		return err
+	}
 	return keyvalue.Forget(ctx, store, leaseAt(ref.Tier))
+}
+
+func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	_, present, err := stackrecords.Read(ctx, store, tier, ContainersSlug, containerInfraRef(tier).Name)
+	if err != nil || !present {
+		return provider.BootstrapPart{}, false, err
+	}
+	consumers := consumersPrefix(tier)
+	entries, err := store.List(ctx, consumers.Partition, consumers.Path...)
+	if err != nil {
+		return provider.BootstrapPart{}, false, fmt.Errorf("read who uses the shared container infrastructure for the %s tier: %w", tier, err)
+	}
+	users := []string{}
+	for _, entry := range entries {
+		if rest, ok := entry.Key.Under(consumers.Path...); ok {
+			users = append(users, rest[0])
+		}
+	}
+	slices.Sort(users)
+	front, _, err := awsports.ReadContainerFront(ctx, store, tier)
+	if err != nil {
+		return provider.BootstrapPart{}, false, err
+	}
+	return provider.BootstrapPart{
+		Name:      ContainersPart,
+		Summary:   containersSummary,
+		Current:   true,
+		Resources: listContainerInfrastructureResources(tier, front),
+		UsedBy:    slices.Compact(users),
+		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeContainerInfrastructure(tier)},
+	}, true, nil
+}
+
+func listContainerInfrastructureResources(tier environment.Tier, front awsports.ContainerFront) []provider.PartResource {
+	resources := []provider.PartResource{
+		{Kind: "AWS::ECS::Cluster", ID: containerInfraName(tier)},
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: containerInfraName(tier)},
+		{Kind: "AWS::EC2::SecurityGroup", ID: containerInfraName(tier, "front")},
+		{Kind: "AWS::EC2::SecurityGroup", ID: containerInfraName(tier, "tasks")},
+		{Kind: "AWS::Logs::LogGroup", ID: logevents.NameContainerGroup(tier)},
+	}
+	if front.VPCOrigin != "" {
+		resources = append(resources, provider.PartResource{Kind: "AWS::CloudFront::VpcOrigin", ID: front.VPCOrigin})
+	}
+	return resources
 }
 
 func (w *containerInfraWork) run(ctx *pulumi.Context) error {

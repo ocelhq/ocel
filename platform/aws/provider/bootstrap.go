@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
 func (p *Provider) forget() {
@@ -21,6 +22,19 @@ type forgetting struct {
 	forget    func()
 	key       func(context.Context, environment.Tier) (string, error)
 	keyValues keyvalue.Store
+	region    string
+}
+
+func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+	parts, err := s.Bootstrap.DescribeParts(ctx, described)
+	if err != nil || !described.Present {
+		return parts, err
+	}
+	containers, present, err := deploy.ReadContainerInfrastructurePart(ctx, s.keyValues, s.region, described.Tier)
+	if err != nil || !present {
+		return parts, err
+	}
+	return append(parts, containers), nil
 }
 
 func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
