@@ -21,13 +21,13 @@ func TestAQueuedProbeFailureFailsTheNextProbeOfThatHostnameAndIsReportedAsTheLas
 	if _, err := p.Liveness().ServingRouter(context.Background(), "shop.example.com"); !errors.Is(err, refused) {
 		t.Fatalf("first probe err = %v, want the queued failure", err)
 	}
-	if last := p.Liveness().LastProbeFailure("shop.example.com"); last != refused.Error() {
+	if last := p.Liveness().LastProbeFailure("shop.example.com").Cause; last != refused.Error() {
 		t.Errorf("last probe failure = %q, want %q", last, refused)
 	}
 	if _, err := p.Liveness().ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatalf("second probe err = %v, want the queue spent", err)
 	}
-	if last := p.Liveness().LastProbeFailure("shop.example.com"); last != "" {
+	if last := p.Liveness().LastProbeFailure("shop.example.com").Cause; last != "" {
 		t.Errorf("last probe failure after an answered probe = %q, want none", last)
 	}
 }

@@ -138,7 +138,7 @@ func proxiedVerdict(ctx context.Context, look Lookup, serving provider.Liveness,
 	default:
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("%s resolves to %s, and nothing on this box answered it through Cloudflare", hostname, spell(found))
-		if failure := serving.LastProbeFailure(hostname); failure != "" {
+		if failure := serving.LastProbeFailure(hostname).Cause; failure != "" {
 			check.Finding += ": " + failure
 		}
 	}

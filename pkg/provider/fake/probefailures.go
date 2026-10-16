@@ -1,11 +1,15 @@
 package fake
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/ocelhq/ocel/pkg/provider"
+)
 
 type probeFailures struct {
 	mu     sync.Mutex
 	queued map[string][]error
-	last   map[string]string
+	last   map[string]provider.ProbeFailure
 }
 
 func (p *Provider) QueueProbeFailures(hostname string, causes ...error) {
@@ -28,13 +32,13 @@ func (f *probeFailures) next(hostname string) error {
 	cause := queued[0]
 	f.queued[hostname] = queued[1:]
 	if f.last == nil {
-		f.last = map[string]string{}
+		f.last = map[string]provider.ProbeFailure{}
 	}
-	f.last[hostname] = cause.Error()
+	f.last[hostname] = provider.ProbeFailure{Cause: cause.Error()}
 	return cause
 }
 
-func (f *probeFailures) lastFor(hostname string) string {
+func (f *probeFailures) lastFor(hostname string) provider.ProbeFailure {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.last[hostname]

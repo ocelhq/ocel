@@ -9,5 +9,10 @@ import (
 type Liveness interface {
 	ServingRouter(ctx context.Context, hostname string) (router.Kind, error)
 
-	LastProbeFailure(hostname string) string
+	LastProbeFailure(hostname string) ProbeFailure
+}
+
+type ProbeFailure struct {
+	Cause      string
+	HTTPStatus int
 }

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -15,4 +16,6 @@ func (p liveness) ServingRouter(_ context.Context, hostname string) (router.Kind
 	return p.edges.answering(hostname), nil
 }
 
-func (p liveness) LastProbeFailure(hostname string) string { return p.probes.lastFor(hostname) }
+func (p liveness) LastProbeFailure(hostname string) provider.ProbeFailure {
+	return p.probes.lastFor(hostname)
+}
