@@ -40,7 +40,7 @@ const BOOTSTRAPPED = [
   PROJECT,
   "",
   "Production",
-  "  ✓ bootstrapped, current",
+  "  ✓ bootstrapped, current — `ocel bootstrap status production` lists its parts",
   "",
   PREVIEW,
   "",
