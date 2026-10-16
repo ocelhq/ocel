@@ -506,6 +506,26 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Feature)
 			}
 		}
+		parts, err := bootstrap.DescribeParts(ctx, described)
+		if err != nil {
+			t.Fatalf("DescribeParts() after Apply() = %v", err)
+		}
+		if len(parts) == 0 || parts[0].Name != provider.BasePart {
+			t.Fatalf("DescribeParts() after Apply() = %+v, want the base first", parts)
+		}
+		if len(parts[0].Resources) == 0 {
+			t.Errorf("DescribeParts() reports the base with no resources, and `ocel bootstrap status --resources` could name none of what it holds")
+		}
+		for _, part := range parts {
+			if part.Name == "" {
+				t.Errorf("DescribeParts() returned %+v, and no status can name a nameless part", part)
+			}
+			for _, resource := range part.Resources {
+				if resource.Kind == "" || resource.ID == "" {
+					t.Errorf("DescribeParts() reports %s holding %+v, a resource nobody can find", part.Name, resource)
+				}
+			}
+		}
 
 		removal, err := bootstrap.PlanRemove(ctx, tier)
 		if err != nil {

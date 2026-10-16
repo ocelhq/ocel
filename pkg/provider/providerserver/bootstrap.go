@@ -93,7 +93,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	_, readiness, err := h.readiness(req.GetEdge().GetKind())
+	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +120,15 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 			Enabled:    slices.Contains(status.Features, f.Name),
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
+	}
+	if req.GetWithParts() {
+		var price estimate
+		if cost := p.Hooks().Cost; cost != nil {
+			price = cost.Estimate
+		}
+		if resp.Parts, err = readiness.Parts(ctx, status, price); err != nil {
+			return nil, provider.RefusalError(err)
+		}
 	}
 	return resp, nil
 }

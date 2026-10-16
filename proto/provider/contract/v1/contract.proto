@@ -465,12 +465,52 @@ message DescribeBootstrapRequest {
   bool with_dependents = 2;
 
   EdgeSelection edge = 3;
+
+  bool with_parts = 4;
 }
 
 message DescribeBootstrapResponse {
   repeated Feature features = 1;
 
   BootstrapStatus bootstrap = 2;
+
+  repeated BootstrapPart parts = 3;
+}
+
+enum BootstrapPartState {
+  BOOTSTRAP_PART_STATE_UNSPECIFIED = 0;
+
+  BOOTSTRAP_PART_STATE_CREATING = 1;
+
+  BOOTSTRAP_PART_STATE_READY = 2;
+}
+
+message BootstrapPart {
+  string name = 1;
+
+  string summary = 2;
+
+  string added_by = 3;
+
+  int64 added_at = 4;
+
+  BootstrapPartState state = 5;
+
+  bool current = 6;
+
+  repeated BootstrapPartResource resources = 7;
+
+  repeated string used_by = 8;
+
+  optional string idle_monthly_fixed = 9;
+
+  string currency = 10;
+}
+
+message BootstrapPartResource {
+  string kind = 1;
+
+  string id = 2;
 }
 
 message BootstrapStack {

@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -21,6 +22,8 @@ type Bootstrap interface {
 	PlanRemove(ctx context.Context, tier environment.Tier) (Plan, error)
 
 	Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error
+
+	DescribeParts(ctx context.Context, described BootstrapDescription) ([]BootstrapPart, error)
 }
 
 type BootstrapDescription struct {
@@ -43,6 +46,28 @@ type BootstrapStack struct {
 	WrittenBy string
 
 	ReadError string
+}
+
+const BasePart = "base"
+
+type BootstrapPart struct {
+	Name      string
+	Summary   string
+	Current   bool
+	Resources []PartResource
+	UsedBy    []string
+	Shape     *PartShape
+}
+
+type PartResource struct {
+	Kind string
+	ID   string
+}
+
+type PartShape struct {
+	Vendor    string
+	Region    string
+	Resources []pricing.Shaped
 }
 
 type Feature struct {

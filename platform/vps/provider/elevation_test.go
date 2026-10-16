@@ -43,6 +43,10 @@ func (r *reached) Remove(context.Context, environment.Tier, progress.Log) error 
 	return nil
 }
 
+func (r *reached) DescribeParts(context.Context, provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+	return nil, nil
+}
+
 func unelevated(context.Context) error {
 	return refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@box.example can neither act as root nor run sudo without a password")
