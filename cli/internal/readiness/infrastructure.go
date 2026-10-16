@@ -3,7 +3,6 @@ package readiness
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -55,11 +54,7 @@ func (e NoInfrastructureError) BootstrapRequest() *contractv1.BootstrapRequest {
 func (e NoInfrastructureError) BootstrapProvider() *providerprocess.Provider { return e.Provider }
 
 func (e NoInfrastructureError) command() string {
-	command := BootstrapCommand(e.Tier)
-	if len(e.Features) > 0 {
-		command += " --features " + strings.Join(e.Features, ",")
-	}
-	return command
+	return BootstrapCommand(e.Tier)
 }
 
 func requiredFeatures(status *contractv1.BootstrapStatus) []string {

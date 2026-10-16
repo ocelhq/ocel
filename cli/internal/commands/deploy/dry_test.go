@@ -173,7 +173,7 @@ func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Run `ocel bootstrap production --features") {
+	if !strings.Contains(stdout.String(), "Run `ocel bootstrap production`") {
 		t.Errorf("stdout = %q, want the refusal to name the bootstrap that would have to run first", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "Run without --dry to apply.") {
@@ -247,8 +247,8 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Run `ocel bootstrap production --features") {
-		t.Errorf("stdout = %q, want the bootstrap that would have to run first", stdout.String())
+	if want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"; !strings.Contains(stdout.String(), want) {
+		t.Errorf("stdout = %q, want it to say %q: a dry run records nothing for the bootstrap to add", stdout.String(), want)
 	}
 	if strings.Contains(stdout.String(), "now?") {
 		t.Errorf("stdout = %q, want a dry run never to offer to bootstrap: it changes nothing", stdout.String())

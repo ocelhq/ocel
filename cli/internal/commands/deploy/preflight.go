@@ -40,6 +40,7 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 		Slug:            cfg.Slug,
 		ClaimsDomains:   true,
 		ProjectRegistry: true,
+		RecordWants:     true,
 		Policy:          policy,
 
 		CheckPreviewRoute: true,
@@ -130,6 +131,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 		ClaimsDomains:   true,
 		RequireHostname: true,
 		ProjectRegistry: true,
+		RecordWants:     true,
 		Policy:          policy,
 	}
 }

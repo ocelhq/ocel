@@ -68,11 +68,7 @@ func (g Gap) IsEmpty() bool {
 }
 
 func (g Gap) RepairCommand(tier environmentv1.Tier) string {
-	command := BootstrapCommand(tier)
-	if len(g.Features) > 0 {
-		command += " --features " + strings.Join(g.Features, ",")
-	}
-	return command
+	return BootstrapCommand(tier)
 }
 
 func (g Gap) BootstrapRequest(tier environmentv1.Tier, edge *contractv1.EdgeSelection) *contractv1.BootstrapRequest {
@@ -91,13 +87,18 @@ func (g Gap) RefuseMissing(tier environmentv1.Tier) error {
 }
 
 type MissingFeaturesError struct {
-	Gap      Gap
-	Tier     environmentv1.Tier
-	Edge     *contractv1.EdgeSelection
-	Provider *providerprocess.Provider
+	Gap        Gap
+	Tier       environmentv1.Tier
+	Edge       *contractv1.EdgeSelection
+	Provider   *providerprocess.Provider
+	Unrecorded bool
 }
 
 func (e MissingFeaturesError) Error() string {
+	if e.Unrecorded {
+		return fmt.Sprintf("the %s bootstrap does not include what this project needs: %s.\nA dry run records nothing: %s",
+			TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Hint())
+	}
 	return fmt.Sprintf(
 		"the %s bootstrap does not include what this project needs: %s.\nRun `%s` and try again",
 		TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Gap.RepairCommand(e.Tier),
@@ -110,9 +111,19 @@ func (e MissingFeaturesError) Finding() string {
 	return fmt.Sprintf("The %s bootstrap does not include what this project needs: %s.", TierName(e.Tier), strings.Join(e.Gap.Missing, ", "))
 }
 
-func (e MissingFeaturesError) Remedy() string { return "`" + e.Hint() + "`" }
+func (e MissingFeaturesError) Remedy() string {
+	if e.Unrecorded {
+		return e.Hint()
+	}
+	return "`" + e.Hint() + "`"
+}
 
-func (e MissingFeaturesError) Hint() string { return e.Gap.RepairCommand(e.Tier) }
+func (e MissingFeaturesError) Hint() string {
+	if e.Unrecorded {
+		return "deploy without --dry, which records what this project wants, then run `" + e.Gap.RepairCommand(e.Tier) + "`"
+	}
+	return e.Gap.RepairCommand(e.Tier)
+}
 
 func (e MissingFeaturesError) refuse() error {
 	return &clierror.Error{Code: clierror.CodeBootstrapFeaturesMissing, Hint: e.Hint(), Cause: e}

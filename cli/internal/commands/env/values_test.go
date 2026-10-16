@@ -925,8 +925,24 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if want := provider.FeatureVariablesKey; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
 		}
-		if want := "ocel bootstrap production --features"; !strings.Contains(stderr.String(), want) {
-			t.Errorf("stream = %q, want it to name `%s`", stderr.String(), want)
+		if want := "`ocel bootstrap production`"; !strings.Contains(stderr.String(), want) || strings.Contains(stderr.String(), "--features") {
+			t.Errorf("stream = %q, want it to name %s alone", stderr.String(), want)
+		}
+	})
+
+	t.Run("a write with no key to seal under records that the project wants one", func(t *testing.T) {
+		project := setUpVariablesKeyFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err == nil {
+			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
+		}
+		wants, err := stackrecords.ListBootstrapWants(context.Background(), project.Provider.KeyValues(), environment.TierProduction)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(wants[provider.FeatureVariablesKey]) != 1 || len(wants) != 1 {
+			t.Errorf("wants = %v, want this project's want of %s alone, for `ocel bootstrap production` to add", wants, provider.FeatureVariablesKey)
 		}
 	})
 
@@ -961,8 +977,8 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "ocel bootstrap production --features " + provider.FeatureVariablesKey; !strings.Contains(stderr.String(), want) {
-			t.Errorf("stream = %q, want it to name `%s` alone", stderr.String(), want)
+		if want := "does not include what this project needs: " + provider.FeatureVariablesKey + "."; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name %q", stderr.String(), want)
 		}
 		if strings.Contains(err.Error(), fake.FeatureImages) {
 			t.Errorf("runEnvSet err = %v, want a write to ask for the key it seals under, not for what a deploy would need", err)
@@ -999,7 +1015,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err != nil {
 			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if want := "Run `ocel bootstrap production --features " + provider.FeatureVariablesKey + "` now?"; !strings.Contains(stderr.String(), want) {
+		if want := "Run `ocel bootstrap production` now?"; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stderr = %q, want the offer put to whoever is at the terminal", stderr.String())
 		}
 		if strings.Contains(stdout.String(), "Run `ocel bootstrap") {
