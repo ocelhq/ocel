@@ -10,7 +10,10 @@ import (
 
 type cipher struct{ p *Provider }
 
-func (s cipher) openCipher(ctx context.Context) (ports.Cipher, error) {
+func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (ports.Cipher, error) {
+	if tier == "" {
+		return ports.Cipher{}, ports.Tierless("a value")
+	}
 	opened, err := s.p.openClients(ctx)
 	if err != nil {
 		return ports.Cipher{}, err
@@ -19,7 +22,7 @@ func (s cipher) openCipher(ctx context.Context) (ports.Cipher, error) {
 }
 
 func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	opened, err := s.openCipher(ctx)
+	opened, err := s.openKMS(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +30,7 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 }
 
 func (s cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	opened, err := s.openCipher(ctx)
+	opened, err := s.openKMS(ctx, tier)
 	if err != nil {
 		return nil, err
 	}

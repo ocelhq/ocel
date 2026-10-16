@@ -87,6 +87,22 @@ func gcloudProject(ctx context.Context) (string, error) {
 }
 
 func (p *Provider) openClients(ctx context.Context) (*clients, error) {
+	opened, err := p.resolveClients(ctx)
+	if err != nil || opened.emulated() {
+		return opened, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.regionChecked {
+		if err := opened.refuseRegionNotServed(ctx); err != nil {
+			return nil, err
+		}
+		p.regionChecked = true
+	}
+	return opened, nil
+}
+
+func (p *Provider) resolveClients(ctx context.Context) (*clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.resolved != nil {
@@ -109,7 +125,7 @@ func (p *Provider) openClients(ctx context.Context) (*clients, error) {
 }
 
 func (p *Provider) Names(ctx context.Context) (Names, error) {
-	resolved, err := p.openClients(ctx)
+	resolved, err := p.resolveClients(ctx)
 	if err != nil {
 		return Names{}, err
 	}
