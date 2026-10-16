@@ -55,9 +55,6 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 		}
 	}
 	status.Features = bootstrapplan.InCatalogueOrder(r.Bootstrap.Catalogue(), present)
-	if !status.Present {
-		return status, nil
-	}
 	if status.RepairOnDeploy, err = r.repairOnDeploy(ctx, tier); err != nil {
 		return BootstrapStatus{}, err
 	}
@@ -322,7 +319,7 @@ func (r Readiness) admitRemovals(ctx context.Context, tier environment.Tier, rem
 
 func (r Readiness) RecordedFeatures(ctx context.Context, tier environment.Tier) (map[string][]string, error) {
 	projects, err := r.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
-	if err != nil {
+	if err != nil && !storeAbsent(err) {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
@@ -438,7 +435,7 @@ func denied(refused refusal.Refusal) string {
 
 func (r Readiness) repairOnDeploy(ctx context.Context, tier environment.Tier) (bool, error) {
 	recorded, err := keyvalue.ReadOrEmpty(ctx, r.KeyValues, stackrecords.BootstrapKey(tier))
-	if err != nil {
+	if err != nil && !storeAbsent(err) {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	if len(recorded.Value) == 0 {
@@ -449,6 +446,11 @@ func (r Readiness) repairOnDeploy(ctx context.Context, tier environment.Tier) (b
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	return state.RepairOnDeploy, nil
+}
+
+func storeAbsent(err error) bool {
+	var refused refusal.Refusal
+	return errors.As(err, &refused) && refused.Code == refusal.CodeNotReady
 }
 
 func (r Readiness) RecordBootstrap(ctx context.Context, tier environment.Tier, state stackrecords.BootstrapSettings) error {
@@ -475,6 +477,9 @@ type BootstrapUsers struct {
 
 func (r Readiness) BootstrapUsers(ctx context.Context, tier environment.Tier) (BootstrapUsers, error) {
 	recorded, err := r.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
+	if storeAbsent(err) {
+		return BootstrapUsers{}, nil
+	}
 	if err != nil {
 		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}

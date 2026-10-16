@@ -949,3 +949,24 @@ func TestBootstrapRefusesAnEdgeTheProviderDoesNotServe(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() against an unserved edge = %v, want it named in a refusal", err)
 	}
 }
+
+func TestBootstrapDescribesAndCreatesATierWhoseStoreTheBootstrapCreates(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	vendor := vendorWithAStoreTheBootstrapCreates{fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	client := servedProvider(t, "1.2.3", vendor)
+
+	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+		Tier:           environmentv1.Tier_TIER_PRODUCTION,
+		WithDependents: true,
+	})
+	if err != nil {
+		t.Fatalf("DescribeBootstrap() error = %v, want the bootstrap described as absent", err)
+	}
+	if described.GetBootstrap().GetPresent() {
+		t.Fatal("DescribeBootstrap() reports a bootstrap where none was applied")
+	}
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+}
