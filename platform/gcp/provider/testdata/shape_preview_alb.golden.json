@@ -147,6 +147,24 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_service_account:ocel-c971a2492c",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_service_account",
+      "name": "ocel-c971a2492c",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_part_databases",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_iam_custom_role",
+      "name": "ocel_part_databases",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_service_account:ocel-bf6a3118ee",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

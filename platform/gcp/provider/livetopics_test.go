@@ -59,7 +59,7 @@ func ordersSpec(consumers ...string) *provider.TopicSpec {
 
 func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *testing.T) {
 	p := live(t)
-	bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
+	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
 	ctx := context.Background()
 	ref := infraRef(t)
 	names := taskNamesOf(t, ref)
@@ -126,7 +126,7 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 
 func TestLiveATopicWhoseOrderingChangedIsRefusedBeforeAnythingChanges(t *testing.T) {
 	p := live(t)
-	bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
+	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
 	ctx := context.Background()
 	ref := infraRef(t)
 	names := taskNamesOf(t, ref)
@@ -157,7 +157,7 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedBeforeAnythingChanges(t *testing
 
 func TestLiveATopicDeclaredWithNoConfigIsAPubSubTopicAlone(t *testing.T) {
 	p := live(t)
-	bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
+	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
 	ctx := context.Background()
 	ref := infraRef(t)
 

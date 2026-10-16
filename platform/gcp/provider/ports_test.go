@@ -17,6 +17,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func testProvider(t *testing.T) *gcp.Provider {
@@ -505,8 +506,18 @@ func TestADeployMayAddTheBootstrapPartsGoogleNamesNoConditionForThroughOneCustom
 		}
 	}
 	for _, line := range strings.Split(document.Document, "\n") {
-		if line == "roles/compute.networkAdmin" {
-			t.Errorf("Permissions(deploy) grants roles/compute.networkAdmin, which deletes every network in the project, where a deploy only creates the tier's")
+		if line == "roles/compute.networkAdmin" || (strings.HasPrefix(line, "roles/cloudtasks.") && !strings.Contains(line, " on the queue ")) {
+			t.Errorf("Permissions(deploy) grants %s, which deletes what a deploy only creates", line)
 		}
+	}
+	databases := "projects/acme-prod/roles/ocel_part_databases, on the condition "
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		named := ports.TaskDatabase("ocel", tier)
+		if !strings.Contains(document.Document, databases) || !strings.Contains(document.Document, `resource.name == "projects/acme-prod/databases/`+named+`"`) {
+			t.Errorf("Permissions(deploy) =\n%s\nwant the part databases role granted on the condition it names %s: a deploy makes a tier's task database and no other", document.Document, named)
+		}
+	}
+	if strings.Contains(document.Document, "roles/datastore.owner") {
+		t.Errorf("Permissions(deploy) grants roles/datastore.owner, which deletes every Firestore database in the project")
 	}
 }

@@ -23,6 +23,7 @@ const (
 	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
 	KindGrant          Kind = "resourcemanager:grant"
+	KindQueue          Kind = "cloudtasks:queue"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -37,6 +38,8 @@ var BootstrapAPIs = []string{
 	"run.googleapis.com",
 	"cloudscheduler.googleapis.com",
 	"iamcredentials.googleapis.com",
+	"pubsub.googleapis.com",
+	"cloudtasks.googleapis.com",
 }
 
 type item struct {
@@ -60,6 +63,7 @@ var kindNouns = map[Kind]string{
 	KindServiceAccount: "service account",
 	KindRole:           "custom role",
 	KindGrant:          "project grant of",
+	KindQueue:          "Cloud Tasks queue",
 }
 
 func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
@@ -113,6 +117,18 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 		{
 			Kind: KindGrant, Name: networkUserRole, Shared: true,
 			Note: "lets the Cloud Run service agent attach services to the subnetwork of a tier's private network, which a deploy adds with its first database or kv store and may not grant on",
+		},
+		{
+			Kind: KindServiceAccount, Name: names.PushAccount(tier),
+			Note: "the identity Pub/Sub signs each push to a worker of this tier as, which only a bootstrap may let Pub/Sub's agent sign as",
+		},
+		{
+			Kind: KindQueue, Name: names.DelayQueue(tier),
+			Note: "the queue a delayed message of this tier waits in, which a deploy grants each app that publishes the right to enqueue on, and may only grant on a queue that already exists",
+		},
+		{
+			Kind: KindRole, Name: names.PartDatabasesRole(), Shared: true,
+			Note: "the role a deploy credential is granted, on the condition it names the tier databases a part holds, to make those databases and their indexes, and no more",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),

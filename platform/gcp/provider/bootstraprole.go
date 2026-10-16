@@ -47,7 +47,7 @@ func newAppAccountsRole(names Names) customRole {
 }
 
 func findCustomRole(names Names, id string) (customRole, bool) {
-	for _, role := range []customRole{newAppAccountsRole(names), newCDNPurgeRole(names), newPartsRole(names)} {
+	for _, role := range []customRole{newAppAccountsRole(names), newCDNPurgeRole(names), newPartsRole(names), newPartDatabasesRole(names)} {
 		if role.id == id {
 			return role, true
 		}

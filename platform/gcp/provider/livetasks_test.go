@@ -14,8 +14,6 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -79,10 +77,10 @@ func projectGrants(t *testing.T, role, member, database string) bool {
 	})
 }
 
-func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyNeed(t *testing.T) {
+func TestLiveTheBaseGivesTheTierADelayQueueAndAPushAccountAndTheTasksPartItsDatabase(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
-	bootstrap := bootstrapped(t, p, tier, gcp.TasksFeature)
+	bootstrap := bootstrappedWith(t, p, tier, gcp.TasksPart)
 	names := liveNames(t)
 	ctx := context.Background()
 
@@ -90,10 +88,12 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(described.Stacks, func(stack provider.BootstrapStack) bool {
-		return stack.Feature == gcp.TasksFeature && stack.Present
-	}) {
-		t.Errorf("Describe().Stacks = %+v, want the %s feature installed", described.Stacks, gcp.TasksFeature)
+	parts, err := bootstrap.DescribeParts(ctx, described)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == gcp.TasksPart && part.Current }) {
+		t.Errorf("DescribeParts() = %+v, want the %s part current", parts, gcp.TasksPart)
 	}
 
 	tierAccount := "serviceAccount:ocel-" + string(tier) + "@" + liveProject() + ".iam.gserviceaccount.com"
@@ -117,18 +117,5 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 
 	if !accountGrants(t, names.PushAccountEmail(tier), "roles/iam.serviceAccountTokenCreator", agentOf(t, "@gcp-sa-pubsub.iam.gserviceaccount.com")) {
 		t.Error("Pub/Sub may not sign a push as the push account, so no push would reach a worker")
-	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: []string{gcp.TasksFeature}, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply() removing %s = %v", gcp.TasksFeature, err)
-	}
-	accounts, err := iam.NewService(ctx, ports.EmulatorREST(endpoint())...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := accounts.Projects.ServiceAccounts.Get("projects/" + liveProject() + "/serviceAccounts/" + names.PushAccountEmail(tier)).Context(ctx).Do(); err == nil {
-		t.Error("the push account outlived the feature that made it")
-	}
-	if _, err := tasksClient.GetQueue(ctx, &cloudtaskspb.GetQueueRequest{Name: queue}); status.Code(err) == codes.NotFound {
-		t.Error("the delay queue was deleted, and Cloud Tasks holds a deleted queue's name for 7 days: a feature added again within them could not make it")
 	}
 }
