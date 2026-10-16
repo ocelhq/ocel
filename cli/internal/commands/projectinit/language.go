@@ -67,8 +67,15 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 			),
 		}
 	}
-	if err != nil || !found {
-		return sdkLanguage{}, false, err
+	if err != nil {
+		return sdkLanguage{}, false, &clierror.Error{
+			Code:  clierror.CodeInitAmbiguousLanguage,
+			Hint:  "--lang",
+			Cause: fmt.Errorf("%w, so ocel cannot tell which language this project is written in: name it with `--lang`, one of %s", err, english.Or(languageNames())),
+		}
+	}
+	if !found {
+		return sdkLanguage{}, false, nil
 	}
 	return sdkLanguageOf(written), true, nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -359,6 +361,26 @@ func TestInitRefusesANextAppBesideAPythonApp(t *testing.T) {
 		t.Fatal("init picked a language between a next app and a python app")
 	}
 	for _, want := range []string{"a python app (main.py) and a Next.js app", "--lang python"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestInitPointsAtLangWhereAManifestItNeedsCannotBeRead(t *testing.T) {
+	dir := manifestDir(t, "go.mod")
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeInitAmbiguousLanguage || coded.Hint != "--lang" {
+		t.Fatalf("err = %v, want %s with the --lang hint", err, clierror.CodeInitAmbiguousLanguage)
+	}
+	for _, want := range []string{"is not JSON", "--lang"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not mention %q", err, want)
 		}
