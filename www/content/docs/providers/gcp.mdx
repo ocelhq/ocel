@@ -52,9 +52,16 @@ ocel bootstrap production
 ocel deploy
 ```
 
-Each tier's bootstrap also creates a Firestore database of its own, `<namespace>-<tier>-tags`,
-that holds the revalidated tags of the tier's Next apps. It has no standing charge, only the
-reads, writes and storage its records use.
+The bootstrap makes only what every deploy needs. The first deploy that needs something more adds
+it to the tier with the deploy credential and shows it in its plan: the tag database a Next app
+that revalidates writes to, the network a database or kv store is reached over, the database
+topics and tasks keep their runs in, and the load balancer of the `alb` edge. `ocel bootstrap status`
+lists each of these parts, who added it, which projects use it and what it costs idle, and
+`ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand.
+
+The first deploy whose build revalidates adds a Firestore database of the tier's own,
+`<namespace>-<tier>-tags`, that holds the revalidated tags of the tier's Next apps. It has no
+standing charge, only the reads, writes and storage its records use.
 
 ## Next.js
 
@@ -187,21 +194,30 @@ already-routed preview waits the same way, and that preview is open until the wa
 Changing or revoking a password or secret takes the same few minutes to apply, and
 `ocel protection` streams the rollout while it waits.
 
-Each tier's bootstrap attaches the plugin with an empty gate set that admits
-everything, and a plugin that crashes refuses requests rather than passing them. The bootstrap checks
-the Service Extensions API (`networkservices.googleapis.com`) is on, and the credentials that
-run it and deploys hold `roles/networkservices.admin`. A load balancer only Cloudflare
+The deploy that adds the load balancer attaches the plugin with an empty gate set that admits
+everything, and a plugin that crashes refuses requests rather than passing them. That deploy checks
+the Service Extensions API (`networkservices.googleapis.com`) is on, and the deploy credential
+holds `roles/networkservices.admin`. A load balancer only Cloudflare
 reaches attaches no plugin: the worker in front of it runs the gate.
 
 A service behind the load balancer takes traffic from the load balancer alone, so its
 `run.app` URL does not answer: there is no way round the gate to it.
 
-A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
-provisions one global external Application Load Balancer per tier — one address, one
+A hostname on Google Cloud costs a load balancer. Name the `alb` edge and the first deploy
+behind it adds one global external Application Load Balancer per tier — one address, one
 certificate map, one URL map, Cloud CDN on every backend — and every project in that tier
 is answered by it. It is the only thing ocel provisions on Google Cloud that bills while
 it serves no traffic: about $18 a month per tier for the forwarding rule, plus
-Premium-tier egress. The bootstrap plan says so before it provisions anything.
+Premium-tier egress. The deploy plan says so before it provisions anything, and the destroy of
+the last project behind it, or the deploy that moves that project to another edge, takes it
+down again. One that still has a hostname bound stays until the hostname is released.
+Binding a preview wildcard with `ocel domain use --preview` uses the same load balancer: it adds
+it if no deploy has, `ocel bootstrap status` lists the wildcard among its users, and releasing
+the wildcard takes the load balancer down if nothing else is behind it.
+
+The deploy credential adds the load balancer, its gate plugin and the Artifact Registry
+repository the plugin is kept in under the roles that bind hostnames, and creates and deletes
+that repository through the parts role [below](#what-to-grant).
 
 The bootstrap also keeps one custom role,
 `projects/<project>/roles/<namespace with _ for ->_cdn_purge`, holding only
@@ -384,26 +400,25 @@ the instance and its data.
 
 ## Private network
 
-KV stores and databases are reached over a network of the tier's own, which a bootstrap installs
-once:
+KV stores and databases are reached over a network of the tier's own, which the first deploy
+declaring one adds as the tier's `private-network` part. Switch its services on first:
 
 ```bash
 gcloud services enable compute.googleapis.com memorystore.googleapis.com sqladmin.googleapis.com \
   networkconnectivity.googleapis.com serviceconsumermanagement.googleapis.com \
   servicenetworking.googleapis.com --project my-project
-ocel bootstrap production --features private-network
 ```
 
 That is one VPC network with one subnetwork, `10.240.0.0/20`, in the bootstrap's region, and
 the service connection policies Memorystore and Cloud SQL connect each instance through. None of
-it bills. The bootstrap credential also needs `roles/compute.networkAdmin` and
-`roles/cloudsql.viewer`. A deploy declaring a store or a database on a tier without it is
-refused, naming that command. Cloud Run services and functions bound to one reach private
-addresses over that subnetwork through direct VPC egress; the rest of their traffic leaves as
-before.
+it bills. A deploy that finds a service switched off is refused, naming the command that switches
+it on. The bootstrap grants the Cloud Run service agent `roles/compute.networkUser` on the project,
+so Cloud Run services and functions bound to a store or database reach private addresses over
+that subnetwork through direct VPC egress; the rest of their traffic leaves as before.
 
-**Removing it.** Dropping `private-network` from a bootstrap, or removing the bootstrap, is
-refused while any store or database is still on the tier's network, naming them.
+**Removing it.** `ocel bootstrap destroy` takes the network down, and is refused while any store
+or database is still on it, naming them. The bootstrap credential needs
+`roles/compute.networkAdmin` and `roles/cloudsql.viewer` for that.
 
 ## Topics, tasks and workers
 
@@ -416,27 +431,24 @@ Each worker runs as a second Cloud Run service from its app's image, scaled from
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
 gets at most 600 seconds, the longest a push subscription waits for an answer.
 
-Topics and tasks need a feature of the tier's bootstrap, installed once:
+The bootstrap makes the tier's delay queue, `<namespace>-<tier>-delays`, and the push account
+Pub/Sub signs each push as, so it wants Cloud Tasks and Pub/Sub on. The first deploy declaring a
+topic or task adds the tier's task database as the tier's `tasks` part.
 
-```bash
-gcloud services enable pubsub.googleapis.com cloudtasks.googleapis.com --project my-project
-ocel bootstrap production --features tasks
-```
-
-That is the tier's task database, its delay queue and its push account. None of it bills while
-idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
-task on a tier without it is refused, naming that command, and an ephemeral preview declaring one
-is refused. A Next app that declares neither needs no queue. Dropping `tasks` from a bootstrap is
-refused while any project on the tier still declares a topic or task.
+None of it bills while idle. An ephemeral preview declaring a topic or task is refused. A Next
+app that declares neither uses no queue. `ocel bootstrap destroy` deletes the database and
+purges the queue, keeping it, since Cloud Tasks will not make a queue under a deleted queue's
+name for 7 days. It needs `roles/cloudtasks.admin` in the bootstrap credential, and is refused
+while any project on the tier still declares a topic or task.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
 batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger
 is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
-Once `tasks` is installed, a deploy also keeps the app's access to the tier's delay queue, and
-Google cannot narrow that grant by condition, so you give the deploy credential the role on
-exactly that queue, once per tier:
+A deploy also keeps the app's access to the tier's delay queue, and Google cannot narrow that
+grant by condition, so you give the deploy credential the role on exactly that queue, once per
+tier:
 
 ```bash
 gcloud tasks queues add-iam-policy-binding ocel-production-delays \
@@ -445,8 +457,8 @@ gcloud tasks queues add-iam-policy-binding ocel-production-delays \
   --role=roles/cloudtasks.queueAdmin
 ```
 
-The queue is `<namespace>-<tier>-delays`, so a project with a preview tier needs the same grant
-for it. A deploy that lacks it is refused, naming it.
+A project with a preview tier needs the same grant for `ocel-preview-delays`. A deploy that
+lacks it is refused, naming it.
 
 ## Realtime
 
@@ -470,7 +482,7 @@ Turn the services on once:
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
   iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com \
-  iamcredentials.googleapis.com --project my-project
+  iamcredentials.googleapis.com pubsub.googleapis.com cloudtasks.googleapis.com --project my-project
 ```
 
 Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
@@ -479,7 +491,7 @@ A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
 `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
 `roles/memorystore.admin`, `roles/pubsub.admin` and `roles/cloudscheduler.admin`, and the
-custom role `ocel bootstrap` keeps for it.
+custom roles `ocel bootstrap` keeps for it.
 
 The custom role lets a deploy create the service accounts its apps run as and set who may act as
 them, and nothing else: it holds `iam.serviceAccounts.create`, `.get`, `.getIamPolicy` and
@@ -495,6 +507,28 @@ gcloud projects add-iam-policy-binding my-project \
 
 An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
 because a delayed message is published as the app that sent it.
+
+The first deploy that needs a part of the bootstrap adds it with two more custom roles the
+bootstrap keeps. `<namespace with _ for ->_part_databases` makes the tag and task databases and
+their indexes, granted on a condition naming those four databases, so it reaches no other
+Firestore database. `<namespace with _ for ->_parts` creates the tier's network, subnetwork and
+service connection policies, uses that network and subnetwork as the policies need, creates the
+repository the load balancer's gate plugin is kept in, and reads whether a service is on. Compute
+Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute a
+condition could hold those by, so it is granted unconditioned; it deletes nothing but that
+repository, which the last project behind the load balancer takes down with it.
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=projects/my-project/roles/ocel_parts --condition=None
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=projects/my-project/roles/ocel_part_databases \
+  --condition="title=ocel part databases,expression=resource.name == 'projects/my-project/databases/ocel-production-tags' || resource.name.startsWith('projects/my-project/databases/ocel-production-tags/') || resource.name == 'projects/my-project/databases/ocel-production-tasks' || resource.name.startsWith('projects/my-project/databases/ocel-production-tasks/') || resource.name == 'projects/my-project/databases/ocel-preview-tags' || resource.name.startsWith('projects/my-project/databases/ocel-preview-tags/') || resource.name == 'projects/my-project/databases/ocel-preview-tasks' || resource.name.startsWith('projects/my-project/databases/ocel-preview-tasks/')"
+```
+
+`ocel permissions deploy` prints each grant with its condition for your namespace.
 
 A bootstrap never deletes the role, because Google holds a deleted custom role's id for up to 44
 days and nothing could make it again in that time. A role deleted by hand is undeleted within
@@ -573,7 +607,7 @@ gcloud projects add-iam-policy-binding my-project \
   --condition="title=ocel buckets,expression=resource.name.startsWith('projects/_/buckets/ocel--')"
 ```
 
-On a tier with the [private network](#private-network), a deploy also creates, changes and
+Once a tier has its [private network](#private-network), a deploy also creates, changes and
 deletes the Cloud SQL instances its databases run on, named the same way: grant
 `roles/cloudsql.admin` under a condition naming them. Cloud SQL names an instance by the
 project's id:
@@ -602,6 +636,7 @@ gcloud projects add-iam-policy-binding my-project \
 A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the
 realtime grant, plus `roles/datastore.owner`, `roles/storage.admin`,
 `roles/cloudkms.admin`, `roles/artifactregistry.admin`,
-`roles/iam.serviceAccountAdmin`, `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin` and
-`roles/cloudscheduler.admin`. Anything missing is named back to you before anything is
-created.
+`roles/iam.serviceAccountAdmin`, `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin`,
+`roles/cloudscheduler.admin`, and, to take down the parts deploys added, `roles/compute.networkAdmin`,
+`roles/cloudsql.viewer` and `roles/cloudtasks.admin`. Anything missing is named back to you before
+anything is created.
