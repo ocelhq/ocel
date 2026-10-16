@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -120,6 +123,41 @@ func TestAContainerDeployWhoseInfrastructureFailsLeavesNoContainersPartCreating(
 
 	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart); err != nil || present {
 		t.Errorf("containers record = %+v, %v, %v after its infrastructure failed, want no claim left creating", recorded, present, err)
+	}
+}
+
+func TestRemovingTheContainersPartIsRefusedWhileAContainerAppRunsInItAndTakesItDownOnceNoneDoes(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	engine := &mockedEngine{outputs: containerPartOutputs()}
+	stacks := stacksWith(cfg, engine)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision(shop) = %v", err)
+	}
+
+	err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, spec.Ref.Project) {
+		t.Fatalf("RemoveContainerInfrastructure() while %s runs in it = %v, want a refusal naming it: its service holds the cluster", spec.Ref.Project, err)
+	}
+	if torn := engine.torn(); len(torn) != 0 {
+		t.Fatalf("a refused removal tore down %v, want nothing", torn)
+	}
+
+	if err := keyvalue.Forget(ctx, cfg.KeyValues, consumerAt(spec.Ref)); err != nil {
+		t.Fatal(err)
+	}
+	if err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard()); err != nil {
+		t.Fatalf("RemoveContainerInfrastructure() with no container app left = %v", err)
+	}
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != containerInfraRef(tier).Name.String() {
+		t.Errorf("the removal tore down %v, want the container infrastructure stack", torn)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart); err != nil || present {
+		t.Errorf("containers record present %v (%v) after its removal, want it forgotten", present, err)
 	}
 }
 

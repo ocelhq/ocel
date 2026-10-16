@@ -8,6 +8,9 @@ import (
 )
 
 const (
+	Part    = "bastion"
+	Summary = "the task a port forward runs inside the tier's network"
+
 	Prefix                 = "ocel-bastion"
 	PortForwardingDocument = "AWS-StartPortForwardingSessionToRemoteHost"
 

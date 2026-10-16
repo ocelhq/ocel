@@ -2,20 +2,65 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
+type removablePart struct {
+	provider.Part
+	plan   func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error)
+	remove func(ctx context.Context, tier environment.Tier, progress progress.Log) error
+}
+
+var recordedParts = []provider.Part{
+	{Name: imageoptimizer.Part, Summary: imageoptimizer.Summary},
+	{Name: taginvalidator.Part, Summary: taginvalidator.Summary},
+	{Name: cloudfrontpart.Part, Summary: cloudfrontpart.Summary},
+	{Name: notfoundapi.Part, Summary: notfoundapi.Summary},
+	{Name: envsourcesync.Part, Summary: envsourcesync.Summary},
+}
+
+func (p *Provider) removableParts() []removablePart {
+	removable := make([]removablePart, 0, len(recordedParts)+2)
+	for _, part := range recordedParts {
+		removable = append(removable, removablePart{
+			Part: part,
+			plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+				return p.planPartRemoval(ctx, tier, part.Name, "this run removes it; the next deploy that uses it adds it again")
+			},
+			remove: func(ctx context.Context, tier environment.Tier, _ progress.Log) error {
+				return p.removePart(ctx, tier, part.Name)
+			},
+		})
+	}
+	return append(removable,
+		removablePart{
+			Part:   provider.Part{Name: deploy.ContainersPart, Summary: deploy.ContainersSummary},
+			plan:   p.planContainersRemoval,
+			remove: p.stacks.RemoveContainerInfrastructure,
+		},
+		removablePart{
+			Part:   provider.Part{Name: bastion.Part, Summary: bastion.Summary},
+			plan:   p.planBastionRemoval,
+			remove: p.removeBastion,
+		},
+	)
+}
+
 func (p *Provider) removeAddedParts(ctx context.Context, tier environment.Tier) error {
-	namespace := string(p.namespace)
 	for _, name := range addedParts {
 		recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, name)
 		if err != nil {
@@ -24,46 +69,97 @@ func (p *Provider) removeAddedParts(ctx context.Context, tier environment.Tier) 
 		if !present {
 			continue
 		}
-		switch name {
-		case imageoptimizer.Part:
-			err = imageoptimizer.Remove(ctx, imageoptimizer.NewClients(p.aws), namespace, tier)
-		case taginvalidator.Part:
-			err = taginvalidator.Remove(ctx, taginvalidator.NewClients(p.aws), namespace, tier)
-		case cloudfrontpart.Part:
-			var api cloudfrontpart.API
-			if api, err = p.cloudFrontAPI(ctx); err == nil {
-				err = cloudfrontpart.Remove(ctx, api, cloudfrontpart.Spec{Namespace: p.namespace, Tier: tier}, recorded.Resources)
-			}
-		case notfoundapi.Part:
-			err = notfoundapi.Remove(ctx, apigateway.NewFromConfig(p.aws), recorded.Resources)
-		}
-		if err != nil {
+		if err := p.takePart(ctx, tier, name, recorded); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+func (p *Provider) removePart(ctx context.Context, tier environment.Tier, name string) error {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, name)
+	if err != nil || !present {
+		return err
+	}
+	return p.takePart(ctx, tier, name, recorded)
+}
+
+func (p *Provider) takePart(ctx context.Context, tier environment.Tier, name string, recorded stackrecords.BootstrapPart) error {
+	namespace := string(p.namespace)
+	switch name {
+	case imageoptimizer.Part:
+		return imageoptimizer.Remove(ctx, imageoptimizer.NewClients(p.aws), namespace, tier)
+	case taginvalidator.Part:
+		return taginvalidator.Remove(ctx, taginvalidator.NewClients(p.aws), namespace, tier)
+	case cloudfrontpart.Part:
+		api, err := p.cloudFrontAPI(ctx)
+		if err != nil {
+			return err
+		}
+		return cloudfrontpart.Remove(ctx, api, cloudfrontpart.Spec{Namespace: p.namespace, Tier: tier}, recorded.Resources)
+	case notfoundapi.Part:
+		return notfoundapi.Remove(ctx, apigateway.NewFromConfig(p.aws), recorded.Resources)
+	case envsourcesync.Part:
+		return envsourcesync.Remove(ctx, envsourcesync.NewClients(p.aws), namespace, tier)
+	}
+	return fmt.Errorf("this provider removes no bootstrap part named %q", name)
+}
+
 func (p *Provider) planAddedPartRemoval(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	for _, name := range addedParts {
-		recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, name)
+		group, err := p.planPartRemoval(ctx, tier, name, "the bootstrap it belongs to is being removed")
 		if err != nil {
 			return nil, err
 		}
-		if !present {
-			continue
+		if group != nil {
+			groups = append(groups, *group)
 		}
-		group := provider.ChangeGroup{
-			Kind:   provider.StackGroupKind,
-			Name:   "bootstrap part " + name,
-			Action: provider.ActionDelete,
-			Reason: "added by " + recorded.AddedBy + " on first use; the bootstrap it belongs to is being removed",
-		}
-		for _, resource := range recorded.Resources {
-			group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})
-		}
-		groups = append(groups, group)
 	}
 	return groups, nil
+}
+
+func (p *Provider) planPartRemoval(ctx context.Context, tier environment.Tier, name, why string) (*provider.ChangeGroup, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, name)
+	if err != nil || !present {
+		return nil, err
+	}
+	return partDeletion(name, "added by "+recorded.AddedBy+" on first use; "+why, recorded.Resources), nil
+}
+
+func (p *Provider) planContainersRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+	part, present, err := deploy.ReadContainerInfrastructurePart(ctx, p.KeyValues(), p.aws.Region, tier)
+	if err != nil || !present {
+		return nil, err
+	}
+	if len(part.UsedBy) > 0 {
+		return nil, deploy.RefuseContainerInfrastructureInUse(tier, part.UsedBy)
+	}
+	return partDeletion(part.Name, "this run removes it; the next container deploy adds it again", part.Resources), nil
+}
+
+func (p *Provider) planBastionRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+	resources, found, err := bastion.Describe(ctx, bastion.NewClients(p.aws), tier)
+	if err != nil || !found {
+		return nil, err
+	}
+	return partDeletion(bastion.Part, "this run removes it; the next port forward adds it again", resources), nil
+}
+
+func (p *Provider) removeBastion(ctx context.Context, tier environment.Tier, _ progress.Log) error {
+	return bastion.Remove(ctx, bastion.NewClients(p.aws), tier)
+}
+
+func partDeletion(name, reason string, resources []provider.PartResource) *provider.ChangeGroup {
+	group := provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
+		Name:   "bootstrap part " + name,
+		Part:   name,
+		Action: provider.ActionDelete,
+		Reason: reason,
+	}
+	for _, resource := range resources {
+		group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})
+	}
+	return &group
 }

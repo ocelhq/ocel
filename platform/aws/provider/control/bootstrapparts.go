@@ -12,11 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-const (
-	baseSummary    = "the permissions, buckets, tables and secrets every deploy in this tier runs on"
-	bastionSummary = "the task a port forward runs inside the tier's network"
-	bastionPart    = "bastion"
-)
+const baseSummary = "the permissions, buckets, tables and secrets every deploy in this tier runs on"
 
 func (b Bootstrap) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
 	read, passed := described.VendorState.(bootstrap.Reading)
@@ -76,8 +72,8 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	}
 	if found {
 		parts = append(parts, provider.BootstrapPart{
-			Name:      bastionPart,
-			Summary:   bastionSummary,
+			Name:      bastion.Part,
+			Summary:   bastion.Summary,
 			Current:   true,
 			Resources: resources,
 			Shape: &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: []pricing.Shaped{

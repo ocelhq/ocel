@@ -33,7 +33,7 @@ const (
 	ContainersSlug = awsports.ContainersSlug
 
 	ContainersPart    = "containers"
-	containersSummary = "the load balancer and cluster every container app in the tier runs behind"
+	ContainersSummary = "the load balancer and cluster every container app in the tier runs behind"
 
 	consumersKey  = "consumers"
 	leaseKey      = "lease"
@@ -355,31 +355,71 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store
 	if progress != nil {
 		progress.Say("Taking down the shared container infrastructure for the " + string(ref.Tier) + " tier: the last container app in it is gone")
 	}
-	stack := containerInfraRef(ref.Tier)
-	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
-		return fmt.Errorf("take down the shared container infrastructure for the %s tier: %w", ref.Tier, err)
-	}
-	if err := stackrecords.Forget(ctx, store, ref.Tier, ContainersSlug, stack.Name); err != nil {
-		return err
-	}
-	if err := keyvalue.Forget(ctx, store, awsports.ContainerFrontKey(ref.Tier)); err != nil {
-		return err
-	}
-	if err := stackrecords.ForgetBootstrapPart(ctx, store, ref.Tier, ContainersPart); err != nil {
-		return err
-	}
-	return keyvalue.Forget(ctx, store, leaseAt(ref.Tier))
+	return retireContainerInfra(ctx, owner, store, ref.Tier, progress)
 }
 
-func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	_, present, err := stackrecords.Read(ctx, store, tier, ContainersSlug, containerInfraRef(tier).Name)
-	if err != nil || !present {
-		return provider.BootstrapPart{}, false, err
+func (r *Stacks) RemoveContainerInfrastructure(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	r.containerInfraLock.Lock()
+	defer r.containerInfraLock.Unlock()
+	owner, err := r.containerInfraFor(ctx, tier)
+	if err != nil {
+		return err
 	}
+	store := owner.cfg.KeyValues
+	users, err := listContainerInfraUsers(ctx, store, tier)
+	if err != nil {
+		return err
+	}
+	if len(users) > 0 {
+		return RefuseContainerInfrastructureInUse(tier, users)
+	}
+	leased, err := keyvalue.ReadOrEmpty(ctx, store, leaseAt(tier))
+	if err != nil {
+		return err
+	}
+	state, err := leaseOf(leased)
+	if err != nil {
+		return err
+	}
+	state.Destroying = true
+	if err := writeLease(ctx, store, leased, state); err != nil {
+		if errors.Is(err, keyvalue.ErrStale) {
+			return refusal.Refuse(refusal.CodeBusy, "a deploy took the shared container infrastructure of the %s tier while this run was removing it; run the removal again", tier)
+		}
+		return fmt.Errorf("mark the shared container infrastructure for the %s tier as going down: %w", tier, err)
+	}
+	return retireContainerInfra(ctx, owner, store, tier, progress)
+}
+
+func RefuseContainerInfrastructureInUse(tier environment.Tier, users []string) error {
+	return refusal.Refuse(refusal.CodeInvalid,
+		"%s still run container apps on the shared container infrastructure of the %s tier, and its cluster is not deleted while their services run in it.\n"+
+			"Remove the container apps from those projects and deploy them, or destroy their environments: the last one to leave takes it down",
+		strings.Join(users, ", "), tier)
+}
+
+func retireContainerInfra(ctx context.Context, owner *release, store keyvalue.Store, tier environment.Tier, progress progress.Log) error {
+	stack := containerInfraRef(tier)
+	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
+		return fmt.Errorf("take down the shared container infrastructure for the %s tier: %w", tier, err)
+	}
+	if err := stackrecords.Forget(ctx, store, tier, ContainersSlug, stack.Name); err != nil {
+		return err
+	}
+	if err := keyvalue.Forget(ctx, store, awsports.ContainerFrontKey(tier)); err != nil {
+		return err
+	}
+	if err := stackrecords.ForgetBootstrapPart(ctx, store, tier, ContainersPart); err != nil {
+		return err
+	}
+	return keyvalue.Forget(ctx, store, leaseAt(tier))
+}
+
+func listContainerInfraUsers(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]string, error) {
 	consumers := consumersPrefix(tier)
 	entries, err := store.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
-		return provider.BootstrapPart{}, false, fmt.Errorf("read who uses the shared container infrastructure for the %s tier: %w", tier, err)
+		return nil, fmt.Errorf("read who uses the shared container infrastructure for the %s tier: %w", tier, err)
 	}
 	users := []string{}
 	for _, entry := range entries {
@@ -388,16 +428,28 @@ func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, 
 		}
 	}
 	slices.Sort(users)
+	return slices.Compact(users), nil
+}
+
+func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	_, present, err := stackrecords.Read(ctx, store, tier, ContainersSlug, containerInfraRef(tier).Name)
+	if err != nil || !present {
+		return provider.BootstrapPart{}, false, err
+	}
+	users, err := listContainerInfraUsers(ctx, store, tier)
+	if err != nil {
+		return provider.BootstrapPart{}, false, err
+	}
 	front, _, err := awsports.ReadContainerFront(ctx, store, tier)
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
 	return provider.BootstrapPart{
 		Name:      ContainersPart,
-		Summary:   containersSummary,
+		Summary:   ContainersSummary,
 		Current:   true,
 		Resources: listContainerInfrastructureResources(tier, front),
-		UsedBy:    slices.Compact(users),
+		UsedBy:    users,
 		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeContainerInfrastructure(tier)},
 
 		RetiresWithLastUser: true,
