@@ -9,7 +9,7 @@ ocel bootstrap production [flags]
 
 Also spelled `ocel bootstrap prod`.
 
-A bootstrap only ever builds up: `--features` and the interactive picker add and refresh, and a feature they leave out stays included. `--remove` is the only way anything goes.
+A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. `--remove` is the only way anything goes.
 
 Every run prints the changes it would make before asking; `--dry` prints them and stops.
 
@@ -18,7 +18,6 @@ Every run prints the changes it would make before asking; `--dry` prints them an
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry` | `bool` | `false` | Print the changes and stop, applying nothing |
-| `--features` | `string` |  | Comma-separated set of features to add or refresh; whatever else is installed is left alone (also: all, none) |
 | `--force` | `bool` | `false` | Remove a feature other projects still use |
 | `--remove` | `string` |  | Comma-separated set of features to tear down; nothing goes unless it is named here |
 | `--repair` | `bool` | `false` | Let later deploys refresh stale features on their own; `--repair=false` turns it off |

@@ -85,7 +85,7 @@ func TestTheFeaturesFlagKeepsTheProvidersOrderAndTakesAllOrNone(t *testing.T) {
 		if err == nil {
 			t.Fatal("parseFeatureFlag accepted a feature without what it depends on")
 		}
-		if !strings.Contains(err.Error(), "--features isr,relay-edge") {
+		if !strings.Contains(err.Error(), "name all of isr,relay-edge") {
 			t.Errorf("error %q does not name the full set to pass instead", err)
 		}
 	})
