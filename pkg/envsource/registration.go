@@ -223,3 +223,17 @@ func Registrations(ctx context.Context, store keyvalue.Store, tier environment.T
 	slices.SortFunc(out, func(a, b Registration) int { return strings.Compare(a.Project, b.Project) })
 	return out, errors.Join(undecodable...)
 }
+
+func ScheduledProjects(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]string, error) {
+	registrations, err := Registrations(ctx, store, tier)
+	if registrations == nil {
+		return nil, err
+	}
+	projects := []string{}
+	for _, registration := range registrations {
+		if registration.Descriptor.Reading() == ReadingOnSchedule {
+			projects = append(projects, registration.Project)
+		}
+	}
+	return projects, nil
+}
