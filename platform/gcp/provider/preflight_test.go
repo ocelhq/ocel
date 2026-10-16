@@ -22,18 +22,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func withStamp(t *testing.T, written stamp) *Provider {
-	t.Helper()
-	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || !strings.HasSuffix(r.URL.Path, "/ocel-acme-prod-production/"+StampObject) {
-			t.Errorf("preflight called %s %s, want only the tier's bootstrap stamp read", r.Method, r.URL.Path)
-		}
-		writeBody(w, written)
-	}))
-	t.Cleanup(served.Close)
-	return pushing(t, served.URL)
-}
-
 func declaringAStore(memory int64) provider.DeployPreflight {
 	return provider.DeployPreflight{
 		Deploy:    provider.DeploySpec{Tier: environment.TierProduction},
@@ -113,24 +101,6 @@ func declaringATask(infra naming.StackName) provider.DeployPreflight {
 		Resources: []provider.Resource{{Name: "task-resize", Declared: "resize", Type: provider.BindingTask, Topic: &provider.TopicSpec{
 			Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "worker", Exclusive: true}},
 		}}},
-	}
-}
-
-func TestADeployDeclaringATaskIsAdmittedOnceTheTierHasTasks(t *testing.T) {
-	p := withStamp(t, stamp{State: stateComplete, Features: []string{tasksFeature}})
-	if err := p.PreflightDeploy(context.Background(), declaringATask(naming.InfraStack("prod"))); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a task admitted on a tier whose tasks feature is installed", err)
-	}
-}
-
-func TestADeployDeclaringATaskIsRefusedUntilTheTierHasTasks(t *testing.T) {
-	for _, written := range []stamp{{State: stateComplete}, {State: stateApplying, Features: []string{tasksFeature}}} {
-		err := withStamp(t, written).PreflightDeploy(context.Background(), declaringATask(naming.InfraStack("prod")))
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady ||
-			!strings.Contains(err.Error(), "ocel bootstrap production --features "+tasksFeature) {
-			t.Errorf("PreflightDeploy() under stamp %+v = %v, want it refused naming the bootstrap that installs topics and tasks", written, err)
-		}
 	}
 }
 

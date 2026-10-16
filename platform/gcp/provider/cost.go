@@ -51,6 +51,7 @@ var itemTypes = map[Kind]string{
 	KindService:        tfCloudRunService,
 	KindSchedule:       tfSchedulerJob,
 	KindGrant:          tfProjectIAMMember,
+	KindQueue:          tfCloudTasksQueue,
 }
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -65,6 +66,9 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	for _, item := range bootstrapItems(names, req.Deploy.Tier, false) {
+		if item.Kind == KindQueue {
+			continue
+		}
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
@@ -198,10 +202,9 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	if !declared {
 		return
 	}
-	tier := req.Deploy.Tier
-	tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
-	tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
-	tree.Add(shared, string(Vendor), tfCloudTasksQueue, names.DelayQueue(tier), region, map[string]any{"location": region})
+	tree.AddShaped(shared, string(Vendor), region, tasksShape(names, req.Deploy.Tier, region))
+	queue := item{Kind: KindQueue, Name: names.DelayQueue(req.Deploy.Tier)}
+	tree.Add(shared, string(Vendor), itemTypes[KindQueue], queue.Name, region, itemProperties(queue, region))
 }
 
 func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {
@@ -262,6 +265,8 @@ func itemProperties(item item, region string) map[string]any {
 		}
 	case KindSchedule:
 		return map[string]any{"region": region, "schedule": syncSchedule}
+	case KindQueue:
+		return map[string]any{"location": region}
 	}
 	return map[string]any{}
 }

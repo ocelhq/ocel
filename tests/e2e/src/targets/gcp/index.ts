@@ -67,7 +67,6 @@ import {
   servicesOf,
   strayServices,
   switchOn,
-  TASKS_FEATURE,
   type Where,
 } from "./store";
 
@@ -169,10 +168,11 @@ function hasCloudflareZone(env: NodeJS.ProcessEnv): boolean {
 }
 
 export function laneFeatures(env: NodeJS.ProcessEnv, emulated: boolean): string[] {
-  if (emulated) {
-    return [TASKS_FEATURE];
-  }
-  return [TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
+  return !emulated && hasCloudflareZone(env) ? [ALB_FEATURE] : [];
+}
+
+function featureArgs(features: string[]): string[] {
+  return features.length > 0 ? ["--features", features.join(",")] : [];
 }
 
 export function previewBootstrapArgs(
@@ -183,8 +183,7 @@ export function previewBootstrapArgs(
   if (emulated || !planned.cells.some((cell) => cell.phases.includes("preview"))) {
     return undefined;
   }
-  const features = [TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
-  return ["bootstrap", "preview", "--yes", "--features", features.join(",")];
+  return ["bootstrap", "preview", "--yes", ...featureArgs(laneFeatures(env, emulated))];
 }
 
 export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previews {
@@ -250,7 +249,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       const features = laneFeatures(process.env, emulator !== undefined);
       await ocel(
         dir,
-        ["bootstrap", "production", "--yes", "--features", features.join(",")],
+        ["bootstrap", "production", "--yes", ...featureArgs(features)],
         childEnv(dir),
       );
       const preview = previewBootstrapArgs(process.env, emulator !== undefined, planned);

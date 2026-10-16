@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	tasksFeature = "tasks"
+	tasksPart    = "tasks"
+	tasksSummary = "a Firestore database of the tier's own that the runs of its topics, tasks and workers are kept in, with no recurring cost of its own"
 
 	pubSubAgentDomain     = "@gcp-sa-pubsub.iam.gserviceaccount.com"
 	cloudTasksAgentDomain = "@gcp-sa-cloudtasks.iam.gserviceaccount.com"
@@ -44,27 +45,9 @@ const (
 	collectionScoped = "COLLECTION"
 )
 
-var TasksAPIs = []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com"}
-
-var tasksPermissions = []string{
-	"cloudtasks.queues.create",
-	"cloudtasks.queues.get",
-	"cloudtasks.queues.purge",
-	"cloudtasks.queues.getIamPolicy",
-	"cloudtasks.queues.setIamPolicy",
-	"resourcemanager.projects.get",
-}
-
-var tasksRoles = []string{"roles/cloudtasks.admin"}
-
 var queueRoles = []string{queueEnqueuerRole}
 
 var retiredTierQueueRoles = []string{queueEnqueuerRole, queueDeleterRole}
-
-func tasksSummary() string {
-	return "a Firestore database of the tier's own that its runs are kept in, a Cloud Tasks queue a delayed message waits in, " +
-		"and the account Pub/Sub signs each push to a worker as: what topics, tasks and workers run on, with no recurring cost of its own"
-}
 
 func taskDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
 	return &cloudresourcemanager.Expr{
@@ -73,34 +56,50 @@ func taskDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemana
 	}
 }
 
-func (b bootstrap) raiseTasks(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+func (b bootstrap) tasksPart(tier environment.Tier) part {
+	var resources []provider.PartResource
 	if !b.clients.emulated() {
-		if err := b.makeDatabase(ctx, survey{Project: b.clients.project, Region: b.clients.region}, b.clients.TaskDatabase(tier)); err != nil {
-			return err
-		}
-		if err := b.ensureRunIndexes(ctx, tier); err != nil {
-			return err
-		}
+		resources = append(resources, provider.PartResource{Kind: string(KindDatabase), ID: b.clients.TaskDatabase(tier)})
 	}
-	if err := b.ensureDelayQueue(ctx, tier); err != nil {
-		return err
+	return part{
+		name:        tasksPart,
+		summary:     tasksSummary,
+		resources:   resources,
+		shape:       tasksShape(b.clients.Names, tier, b.clients.region),
+		make:        func(ctx context.Context) error { return b.makeTasks(ctx, tier) },
+		users:       func(ctx context.Context) ([]string, error) { return b.listTaskUsers(ctx, tier) },
+		refuseInUse: func(ctx context.Context) error { return b.refuseTasksInUse(ctx, tier) },
+		remove:      func(ctx context.Context) error { return b.removeTasks(ctx, tier) },
 	}
-	if err := b.makeAccount(ctx, survey{Tier: tier}, b.clients.PushAccount(tier)); err != nil {
-		return err
-	}
-	ensureProgress(progress).Debug("The " + string(tier) + " tier keeps its runs in " + b.clients.TaskDatabase(tier) + " and delays messages in " + b.clients.DelayQueue(tier))
-	return nil
 }
 
-func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, features []string) error {
-	if !slices.Contains(features, tasksFeature) {
+func tasksShape(names Names, tier environment.Tier, region string) []pricing.Shaped {
+	return []pricing.Shaped{
+		{Name: names.TaskDatabase(tier), Type: tfFirestoreDatabase, Properties: map[string]any{"location_id": region, "type": nativeFirestore}},
+	}
+}
+
+func (b bootstrap) makeTasks(ctx context.Context, tier environment.Tier) error {
+	if b.clients.emulated() {
 		return nil
 	}
+	if err := b.makeDatabase(ctx, survey{Project: b.clients.project, Region: b.clients.region}, b.clients.TaskDatabase(tier)); err != nil {
+		return err
+	}
+	return b.ensureRunIndexes(ctx, tier)
+}
+
+type taskHolder struct {
+	named   string
+	project string
+}
+
+func (b bootstrap) listTaskHolders(ctx context.Context, tier environment.Tier) ([]taskHolder, error) {
 	projects, err := b.records.List(ctx, stackrecords.ProjectsPartition(tier))
 	if err != nil {
-		return fmt.Errorf("read the projects deployed on tier %s: %w", tier, err)
+		return nil, fmt.Errorf("read the projects deployed on tier %s: %w", tier, err)
 	}
-	var held []string
+	var held []taskHolder
 	for _, project := range projects {
 		if len(project.Key.Path) != 1 {
 			continue
@@ -108,7 +107,7 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 		slug := project.Key.Path[0]
 		stacks, err := stackrecords.List(ctx, b.records, tier, slug)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, stack := range stacks {
 			for _, binding := range stack.Bindings {
@@ -116,48 +115,48 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 					continue
 				}
 				named := fmt.Sprintf("%s %s of project %s environment %s", binding.Type, cmp.Or(binding.Properties[stackrecords.PropertyDeclared], binding.Name), slug, stack.Name.Env)
-				if !slices.Contains(held, named) {
-					held = append(held, named)
+				if !slices.ContainsFunc(held, func(each taskHolder) bool { return each.named == named }) {
+					held = append(held, taskHolder{named: named, project: slug})
 				}
 			}
 		}
 	}
-	if len(held) > 0 {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"tier %s still runs %s, and taking feature %s down deletes the task database their runs are kept in and the account Pub/Sub pushes to their workers as.\n"+
-				"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove feature %s again",
-			tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
-	}
-	return nil
+	return held, nil
 }
 
-func (b bootstrap) tearTasks(ctx context.Context, tier environment.Tier) error {
-	steps := []func() error{
-		func() error { return b.takeAccount(ctx, tier, b.clients.PushAccount(tier)) },
-		func() error { return b.purgeDelayQueue(ctx, tier) },
-	}
-	if !b.clients.emulated() {
-		steps = append(steps, func() error { return b.takeDatabase(ctx, b.clients.TaskDatabase(tier)) })
-	}
-	return everyStep(steps...)
-}
-
-func (b bootstrap) tasksInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
-	if !b.clients.emulated() {
-		database, err := b.databasePresence(ctx, b.clients.TaskDatabase(tier))
-		if err != nil || !database.present {
-			return false, err
-		}
-	}
-	queue, err := b.readDelayQueue(ctx, tier)
-	if err != nil || queue == nil {
-		return false, err
-	}
-	push, err := b.accountPresence(ctx, tier, b.clients.PushAccount(tier))
+func (b bootstrap) listTaskUsers(ctx context.Context, tier environment.Tier) ([]string, error) {
+	held, err := b.listTaskHolders(ctx, tier)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return push.present && push.mends == "", nil
+	users := []string{}
+	for _, each := range held {
+		users = append(users, each.project)
+	}
+	slices.Sort(users)
+	return slices.Compact(users), nil
+}
+
+func (b bootstrap) refuseTasksInUse(ctx context.Context, tier environment.Tier) error {
+	held, err := b.listTaskHolders(ctx, tier)
+	if err != nil || len(held) == 0 {
+		return err
+	}
+	named := make([]string, 0, len(held))
+	for _, each := range held {
+		named = append(named, each.named)
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"tier %s still runs %s, and removing its bootstrap deletes the task database their runs are kept in and the account Pub/Sub pushes to their workers as.\n"+
+			"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove the %s bootstrap again",
+		tier, strings.Join(named, ", "), tier)
+}
+
+func (b bootstrap) removeTasks(ctx context.Context, tier environment.Tier) error {
+	if b.clients.emulated() {
+		return nil
+	}
+	return b.takeDatabase(ctx, b.clients.TaskDatabase(tier))
 }
 
 func (b bootstrap) pushPurpose(tier environment.Tier) accountPurpose {

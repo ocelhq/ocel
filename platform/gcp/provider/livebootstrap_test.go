@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +41,7 @@ func servicesEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
-	for _, api := range slices.Concat(gcp.BootstrapAPIs, gcp.TasksAPIs) {
+	for _, api := range gcp.BootstrapAPIs {
 		name := "projects/" + liveProject() + "/services/" + api
 		if _, err := service.Services.Enable(name, &serviceusage.EnableServiceRequest{}).Context(ctx).Do(); err != nil {
 			t.Fatalf("enable %s: %v", api, err)
@@ -78,6 +77,15 @@ func bootstrapped(t *testing.T, p *gcp.Provider, tier environment.Tier, features
 			t.Errorf("Remove(%s) = %v", tier, err)
 		}
 	})
+	return bootstrap
+}
+
+func bootstrappedWith(t *testing.T, p *gcp.Provider, tier environment.Tier, parts ...string) provider.Bootstrap {
+	t.Helper()
+	bootstrap := bootstrapped(t, p, tier)
+	if err := gcp.AddParts(context.Background(), p, tier, parts...); err != nil {
+		t.Fatalf("AddParts(%s, %v) = %v, want the parts a deploy adds on first use", tier, parts, err)
+	}
 	return bootstrap
 }
 

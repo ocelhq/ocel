@@ -92,14 +92,14 @@ describe("laneFeatures", () => {
   };
 
   it("bootstraps the load balancer on the real lane only when the run names a zone and a Cloudflare token and account", () => {
-    expect(laneFeatures({}, false)).toEqual(["tasks"]);
-    expect(laneFeatures(zoned, false)).toEqual(["tasks", "alb-edge"]);
-    expect(laneFeatures({ ...zoned, CLOUDFLARE_API_TOKEN: " " }, false)).toEqual(["tasks"]);
+    expect(laneFeatures({}, false)).toEqual([]);
+    expect(laneFeatures(zoned, false)).toEqual(["alb-edge"]);
+    expect(laneFeatures({ ...zoned, CLOUDFLARE_API_TOKEN: " " }, false)).toEqual([]);
   });
 
-  it("bootstraps tasks alone on floci", () => {
-    expect(laneFeatures({}, true)).toEqual(["tasks"]);
-    expect(laneFeatures(zoned, true)).toEqual(["tasks"]);
+  it("bootstraps no feature on floci", () => {
+    expect(laneFeatures({}, true)).toEqual([]);
+    expect(laneFeatures(zoned, true)).toEqual([]);
   });
 });
 
@@ -112,21 +112,15 @@ describe("previewBootstrapArgs", () => {
   const previewing = { cells: [{ phases: ["deploy", "verify", "preview", "destroy"] }] };
   const plain = { cells: [{ phases: ["deploy", "verify", "destroy"] }] };
 
-  it("bootstraps the preview tier with tasks and the load balancer when a planned cell previews and the zone is set", () => {
+  it("bootstraps the preview tier with the load balancer when a planned cell previews and the zone is set", () => {
     expect(previewBootstrapArgs(zoned, false, previewing)).toEqual([
       "bootstrap",
       "preview",
       "--yes",
       "--features",
-      "tasks,alb-edge",
+      "alb-edge",
     ]);
-    expect(previewBootstrapArgs({}, false, previewing)).toEqual([
-      "bootstrap",
-      "preview",
-      "--yes",
-      "--features",
-      "tasks",
-    ]);
+    expect(previewBootstrapArgs({}, false, previewing)).toEqual(["bootstrap", "preview", "--yes"]);
   });
 
   it("bootstraps no preview tier on floci or when no planned cell previews", () => {

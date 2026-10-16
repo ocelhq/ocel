@@ -42,9 +42,6 @@ func (bootstrap) Catalogue() []provider.Feature {
 			"a recurring cost, about $18 a month plus egress, " +
 			"and a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with",
 		Edges: []edge.Kind{cloudflare.Kind},
-	}, {
-		Name:    tasksFeature,
-		Summary: tasksSummary(),
 	}}
 }
 
@@ -96,14 +93,7 @@ func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequ
 	if err := b.raiseFronts(ctx, req, progress); err != nil {
 		return err
 	}
-	if err := b.raiseCDNPurgeRole(ctx, req, progress); err != nil {
-		return err
-	}
-	if !slices.Contains(req.Features, tasksFeature) {
-		return nil
-	}
-	ensureProgress(progress).Say("Installing feature " + tasksFeature + " for " + string(req.Tier) + ": " + b.summaryOf(tasksFeature))
-	return b.raiseTasks(ctx, req.Tier, progress)
+	return b.raiseCDNPurgeRole(ctx, req, progress)
 }
 
 func (b bootstrap) summaryOf(name string) string {
@@ -162,36 +152,20 @@ func (b bootstrap) dropFronts(
 }
 
 func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
-	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
-		return err
-	}
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
 	}
 	if slices.Contains(droppedFeatures(read.Stamp.Features, req), albFeature) {
 		ensureProgress(progress).Say("Kept custom role " + read.Names.CDNPurgeRolePath() + ": " + reasonRoleKept)
 	}
-	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
-		return nil
-	}
-	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push account and its grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
-	return b.tearTasks(ctx, req.Tier)
+	return nil
 }
 
 func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, features []string) error {
-	if err := b.tearFronts(ctx, tier, features); err != nil {
-		return err
-	}
-	if !slices.Contains(features, tasksFeature) {
-		return nil
-	}
-	return b.tearTasks(ctx, tier)
+	return b.tearFronts(ctx, tier, features)
 }
 
 func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
-	if feature == tasksFeature {
-		return b.tasksInstalled(ctx, tier)
-	}
 	return b.frontInstalled(ctx, tier, feature)
 }
 
@@ -258,9 +232,6 @@ func apisFor(tier environment.Tier, features []string) []string {
 		apis = appendMissing(apis, albShieldedAPIs)
 	case slices.Contains(features, albFeature):
 		apis = appendMissing(apis, albAPIs)
-	}
-	if slices.Contains(features, tasksFeature) {
-		apis = appendMissing(apis, TasksAPIs)
 	}
 	return apis
 }

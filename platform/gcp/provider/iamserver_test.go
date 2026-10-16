@@ -59,7 +59,9 @@ type iamServer struct {
 	queueWrites   int
 	queueAborts   int
 
-	tasksAbsent bool
+	tasksAbsent  bool
+	queuesMade   []string
+	queuesPurged []string
 
 	deletedAccounts []string
 }
@@ -70,6 +72,9 @@ type delayQueues struct {
 }
 
 func (q delayQueues) CreateQueue(_ context.Context, req *cloudtaskspb.CreateQueueRequest) (*cloudtaskspb.Queue, error) {
+	q.server.mu.Lock()
+	defer q.server.mu.Unlock()
+	q.server.queuesMade = append(q.server.queuesMade, req.GetQueue().GetName())
 	return req.GetQueue(), nil
 }
 
@@ -78,6 +83,9 @@ func (q delayQueues) GetQueue(_ context.Context, req *cloudtaskspb.GetQueueReque
 }
 
 func (q delayQueues) PurgeQueue(_ context.Context, req *cloudtaskspb.PurgeQueueRequest) (*cloudtaskspb.Queue, error) {
+	q.server.mu.Lock()
+	defer q.server.mu.Unlock()
+	q.server.queuesPurged = append(q.server.queuesPurged, req.GetName())
 	return &cloudtaskspb.Queue{Name: req.GetName()}, nil
 }
 
@@ -146,6 +154,8 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
+			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": enabledService})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):

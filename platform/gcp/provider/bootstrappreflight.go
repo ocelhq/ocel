@@ -83,6 +83,11 @@ var bootstrapPermissions = []string{
 	"cloudscheduler.jobs.update",
 	"cloudscheduler.jobs.delete",
 	"cloudscheduler.jobs.enable",
+	"cloudtasks.queues.create",
+	"cloudtasks.queues.get",
+	"cloudtasks.queues.purge",
+	"cloudtasks.queues.getIamPolicy",
+	"cloudtasks.queues.setIamPolicy",
 }
 
 var assetStorePermissions = []string{
@@ -105,6 +110,7 @@ var bootstrapRoles = []string{
 	"roles/cloudscheduler.admin",
 	"roles/compute.networkAdmin",
 	"roles/cloudsql.viewer",
+	"roles/cloudtasks.admin",
 }
 
 var deployRoles = []string{
@@ -204,6 +210,10 @@ func partsGrant(names Names) string {
 	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity and Service Usage name no resource attribute an IAM condition could hold a part by"
 }
 
+func partDatabasesGrant(names Names) string {
+	return names.PartDatabasesRolePath() + ", on the condition " + partDatabasesCondition(names)
+}
+
 func projectPermissionsGrant() string {
 	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
 		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
@@ -242,9 +252,6 @@ func permissionsFor(features []string) []string {
 	case slices.Contains(features, albFeature):
 		permissions = appendMissing(permissions, alb.Permissions)
 	}
-	if slices.Contains(features, tasksFeature) {
-		permissions = appendMissing(permissions, tasksPermissions)
-	}
 	return permissions
 }
 
@@ -255,9 +262,6 @@ func rolesCovering(features []string) []string {
 		roles = appendMissing(roles, alb.ShieldedRoles())
 	case slices.Contains(features, albFeature):
 		roles = appendMissing(roles, alb.Roles())
-	}
-	if slices.Contains(features, tasksFeature) {
-		roles = appendMissing(roles, tasksRoles)
 	}
 	return roles
 }

@@ -39,6 +39,7 @@ const (
 	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this tier keeps in it are deleted"
 	reasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
 	reasonAbsent       = "nothing is provisioned here"
+	reasonQueuePurged  = "its waiting messages are deleted and the queue is kept, since Cloud Tasks will not create a queue under a deleted queue's name for 7 days"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
@@ -204,9 +205,6 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	if err := b.featuresFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
-		return provider.Plan{}, err
-	}
-	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return provider.Plan{}, err
 	}
 	current, err := b.described(ctx, read)
@@ -386,6 +384,8 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeAccount(ctx, read, target.Name)
 	case KindGrant:
 		return b.bindProjectGrant(ctx, target.Name, true)
+	case KindQueue:
+		return b.ensureDelayQueue(ctx, read.Tier)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -890,7 +890,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindQueue, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func removals(read survey) []removal {
@@ -927,6 +927,8 @@ func removing(read survey, target item) removal {
 		taking.action = provider.ActionDisableThenDelete
 	case target.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonKeyScheduled, true
+	case target.Kind == KindQueue:
+		taking.action, taking.reason = provider.ActionUpdate, reasonQueuePurged
 	case target.Name == read.Names.Bucket(read.Tier):
 		taking.item.Slow = true
 	}
@@ -996,6 +998,8 @@ func (r removal) report(progress progress.Log) {
 		progress.Debug("Nothing to remove: " + r.item.phrase() + " does not exist")
 	case r.action == provider.ActionKeep:
 		progress.Say("Kept " + r.item.phrase() + ": " + r.reason)
+	case r.item.Kind == KindQueue:
+		progress.Say("Purged " + r.item.phrase() + ": " + r.reason)
 	case r.item.Kind == KindKey && r.destroyAfter == 0:
 		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(defaultKeyDestroyAfter) + ", its default")
 	case r.item.Kind == KindKey:
@@ -1028,6 +1032,8 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 		return 0, b.takeAccount(ctx, read.Tier, target.Name)
 	case KindGrant:
 		return 0, b.bindProjectGrant(ctx, target.Name, false)
+	case KindQueue:
+		return 0, b.purgeDelayQueue(ctx, read.Tier)
 	default:
 		return 0, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
 	}

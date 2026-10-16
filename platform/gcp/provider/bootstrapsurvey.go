@@ -195,6 +195,9 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 		return b.accountPresence(ctx, tier, target.Name)
 	case KindGrant:
 		return presenceFrom(b.projectGrantBound(ctx, target.Name))
+	case KindQueue:
+		queue, err := b.readDelayQueue(ctx, tier)
+		return presence{present: queue != nil}, err
 	}
 	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 }

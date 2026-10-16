@@ -11,7 +11,7 @@ import (
 func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleAccepts(t *testing.T) {
 	t.Parallel()
 
-	features := []string{albShieldedFeature, tasksFeature}
+	features := []string{albShieldedFeature}
 	if n := len(permissionsFor(features)); n <= 100 {
 		t.Fatalf("the features need %d permissions, want more than 100 to cross Google's limit", n)
 	}

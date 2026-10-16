@@ -45,6 +45,7 @@ func (p part) digest() string {
 
 var deployedParts = []func(bootstrap, environment.Tier) part{
 	bootstrap.networkPart,
+	bootstrap.tasksPart,
 }
 
 func (b bootstrap) listDeployedParts(tier environment.Tier) []part {
