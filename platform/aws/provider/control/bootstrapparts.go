@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -54,23 +53,19 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 		if name == "" {
 			name = provider.BasePart
 		}
-		resources, err := b.stackResources(ctx, stack.Name)
-		if err != nil {
-			return nil, err
-		}
 		parts = append(parts, provider.BootstrapPart{
 			Name:      name,
 			Summary:   summaries[name],
 			Current:   stack.Current(),
-			Resources: resources,
+			Resources: b.stackResources(ctx, stack.Name),
 			Shape:     &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[name]},
 		})
 	}
-	resources, raised, err := bastion.Describe(ctx, b.Bastion, described.Tier)
+	resources, found, err := bastion.Describe(ctx, b.Bastion, described.Tier)
 	if err != nil {
 		return nil, err
 	}
-	if raised {
+	if found {
 		parts = append(parts, provider.BootstrapPart{
 			Name:      bastionPart,
 			Summary:   bastionSummary,
@@ -89,7 +84,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	return parts, nil
 }
 
-func (b Bootstrap) stackResources(ctx context.Context, stackName string) ([]provider.PartResource, error) {
+func (b Bootstrap) stackResources(ctx context.Context, stackName string) []provider.PartResource {
 	var out []provider.PartResource
 	var token *string
 	for {
@@ -98,7 +93,7 @@ func (b Bootstrap) stackResources(ctx context.Context, stackName string) ([]prov
 			NextToken: token,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list the resources of %s: %w", stackName, err)
+			return nil
 		}
 		for _, summary := range page.StackResourceSummaries {
 			id := aws.ToString(summary.PhysicalResourceId)
@@ -108,7 +103,7 @@ func (b Bootstrap) stackResources(ctx context.Context, stackName string) ([]prov
 			out = append(out, provider.PartResource{Kind: aws.ToString(summary.ResourceType), ID: id})
 		}
 		if token = page.NextToken; token == nil {
-			return out, nil
+			return out
 		}
 	}
 }
