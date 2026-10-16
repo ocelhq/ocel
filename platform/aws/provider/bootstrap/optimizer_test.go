@@ -98,7 +98,6 @@ func bootstrapPayloads() map[string]payloads.Payload {
 	byPrefix := map[string]payloads.Payload{
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
-		envSourceSyncKeyPrefix:  payloads.EnvSourceSync(),
 	}
 	byKey := map[string]payloads.Payload{}
 	for prefix, p := range byPrefix {

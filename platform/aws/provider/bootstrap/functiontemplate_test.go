@@ -8,9 +8,8 @@ import (
 
 func fixturePayloads() stackPayloads {
 	return stackPayloads{
-		optimizer:     fixtureOptimizerCode(),
-		invalidator:   fixtureInvalidatorCode(),
-		envSourceSync: fixtureEnvSourceSyncCode(),
+		optimizer:   fixtureOptimizerCode(),
+		invalidator: fixtureInvalidatorCode(),
 	}
 }
 

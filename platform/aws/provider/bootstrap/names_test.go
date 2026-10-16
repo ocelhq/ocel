@@ -68,10 +68,6 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"headers policy":        n.edgeHeadersPolicyName(environment.TierProduction),
 		"asset access":          n.edgeAssetAccessName(environment.TierProduction),
 		"cache policy name":     n.PolicyName("edge-cache"),
-		"schedule group":        n.envSourceSyncScheduleGroupName(environment.TierProduction),
-		"preview schedules":     n.envSourceSyncScheduleGroupName(environment.TierPreview),
-		"schedule":              n.envSourceSyncScheduleName(environment.TierProduction),
-		"preview schedule":      n.envSourceSyncScheduleName(environment.TierPreview),
 	}
 }
 

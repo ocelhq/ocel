@@ -197,11 +197,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_function:EnvSourceSync",
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-env-sync",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "EnvSourceSync",
+      "name": "ocel-env-sync",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -213,11 +213,11 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:EnvSourceSyncLogGroup",
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "EnvSourceSyncLogGroup",
+      "name": "/aws/lambda/ocel-env-sync",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14

@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 )
 
 const groupVendor provider.Vendor = "aws"
@@ -52,6 +53,7 @@ type Bootstrap struct {
 	Store        bootstrap.ObjectStore
 	Buckets      cfn.BucketEmptierAPI
 	Bastion      bastion.Clients
+	EnvSync      envsourcesync.Clients
 	Edge         edge.Edge
 	Edges        provider.Edges
 	Kinds        []edge.Kind
@@ -73,6 +75,7 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		Store:        s3.NewFromConfig(cfg),
 		Buckets:      s3.NewFromConfig(cfg),
 		Bastion:      bastion.NewClients(cfg),
+		EnvSync:      envsourcesync.NewClients(cfg),
 		Edge:         front,
 		Edges:        registry,
 		Kinds:        kinds,
@@ -342,8 +345,13 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		Records: b.Records,
 		Buckets: b.Buckets,
 
-		RemoveBastion: b.removeBastion,
+		RemoveBastion:       b.removeBastion,
+		RemoveEnvSourceSync: b.removeEnvSourceSync,
 	}, b.Namespace, tier, progress)
+}
+
+func (b Bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tier) error {
+	return envsourcesync.Remove(ctx, b.EnvSync, string(b.Namespace), tier)
 }
 
 func (b Bootstrap) removeBastion(ctx context.Context, tier environment.Tier) error {

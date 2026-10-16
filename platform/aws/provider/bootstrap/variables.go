@@ -94,7 +94,7 @@ func variablesOutputs() string {
     Description: "DynamoDB table storing every variable set for this tier, with its history. Kept apart from the state table so a variable read never touches deploy state."
     Value: !Ref VariablesTable
   %s:
-    Description: "ARN of that table, passed to the variables-key stack so its env source sync's role reaches this table and no other."
+    Description: "ARN of that table, read by the deploy that adds the env source sync so the sync's role reaches this table and no other."
     Value: !GetAtt VariablesTable.Arn
 `, outputVariablesTable, outputVariablesTableARN)
 }

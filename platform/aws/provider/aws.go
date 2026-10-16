@@ -103,6 +103,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenRegistryImages:  p.OpenRegistryImages,
 		ProveIdentity:       p.ProveIdentity,
+		EnsureEnvSourceSync: p.EnsureEnvSourceSync,
 		ForwardPorts:        p.ForwardPorts,
 		ServeBindingProxy:   p.ServeBindingProxy,
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
@@ -114,7 +115,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap), forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region}, nil
+	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap), forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }

@@ -12,9 +12,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	aws "github.com/ocelhq/ocel/platform/aws/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 )
 
-func TestLiveTheVariablesKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testing.T) {
+func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testing.T) {
 	a := live(t)
 	tier := environment.TierProduction
 	boot := a.emptied(t, tier)
@@ -24,37 +27,31 @@ func TestLiveTheVariablesKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *t
 	if err := boot.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", provider.FeatureVariablesKey, err)
 	}
+	stack := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
+	if physical := a.stackResources(t, stack); physical["EnvSourceSync"] != "" {
+		t.Errorf("%s still makes the env source sync, which the first scheduled env source adds", stack)
+	}
 
-	name := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
-	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
-		t.Fatalf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
-	}
-	physical := a.stackResources(t, name)
-	// TODO: assert the schedule and the sync's invoke config through their own APIs once floci's CloudFormation creates AWS::Scheduler::Schedule and AWS::Lambda::EventInvokeConfig; today it records a placeholder id for each and makes neither.
-	for _, want := range []string{"EnvSourceSync", "EnvSourceSyncRole", "EnvSourceSyncLogGroup", "EnvSourceSyncInvokeConfig", "EnvSourceSyncScheduleRole", "EnvSourceSyncScheduleGroup"} {
-		if physical[want] == "" {
-			t.Errorf("%s has no %s, so no scheduled env source is kept current", name, want)
-		}
-	}
-	group, err := defaultNamespace.StackNameFor(tier)
+	p, err := aws.New(ctx, provider.Settings{Options: provider.Options{"region": liveRegion}})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("New() = %v", err)
 	}
-	if physical["EnvSourceSyncScheduleGroup"] != group {
-		t.Errorf("the schedule group is %q, want %q, the name the bootstrap credential reaches it by", physical["EnvSourceSyncScheduleGroup"], group)
+	if err := p.Hooks().EnsureEnvSourceSync(ctx, tier, "shop"); err != nil {
+		t.Fatalf("EnsureEnvSourceSync() = %v", err)
 	}
-	function := physical["EnvSourceSync"]
-	if function != "" && !a.functionExists(function) {
-		t.Errorf("%s names function %s, but Lambda has no such function", name, function)
+	function := envsourcesync.NamesFor(string(defaultNamespace), tier).Function
+	if !a.functionExists(function) {
+		t.Errorf("Lambda has no %s once the first scheduled env source added it", function)
+	}
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, envsourcesync.Part)
+	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
+		t.Errorf("part record = %+v, %v, %v, want it ready and added by shop", recorded, present, err)
 	}
 
 	if err := boot.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
-	if status := a.stackStatus(t, name); status != "" && status != "DELETE_COMPLETE" {
-		t.Errorf("%s is in state %q after the tier is removed, want it gone", name, status)
-	}
-	if function != "" && a.functionExists(function) {
+	if a.functionExists(function) {
 		t.Errorf("the env source sync %s outlived the tier it synced", function)
 	}
 }

@@ -23,8 +23,6 @@ func fixtureRefs() stackRefs {
 		stateTableARN:       "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state",
 		stateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state/stream/2026-01-01T00:00:00.000",
 		imageOptimizerARN:   "arn:aws:lambda:us-east-1:111122223333:function:ocel-image-optimizer",
-		variablesTable:      "ocel-variables",
-		variablesTableARN:   "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-variables",
 	}
 }
 

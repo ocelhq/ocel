@@ -54,6 +54,7 @@ type Deployed struct {
 	ArtifactBucket    string
 	AssetBucket       string
 	VariablesTable    string
+	VariablesTableARN string
 	VariablesKeyARN   string
 	ImageOptimizerURL string
 	AppBoundaryARN    string
@@ -244,9 +245,9 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		case outputAssetBucketARN:
 			refs.assetBucketARN = value
 		case outputVariablesTable:
-			d.VariablesTable, refs.variablesTable = value, value
+			d.VariablesTable = value
 		case outputVariablesTableARN:
-			refs.variablesTableARN = value
+			d.VariablesTableARN = value
 		case outputVariablesKeyARN:
 			d.VariablesKeyARN = value
 		case outputImageOptimizerURL:
@@ -263,9 +264,8 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 }
 
 type stackPayloads struct {
-	optimizer     payloads.Placement
-	invalidator   payloads.Placement
-	envSourceSync payloads.Placement
+	optimizer   payloads.Placement
+	invalidator payloads.Placement
 }
 
 type spec struct {
