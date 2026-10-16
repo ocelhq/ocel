@@ -1975,3 +1975,69 @@ func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsOcelsAndItsOwnTiers(t *te
 		}
 	}
 }
+
+func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *testing.T) {
+	const distribution = "arn:aws:cloudfront::111122223333:distribution/E2QWRUHAPOMQZL"
+	tags := func(prefix, managedBy, tier string) requestContext {
+		request := requestContext{}
+		if managedBy != "" {
+			request[prefix+managedByTagKey] = managedBy
+		}
+		if tier != "" {
+			request[prefix+naming.EnvTierTagKey] = tier
+		}
+		return request
+	}
+	onExisting := []string{
+		"cloudfront:DeleteDistribution",
+		"cloudfront:GetDistribution",
+		"cloudfront:GetDistributionConfig",
+		"cloudfront:UpdateDistribution",
+	}
+	for _, tier := range bothTiers {
+		_, deployDoc := renderedCredentialsOf(t, tier)
+		sibling := string(tier.Sibling())
+		if !allows(t, deployDoc, "cloudfront:ListDistributions", UnscopedResource, nil) {
+			t.Errorf("the %s deploy credential cannot list the distributions it finds its own among", tier)
+		}
+		created := tags("aws:RequestTag/", managedByTagValue, string(tier))
+		if !allows(t, deployDoc, "cloudfront:CreateDistribution", UnscopedResource, created) {
+			t.Errorf("the %s deploy credential cannot create a distribution tagged as Ocel's and its own tier's", tier)
+		}
+		if !allows(t, deployDoc, "cloudfront:TagResource", distribution, created) {
+			t.Errorf("the %s deploy credential cannot tag the distribution it creates as Ocel's and its own tier's", tier)
+		}
+		for name, request := range map[string]requestContext{
+			"untagged":                     tags("aws:RequestTag/", "", ""),
+			"without the managed-by tag":   tags("aws:RequestTag/", "", string(tier)),
+			"without the tier tag":         tags("aws:RequestTag/", managedByTagValue, ""),
+			"tagged as the sibling tier's": tags("aws:RequestTag/", managedByTagValue, sibling),
+		} {
+			if allows(t, deployDoc, "cloudfront:CreateDistribution", UnscopedResource, request) {
+				t.Errorf("the %s deploy credential can create a distribution %s", tier, name)
+			}
+			if allows(t, deployDoc, "cloudfront:TagResource", distribution, request) {
+				t.Errorf("the %s deploy credential can tag a distribution %s", tier, name)
+			}
+		}
+		retagged := tags("aws:ResourceTag/", managedByTagValue, sibling)
+		maps.Copy(retagged, created)
+		if allows(t, deployDoc, "cloudfront:TagResource", distribution, retagged) {
+			t.Errorf("the %s deploy credential can retag the %s tier's distribution as its own", tier, sibling)
+		}
+		for _, action := range onExisting {
+			if !allows(t, deployDoc, action, distribution, tags("aws:ResourceTag/", managedByTagValue, string(tier))) {
+				t.Errorf("the %s deploy credential cannot call %s on a distribution Ocel tagged for its tier", tier, action)
+			}
+			for name, request := range map[string]requestContext{
+				"untagged":                     tags("aws:ResourceTag/", "", ""),
+				"not tagged as Ocel's":         tags("aws:ResourceTag/", "", string(tier)),
+				"tagged as the sibling tier's": tags("aws:ResourceTag/", managedByTagValue, sibling),
+			} {
+				if allows(t, deployDoc, action, distribution, request) {
+					t.Errorf("the %s deploy credential can call %s on a distribution %s", tier, action, name)
+				}
+			}
+		}
+	}
+}
