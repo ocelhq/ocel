@@ -63,6 +63,8 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Short: "Make this directory deployable",
 		Long: "Writes the project config, ocel.config.ts in a project built with node and ocel.json in any other, " +
 			"and adds the ocel SDK with your language's own package manager.\n\n" +
+			"Adds .ocel/, where ocel keeps build output, run logs and local state, to .gitignore\n" +
+			"unless git already ignores it.\n\n" +
 			"Runs entirely offline: it neither signs you in nor contacts the Ocel console.\n\n" +
 			"The slug is the project's deployment identity — every stack and resource\n" +
 			"ocel creates in your own provider account is keyed on it, so changing it later\n" +
@@ -263,6 +265,13 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 		return "", fmt.Errorf("write %s: %w", name, err)
 	}
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
+
+	switch wrote, err := ensureStateDirIgnored(projectDir); {
+	case err != nil:
+		build.Warn(fmt.Sprintf("Could not add %s to %s (%v) — add it yourself: ocel keeps build output, run logs and local state there.", stateDirPattern, gitignoreName, err))
+	case wrote:
+		build.Say(fmt.Sprintf("Added %s to %s", stateDirPattern, gitignoreName))
+	}
 
 	if detected {
 		added = addSDK(ctx, dependencies, build, projectDir, lang)

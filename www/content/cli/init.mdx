@@ -16,6 +16,9 @@ manager. Entirely offline: it signs you into nothing and doesn't contact the con
   leave out; under `--json` or with no terminal, it fails with
   [`input_required`](/docs/errors/input_required). A name the provider doesn't take is refused,
   naming the ones it does.
+- `.ocel/` holds build output, run logs and local state, none of it to commit. Init adds it to
+  this directory's `.gitignore` unless git already ignores it, and creates the `.gitignore` only in
+  a git repository.
 
 Then pin the providers this CLI runs, and commit the result:
 
