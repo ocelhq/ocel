@@ -352,8 +352,43 @@ export interface AwsProviderOptions {
   certificates?: Record<string, string>;
   /** How ocel logs --tail reads this account's logs. */
   logs?: AwsLogOptions;
-  /** The AWS region to deploy into. */
-  region?: string;
+  /** The AWS region to deploy into, such as us-east-1: a region, never an availability zone such as us-east-1a. Omit it and ocel reads AWS_REGION, AWS_DEFAULT_REGION, then the profile. */
+  region?:
+    | "af-south-1"
+    | "ap-east-1"
+    | "ap-east-2"
+    | "ap-northeast-1"
+    | "ap-northeast-2"
+    | "ap-northeast-3"
+    | "ap-south-1"
+    | "ap-south-2"
+    | "ap-southeast-1"
+    | "ap-southeast-2"
+    | "ap-southeast-3"
+    | "ap-southeast-4"
+    | "ap-southeast-5"
+    | "ap-southeast-6"
+    | "ap-southeast-7"
+    | "ca-central-1"
+    | "ca-west-1"
+    | "eu-central-1"
+    | "eu-central-2"
+    | "eu-north-1"
+    | "eu-south-1"
+    | "eu-south-2"
+    | "eu-west-1"
+    | "eu-west-2"
+    | "eu-west-3"
+    | "il-central-1"
+    | "me-central-1"
+    | "me-south-1"
+    | "mx-central-1"
+    | "sa-east-1"
+    | "us-east-1"
+    | "us-east-2"
+    | "us-west-1"
+    | "us-west-2"
+    | (string & {});
   /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value. */
   variablesKey?: string;
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
@@ -427,8 +462,52 @@ export interface DNSOptions {
 export interface GcpProviderOptions {
   /** The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables. */
   project?: string;
-  /** The region to deploy into. A project spans them all, so this names the one. */
-  region: string;
+  /** The region to deploy into, such as us-central1: a region, never a zone such as us-central1-f. A project spans them all, so this names the one. */
+  region:
+    | "africa-south1"
+    | "asia-east1"
+    | "asia-east2"
+    | "asia-northeast1"
+    | "asia-northeast2"
+    | "asia-northeast3"
+    | "asia-south1"
+    | "asia-south2"
+    | "asia-southeast1"
+    | "asia-southeast2"
+    | "asia-southeast3"
+    | "australia-southeast1"
+    | "australia-southeast2"
+    | "europe-central2"
+    | "europe-north1"
+    | "europe-north2"
+    | "europe-southwest1"
+    | "europe-west1"
+    | "europe-west10"
+    | "europe-west12"
+    | "europe-west2"
+    | "europe-west3"
+    | "europe-west4"
+    | "europe-west6"
+    | "europe-west8"
+    | "europe-west9"
+    | "me-central1"
+    | "me-central2"
+    | "me-west1"
+    | "northamerica-northeast1"
+    | "northamerica-northeast2"
+    | "northamerica-south1"
+    | "southamerica-east1"
+    | "southamerica-west1"
+    | "us-central1"
+    | "us-east1"
+    | "us-east4"
+    | "us-east5"
+    | "us-south1"
+    | "us-west1"
+    | "us-west2"
+    | "us-west3"
+    | "us-west4"
+    | (string & {});
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
   edge?: GcpEdgeDescriptor;
   /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */

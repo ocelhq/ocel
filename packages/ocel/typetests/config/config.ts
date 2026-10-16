@@ -2,10 +2,10 @@ import { defineConfig, type Need } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
 import { cloudflare } from "ocel/edge";
 import { exec, infisical } from "ocel/env-source";
-import awsProvider from "ocel/providers/aws";
+import awsProvider, { type AwsProviderOptions } from "ocel/providers/aws";
 import { route53 } from "ocel/providers/aws/dns";
 import { apiGateway, cloudfront } from "ocel/providers/aws/edge";
-import gcpProvider from "ocel/providers/gcp";
+import gcpProvider, { type GcpProviderOptions } from "ocel/providers/gcp";
 import { alb } from "ocel/providers/gcp/edge";
 import vpsProvider from "ocel/providers/vps";
 
@@ -94,6 +94,21 @@ export const albThroughATunnel = gcpProvider({
   region: "europe-west1",
   // @ts-expect-error tunnel is an option of the cloudflare edge alone
   edge: alb({ tunnel: true }),
+});
+
+export const gcpRegionsAreSuggested: Extract<GcpProviderOptions["region"], "us-central1"> =
+  "us-central1";
+
+export const awsRegionsAreSuggested: Extract<AwsProviderOptions["region"], "us-east-1"> =
+  "us-east-1";
+
+export const aGcpRegionLaunchedAfterThisReleaseStillDeploys = gcpProvider({
+  project: "acme",
+  region: "mars-north1",
+});
+
+export const anAwsRegionLaunchedAfterThisReleaseStillDeploys = awsProvider({
+  region: "mars-north-1",
 });
 
 export const edgeWithAZone = awsProvider({

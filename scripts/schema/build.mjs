@@ -207,7 +207,7 @@ class Emitter {
     if (node.oneOf) return this.union(node, indent);
     switch (node.type) {
       case "string":
-        return prefixed(node.pattern);
+        return node.examples ? suggested(node.examples) : prefixed(node.pattern);
       case "boolean":
         return "boolean";
       case "integer":
@@ -329,6 +329,10 @@ function soleKey(node) {
     Object.keys(node.properties ?? {}).length === 1 &&
     node.required?.length === 1
   );
+}
+
+function suggested(examples) {
+  return [...examples.map((value) => JSON.stringify(value)), "(string & {})"].join(" | ");
 }
 
 function prefixed(pattern) {

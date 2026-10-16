@@ -84,7 +84,7 @@ a single `-`), and it may create, tag and delete images only in that project's r
 
 | Option | What it does |
 | --- | --- |
-| `region` | The region to deploy into. |
+| `region` | The region to deploy into, such as `us-east-1`: a region, never an availability zone such as `us-east-1a`. Omit it and ocel reads `AWS_REGION`, `AWS_DEFAULT_REGION`, then the profile. |
 | `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap` makes a key ocel owns, once a project here first seals a value. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
 | `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no gaps between polls, billed per session-minute past the free tier, at most 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
