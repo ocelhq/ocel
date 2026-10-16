@@ -161,3 +161,33 @@ Next inlines the value when it builds, so `ocel env set` on a public key needs a
 served from, like `OCEL_URL`. Both come from the hostname the deploy serves the app on, so an app
 served on none, such as one reached only at its provider's own address, gets neither. Ocel
 writes nothing into your `tsconfig.json`.
+
+## Link previews
+
+Next.js resolves a relative `openGraph.images` or `twitter.images`, and the image an
+`opengraph-image` or `twitter-image` file generates, against `metadataBase`. Social sites need
+absolute image URLs to show a link preview.
+
+When `metadataBase` is unset, Next.js falls back to the host in `VERCEL_PROJECT_PRODUCTION_URL`,
+and to `http://localhost:3000` without it. Ocel sets that variable on a Next.js app, at build and
+at runtime, to the host of `NEXT_PUBLIC_OCEL_URL`: the production hostname in production, the
+preview's own hostname in a preview. Next.js reads it nowhere else. The build still warns that
+`metadataBase` is not set, naming the host it used.
+
+Set `metadataBase` yourself to silence the warning, to resolve relative `alternates` and
+`openGraph.url` too (Next.js leaves those relative without one), or to give a URL to an app
+served on no hostname of its own:
+
+```tsx title="app/layout.tsx"
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_OCEL_URL ?? "http://localhost:3000"),
+};
+```
+
+`NEXT_PUBLIC_OCEL_URL` is set when the deploy serves the app on a hostname: one in
+`domains.production` (see [`ocel domain`](/docs/cli/domain)), or for a preview, a
+`domains.preview` or the preview domain from `ocel domain use --preview`. Under `ocel dev` it is
+the local URL. An app reached only at its provider's own address gets neither variable, so its
+images point at `localhost` until you give it a hostname or a literal `metadataBase`.
