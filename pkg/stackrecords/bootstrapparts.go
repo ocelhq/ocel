@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -132,4 +133,101 @@ func decodeBootstrapPart(entry keyvalue.Entry) (BootstrapPart, error) {
 		return BootstrapPart{}, fmt.Errorf("read the bootstrap part %s: %w", entry.Key, err)
 	}
 	return part, nil
+}
+
+type PartWork struct {
+	Name      string
+	WrittenBy string
+	Digest    string
+	AddedBy   string
+	Make      func(ctx context.Context) ([]provider.PartResource, error)
+}
+
+var (
+	partPoll        = time.Second
+	partPollCeiling = 10 * time.Second
+	partLease       = 15 * time.Minute
+)
+
+func EnsureBootstrapPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, work PartWork) error {
+	key := BootstrapPartKey(tier, work.Name)
+	var seen keyvalue.Revision
+	var since time.Time
+	for attempt := 0; ; attempt++ {
+		recorded, err := keyvalue.ReadOrEmpty(ctx, store, key)
+		if err != nil {
+			return fmt.Errorf("read the %s bootstrap part %s: %w", tier, work.Name, err)
+		}
+		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedAt: time.Now().UTC()}
+		var prior []byte
+		if len(recorded.Value) > 0 {
+			part, err := decodeBootstrapPart(recorded)
+			if err != nil {
+				return err
+			}
+			switch {
+			case part.State == PartReady && (part.Digest == work.Digest || provider.WrittenBy(part.WrittenBy).Newer(provider.WrittenBy(work.WrittenBy))):
+				return nil
+			case part.State != PartReady:
+				if recorded.Revision != seen {
+					seen, since = recorded.Revision, time.Now()
+				}
+				if time.Since(since) < partLease {
+					if err := pausePart(ctx, attempt); err != nil {
+						return fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
+					}
+					continue
+				}
+			default:
+				prior = recorded.Value
+			}
+			claim.AddedBy, claim.AddedAt = part.AddedBy, part.AddedAt
+		}
+		if recorded.Value, err = json.Marshal(claim); err != nil {
+			return fmt.Errorf("record the %s bootstrap part %s: %w", tier, work.Name, err)
+		}
+		revision, err := store.Write(ctx, recorded)
+		if errors.Is(err, keyvalue.ErrStale) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("claim the %s bootstrap part %s: %w", tier, work.Name, err)
+		}
+		resources, err := work.Make(ctx)
+		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), partSettleTimeout)
+		defer cancel()
+		if err != nil {
+			return errors.Join(err, releaseClaim(settle, store, keyvalue.Entry{Key: key, Value: prior, Revision: revision}))
+		}
+		claim.Resources = resources
+		return MarkBootstrapPartReady(settle, store, tier, work.Name, claim)
+	}
+}
+
+const partSettleTimeout = 30 * time.Second
+
+func releaseClaim(ctx context.Context, store keyvalue.Store, claimed keyvalue.Entry) error {
+	if len(claimed.Value) == 0 {
+		err := store.Remove(ctx, claimed.Key, claimed.Revision)
+		if err == nil || errors.Is(err, keyvalue.ErrNotFound) || errors.Is(err, keyvalue.ErrStale) {
+			return nil
+		}
+		return fmt.Errorf("release the claim on %s: %w", claimed.Key, err)
+	}
+	if _, err := store.Write(ctx, claimed); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+		return fmt.Errorf("restore %s to what it recorded before this claim: %w", claimed.Key, err)
+	}
+	return nil
+}
+
+func pausePart(ctx context.Context, attempt int) error {
+	delay := min(partPoll<<min(attempt, 8), partPollCeiling)
+	timer := time.NewTimer(delay/2 + time.Duration(rand.Int64N(int64(delay))))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
