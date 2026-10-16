@@ -134,14 +134,6 @@ func (n Namespace) edgeSetName(what string, tier environment.Tier) string {
 	return suffixed(tier, string(n)+"-"+what)
 }
 
-func (n Namespace) envSourceSyncScheduleGroupName(tier environment.Tier) string {
-	return suffixed(tier, n.CoreStackName())
-}
-
-func (n Namespace) envSourceSyncScheduleName(tier environment.Tier) string {
-	return suffixed(tier, string(n)+"-env-sync")
-}
-
 func (n Namespace) PolicyName(what string) string { return string(n) + "-" + what }
 
 func (n Namespace) ChangeSetNameFor(stackName string) string {

@@ -70,6 +70,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		Records: noRecords,
 		Buckets: &teardownBuckets{},
 		Bastion: bastion.Clients{ECS: &absentBastion{}, IAM: &absentBastion{}, EC2: &absentBastion{}},
+		EnvSync: (&absentEnvSync{}).clients(),
 		Edge:    front,
 		Edges:   registryOf(front),
 		Kinds:   kindsOf(front),

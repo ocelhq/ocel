@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
@@ -1530,9 +1529,9 @@ func taggedWithTier(tier environment.Tier, also requestContext) requestContext {
 }
 
 func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *testing.T) {
-	const function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-bootstrap-variables-k-EnvSourceSync-A1B2C3D4E5F6"
+	const function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-bootstrap-image-optim-ImageOptimizer-A1B2C3D4E5F6"
 	roleOf := func(tier environment.Tier) string {
-		return "arn:aws:iam::111122223333:role" + defaultNamespace.bootstrapRolePathFor(tier) + "ocel-bootstrap-variables-k-EnvSourceSyncRol-A1B2C3D4E5F6"
+		return "arn:aws:iam::111122223333:role" + defaultNamespace.bootstrapRolePathFor(tier) + "ocel-bootstrap-image-optim-ImageOptimizerRo-A1B2C3D4E5F6"
 	}
 	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
 	for _, tier := range bothTiers {
@@ -1556,7 +1555,6 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 			{"lambda:UpdateFunctionConfiguration", function, function, nil},
 			{"lambda:AddPermission", function, function, nil},
 			{"lambda:DeleteFunction", function, function, nil},
-			{"lambda:PutFunctionEventInvokeConfig", function, function, nil},
 			{"lambda:TagResource", function, function, nil},
 		} {
 			if !allows(t, bootstrapDoc, c.action, c.arn, taggedWithTier(tier, c.also)) {
@@ -1592,16 +1590,13 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 func TestABootstrapCredentialReachesTheNamedBootstrapResourcesOfOnlyItsOwnTier(t *testing.T) {
 	const account = "us-east-1:111122223333"
 	named := func(tier environment.Tier) map[string]string {
-		feature := defaultNamespace.featureStackName(provider.FeatureVariablesKey, tier)
+		feature := defaultNamespace.featureStackName(FeatureImageOptimization, tier)
 		core, _ := defaultNamespace.StackNameFor(tier)
 		edgeUser, _ := defaultNamespace.EdgeUserNameFor(tier)
-		group := defaultNamespace.envSourceSyncScheduleGroupName(tier)
 		return map[string]string{
 			"cloudformation:DeleteStack":     "arn:aws:cloudformation:" + account + ":stack/" + core + "/0a1b",
 			"cloudformation:CreateChangeSet": "arn:aws:cloudformation:" + account + ":stack/" + feature + "/0a1b",
-			"logs:DeleteLogGroup":            "arn:aws:logs:" + account + ":log-group:/aws/lambda/" + feature + "-EnvSourceSync",
-			"scheduler:UpdateSchedule":       "arn:aws:scheduler:" + account + ":schedule/" + group + "/" + defaultNamespace.envSourceSyncScheduleName(tier),
-			"scheduler:DeleteScheduleGroup":  "arn:aws:scheduler:" + account + ":schedule-group/" + group,
+			"logs:DeleteLogGroup":            "arn:aws:logs:" + account + ":log-group:/aws/lambda/" + feature + "-ImageOptimizer",
 			"iam:PutUserPolicy":              "arn:aws:iam::111122223333:user/" + edgeUser,
 			"lambda:PublishLayerVersion":     "arn:aws:lambda:" + account + ":layer:" + runtimeLayerName(defaultNamespace, tier, arch.ARM64, "0123456789abcdef"),
 		}

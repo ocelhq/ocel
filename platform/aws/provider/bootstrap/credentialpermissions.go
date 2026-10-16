@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
@@ -23,6 +24,8 @@ const (
 	managedByTagValue = "ocel"
 
 	LambdaServicePrincipal = "lambda.amazonaws.com"
+
+	schedulerServicePrincipal = "scheduler.amazonaws.com"
 
 	ecsTasksPrincipal = "ecs-tasks.amazonaws.com"
 
@@ -117,8 +120,7 @@ type ScopedARNs struct {
 	bootstrapFunction    string
 	bootstrapLogGroups   []string
 	bootstrapQueues      []string
-	scheduleGroup        string
-	schedule             string
+	envSyncFunction      string
 	edgeUser             string
 	passphraseParam      string
 	edgeParams           []string
@@ -134,7 +136,6 @@ var (
 
 func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 	core, _ := n.StackNameFor(tier)
-	group := n.envSourceSyncScheduleGroupName(tier)
 	edgeUser, _ := n.EdgeUserNameFor(tier)
 	origin, _ := n.OriginSecretParamFor(tier)
 	a := ScopedARNs{
@@ -146,8 +147,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		appRoles:          "arn:aws:iam::*:role" + n.AppRolePathFor(tier) + "*",
 		bastionRole:       "arn:aws:iam::*:role/" + bastion.NameFor(tier),
 		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
-		scheduleGroup:     "arn:aws:scheduler:*:*:schedule-group/" + group,
-		schedule:          "arn:aws:scheduler:*:*:schedule/" + group + "/*",
+		envSyncFunction:   "arn:aws:lambda:*:*:function:" + envsourcesync.NamesFor(string(n), tier).Function,
 		edgeUser:          "arn:aws:iam::*:user/" + edgeUser,
 		passphraseParam:   parameterARNPrefix + n.PassphraseParamFor(tier),
 		originParam:       parameterARNPrefix + origin,
@@ -452,6 +452,10 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 			Actions:   []string{"lambda:TagResource"},
 			Resources: []string{appFunctionARN},
 			Condition: r.retaggedByOcelOnlyAsItsTier(),
+		},
+		{
+			Actions:   []string{"lambda:PutFunctionEventInvokeConfig"},
+			Resources: []string{r.envSyncFunction, r.envSyncFunction + ":$LATEST"},
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -1241,31 +1245,6 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 			Condition: passedToLambda(),
 		},
 		{
-			Actions:   []string{"iam:PassRole"},
-			Resources: r.bootstrapRoles,
-			Condition: passedTo(schedulerServicePrincipal),
-		},
-		{
-			Actions: []string{
-				"scheduler:CreateScheduleGroup",
-				"scheduler:DeleteScheduleGroup",
-				"scheduler:GetScheduleGroup",
-				"scheduler:ListTagsForResource",
-				"scheduler:TagResource",
-				"scheduler:UntagResource",
-			},
-			Resources: []string{r.scheduleGroup},
-		},
-		{
-			Actions: []string{
-				"scheduler:CreateSchedule",
-				"scheduler:DeleteSchedule",
-				"scheduler:GetSchedule",
-				"scheduler:UpdateSchedule",
-			},
-			Resources: []string{r.schedule},
-		},
-		{
 			Actions:   []string{"lambda:CreateFunction"},
 			Resources: []string{r.bootstrapFunction},
 			Condition: r.madeForItsTier(),
@@ -1279,7 +1258,6 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 			Actions: []string{
 				"lambda:GetFunction",
 				"lambda:GetFunctionConfiguration",
-				"lambda:GetFunctionEventInvokeConfig",
 				"lambda:GetFunctionUrlConfig",
 				"lambda:GetPolicy",
 				"lambda:ListTags",
@@ -1291,14 +1269,11 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 				"lambda:AddPermission",
 				"lambda:CreateFunctionUrlConfig",
 				"lambda:DeleteFunction",
-				"lambda:DeleteFunctionEventInvokeConfig",
 				"lambda:DeleteFunctionUrlConfig",
-				"lambda:PutFunctionEventInvokeConfig",
 				"lambda:RemovePermission",
 				"lambda:UntagResource",
 				"lambda:UpdateFunctionCode",
 				"lambda:UpdateFunctionConfiguration",
-				"lambda:UpdateFunctionEventInvokeConfig",
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			Resources: []string{r.bootstrapFunction},

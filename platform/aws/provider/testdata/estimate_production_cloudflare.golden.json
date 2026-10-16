@@ -366,7 +366,7 @@
       "monthlyUsage": "0.03"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function:EnvSourceSync",
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-env-sync",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -394,7 +394,7 @@
       "monthlyUsage": "0.53"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:EnvSourceSyncLogGroup",
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync",
       "status": "STATUS_PRICED",
       "components": [
         {

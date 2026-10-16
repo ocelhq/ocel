@@ -20,51 +20,35 @@ import (
 
 var variablesKeyFeature = feature{
 	name:       provider.FeatureVariablesKey,
-	summary:    "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly, and the sync that keeps scheduled env sources current",
+	summary:    "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
 	template:   variablesKeyTemplate,
-	payloads:   variablesKeyPayloads,
-	placements: variablesKeyPlacements,
+	payloads:   noPayloads,
+	placements: noPlacements,
 	afterPlan:  validateBroughtKey,
 }
 
-func variablesKeyPayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
-	code, err := ensureEnvSourceSyncPayload(ctx, store, bucket)
-	return stackPayloads{envSourceSync: code}, err
-}
-
-func variablesKeyPlacements(bucket string) stackPayloads {
-	return stackPayloads{envSourceSync: envSourceSyncPlacement(bucket)}
-}
-
 func variablesKeyTemplate(in featureInputs) (featureStack, error) {
-	params, values := crossStack([]crossStackParam{
-		{paramVariablesTableName, "The core bootstrap's variables table, which the env source sync reads registrations from and writes values into.", in.refs.variablesTable},
-		{paramVariablesTableARN, "ARN of that table, so the env source sync's role reaches this table and no other.", in.refs.variablesTableARN},
-	})
 	if in.variablesKey != "" {
-		return featureStack{params: values, body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under, and the env source sync that encrypts under it. Ocel owns no key here and puts nothing on it."
-%sResources:
+		return featureStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under. Ocel owns no key here and puts nothing on it."
+Resources:
   VariablesKeyRecord:
     Type: AWS::CloudFormation::WaitConditionHandle
     Metadata:
       Description: "Placeholder for the %s tier's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
-%sOutputs:
+Outputs:
 %s`,
-			provider.FeatureVariablesKey, in.tier, params, in.tier,
-			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, fmt.Sprintf("%q", in.variablesKey)),
+			provider.FeatureVariablesKey, in.tier, in.tier,
 			broughtVariablesKeyOutput(in.variablesKey))}, nil
 	}
 	return featureStack{
-		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, the alias naming it, and the env source sync that encrypts under it."
-%sResources:
-%s%sOutputs:
+Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, and the alias naming it."
+Resources:
+%sOutputs:
 %s`,
-			provider.FeatureVariablesKey, in.tier, params,
+			provider.FeatureVariablesKey, in.tier,
 			variablesKeyResources(in.ns, in.tier),
-			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, "!GetAtt VariablesKey.Arn"),
 			variablesKeyOutputs()),
 	}, nil
 }

@@ -23,6 +23,8 @@ type forgetting struct {
 	key       func(context.Context, environment.Tier) (string, error)
 	keyValues keyvalue.Store
 	region    string
+
+	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
 }
 
 func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
@@ -31,10 +33,20 @@ func (s forgetting) DescribeParts(ctx context.Context, described provider.Bootst
 		return parts, err
 	}
 	containers, present, err := deploy.ReadContainerInfrastructurePart(ctx, s.keyValues, s.region, described.Tier)
-	if err != nil || !present {
-		return parts, err
+	if err != nil {
+		return nil, err
 	}
-	return append(parts, containers), nil
+	if present {
+		parts = append(parts, containers)
+	}
+	sync, present, err := s.envSourceSync(ctx, described.Tier)
+	if err != nil {
+		return nil, err
+	}
+	if present {
+		parts = append(parts, sync)
+	}
+	return parts, nil
 }
 
 func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {

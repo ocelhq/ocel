@@ -47,11 +47,15 @@ func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, err
 		return "", err
 	}
 	if key == "" {
-		return "", refusal.Refuse(refusal.CodeNotReady,
-			"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-			tier, provider.BootstrapVariablesKeyCommand(tier))
+		return "", RefuseUnkeyed(tier)
 	}
 	return key, nil
+}
+
+func RefuseUnkeyed(tier environment.Tier) error {
+	return refusal.Refuse(refusal.CodeNotReady,
+		"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
+		tier, provider.BootstrapVariablesKeyCommand(tier))
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
