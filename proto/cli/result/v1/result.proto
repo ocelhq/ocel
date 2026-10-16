@@ -43,6 +43,46 @@ message BindingSummary {
   uint64 version = 5;
 }
 
+message BootstrapStatusResult {
+  repeated BootstrapTierStatus tiers = 1;
+}
+
+message BootstrapTierStatus {
+  common.environment.v1.Tier tier = 1;
+
+  bool present = 2;
+
+  repeated BootstrapPartStatus parts = 3;
+}
+
+message BootstrapPartStatus {
+  string name = 1;
+
+  string summary = 2;
+
+  string added_by = 3;
+
+  string added_at = 4;
+
+  string state = 5;
+
+  bool current = 6;
+
+  repeated string used_by = 7;
+
+  optional string idle_monthly_fixed = 8;
+
+  string currency = 9;
+
+  repeated BootstrapPartResource resources = 10;
+}
+
+message BootstrapPartResource {
+  string kind = 1;
+
+  string id = 2;
+}
+
 message DomainStatusResult {
   bool ready = 1;
 
