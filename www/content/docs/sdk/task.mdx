@@ -29,14 +29,14 @@ package resources
 import (
 	"context"
 
-	"ocel.dev"
+	"ocel.dev/task"
 )
 
 type Image struct {
 	URL string `json:"url"`
 }
 
-var Resize = ocel.Task("resize-image", func(ctx context.Context, image Image) (int, error) {
+var Resize = task.New("resize-image", func(ctx context.Context, image Image) (int, error) {
 	return len(image.URL), nil
 })
 ```
@@ -89,7 +89,7 @@ const run = await resize.trigger({ url }, { delay: "5m" });
 <Tab value="Go">
 
 ```go
-run, err := resources.Resize.Trigger(ctx, resources.Image{URL: url}, ocel.Delay(5*time.Minute))
+run, err := resources.Resize.Trigger(ctx, resources.Image{URL: url}, task.Delay(5*time.Minute))
 ```
 
 </Tab>

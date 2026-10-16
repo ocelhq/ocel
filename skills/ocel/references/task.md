@@ -20,11 +20,11 @@ const page = await runs.list({ task: "send-receipt", limit: 20 });
 ```
 
 ```go
-var SendReceipt = ocel.Task("send-receipt", func(ctx context.Context, p Receipt) (Result, error) { /* … */ })
-var Nightly = ocel.Task("nightly-report", report, ocel.Cron("0 3 * * *"))
+var SendReceipt = task.New("send-receipt", func(ctx context.Context, p Receipt) (Result, error) { /* … */ })
+var Nightly = task.New("nightly-report", report, task.Cron("0 3 * * *"))
 
-handle, err := infra.SendReceipt.Trigger(ctx, Receipt{OrderID: id}, ocel.Tags("checkout"))
-run, err := ocel.RetrieveRun(ctx, handle.ID)
+handle, err := infra.SendReceipt.Trigger(ctx, Receipt{OrderID: id}, task.Tags("checkout"))
+run, err := runs.Retrieve(ctx, handle.ID)
 ```
 
 ```python
@@ -56,7 +56,7 @@ Rust needs `#[ocel::main]` on `main`. A Rust task's name defaults to the functio
 
 - **Failure:**
   - Throwing or returning an error fails the attempt; `retry` decides whether another attempt follows.
-  - `AbortTaskRunError` (TS, Python) or `ocel.ErrAbort` (Go) ends the run with no retry.
+  - `AbortTaskRunError` (TS, Python) or `runs.ErrAbort` (Go) ends the run with no retry.
 - **Cron:** a standard five-field expression.
 - **Trigger options:**
   - `delay`, `ttl`, `idempotencyKey`, `debounce`, `tags`, `metadata`.

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	"example.com/web/infra"
-	"ocel.dev"
+	"ocel.dev/realtime"
 )
 
 const bindingKey = "OCEL_RESOURCE_REALTIME_app"
@@ -66,7 +66,7 @@ func servePublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := publish(r.Context(), req)
-	var refused *ocel.PublishRefusedError
+	var refused *realtime.PublishRefusedError
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)

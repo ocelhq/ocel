@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"ocel.dev"
+	"ocel.dev/runs"
+	"ocel.dev/task"
+	"ocel.dev/topic"
 )
 
 type Sighting struct {
@@ -17,12 +19,12 @@ type Sighting struct {
 
 var errNoRun = errors.New("the handler was handed a context without a run")
 
-var SightingTask = ocel.Task("sighting", func(_ context.Context, sighting Sighting) (Sighting, error) {
+var SightingTask = task.New("sighting", func(_ context.Context, sighting Sighting) (Sighting, error) {
 	return sighting, nil
 })
 
 func recordSighting(ctx context.Context, tag string, payload json.RawMessage) error {
-	run, ok := ocel.RunFrom(ctx)
+	run, ok := runs.FromContext(ctx)
 	if !ok {
 		return errNoRun
 	}
@@ -30,18 +32,18 @@ func recordSighting(ctx context.Context, tag string, payload json.RawMessage) er
 		tag = run.ID
 	}
 	sighting := Sighting{Kind: string(run.Kind), Name: run.Name, Topic: run.Topic, Payload: string(payload)}
-	_, err := SightingTask.Trigger(ctx, sighting, ocel.Tags(tag))
+	_, err := SightingTask.Trigger(ctx, sighting, task.Tags(tag))
 	return err
 }
 
-var ExactEcho = ocel.Task("exact-echo", func(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
+var ExactEcho = task.New("exact-echo", func(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
 	return payload, recordSighting(ctx, "", payload)
 })
 
-var ExactOrders = ocel.Topic[json.RawMessage]("exact-orders")
+var ExactOrders = topic.New[json.RawMessage]("exact-orders")
 
 var ExactAudit = ExactOrders.Consumer("exact-audit", func(ctx context.Context, payload json.RawMessage) error {
-	run, ok := ocel.RunFrom(ctx)
+	run, ok := runs.FromContext(ctx)
 	if !ok {
 		return errNoRun
 	}

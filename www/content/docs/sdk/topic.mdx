@@ -32,14 +32,14 @@ import (
 	"context"
 	"log"
 
-	"ocel.dev"
+	"ocel.dev/topic"
 )
 
 type Order struct {
 	ID string `json:"id"`
 }
 
-var Orders = ocel.Topic[Order]("orders")
+var Orders = topic.New[Order]("orders")
 
 var Audit = Orders.Consumer("audit", func(ctx context.Context, order Order) error {
 	log.Println("order placed", order.ID)

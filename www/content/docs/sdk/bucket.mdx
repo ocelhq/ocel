@@ -20,9 +20,9 @@ export const uploads = bucket("uploads");
 ```go title="resources/resources.go"
 package resources
 
-import "ocel.dev"
+import "ocel.dev/bucket"
 
-var Uploads = ocel.Bucket("uploads")
+var Uploads = bucket.New("uploads")
 ```
 
 </Tab>
@@ -89,11 +89,11 @@ await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
 
 ```go
 err := resources.Uploads.WriteAll(ctx, "reports/q3.pdf", data,
-    ocel.ContentType("application/pdf"))
+    bucket.ContentType("application/pdf"))
 
 report, err := resources.Uploads.ReadAll(ctx, "reports/q3.pdf")
 
-for object, err := range resources.Uploads.List(ctx, ocel.Prefix("reports/")) {
+for object, err := range resources.Uploads.List(ctx, bucket.Prefix("reports/")) {
     if err != nil {
         return err
     }
@@ -104,7 +104,7 @@ err = resources.Uploads.Delete(ctx, "reports/q3.pdf", "reports/q2.pdf")
 ```
 
 - `NewReader` and `NewWriter` stream one object.
-- A missing key returns `ocel.ErrObjectNotFound`.
+- A missing key returns `bucket.ErrObjectNotFound`.
 
 </Tab>
 
@@ -164,8 +164,8 @@ resources.uploads.delete("reports/q3.pdf").await?;
 
 | Condition | TypeScript | Go | Python | Rust |
 | --- | --- | --- | --- | --- |
-| Only if the key is empty | `ifNoneMatch: "*"` | `ocel.IfNotExists()` | `if_not_exists=True` | `.if_not_exists()` |
-| Only while the etag matches | `ifMatch: etag` | `ocel.IfMatch(etag)` | `if_match=etag` | `.if_match(etag)` |
+| Only if the key is empty | `ifNoneMatch: "*"` | `bucket.IfNotExists()` | `if_not_exists=True` | `.if_not_exists()` |
+| Only while the etag matches | `ifMatch: etag` | `bucket.IfMatch(etag)` | `if_match=etag` | `.if_match(etag)` |
 
 An unmet condition refuses the write.
 
@@ -177,7 +177,7 @@ export const assets = bucket("assets", { public: true });
 assets.publicUrl("logo.svg"); // https://storage.example.com/logo.svg
 ```
 
-Go `ocel.BucketPublic()`, Python `public=True`, Rust `#[ocel(public)]`.
+Go `bucket.Public()`, Python `public=True`, Rust `#[ocel(public)]`.
 
 - The address comes from the domain bound to the project. With no domain, `publicUrl` fails.
 - In TypeScript `publicUrl` exists only on a public bucket; the other SDKs fail at the call.

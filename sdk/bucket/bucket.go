@@ -1,0 +1,435 @@
+// Package bucket declares the object storage buckets an app uses, and reads
+// and writes their objects over the binding the deploy delivers.
+package bucket
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"iter"
+	"net/http"
+	"net/url"
+	"runtime"
+	"sync"
+	"time"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"ocel.dev"
+	"ocel.dev/internal/binding"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
+	"ocel.dev/internal/proto/app/bucket/v1/bucketv1connect"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
+)
+
+const (
+	singleRequestCeiling = 16 << 20
+	defaultPartSize      = 8 << 20
+	partsInFlight        = 4
+)
+
+// ErrObjectNotFound is what every operation that cannot answer with nothing
+// reports when the bucket has no object under the key. Match it with
+// [errors.Is].
+var ErrObjectNotFound = errors.New("the bucket has no object under this key")
+
+// ErrPreconditionFailed is what a write conditioned with [IfNotExists] or
+// [IfMatch] reports when the object did not meet the condition. Match it with
+// [errors.Is].
+var ErrPreconditionFailed = errors.New("the object did not meet the condition this write set")
+
+// An Object is what a bucket knows about one object it stores.
+type Object struct {
+	// Key is the key the object is addressed by.
+	Key string
+	// Size is the object's length in bytes.
+	Size int64
+	// ETag is the store's opaque version tag for these bytes.
+	ETag string
+	// ContentType is the media type the object was written with.
+	ContentType string
+	// UploadedAt is when the object last took its current bytes, as the store
+	// reports it.
+	UploadedAt time.Time
+	// Metadata is the user metadata written alongside the object.
+	Metadata map[string]string
+}
+
+// A SignedUpload is a target someone without a credential writes one object
+// through, for as long as it stays valid.
+type SignedUpload struct {
+	// URL is where the body is sent.
+	URL string
+	// Method is the HTTP method to send it with.
+	Method string
+	// Headers are the headers the signature covers, which the caller must send
+	// unchanged.
+	Headers map[string]string
+	// Fields are the form fields the caller must send to a POST target, and are
+	// empty for a PUT target.
+	Fields map[string]string
+	// Expires is when the target stops being valid, and is the zero time when
+	// the lifetime was left to the runtime.
+	Expires time.Time
+}
+
+// An Option tunes the bucket [New] declares.
+type Option func(*resourcesv1.BucketConfig)
+
+// Public serves every object in the bucket anonymously over HTTP.
+func Public() Option {
+	return func(c *resourcesv1.BucketConfig) { c.Public = true }
+}
+
+// AllowedOrigins names the browser origins allowed to upload straight to
+// the store.
+func AllowedOrigins(origins ...string) Option {
+	return func(c *resourcesv1.BucketConfig) { c.AllowedOrigins = origins }
+}
+
+// A Bucket is a bucket an app declares and reads and writes its objects
+// through.
+type Bucket struct {
+	name string
+
+	http          *http.Client
+	singleCeiling int64
+	partSize      int64
+
+	mu    sync.Mutex
+	bound *boundBucket
+}
+
+type boundBucket struct {
+	client        bucketv1connect.BucketServiceClient
+	bucket        string
+	publicBaseURL string
+}
+
+// New declares a bucket named name and returns the handle an app reads and
+// writes its objects through. Call it from a file under the project's discovery
+// folder: during discovery the call is the declaration, and at runtime it reads
+// the binding the deploy delivered for that name.
+func New(name string, opts ...Option) *Bucket {
+	if binding.Discovering() {
+		config := &resourcesv1.BucketConfig{}
+		for _, opt := range opts {
+			opt(config)
+		}
+		_, file, line, _ := runtime.Caller(1)
+		err := binding.Declare(&resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{
+				Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET,
+				Name: name,
+			},
+			Config: &resourcesv1.DeclareRequest_Bucket{Bucket: config},
+			Source: fmt.Sprintf("%s:%d", file, line),
+		})
+		if err != nil {
+			panic(fmt.Sprintf("ocel: declare bucket %q: %v", name, err))
+		}
+	}
+	return &Bucket{
+		name:          name,
+		http:          http.DefaultClient,
+		singleCeiling: singleRequestCeiling,
+		partSize:      defaultPartSize,
+	}
+}
+
+// Name is the name the bucket was declared under.
+func (b *Bucket) Name() string { return b.name }
+
+// Attrs is what the bucket knows about the object under key. It reports
+// [ErrObjectNotFound] when the bucket has none.
+func (b *Bucket) Attrs(ctx context.Context, key string) (*Object, error) {
+	obj, err := b.head(ctx, "Attrs", key)
+	if err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		return nil, objectNotFound(key)
+	}
+	return obj, nil
+}
+
+// Exists reports whether the bucket has an object under key.
+func (b *Bucket) Exists(ctx context.Context, key string) (bool, error) {
+	obj, err := b.head(ctx, "Exists", key)
+	if err != nil {
+		return false, err
+	}
+	return obj != nil, nil
+}
+
+// Delete removes the objects under keys. A key with no object under it is not an
+// error.
+func (b *Bucket) Delete(ctx context.Context, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	bound, err := b.connect("Delete")
+	if err != nil {
+		return err
+	}
+	_, err = bound.client.Delete(ctx, &bucketv1.DeleteRequest{
+		Bucket: bound.bucket,
+		Keys:   keys,
+	})
+	return err
+}
+
+// Copy copies the object under src to dst within the same bucket. It reports
+// [ErrObjectNotFound] when the bucket has nothing under src.
+func (b *Bucket) Copy(ctx context.Context, dst, src string) (*Object, error) {
+	bound, err := b.connect("Copy")
+	if err != nil {
+		return nil, err
+	}
+	res, err := bound.client.Copy(ctx, &bucketv1.CopyRequest{
+		Bucket:         bound.bucket,
+		SourceKey:      src,
+		DestinationKey: dst,
+	})
+	if err != nil {
+		return nil, refused(src, err)
+	}
+	return objectFrom(res.GetObject()), nil
+}
+
+// List walks the objects in the bucket, a page at a time, and yields the
+// first error it meets before stopping.
+func (b *Bucket) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object, error] {
+	return func(yield func(*Object, error) bool) {
+		bound, err := b.connect("List")
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		options := listOptions{}
+		for _, opt := range opts {
+			opt.applyList(&options)
+		}
+		cursor := ""
+		for {
+			res, err := bound.client.List(ctx, &bucketv1.ListRequest{
+				Bucket: bound.bucket,
+				Prefix: options.prefix,
+				Limit:  options.limit,
+				Cursor: cursor,
+			})
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			for _, info := range res.GetObjects() {
+				if !yield(objectFrom(info), nil) {
+					return
+				}
+			}
+			cursor = res.GetNextCursor()
+			if cursor == "" {
+				return
+			}
+		}
+	}
+}
+
+// SignedURL is a url that reads the object under key without a credential, for
+// as long as it stays valid.
+func (b *Bucket) SignedURL(ctx context.Context, key string, opts ...SignOption) (string, error) {
+	options := signOptions{}
+	for _, opt := range opts {
+		opt.applySign(&options)
+	}
+	target, err := b.sign(ctx, "SignedURL", key,
+		bucketv1.SignedOperation_SIGNED_OPERATION_GET,
+		bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+		&bucketv1.SignConstraints{DownloadFilename: options.download},
+		options.expires,
+	)
+	if err != nil {
+		return "", err
+	}
+	return target.GetUrl(), nil
+}
+
+// SignedUpload is a target that writes the object under key without a
+// credential, for as long as it stays valid.
+func (b *Bucket) SignedUpload(ctx context.Context, key string, opts ...SignOption) (*SignedUpload, error) {
+	options := signOptions{}
+	for _, opt := range opts {
+		opt.applySign(&options)
+	}
+	target, err := b.sign(ctx, "SignedUpload", key,
+		bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD,
+		bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+		&bucketv1.SignConstraints{ContentType: options.contentType, MaxSize: options.maxSize},
+		options.expires,
+	)
+	if err != nil {
+		return nil, err
+	}
+	method := target.GetMethod()
+	if method == "" {
+		method = http.MethodPost
+	}
+	upload := &SignedUpload{
+		URL:     target.GetUrl(),
+		Method:  method,
+		Headers: target.GetHeaders(),
+		Fields:  target.GetFields(),
+	}
+	if options.expires > 0 {
+		upload.Expires = time.Now().Add(options.expires)
+	}
+	return upload, nil
+}
+
+// PublicURL is the address the object under key is served at anonymously. It
+// fails on a bucket that has no public address.
+func (b *Bucket) PublicURL(key string) (*url.URL, error) {
+	bound, err := b.connect("PublicURL")
+	if err != nil {
+		return nil, err
+	}
+	if bound.publicBaseURL == "" {
+		return nil, fmt.Errorf(
+			"this bucket has no public address, so %q has no public url: "+
+				"declare the bucket with bucket.Public() and give the project a domain to serve it from",
+			key,
+		)
+	}
+	base, err := url.Parse(bound.publicBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("the public address this bucket was delivered is not a url: %w", err)
+	}
+	return base.JoinPath(key), nil
+}
+
+func (b *Bucket) head(ctx context.Context, access, key string) (*Object, error) {
+	bound, err := b.connect(access)
+	if err != nil {
+		return nil, err
+	}
+	res, err := bound.client.Head(ctx, &bucketv1.HeadRequest{
+		Bucket: bound.bucket,
+		Key:    key,
+	})
+	if err != nil {
+		return nil, refused(key, err)
+	}
+	info := res.GetObject()
+	if info == nil {
+		return nil, nil
+	}
+	return objectFrom(info), nil
+}
+
+func (b *Bucket) sign(
+	ctx context.Context,
+	access, key string,
+	operation bucketv1.SignedOperation,
+	audience bucketv1.SignedAudience,
+	constraints *bucketv1.SignConstraints,
+	expires time.Duration,
+) (*bucketv1.PresignedTarget, error) {
+	bound, err := b.connect(access)
+	if err != nil {
+		return nil, err
+	}
+	req := &bucketv1.SignRequest{
+		Bucket:      bound.bucket,
+		Key:         key,
+		Operation:   operation,
+		Audience:    audience,
+		Constraints: constraints,
+	}
+	if expires > 0 {
+		req.ExpiresIn = durationpb.New(expires)
+	}
+	res, err := bound.client.Sign(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	target := res.GetTarget()
+	if target == nil {
+		return nil, fmt.Errorf("the runtime signed nothing for %q", key)
+	}
+	return target, nil
+}
+
+func (b *Bucket) connect(access string) (*boundBucket, error) {
+	if binding.Discovering() {
+		return nil, &ocel.UnprovisionedError{Resource: b.resource(), Access: access}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.bound != nil {
+		return b.bound, nil
+	}
+	delivered, err := binding.Read(b.name, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
+	if err != nil {
+		return nil, err
+	}
+	address, authorized, err := binding.ReadRuntimeConnection()
+	if err != nil {
+		return nil, err
+	}
+	properties := delivered.GetBucket()
+	b.bound = &boundBucket{
+		client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
+		bucket:        properties.GetBucket(),
+		publicBaseURL: properties.GetPublicBaseUrl(),
+	}
+	return b.bound, nil
+}
+
+func (b *Bucket) resource() string {
+	return fmt.Sprintf("bucket(%q)", b.name)
+}
+
+func objectFrom(wire *bucketv1.ObjectInfo) *Object {
+	obj := &Object{
+		Key:         wire.GetKey(),
+		Size:        wire.GetSize(),
+		ETag:        wire.GetEtag(),
+		ContentType: wire.GetContentType(),
+		Metadata:    wire.GetMetadata(),
+	}
+	if at := wire.GetUploadedAt(); at != nil {
+		obj.UploadedAt = at.AsTime()
+	}
+	return obj
+}
+
+func objectNotFound(key string) error {
+	return fmt.Errorf("%w: %q", ErrObjectNotFound, key)
+}
+
+func preconditionFailed(key string) error {
+	return fmt.Errorf("%w: %q", ErrPreconditionFailed, key)
+}
+
+func refused(key string, err error) error {
+	switch connect.CodeOf(err) {
+	case connect.CodeNotFound:
+		return objectNotFound(key)
+	case connect.CodeFailedPrecondition:
+		return preconditionFailed(key)
+	default:
+		return err
+	}
+}
+
+func refusedStatus(key string, status int) error {
+	switch status {
+	case http.StatusNotFound:
+		return objectNotFound(key)
+	case http.StatusPreconditionFailed, http.StatusConflict:
+		return preconditionFailed(key)
+	default:
+		return nil
+	}
+}

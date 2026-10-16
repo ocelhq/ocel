@@ -1,0 +1,183 @@
+// Package realtime declares realtime resources and their channels: what
+// clients may subscribe and publish to, and what the app publishes to them.
+package realtime
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"reflect"
+	"runtime"
+	"sync"
+	"time"
+
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	"ocel.dev"
+	"ocel.dev/internal/binding"
+	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
+	"ocel.dev/internal/proto/app/realtime/v1/realtimev1connect"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
+)
+
+const (
+	minRealtimeTokenTTL     = 10 * time.Second
+	maxRealtimeTokenTTL     = 5 * time.Minute
+	defaultRealtimeTokenTTL = 60 * time.Second
+)
+
+// An Option tunes the realtime resource [New] declares.
+type Option interface {
+	applyRealtime(*realtimeSettings)
+}
+
+type realtimeSettings struct {
+	ttl       time.Duration
+	authorize func(*http.Request) (any, error)
+	authType  reflect.Type
+}
+
+type realtimeOption func(*realtimeSettings)
+
+func (o realtimeOption) applyRealtime(s *realtimeSettings) { o(s) }
+
+// Authorize identifies the caller of the realtime handler from its request,
+// with whatever auth the app already uses. It answers nil for nobody; an error or a
+// panic fails the whole request with 500. Its answer is the Auth of every rule, which
+// a rule's context names as A, and the auth's "id" field as JSON, when a string or a
+// number, is the sub of every token minted for the caller.
+func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
+	return realtimeOption(func(s *realtimeSettings) {
+		s.authType = reflect.TypeFor[A]()
+		s.authorize = func(r *http.Request) (any, error) {
+			auth, err := authorize(r)
+			if err != nil || auth == nil {
+				return nil, err
+			}
+			return auth, nil
+		}
+	})
+}
+
+// TokenTTL is how long each token the handler mints lives, 10s to 5m in whole
+// seconds; without it, 60s.
+func TokenTTL(ttl time.Duration) Option {
+	return realtimeOption(func(s *realtimeSettings) { s.ttl = ttl })
+}
+
+// A Realtime is a realtime resource an app declares: typed channels that
+// browsers subscribe to through its [Realtime.Handler] and the server
+// publishes on through each [Channel].
+type Realtime struct {
+	name     string
+	source   string
+	settings realtimeSettings
+
+	mutex      sync.Mutex
+	channels   []*declaredChannel
+	connection binding.Connection[realtimev1connect.RealtimeServiceClient]
+}
+
+// New declares a realtime resource named name, which begins every channel it
+// holds: letters, digits and -, at most 50 characters. Declare its channels with
+// [NewChannel] and serve them with [Realtime.Handler]. Call it from a file under
+// the project's discovery folder: during discovery the call is the declaration, and at
+// runtime the resource reads the binding the deploy delivered for that name.
+func New(name string, opts ...Option) *Realtime {
+	_, file, line, _ := runtime.Caller(1)
+	d := &Realtime{
+		name:     name,
+		source:   fmt.Sprintf("%s:%d", file, line),
+		settings: realtimeSettings{ttl: defaultRealtimeTokenTTL},
+	}
+	for _, opt := range opts {
+		opt.applyRealtime(&d.settings)
+	}
+	if !channelSegment.MatchString(name) {
+		d.refuse("the name begins every channel, so it is a channel namespace: %s", channelSegmentRule)
+	}
+	if ttl := d.settings.ttl; ttl < minRealtimeTokenTTL || ttl > maxRealtimeTokenTTL || ttl%time.Second != 0 {
+		d.refuse("token ttl %s is outside %s to %s in whole seconds: a token lives long enough to open a socket and no longer", ttl, minRealtimeTokenTTL, maxRealtimeTokenTTL)
+	}
+	d.declare()
+	return d
+}
+
+// Name is the name the resource was declared under.
+func (d *Realtime) Name() string { return d.name }
+
+func (d *Realtime) refuse(format string, args ...any) {
+	panic(fmt.Sprintf("ocel: realtime %q: ", d.name) + fmt.Sprintf(format, args...))
+}
+
+func (d *Realtime) declare() {
+	channels := make([]*resourcesv1.RealtimeChannel, 0, len(d.channels))
+	for _, channel := range d.channels {
+		channels = append(channels, channel.buildManifest())
+	}
+	binding.DeclareResource(d.source, &resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: d.name},
+		Config: &resourcesv1.DeclareRequest_Realtime{Realtime: &resourcesv1.RealtimeConfig{
+			Channels: channels,
+			TokenTtl: durationpb.New(d.settings.ttl),
+		}},
+	})
+}
+
+func (d *Realtime) addChannel(channel *declaredChannel) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	for _, prior := range d.channels {
+		if prior.pattern.written == channel.pattern.written {
+			d.refuse("channel %q is declared already at %s, and a resource declares each pattern once", channel.pattern.written, prior.source)
+		}
+	}
+	d.channels = append(d.channels, channel)
+	d.declare()
+}
+
+func (d *Realtime) findChannel(pattern string) *declaredChannel {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	for _, channel := range d.channels {
+		if channel.pattern.written == pattern {
+			return channel
+		}
+	}
+	return nil
+}
+
+type realtimeBinding struct {
+	properties *bindingsv1.RealtimeProperties
+	transport  realtimeTransport
+}
+
+func (d *Realtime) readBinding(access string) (realtimeBinding, error) {
+	if binding.Discovering() {
+		return realtimeBinding{}, &ocel.UnprovisionedError{Resource: fmt.Sprintf("realtime(%q)", d.name), Access: access}
+	}
+	delivered, err := binding.Read(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME)
+	if err != nil {
+		return realtimeBinding{}, err
+	}
+	properties := delivered.GetRealtime()
+	transport, err := findRealtimeTransport(properties.GetTransport())
+	if err != nil {
+		return realtimeBinding{}, fmt.Errorf("ocel: realtime %q: %w", d.name, err)
+	}
+	return realtimeBinding{properties: properties, transport: transport}, nil
+}
+
+func (d *Realtime) connect(access string) (*binding.Resource[realtimev1connect.RealtimeServiceClient], error) {
+	return d.connection.Connect(fmt.Sprintf("realtime(%q)", d.name), access, func() (*binding.Resource[realtimev1connect.RealtimeServiceClient], error) {
+		return binding.Dial(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME, realtimev1connect.NewRealtimeServiceClient)
+	})
+}
+
+func (d *Realtime) publishEvent(ctx context.Context, runtime *binding.Resource[realtimev1connect.RealtimeServiceClient], wire string, envelope []byte) error {
+	if _, err := runtime.Client.Publish(ctx, &realtimev1.PublishRequest{Realtime: d.name, Channel: wire, Event: string(envelope)}); err != nil {
+		return fmt.Errorf("ocel: realtime %q: publish on %s: %w", d.name, wire, err)
+	}
+	return nil
+}

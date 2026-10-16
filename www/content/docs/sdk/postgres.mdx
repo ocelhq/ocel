@@ -20,9 +20,9 @@ export const db = postgres("main");
 ```go title="resources/resources.go"
 package resources
 
-import "ocel.dev"
+import "ocel.dev/postgres"
 
-var DB = ocel.Postgres("main")
+var DB = postgres.New("main")
 ```
 
 </Tab>
@@ -55,7 +55,7 @@ fn main() {
 
 </Tabs>
 
-The Postgres major version is `17` unless declared: `{ version: "16" }`, `ocel.PostgresVersion("16")`, `version="16"`, `#[ocel(version = "16")]`.
+The Postgres major version is `17` unless declared: `{ version: "16" }`, `postgres.Version("16")`, `version="16"`, `#[ocel(version = "16")]`.
 
 ## Querying
 

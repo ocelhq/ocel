@@ -24,11 +24,11 @@ export const cache = kv("cache", {
 ```go title="resources/resources.go"
 package resources
 
-import "ocel.dev"
+import "ocel.dev/kv"
 
-var Cache = ocel.KV("cache")
+var Cache = kv.New("cache")
 
-var Session = ocel.KVText[string](Cache, "session", "session/:id")
+var Session = kv.NewText[string](Cache, "session", "session/:id")
 ```
 
 </Tab>
@@ -64,7 +64,7 @@ pub struct Infra {
 
 </Tabs>
 
-Store options: `version` (`"8"` or `"9"`), `eviction` (default `noeviction`) and `memory`, such as `"256mb"`; in Go, `ocel.KVVersion`, `ocel.KVEviction` and `ocel.KVMemory`. An entry can declare a `ttl`.
+Store options: `version` (`"8"` or `"9"`), `eviction` (default `noeviction`) and `memory`, such as `"256mb"`; in Go, `kv.Version`, `kv.Eviction` and `kv.Memory`. An entry can declare a `ttl`.
 
 ## Reading and writing
 
@@ -83,9 +83,9 @@ const token = await cache.session.get({ id: "abc" }); // undefined when missing
 <Tab value="Go">
 
 ```go
-err := resources.Session.Set(ctx, "abc", token, ocel.KVTTL(time.Hour))
+err := resources.Session.Set(ctx, "abc", token, kv.TTL(time.Hour))
 
-token, err := resources.Session.Get(ctx, "abc") // ocel.ErrKVMiss when missing
+token, err := resources.Session.Get(ctx, "abc") // kv.ErrMiss when missing
 ```
 
 </Tab>
@@ -117,4 +117,4 @@ let token = entry.get().await?; // None when missing
 
 </Tabs>
 
-A write without `ttl` uses the entry's own. `"keep"` keeps the key's current TTL and `null` clears it (Go `ocel.KVKeepTTL()` / `ocel.KVNoTTL()`, Rust `.keep_ttl()` / `.clear_ttl()`).
+A write without `ttl` uses the entry's own. `"keep"` keeps the key's current TTL and `null` clears it (Go `kv.KeepTTL()` / `kv.NoTTL()`, Rust `.keep_ttl()` / `.clear_ttl()`).

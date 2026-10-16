@@ -30,16 +30,16 @@ import (
 	"net/http"
 	"os"
 
-	ocel "ocel.dev"
+	"ocel.dev/worker"
 %s)
 
 func main() {
-	worker := os.Getenv("` + processenv.WorkerEnvVar + `")
-	if worker == "" {
+	name := os.Getenv("` + processenv.WorkerEnvVar + `")
+	if name == "" {
 		log.Fatal("ocel: ` + processenv.WorkerEnvVar + ` names no worker, so this worker entry has nothing to serve")
 	}
 	address := net.JoinHostPort(cmp.Or(os.Getenv("HOST"), "127.0.0.1"), os.Getenv("PORT"))
-	log.Fatal(http.ListenAndServe(address, ocel.WorkerHandler(worker)))
+	log.Fatal(http.ListenAndServe(address, worker.Handler(name)))
 }
 `
 

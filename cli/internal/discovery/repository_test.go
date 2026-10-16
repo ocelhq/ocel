@@ -258,7 +258,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 }
 
 func TestGoSDKWireNamesMatchConstants(t *testing.T) {
-	path := filepath.Join(fixturetest.RepoDir(t), "sdk", "wire.go")
+	path := filepath.Join(fixturetest.RepoDir(t), "sdk", "internal", "binding", "wire.go")
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -281,24 +281,24 @@ func TestGoSDKWireNamesMatchConstants(t *testing.T) {
 		return true
 	})
 	want := map[string]string{
-		"phaseEnv":          processenv.PhaseEnvVar,
-		"devServerEnv":      processenv.DevServerEnvVar,
-		"devServerTokenEnv": processenv.DevServerTokenEnvVar,
-		"appFolderEnv":      processenv.AppFolderEnvVar,
-		"appURLEnv":         processenv.AppURLEnvVar,
-		"runtimeAddressEnv": processenv.RuntimeAddressEnvVar,
-		"liveDirEnv":        processenv.LiveDirEnvVar,
-		"sessionTokenEnv":   localrpc.SessionTokenEnvVar,
+		"PhaseEnv":          processenv.PhaseEnvVar,
+		"DevServerEnv":      processenv.DevServerEnvVar,
+		"DevServerTokenEnv": processenv.DevServerTokenEnvVar,
+		"AppFolderEnv":      processenv.AppFolderEnvVar,
+		"AppURLEnv":         processenv.AppURLEnvVar,
+		"RuntimeAddressEnv": processenv.RuntimeAddressEnvVar,
+		"LiveDirEnv":        processenv.LiveDirEnvVar,
+		"SessionTokenEnv":   localrpc.SessionTokenEnvVar,
 		"sdkVersionHeader":  sdkversion.Header,
 	}
 	for name, value := range want {
 		if got[name] != value {
-			t.Errorf("sdk/wire.go %s = %q, want %q", name, got[name], value)
+			t.Errorf("sdk/internal/binding/wire.go %s = %q, want %q", name, got[name], value)
 		}
 	}
 	for name := range got {
 		if _, ok := want[name]; !ok {
-			t.Errorf("sdk/wire.go %s has no counterpart the CLI names", name)
+			t.Errorf("sdk/internal/binding/wire.go %s has no counterpart the CLI names", name)
 		}
 	}
 }

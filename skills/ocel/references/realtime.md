@@ -30,10 +30,10 @@ await live.publish("orders/:orderId", { params: { orderId }, body: { status: "pa
 ```
 
 ```go
-var Live = ocel.Realtime("app", ocel.RealtimeAuthorize(func(r *http.Request) (*Caller, error) { /* … */ }))
-var Orders = ocel.Channel[OrderEvent, OrderParams](Live, "orders/:orderId",
-    ocel.ChannelSubscribe(func(c *ocel.SubscribeContext[Caller, OrderParams]) (bool, error) { /* … */ }))
-// OrderParams fields carry `realtime:"orderId"` tags; ocel.ChannelSubscribePublic() for public channels
+var Live = realtime.New("app", realtime.Authorize(func(r *http.Request) (*Caller, error) { /* … */ }))
+var Orders = realtime.NewChannel[OrderEvent, OrderParams](Live, "orders/:orderId",
+    realtime.ChannelSubscribe(func(c *realtime.SubscribeContext[Caller, OrderParams]) (bool, error) { /* … */ }))
+// OrderParams fields carry `realtime:"orderId"` tags; realtime.ChannelSubscribePublic() for public channels
 ```
 
 ```python

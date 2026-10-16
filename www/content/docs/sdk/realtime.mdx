@@ -51,14 +51,14 @@ package resources
 import (
 	"net/http"
 
-	"ocel.dev"
+	"ocel.dev/realtime"
 )
 
 type Caller struct {
 	ID string `json:"id"`
 }
 
-var Live = ocel.Realtime("app", ocel.RealtimeAuthorize(func(r *http.Request) (*Caller, error) {
+var Live = realtime.New("app", realtime.Authorize(func(r *http.Request) (*Caller, error) {
 	return readCaller(r)
 }))
 
@@ -70,8 +70,8 @@ type OrderParams struct {
 	OrderID string `realtime:"orderId"`
 }
 
-var Orders = ocel.Channel[OrderEvent, OrderParams](Live, "orders/:orderId",
-	ocel.ChannelSubscribe(func(ctx *ocel.SubscribeContext[Caller, OrderParams]) (bool, error) {
+var Orders = realtime.NewChannel[OrderEvent, OrderParams](Live, "orders/:orderId",
+	realtime.ChannelSubscribe(func(ctx *realtime.SubscribeContext[Caller, OrderParams]) (bool, error) {
 		return ownsOrder(ctx.Auth.ID, ctx.Params.OrderID), nil
 	}),
 )
@@ -84,7 +84,7 @@ err := resources.Orders.Publish(ctx, resources.OrderParams{OrderID: id},
 	resources.OrderEvent{Status: "shipped"})
 ```
 
-`ocel.ChannelSubscribePublic()` opens a channel to anyone; `ocel.ChannelPublish(rule)` lets browsers publish.
+`realtime.ChannelSubscribePublic()` opens a channel to anyone; `realtime.ChannelPublish(rule)` lets browsers publish.
 
 </Tab>
 
