@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -26,8 +24,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
-
-const partsUsedSegment = "parts"
 
 type partWork struct {
 	name    string
@@ -209,7 +205,7 @@ func (p *Provider) addedPartWorks(ctx context.Context, tier environment.Tier) ([
 }
 
 func (p *Provider) describeAddedParts(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error) {
-	users, err := readPartUsers(ctx, p.KeyValues(), tier)
+	users, err := stackrecords.ListPartUsers(ctx, p.KeyValues(), tier)
 	if err != nil {
 		return nil, err
 	}
@@ -329,61 +325,4 @@ func usesOf(root string, app builtApp) (buildoutput.Uses, error) {
 		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app.name, err)
 	}
 	return buildoutput.Uses{Revalidation: revalidates, ImageOptimization: err == nil}, nil
-}
-
-type partsUsed struct {
-	Parts []string `json:"parts,omitempty"`
-}
-
-func partsUsedKey(tier environment.Tier, project string) keyvalue.Key {
-	return stackrecords.ProjectsPartition(tier).Key(project, partsUsedSegment)
-}
-
-func recordPartsUsed(ctx context.Context, store keyvalue.Store, tier environment.Tier, project string, parts []string) error {
-	return keyvalue.Change(ctx, store, partsUsedKey(tier, project), func(recorded keyvalue.Entry) ([]byte, bool, error) {
-		var prior partsUsed
-		if len(recorded.Value) > 0 {
-			if err := json.Unmarshal(recorded.Value, &prior); err != nil {
-				return nil, false, fmt.Errorf("read the parts %s uses: %w", project, err)
-			}
-		}
-		if slices.Equal(prior.Parts, parts) && len(recorded.Value) > 0 {
-			return nil, false, nil
-		}
-		value, err := json.Marshal(partsUsed{Parts: parts})
-		return value, true, err
-	})
-}
-
-func readPartUsers(ctx context.Context, store keyvalue.Store, tier environment.Tier) (map[string][]string, error) {
-	entries, err := store.List(ctx, stackrecords.ProjectsPartition(tier))
-	if err != nil {
-		return nil, fmt.Errorf("read the projects of the %s tier: %w", tier, err)
-	}
-	live := map[string]bool{}
-	used := map[string][]string{}
-	for _, entry := range entries {
-		switch path := entry.Key.Path; {
-		case len(path) == 1:
-			live[path[0]] = true
-		case len(path) == 2 && path[1] == partsUsedSegment && len(entry.Value) > 0:
-			var recorded partsUsed
-			if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-				return nil, fmt.Errorf("read the parts %s uses: %w", path[0], err)
-			}
-			for _, part := range recorded.Parts {
-				used[part] = append(used[part], path[0])
-			}
-		}
-	}
-	users := map[string][]string{}
-	for part, projects := range used {
-		for _, project := range projects {
-			if live[project] {
-				users[part] = append(users[part], project)
-			}
-		}
-		slices.Sort(users[part])
-	}
-	return users, nil
 }
