@@ -587,7 +587,7 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	gap := readiness.NewGap(status)
 	stale, unreadable := staleStacks(status), unreadableStacks(status)
 	if len(gap.Missing) == 0 && len(stale) == 0 && len(unreadable) == 0 {
-		s.pass("bootstrapped, current")
+		s.pass("bootstrapped, current — `ocel bootstrap status " + name + "` lists its parts")
 		return s
 	}
 	if len(gap.Missing) > 0 {
