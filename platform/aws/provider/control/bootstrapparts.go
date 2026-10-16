@@ -62,6 +62,14 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 			Shape:     &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[name]},
 		})
 	}
+	layers, found, err := bootstrap.ReadRuntimeLayersPart(ctx, b.Layers, b.Records(read.Deployed.StateTable), described.Tier)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		layers.Shape = &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[layers.Name]}
+		parts = append(parts, layers)
+	}
 	resources, found, err := bastion.Describe(ctx, b.Bastion, described.Tier)
 	if err != nil {
 		return nil, err

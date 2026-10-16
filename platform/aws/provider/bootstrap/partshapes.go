@@ -17,6 +17,7 @@ func ShapeParts(ns Namespace, tier environment.Tier, features []string, options 
 	}
 	shapes := map[string][]pricing.Shaped{
 		provider.BasePart: shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey))),
+		RuntimeLayersPart: shapedRuntimeLayers(),
 	}
 	for _, name := range features {
 		f, known := featureNamed(name)

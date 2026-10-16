@@ -116,7 +116,7 @@ func usersOf(part provider.BootstrapPart, recorded map[string][]string, catalogu
 	switch {
 	case part.UsedBy != nil:
 		return part.UsedBy
-	case part.Name == provider.BasePart:
+	case part.Name == provider.BasePart || part.UsedByEveryProject:
 		return slices.Sorted(maps.Keys(recorded))
 	case catalogued:
 		return ProjectsDependingOn(recorded, []string{part.Name})
