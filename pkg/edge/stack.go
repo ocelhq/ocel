@@ -34,6 +34,7 @@ type StackSpec struct {
 	PruneOnly       bool
 	PruneRoutes     bool
 	Gate            *gate.Gate
+	Say             func(string)
 	Warn            func(string)
 	Program         *ProgramSpec
 }

@@ -637,6 +637,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		Tier:        r.spec.Tier,
 		Slug:        r.spec.Slug,
 		PruneRoutes: true,
+		Say:         progress.Say,
 		Warn:        progress.Warn,
 	}
 	var base string

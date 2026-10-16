@@ -289,7 +289,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
-	set, err := p.ensureEdgeSet(ctx, spec.Tier, spec.Slug, "", spec.Warn)
+	set, err := p.ensureEdgeSet(ctx, spec.Tier, spec.Slug, "", spec.Say)
 	if err != nil {
 		return nil, err
 	}
