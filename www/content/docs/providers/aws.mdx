@@ -56,6 +56,10 @@ rest is added by the first deploy that needs it, with the deploy credential, and
 
 A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
 again, and `ocel bootstrap destroy production` removes them with the rest.
+`ocel bootstrap production --remove <part>` takes one part down, whichever added it, and refuses
+while a project here uses it unless you pass `--force`; the next deploy that needs a part a deploy
+adds adds it back. `--force` never takes `containers` down while a container app still runs on it:
+remove those apps or destroy their environments, and the last one to leave takes it down.
 
 Two parts only the bootstrap credential may make, so no deploy adds them:
 

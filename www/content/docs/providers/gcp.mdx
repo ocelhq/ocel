@@ -58,6 +58,10 @@ that revalidates writes to, the network a database or kv store is reached over, 
 topics and tasks keep their runs in, and the load balancer of the `alb` edge. `ocel bootstrap status`
 lists each of these parts, who added it, which projects use it and what it costs idle, and
 `ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand.
+`ocel bootstrap production --remove <part>` takes one part down, `cloudflare-origin` included, and
+refuses while a project here uses it unless you pass `--force`; the next deploy that needs a part a
+deploy adds adds it back. `--force` never takes `private-network` down while a kv store or database
+is on it, or `alb` while a hostname is bound to it: remove those first.
 
 The first deploy whose build revalidates adds a Firestore database of the tier's own,
 `<namespace>-<tier>-tags`, that holds the revalidated tags of the tier's Next apps. It has no
