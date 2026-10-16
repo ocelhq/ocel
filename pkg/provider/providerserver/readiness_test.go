@@ -138,6 +138,27 @@ func TestStateReadsRepairOnDeployFromTheRecord(t *testing.T) {
 	}
 }
 
+type unbootstrappedStore struct{ keyvalue.Store }
+
+func (unbootstrappedStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
+	return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+}
+
+func TestStateReportsNoBootstrapWhereTheStoreItWouldRecordInIsNotThere(t *testing.T) {
+	t.Parallel()
+
+	readiness, p := newReadiness(t, "2.0.0")
+	readiness.KeyValues = unbootstrappedStore{p.KeyValues()}
+
+	status, err := readiness.Status(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Status() error = %v, want no bootstrap reported", err)
+	}
+	if status.Present {
+		t.Error("Status() reports a bootstrap where none was applied")
+	}
+}
+
 func TestEnsureReadyRefusesABootstrapThatIsNotThere(t *testing.T) {
 	t.Parallel()
 

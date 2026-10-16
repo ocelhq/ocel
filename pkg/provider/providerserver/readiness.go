@@ -55,6 +55,9 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 		}
 	}
 	status.Features = bootstrapplan.InCatalogueOrder(r.Bootstrap.Catalogue(), present)
+	if !status.Present {
+		return status, nil
+	}
 	if status.RepairOnDeploy, err = r.repairOnDeploy(ctx, tier); err != nil {
 		return BootstrapStatus{}, err
 	}
