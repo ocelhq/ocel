@@ -10,7 +10,6 @@ import {
   DEFAULT_COMPAT_TARGET,
   ENTRY_SLUG,
   ocelBinary,
-  PREVIEW_BOOTSTRAP_FEATURES,
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
@@ -20,6 +19,7 @@ import { linkSidecar } from "./sidecar.mjs";
 
 const BOOTSTRAP_TIMEOUT_MS = 30 * 60 * 1000;
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
+const KEY_WANT = "E2E_VARIABLES_KEY_WANTED";
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const wildcard = process.argv[2] || process.env.OCEL_E2E_PREVIEW_DOMAIN;
@@ -48,14 +48,8 @@ export function reconcileEntry(wildcard) {
   writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: ENTRY_SLUG }));
   linkSidecar(dir, sidecarDir);
 
-  const features = PREVIEW_BOOTSTRAP_FEATURES.join(",");
-  console.error(`[ocel-e2e] bootstrapping the preview tier with ${features} (from ${dir})`);
-  const bootstrapFailure = failureOf(
-    adapterDir,
-    dir,
-    ["bootstrap", "preview", "--features", features, "--yes"],
-    BOOTSTRAP_TIMEOUT_MS,
-  );
+  console.error(`[ocel-e2e] bootstrapping the preview tier and its variables key (from ${dir})`);
+  const bootstrapFailure = bootstrapWithVariablesKey(adapterDir, dir);
   if (bootstrapFailure) {
     console.error(
       `[ocel-e2e] PREVIEW BOOTSTRAP FAILED: ${bootstrapFailure}\n` +
@@ -84,6 +78,41 @@ export function reconcileEntry(wildcard) {
   return true;
 }
 
+export function bootstrapWithVariablesKey(adapterDir, dir, run = attempt) {
+  const bootstrap = () =>
+    run(adapterDir, dir, ["bootstrap", "preview", "--yes"], BOOTSTRAP_TIMEOUT_MS);
+  const first = bootstrap();
+  if (first.failure) {
+    return first.failure;
+  }
+  const wanted = run(
+    adapterDir,
+    dir,
+    ["env", "set", `${KEY_WANT}=wanted`, "--preview"],
+    RECONCILE_TIMEOUT_MS,
+  );
+  if (!wanted.failure) {
+    return run(adapterDir, dir, ["env", "rm", KEY_WANT, "--preview"], RECONCILE_TIMEOUT_MS).failure;
+  }
+  if (!wanted.said.includes("variables-key")) {
+    return wanted.failure;
+  }
+  return bootstrap().failure;
+}
+
+function attempt(adapterDir, dir, args, timeout) {
+  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), ...args], {
+    cwd: dir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout,
+    env: withoutSkipChecks(process.env),
+  });
+  process.stderr.write(res.stdout ?? "");
+  process.stderr.write(res.stderr ?? "");
+  return { failure: failureFrom(res), said: `${res.stdout ?? ""}${res.stderr ?? ""}` };
+}
+
 function failureOf(adapterDir, dir, args, timeout) {
   const res = spawnSync(process.execPath, [ocelBinary(adapterDir), ...args], {
     cwd: dir,
@@ -91,6 +120,10 @@ function failureOf(adapterDir, dir, args, timeout) {
     timeout,
     env: withoutSkipChecks(process.env),
   });
+  return failureFrom(res);
+}
+
+function failureFrom(res) {
   if (res.error || res.signal || res.status !== 0) {
     return (
       res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`)
