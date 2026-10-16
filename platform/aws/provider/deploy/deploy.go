@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -36,6 +37,7 @@ type Config struct {
 
 	Tags      TagClock
 	KeyValues keyvalue.Store
+	WrittenBy provider.WrittenBy
 	Rules     RulesAPI
 
 	RequiredFeatures []string

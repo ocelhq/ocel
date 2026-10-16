@@ -71,6 +71,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
 		KeyValues: p.KeyValues(),
+		WrittenBy: p.writtenBy,
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
 
 		Tier:                scope.Tier,

@@ -66,6 +66,30 @@ func TestConfigureHandsTheProviderTheProjectItServes(t *testing.T) {
 	}
 }
 
+func TestConfigureHandsTheProviderTheBuildThatServesIt(t *testing.T) {
+	var seen provider.Settings
+	config := providerserver.Config{
+		Version: "v1.2.3",
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+			seen = settings
+			return fake.NewProvider(fake.Options{}), nil
+		},
+	}
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
+	t.Cleanup(server.Close)
+
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
+		Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
+	}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	if seen.WrittenBy != "v1.2.3" {
+		t.Errorf("WrittenBy = %q, want the release serving the session, v1.2.3", seen.WrittenBy)
+	}
+}
+
 func workingDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
