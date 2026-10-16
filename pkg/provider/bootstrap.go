@@ -114,11 +114,3 @@ func BootstrapCommand(tier environment.Tier) string {
 	}
 	return "ocel bootstrap production"
 }
-
-func BootstrapFeaturesCommand(tier environment.Tier) string {
-	return BootstrapCommand(tier) + " --features"
-}
-
-func BootstrapVariablesKeyCommand(tier environment.Tier) string {
-	return BootstrapFeaturesCommand(tier) + " " + FeatureVariablesKey
-}

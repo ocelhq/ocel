@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -38,7 +39,8 @@ func (h *Service) ensureSync(ctx context.Context, scope variablestore.Scope, des
 	if err != nil || backend.EnsureEnvSourceSync == nil {
 		return err
 	}
-	return provider.RefusalError(backend.EnsureEnvSourceSync(ctx, scope.Tier, scope.Project))
+	refused := backend.EnsureEnvSourceSync(ctx, scope.Tier, scope.Project)
+	return provider.RefusalError(stackrecords.RecordWantedPart(ctx, backend.KeyValues, scope.Tier, scope.Project, refused))
 }
 
 func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEnvSourceRequest) (*variablestorev1.SyncEnvSourceResponse, error) {

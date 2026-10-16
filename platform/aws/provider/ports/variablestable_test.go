@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -106,8 +107,12 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
 	}
-	if want := "ocel bootstrap production --features variables-key"; !strings.Contains(err.Error(), want) {
-		t.Errorf("Seal err = %v, want it to name `%s`", err, want)
+	if want := "Run `ocel bootstrap production`"; !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "--features") {
+		t.Errorf("Seal err = %v, want it to name %s alone", err, want)
+	}
+	var wanted provider.WantedPartError
+	if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
+		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.FeatureVariablesKey)
 	}
 }
 
@@ -121,8 +126,12 @@ func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
 	}
-	if want := "ocel bootstrap production --features variables-key"; !strings.Contains(err.Error(), want) {
-		t.Errorf("Seal err = %v, want it to name `%s`", err, want)
+	if want := "Run `ocel bootstrap production`"; !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "--features") {
+		t.Errorf("Seal err = %v, want it to name %s alone", err, want)
+	}
+	var wanted provider.WantedPartError
+	if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
+		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.FeatureVariablesKey)
 	}
 }
 

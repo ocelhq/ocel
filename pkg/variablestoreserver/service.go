@@ -74,6 +74,7 @@ func (h *Service) scoped(requested environmentv1.Tier, slug string) (variablesto
 	if err := variablestore.ValidateProject(slug); err != nil {
 		return variablestore.Store{}, variablestore.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	store.Cipher = wantRecordingCipher{Cipher: store.Cipher, keyValues: store.KeyValues, project: slug}
 	return store, variablestore.Scope{Project: slug, Tier: tier}, nil
 }
 

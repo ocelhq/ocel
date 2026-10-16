@@ -38,9 +38,9 @@ func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, err
 			"a value names no tier, and this account seals each tier's values under the key its own bootstrap made")
 	}
 	if s.Keys == nil {
-		return "", refusal.Refuse(refusal.CodeNotReady,
+		return "", provider.WantedPartError{Part: provider.FeatureVariablesKey, Err: refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account has a key to seal a %s value under.\nRun `%s`, then try again",
-			tier, provider.BootstrapVariablesKeyCommand(tier))
+			tier, provider.BootstrapCommand(tier))}
 	}
 	key, err := s.Keys.Key(ctx, tier)
 	if err != nil {
@@ -53,9 +53,9 @@ func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, err
 }
 
 func RefuseUnkeyed(tier environment.Tier) error {
-	return refusal.Refuse(refusal.CodeNotReady,
+	return provider.WantedPartError{Part: provider.FeatureVariablesKey, Err: refusal.Refuse(refusal.CodeNotReady,
 		"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-		tier, provider.BootstrapVariablesKeyCommand(tier))
+		tier, provider.BootstrapCommand(tier))}
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
