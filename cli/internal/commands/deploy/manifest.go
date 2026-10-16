@@ -173,7 +173,12 @@ func assembleManifest(dependencies Dependencies, a assembly, resources []declara
 		if len(resources) == 0 {
 			return nil, nil
 		}
-		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
+		only := fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug)
+		if len(cfg.Apps) == 0 && cfg.RootAppUndetected != nil {
+			a.phase.Warn(only + ", and " + cfg.RootAppUndetected.Error())
+		} else {
+			a.phase.Say(only)
+		}
 	}
 
 	if err := manifest.RefuseUnnamedApps(cfg, built); err != nil {
