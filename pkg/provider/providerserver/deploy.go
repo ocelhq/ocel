@@ -68,6 +68,9 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		}
 		run.hold = hold
 		result, err := run.execute(ctx)
+		if !req.GetDry() {
+			err = stackrecords.RecordWantedPart(ctx, run.provider.KeyValues(), spec.Tier, spec.Slug, err)
+		}
 		return result, hold.explain(err)
 	})
 }
@@ -452,7 +455,11 @@ func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
-	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, r.features, !r.dry, progress)
+	wantedBy := r.spec.Slug
+	if r.dry {
+		wantedBy = ""
+	}
+	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, wantedBy, r.features, !r.dry, progress)
 	return err
 }
 

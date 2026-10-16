@@ -314,6 +314,83 @@ func TestPreflightReportsEveryFeatureTheProjectNeedsThatABootstrapLacks(t *testi
 	}
 }
 
+func wantedParts(t *testing.T, vendor *fake.Provider, tier environment.Tier) map[string][]string {
+	t.Helper()
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), tier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return wants
+}
+
+func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBootstrapLacks(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	direct := &contractv1.EdgeSelection{Kind: "direct"}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Features: []string{fake.FeatureCache}, Edge: direct})
+	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Frameworks:   []string{"next"},
+		Edge:         direct,
+		RecordWants:  true,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	want := map[string][]string{fake.FeatureImages: {"shop"}}
+	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("wants = %v, want %v: the bootstrap holds cache, and a next project also wants images", got, want)
+	}
+}
+
+func TestAPreflightRecordsAPartTheCommandWantsBeyondItsBuildOnlyWhenTheProviderOffersIt(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	direct := &contractv1.EdgeSelection{Kind: "direct"}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Edge:         direct,
+		RecordWants:  true,
+		WantedParts:  []string{fake.FeatureCache, "variables-key"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	want := map[string][]string{fake.FeatureCache: {"shop"}}
+	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("wants = %v, want %v: this provider offers no variables-key", got, want)
+	}
+}
+
+func TestAPreflightNotAskedToRecordWantsRecordsNone(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	direct := &contractv1.EdgeSelection{Kind: "direct"}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Frameworks:   []string{"next"},
+		Edge:         direct,
+		WantedParts:  []string{fake.FeatureCache},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	if got := wantedParts(t, vendor, environment.TierProduction); len(got) != 0 {
+		t.Errorf("wants = %v, want none: a dry run or a read changes nothing", got)
+	}
+}
+
 func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	t.Parallel()
 

@@ -786,6 +786,10 @@ message PreflightRequest {
   ImageRegistry project_registry = 10;
 
   bool check_preview_route = 11;
+
+  bool record_wants = 12;
+
+  repeated string wanted_parts = 13;
 }
 
 message ContainerApp {

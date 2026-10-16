@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -242,7 +243,7 @@ func TestEnsureReadyRefusesABootstrapThatIsNotThere(t *testing.T) {
 
 	readiness, _ := newReadiness(t, "2.0.0")
 
-	_, err := readiness.EnsureReady(context.Background(), environment.TierPreview, nil, true, &recorder{})
+	_, err := readiness.EnsureReady(context.Background(), environment.TierPreview, "", nil, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
@@ -252,24 +253,68 @@ func TestEnsureReadyRefusesABootstrapThatIsNotThere(t *testing.T) {
 	}
 }
 
-func TestEnsureReadyRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.T) {
+func TestEnsureReadyRefusesAMissingPartAndNamesTheBootstrapCommandAlone(t *testing.T) {
 	t.Parallel()
 
 	readiness, vendor := newReadiness(t, "2.0.0")
 	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 
-	_, err := readiness.EnsureReady(context.Background(), environment.TierProduction, []string{fake.FeatureImages}, true, &recorder{})
+	_, err := readiness.EnsureReady(context.Background(), environment.TierProduction, "shop", []string{fake.FeatureImages}, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	for _, want := range []string{
-		"lacks the features this project needs: " + fake.FeatureImages,
-		"`ocel bootstrap production --features " + fake.FeatureImages + "`",
+		"lacks a part this project wants: " + fake.FeatureImages,
+		"Run `ocel bootstrap production`",
 	} {
 		if !strings.Contains(refused.Message, want) {
 			t.Errorf("EnsureReady() = %q, want it to contain %q", refused.Message, want)
 		}
+	}
+	if strings.Contains(refused.Message, "--features") {
+		t.Errorf("EnsureReady() = %q, want no --features in the command it names", refused.Message)
+	}
+}
+
+func TestEnsureReadyRecordsThatTheProjectWantsThePartsTheBootstrapLacks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	readiness, vendor := newReadiness(t, "2.0.0")
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "shop", []string{fake.FeatureCache, fake.FeatureImages}, true, &recorder{}); err == nil {
+		t.Fatal("EnsureReady() = nil, want a refusal: images is missing")
+	}
+
+	wants, err := stackrecords.ListBootstrapWants(ctx, vendor.KeyValues(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string][]string{fake.FeatureImages: {"shop"}}; !maps.EqualFunc(wants, want, slices.Equal) {
+		t.Errorf("ListBootstrapWants() = %v, want %v", wants, want)
+	}
+}
+
+func TestEnsureReadyNamingNoProjectRecordsNoWant(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	readiness, vendor := newReadiness(t, "2.0.0")
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+
+	_, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureImages}, false, &recorder{})
+	if err == nil {
+		t.Fatal("EnsureReady() = nil, want a refusal: images is missing")
+	}
+	if want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"; !strings.Contains(err.Error(), want) {
+		t.Errorf("EnsureReady() error = %v, want it to say %q: nothing was recorded for the bootstrap to add", err, want)
+	}
+
+	wants, err := stackrecords.ListBootstrapWants(ctx, vendor.KeyValues(), environment.TierProduction)
+	if err != nil || len(wants) != 0 {
+		t.Errorf("ListBootstrapWants() = %v, %v, want nothing recorded", wants, err)
 	}
 }
 
@@ -286,7 +331,7 @@ func TestEnsureReadyRepairsAStaleBootstrapWithoutAcceptingReplacements(t *testin
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
-	status, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	status, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress)
 	if err != nil {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
@@ -314,7 +359,7 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoRepair
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
@@ -338,7 +383,7 @@ func TestEnsureReadyAsksForNoRepairAndGetsNone(t *testing.T) {
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
-	status, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, false, progress)
+	status, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, false, progress)
 	if err != nil {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
@@ -366,7 +411,7 @@ func TestEnsureReadyNeverRepairsOrCallsStaleABootstrapPartItCouldNotRead(t *test
 	bootstrap.MarkUnreadable(fake.FeatureCache, "the edge was rate limited")
 
 	progress := &recorder{}
-	status, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress)
+	status, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress)
 	if err != nil {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
@@ -398,7 +443,7 @@ func TestEnsureReadyWillNotRepairFromADevelopmentBuild(t *testing.T) {
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
@@ -424,7 +469,7 @@ func TestEnsureReadyReportsARepairTheCredentialsCannotDo(t *testing.T) {
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	progress := &recorder{}
-	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
 	}
 	if !strings.Contains(progress.warnings(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
@@ -464,7 +509,7 @@ func TestADeniedRepairWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied, ""))
 
 	progress := &recorder{}
-	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v, want a refused repair to leave the run state", err)
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
@@ -486,7 +531,7 @@ func TestEnsureReadyWarnsThatARepairFailedAndCarriesOnWithTheBootstrapInPlace(t 
 	bootstrap.RefuseApply(errors.New("the stack update timed out"))
 
 	progress := &recorder{}
-	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := readiness.EnsureReady(ctx, environment.TierProduction, "", []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v, want a failed repair to leave the run standing", err)
 	}
 	want := "Could not refresh the production bootstrap, so this run continues against the one in place: the stack update timed out"
@@ -596,12 +641,12 @@ func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	readiness, vendor := newReadiness(t, "2.0.0")
 	bootstrapped(t, vendor, environment.TierPreview)
 
-	_, err := readiness.EnsureReady(context.Background(), environment.TierPreview, []string{fake.FeatureImages}, true, &recorder{})
+	_, err := readiness.EnsureReady(context.Background(), environment.TierPreview, "", []string{fake.FeatureImages}, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("EnsureReady() = %v, want a refusal", err)
 	}
-	if !strings.Contains(refused.Message, "`ocel bootstrap preview --features ") {
+	if !strings.Contains(refused.Message, "`ocel bootstrap preview`") {
 		t.Errorf("EnsureReady() = %q, want the preview bootstrap's own command", refused.Message)
 	}
 }

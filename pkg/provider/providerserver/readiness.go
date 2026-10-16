@@ -361,7 +361,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, required []string, repair bool, progress progress.Log) (BootstrapStatus, error) {
+func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wantedBy string, required []string, repair bool, progress progress.Log) (BootstrapStatus, error) {
 	status, err := r.SessionStatus(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -370,8 +370,8 @@ func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, requi
 	if !status.Present {
 		return status, refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
 	}
-	if err := status.lacking(required, command); err != nil {
-		return status, err
+	if missing := bootstrapplan.MissingFeatures(status.Features, required); len(missing) > 0 {
+		return status, errors.Join(refuseLacking(missing, command, wantedBy != ""), r.RecordWants(ctx, tier, wantedBy, missing))
 	}
 	if repair && r.repair(ctx, status, required, progress) {
 		if status, err = r.SessionStatus(ctx, tier); err != nil {
@@ -391,14 +391,29 @@ func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, requi
 	return status, nil
 }
 
-func (s BootstrapStatus) lacking(required []string, command string) error {
-	missing := bootstrapplan.MissingFeatures(s.Features, required)
-	if len(missing) == 0 {
-		return nil
+func refuseLacking(missing []string, command string, recorded bool) error {
+	if !recorded {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"this account's Ocel bootstrap lacks a part this project wants: %s, and only the bootstrap credential may add it.\n"+
+				"A dry run records nothing: deploy without --dry, which records what this project wants, then run `%s` and try again",
+			strings.Join(missing, ", "), command)
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this account's Ocel bootstrap lacks the features this project needs: %s.\nRun `%s --features %s` and try again",
-		strings.Join(missing, ", "), command, strings.Join(missing, ","))
+		"this account's Ocel bootstrap lacks a part this project wants: %s, and only the bootstrap credential may add it.\n"+
+			"Run `%s`, which adds every part a project here was refused for, and try again",
+		strings.Join(missing, ", "), command)
+}
+
+func (r Readiness) RecordWants(ctx context.Context, tier environment.Tier, project string, parts []string) error {
+	if project == "" {
+		return nil
+	}
+	for _, part := range parts {
+		if err := stackrecords.RecordBootstrapWant(ctx, r.KeyValues, tier, part, project); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r Readiness) repair(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
