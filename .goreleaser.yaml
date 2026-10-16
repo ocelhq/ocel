@@ -2,6 +2,10 @@ version: 2
 
 project_name: ocel
 
+git:
+  ignore_tags:
+    - "sdk/*"
+
 before:
   hooks:
     - go generate -C cli ./...
