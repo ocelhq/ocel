@@ -25,6 +25,8 @@ type Backend struct {
 	Cipher        seal.Cipher
 	VerifyGrants  func(ctx context.Context, binding provider.Binding) error
 	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+
+	EnsureEnvSourceSync func(ctx context.Context, tier environment.Tier, project string) error
 }
 
 type BackendSource interface {

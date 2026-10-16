@@ -28,6 +28,7 @@ type Hooks struct {
 	ReadNextServerRuntime func(ctx context.Context) (map[string][]byte, error)
 	CheckHost             func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	ProveIdentity         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+	EnsureEnvSourceSync   func(ctx context.Context, tier environment.Tier, project string) error
 	OpenTaskStore         func(ctx context.Context) (TaskStore, error)
 	ForwardPorts          func(ctx context.Context, req PortForwardRequest, progress progress.Log) ([]PortForward, error)
 	ServeBindingProxy     func(ctx context.Context, req BindingProxyRequest, progress progress.Log) (BindingProxy, error)

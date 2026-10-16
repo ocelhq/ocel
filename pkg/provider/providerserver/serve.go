@@ -162,6 +162,8 @@ func (s sessionBackend) Read() (variablestoreserver.Backend, error) {
 		Cipher:        vendor.Cipher(),
 		VerifyGrants:  hooks.VerifyGrants,
 		ProveIdentity: hooks.ProveIdentity,
+
+		EnsureEnvSourceSync: hooks.EnsureEnvSourceSync,
 	}, nil
 }
 
