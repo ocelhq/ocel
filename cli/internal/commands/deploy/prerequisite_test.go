@@ -207,7 +207,7 @@ func TestADeployUnderJSONOnATerminalOffersNoSetupAndFailsWithTheMissingPrerequis
 	}{
 		{"no infrastructure", func(t *testing.T, fixture clitest.FakeProject) {
 			removeBootstrap(t, fixture, environment.TierProduction)
-		}, "bootstrap.missing", "ocel bootstrap production --features cache,images"},
+		}, "bootstrap.missing", "ocel bootstrap production"},
 		{"no production hostname", func(t *testing.T, fixture clitest.FakeProject) {
 			clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), "export default {\n  slug: \""+clitest.FixtureSlug+"\",\n  provider: { fake: {} },\n};\n")
 		}, "prerequisite.missing", "domains.production"},

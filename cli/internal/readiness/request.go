@@ -10,6 +10,10 @@ import (
 )
 
 func newPreflightRequest(cfg *project.Project, req Request) *contractv1.PreflightRequest {
+	var wanted []string
+	if req.Feature != "" {
+		wanted = []string{req.Feature}
+	}
 	return &contractv1.PreflightRequest{
 		RequiredTier:     req.Tier,
 		Slug:             req.Slug,
@@ -22,6 +26,8 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		ProjectRegistry:  req.Registry,
 
 		CheckPreviewRoute: req.CheckPreviewRoute,
+		RecordWants:       req.RecordWants && !req.DryRun,
+		WantedParts:       wanted,
 	}
 }
 

@@ -33,6 +33,8 @@ type Request struct {
 	HostCheckDomains []string
 	RequireHostname  bool
 	Feature          string
+	RecordWants      bool
+	DryRun           bool
 	Registry         *contractv1.ImageRegistry
 
 	CheckPreviewRoute bool
@@ -67,7 +69,7 @@ func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess
 		return err
 	}
 	if req.Require == Features {
-		if err := refuseMissingFeatures(NewGap(resp.GetBootstrap()), provider, cfg, req.Tier); err != nil {
+		if err := refuseMissingFeatures(NewGap(resp.GetBootstrap()), provider, cfg, req); err != nil {
 			return err
 		}
 	}
@@ -98,11 +100,11 @@ func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *pr
 	return &clierror.Error{Code: clierror.CodeBootstrapMissing, Hint: absent.Hint(), Cause: absent}
 }
 
-func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {
+func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
 	if len(gap.Missing) == 0 {
 		return nil
 	}
-	return MissingFeaturesError{Gap: gap, Tier: tier, Edge: cfg.EdgeSelection(), Provider: provider}.refuse()
+	return MissingFeaturesError{Gap: gap, Tier: req.Tier, Edge: cfg.EdgeSelection(), Provider: provider, Unrecorded: req.RecordWants && req.DryRun}.refuse()
 }
 
 func refuseMissingOfferedFeature(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, req Request) error {
@@ -110,7 +112,7 @@ func refuseMissingOfferedFeature(ctx context.Context, provider *providerprocess.
 	if err != nil || !offered {
 		return err
 	}
-	return refuseMissingFeatures(NewFeatureGap(status, req.Feature), provider, cfg, req.Tier)
+	return refuseMissingFeatures(NewFeatureGap(status, req.Feature), provider, cfg, req)
 }
 
 func TierName(tier environmentv1.Tier) string {

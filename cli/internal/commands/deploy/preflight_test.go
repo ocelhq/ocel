@@ -222,6 +222,28 @@ func onlyPreflight(t *testing.T, fixture clitest.FakeProject) *contractv1.Prefli
 	return preflights[0]
 }
 
+func TestADeployAsksThePreflightToRecordThePartsItWantsAndADryOneDoesNot(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts deployOptions
+		want bool
+	}{
+		{name: "a deploy", opts: deployOptions{yes: true}, want: true},
+		{name: "a dry deploy", opts: deployOptions{dry: true}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dependencies := newTestDependencies()
+			stubBuild(&dependencies, nil)
+			fixture := setUpDeployProject(t)
+
+			deployOutput(t, fixture, dependencies, tc.opts, "")
+			if got := onlyPreflight(t, fixture).GetRecordWants(); got != tc.want {
+				t.Errorf("the preflight's record_wants = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestADeployNamesItsSlugToThePreflightWhateverItDeclaresAndWhoeverIsThere(t *testing.T) {
 	t.Run("declared domains pass the slug to the preflight", func(t *testing.T) {
 		dependencies := newTestDependencies()
@@ -581,7 +603,7 @@ func setUpProjectLackingFeatures(t *testing.T) clitest.FakeProject {
 	return fixture
 }
 
-const bootstrapCommand = "Run `ocel bootstrap production --features cache,images` and try again"
+const bootstrapCommand = "Run `ocel bootstrap production` and try again"
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	fixture := setUpProjectLackingFeatures(t)

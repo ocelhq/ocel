@@ -24,6 +24,7 @@ type OpenOptions struct {
 	ClaimsDomains   bool
 	RequireHostname bool
 	Feature         string
+	RecordWants     bool
 	ProjectRegistry bool
 	Policy          consent.Policy
 
@@ -62,6 +63,8 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 		Slug:            opts.Slug,
 		RequireHostname: opts.RequireHostname,
 		Feature:         opts.Feature,
+		RecordWants:     opts.RecordWants,
+		DryRun:          opts.Policy.DryRun,
 		Registry:        registry,
 
 		CheckPreviewRoute: opts.CheckPreviewRoute,

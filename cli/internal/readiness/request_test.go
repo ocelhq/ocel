@@ -7,6 +7,22 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
+func TestAPreflightRecordingWantsNamesThePartTheCommandWantsBeyondItsBuild(t *testing.T) {
+	t.Parallel()
+
+	sent := newPreflightRequest(&project.Project{}, Request{RecordWants: true, Feature: "variables-key"})
+
+	if !sent.GetRecordWants() || !reflect.DeepEqual(sent.GetWantedParts(), []string{"variables-key"}) {
+		t.Errorf("preflight = record_wants %v, wanted_parts %v, want the key recorded as wanted", sent.GetRecordWants(), sent.GetWantedParts())
+	}
+	if dry := newPreflightRequest(&project.Project{}, Request{RecordWants: true, DryRun: true}); dry.GetRecordWants() {
+		t.Errorf("preflight = record_wants %v, want a dry run to record nothing", dry.GetRecordWants())
+	}
+	if plain := newPreflightRequest(&project.Project{}, Request{}); plain.GetRecordWants() || len(plain.GetWantedParts()) != 0 {
+		t.Errorf("preflight = record_wants %v, wanted_parts %v, want a command that wants nothing beyond its build to name nothing", plain.GetRecordWants(), plain.GetWantedParts())
+	}
+}
+
 func TestOnlyContainerAppsAreNamedEachWithTheArchitectureItDeclares(t *testing.T) {
 	t.Parallel()
 

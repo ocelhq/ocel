@@ -139,7 +139,7 @@ func TestABootstrapGapNamesEachFeatureOnce(t *testing.T) {
 		t.Errorf("stale = %v, want %v", gap.Stale, want)
 	}
 	command := gap.RepairCommand(environmentv1.Tier_TIER_PRODUCTION)
-	if want := "ocel bootstrap production --features cloudflare-edge"; command != want {
+	if want := "ocel bootstrap production"; command != want {
 		t.Errorf("repair command = %q, want %q", command, want)
 	}
 	if features := requiredFeatures(status); !slices.Equal(features, []string{"cloudflare-edge"}) {
