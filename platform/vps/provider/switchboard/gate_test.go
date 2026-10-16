@@ -505,3 +505,55 @@ func TestAnOptionsRequestToAnAllowedPrefixPassesTheGateWithoutCredentials(t *tes
 func TestTheSwitchboardsGateAnswersTheGatesConformanceVectorsOverHTTP(t *testing.T) {
 	edgeconformance.RunGateWith(t, switchboard.CheckGateOverHTTP)
 }
+
+func revalidatingRouting(t *testing.T, app string, digest string) []byte {
+	t.Helper()
+	var document map[string]any
+	if err := json.Unmarshal(gatedRouting(t, bothGated, upstreams{preview: app, production: app, open: backend(t, "plain")}), &document); err != nil {
+		t.Fatal(err)
+	}
+	routes := document["routes"].([]any)
+	routes[0].(map[string]any)["revalidateTokenDigest"] = digest
+	written, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return written
+}
+
+func sendRevalidation(t *testing.T, at, host, method, token string) int {
+	t.Helper()
+	request, err := http.NewRequest(method, "http://"+at+"/blog", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = host
+	request.Header.Set(gate.HeaderRevalidate, token)
+	response, err := boardClient.Do(request)
+	if err != nil {
+		t.Fatalf("%s %s/blog: %v", method, host, err)
+	}
+	_ = response.Body.Close()
+	return response.StatusCode
+}
+
+func TestAGatedHostServesAHEADCarryingTheRevalidateTokenOfTheReleaseItRoutesTo(t *testing.T) {
+	t.Parallel()
+
+	const token = "b1946ac92492d2347c6235b4d2611184"
+	app, seen := appBehindGate(t, nil)
+	_, at := served(t, revalidatingRouting(t, app, gate.HashRevalidateToken(token)))
+
+	if status := sendRevalidation(t, at, previewHost, http.MethodHead, token); status != http.StatusOK || seen.reached != 1 {
+		t.Errorf("a HEAD carrying the release's revalidate token answered %d and reached the app %d times, want 200 from the app", status, seen.reached)
+	}
+	if status := sendRevalidation(t, at, previewHost, http.MethodGet, token); status != http.StatusUnauthorized {
+		t.Errorf("a GET carrying the release's revalidate token answered %d, want 401", status)
+	}
+	if status := sendRevalidation(t, at, productionHost, http.MethodHead, token); status != http.StatusUnauthorized {
+		t.Errorf("a HEAD carrying another release's revalidate token answered %d, want 401", status)
+	}
+	if seen.reached != 1 {
+		t.Errorf("the app was reached %d times, want only by the revalidating HEAD", seen.reached)
+	}
+}

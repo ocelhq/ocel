@@ -552,6 +552,12 @@ deploy warns, naming those functions, and changing the credentials or running
 `ocel protection sync` writes the gate and then exits with an error naming them, until they are
 destroyed.
 
+A protected tier still lets through the request Next's `res.revalidate()` sends to its own URL: a
+`HEAD` whose `x-prerender-revalidate` header holds the preview mode ID of the build the hostname
+serves. Each Next build makes a new one, and the gate checks it against a SHA-256 of it the release
+records. A `GET` with that header, or a `HEAD` with another build's ID, gets the login form like
+any other request.
+
 ## lifecycle
 
 `lifecycle.preBuild` runs once per deploy on your machine, after provisioning and before any

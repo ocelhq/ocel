@@ -97,7 +97,7 @@ func (e *Edge) runsRecordedGate(ctx context.Context, tier environment.Tier, slug
 	if !gated || !running {
 		return !gated && !running, nil
 	}
-	return sameGateRecord(gateRecord{Hosts: hosts, Gate: held}, record), nil
+	return sameGateRecord(gateRecord{Hosts: hosts, Gate: held, RevalidateTokenDigests: config.FindRevalidateTokenDigests(slug)}, record), nil
 }
 
 func (e *Edge) refuseOversizedConfig(tier environment.Tier, config string) error {

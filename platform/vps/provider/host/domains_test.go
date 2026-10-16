@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -746,5 +747,28 @@ func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *
 	err := box.host().rerender(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "may still serve") {
 		t.Errorf("rerender() over a reload that failed and a reload back that failed too = %v, want it to say the proxy may still serve what the restored files no longer record", err)
+	}
+}
+
+func TestARolledOutAppRouteCarriesTheRevalidateTokenDigestOfTheReleaseItRuns(t *testing.T) {
+	t.Parallel()
+
+	box := claimingBox(t, twoProjects())
+	digest := gate.HashRevalidateToken("b1946ac92492d2347c6235b4d2611184")
+	if err := box.host().RollOut(context.Background(), Rollout{
+		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz", RevalidateTokenDigest: digest}},
+		DeployTimeout: DeployWindow,
+		DrainTimeout:  DrainWindow,
+	}, nil); err != nil {
+		t.Fatalf("RollOut() = %v", err)
+	}
+
+	table, err := ReadRoutingTable([]byte(box.recorded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
+	if at < 0 || table.Routes[at].RevalidateTokenDigest != digest {
+		t.Errorf("after the rollout the routes read %v, want web's to carry the revalidate token digest %s: the switchboard admits a revalidating HEAD on the digest of the release a hostname routes to", table.Routes, digest)
 	}
 }

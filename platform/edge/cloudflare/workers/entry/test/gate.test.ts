@@ -1,7 +1,7 @@
 import { createExecutionContext } from "cloudflare:test";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import gateEncodings from "@platform/edge-contract/fixtures/gate" with { type: "json" };
-import { hashPassword } from "@platform/edge-contract/gate";
+import { hashPassword, hashRevalidateToken } from "@platform/edge-contract/gate";
 import { describe, expect, it } from "vitest";
 import vectors from "../../../../../../pkg/edge/edgeconformance/gate.json" with { type: "json" };
 import { gateRequest, readGate } from "../src/gate";
@@ -404,6 +404,52 @@ describe("the gate on a project's production worker", () => {
     }
   });
 
+  it("serves a HEAD carrying the revalidate token of the release the host serves, and refuses a GET carrying it", async () => {
+    const token = "b1946ac92492d2347c6235b4d2611184";
+    const env = await productionEnv({
+      RELEASES: {
+        ...bindingHolding({ p1: JSON.stringify(await gateRecord()) }),
+        readPointerRecord: async () => ({
+          kind: "record",
+          release: "deploy-2",
+          record: makeRecord({ revalidateTokenDigest: await hashRevalidateToken(token) }),
+        }),
+      },
+    });
+
+    const revalidated = await visit(
+      new Request("https://app.example.com/users", {
+        method: "HEAD",
+        headers: { "x-prerender-revalidate": token },
+      }),
+      env,
+    );
+    expect(revalidated.response.status).toBe(200);
+    expect(revalidated.wire.calls[0].headers.get("x-prerender-revalidate")).toBe(token);
+
+    const read = await visit(
+      new Request("https://app.example.com/users", {
+        headers: { "x-prerender-revalidate": token },
+      }),
+      env,
+    );
+    expect(read.response.status).toBe(401);
+    expect(read.wire.calls).toHaveLength(0);
+  });
+
+  it("refuses a revalidating HEAD when the release the host serves states no revalidate token", async () => {
+    const { response, wire } = await visit(
+      new Request("https://app.example.com/users", {
+        method: "HEAD",
+        headers: { "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184" },
+      }),
+      await productionEnv(),
+    );
+
+    expect(response.status).toBe(401);
+    expect(wire.calls).toHaveLength(0);
+  });
+
   it("gates the workers.dev host it serves when it has no domain", async () => {
     const { response, wire } = await visit(
       new Request("https://ocel-web.acct.workers.dev/users"),
@@ -646,6 +692,7 @@ type VectorRequest = {
   method: string;
   host: string;
   target: string;
+  revalidateTokenDigest?: string;
   headers: Record<string, string | string[]>;
 };
 
@@ -686,7 +733,12 @@ describe("the entry worker's gate answers the gate's conformance vectors", () =>
           bodyExcludes?: string[];
         };
 
-        const outcome = await gateRequest(requestOf(example.request), gate, vectors.nowSeconds);
+        const outcome = await gateRequest(
+          requestOf(example.request),
+          gate,
+          vectors.nowSeconds,
+          (example.request as VectorRequest).revalidateTokenDigest,
+        );
 
         if (expected.forward) {
           if (outcome.kind !== "forward")

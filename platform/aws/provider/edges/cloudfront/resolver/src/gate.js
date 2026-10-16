@@ -9,7 +9,6 @@ var LOGIN_SCRIPT =
   LOGIN_PATH +
   '",{method:"POST",headers:{Authorization:"Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(":"+p.value)))}});r.ok?location.assign(document.querySelector("main").dataset.next):document.getElementById("incorrect").hidden=!1}';
 var GATE_KEY_PREFIX = 'gate/';
-var HEX_DIGITS = '0123456789abcdef';
 
 function sign(gate, purpose, input) {
   // biome-ignore lint/style/useNodejsImportProtocol: CloudFront Functions names its built-in module crypto
@@ -38,7 +37,7 @@ function decodeUtf8(binary) {
   var escaped = '';
   for (let i = 0; i < binary.length; i++) {
     const byte = binary.charCodeAt(i);
-    escaped += '%' + HEX_DIGITS.charAt(byte >> 4) + HEX_DIGITS.charAt(byte & 15);
+    escaped += (byte < 16 ? '%0' : '%') + byte.toString(16);
   }
   try {
     return decodeURIComponent(escaped);
@@ -238,7 +237,14 @@ async function enforceGate(request, route, host) {
 
   var hasPassword = hasBasicPassword(gate, joinedHeader(request.headers, 'authorization'));
   var hasBypass = hasBypassSecret(gate, joinedHeader(request.headers, BYPASS_HEADER));
-  var admitted = hasPassword || hasBypass || hasSession(gate, request, host);
+  var revalidates =
+    request.method === 'HEAD' &&
+    !!route.revalidateTokenDigest &&
+    sameHex(
+      sha256Hex(joinedHeader(request.headers, REVALIDATE_HEADER)),
+      route.revalidateTokenDigest,
+    );
+  var admitted = hasPassword || hasBypass || revalidates || hasSession(gate, request, host);
 
   var readsOrHeads = request.method === 'GET' || request.method === 'HEAD';
   if (

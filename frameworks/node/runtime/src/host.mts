@@ -232,6 +232,7 @@ interface Trust {
   guard?: OriginGuard;
   mounted?: MountedGate;
   gate?: GateSource;
+  revalidateTokenDigest?: string;
 }
 
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
@@ -329,7 +330,8 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
         if (trust.mounted) {
           const { admitGate, openGate } = await import("./gate.mjs");
           trust.gate ??= openGate(trust.mounted);
-          if (!(await admitGate(trust.gate, req, res, reachedHost))) return;
+          if (!(await admitGate(trust.gate, req, res, reachedHost, trust.revalidateTokenDigest)))
+            return;
         }
         const ocel: OcelContext = { waitUntil };
         const run = () => invoke(req, res, ocel);
@@ -343,22 +345,44 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   };
 }
 
-function originTrust(env: NodeJS.ProcessEnv, forwarded: boolean): Trust {
-  return { forwarded, guard: originGuard(env), mounted: takeMountedGate(env) };
+function originTrust(
+  env: NodeJS.ProcessEnv,
+  forwarded: boolean,
+  revalidateTokenDigest?: string,
+): Trust {
+  return {
+    forwarded,
+    guard: originGuard(env),
+    mounted: takeMountedGate(env),
+    revalidateTokenDigest,
+  };
 }
 
-export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
+export function serveInvoke(
+  invoke: Invoke,
+  onListening?: OnListening,
+  bind?: Bind,
+  revalidateTokenDigest?: string,
+): Promise<void> {
   return startServer(
-    http.createServer(wrapWithOcelContext(invoke, originTrust(process.env, true))),
+    http.createServer(
+      wrapWithOcelContext(invoke, originTrust(process.env, true, revalidateTokenDigest)),
+    ),
     onListening,
     true,
     bind,
   );
 }
 
-export function serveEntry(invoke: Invoke, bind?: Bind): Promise<void> {
+export function serveEntry(
+  invoke: Invoke,
+  bind?: Bind,
+  revalidateTokenDigest?: string,
+): Promise<void> {
   return startServer(
-    http.createServer(wrapWithOcelContext(invoke, originTrust(process.env, false))),
+    http.createServer(
+      wrapWithOcelContext(invoke, originTrust(process.env, false, revalidateTokenDigest)),
+    ),
     undefined,
     true,
     bind,

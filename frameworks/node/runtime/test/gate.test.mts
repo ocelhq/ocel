@@ -19,6 +19,7 @@ interface Case {
     method: string;
     host: string;
     target: string;
+    revalidateTokenDigest?: string;
     headers: Record<string, string | string[]>;
   };
   expect: {
@@ -55,11 +56,12 @@ async function serveAndReach(
   target: string,
   headers: http.OutgoingHttpHeaders,
   app: (res: http.ServerResponse) => void = (res) => res.end("served by the app"),
+  revalidateTokenDigest?: string,
 ): Promise<Reach> {
   let reachedApp = false;
   let heard: http.IncomingHttpHeaders = {};
   const server = http.createServer(async (req, res) => {
-    if (!(await admitGate(source, req, res))) return;
+    if (!(await admitGate(source, req, res, req.headers.host, revalidateTokenDigest))) return;
     reachedApp = true;
     heard = { ...req.headers };
     app(res);
@@ -121,6 +123,8 @@ describe("a service that mounts a gate answers every conformance vector", () => 
         example.request.method,
         example.request.target,
         wire,
+        undefined,
+        example.request.revalidateTokenDigest,
       );
 
       if (example.expect.forward) {

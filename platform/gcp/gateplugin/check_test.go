@@ -19,6 +19,7 @@ func TestThePluginAnswersEveryConformanceVector(t *testing.T) {
 		config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 			map[string]string{req.Host: "shop"},
 			map[string]gate.Gate{"shop": held},
+			map[string]string{req.Host: req.RevalidateTokenDigest},
 		))
 		if err != nil {
 			t.Fatalf("ParseConfig = %v", err)
@@ -41,6 +42,7 @@ func TestARequestForAHostNoGateNamesPassesUnchanged(t *testing.T) {
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": {Key: "k"}},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -65,6 +67,7 @@ func TestAnUncredentialedRequestForAProtectedHostIsAnsweredByThePluginBeforeAnyC
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"shop.example.com": "shop", "pr-7-shop.preview.example.com": "shop"},
 		map[string]gate.Gate{"shop": {Key: "k", PasswordMAC: "m"}},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +97,7 @@ func TestTheLoginPostIsAnsweredByThePluginWithTheSessionCookie(t *testing.T) {
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +126,7 @@ func TestASessionCookieOnASecondCookieLineIsAdmittedAndRemovedBeforeForwarding(t
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -149,6 +154,7 @@ func TestACookieTheGateDoesNotReadIsForwardedByteForByte(t *testing.T) {
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)

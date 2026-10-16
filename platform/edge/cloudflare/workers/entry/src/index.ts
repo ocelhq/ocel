@@ -27,6 +27,7 @@ import {
   gateRequest,
   gateUnreadableResponse,
   readGate,
+  readRevalidateTokenDigest,
   withResponseHeaders,
   withRobotsTag,
 } from "./gate";
@@ -326,12 +327,17 @@ function unavailableResponse(): Response {
 async function passGate(
   request: Request,
   env: Env,
-  slug: string,
+  releases: ReleaseLookup,
 ): Promise<Response | { request: Request; responseHeaders?: Headers }> {
-  const read = await readGate(env.RELEASES, slug);
+  const read = await readGate(env.RELEASES, releases.slug);
   if (read.kind === "unreadable") return gateUnreadableResponse();
   if (read.kind === "open") return { request };
-  const outcome = await gateRequest(request, read.gate, Math.floor(Date.now() / 1000));
+  const outcome = await gateRequest(
+    request,
+    read.gate,
+    Math.floor(Date.now() / 1000),
+    await readRevalidateTokenDigest(request, releases),
+  );
   return outcome.kind === "respond" ? outcome.response : outcome;
 }
 
@@ -364,7 +370,7 @@ export default {
     }
     if (!releases.slug) return deploymentNotFoundResponse();
 
-    const gated = await passGate(request, env, releases.slug);
+    const gated = await passGate(request, env, releases);
     if (gated instanceof Response) return gated;
     const { request: visitor, responseHeaders: gateHeaders } = gated;
 

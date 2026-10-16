@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -21,8 +22,9 @@ const (
 )
 
 type gateRecord struct {
-	Hosts []string  `json:"hosts,omitempty"`
-	Gate  gate.Gate `json:"gate"`
+	Hosts                  []string          `json:"hosts,omitempty"`
+	Gate                   gate.Gate         `json:"gate"`
+	RevalidateTokenDigests map[string]string `json:"revalidateTokenDigests,omitempty"`
 }
 
 type gatePublication struct {
@@ -147,6 +149,7 @@ func (e *Edge) encodeGateConfig(ctx context.Context, tier environment.Tier) (str
 		return "", err
 	}
 	hosts := map[string]string{}
+	digests := map[string]string{}
 	gates := make(map[string]gate.Gate, len(entries))
 	for _, entry := range entries {
 		slug := entry.Key.Path[len(entry.Key.Path)-1]
@@ -158,8 +161,9 @@ func (e *Edge) encodeGateConfig(ctx context.Context, tier environment.Tier) (str
 		for _, host := range record.Hosts {
 			hosts[host] = slug
 		}
+		maps.Copy(digests, record.RevalidateTokenDigests)
 	}
-	return gateplugin.EncodeConfig(hosts, gates), nil
+	return gateplugin.EncodeConfig(hosts, gates, digests), nil
 }
 
 func (e *Edge) readGatePublication(ctx context.Context, tier environment.Tier) (gatePublication, bool, error) {

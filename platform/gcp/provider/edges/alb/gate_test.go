@@ -18,8 +18,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
 var shopGate = gate.Gate{Key: "shop-key", PasswordMAC: "shop-mac", BypassSecrets: []string{"shop-bypass"}}
@@ -1023,5 +1025,64 @@ func TestBootstrappingAPreviewTierWhoseGateRecordsWereSealedForPreviewsAloneAtta
 
 	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the preview plugin holds %s, want the protected preview's keys", config)
+	}
+}
+
+func (w *world) revalidateTokenDigests(tierStack, slug string) map[string]string {
+	config, err := gateplugin.ParseConfig(w.gateConfig(tierStack))
+	if err != nil {
+		return map[string]string{"unparseable": err.Error()}
+	}
+	return config.FindRevalidateTokenDigests(slug)
+}
+
+func revalidating(record router.ReleaseRecord, token string) router.ReleaseRecord {
+	record.RevalidateTokenDigest = gate.HashRevalidateToken(token)
+	return record
+}
+
+func TestAGatedPreviewHostCarriesTheRevalidateTokenDigestOfTheReleaseItServesIntoThePlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	balancer, w := gatedEdge(t)
+	moving := routerStack{s: reconcileGated(t, balancer, "shop", &shopGate)}
+
+	first := revalidating(previewRecord("b1"), "first-build-preview-mode-id-0000")
+	if err := moving.MovePointer(ctx, aliasMove("p1", aliasHost, first), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	if got := w.revalidateTokenDigests(GateStack(environment.TierPreview), "shop"); got[aliasHost] != first.RevalidateTokenDigest {
+		t.Errorf("the plugin holds revalidate token digests %v, want %s to carry b1's", got, aliasHost)
+	}
+
+	second := revalidating(previewRecord("b2"), "second-build-preview-mode-id-000")
+	if err := moving.MovePointer(ctx, aliasMove("p2", aliasHost, second), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p2) = %v", err)
+	}
+	if got := w.revalidateTokenDigests(GateStack(environment.TierPreview), "shop"); got[aliasHost] != second.RevalidateTokenDigest {
+		t.Errorf("the plugin holds revalidate token digests %v, want %s to carry b2's, the release it now serves", got, aliasHost)
+	}
+}
+
+func TestAGatedProductionHostCarriesTheRevalidateTokenDigestOfEachReleasePromotedOntoIt(t *testing.T) {
+	t.Parallel()
+
+	balancer, w := gatedEdgeOn(t, environment.TierProduction)
+	shop := reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
+	bindShop(t, shop)
+
+	first := revalidating(staticRecord("b1"), "first-build-preview-mode-id-0000")
+	stage(t, shop, first)
+	promote(t, shop, "p1", "b1")
+	if got := w.revalidateTokenDigests(GateStack(environment.TierProduction), "shop"); got["shop.example.com"] != first.RevalidateTokenDigest {
+		t.Errorf("the production plugin holds revalidate token digests %v, want shop.example.com to carry b1's", got)
+	}
+
+	second := revalidating(staticRecord("b2"), "second-build-preview-mode-id-000")
+	stage(t, shop, second)
+	promote(t, shop, "p2", "b2")
+	if got := w.revalidateTokenDigests(GateStack(environment.TierProduction), "shop"); got["shop.example.com"] != second.RevalidateTokenDigest {
+		t.Errorf("the production plugin holds revalidate token digests %v, want shop.example.com to carry b2's, the release it now serves", got)
 	}
 }

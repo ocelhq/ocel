@@ -34,7 +34,7 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) released(ctx context.Context, records map[string]router.ReleaseRecord, progress progress.Log) error {
 	hosts := maps.Clone(s.recorded.Hosts)
-	var took, moved []string
+	var took, moved, revalidated []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
 		host := hosts[hostname]
 		if isWildcard(hostname) || host.Pointer != "" {
@@ -51,20 +51,29 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 			if service == "" {
 				continue
 			}
-			host.Service, host.StaticRoutes = service, routes
+			host.Service, host.StaticRoutes, host.RevalidateTokenDigest = service, routes, record.RevalidateTokenDigest
 			took = append(took, hostname)
-		case found && pin.ResolveService(record) == host.Service && host.StaticRoutes != routes:
-			host.StaticRoutes = routes
-			moved = append(moved, hostname)
+		case found && pin.ResolveService(record) == host.Service:
+			if host.StaticRoutes == routes && host.RevalidateTokenDigest == record.RevalidateTokenDigest {
+				continue
+			}
+			if host.StaticRoutes != routes {
+				host.StaticRoutes = routes
+				moved = append(moved, hostname)
+			}
+			if host.RevalidateTokenDigest != record.RevalidateTokenDigest {
+				host.RevalidateTokenDigest = record.RevalidateTokenDigest
+				revalidated = append(revalidated, hostname)
+			}
 		default:
 			continue
 		}
 		hosts[hostname] = host
 	}
-	if len(took) == 0 && len(moved) == 0 {
+	if len(took) == 0 && len(moved) == 0 && len(revalidated) == 0 {
 		return nil
 	}
-	if err := s.admitGatedHosts(ctx, took, progress); err != nil {
+	if err := s.admitGatedHosts(ctx, pickHosts(hosts, slices.Concat(took, revalidated)), progress); err != nil {
 		return err
 	}
 	if len(took) > 0 {
@@ -89,6 +98,14 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 	s.recorded.Hosts = hosts
 	s.keep()
 	return nil
+}
+
+func pickHosts(hosts map[string]Host, names []string) map[string]Host {
+	picked := make(map[string]Host, len(names))
+	for _, name := range names {
+		picked[name] = hosts[name]
+	}
+	return picked
 }
 
 func (s *stack) adopt(balancer LoadBalancer) error {
@@ -146,11 +163,12 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		hosts = map[string]Host{}
 	}
 	hosts[binding.Hostname] = Host{
-		App:          binding.App,
-		Certificate:  binding.Certificate,
-		Service:      served.Service,
-		Backend:      backendName(s.state.Slug, s.state.Tier, binding.Hostname),
-		StaticRoutes: served.StaticRoutes,
+		App:                   binding.App,
+		Certificate:           binding.Certificate,
+		Service:               served.Service,
+		Backend:               backendName(s.state.Slug, s.state.Tier, binding.Hostname),
+		StaticRoutes:          served.StaticRoutes,
+		RevalidateTokenDigest: served.RevalidateTokenDigest,
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)
 	if err != nil {
@@ -163,7 +181,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return s.disown(ctx, binding.Hostname)
 	}
 	if served.Service != "" {
-		if err := s.admitGatedHosts(ctx, []string{binding.Hostname}, sayingTo(binding.Say)); err != nil {
+		if err := s.admitGatedHosts(ctx, pickHosts(hosts, []string{binding.Hostname}), sayingTo(binding.Say)); err != nil {
 			return errors.Join(err, release())
 		}
 	}
@@ -248,7 +266,7 @@ func (s *stack) serving(ctx context.Context, app string) (Host, error) {
 	if err != nil {
 		return Host{}, err
 	}
-	return Host{Service: pin.ResolveService(record), StaticRoutes: routes}, nil
+	return Host{Service: pin.ResolveService(record), StaticRoutes: routes, RevalidateTokenDigest: record.RevalidateTokenDigest}, nil
 }
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {

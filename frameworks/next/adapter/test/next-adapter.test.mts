@@ -1919,6 +1919,23 @@ test("states the runtime and next's own build id in hosting.json", async () => {
   expect(hosting.frameworkBuildId).toBe(manifest.buildId);
 });
 
+test("states the digest of the token its revalidations carry, the build's preview mode id", async () => {
+  const { projectDir, args } = await synthProject();
+  const previewModeId = "b1946ac92492d2347c6235b4d2611184";
+  await writeFile(
+    join(projectDir, ".next/prerender-manifest.json"),
+    JSON.stringify({ version: 4, routes: {}, dynamicRoutes: {}, preview: { previewModeId } }),
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const hosting = JSON.parse(await readFile(join(projectDir, ".ocel/output/hosting.json"), "utf8"));
+  expect(hosting.revalidateTokenDigest).toBe(
+    "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+  );
+});
+
 test("states next's static dir as immutable under whatever base path the build serves it at", async () => {
   const { deriveNextStatic } = await import("../src/next-adapter.mts");
 

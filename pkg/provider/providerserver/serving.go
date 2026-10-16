@@ -34,16 +34,17 @@ type AppServingInput struct {
 }
 
 type AppServing struct {
-	RootFunction   string
-	OriginDispatch *provider.RoutingSpec
-	OcelRouteTable *provider.RoutingSpec
-	EdgeRouteTable *provider.EdgeRouteTable
-	Guard          *provider.OriginGuard
-	ISR            *provider.ISRSpec
-	Bytecode       *provider.BytecodeSpec
-	AssetPrefix    string
-	Static         *edge.Static
-	Prerenders     bool
+	RootFunction          string
+	OriginDispatch        *provider.RoutingSpec
+	OcelRouteTable        *provider.RoutingSpec
+	EdgeRouteTable        *provider.EdgeRouteTable
+	Guard                 *provider.OriginGuard
+	ISR                   *provider.ISRSpec
+	Bytecode              *provider.BytecodeSpec
+	AssetPrefix           string
+	Static                *edge.Static
+	Prerenders            bool
+	RevalidateTokenDigest string
 }
 
 func (s AppServing) OriginTable() *provider.RoutingSpec {
@@ -65,6 +66,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if present {
 		facts.RootFunction = hosting.RootFunction
 		facts.Static = hosting.Static
+		facts.RevalidateTokenDigest = hosting.RevalidateTokenDigest
 	}
 	uses, err := buildUses(q.Root, q.App, q.Framework, hosting, present)
 	if err != nil {

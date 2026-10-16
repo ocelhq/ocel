@@ -93,6 +93,7 @@ async function enforceMountedGate(
   source: GateSource,
   req: http.IncomingMessage,
   reachedHost: string,
+  revalidateTokenDigest?: string,
 ): Promise<GateResponse | undefined | "open"> {
   const reading = await source.current();
   if (reading.kind === "unreadable") return newUnavailableResponse();
@@ -104,6 +105,7 @@ async function enforceMountedGate(
       host: reachedHost,
       target: req.url ?? "/",
       headers: newFetchHeaders(req),
+      revalidateTokenDigest,
     },
     source.nowSeconds(),
   );
@@ -117,8 +119,9 @@ export async function admitGate(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   reachedHost = req.headers.host ?? "",
+  revalidateTokenDigest?: string,
 ): Promise<boolean> {
-  const answer = await enforceMountedGate(source, req, reachedHost);
+  const answer = await enforceMountedGate(source, req, reachedHost, revalidateTokenDigest);
   if (answer === "open") return true;
   if (answer) {
     const { status, headers, body } = answer;

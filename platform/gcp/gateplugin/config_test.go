@@ -18,7 +18,7 @@ func TestAConfigRoundTripsEveryGateItHolds(t *testing.T) {
 	}
 	hosts := map[string]string{"pr-1-shop.example.dev": "shop", "pr-2-shop.example.dev": "shop", "main-blog.example.dev": "blog"}
 
-	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(hosts, gates))
+	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(hosts, gates, nil))
 	if err != nil {
 		t.Fatalf("ParseConfig = %v", err)
 	}
@@ -44,6 +44,7 @@ func TestAConfigFindsOneProjectsGateAndTheHostsItGates(t *testing.T) {
 	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"pr-2-shop.example.dev": "shop", "pr-1-shop.example.dev": "shop", "main-blog.example.dev": "blog"},
 		map[string]gate.Gate{"shop": {Key: "shop-key"}, "blog": {Key: "blog-key"}, "docs": {Key: "docs-key"}},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +59,36 @@ func TestAConfigFindsOneProjectsGateAndTheHostsItGates(t *testing.T) {
 	}
 	if _, _, found := parsed.FindProject("ghost"); found {
 		t.Error("FindProject(ghost) found a gate the config does not hold")
+	}
+}
+
+func TestAConfigHoldsTheRevalidateTokenDigestOfEachHostThatHasOne(t *testing.T) {
+	t.Parallel()
+
+	digest := gate.HashRevalidateToken("b1946ac92492d2347c6235b4d2611184")
+	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
+		map[string]string{"pr-1-shop.example.dev": "shop", "pr-2-shop.example.dev": "shop", "main-blog.example.dev": "blog"},
+		map[string]gate.Gate{"shop": {Key: "shop-key"}, "blog": {Key: "blog-key"}},
+		map[string]string{"pr-1-shop.example.dev": digest, "pr-2-shop.example.dev": ""},
+	))
+	if err != nil {
+		t.Fatalf("ParseConfig = %v", err)
+	}
+
+	if got := parsed.FindRevalidateTokenDigests("shop"); !reflect.DeepEqual(got, map[string]string{"pr-1-shop.example.dev": digest}) {
+		t.Errorf("FindRevalidateTokenDigests(shop) = %v, want the digest of the one host whose release has a token", got)
+	}
+	if got := parsed.FindRevalidateTokenDigests("blog"); len(got) != 0 {
+		t.Errorf("FindRevalidateTokenDigests(blog) = %v, want none", got)
+	}
+}
+
+func TestAConfigNamingARevalidateTokenDigestForAHostItDoesNotRouteIsRefused(t *testing.T) {
+	t.Parallel()
+
+	_, err := gateplugin.ParseConfig("ocel-gate 1\ng shop key - - -\nr pr-1.example.dev 8f0a\n")
+	if err == nil {
+		t.Fatal("ParseConfig accepted a revalidate token digest for a host it routes to no gate")
 	}
 }
 
@@ -77,6 +108,7 @@ func TestAHostMatchesWhateverCapitalisationTheRequestArrivesIn(t *testing.T) {
 	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"pr-1-shop.example.dev": "shop"},
 		map[string]gate.Gate{"shop": {Key: "k"}},
+		nil,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +129,7 @@ func TestAHostMatchesWhateverCapitalisationTheRequestArrivesIn(t *testing.T) {
 func TestAnEmptyConfigGatesNothing(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(nil, nil))
+	parsed, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(nil, nil, nil))
 	if err != nil {
 		t.Fatalf("ParseConfig of an empty config = %v", err)
 	}
@@ -112,9 +144,9 @@ func TestEncodingTheSameRecordsAlwaysYieldsTheSameText(t *testing.T) {
 	hosts := map[string]string{"b.example.dev": "shop", "a.example.dev": "shop", "c.example.dev": "blog"}
 	gates := map[string]gate.Gate{"shop": {Key: "1"}, "blog": {Key: "2"}}
 
-	first := gateplugin.EncodeConfig(hosts, gates)
+	first := gateplugin.EncodeConfig(hosts, gates, nil)
 	for range 20 {
-		if again := gateplugin.EncodeConfig(hosts, gates); again != first {
+		if again := gateplugin.EncodeConfig(hosts, gates, nil); again != first {
 			t.Fatalf("EncodeConfig changed between calls:\n%s\n%s", first, again)
 		}
 	}
@@ -151,7 +183,7 @@ func TestATextThatIsNoConfigIsRefused(t *testing.T) {
 func TestAConfigIsPlainLinesSoItStaysSmallAndReadable(t *testing.T) {
 	t.Parallel()
 
-	text := gateplugin.EncodeConfig(map[string]string{"a.example.dev": "shop"}, map[string]gate.Gate{"shop": {Key: "k"}})
+	text := gateplugin.EncodeConfig(map[string]string{"a.example.dev": "shop"}, map[string]gate.Gate{"shop": {Key: "k"}}, nil)
 	if strings.ContainsAny(text, "{}\"") {
 		t.Errorf("the config carries JSON syntax: %q", text)
 	}

@@ -28,16 +28,17 @@ const (
 )
 
 type route struct {
-	Stack        string   `json:"stack,omitempty"`
-	Slug         string   `json:"slug,omitempty"`
-	Origin       string   `json:"origin"`
-	Container    string   `json:"container,omitempty"`
-	Release      string   `json:"release"`
-	Assets       string   `json:"assets"`
-	AssetPrefix  string   `json:"assetPrefix,omitempty"`
-	Immutable    []string `json:"immutable,omitempty"`
-	ShieldRegion string   `json:"shieldRegion,omitempty"`
-	Secret       string   `json:"secret"`
+	Stack                 string   `json:"stack,omitempty"`
+	Slug                  string   `json:"slug,omitempty"`
+	Origin                string   `json:"origin"`
+	Container             string   `json:"container,omitempty"`
+	Release               string   `json:"release"`
+	Assets                string   `json:"assets"`
+	AssetPrefix           string   `json:"assetPrefix,omitempty"`
+	Immutable             []string `json:"immutable,omitempty"`
+	ShieldRegion          string   `json:"shieldRegion,omitempty"`
+	Secret                string   `json:"secret"`
+	RevalidateTokenDigest string   `json:"revalidateTokenDigest,omitempty"`
 }
 
 type routeStore struct {
