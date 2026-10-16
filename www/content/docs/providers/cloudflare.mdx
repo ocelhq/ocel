@@ -34,9 +34,12 @@ it: Route 53 cannot write the records the edge answers on.
 
 ## Setup
 
-Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment; the config never
-holds them. A deploy checks both before the build, and stops if either is unset or Cloudflare
-will not list the account's zones for the token.
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment ocel runs in, such as by
+exporting them in your shell; the config never holds them, and the project's `.env` doesn't reach
+the provider. Create the token at
+[dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens). A deploy
+checks both before the build, and stops if either is unset or Cloudflare will not list the
+account's zones for the token.
 
 | The token needs | When |
 | --- | --- |

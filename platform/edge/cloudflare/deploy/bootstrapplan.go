@@ -8,7 +8,6 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -104,11 +103,8 @@ func (w workerState) removals() []edge.PlanChange {
 
 func bootstrapCredentials() (string, error) {
 	accountID := readAccountID()
-	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; export it and re-run", envAccountID)
-	}
-	if os.Getenv(envAPIToken) == "" {
-		return "", fmt.Errorf("%s is not set; export it and re-run", envAPIToken)
+	if err := refuseUnsetCredentials(accountID); err != nil {
+		return "", err
 	}
 	return accountID, nil
 }
