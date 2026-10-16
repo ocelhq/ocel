@@ -221,7 +221,7 @@ func (deletedChangeSets) DescribeChangeSet(context.Context, *cloudformation.Desc
 func TestAChangeSetSomethingElseDeletedStopsAtOnce(t *testing.T) {
 	waits := recordWaits(t)
 
-	_, _, err := cfn.AwaitChangeSet(context.Background(), deletedChangeSets{newFakeCFN()}, "ocel-1")
+	_, _, err := cfn.AwaitChangeSet(context.Background(), deletedChangeSets{newFakeCFN()}, "ocel-bootstrap", "ocel-1")
 	if err == nil {
 		t.Fatal("a deleted change set was waited on as though it were still being built")
 	}

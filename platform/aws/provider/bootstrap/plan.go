@@ -229,7 +229,7 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environm
 		group.Reason = "version stamp is behind; no resource changes"
 		return group
 	}
-	cfn.DiscardChangeSet(ctx, stacks, id)
+	cfn.DiscardChangeSet(ctx, stacks, group.Name, id)
 	if group.Changes = resourceChanges(changes); len(group.Changes) == 0 {
 		group.Reason = provider.WithDetailUnavailable(group.Reason)
 	}
