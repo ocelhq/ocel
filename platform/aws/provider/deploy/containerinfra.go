@@ -208,7 +208,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		Tags:        containerInfraTags(tier),
 		VendorState: work,
 	}
-	writer := provider.WrittenByVersion("")
+	writer := owner.cfg.WrittenBy
 	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
 		WrittenBy: string(writer),
 		AddedBy:   ref.Project,

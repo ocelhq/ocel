@@ -31,6 +31,7 @@ type Provider struct {
 	options    Options
 	transforms []string
 	projectDir string
+	writtenBy  provider.WrittenBy
 	aws        aws.Config
 	namespace  bootstrap.Namespace
 
@@ -61,6 +62,7 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	}
 	p := NewProvider(decoded, settings.Transforms, cfg, bootstrap.Namespace(ns))
 	p.projectDir = settings.ProjectDir
+	p.writtenBy = settings.WrittenBy
 	return p, nil
 }
 

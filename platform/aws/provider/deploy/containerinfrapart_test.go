@@ -15,20 +15,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func TestTheContainerInfraIsAPartAddedByTheFirstContainerDeployAndUsedByEveryOneAfter(t *testing.T) {
+func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedByEveryOneAfter(t *testing.T) {
 	t.Parallel()
 
-	cfg, spec := containerStackSpec(t)
-	cfg.KeyValues = fake.NewKeyValues()
-	cfg.BackendURL = "s3://ocel-state/conformance"
-	cfg.PulumiProject = "ocel-conformance"
-	cfg.Passphrase = "a-passphrase"
-	outputs := containerInfraOutputs()
-	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
-	}}
-	stacks := stacksWith(cfg, &mockedEngine{outputs: outputs})
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	stacks := stacksWith(cfg, &mockedEngine{outputs: containerPartOutputs()})
 	ctx := context.Background()
 	tier := environment.TierProduction
 
@@ -67,4 +58,64 @@ func TestTheContainerInfraIsAPartAddedByTheFirstContainerDeployAndUsedByEveryOne
 	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart); err != nil || present {
 		t.Errorf("containers record present %v (%v) after its last user left, want it forgotten with the infrastructure", present, err)
 	}
+}
+
+func TestAnOlderReleasesContainerDeployLeavesTheContainersPartANewerReleaseRecorded(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	ctx := context.Background()
+	tier := environment.TierProduction
+	newer := stackrecords.BootstrapPart{WrittenBy: "v2.0.0", AddedBy: "blog"}
+	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart, newer); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.MarkBootstrapPartReady(ctx, cfg.KeyValues, tier, ContainersPart, newer); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := stacksWith(cfg, &mockedEngine{outputs: containerPartOutputs()}).Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision(shop) = %v", err)
+	}
+
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart)
+	if err != nil || recorded.WrittenBy != "v2.0.0" {
+		t.Errorf("containers record written by %q (%v), want the newer release's v2.0.0 kept", recorded.WrittenBy, err)
+	}
+}
+
+func TestAContainerDeployRecordsTheContainersPartAsWrittenByItsOwnRelease(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	ctx := context.Background()
+
+	if _, err := stacksWith(cfg, &mockedEngine{outputs: containerPartOutputs()}).Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision(shop) = %v", err)
+	}
+
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart)
+	if err != nil || recorded.WrittenBy != "v1.0.0" {
+		t.Errorf("containers record written by %q (%v), want the deploying release v1.0.0", recorded.WrittenBy, err)
+	}
+}
+
+func containerPartSpec(t *testing.T, writer provider.WrittenBy) (Config, provider.StackSpec) {
+	t.Helper()
+	cfg, spec := containerStackSpec(t)
+	cfg.KeyValues = fake.NewKeyValues()
+	cfg.BackendURL = "s3://ocel-state/conformance"
+	cfg.PulumiProject = "ocel-conformance"
+	cfg.Passphrase = "a-passphrase"
+	cfg.WrittenBy = writer
+	return cfg, spec
+}
+
+func containerPartOutputs() map[string]auto.OutputValue {
+	outputs := containerInfraOutputs()
+	outputs["web"] = auto.OutputValue{Value: map[string]any{
+		outputKeyContainerURL:      "http://" + fixtureOrigin,
+		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+	}}
+	return outputs
 }

@@ -20,6 +20,7 @@ type Settings struct {
 	Transforms []string
 	Slug       string
 	ProjectDir string
+	WrittenBy  WrittenBy
 }
 
 func RefuseTransforms(vendor Vendor, transforms []string) error {

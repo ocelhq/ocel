@@ -13,6 +13,7 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 		Transforms: req.GetConfig().GetTransforms(),
 		Slug:       req.GetConfig().GetSlug(),
 		ProjectDir: req.GetConfig().GetProjectDir(),
+		WrittenBy:  h.session.writer,
 	}
 	if err := h.session.configure(ctx, settings); err != nil {
 		return nil, err
