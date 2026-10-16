@@ -90,8 +90,6 @@ type BootstrapRequest struct {
 
 	RefuseReplacements bool
 
-	Repair bool
-
 	WrittenBy WrittenBy
 
 	VendorState any

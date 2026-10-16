@@ -276,15 +276,7 @@ func words(argv []string) string {
 type asking func(ctx context.Context, what, command string, stdin io.Reader) (string, error)
 
 type drawing struct {
-	ask   asking
-	owner bool
-}
-
-func (d drawing) survey(items []Item, also ...string) string {
-	if d.owner {
-		return surveyOwned(items, also...)
-	}
-	return survey(items, also...)
+	ask asking
 }
 
 func (h *Host) run(ctx context.Context, what, command string, stdin io.Reader) (string, error) {
@@ -350,11 +342,6 @@ func spoken(result session.Result) string {
 
 func (h *Host) Install(ctx context.Context, item Item) error {
 	_, err := h.run(ctx, "write "+item.ID(), item.command(), item.stdin())
-	return err
-}
-
-func (h *Host) Reassert(ctx context.Context, item Item) error {
-	_, err := h.reach(ctx, "write "+item.ID(), item.command(), item.stdin())
 	return err
 }
 
@@ -464,14 +451,6 @@ func (h *Host) Observe(ctx context.Context, tier environment.Tier) (Reading, err
 	return read, nil
 }
 
-func (h *Host) Own(ctx context.Context, tier environment.Tier) (Reading, error) {
-	keys, err := h.keys(ctx)
-	if err != nil {
-		return Reading{}, err
-	}
-	return h.read(ctx, tier, keys, drawing{ask: h.reach, owner: true})
-}
-
 func (h *Host) Survey(ctx context.Context, tier environment.Tier) (Reading, error) {
 	return h.observing(ctx, tier, nil, drawing{ask: h.run})
 }
@@ -497,7 +476,7 @@ func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte,
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
-	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", drawn.survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
+	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -547,10 +526,6 @@ func (h *Host) Stamp(ctx context.Context, tier environment.Tier, stamp Stamp) er
 
 func survey(items []Item, also ...string) string {
 	return surveying(`[ -f "$p" ]`, items, also...)
-}
-
-func surveyOwned(items []Item, also ...string) string {
-	return surveying(`[ -f "$p" ] && [ -r "$p" ]`, items, also...)
 }
 
 func surveying(file string, items []Item, also ...string) string {

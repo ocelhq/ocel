@@ -78,9 +78,6 @@ func isAppRecorded(stacks []stackrecords.NamedStack, app string) bool {
 }
 
 func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if req.Repair {
-		return nil
-	}
 	progress = ensureProgress(progress)
 	service, err := b.clients.Accounts()
 	if err != nil {

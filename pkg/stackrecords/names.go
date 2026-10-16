@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	bootstrapKey     = "settings"
 	wildcardKey      = "preview"
 	previewKeyRecord = "previewkey"
 	gatesRecord      = "gates"
@@ -21,10 +20,6 @@ func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
 
 func ProjectKey(tier environment.Tier, slug string) keyvalue.Key {
 	return ProjectsPartition(tier).Key(slug)
-}
-
-func BootstrapKey(tier environment.Tier) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(bootstrapKey)
 }
 
 func bootstrapPartition(tier environment.Tier) keyvalue.Partition {

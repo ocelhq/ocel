@@ -459,7 +459,7 @@ func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) 
 	if r.dry {
 		wantedBy = ""
 	}
-	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, wantedBy, r.features, !r.dry, progress)
+	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, wantedBy, r.features, progress)
 	return err
 }
 

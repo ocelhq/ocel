@@ -34,7 +34,6 @@ type fakeCFN struct {
 	tags         map[string][]cfntypes.Tag
 	reasons      map[string]string
 	blockedNames map[string]int
-	busyLooks    map[string]int
 	planned      map[string][]cfntypes.ResourceChange
 	changeSets   map[string]*fakeChangeSet
 	users        *fakeIAM
@@ -59,7 +58,6 @@ func newFakeCFN() *fakeCFN {
 		tags:         map[string][]cfntypes.Tag{},
 		reasons:      map[string]string{},
 		blockedNames: map[string]int{},
-		busyLooks:    map[string]int{},
 		planned:      map[string][]cfntypes.ResourceChange{},
 		changeSets:   map[string]*fakeChangeSet{},
 	}
@@ -97,11 +95,6 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	name := aws.ToString(in.StackName)
 	if _, ok := f.templates[name]; !ok {
 		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
-	}
-	if looks := f.busyLooks[name]; looks > 0 {
-		if f.busyLooks[name] = looks - 1; f.busyLooks[name] == 0 {
-			f.statuses[name] = cfntypes.StackStatusUpdateComplete
-		}
 	}
 	var out []cfntypes.Output
 	for k, v := range f.outputs[name] {
@@ -199,13 +192,6 @@ func (f *fakeCFN) plan(stackName string, changes ...cfntypes.ResourceChange) {
 	f.planned[stackName] = changes
 }
 
-func (f *fakeCFN) busy(stackName string, looks int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.statuses[stackName] = cfntypes.StackStatusUpdateInProgress
-	f.busyLooks[stackName] = looks
-}
-
 const behindTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
 
 func (f *fakeCFN) fallBehind(stackName string) {
@@ -219,9 +205,6 @@ func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateCh
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	name, body := aws.ToString(in.StackName), aws.ToString(in.TemplateBody)
-	if stackBusy(f.statuses[name]) {
-		return nil, validationError{msg: "Stack:" + name + " is in " + string(f.statuses[name]) + " state and can not be updated."}
-	}
 	id := fmt.Sprintf("%s/%s", name, aws.ToString(in.ChangeSetName))
 	set := &fakeChangeSet{stack: name, body: body, params: in.Parameters, tags: in.Tags, changes: f.planned[name]}
 	if f.templates[name] == body && sameParams(f.params[name], in.Parameters) {
