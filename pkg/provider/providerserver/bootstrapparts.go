@@ -62,6 +62,8 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 			State:   contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY,
 			Current: part.Current,
 			UsedBy:  usersOf(part, recorded, catalogued[part.Name]),
+
+			RetiresWithLastUser: part.RetiresWithLastUser,
 		}
 		for _, resource := range part.Resources {
 			out.Resources = append(out.Resources, &contractv1.BootstrapPartResource{Kind: resource.Kind, Id: resource.ID})

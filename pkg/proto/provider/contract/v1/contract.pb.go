@@ -3020,20 +3020,21 @@ func (x *DescribeBootstrapResponse) GetParts() []*BootstrapPart {
 }
 
 type BootstrapPart struct {
-	state            protoimpl.MessageState   `protogen:"open.v1"`
-	Name             string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Summary          string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	AddedBy          string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
-	AddedAt          int64                    `protobuf:"varint,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
-	AddedWith        string                   `protobuf:"bytes,13,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
-	State            BootstrapPartState       `protobuf:"varint,5,opt,name=state,proto3,enum=provider.contract.v1.BootstrapPartState" json:"state,omitempty"`
-	Current          bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
-	Resources        []*BootstrapPartResource `protobuf:"bytes,7,rep,name=resources,proto3" json:"resources,omitempty"`
-	UsedBy           []string                 `protobuf:"bytes,8,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
-	IdleMonthlyFixed *string                  `protobuf:"bytes,9,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
-	Currency         string                   `protobuf:"bytes,10,opt,name=currency,proto3" json:"currency,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState   `protogen:"open.v1"`
+	Name                string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Summary             string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	AddedBy             string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
+	AddedAt             int64                    `protobuf:"varint,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
+	AddedWith           string                   `protobuf:"bytes,13,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
+	State               BootstrapPartState       `protobuf:"varint,5,opt,name=state,proto3,enum=provider.contract.v1.BootstrapPartState" json:"state,omitempty"`
+	Current             bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
+	Resources           []*BootstrapPartResource `protobuf:"bytes,7,rep,name=resources,proto3" json:"resources,omitempty"`
+	UsedBy              []string                 `protobuf:"bytes,8,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
+	IdleMonthlyFixed    *string                  `protobuf:"bytes,9,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
+	Currency            string                   `protobuf:"bytes,10,opt,name=currency,proto3" json:"currency,omitempty"`
+	RetiresWithLastUser bool                     `protobuf:"varint,11,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *BootstrapPart) Reset() {
@@ -3141,6 +3142,13 @@ func (x *BootstrapPart) GetCurrency() string {
 		return x.Currency
 	}
 	return ""
+}
+
+func (x *BootstrapPart) GetRetiresWithLastUser() bool {
+	if x != nil {
+		return x.RetiresWithLastUser
+	}
+	return false
 }
 
 type BootstrapPartResource struct {
@@ -7644,7 +7652,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
 	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x129\n" +
-	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\xb6\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\xeb\x03\n" +
 	"\rBootstrapPart\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -7658,7 +7666,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\aused_by\x18\b \x03(\tR\x06usedBy\x121\n" +
 	"\x12idle_monthly_fixed\x18\t \x01(\tH\x00R\x10idleMonthlyFixed\x88\x01\x01\x12\x1a\n" +
 	"\bcurrency\x18\n" +
-	" \x01(\tR\bcurrencyB\x15\n" +
+	" \x01(\tR\bcurrency\x123\n" +
+	"\x16retires_with_last_user\x18\v \x01(\bR\x13retiresWithLastUserB\x15\n" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +

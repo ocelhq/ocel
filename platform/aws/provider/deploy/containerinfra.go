@@ -399,6 +399,8 @@ func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, 
 		Resources: listContainerInfrastructureResources(tier, front),
 		UsedBy:    slices.Compact(users),
 		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeContainerInfrastructure(tier)},
+
+		RetiresWithLastUser: true,
 	}, true, nil
 }
 

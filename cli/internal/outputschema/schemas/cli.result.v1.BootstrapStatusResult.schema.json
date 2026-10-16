@@ -35,6 +35,10 @@
         "^(idle_monthly_fixed)$": {
           "type": "string"
         },
+        "^(retires_with_last_user)$": {
+          "default": false,
+          "type": "boolean"
+        },
         "^(used_by)$": {
           "items": {
             "type": "string"
@@ -75,6 +79,10 @@
             "$ref": "#/$defs/cli.result.v1.BootstrapPartResource.jsonschema.json"
           },
           "type": "array"
+        },
+        "retiresWithLastUser": {
+          "default": false,
+          "type": "boolean"
         },
         "state": {
           "default": "",
