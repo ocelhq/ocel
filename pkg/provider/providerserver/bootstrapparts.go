@@ -18,14 +18,18 @@ const partScope = "part"
 
 type estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
 
+func (s BootstrapStatus) description() provider.BootstrapDescription {
+	return provider.BootstrapDescription{
+		Tier:        s.Tier,
+		Present:     s.Present,
+		Stacks:      s.Stacks,
+		Unfinished:  s.Unfinished,
+		VendorState: s.VendorState,
+	}
+}
+
 func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price estimate) ([]*contractv1.BootstrapPart, error) {
-	described, err := r.Bootstrap.DescribeParts(ctx, provider.BootstrapDescription{
-		Tier:        status.Tier,
-		Present:     status.Present,
-		Stacks:      status.Stacks,
-		Unfinished:  status.Unfinished,
-		VendorState: status.VendorState,
-	})
+	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
 	if err != nil {
 		return nil, err
 	}
@@ -188,10 +192,24 @@ func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, addin
 }
 
 func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, features, removed []string) error {
+	status, err := r.Status(ctx, tier)
+	if err != nil {
+		return err
+	}
+	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
+	if err != nil {
+		return err
+	}
+	named := make(map[string]provider.BootstrapPart, len(described))
+	for _, part := range described {
+		named[part.Name] = part
+	}
 	for _, name := range append([]string{provider.BasePart}, features...) {
 		if err := stackrecords.MarkBootstrapPartReady(ctx, r.KeyValues, tier, name, stackrecords.BootstrapPart{
 			WrittenBy: string(r.WrittenBy),
+			Digest:    named[name].Digest,
 			AddedAt:   time.Now().UTC(),
+			Resources: named[name].Resources,
 		}); err != nil {
 			return err
 		}

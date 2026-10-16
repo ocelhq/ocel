@@ -210,6 +210,7 @@ func (b *Bootstrap) DescribeParts(_ context.Context, described provider.Bootstra
 		parts = append(parts, provider.BootstrapPart{
 			Name:      name,
 			Current:   stack.DigestCurrent,
+			Digest:    "digest-" + stack.Name,
 			Resources: []provider.PartResource{{Kind: "Fake::Stack", ID: stack.Name}},
 			Shape: &provider.PartShape{
 				Vendor:    string(Vendor),

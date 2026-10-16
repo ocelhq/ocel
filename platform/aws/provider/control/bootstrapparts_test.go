@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 type presentBastion struct{ absentBastion }
@@ -66,6 +67,20 @@ func TestAnAWSBootstrapsBaseHoldsTheResourcesOfItsCoreStack(t *testing.T) {
 	}
 	if base.Shape == nil || len(base.Shape.Resources) == 0 {
 		t.Errorf("base shape = %+v, want what the core stack's template prices", base.Shape)
+	}
+}
+
+func TestAnAWSBootstrapsBaseCarriesTheDigestItsCoreStackWasStampedWith(t *testing.T) {
+	t.Parallel()
+	b := installedBootstrapper(t, environment.TierProduction)
+	core, err := defaultNamespace.StackNameFor(environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.CFN.(*teardownCFN).tags = map[string][]cfntypes.Tag{core: {{Key: aws.String(cfn.TagDigest), Value: aws.String("sha256:core")}}}
+
+	if got := describeParts(t, b)[provider.BasePart].Digest; got != "sha256:core" {
+		t.Errorf("base digest = %q, want the core stack's stamp sha256:core", got)
 	}
 }
 

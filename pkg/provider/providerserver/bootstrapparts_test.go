@@ -62,6 +62,25 @@ func TestABootstrapsPartsNameWhoAddedThemAndWhoUsesThem(t *testing.T) {
 	}
 }
 
+func TestABootstrapRecordsWhatEachPartItCreatedHoldsAndTheDigestOfItsContent(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Features: []string{fake.FeatureCache}})
+
+	for _, name := range []string{provider.BasePart, fake.FeatureCache} {
+		recorded, present, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, name)
+		if err != nil || !present {
+			t.Fatalf("ReadBootstrapPart(%s) = %v, %v, want the part recorded", name, present, err)
+		}
+		if len(recorded.Resources) == 0 || recorded.Resources[0].Kind == "" || recorded.Resources[0].ID == "" {
+			t.Errorf("%s record holds resources %+v, want what the part holds", name, recorded.Resources)
+		}
+		if recorded.Digest == "" {
+			t.Errorf("%s record holds no digest, want the digest of what the bootstrap wrote", name)
+		}
+	}
+}
+
 func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAShape(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")

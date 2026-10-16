@@ -54,6 +54,7 @@ type BootstrapPart struct {
 	Name      string
 	Summary   string
 	Current   bool
+	Digest    string
 	Resources []PartResource
 	UsedBy    []string
 	Shape     *PartShape

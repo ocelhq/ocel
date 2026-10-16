@@ -57,6 +57,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 			Name:      name,
 			Summary:   summaries[name],
 			Current:   stack.Current(),
+			Digest:    stack.Digest,
 			Resources: b.stackResources(ctx, stack.Name),
 			Shape:     &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[name]},
 		})

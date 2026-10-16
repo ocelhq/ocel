@@ -12,6 +12,7 @@ func TestAGCPBootstrapsPartsAreTheBaseItemsEachInstalledFeatureAndEachEdgePart(t
 	b, _ := fronting(t)
 	read := surveyed(albFeature)
 	read.Region = "europe-west1"
+	read.Stamp.Digest = "sha256:base"
 	stacks := []provider.BootstrapStack{
 		{Name: "acme-prod/production", Present: true, DigestCurrent: true},
 		{Name: "acme-prod/production/" + albFeature, Feature: albFeature, Present: true, DigestCurrent: true},
@@ -25,8 +26,8 @@ func TestAGCPBootstrapsPartsAreTheBaseItemsEachInstalledFeatureAndEachEdgePart(t
 		t.Fatalf("parts = %+v, want the base, %s and the edge's part", parts, albFeature)
 	}
 	base := parts[0]
-	if !base.Current {
-		t.Errorf("base = %+v, want it current as its stack is", base)
+	if !base.Current || base.Digest != "sha256:base" {
+		t.Errorf("base = %+v, want it current as its stack is, with the digest its stamp records", base)
 	}
 	if len(base.Resources) != len(bootstrapItems(read.Names, read.Tier, false)) {
 		t.Errorf("base holds %d resources, want one per base item", len(base.Resources))
