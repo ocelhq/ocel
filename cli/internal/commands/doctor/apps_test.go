@@ -55,7 +55,7 @@ func TestDoctorWarnsThatAProjectWithNoAppsAndNoResourcesHasNothingToDeploy(t *te
 	if got.verdict != verdictWarn {
 		t.Fatalf("verdict = %v, want a warning: a deploy of this project deploys nothing", got.verdict)
 	}
-	want := "config loads — nothing to deploy: no apps or resources declared, and no app is detected at the project root, which holds a package.json with no next or @sveltejs/kit dependency and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", ")
+	want := "config loads — nothing to deploy: no apps or resources declared, and no app is detected at the project root, which holds a package.json with no next or @sveltejs/kit dependency, no start script, no main and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", ") + ", index.mjs, index.cjs"
 	if got.text != want {
 		t.Errorf("text = %q, want %q", got.text, want)
 	}

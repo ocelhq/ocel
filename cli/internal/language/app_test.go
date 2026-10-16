@@ -16,19 +16,26 @@ func TestDetectAppFindsTheAppEachLanguagesBuildWouldServe(t *testing.T) {
 	cases := []struct {
 		name  string
 		files map[string]string
-		want  language.Language
+		want  string
 	}{
-		{"a next dependency", map[string]string{"package.json": `{"dependencies":{"next":"15"}}`}, language.JS},
-		{"a next config", map[string]string{"package.json": `{}`, "next.config.mjs": "export default {}\n"}, language.JS},
-		{"a sveltekit dependency", map[string]string{"package.json": `{"devDependencies":{"@sveltejs/kit":"2"}}`}, language.JS},
-		{"a node entrypoint under src", map[string]string{"package.json": `{}`, "src/server.ts": "export {}\n"}, language.JS},
-		{"a node entrypoint at the root", map[string]string{"package.json": `{}`, "app.js": "\n"}, language.JS},
-		{"a main.py", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, language.Python},
-		{"a main.py beside requirements.txt", map[string]string{"requirements.txt": "fastapi\n", "main.py": "\n"}, language.Python},
-		{"a main package in the directory", map[string]string{"go.mod": "module example.com/api\n", "main.go": mainGo}, language.Go},
-		{"a crate building src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "src/main.rs": "fn main() {}\n"}, language.Rust},
-		{"a crate building one named bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, language.Rust},
-		{"a crate naming src/main.rs as its one bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n", "src/main.rs": "fn main() {}\n"}, language.Rust},
+		{"a next dependency", map[string]string{"package.json": `{"dependencies":{"next":"15"}}`}, "next"},
+		{"a next config", map[string]string{"package.json": `{}`, "next.config.mjs": "export default {}\n"}, "next"},
+		{"a sveltekit dependency", map[string]string{"package.json": `{"devDependencies":{"@sveltejs/kit":"2"}}`}, "sveltekit"},
+		{"a node entrypoint under src", map[string]string{"package.json": `{}`, "src/server.ts": "export {}\n"}, "node"},
+		{"a node entrypoint at the root", map[string]string{"package.json": `{}`, "app.js": "\n"}, "node"},
+		{"a start script", map[string]string{"package.json": `{"scripts":{"start":"node dist/main.js"}}`, "src/main.ts": "export {}\n"}, "node"},
+		{"a main the build writes", map[string]string{"package.json": `{"main":"dist/main.js","scripts":{"build":"tsc"}}`}, "node"},
+		{"a main that is there", map[string]string{"package.json": `{"main":"lib/main.js"}`, "lib/main.js": "\n"}, "node"},
+		{"an index.mjs", map[string]string{"package.json": `{}`, "index.mjs": "\n"}, "node"},
+		{"a main.py", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, "python"},
+		{"a main.py beside requirements.txt", map[string]string{"requirements.txt": "fastapi\n", "main.py": "\n"}, "python"},
+		{"a main package in the directory", map[string]string{"go.mod": "module example.com/api\n", "main.go": mainGo}, "go"},
+		{"a main package built without cgo", map[string]string{"go.mod": "module example.com/api\n", "main.go": "//go:build !cgo\n\n" + mainGo}, "go"},
+		{"a crate building src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"a crate building one named bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, "rust"},
+		{"a crate naming src/main.rs as its one bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"an edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"a workspace edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[workspace]\n\n[workspace.package]\nedition = \"2015\"\n\n[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, "rust"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,6 +46,12 @@ func TestDetectAppFindsTheAppEachLanguagesBuildWouldServe(t *testing.T) {
 			}
 		})
 	}
+}
+
+const nodeLack = "a package.json with no next or @sveltejs/kit dependency, no start script, no main and no entrypoint among "
+
+func nodeEntrypointsTried() string {
+	return strings.Join(language.NodeEntrypoints, ", ") + ", index.mjs, index.cjs"
 }
 
 func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
@@ -52,7 +65,22 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 		{
 			"a package.json with no framework and no entrypoint",
 			map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`},
-			"a package.json with no next or @sveltejs/kit dependency and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", "),
+			nodeLack + nodeEntrypointsTried(),
+		},
+		{
+			"a package.json whose main names a file nothing writes",
+			map[string]string{"package.json": `{"main":"index.js","scripts":{"test":"exit 1"}}`},
+			nodeLack + nodeEntrypointsTried(),
+		},
+		{
+			"a go module whose main package needs cgo",
+			map[string]string{"go.mod": "module example.com/api\n", "main.go": "//go:build cgo\n\n" + mainGo},
+			"a go.mod with no package main in its own directory",
+		},
+		{
+			"an edition 2021 crate building its declared bin and src/main.rs",
+			map[string]string{"Cargo.toml": "[package]\nname = \"api\"\nedition = \"2021\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"},
+			"a Cargo.toml building 2 binaries, where an app builds one",
 		},
 		{
 			"a pyproject.toml with no main.py",
@@ -87,7 +115,7 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 		{
 			"two manifests, neither holding an app",
 			map[string]string{"package.json": `{}`, "pyproject.toml": "[project]\nname = \"helpers\"\n"},
-			"a pyproject.toml with no main.py and a package.json with no next or @sveltejs/kit dependency and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", "),
+			"a pyproject.toml with no main.py and " + nodeLack + nodeEntrypointsTried(),
 		},
 	}
 	for _, tc := range cases {
@@ -131,5 +159,26 @@ func TestDetectAppRefusesAPackageJSONThatIsNotJSON(t *testing.T) {
 	_, err := language.DetectApp(dirWithFiles(t, map[string]string{"package.json": "{"}))
 	if err == nil || !strings.Contains(err.Error(), "is not JSON") {
 		t.Fatalf("DetectApp err = %v, want the package.json refused", err)
+	}
+}
+
+func TestADeclaredEntrypointDecidesWhichManifestHoldsTheApp(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"go.mod":           "module example.com/api\n",
+		"cmd/api/main.go":  mainGo,
+		"package.json":     `{"dependencies":{"next":"15"}}`,
+		"src/web/index.ts": "export {}\n",
+	})
+
+	if got, ok, err := language.Detect(dir, "cmd/api"); err != nil || !ok || got != language.Go {
+		t.Errorf("Detect = %q, %v, %v, want %q: package main is where the entrypoint points", got, ok, err, language.Go)
+	}
+	if got, found, err := language.DetectFramework(dir, "cmd/api"); err != nil || !found || got != "go" {
+		t.Errorf("DetectFramework = %q, %v, %v, want go", got, found, err)
+	}
+	if got, ok, err := language.Detect(dir, "src/web/index.ts"); err != nil || !ok || got != language.JS {
+		t.Errorf("Detect = %q, %v, %v, want %q: the entrypoint is a TypeScript file", got, ok, err, language.JS)
 	}
 }

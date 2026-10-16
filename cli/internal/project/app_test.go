@@ -22,6 +22,7 @@ func TestAProjectNamingNoAppsHasTheAppAtItsRootInEveryLanguageShapedAsIfNamedThe
 		framework string
 	}{
 		{"node", map[string]string{nodeManifest: `{"dependencies":{"express":"5"}}`, "src/server.ts": "export {}\n"}, buildoutput.FrameworkNode},
+		{"node started by its start script", map[string]string{nodeManifest: `{"scripts":{"start":"node dist/main.js"}}`, "src/main.ts": "export {}\n"}, buildoutput.FrameworkNode},
 		{"next", map[string]string{nodeManifest: `{"dependencies":{"next":"15"}}`}, buildoutput.FrameworkNext},
 		{"sveltekit", map[string]string{nodeManifest: `{"devDependencies":{"@sveltejs/kit":"2"}}`}, buildoutput.FrameworkSvelteKit},
 		{"python", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, buildoutput.FrameworkPython},
@@ -63,7 +64,7 @@ func TestAProjectNamingNoAppsHasNoAppAtARootNoBuildWouldServe(t *testing.T) {
 		files map[string]string
 		why   string
 	}{
-		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next or @sveltejs/kit dependency and no entrypoint among src/server.ts"},
+		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next or @sveltejs/kit dependency, no start script, no main and no entrypoint among src/server.ts"},
 		{"a go module whose main package is under cmd", map[string]string{"go.mod": "module example.com/api\n", "cmd/api/main.go": "package main\n\nfunc main() {}\n"}, "a go.mod with no package main in its own directory"},
 		{"a crate building two binaries", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"api\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"migrate\"\npath = \"src/migrate.rs\"\n"}, "a Cargo.toml building 2 binaries, where an app builds one"},
 		{"a pyproject.toml with no main.py", map[string]string{"pyproject.toml": "[project]\nname = \"helpers\"\n"}, "a pyproject.toml with no main.py"},
@@ -87,6 +88,24 @@ func TestAProjectNamingNoAppsHasNoAppAtARootNoBuildWouldServe(t *testing.T) {
 				t.Errorf("RootAppUndetected = %v, want it to say the root holds %s", cfg.RootAppUndetected, tc.why)
 			}
 		})
+	}
+}
+
+func TestANamedAppIsBuiltInTheLanguageItsEntrypointIsWrittenIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop","apps":[{"name":"api","path":".","compute":{"serverless":{"entrypoint":"cmd/api"}}}]}`)
+	write(t, filepath.Join(dir, "go.mod"), "module example.com/api\n")
+	write(t, filepath.Join(dir, "cmd", "api", "main.go"), "package main\n\nfunc main() {}\n")
+	write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"next":"15"}}`)
+
+	cfg, err := Load(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != buildoutput.FrameworkGo {
+		t.Errorf("Apps = %+v, want one go app: package main is in cmd/api, and the package.json beside it is tooling", cfg.Apps)
 	}
 }
 

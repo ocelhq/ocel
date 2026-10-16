@@ -188,7 +188,7 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 			return newInvalidConfigError(err, "")
 		}
 		if isDir(dir) {
-			framework, _, err := language.DetectFramework(dir)
+			framework, _, err := language.DetectFramework(dir, "")
 			if err != nil {
 				return fmt.Errorf("app %q: %w", a.Name, err)
 			}
@@ -200,13 +200,13 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	case compute.Serverless != nil:
 		app.Compute = provider.ComputeServerless
 		named := strings.TrimSpace(compute.Serverless.Framework)
-		framework, err := frameworkOf(a.Name, dir, named)
+		framework, err := frameworkOf(a.Name, dir, named, compute.Serverless.Entrypoint)
 		if err != nil {
 			return err
 		}
 		app.Serverless = &Serverless{Framework: framework, Entrypoint: compute.Serverless.Entrypoint}
 	default:
-		framework, err := frameworkOf(a.Name, dir, "")
+		framework, err := frameworkOf(a.Name, dir, "", "")
 		switch {
 		case err != nil:
 			app.undetected = err
@@ -230,7 +230,7 @@ func (e *undetectedRootAppError) Error() string {
 func (e *undetectedRootAppError) Unwrap() error { return e.cause }
 
 func rootApp(name, dir string) (apps []App, undetected error, err error) {
-	_, err = language.DetectApp(dir)
+	framework, err := language.DetectApp(dir)
 	var ambiguity *language.AmbiguityError
 	var missing *language.NoAppError
 	switch {
@@ -241,11 +241,14 @@ func rootApp(name, dir string) (apps []App, undetected error, err error) {
 	case err != nil:
 		return nil, nil, err
 	}
-	app := App{Name: name, Path: ".", BuildsWithResources: true}
-	if err := shapeApp(&app, configdoc.AppConfig{Name: name, Path: "."}, dir); err != nil {
-		return nil, nil, err
-	}
-	return []App{app}, nil, nil
+	return []App{{
+		Name:       name,
+		Path:       ".",
+		Serverless: &Serverless{Framework: framework},
+		Container:  &Container{},
+
+		BuildsWithResources: true,
+	}}, nil, nil
 }
 
 func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {

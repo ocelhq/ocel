@@ -51,7 +51,7 @@ func sdkLanguageOf(written language.Language) sdkLanguage {
 }
 
 func detectLanguage(dir string) (sdkLanguage, bool, error) {
-	written, found, err := language.Detect(dir)
+	written, found, err := language.Detect(dir, "")
 	var ambiguity *language.AmbiguityError
 	if errors.As(err, &ambiguity) {
 		names := make([]string, 0, len(ambiguity.Languages))

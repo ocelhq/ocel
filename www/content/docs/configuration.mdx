@@ -256,10 +256,10 @@ framework's build serves:
 | --- | --- |
 | `next` | a `package.json` naming `next`, or a `next.config.js`, `.mjs` or `.ts` |
 | `sveltekit` | a `package.json` naming `@sveltejs/kit` |
-| `node` | a `package.json` and the first of `src/server.ts`, `src/server.js`, `src/index.ts`, `src/index.js`, `src/app.ts`, `src/app.js`, `index.ts`, `index.js`, `server.ts`, `server.js`, `app.ts`, `app.js` |
+| `node` | a `package.json` and the first of `src/server.ts`, `src/server.js`, `src/index.ts`, `src/index.js`, `src/app.ts`, `src/app.js`, `index.ts`, `index.js`, `server.ts`, `server.js`, `app.ts`, `app.js`; or what a container starts: a `start` script, a `main` that is there or that the `build` script writes, or an `index.mjs` or `index.cjs` |
 | `python` | a `pyproject.toml` or `requirements.txt`, and a `main.py` |
-| `go` | a `go.mod`, and `package main` in the root directory itself, not under `cmd/` |
-| `rust` | a `Cargo.toml` whose crate builds one binary: `src/main.rs` or a single `[[bin]]` |
+| `go` | a `go.mod`, and `package main` in the root directory itself, not under `cmd/`, built with cgo off |
+| `rust` | a `Cargo.toml` whose crate builds one binary: `src/main.rs` or a single `[[bin]]`, which in edition 2015 replaces `src/main.rs` |
 
 A `package.json` with none of these is tooling, such as the SDK of a project that declares only
 resources. When the root holds the manifests of several languages, the one that holds an app is
@@ -368,6 +368,8 @@ With no `framework`, ocel reads the app's directory, in this order:
 A `Cargo.toml` beside a node or python manifest is that app's native extension, not a rust app.
 When the directory holds the manifests of several languages and only one of them holds
 [what its build serves](#the-app-at-the-project-root), that one decides, whatever this order says.
+An `entrypoint` decides it the same way: a directory holding `package main` is go, and a
+JavaScript or TypeScript file is node.
 
 A rust app builds as a static musl binary for its `arch`, so install the target:
 

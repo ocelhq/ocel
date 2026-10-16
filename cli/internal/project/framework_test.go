@@ -137,7 +137,7 @@ func TestDetectFramework(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := detectFramework(appDir(t, tc.files))
+			got, err := detectFramework(appDir(t, tc.files), "")
 			if err != nil {
 				t.Fatalf("detectFramework = %v", err)
 			}
@@ -156,7 +156,7 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 
 		dir := appDir(t, map[string]string{"main.rb": "puts 1\n"})
 
-		_, err := detectFramework(dir)
+		_, err := detectFramework(dir, "")
 		if err == nil {
 			t.Fatal("detectFramework = nil error, want a refusal: nothing here says what the app is")
 		}
@@ -172,7 +172,7 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 
 		dir := appDir(t, map[string]string{"package.json": "{ not json"})
 
-		_, err := detectFramework(dir)
+		_, err := detectFramework(dir, "")
 		if err == nil {
 			t.Fatal("detectFramework = nil error, want a refusal: the manifest cannot be read")
 		}

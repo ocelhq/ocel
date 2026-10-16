@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-func detectFramework(dir string) (string, error) {
-	framework, found, err := language.DetectFramework(dir)
+func detectFramework(dir, entrypoint string) (string, error) {
+	framework, found, err := language.DetectFramework(dir, entrypoint)
 	if err != nil || found {
 		return framework, err
 	}
@@ -20,7 +20,7 @@ func detectFramework(dir string) (string, error) {
 	), "")
 }
 
-func frameworkOf(app string, dir string, named string) (string, error) {
+func frameworkOf(app, dir, named, entrypoint string) (string, error) {
 	if named != "" {
 		if !buildoutput.IsKnownFramework(named) {
 			return "", newInvalidConfigError(fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks()))), "")
@@ -30,7 +30,7 @@ func frameworkOf(app string, dir string, named string) (string, error) {
 	if !isDir(dir) {
 		return "", nil
 	}
-	framework, err := detectFramework(dir)
+	framework, err := detectFramework(dir, entrypoint)
 	if err != nil {
 		return "", fmt.Errorf("app %q: %w", app, err)
 	}
