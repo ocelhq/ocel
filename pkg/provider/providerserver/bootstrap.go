@@ -80,7 +80,6 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 
 func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 	return ApplyRequest{
-		Features:           req.GetFeatures(),
 		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
 		AcceptReplacements: req.GetAcceptReplacements(),
@@ -100,25 +99,8 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	recorded := map[string][]string{}
-	if req.GetWithDependents() {
-		if recorded, err = readiness.RecordedFeatures(ctx, tier); err != nil {
-			return nil, provider.RefusalError(err)
-		}
-	}
-
 	resp := &contractv1.DescribeBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Features),
-	}
-	for _, f := range readiness.Bootstrap.Catalogue() {
-		resp.Features = append(resp.Features, &contractv1.Feature{
-			Name:       f.Name,
-			Summary:    f.Summary,
-			DependsOn:  f.DependsOn,
-			Edges:      featureEdges(f.Edges),
-			Enabled:    slices.Contains(status.Features, f.Name),
-			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
-		})
 	}
 	if req.GetWithParts() {
 		var price estimate
@@ -130,14 +112,6 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 		}
 	}
 	return resp, nil
-}
-
-func featureEdges(kinds []edge.Kind) []string {
-	var edges []string
-	for _, kind := range kinds {
-		edges = append(edges, string(kind))
-	}
-	return edges
 }
 
 func ChangePlanProto(plan provider.Plan, subject, kind string) *planv1.ChangePlan {

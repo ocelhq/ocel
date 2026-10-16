@@ -2,6 +2,7 @@ package clitest
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -26,7 +27,13 @@ func SetUpProject(t *testing.T) FakeProject {
 
 func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features ...string) {
 	t.Helper()
-	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Features: features}, nil); err != nil {
+	var others []string
+	for _, offered := range p.FakeBootstrap().Catalogue() {
+		if !slices.Contains(features, offered.Name) {
+			others = append(others, offered.Name)
+		}
+	}
+	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Features: features, Remove: others}, nil); err != nil {
 		t.Fatalf("bootstrap the fake provider's %s tier: %v", tier, err)
 	}
 }

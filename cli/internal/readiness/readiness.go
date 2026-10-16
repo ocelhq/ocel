@@ -47,7 +47,7 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 		err = RefuseUnready(read.Response, provider, cfg, req)
 	}
 	if err == nil && req.Feature != "" {
-		err = refuseMissingOfferedFeature(ctx, provider, cfg, read.Response.GetBootstrap(), req)
+		err = refuseMissingFeatures(NewFeatureGap(read.Response.GetBootstrap(), req.Feature), provider, cfg, req)
 	}
 	if err != nil {
 		return Preflight{}, err
@@ -89,7 +89,6 @@ func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *pr
 	}
 	absent := NoInfrastructureError{
 		Tier:     tier,
-		Features: requiredFeatures(resp.GetBootstrap()),
 		Account:  resp.GetIdentity().GetAccount(),
 		Edge:     cfg.EdgeSelection(),
 		Provider: provider,
@@ -105,14 +104,6 @@ func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *pro
 		return nil
 	}
 	return MissingFeaturesError{Gap: gap, Tier: req.Tier, Edge: cfg.EdgeSelection(), Provider: provider, Unrecorded: req.RecordWants && req.DryRun}.refuse()
-}
-
-func refuseMissingOfferedFeature(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, req Request) error {
-	offered, err := hasOffer(ctx, provider, req.Tier, cfg.EdgeSelection(), req.Feature)
-	if err != nil || !offered {
-		return err
-	}
-	return refuseMissingFeatures(NewFeatureGap(status, req.Feature), provider, cfg, req)
 }
 
 func TierName(tier environmentv1.Tier) string {

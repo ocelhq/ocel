@@ -5,7 +5,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -92,22 +91,23 @@ func (b *Bootstrap) PlansRemovalWith(plan provider.Plan) {
 
 func (b *Bootstrap) Catalogue() []provider.Feature {
 	b.mu.Lock()
-	offered := b.catalogue
-	b.mu.Unlock()
-	if offered != nil {
-		return slices.Clone(offered)
+	defer b.mu.Unlock()
+	return b.catalogueLocked()
+}
+
+func (b *Bootstrap) catalogueLocked() []provider.Feature {
+	if b.catalogue != nil {
+		return slices.Clone(b.catalogue)
 	}
 	return []provider.Feature{
 		{
 			Name:    FeatureCache,
 			Summary: "the reference provider's response cache",
-			Serves:  buildoutput.Uses{Revalidation: true},
 		},
 		{
 			Name:      FeatureImages,
 			Summary:   "the reference provider's image optimizer",
 			DependsOn: []string{FeatureCache},
-			Serves:    buildoutput.Uses{ImageOptimization: true},
 			Edges:     []edge.Kind{"relay"},
 		},
 	}
@@ -262,7 +262,17 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 		return b.refusal
 	}
 	b.requests = append(b.requests, req)
-	b.applied[req.Tier] = slices.Clone(req.Features)
+	installed := slices.Clone(b.applied[req.Tier])
+	for _, feature := range req.Features {
+		if !slices.Contains(installed, feature) {
+			installed = append(installed, feature)
+		}
+	}
+	installed = slices.DeleteFunc(installed, func(feature string) bool { return slices.Contains(req.Remove, feature) })
+	b.applied[req.Tier] = bootstrapplan.InCatalogueOrder(b.catalogueLocked(), installed)
+	if b.applied[req.Tier] == nil {
+		b.applied[req.Tier] = []string{}
+	}
 	b.stale = map[string]bool{}
 	b.unreadable = map[string]string{}
 	if progress != nil {

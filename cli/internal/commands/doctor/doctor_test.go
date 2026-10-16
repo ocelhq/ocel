@@ -496,11 +496,6 @@ func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) 
 	if len(asked) != 2 {
 		t.Fatalf("the provider was asked %d times, want once per tier: %v", len(asked), asked)
 	}
-	for _, req := range asked {
-		if req.GetWithDependents() {
-			t.Errorf("doctor asked %v; it renders no dependent, and reading them costs one query per project in the account", asked)
-		}
-	}
 }
 
 func TestRunDoctorServesPreviewsOnTheGlobalWildcardWithoutAWarning(t *testing.T) {

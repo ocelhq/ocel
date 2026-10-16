@@ -29,12 +29,10 @@ import (
 )
 
 type Options struct {
-	Yes              bool
-	Dry              bool
-	Force            bool
-	Features         string
-	Remove           string
-	FeaturesDeclared bool
+	Yes    bool
+	Dry    bool
+	Force  bool
+	Remove string
 }
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
@@ -83,19 +81,14 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			opts := opts
-			opts.FeaturesDeclared = cmd.Flags().Changed("features")
-
 			return Run(cmd.Context(), invocation, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
 	commands.AddYesFlag(cmd, &opts.Yes)
 	commands.AddDryFlag(cmd, &opts.Dry, "Print the changes and stop, applying nothing")
-	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
-	_ = cmd.Flags().MarkHidden("features")
-	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
-	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
+	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of parts to take down; nothing goes unless it is named here")
+	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a part projects here still use")
 
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
@@ -177,43 +170,22 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		if err != nil {
 			return err
 		}
-		catalogue := planned.GetFeatures()
-
-		named, err := parseRemoveFlag(opts.Remove, catalogue)
-		if err != nil {
-			return err
-		}
-		installed := enabledFeatures(catalogue)
-		going := goingFeatures(catalogue, installed, named)
+		named := parseRemoveFlag(opts.Remove)
+		parts := planned.GetParts()
+		going := installedOf(parts, named)
 		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-		if absent := without(named, installed); len(absent) > 0 {
+		if absent := without(named, going); len(absent) > 0 {
 			planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
 		}
-		if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
+		if len(named) > 0 && len(going) == 0 {
 			return nil
-		}
-
-		asking := policy.IsAsking()
-		picked := asking && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeKind()), tier, asking, stdout, stdin)
-		if err != nil {
-			return err
-		}
-		if !selected {
-			planning.Say("No feature was picked")
-			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
-			return nil
-		}
-		if err := refuseFeaturesNamedBothWays(requested, named); err != nil {
-			return err
 		}
 
 		req := &contractv1.BootstrapRequest{
-			Tier:     tier,
-			Features: requested,
-			Remove:   going,
-			Force:    opts.Force,
-			Edge:     cfg.EdgeSelection(),
+			Tier:   tier,
+			Remove: going,
+			Force:  opts.Force,
+			Edge:   cfg.EdgeSelection(),
 		}
 
 		drawn, err := drawPlan(ctx, planning, provider, req)
@@ -224,18 +196,11 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		case drawn.rendered():
 		case len(going) > 0:
 			planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), readiness.TierName(tier)))
-			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
+			if dependents := usersOf(parts, going); len(dependents) > 0 {
 				planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 			}
 		default:
 			planning.Say(unchanged(tier))
-		}
-		if !picked {
-			edgeID := drawn.edgeKind
-			if edgeID == "" {
-				edgeID = string(cfg.EdgeKind())
-			}
-			sayImplied(planning, tier, impliedFeatures(catalogue, requested, edgeID))
 		}
 		status := planned.GetBootstrap()
 		if status.GetDowngrade() {
@@ -282,8 +247,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 }
 
 type drawnPlan struct {
-	shown    *planv1.ChangePlan
-	edgeKind string
+	shown *planv1.ChangePlan
 }
 
 func (d drawnPlan) rendered() bool { return len(d.shown.GetGroups()) > 0 }
@@ -298,16 +262,14 @@ func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess
 	if err != nil {
 		return drawnPlan{}, err
 	}
-	drawn := drawnPlan{edgeKind: plan.GetEdgeKind()}
 	if len(plan.GetGroups()) == 0 {
-		return drawn, nil
+		return drawnPlan{}, nil
 	}
 	var notes []*planv1.Note
 	if !consent.Mutates(plan) {
 		notes = append(notes, &planv1.Note{Text: unchanged(req.GetTier())})
 	}
-	drawn.shown = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", tier), plan, notes...)
-	return drawn, nil
+	return drawnPlan{shown: planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", tier), plan, notes...)}, nil
 }
 
 func confirmPlan(ctx context.Context, policy consent.Policy, planning *run.Span, provider *providerprocess.Provider, tier environmentv1.Tier, drawn drawnPlan) (bool, error) {
@@ -329,9 +291,9 @@ func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, 
 	var planned *contractv1.DescribeBootstrapResponse
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
-			Tier:           tier,
-			WithDependents: true,
-			Edge:           cfg.EdgeSelection(),
+			Tier:      tier,
+			WithParts: true,
+			Edge:      cfg.EdgeSelection(),
 		})
 		return err
 	})

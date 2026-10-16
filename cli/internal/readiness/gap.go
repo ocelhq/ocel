@@ -17,7 +17,6 @@ type Gap struct {
 	Missing    []string
 	Stale      []string
 	Unreadable []string
-	Features   []string
 }
 
 func NewGap(status *contractv1.BootstrapStatus) Gap {
@@ -36,30 +35,24 @@ func NewGap(status *contractv1.BootstrapStatus) Gap {
 			case !stack.GetDigestCurrent():
 				gap.Stale = append(gap.Stale, stack.GetName())
 			}
-			if feature != "" {
-				gap.Features = append(gap.Features, feature)
-			}
-		case stack.GetRequired() && feature != "":
+		case stack.GetRequired() && feature != "" && !slices.Contains(gap.Missing, feature):
 			gap.Missing = append(gap.Missing, feature)
-			gap.Features = append(gap.Features, feature)
 		}
 	}
-	slices.Sort(gap.Features)
-	gap.Features = slices.Compact(gap.Features)
+	slices.Sort(gap.Missing)
 	return gap
 }
 
 func NewFeatureGap(status *contractv1.BootstrapStatus, feature string) Gap {
+	var gap Gap
 	if !status.GetPresent() {
-		return Gap{}
+		return gap
 	}
-	gap := Gap{Features: []string{feature}}
 	for _, stack := range status.GetStacks() {
-		if stack.GetFeature() == feature && stack.GetPresent() {
-			return gap
+		if stack.GetFeature() == feature && stack.GetRequired() && !stack.GetPresent() {
+			gap.Missing = []string{feature}
 		}
 	}
-	gap.Missing = []string{feature}
 	return gap
 }
 
@@ -72,11 +65,7 @@ func (g Gap) RepairCommand(tier environmentv1.Tier) string {
 }
 
 func (g Gap) BootstrapRequest(tier environmentv1.Tier, edge *contractv1.EdgeSelection) *contractv1.BootstrapRequest {
-	return &contractv1.BootstrapRequest{
-		Tier:     tier,
-		Features: g.Features,
-		Edge:     edge,
-	}
+	return &contractv1.BootstrapRequest{Tier: tier, Edge: edge}
 }
 
 func (g Gap) RefuseMissing(tier environmentv1.Tier) error {

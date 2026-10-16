@@ -1,12 +1,9 @@
 package readiness
 
 import (
-	"slices"
-
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func newPreflightRequest(cfg *project.Project, req Request) *contractv1.PreflightRequest {
@@ -18,7 +15,6 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		RequiredTier:     req.Tier,
 		Slug:             req.Slug,
 		Domains:          req.Domains,
-		Frameworks:       frameworks(cfg),
 		Containers:       containers(cfg),
 		Edge:             cfg.EdgeSelection(),
 		CheckHosts:       req.CheckHosts,
@@ -29,20 +25,6 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		RecordWants:       req.RecordWants && !req.DryRun,
 		WantedParts:       wanted,
 	}
-}
-
-func frameworks(cfg *project.Project) []string {
-	var named []string
-	for _, app := range cfg.Apps {
-		if app.RunsOn(provider.ComputeContainer) {
-			continue
-		}
-		if framework := app.Framework(); framework != "" {
-			named = append(named, framework)
-		}
-	}
-	slices.Sort(named)
-	return slices.Compact(named)
 }
 
 func containers(cfg *project.Project) []*contractv1.ContainerApp {

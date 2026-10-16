@@ -85,12 +85,12 @@ func TestBootstrapTakesTheTierAsASubcommandOrItsAlias(t *testing.T) {
 		if found.Name() != tc.want {
 			t.Errorf("Find(%q) = %q, want %q", tc.typed, found.Name(), tc.want)
 		}
-		for _, flag := range []string{"yes", "dry", "features", "remove", "force"} {
+		for _, flag := range []string{"yes", "dry", "remove", "force"} {
 			if found.Flags().Lookup(flag) == nil {
 				t.Errorf("%s has no --%s", found.Name(), flag)
 			}
 		}
-		for _, flag := range []string{"repair"} {
+		for _, flag := range []string{"features", "repair"} {
 			if found.Flags().Lookup(flag) != nil {
 				t.Errorf("%s still takes --%s", found.Name(), flag)
 			}
@@ -149,8 +149,8 @@ func TestBootstrapDestroyTakesTheTierOrItsAliasAsItsArgument(t *testing.T) {
 	}
 }
 
-func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
-	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
+func TestBootstrapReadsThePartsThenPlansTheApplyItIsAboutToSend(t *testing.T) {
+	t.Run("bootstrap reads the parts, then plans the apply it is about to send", func(t *testing.T) {
 		project, invocation := bootstrapProject(t, "", featureISR)
 
 		var stdout, stderr bytes.Buffer
@@ -159,15 +159,22 @@ func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
 		described := clitest.RequestsTo[*contractv1.DescribeBootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceDescribeBootstrapProcedure)
-		if len(described) != 1 || !described[0].GetWithDependents() {
-			t.Errorf("the catalogue was read %v; a provider that draws no plan leaves the dependent names nowhere else to come from", described)
+		if len(described) != 1 || !described[0].GetWithParts() {
+			t.Errorf("the parts were read %v; a provider that draws no plan leaves who uses a part nowhere else to come from", described)
 		}
 		planned := clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure)
-		if len(planned) == 0 || !planned[0].GetDry() || strings.Join(planned[0].GetFeatures(), ",") != featureISR || planned[0].GetForce() {
+		if len(planned) == 0 || !planned[0].GetDry() || planned[0].GetForce() {
 			t.Errorf("the provider was asked to plan %v, want the first ask to be the apply it would send, drawn dry", planned)
 		}
 	})
 }
+
+const (
+	featureISR               = "isr"
+	featureImageOptimization = "image-optimization"
+	featureRelayEdge         = "relay-edge"
+	featureDirectEdge        = "direct-edge"
+)
 
 func catalogue() []provider.Feature {
 	return []provider.Feature{
@@ -239,11 +246,11 @@ func applies(t *testing.T, project clitest.FakeProject) []*contractv1.BootstrapR
 }
 
 func intent(req *contractv1.BootstrapRequest) string {
-	said := "features=" + strings.Join(req.GetFeatures(), ",")
+	var said string
 	if len(req.GetRemove()) > 0 {
-		said += " remove=" + strings.Join(req.GetRemove(), ",")
+		said = "remove=" + strings.Join(req.GetRemove(), ",") + " "
 	}
-	said += " force=" + boolWord(req.GetForce()) + " acceptReplacements=" + boolWord(req.GetAcceptReplacements())
+	said += "force=" + boolWord(req.GetForce()) + " acceptReplacements=" + boolWord(req.GetAcceptReplacements())
 	return said
 }
 
@@ -650,40 +657,8 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
 			t.Errorf("stdout = %q, want the deletion shown before it is applied", stdout.String())
 		}
-		if got := intents(t, project); len(got) != 1 || got[0] != "features=image-optimization remove=isr force=true acceptReplacements=true" {
+		if got := intents(t, project); len(got) != 1 || got[0] != "remove=isr force=true acceptReplacements=true" {
 			t.Errorf("provider was asked to apply %v, want the named removal passed through and the unnamed feature ensured", got)
-		}
-	})
-
-	t.Run("an installed feature no flag names is not the subject of the plan", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Features: featureISR, FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		if got := intents(t, project); len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
-			t.Errorf("provider was asked to apply %v, want image-optimization neither ensured nor removed by a run that never named it", got)
-		}
-	})
-
-	t.Run("--features and --remove naming the same feature is refused before any plan", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Features: featureISR, FeaturesDeclared: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("runBootstrap err = nil, want a feature named both ways refused")
-		}
-		for _, want := range []string{"--features", "--remove", "isr"} {
-			if !strings.Contains(stdout.String(), want) {
-				t.Errorf("stdout = %q, want the refusal to name %q", stdout.String(), want)
-			}
-		}
-		if planned := clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure); len(planned) != 0 {
-			t.Errorf("the provider was asked to plan despite the contradiction: %v", planned)
 		}
 	})
 
@@ -702,19 +677,6 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			t.Errorf("provider was asked to apply %v, want a run that was only a removal of nothing to apply nothing", intents(t, project))
 		}
 	})
-
-	t.Run("--remove of an absent feature beside --features still ensures what --features named", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: featureImageOptimization, Features: featureISR, FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		if got := intents(t, project); len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
-			t.Errorf("provider was asked to apply %v, want the declared features ensured despite the empty removal", got)
-		}
-	})
 }
 
 func TestBootstrapYesMeansYes(t *testing.T) {
@@ -725,7 +687,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Features: featureISR, FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "± OcelOriginSecret") {
@@ -746,7 +708,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Features: featureImageOptimization, FeaturesDeclared: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: featureISR}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
@@ -755,7 +717,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		if strings.Contains(stdout.String(), "Remove it anyway?") {
 			t.Errorf("stdout = %q, want the plan's own delete group to be the question, asked once", stdout.String())
 		}
-		if got := intents(t, project); len(got) != 1 || got[0] != "features=image-optimization remove=isr force=true acceptReplacements=true" {
+		if got := intents(t, project); len(got) != 1 || got[0] != "remove=isr force=true acceptReplacements=true" {
 			t.Errorf("provider was asked to apply %v, want the add and the removal in the one apply the plan covered", got)
 		}
 	})
@@ -767,7 +729,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Features: noFeatures, FeaturesDeclared: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: featureISR}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -793,7 +755,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Features: noFeatures, FeaturesDeclared: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -819,7 +781,7 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
 	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Features: featureISR, FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+	if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 		t.Fatalf("Run err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
 
@@ -885,16 +847,10 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 		wants     []string
 	}{
 		{
-			name:      "removing a feature that is not there",
+			name:      "removing a part that is not there",
 			installed: []string{featureISR},
 			opts:      Options{Yes: true, Remove: featureImageOptimization},
 			wants:     []string{"image-optimization is not in the production bootstrap, so there is nothing to remove."},
-		},
-		{
-			name:  "features the edge pulls in",
-			edge:  "edge: \"relay\"",
-			opts:  Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true},
-			wants: []string{"Also adding feature relay-edge to the production bootstrap: this project's edge needs it", "Also adding feature isr to the production bootstrap: relay-edge needs it"},
 		},
 		{
 			name:      "content going backwards",
@@ -986,110 +942,6 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	})
 }
 
-func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
-	t.Run("a relay project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "edge: \"relay\"")
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		want := "INFO  [plan] Also adding feature relay-edge to the production bootstrap: this project's edge needs it\nINFO  [plan] Also adding feature isr to the production bootstrap: relay-edge needs it\n"
-		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
-		}
-	})
-
-	t.Run("a bare run on the default edge is told its edge feature too", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "")
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		want := "Also adding feature relay-edge to the production bootstrap: this project's edge needs it\n"
-		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
-		}
-	})
-
-	t.Run("a set that names everything applied says nothing", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "edge: \"relay\"")
-
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Dry: true, Features: "isr,relay-edge", FeaturesDeclared: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		if strings.Contains(stdout.String(), "Also adding") {
-			t.Errorf("stdout = %q, want nothing said where the set named everything applied", stdout.String())
-		}
-	})
-}
-
-func TestBootstrapSendsTheFeatureSetItWasGiven(t *testing.T) {
-	cases := []struct {
-		name        string
-		declaration string
-		features    string
-		want        string
-	}{
-		{"a named set reaches the provider whole", "edge: \"relay\"", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
-		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,variables-key,relay-edge,direct-edge force=false acceptReplacements=true"},
-		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			project, invocation := bootstrapProject(t, tc.declaration)
-
-			var stdout, stderr bytes.Buffer
-			opts := Options{Yes: true, Features: tc.features, FeaturesDeclared: true}
-			clitest.AttachTerminalSink(invocation, &stdout)
-			if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-			}
-
-			got := applies(t, project)
-			if len(got) != 1 {
-				t.Fatalf("bootstrap was applied %d times, want exactly 1: %v", len(got), got)
-			}
-			if said := intent(got[0]); said != tc.want {
-				t.Errorf("provider was asked to apply %q, want %q", said, tc.want)
-			}
-		})
-	}
-}
-
-func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
-	project, invocation := bootstrapProject(t, "", featureISR, featureRelayEdge)
-
-	var stdout, stderr bytes.Buffer
-	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
-
-	if got := intents(t, project); len(got) != 1 || got[0] != "features=isr,relay-edge force=false acceptReplacements=true" {
-		t.Errorf("provider was asked to apply %v, want the set the account already has", got)
-	}
-}
-
-func TestBootstrapLeavesOutWhatItWasNotAskedAbout(t *testing.T) {
-	project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
-
-	var stdout, stderr bytes.Buffer
-	opts := Options{Yes: true, Features: "isr", FeaturesDeclared: true}
-	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
-	if got := intents(t, project); len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
-		t.Errorf("provider was asked to apply %v; another project's feature goes only when a run names it", got)
-	}
-}
-
 func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
 	project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
 
@@ -1099,7 +951,7 @@ func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
 	if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if got := intents(t, project); len(got) != 1 || got[0] != "features=isr remove=image-optimization force=true acceptReplacements=true" {
+	if got := intents(t, project); len(got) != 1 || got[0] != "remove=image-optimization force=true acceptReplacements=true" {
 		t.Errorf("provider was asked to apply %v, want the named removal passed through", got)
 	}
 }

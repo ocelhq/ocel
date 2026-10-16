@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -47,21 +46,14 @@ func FeatureLevels(catalogue []provider.Feature, names []string) ([][]string, er
 	return levels, nil
 }
 
-func RequiredFeatures(catalogue []provider.Feature, apps []buildoutput.Uses, edgeKind edge.Kind) ([]string, error) {
+func RequiredFeatures(catalogue []provider.Feature, edgeKind edge.Kind) ([]string, error) {
 	var needed []string
 	for _, f := range catalogue {
-		if featureNeeded(f, apps, edgeKind) {
+		if edgeKind != edge.None && slices.Contains(f.Edges, edgeKind) {
 			needed = append(needed, f.Name)
 		}
 	}
 	return FeaturesWithDependencies(catalogue, needed)
-}
-
-func featureNeeded(f provider.Feature, apps []buildoutput.Uses, edgeKind edge.Kind) bool {
-	if slices.ContainsFunc(apps, f.Serves.HasAnyOf) {
-		return true
-	}
-	return edgeKind != edge.None && slices.Contains(f.Edges, edgeKind)
 }
 
 func FeaturesWithDependencies(catalogue []provider.Feature, names []string) ([]string, error) {
@@ -127,21 +119,6 @@ func FeaturesToRemove(catalogue []provider.Feature, installed, named []string) (
 		}
 	}
 	return InCatalogueOrder(catalogue, keys(doomed)), nil
-}
-
-func RefuseEnsuringAndRemoving(ensure, removing []string) error {
-	var both []string
-	for _, name := range ensure {
-		if slices.Contains(removing, name) {
-			both = append(both, name)
-		}
-	}
-	if len(both) == 0 {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"this run asks to install %s and to remove it at once; a feature is either ensured or removed, never both",
-		strings.Join(both, ", "))
 }
 
 func MissingFeatures(installed, required []string) []string {

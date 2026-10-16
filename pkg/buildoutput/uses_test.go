@@ -27,24 +27,3 @@ func TestEveryOtherFrameworkIsPresumedBeforeItsBuildToUseNothing(t *testing.T) {
 		}
 	}
 }
-
-func TestUsesHasAnyOfAnotherOnlyWhenTheyShareOne(t *testing.T) {
-	t.Parallel()
-
-	revalidation := buildoutput.Uses{Revalidation: true}
-	images := buildoutput.Uses{ImageOptimization: true}
-	both := buildoutput.Uses{Revalidation: true, ImageOptimization: true}
-	for _, tc := range []struct {
-		uses, other buildoutput.Uses
-		want        bool
-	}{
-		{revalidation, both, true},
-		{both, images, true},
-		{revalidation, images, false},
-		{buildoutput.Uses{}, both, false},
-	} {
-		if got := tc.uses.HasAnyOf(tc.other); got != tc.want {
-			t.Errorf("%+v.HasAnyOf(%+v) = %v, want %v", tc.uses, tc.other, got, tc.want)
-		}
-	}
-}

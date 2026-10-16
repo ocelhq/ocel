@@ -89,10 +89,12 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	required, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), presumedUses(req.GetFrameworks()), readiness.Edge)
+	catalogue := readiness.Bootstrap.Catalogue()
+	required, err := bootstrapplan.RequiredFeatures(catalogue, readiness.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
+	required = bootstrapplan.InCatalogueOrder(catalogue, append(required, req.GetWantedParts()...))
 
 	var status bootstrapStatus
 	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
@@ -111,8 +113,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
 	if req.GetRecordWants() {
-		wanted := append(slices.Clone(required), bootstrapplan.InCatalogueOrder(readiness.Bootstrap.Catalogue(), req.GetWantedParts())...)
-		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingFeatures(status.own.Features, wanted)); err != nil {
+		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingFeatures(status.own.Features, required)); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}

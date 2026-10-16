@@ -6,15 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 var testCatalogue = []provider.Feature{
-	{Name: "isr", Summary: "incremental regeneration", Serves: buildoutput.Uses{Revalidation: true}},
-	{Name: "image-optimization", Summary: "image optimizer", Serves: buildoutput.Uses{ImageOptimization: true}},
+	{Name: "isr", Summary: "incremental regeneration"},
+	{Name: "image-optimization", Summary: "image optimizer"},
 	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Edges: []edge.Kind{"cloudflare"}},
 }
 
@@ -216,51 +215,26 @@ func TestRequiredFeatures(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		apps []buildoutput.Uses
 		edge edge.Kind
 		want []string
 	}{
-		{name: "a project needing nothing needs no feature"},
+		{name: "a project with no edge needs no part"},
 		{
-			name: "an app pulls the features that serve what it uses",
-			apps: []buildoutput.Uses{{Revalidation: true, ImageOptimization: true}},
-			want: []string{"isr", "image-optimization"},
-		},
-		{
-			name: "an app using revalidation alone pulls no image optimizer",
-			apps: []buildoutput.Uses{{Revalidation: true}},
-			want: []string{"isr"},
-		},
-		{
-			name: "what the apps use together is one set",
-			apps: []buildoutput.Uses{{ImageOptimization: true}, {}, {Revalidation: true}},
-			want: []string{"isr", "image-optimization"},
-		},
-		{
-			name: "an edge pulls the feature that names it, and what it depends on",
+			name: "an edge pulls the part that names it, and what it depends on",
 			edge: "cloudflare",
 			want: []string{"isr", "cloudflare-edge"},
 		},
-		{
-			name: "apps and edge together are one set",
-			apps: []buildoutput.Uses{{Revalidation: true, ImageOptimization: true}},
-			edge: "cloudflare",
-			want: []string{"isr", "image-optimization", "cloudflare-edge"},
-		},
-		{
-			name: "apps that use nothing pull nothing",
-			apps: []buildoutput.Uses{{}, {}},
-		},
+		{name: "an edge no part names pulls nothing", edge: "direct"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RequiredFeatures(testCatalogue, tc.apps, tc.edge)
+			got, err := RequiredFeatures(testCatalogue, tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures() = %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("RequiredFeatures(%+v, %q) = %v, want %v", tc.apps, tc.edge, got, tc.want)
+				t.Errorf("RequiredFeatures(%q) = %v, want %v", tc.edge, got, tc.want)
 			}
 		})
 	}

@@ -67,6 +67,7 @@ func newReadiness(t *testing.T, writer provider.WrittenBy) (providerserver.Readi
 		Bootstrap: p.FakeBootstrap(),
 		KeyValues: p.KeyValues(),
 		WrittenBy: writer,
+		Edge:      fake.KindRelay,
 	}, p
 }
 

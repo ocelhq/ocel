@@ -31,8 +31,7 @@ func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	recordProject(t, vendor, "blog")
 
@@ -249,8 +248,7 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 	ctx := context.Background()
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 
 	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{
@@ -267,14 +265,13 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 	}
 }
 
-func TestPreflightWithNoBootstrapYetReportsEveryFeatureTheProjectNeeds(t *testing.T) {
+func TestPreflightWithNoBootstrapYetReportsEveryPartTheEdgeRequires(t *testing.T) {
 	t.Parallel()
 
 	client, _ := contractServed(t, "1.2.3")
 	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
-		Frameworks:   []string{"next"},
-		Edge:         &contractv1.EdgeSelection{Kind: "direct"},
+		Edge:         &contractv1.EdgeSelection{Kind: "relay"},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
@@ -286,19 +283,18 @@ func TestPreflightWithNoBootstrapYetReportsEveryFeatureTheProjectNeeds(t *testin
 		}
 	}
 	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(absent, want) {
-		t.Errorf("Preflight() reports %v as required and absent, want %v, which a next project needs", absent, want)
+		t.Errorf("Preflight() reports %v as required and absent, want %v, which the relay edge requires", absent, want)
 	}
 }
 
-func TestPreflightReportsEveryFeatureTheProjectNeedsThatABootstrapLacks(t *testing.T) {
+func TestPreflightReportsEveryPartTheEdgeRequiresThatABootstrapLacks(t *testing.T) {
 	t.Parallel()
 
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: &contractv1.EdgeSelection{Kind: "direct"}})
 	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
-		Frameworks:   []string{"next"},
-		Edge:         &contractv1.EdgeSelection{Kind: "direct"},
+		Edge:         &contractv1.EdgeSelection{Kind: "relay"},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
@@ -310,7 +306,7 @@ func TestPreflightReportsEveryFeatureTheProjectNeedsThatABootstrapLacks(t *testi
 		}
 	}
 	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(absent, want) {
-		t.Errorf("Preflight() reports %v as required and absent, want %v, which a next project needs and the bootstrap lacks", absent, want)
+		t.Errorf("Preflight() reports %v as required and absent, want %v, which the relay edge requires and the bootstrap lacks", absent, want)
 	}
 }
 
@@ -328,12 +324,12 @@ func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBoots
 
 	client, vendor := contractServed(t, "1.2.3")
 	direct := &contractv1.EdgeSelection{Kind: "direct"}
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Features: []string{fake.FeatureCache}, Edge: direct})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
-		Frameworks:   []string{"next"},
-		Edge:         direct,
+		Edge:         &contractv1.EdgeSelection{Kind: "relay"},
 		RecordWants:  true,
 	})
 	if err != nil {
@@ -342,7 +338,7 @@ func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBoots
 
 	want := map[string][]string{fake.FeatureImages: {"shop"}}
 	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
-		t.Errorf("wants = %v, want %v: the bootstrap holds cache, and a next project also wants images", got, want)
+		t.Errorf("wants = %v, want %v: the bootstrap holds cache, and the relay edge also wants images", got, want)
 	}
 }
 
@@ -378,7 +374,6 @@ func TestAPreflightNotAskedToRecordWantsRecordsNone(t *testing.T) {
 	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
-		Frameworks:   []string{"next"},
 		Edge:         direct,
 		WantedParts:  []string{fake.FeatureCache},
 	})
@@ -942,8 +937,7 @@ func TestPreflightNamesNoKnownSlugsForAProjectThatIsAlreadyRecorded(t *testing.T
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	recordProject(t, vendor, "blog")
 	recordProject(t, vendor, "shop")
@@ -998,8 +992,7 @@ func TestPreflightOfARecordedProjectReadsItsRecordWithoutListingTheOthers(t *tes
 	vendor := &projectListingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
 	client := servedProvider(t, "1.2.3", vendor)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	recordProject(t, vendor.Provider, "blog")
 	recordProject(t, vendor.Provider, "shop")
