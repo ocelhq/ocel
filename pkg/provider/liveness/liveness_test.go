@@ -40,6 +40,7 @@ type dnsBook struct {
 	hosts   map[string][]string
 	aliases map[string]string
 	zones   map[string][]string
+	cuts    []string
 }
 
 func (b *dnsBook) note(what, name string) string {
@@ -96,6 +97,24 @@ func (b *dnsBook) NS(_ context.Context, name string) ([]*net.NS, error) {
 		named = append(named, &net.NS{Host: ns + "."})
 	}
 	return named, nil
+}
+
+func (b *dnsBook) IsZoneCut(_ context.Context, name string) (bool, error) {
+	name = b.note("cut", name)
+	if b.down {
+		return false, &net.DNSError{Err: "i/o timeout", Name: name, IsTimeout: true}
+	}
+	return slices.Contains(b.cuts, name), nil
+}
+
+func namesHostname(heard []string, hostname string) []string {
+	var named []string
+	for _, asked := range heard {
+		if strings.HasSuffix(asked, " "+hostname) {
+			named = append(named, asked)
+		}
+	}
+	return named
 }
 
 func dialing(routes map[string]string) func(context.Context, string, string) (net.Conn, error) {
@@ -200,22 +219,62 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 	}
 }
 
-func TestAHostnameTheSystemResolverAnswersIsProbedWhereItResolvesAndNoNameserverIsAsked(t *testing.T) {
+func TestAHostnameIsLocatedOffItsZonesNameserversBeforeTheSystemResolverIsAskedForIt(t *testing.T) {
 	t.Parallel()
 
-	probe := resolvedAt(t, "cloudfront", nil)
-	var authorities []string
-	probe.Authority = func(nameserver string) DNSLookup {
-		authorities = append(authorities, nameserver)
-		return &dnsBook{}
+	system := &dnsBook{
+		zones: map[string][]string{"example.com": {"ns1.example.net"}},
+		hosts: map[string][]string{"shop.example.com": {"198.51.100.99"}},
+	}
+	probe := &Net{
+		System: system,
+		Authority: func(nameserver string) NameserverLookup {
+			if nameserver == "ns1.example.net" {
+				return &dnsBook{hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}}
+			}
+			return &dnsBook{down: true}
+		},
+		Dial: dialing(map[string]string{"203.0.113.4:443": answeringAs(t, "cloudfront", nil)}),
+		TLS:  trusting(),
 	}
 
 	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v, want the router at the address the system resolver gave", kind, err)
+		t.Fatalf("Serving() = %q, %v (%s), want the router at the address the zone's nameserver gave", kind, err, probe.LastProbeFailure("shop.example.com").Cause)
 	}
-	if len(authorities) != 0 {
-		t.Errorf("the probe asked nameservers %v directly although the system resolver answered: a private zone, a split horizon or a hosts-file entry is what the operator's own machine reaches, and the public nameservers know nothing of it", authorities)
+	if named := namesHostname(system.heard(), "shop.example.com"); len(named) != 0 {
+		t.Errorf("the system resolver was asked %v: a record ocel has just written may not have reached every nameserver yet, and the resolver of the operator's network caches the miss for the zone's negative ttl, so the deploy succeeds and the browser on the same network cannot open the site", named)
+	}
+}
+
+func TestAHostnameItsZonesNameserversHaveNoRecordForIsUnservedWithoutAskingTheSystemResolver(t *testing.T) {
+	t.Parallel()
+
+	system := &dnsBook{zones: map[string][]string{"example.com": {"ns1.example.net"}}}
+	probe := &Net{
+		System:    system,
+		Authority: func(string) NameserverLookup { return &dnsBook{} },
+	}
+
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
+	if err != nil || kind != "" {
+		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
+	}
+	if named := namesHostname(system.heard(), "shop.example.com"); len(named) != 0 {
+		t.Errorf("the system resolver was asked %v after the zone's nameservers answered that the record is not there yet: the miss it caches outlives the deploy", named)
+	}
+}
+
+func TestAHostnameNoNameserverOfItsZoneCanBeReachedForIsProbedWhereTheSystemResolverPutsIt(t *testing.T) {
+	t.Parallel()
+
+	probe := resolvedAt(t, "cloudfront", nil)
+	probe.System.(*dnsBook).zones = map[string][]string{"example.com": {"ns1.example.net"}}
+	probe.Authority = func(string) NameserverLookup { return &dnsBook{down: true} }
+
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
+	if err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s), want the router at the address the system resolver gave: a network that lets no query through to a public nameserver still resolves through its own", kind, err, probe.LastProbeFailure("shop.example.com").Cause)
 	}
 }
 
@@ -223,13 +282,16 @@ func TestAWildcardIsProbedOnALabelUnderIt(t *testing.T) {
 	t.Parallel()
 
 	book := &dnsBook{}
-	probe := &Net{System: book, Authority: func(string) DNSLookup { return &dnsBook{} }}
+	probe := &Net{System: book, Authority: func(string) NameserverLookup { return &dnsBook{} }}
 	if _, err := probe.ServingRouter(context.Background(), "*.preview.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	want := "A " + edge.ProbeHostname("*.preview.example.com")
-	if heard := book.heard(); len(heard) == 0 || heard[0] != want {
-		t.Errorf("the probe asked %v first, want %q", heard, want)
+	heard := book.heard()
+	if want := "A " + edge.ProbeHostname("*.preview.example.com"); !slices.Contains(heard, want) {
+		t.Errorf("the probe asked %v, want %q", heard, want)
+	}
+	if named := namesHostname(heard, "*.preview.example.com"); len(named) != 0 {
+		t.Errorf("the probe asked %v of the wildcard itself, want a label under it", named)
 	}
 }
 
@@ -257,7 +319,7 @@ func hinted(t *testing.T, zones map[string][]string, nameservers map[string]*dns
 			zones: zones,
 			hosts: map[string][]string{"d111.cloudfront.net": {"198.51.100.7"}},
 		},
-		Authority: func(nameserver string) DNSLookup {
+		Authority: func(nameserver string) NameserverLookup {
 			if book, ok := nameservers[nameserver]; ok {
 				return book
 			}
@@ -287,18 +349,37 @@ func TestAHostnameTheSystemResolverCannotSeeYetIsLocatedOffAnyOneOfItsZonesNames
 	}
 }
 
-func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameservers(t *testing.T) {
+func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameserversOnceItsParentDelegatesIt(t *testing.T) {
 	t.Parallel()
 
 	probe := hinted(t,
 		map[string][]string{"shop.example.co.uk": {"ns1.example.net"}, "co.uk": {"ns.nic.uk"}},
 		map[string]*dnsBook{
+			"ns.nic.uk":       {cuts: []string{"shop.example.co.uk"}},
 			"ns1.example.net": {hosts: map[string][]string{"shop.example.co.uk": {"203.0.113.4"}}},
 		})
 
 	kind, err := probe.ServingRouter(context.Background(), "shop.example.co.uk")
 	if err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.LastProbeFailure("shop.example.co.uk").Cause)
+	}
+	if named := namesHostname(probe.System.(*dnsBook).heard(), "shop.example.co.uk"); !slices.Equal(named, []string{"NS shop.example.co.uk"}) {
+		t.Errorf("the system resolver was asked %v about the apex, want only its nameservers once co.uk delegated it: a delegated name exists, so its NS query cannot come back as a miss", named)
+	}
+}
+
+func TestAHostnameItsParentDoesNotDelegateIsNeverAskedForItsOwnNameservers(t *testing.T) {
+	t.Parallel()
+
+	probe := hinted(t,
+		map[string][]string{"example.com": {"ns1.example.net"}},
+		map[string]*dnsBook{"ns1.example.net": {}})
+
+	if kind, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil || kind != "" {
+		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
+	}
+	if named := namesHostname(probe.System.(*dnsBook).heard(), "shop.example.com"); len(named) != 0 {
+		t.Errorf("the system resolver was asked %v: a name its zone has no record for yet comes back as a miss for every type, NS included", named)
 	}
 }
 

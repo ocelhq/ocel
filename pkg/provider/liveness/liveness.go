@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +44,11 @@ func (d netDNS) CNAME(ctx context.Context, host string) (string, error) {
 	return d.resolver.LookupCNAME(ctx, host)
 }
 
+type NameserverLookup interface {
+	DNSLookup
+	IsZoneCut(ctx context.Context, name string) (bool, error)
+}
+
 type ProbeUnanswered struct {
 	Cause      string
 	HTTPStatus int
@@ -52,7 +58,7 @@ func (u ProbeUnanswered) Error() string { return u.Cause }
 
 type Net struct {
 	System       DNSLookup
-	Authority    func(nameserver string) DNSLookup
+	Authority    func(nameserver string) NameserverLookup
 	Dial         func(ctx context.Context, network, address string) (net.Conn, error)
 	TLS          *tls.Config
 	ProbeAddress *url.URL
@@ -200,18 +206,30 @@ func (l *Net) system() DNSLookup {
 	return netDNS{resolver: net.DefaultResolver}
 }
 
-func (l *Net) authority(nameserver string) DNSLookup {
+func (l *Net) authority(nameserver string) NameserverLookup {
 	if l.Authority != nil {
 		return l.Authority(nameserver)
 	}
-	return netDNS{resolver: &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-		return l.dial(ctx, network, net.JoinHostPort(nameserver, "53"))
-	}}}
+	return nameserverDNS{
+		netDNS: netDNS{resolver: &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return l.dial(ctx, network, net.JoinHostPort(nameserver, "53"))
+		}}},
+		nameserver: nameserver,
+		dial:       l.dial,
+	}
 }
 
 func (l *Net) resolveTarget(ctx context.Context, hostname string) (string, []string, error) {
 	if l.ProbeAddress != nil {
 		return l.ProbeAddress.Scheme, []string{dialAddress(l.ProbeAddress)}, nil
+	}
+	authoritative, authoritativeErr := l.resolveAuthoritative(ctx, hostname)
+	if authoritativeErr == nil {
+		return "https", authoritative, nil
+	}
+	var unrecorded recordMissing
+	if ctx.Err() != nil || errors.As(authoritativeErr, &unrecorded) {
+		return "", nil, authoritativeErr
 	}
 	resolved, err := l.system().Host(ctx, hostname)
 	if err == nil && len(resolved) > 0 {
@@ -221,13 +239,9 @@ func (l *Net) resolveTarget(ctx context.Context, hostname string) (string, []str
 		return "", nil, ctx.Err()
 	}
 	if err == nil {
-		err = errors.New("no address")
+		err = errNoAddress
 	}
-	authoritative, authoritativeErr := l.resolveAuthoritative(ctx, hostname)
-	if authoritativeErr != nil {
-		return "", nil, fmt.Errorf("%s resolves to nothing here (%w), and %w", hostname, err, authoritativeErr)
-	}
-	return "https", authoritative, nil
+	return "", nil, fmt.Errorf("%w, and %s resolves to nothing here (%w)", authoritativeErr, hostname, err)
 }
 
 func dialAddress(target *url.URL) string {
@@ -248,25 +262,94 @@ func onPort(addresses []string, port string) []string {
 	return answered
 }
 
+type recordMissing struct {
+	hostname string
+	zone     string
+	failures []string
+}
+
+func (m recordMissing) Error() string {
+	return fmt.Sprintf("the nameservers of %s have no address for %s yet (%s)", m.zone, m.hostname, strings.Join(m.failures, "; "))
+}
+
+var errNoAddress = errors.New("no address")
+
 func (l *Net) resolveAuthoritative(ctx context.Context, hostname string) ([]string, error) {
-	zone, nameservers, err := l.zoneOf(ctx, hostname)
+	zone, nameservers, err := l.zoneAbove(ctx, hostname)
 	if err != nil {
 		return nil, err
 	}
-	failures := make([]string, 0, len(nameservers))
+	addresses, err := l.askNameservers(ctx, zone, nameservers, hostname)
+	var unrecorded recordMissing
+	if !errors.As(err, &unrecorded) || !l.isZoneCut(ctx, nameservers, hostname) {
+		return addresses, err
+	}
+	own, err := l.system().NS(ctx, hostname+".")
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s delegates %s, and its nameservers cannot be read here: %w", zone, hostname, err)
+	}
+	if len(own) == 0 {
+		return nil, fmt.Errorf("%s delegates %s, which names no nameserver of its own", zone, hostname)
+	}
+	return l.askNameservers(ctx, hostname, hostsOf(own), hostname)
+}
+
+func (l *Net) askNameservers(ctx context.Context, zone string, nameservers []string, hostname string) ([]string, error) {
+	asking, stop := context.WithTimeout(ctx, nameserverWindow)
+	defer stop()
+	type reply struct {
+		nameserver string
+		addresses  []string
+		err        error
+	}
+	replies := make(chan reply, len(nameservers))
 	for _, nameserver := range nameservers {
-		asking, stop := context.WithTimeout(ctx, nameserverWindow)
-		addresses, err := l.queryNameserver(asking, nameserver, hostname)
-		stop()
-		if err == nil {
-			return addresses, nil
+		go func() {
+			addresses, err := l.queryNameserver(asking, nameserver, hostname)
+			replies <- reply{nameserver: nameserver, addresses: addresses, err: err}
+		}()
+	}
+	failures := make([]string, 0, len(nameservers))
+	answeredMissing := false
+	for range nameservers {
+		said := <-replies
+		if said.err == nil {
+			return said.addresses, nil
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		failures = append(failures, fmt.Sprintf("%s: %v", nameserver, err))
+		failures = append(failures, fmt.Sprintf("%s: %v", said.nameserver, said.err))
+		answeredMissing = answeredMissing || isAnsweredMissing(said.err)
 	}
-	return nil, fmt.Errorf("no nameserver for %s answers for it yet (%s)", zone, strings.Join(failures, "; "))
+	slices.Sort(failures)
+	if answeredMissing {
+		return nil, recordMissing{hostname: hostname, zone: zone, failures: failures}
+	}
+	return nil, fmt.Errorf("no nameserver for %s answers for %s (%s)", zone, hostname, strings.Join(failures, "; "))
+}
+
+func isAnsweredMissing(err error) bool {
+	var lookup *net.DNSError
+	return errors.Is(err, errNoAddress) || errors.As(err, &lookup) && lookup.IsNotFound
+}
+
+func (l *Net) isZoneCut(ctx context.Context, nameservers []string, hostname string) bool {
+	for _, nameserver := range nameservers {
+		asking, stop := context.WithTimeout(ctx, nameserverWindow)
+		cut, err := l.authority(nameserver).IsZoneCut(asking, hostname)
+		stop()
+		if err == nil {
+			return cut
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+	}
+	return false
 }
 
 func (l *Net) queryNameserver(ctx context.Context, nameserver, hostname string) ([]string, error) {
@@ -287,14 +370,14 @@ func (l *Net) queryNameserver(ctx context.Context, nameserver, hostname string) 
 		return nil, err
 	}
 	if len(addresses) == 0 {
-		return nil, fmt.Errorf("it has no address for %s", hostname)
+		return nil, errNoAddress
 	}
 	return onPort(addresses, "443"), nil
 }
 
-func (l *Net) zoneOf(ctx context.Context, hostname string) (string, []string, error) {
+func (l *Net) zoneAbove(ctx context.Context, hostname string) (string, []string, error) {
 	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
-	for at := range max(len(labels)-1, 1) {
+	for at := 1; at < len(labels); at++ {
 		candidate := strings.Join(labels[at:], ".")
 		servers, err := l.system().NS(ctx, candidate+".")
 		if ctx.Err() != nil {
@@ -303,11 +386,15 @@ func (l *Net) zoneOf(ctx context.Context, hostname string) (string, []string, er
 		if err != nil || len(servers) == 0 {
 			continue
 		}
-		named := make([]string, 0, len(servers))
-		for _, ns := range servers {
-			named = append(named, strings.TrimSuffix(ns.Host, "."))
-		}
-		return candidate, named, nil
+		return candidate, hostsOf(servers), nil
 	}
-	return "", nil, fmt.Errorf("no zone at or above %s names a nameserver", hostname)
+	return "", nil, fmt.Errorf("no zone above %s names a nameserver", hostname)
+}
+
+func hostsOf(servers []*net.NS) []string {
+	named := make([]string, 0, len(servers))
+	for _, ns := range servers {
+		named = append(named, strings.TrimSuffix(ns.Host, "."))
+	}
+	return named
 }
