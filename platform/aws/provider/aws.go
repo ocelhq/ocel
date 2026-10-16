@@ -119,7 +119,8 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	}
 	b := control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap)
 	b.RemoveParts, b.PlanPartRemoval = p.removeAddedParts, p.planAddedPartRemoval
-	return forgetting{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, addedParts: p.describeAddedParts, repairParts: p.repairParts}, nil
+	return forgetting{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, addedParts: p.describeAddedParts, repairParts: p.repairParts,
+		removable: p.removableParts()}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }

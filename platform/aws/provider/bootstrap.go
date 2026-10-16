@@ -2,6 +2,8 @@ package aws
 
 import (
 	"context"
+	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -29,6 +31,48 @@ type forgetting struct {
 	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
 	repairParts   func(ctx context.Context, tier environment.Tier) ([]string, error)
 	addedParts    func(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error)
+
+	removable []removablePart
+}
+
+func (s forgetting) Parts() []provider.Part {
+	offered := s.Bootstrap.Parts()
+	for _, each := range s.removable {
+		offered = append(offered, each.Part)
+	}
+	return offered
+}
+
+func (s forgetting) addedRemovals(req provider.BootstrapRequest) ([]removablePart, provider.BootstrapRequest) {
+	var added []removablePart
+	var stacks []string
+	for _, name := range req.Remove {
+		if at := slices.IndexFunc(s.removable, func(each removablePart) bool { return each.Name == name }); at >= 0 {
+			added = append(added, s.removable[at])
+		} else {
+			stacks = append(stacks, name)
+		}
+	}
+	req.Remove = stacks
+	return added, req
+}
+
+func (s forgetting) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	added, req := s.addedRemovals(req)
+	plan, err := s.Bootstrap.Plan(ctx, req)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	for _, each := range added {
+		group, err := each.plan(ctx, req.Tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		if group != nil {
+			plan.Groups = append(plan.Groups, *group)
+		}
+	}
+	return plan, nil
 }
 
 func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
@@ -62,8 +106,21 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 	if err != nil {
 		return err
 	}
+	added, req := s.addedRemovals(req)
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
+	}
+	s.forget()
+	for _, each := range added {
+		if err := each.remove(ctx, req.Tier, progress); err != nil {
+			return fmt.Errorf("remove the %s tier's %s bootstrap part: %w", req.Tier, each.Name, err)
+		}
+		if err := stackrecords.ForgetBootstrapPart(ctx, s.keyValues, req.Tier, each.Name); err != nil {
+			return err
+		}
+		if progress != nil {
+			progress.Say("Removed the " + each.Name + " part of the " + string(req.Tier) + " bootstrap")
+		}
 	}
 	s.forget()
 	if err := s.repair(ctx, req.Tier, progress); err != nil {
