@@ -27,8 +27,10 @@ prepared:
    entry worker; a record you made yourself is left alone but must be **proxied
    (orange cloud)**, since an unproxied hostname never reaches a worker.
 2. Nothing else in AWS is made by hand. Every run's sweep job bootstraps the
-   preview tier of its namespace with the features `PREVIEW_BOOTSTRAP_FEATURES`
-   in `lib.mjs` names, then runs `ocel domain use` on the wildcard. The first
+   preview tier of its namespace, adding the cloudflare-edge part its edge is
+   fronted through and the variables key (an `ocel env set` refused for want of
+   the key records that the entry wants it, and a second `ocel bootstrap preview`
+   adds it), then runs `ocel domain use` on the wildcard. The first
    deploy that optimizes images or revalidates adds that part itself. No project
    declares a preview domain of its own; every run's previews serve on this one,
    at `<slug>--<name>.ocel.site`.

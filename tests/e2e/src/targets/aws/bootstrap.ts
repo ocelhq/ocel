@@ -5,7 +5,7 @@ import { writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Variant } from "../../matrix/types";
-import { ocel, runOcel } from "../../ocel";
+import { NonzeroExitError, ocel, type Ran, runOcel } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
@@ -17,24 +17,41 @@ import type { AwsWorld } from "./world";
 
 const DEFAULT_VPC_TRIES = 30;
 
-const EDGE_FEATURES: Record<string, string[]> = {
-  cloudfront: [],
-  "api-gateway": [],
-  cloudflare: ["cloudflare-edge"],
-};
-const FLOCI_FEATURES = ["variables-key"];
-
-export function cellBootstrapArgs(variant: Pick<Variant, "config">): string[] {
-  const edge = EDGE_FEATURES[variant.config.edge ?? "cloudfront"];
-  if (!edge) {
-    throw new Error(`no AWS bootstrap feature fronts the ${variant.config.edge} edge`);
-  }
-  const features = [...edge, "variables-key"];
-  return ["bootstrap", "production", "--yes", "--features", features.join(",")];
-}
+const AWS_EDGES = ["cloudfront", "api-gateway", "cloudflare"];
+const KEY_WANT = "E2E_VARIABLES_KEY_WANTED";
+const VARIABLES_KEY_PART = "variables-key";
 
 export const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
 export const BOOTSTRAP_REFRESH_ARGS = ["bootstrap", "production", "--yes"];
+
+export function cellBootstrapArgs(variant: Pick<Variant, "config">): string[] {
+  const edge = variant.config.edge ?? "cloudfront";
+  if (!AWS_EDGES.includes(edge)) {
+    throw new Error(`no AWS bootstrap fronts the ${edge} edge`);
+  }
+  return BOOTSTRAP_REFRESH_ARGS;
+}
+
+export async function bootstrapWithVariablesKey(
+  bootstrap: () => Promise<Ran>,
+  run: (args: string[]) => Promise<Ran>,
+): Promise<void> {
+  await bootstrap();
+  try {
+    await run(["env", "set", `${KEY_WANT}=wanted`]);
+  } catch (error) {
+    if (!(error instanceof NonzeroExitError) || !refusedForTheKey(error.result)) {
+      throw error;
+    }
+    await bootstrap();
+    return;
+  }
+  await run(["env", "rm", KEY_WANT]);
+}
+
+function refusedForTheKey(result: Ran): boolean {
+  return `${result.stdout}\n${result.stderr}`.includes(VARIABLES_KEY_PART);
+}
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
   const cli = cliAt(endpoint);
@@ -83,10 +100,10 @@ export class AwsBootstrap {
     const dir = await copyTree(fixtureDir(first.name), treeDir(runId, "aws", "bootstrap"));
     try {
       await writeJourneyConfig(dir, { target: "aws", slug });
-      await ocel(
-        dir,
-        ["bootstrap", "production", "--yes", "--features", FLOCI_FEATURES.join(",")],
-        ocelEnvIn(dir),
+      const env = ocelEnvIn(dir);
+      await bootstrapWithVariablesKey(
+        () => ocel(dir, BOOTSTRAP_REFRESH_ARGS, env),
+        (args) => ocel(dir, args, env),
       );
     } catch (error) {
       return { lane: error instanceof Error ? error.message : String(error) };
@@ -103,13 +120,10 @@ export class AwsBootstrap {
   async bootstrapCell(cell: CellUnderTest, dir: string): Promise<void> {
     const namespace = await this.namespaceOf(cell);
     if (namespace) {
-      await runOcel(
-        cell,
-        dir,
-        "deploy",
-        "bootstrap",
-        cellBootstrapArgs(cell.variant),
-        ocelEnvIn(dir, namespace),
+      const env = ocelEnvIn(dir, namespace);
+      await bootstrapWithVariablesKey(
+        () => runOcel(cell, dir, "deploy", "bootstrap", cellBootstrapArgs(cell.variant), env),
+        (args) => runOcel(cell, dir, "deploy", `variables-key-${args[1]}`, args, env),
       );
     }
   }
