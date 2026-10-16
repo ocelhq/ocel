@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
@@ -28,8 +27,10 @@ var manifests = []struct {
 	{"pyproject.toml", Python},
 	{"requirements.txt", Python},
 	{nodeManifest, JS},
-	{"Cargo.toml", Rust},
+	{rustManifest, Rust},
 }
+
+const rustManifest = "Cargo.toml"
 
 var extendedByRust = []Language{JS, Python}
 
@@ -80,93 +81,15 @@ func Of(dir string) (Language, bool) {
 	if len(found) == 0 {
 		return "", false
 	}
-	if apps := holdingApps(dir, found); len(apps) > 0 {
-		return apps[0], true
+	if len(found) == 1 {
+		return found[0], true
+	}
+	if inspections, err := inspectAll(dir, found); err == nil {
+		if apps := holdingApps(inspections); len(apps) > 0 {
+			return apps[0].language, true
+		}
 	}
 	return found[0], true
-}
-
-func Detect(dir string) (Language, bool, error) {
-	found := Manifested(dir)
-	if len(found) == 0 {
-		return "", false, nil
-	}
-	if len(found) == 1 {
-		return found[0], true, nil
-	}
-	if apps := holdingApps(dir, found); len(apps) == 1 {
-		return apps[0], true, nil
-	}
-	holdings := make([]string, 0, len(found))
-	for _, l := range found {
-		holdings = append(holdings, holding(dir, l))
-	}
-	return "", false, &AmbiguityError{Dir: dir, Languages: found, holdings: holdings}
-}
-
-type AmbiguityError struct {
-	Dir       string
-	Languages []Language
-	holdings  []string
-}
-
-func (e *AmbiguityError) Holdings() string {
-	if len(e.holdings) == 2 {
-		return "both " + english.And(e.holdings)
-	}
-	return english.And(e.holdings)
-}
-
-func (e *AmbiguityError) Error() string {
-	return fmt.Sprintf("%s holds %s, and nothing there says which one is the app", e.Dir, e.Holdings())
-}
-
-const pythonEntry = "main.py"
-
-func holdingApps(dir string, found []Language) []Language {
-	if len(found) < 2 {
-		return found
-	}
-	var apps []Language
-	for _, l := range found {
-		if holdsApp(dir, l) {
-			apps = append(apps, l)
-		}
-	}
-	return apps
-}
-
-func holdsApp(dir string, l Language) bool {
-	switch l {
-	case JS:
-		framework, _ := jsFramework(dir)
-		return framework != ""
-	case Python:
-		return isRegularFile(filepath.Join(dir, pythonEntry))
-	default:
-		return true
-	}
-}
-
-func holding(dir string, l Language) string {
-	framework := ""
-	if l == JS {
-		framework, _ = jsFramework(dir)
-	}
-	switch {
-	case framework == buildoutput.FrameworkNext:
-		return "a Next.js app"
-	case framework == buildoutput.FrameworkSvelteKit:
-		return "a SvelteKit app"
-	case l == Python && holdsApp(dir, l):
-		return "a python app (" + pythonEntry + ")"
-	}
-	for _, m := range manifests {
-		if m.language == l && isRegularFile(filepath.Join(dir, m.name)) {
-			return "a " + m.name
-		}
-	}
-	return "a " + string(l) + " project"
 }
 
 func jsFramework(dir string) (string, error) {

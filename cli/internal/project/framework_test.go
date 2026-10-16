@@ -112,9 +112,14 @@ func TestDetectFramework(t *testing.T) {
 			want:  "go",
 		},
 		{
-			name:  "a next manifest beside a go module is still the go app's tooling",
-			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"},
+			name:  "a next manifest beside a go main package is still the go app's tooling",
+			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n", "main.go": "package main\n\nfunc main() {}\n"},
 			want:  "go",
+		},
+		{
+			name:  "a next manifest beside a go module with no main package is the app",
+			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"},
+			want:  "next",
 		},
 		{
 			name:  "a go module comes before a cargo manifest beside it",

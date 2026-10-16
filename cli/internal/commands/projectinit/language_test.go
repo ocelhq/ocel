@@ -20,8 +20,12 @@ import (
 func manifestDir(t *testing.T, manifest string) string {
 	t.Helper()
 	dir := t.TempDir()
+	body := "{}\n"
+	if manifest == "Cargo.toml" {
+		body = "[package]\nname = \"acme\"\n"
+	}
 	if manifest != "" {
-		if err := os.WriteFile(filepath.Join(dir, manifest), []byte("{}\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, manifest), []byte(body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", manifest, err)
 		}
 	}

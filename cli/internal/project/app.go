@@ -218,27 +218,34 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	return nil
 }
 
-func rootApp(name, dir string) (apps []App, undetected error, err error) {
-	_, _, err = language.Detect(dir)
-	var ambiguity *language.AmbiguityError
-	if errors.As(err, &ambiguity) {
-		return nil, fmt.Errorf("no app is detected at the project root, which holds %s", ambiguity.Holdings()), nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	framework, found, err := language.DetectFramework(dir)
-	if err != nil || !found || language.OfApp(framework, dir) != language.JS {
-		return nil, nil, err
-	}
-	return []App{{
-		Name:       name,
-		Path:       ".",
-		Serverless: &Serverless{Framework: framework},
-		Container:  &Container{},
+type undetectedRootAppError struct {
+	holdings string
+	cause    error
+}
 
-		BuildsWithResources: true,
-	}}, nil, nil
+func (e *undetectedRootAppError) Error() string {
+	return "no app is detected at the project root, which holds " + e.holdings
+}
+
+func (e *undetectedRootAppError) Unwrap() error { return e.cause }
+
+func rootApp(name, dir string) (apps []App, undetected error, err error) {
+	_, err = language.DetectApp(dir)
+	var ambiguity *language.AmbiguityError
+	var missing *language.NoAppError
+	switch {
+	case errors.As(err, &ambiguity):
+		return nil, &undetectedRootAppError{holdings: ambiguity.Holdings(), cause: err}, nil
+	case errors.As(err, &missing):
+		return nil, &undetectedRootAppError{holdings: missing.Holdings(), cause: err}, nil
+	case err != nil:
+		return nil, nil, err
+	}
+	app := App{Name: name, Path: ".", BuildsWithResources: true}
+	if err := shapeApp(&app, configdoc.AppConfig{Name: name, Path: "."}, dir); err != nil {
+		return nil, nil, err
+	}
+	return []App{app}, nil, nil
 }
 
 func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {

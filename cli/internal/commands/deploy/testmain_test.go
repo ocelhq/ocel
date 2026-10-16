@@ -127,6 +127,7 @@ export function handler() {
 func writeRootApp(t *testing.T, root string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+	clitest.WriteFile(t, filepath.Join(root, "src", "server.js"), "export default {};\n")
 }
 
 func writeUsageMonorepo(t *testing.T, root, fields string) {

@@ -204,20 +204,52 @@ func TestDetectRefusesToChooseBetweenManifestsNoneOfWhichHoldsAnApp(t *testing.T
 	}
 }
 
-func TestAGoModuleBesideANextPackageJSONIsAmbiguousAndReadAsGo(t *testing.T) {
+func TestANextAppWinsOverAGoModuleWithNoMainPackageBesideIt(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json":       nextPackageJSON,
+		"go.mod":             "module example.com/shop\n",
+		"cmd/server/main.go": "package main\n\nfunc main() {}\n",
+	})
+
+	if got, ok := language.Of(dir); !ok || got != language.JS {
+		t.Errorf("Of = %q, %v, want %q: the go build compiles the directory itself, and its package is no main", got, ok, language.JS)
+	}
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.JS {
+		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
+	}
+}
+
+func TestAGoMainPackageBesideANextPackageJSONIsAmbiguousAndReadAsGo(t *testing.T) {
 	t.Parallel()
 
 	dir := dirWithFiles(t, map[string]string{
 		"package.json": nextPackageJSON,
 		"go.mod":       "module example.com/shop\n",
+		"main.go":      "package main\n\nfunc main() {}\n",
 	})
 
 	if got, ok := language.Of(dir); !ok || got != language.Go {
-		t.Errorf("Of = %q, %v, want %q: a go module builds whether or not its main package sits beside go.mod", got, ok, language.Go)
+		t.Errorf("Of = %q, %v, want %q: between two apps the precedence decides what an image is built in", got, ok, language.Go)
 	}
 	var ambiguity *language.AmbiguityError
 	if _, _, err := language.Detect(dir); !errors.As(err, &ambiguity) {
 		t.Errorf("Detect err = %v, want an AmbiguityError", err)
+	}
+}
+
+func TestAPackageJSONBesideAGoMainPackageWithNoEntrypointIsTheGoProjectsTooling(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json": `{"devDependencies":{"tailwindcss":"4"}}`,
+		"go.mod":       "module example.com/shop\n",
+		"main.go":      "package main\n\nfunc main() {}\n",
+	})
+
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.Go {
+		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.Go)
 	}
 }
 
