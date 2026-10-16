@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -45,7 +44,7 @@ func (p *Project) resolveOn(computes []provider.Compute) (*Project, error) {
 	for _, app := range p.Apps {
 		compute := app.Compute
 		if compute == "" {
-			compute = app.computeAmong(computes)
+			compute = computes[0]
 		}
 		shaped, err := app.runningOn(compute)
 		if err != nil {
@@ -80,13 +79,6 @@ func (p *Project) UnresolvedApps() []string {
 	return names
 }
 
-func (a App) computeAmong(computes []provider.Compute) provider.Compute {
-	if a.containerStart != "" && slices.Contains(computes, provider.ComputeContainer) {
-		return provider.ComputeContainer
-	}
-	return computes[0]
-}
-
 func (a App) runningOn(compute provider.Compute) (App, error) {
 	a.Compute = compute
 	if compute == provider.ComputeContainer {
@@ -105,9 +97,6 @@ func (a App) runningOn(compute provider.Compute) (App, error) {
 	if a.Serverless == nil {
 		if a.undetected != nil {
 			return App{}, a.undetected
-		}
-		if a.containerStart != "" {
-			return App{}, fmt.Errorf("app %q is served only by what a container starts, its %s, and its provider runs no containers: add a node entrypoint such as %s, or name the app under \"apps\" with `compute: { serverless: { entrypoint: … } }`", a.Name, a.containerStart, language.NodeEntrypoints[0])
 		}
 		return App{}, fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, a.Path)
 	}

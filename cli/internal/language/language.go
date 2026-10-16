@@ -2,12 +2,10 @@ package language
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
@@ -56,6 +54,11 @@ const svelteKitDependency = "@sveltejs/kit"
 
 var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
 
+var frameworkLabels = map[string]string{
+	buildoutput.FrameworkNext:      "a Next.js app",
+	buildoutput.FrameworkSvelteKit: "a SvelteKit app",
+}
+
 func ManifestNames() []string {
 	names := make([]string, 0, len(manifests))
 	for _, m := range manifests {
@@ -84,20 +87,8 @@ func manifested(dir string) (found []Language, extension bool) {
 }
 
 func Of(dir string) (Language, bool) {
-	app, found, err := byPrecedence(dir, "")
-	if err != nil {
-		return Manifested(dir)[0], true
-	}
-	return app.language, found
-}
-
-func byPrecedence(dir, entrypoint string) (inspection, bool, error) {
-	app, found, err := detect(dir, entrypoint)
-	var ambiguity *AmbiguityError
-	if errors.As(err, &ambiguity) {
-		return ambiguity.candidates[0], true, nil
-	}
-	return app, found, err
+	chosen, found := choose(dir, "")
+	return chosen.language, found
 }
 
 func ofFramework(framework string) (Language, bool) {
@@ -109,101 +100,51 @@ func ofFramework(framework string) (Language, bool) {
 	return "", false
 }
 
-func DetectFramework(dir, entrypoint string) (App, bool, error) {
-	app, found, err := byPrecedence(dir, entrypoint)
-	if err != nil || !found {
-		return App{}, false, err
-	}
-	if app.framework != "" {
-		return app.app(), true, nil
-	}
-	return frameworkOf(dir, app.language, entrypoint)
-}
-
-func frameworkOf(dir string, written Language, entrypoint string) (App, bool, error) {
-	if written == JS {
-		framework, node, err := readNodeApp(dir)
-		if err != nil {
-			return App{}, false, err
-		}
-		if framework != "" {
-			return App{Framework: framework}, true, nil
-		}
-		if entrypoint == "" {
-			if _, ok := NodeEntrypoint(dir); !ok {
-				start, _ := node.containerStart(dir)
-				return App{Framework: buildoutput.FrameworkNode, ContainerStart: start}, true, nil
-			}
-		}
-	}
+func frameworkOfLanguage(l Language) string {
 	for _, f := range frameworks {
-		if f.language == written {
-			return App{Framework: f.name}, true, nil
+		if f.language == l {
+			return f.name
 		}
-	}
-	return App{}, false, nil
-}
-
-type nodePackage struct {
-	Dependencies    map[string]string `json:"dependencies"`
-	DevDependencies map[string]string `json:"devDependencies"`
-	Scripts         map[string]string `json:"scripts"`
-	Main            string            `json:"main"`
-}
-
-func readNodeManifest(dir string) (nodePackage, error) {
-	path := filepath.Join(dir, nodeManifest)
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nodePackage{}, fmt.Errorf("read %s: %w", path, err)
-	}
-	var manifest nodePackage
-	if err := json.Unmarshal(body, &manifest); err != nil {
-		return nodePackage{}, fmt.Errorf("%s is not JSON: %w", path, err)
-	}
-	return manifest, nil
-}
-
-func readNodeApp(dir string) (string, nodePackage, error) {
-	if slices.ContainsFunc(nextConfigNames, func(name string) bool { return isRegularFile(filepath.Join(dir, name)) }) {
-		return buildoutput.FrameworkNext, nodePackage{}, nil
-	}
-	manifest, err := readNodeManifest(dir)
-	if err != nil {
-		return "", nodePackage{}, err
-	}
-	return manifest.framework(), manifest, nil
-}
-
-func (m nodePackage) dependsOn(dependency string) bool {
-	_, runtime := m.Dependencies[dependency]
-	_, development := m.DevDependencies[dependency]
-	return runtime || development
-}
-
-func (m nodePackage) framework() string {
-	if m.dependsOn(nextDependency) {
-		return buildoutput.FrameworkNext
-	}
-	if m.dependsOn(svelteKitDependency) {
-		return buildoutput.FrameworkSvelteKit
 	}
 	return ""
 }
 
-func (m nodePackage) containerStart(dir string) (string, bool) {
-	if strings.TrimSpace(m.Scripts["start"]) != "" {
-		return "start script", true
+func DetectFramework(dir, entrypoint string) (string, bool, error) {
+	chosen, found := choose(dir, entrypoint)
+	if chosen.err != nil {
+		return "", false, chosen.err
 	}
-	if m.Main != "" && (isRegularFile(filepath.Join(dir, filepath.FromSlash(m.Main))) || strings.TrimSpace(m.Scripts["build"]) != "") {
-		return "main " + m.Main, true
+	return chosen.framework, found, nil
+}
+
+func nodeFramework(dir string) (string, error) {
+	if slices.ContainsFunc(nextConfigNames, func(name string) bool { return isRegularFile(filepath.Join(dir, name)) }) {
+		return buildoutput.FrameworkNext, nil
 	}
-	for _, index := range nodeIndexes {
-		if isRegularFile(filepath.Join(dir, index)) {
-			return index, true
-		}
+	path := filepath.Join(dir, nodeManifest)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
 	}
-	return "", false
+	var manifest struct {
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		return "", fmt.Errorf("%s is not JSON: %w", path, err)
+	}
+	dependsOn := func(dependency string) bool {
+		_, runtime := manifest.Dependencies[dependency]
+		_, development := manifest.DevDependencies[dependency]
+		return runtime || development
+	}
+	switch {
+	case dependsOn(nextDependency):
+		return buildoutput.FrameworkNext, nil
+	case dependsOn(svelteKitDependency):
+		return buildoutput.FrameworkSvelteKit, nil
+	}
+	return buildoutput.FrameworkNode, nil
 }
 
 func OfApp(framework, dir string) Language {

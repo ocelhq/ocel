@@ -141,8 +141,8 @@ func TestDetectFramework(t *testing.T) {
 			if err != nil {
 				t.Fatalf("detectFramework = %v", err)
 			}
-			if got.Framework != tc.want {
-				t.Errorf("detectFramework = %+v, want %q", got, tc.want)
+			if got != tc.want {
+				t.Errorf("detectFramework = %q, want %q", got, tc.want)
 			}
 		})
 	}

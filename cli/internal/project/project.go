@@ -137,10 +137,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	}
 	var rootAppUndetected error
 	if len(doc.Apps) == 0 {
-		apps, rootAppUndetected, err = rootApp(doc.Slug, filepath.Dir(configPath))
-		if err != nil {
-			return nil, err
-		}
+		apps, rootAppUndetected = rootApp(doc.Slug, filepath.Dir(configPath))
 		if len(apps) > 0 && doc.Slug == naming.InfraApp {
 			return nil, newInvalidConfigError(fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp), "slug")
 		}

@@ -51,7 +51,7 @@ func sdkLanguageOf(written language.Language) sdkLanguage {
 }
 
 func detectLanguage(dir string) (sdkLanguage, bool, error) {
-	written, found, err := language.Detect(dir, "")
+	written, found, err := language.Detect(dir)
 	var ambiguity *language.AmbiguityError
 	if errors.As(err, &ambiguity) {
 		names := make([]string, 0, len(ambiguity.Languages))
@@ -65,13 +65,6 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 				"this directory holds %s, so it could be a %s project: name the one this is with `--lang %s`",
 				ambiguity.Holdings(), english.Or(names), names[0],
 			),
-		}
-	}
-	if err != nil {
-		return sdkLanguage{}, false, &clierror.Error{
-			Code:  clierror.CodeInitAmbiguousLanguage,
-			Hint:  "--lang",
-			Cause: fmt.Errorf("%w, so ocel cannot tell which language this project is written in: name it with `--lang`, one of %s", err, english.Or(languageNames())),
 		}
 	}
 	if !found {

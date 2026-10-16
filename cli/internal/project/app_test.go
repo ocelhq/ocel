@@ -55,42 +55,6 @@ func TestAProjectNamingNoAppsHasTheAppAtItsRootInEveryLanguageShapedAsIfNamedThe
 	}
 }
 
-func TestARootOnlyAContainerStartsRunsOnAContainerWhereverItIsNamed(t *testing.T) {
-	t.Parallel()
-
-	load := func(config string) *Project {
-		dir := t.TempDir()
-		write(t, filepath.Join(dir, DefaultFileName), config)
-		write(t, filepath.Join(dir, nodeManifest), `{"scripts":{"start":"node dist/main.js"}}`)
-		write(t, filepath.Join(dir, "src", "main.ts"), "export {}\n")
-		cfg, err := Load(context.Background(), dir, "")
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		return cfg
-	}
-	detected := load(`{"slug":"shop"}`)
-	named := load(`{"slug":"shop","apps":[{"name":"shop","path":"."}]}`)
-	if len(detected.Apps) != 1 || detected.Apps[0].Serverless != nil || detected.Apps[0].Container == nil {
-		t.Fatalf("Apps = %+v, want one app shaped for a container alone: no serverless build serves a start script", detected.Apps)
-	}
-	if !reflect.DeepEqual(detected.Apps, named.Apps) {
-		t.Errorf("detected root app = %+v, want it shaped as the same root named under \"apps\": %+v", detected.Apps[0], named.Apps[0])
-	}
-
-	resolved, err := detected.ResolveComputes([]string{"serverless", "container"}, "fake")
-	if err != nil {
-		t.Fatalf("ResolveComputes() error = %v", err)
-	}
-	if got := resolved.Apps[0].Compute; got != provider.ComputeContainer {
-		t.Errorf("compute = %q, want %q: the provider runs containers, and only a container serves this app", got, provider.ComputeContainer)
-	}
-	_, err = detected.ResolveComputes([]string{"serverless"}, "fake")
-	if err == nil || !strings.Contains(err.Error(), "start script") || !strings.Contains(err.Error(), "entrypoint") {
-		t.Errorf("ResolveComputes() error = %v, want it to say only a container serves the start script, and to add an entrypoint", err)
-	}
-}
-
 func TestAProjectNamingNoAppsHasNoAppAtARootNoBuildWouldServe(t *testing.T) {
 	t.Parallel()
 
@@ -99,10 +63,13 @@ func TestAProjectNamingNoAppsHasNoAppAtARootNoBuildWouldServe(t *testing.T) {
 		files map[string]string
 		why   string
 	}{
-		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next or @sveltejs/kit dependency, no start script, no main and no entrypoint among src/server.ts"},
+		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next or @sveltejs/kit dependency and no entrypoint among src/server.ts"},
 		{"a go module whose main package is under cmd", map[string]string{"go.mod": "module example.com/api\n", "cmd/api/main.go": "package main\n\nfunc main() {}\n"}, "a go.mod with no package main in its own directory"},
 		{"a crate building two binaries", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"api\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"migrate\"\npath = \"src/migrate.rs\"\n"}, "a Cargo.toml building 2 binaries, where an app builds one"},
 		{"a pyproject.toml with no main.py", map[string]string{"pyproject.toml": "[project]\nname = \"helpers\"\n"}, "a pyproject.toml with no main.py"},
+		{"a package.json that is not JSON", map[string]string{nodeManifest: "{"}, "a package.json that cannot be read"},
+		{"a Cargo.toml that is not TOML", map[string]string{"Cargo.toml": "[package\n", "src/main.rs": "fn main() {}\n"}, "a Cargo.toml that cannot be read"},
+		{"a crate inheriting its edition from no workspace", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, "a Cargo.toml that cannot be read"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

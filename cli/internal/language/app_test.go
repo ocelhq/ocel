@@ -17,42 +17,36 @@ func TestDetectAppFindsTheAppEachLanguagesBuildWouldServe(t *testing.T) {
 	cases := []struct {
 		name  string
 		files map[string]string
-		want  language.App
+		want  string
 	}{
-		{"a next dependency", map[string]string{"package.json": `{"dependencies":{"next":"15"}}`}, language.App{Framework: "next"}},
-		{"a next config", map[string]string{"package.json": `{}`, "next.config.mjs": "export default {}\n"}, language.App{Framework: "next"}},
-		{"a sveltekit dependency", map[string]string{"package.json": `{"devDependencies":{"@sveltejs/kit":"2"}}`}, language.App{Framework: "sveltekit"}},
-		{"a node entrypoint under src", map[string]string{"package.json": `{}`, "src/server.ts": "export {}\n"}, language.App{Framework: "node"}},
-		{"a node entrypoint at the root", map[string]string{"package.json": `{}`, "app.js": "\n"}, language.App{Framework: "node"}},
-		{"a start script", map[string]string{"package.json": `{"scripts":{"start":"node dist/main.js"}}`, "src/main.ts": "export {}\n"}, language.App{Framework: "node", ContainerStart: "start script"}},
-		{"a main the build writes", map[string]string{"package.json": `{"main":"dist/main.js","scripts":{"build":"tsc"}}`}, language.App{Framework: "node", ContainerStart: "main dist/main.js"}},
-		{"a main that is there", map[string]string{"package.json": `{"main":"lib/main.js"}`, "lib/main.js": "\n"}, language.App{Framework: "node", ContainerStart: "main lib/main.js"}},
-		{"an index.mjs", map[string]string{"package.json": `{}`, "index.mjs": "\n"}, language.App{Framework: "node", ContainerStart: "index.mjs"}},
-		{"a main.py", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, language.App{Framework: "python"}},
-		{"a main.py beside requirements.txt", map[string]string{"requirements.txt": "fastapi\n", "main.py": "\n"}, language.App{Framework: "python"}},
-		{"a main package in the directory", map[string]string{"go.mod": "module example.com/api\n", "main.go": mainGo}, language.App{Framework: "go"}},
-		{"a main package built without cgo", map[string]string{"go.mod": "module example.com/api\n", "main.go": "//go:build !cgo\n\n" + mainGo}, language.App{Framework: "go"}},
-		{"a crate building src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "src/main.rs": "fn main() {}\n"}, language.App{Framework: "rust"}},
-		{"a crate building one named bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, language.App{Framework: "rust"}},
-		{"a crate naming src/main.rs as its one bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n", "src/main.rs": "fn main() {}\n"}, language.App{Framework: "rust"}},
-		{"an edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, language.App{Framework: "rust"}},
-		{"a workspace edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[workspace]\n\n[workspace.package]\nedition = \"2015\"\n\n[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, language.App{Framework: "rust"}},
+		{"a next dependency", map[string]string{"package.json": `{"dependencies":{"next":"15"}}`}, "next"},
+		{"a next config", map[string]string{"package.json": `{}`, "next.config.mjs": "export default {}\n"}, "next"},
+		{"a sveltekit dependency", map[string]string{"package.json": `{"devDependencies":{"@sveltejs/kit":"2"}}`}, "sveltekit"},
+		{"a node entrypoint under src", map[string]string{"package.json": `{}`, "src/server.ts": "export {}\n"}, "node"},
+		{"a node entrypoint at the root", map[string]string{"package.json": `{}`, "app.js": "\n"}, "node"},
+		{"a main.py", map[string]string{"pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, "python"},
+		{"a main.py beside requirements.txt", map[string]string{"requirements.txt": "fastapi\n", "main.py": "\n"}, "python"},
+		{"a main package in the directory", map[string]string{"go.mod": "module example.com/api\n", "main.go": mainGo}, "go"},
+		{"a main package built without cgo", map[string]string{"go.mod": "module example.com/api\n", "main.go": "//go:build !cgo\n\n" + mainGo}, "go"},
+		{"a crate building src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"a crate building one named bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, "rust"},
+		{"a crate naming src/main.rs as its one bin", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"an edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, "rust"},
+		{"a workspace edition 2015 crate whose declared bin hides src/main.rs", map[string]string{"Cargo.toml": "[workspace]\n\n[workspace.package]\nedition = \"2015\"\n\n[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n", "src/main.rs": "fn main() {}\n"}, "rust"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := language.DetectApp(dirWithFiles(t, tc.files))
 			if err != nil || got != tc.want {
-				t.Errorf("DetectApp = %+v, %v, want %+v", got, err, tc.want)
+				t.Errorf("DetectApp = %q, %v, want %q", got, err, tc.want)
 			}
 		})
 	}
 }
 
-const nodeLack = "a package.json with no next or @sveltejs/kit dependency, no start script, no main and no entrypoint among "
-
-func nodeEntrypointsTried() string {
-	return strings.Join(language.NodeEntrypoints, ", ") + ", index.mjs, index.cjs"
+func nodeLack() string {
+	return "a package.json with no next or @sveltejs/kit dependency and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", ")
 }
 
 func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
@@ -66,12 +60,12 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 		{
 			"a package.json with no framework and no entrypoint",
 			map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`},
-			nodeLack + nodeEntrypointsTried(),
+			nodeLack(),
 		},
 		{
-			"a package.json whose main names a file nothing writes",
-			map[string]string{"package.json": `{"main":"index.js","scripts":{"test":"exit 1"}}`},
-			nodeLack + nodeEntrypointsTried(),
+			"a package.json with only a start script, a main and an index.mjs",
+			map[string]string{"package.json": `{"main":"index.mjs","scripts":{"start":"node index.mjs"}}`, "index.mjs": "\n"},
+			nodeLack(),
 		},
 		{
 			"a go module whose main package needs cgo",
@@ -96,7 +90,7 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 		{
 			"a package.json with no app beside the crate of its native extension",
 			map[string]string{"package.json": `{}`, "Cargo.toml": "[package]\nname = \"addon\"\n", "src/main.rs": "fn main() {}\n"},
-			nodeLack + nodeEntrypointsTried() + " and a Cargo.toml read as a native extension, not as an app",
+			nodeLack() + " and a Cargo.toml read as a native extension, not as an app",
 		},
 		{
 			"a go module whose main package is under cmd",
@@ -126,7 +120,7 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 		{
 			"two manifests, neither holding an app",
 			map[string]string{"package.json": `{}`, "pyproject.toml": "[project]\nname = \"helpers\"\n"},
-			"a pyproject.toml with no main.py and " + nodeLack + nodeEntrypointsTried(),
+			"a pyproject.toml with no main.py and " + nodeLack(),
 		},
 	}
 	for _, tc := range cases {
@@ -135,7 +129,7 @@ func TestDetectAppFindsNoAppWhereNoBuildWouldServeOne(t *testing.T) {
 			got, err := language.DetectApp(dirWithFiles(t, tc.files))
 			var missing *language.NoAppError
 			if !errors.As(err, &missing) {
-				t.Fatalf("DetectApp = %+v, %v, want a NoAppError", got, err)
+				t.Fatalf("DetectApp = %q, %v, want a NoAppError", got, err)
 			}
 			if missing.Holdings() != tc.want {
 				t.Errorf("Holdings = %q, want %q", missing.Holdings(), tc.want)
@@ -164,12 +158,30 @@ func TestDetectAppRefusesToChooseBetweenTwoApps(t *testing.T) {
 	}
 }
 
-func TestDetectAppRefusesAPackageJSONThatIsNotJSON(t *testing.T) {
+func TestDetectAppFindsNoAppInAManifestThatCannotBeRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := language.DetectApp(dirWithFiles(t, map[string]string{"package.json": "{"}))
-	if err == nil || !strings.Contains(err.Error(), "is not JSON") {
-		t.Fatalf("DetectApp err = %v, want the package.json refused", err)
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  string
+	}{
+		{"a package.json that is not JSON", map[string]string{"package.json": "{"}, "is not JSON"},
+		{"a Cargo.toml that is not TOML", map[string]string{"Cargo.toml": "[package\n", "src/main.rs": "fn main() {}\n"}, "is not TOML"},
+		{"a crate inheriting its edition from no workspace", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n", "src/server.rs": "fn main() {}\n"}, "no directory above it holds one"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := language.DetectApp(dirWithFiles(t, tc.files))
+			var missing *language.NoAppError
+			if !errors.As(err, &missing) {
+				t.Fatalf("DetectApp err = %v, want a NoAppError", err)
+			}
+			if !strings.Contains(missing.Holdings(), "cannot be read") || !strings.Contains(missing.Holdings(), tc.want) {
+				t.Errorf("Holdings = %q, want it to say the manifest cannot be read: %s", missing.Holdings(), tc.want)
+			}
+		})
 	}
 }
 
@@ -183,36 +195,11 @@ func TestADeclaredEntrypointDecidesWhichManifestHoldsTheApp(t *testing.T) {
 		"src/web/index.ts": "export {}\n",
 	})
 
-	if got, ok, err := language.Detect(dir, "cmd/api"); err != nil || !ok || got != language.Go {
-		t.Errorf("Detect = %q, %v, %v, want %q: package main is where the entrypoint points", got, ok, err, language.Go)
+	if got, found, err := language.DetectFramework(dir, "cmd/api"); err != nil || !found || got != "go" {
+		t.Errorf("DetectFramework = %q, %v, %v, want go: package main is where the entrypoint points", got, found, err)
 	}
-	if got, found, err := language.DetectFramework(dir, "cmd/api"); err != nil || !found || got.Framework != "go" {
-		t.Errorf("DetectFramework = %+v, %v, %v, want go", got, found, err)
-	}
-	if got, ok, err := language.Detect(dir, "src/web/index.ts"); err != nil || !ok || got != language.JS {
-		t.Errorf("Detect = %q, %v, %v, want %q: the entrypoint is a TypeScript file", got, ok, err, language.JS)
-	}
-}
-
-func TestAPackageJSONAContainerStartsIsToolingBesideAnAppInAnotherLanguage(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name  string
-		files map[string]string
-		want  language.Language
-	}{
-		{"a start script beside a go main package", map[string]string{"package.json": `{"scripts":{"start":"air"}}`, "go.mod": "module example.com/api\n", "main.go": mainGo}, language.Go},
-		{"an npm init main and a build script beside a main.py", map[string]string{"package.json": `{"main":"index.js","scripts":{"build":"tailwindcss -o static/app.css"}}`, "pyproject.toml": "[project]\nname = \"api\"\n", "main.py": "\n"}, language.Python},
-		{"a start script beside a go module with no main package", map[string]string{"package.json": `{"scripts":{"start":"node server.mjs"}}`, "go.mod": "module example.com/api\n", "cmd/api/main.go": mainGo}, language.JS},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got, ok, err := language.Detect(dirWithFiles(t, tc.files), ""); err != nil || !ok || got != tc.want {
-				t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, tc.want)
-			}
-		})
+	if got, found, err := language.DetectFramework(dir, "src/web/index.ts"); err != nil || !found || got != "next" {
+		t.Errorf("DetectFramework = %q, %v, %v, want next: the entrypoint is a TypeScript file, and the package.json names next", got, found, err)
 	}
 }
 
@@ -223,7 +210,7 @@ func TestAManifestThatCannotBeReadHoldsNoAppBesideOneThatDoes(t *testing.T) {
 		name  string
 		files map[string]string
 	}{
-		{"a package.json whose main is no string", map[string]string{"package.json": `{"main":1}`}},
+		{"a package.json that is not JSON", map[string]string{"package.json": "{"}},
 		{"a crate inheriting an edition no workspace sets", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\nedition.workspace = true\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n"}},
 	}
 	for _, tc := range cases {
@@ -232,22 +219,23 @@ func TestAManifestThatCannotBeReadHoldsNoAppBesideOneThatDoes(t *testing.T) {
 			tc.files["go.mod"] = "module example.com/api\n"
 			tc.files["main.go"] = mainGo
 			dir := dirWithFiles(t, tc.files)
-			if got, ok, err := language.Detect(dir, ""); err != nil || !ok || got != language.Go {
+			if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.Go {
 				t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.Go)
 			}
-			if got, err := language.DetectApp(dir); err != nil || got.Framework != "go" {
-				t.Errorf("DetectApp = %+v, %v, want the go app", got, err)
+			if got, err := language.DetectApp(dir); err != nil || got != "go" {
+				t.Errorf("DetectApp = %q, %v, want the go app", got, err)
 			}
 		})
 	}
 }
 
-func TestAManifestThatCannotBeReadIsRefusedWhereNoOtherHoldsAnApp(t *testing.T) {
+func TestAManifestThatCannotBeReadLeavesTheLanguageUndecidedWhereNoOtherHoldsAnApp(t *testing.T) {
 	t.Parallel()
 
-	dir := dirWithFiles(t, map[string]string{"package.json": `{"main":1}`, "go.mod": "module example.com/api\n"})
-	if _, _, err := language.Detect(dir, ""); err == nil || !strings.Contains(err.Error(), "is not JSON") {
-		t.Errorf("Detect err = %v, want the package.json refused", err)
+	dir := dirWithFiles(t, map[string]string{"package.json": "{", "go.mod": "module example.com/api\n"})
+	var ambiguity *language.AmbiguityError
+	if _, _, err := language.Detect(dir); !errors.As(err, &ambiguity) || !strings.Contains(ambiguity.Holdings(), "a package.json that cannot be read") {
+		t.Errorf("Detect err = %v, want an AmbiguityError saying the package.json cannot be read", err)
 	}
 }
 
@@ -257,38 +245,26 @@ func TestADeclaredEntrypointIsReadWhereTheBuildReadsIt(t *testing.T) {
 	dir := dirWithFiles(t, map[string]string{
 		"go.mod":           "module example.com/api\n",
 		"cmd/api/main.go":  mainGo,
-		"package.json":     `{"dependencies":{"next":"15"}}`,
+		"package.json":     `{}`,
 		"src/web/index.ts": "export {}\n",
 	})
 
 	cases := []struct {
 		name       string
 		entrypoint string
-		want       language.Language
+		want       string
 	}{
-		{"an absolute path to a TypeScript file", filepath.Join(dir, "src", "web", "index.ts"), language.JS},
-		{"a JavaScript file the build writes", "dist/server.js", language.JS},
-		{"a go file the build writes", "cmd/gen/main.go", language.Go},
-		{"a directory the build writes", "cmd/gen", language.Go},
+		{"an absolute path to a TypeScript file", filepath.Join(dir, "src", "web", "index.ts"), "node"},
+		{"a JavaScript file the build writes", "dist/server.js", "node"},
+		{"a go file the build writes", "cmd/gen/main.go", "go"},
+		{"a directory the build writes", "cmd/gen", "go"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got, ok, err := language.Detect(dir, tc.entrypoint); err != nil || !ok || got != tc.want {
-				t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, tc.want)
+			if got, found, err := language.DetectFramework(dir, tc.entrypoint); err != nil || !found || got != tc.want {
+				t.Errorf("DetectFramework = %q, %v, %v, want %q", got, found, err, tc.want)
 			}
 		})
-	}
-}
-
-func TestDetectFrameworkSaysWhatAContainerStartsWhereNothingElseServesTheApp(t *testing.T) {
-	t.Parallel()
-
-	dir := dirWithFiles(t, map[string]string{"package.json": `{"scripts":{"start":"node dist/main.js"}}`, "src/main.ts": "export {}\n"})
-	if got, found, err := language.DetectFramework(dir, ""); err != nil || !found || got != (language.App{Framework: "node", ContainerStart: "start script"}) {
-		t.Errorf("DetectFramework = %+v, %v, %v, want a node app its start script serves", got, found, err)
-	}
-	if got, found, err := language.DetectFramework(dir, "src/main.ts"); err != nil || !found || got != (language.App{Framework: "node"}) {
-		t.Errorf("DetectFramework = %+v, %v, %v, want a node app served from its entrypoint", got, found, err)
 	}
 }

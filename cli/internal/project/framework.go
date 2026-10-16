@@ -9,32 +9,32 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-func detectFramework(dir, entrypoint string) (language.App, error) {
-	detected, found, err := language.DetectFramework(dir, entrypoint)
+func detectFramework(dir, entrypoint string) (string, error) {
+	framework, found, err := language.DetectFramework(dir, entrypoint)
 	if err != nil || found {
-		return detected, err
+		return framework, err
 	}
-	return language.App{}, newInvalidConfigError(fmt.Errorf(
+	return "", newInvalidConfigError(fmt.Errorf(
 		"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
 		dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(buildoutput.Frameworks())),
 	), "")
 }
 
-func frameworkOf(app, dir, named, entrypoint string) (language.App, error) {
+func frameworkOf(app, dir, named, entrypoint string) (string, error) {
 	if named != "" {
 		if !buildoutput.IsKnownFramework(named) {
-			return language.App{}, newInvalidConfigError(fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks()))), "")
+			return "", newInvalidConfigError(fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks()))), "")
 		}
-		return language.App{Framework: named}, nil
+		return named, nil
 	}
 	if !isDir(dir) {
-		return language.App{}, nil
+		return "", nil
 	}
-	detected, err := detectFramework(dir, entrypoint)
+	framework, err := detectFramework(dir, entrypoint)
 	if err != nil {
-		return language.App{}, fmt.Errorf("app %q: %w", app, err)
+		return "", fmt.Errorf("app %q: %w", app, err)
 	}
-	return detected, nil
+	return framework, nil
 }
 
 func architectureOf(app string, declared string) (string, error) {

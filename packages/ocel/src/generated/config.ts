@@ -11,7 +11,7 @@ export interface OcelConfig {
     | "streaming"
     | "revalidation"
   )[];
-  /** The apps this project deploys. Left off, the project root is the app when it holds what a build serves: a next or @sveltejs/kit dependency, a node entrypoint such as src/server.ts or a start script, a main.py, package main in the root directory, or a crate building one binary. https://ocel.dev/docs/configuration#the-app-at-the-project-root lists each. */
+  /** The apps this project deploys. Left off, the project root is the app when it holds what a build serves: a next or @sveltejs/kit dependency, a node entrypoint such as src/server.ts, a main.py, package main in the root directory, or a crate building one binary. https://ocel.dev/docs/configuration#the-app-at-the-project-root lists each. */
   apps?: AppConfig[];
   /** Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is "@" followed by the name a record your own infrastructure published, such as "@warehouse", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves. */
   bindings?: {

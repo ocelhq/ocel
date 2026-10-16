@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -138,13 +139,13 @@ func TestANextAppWinsOverAPythonProjectWithNoMainPy(t *testing.T) {
 	if got, ok := language.Of(dir); !ok || got != language.JS {
 		t.Errorf("Of = %q, %v, want %q: the pyproject.toml holds no app python serves", got, ok, language.JS)
 	}
-	got, ok, err := language.Detect(dir, "")
+	got, ok, err := language.Detect(dir)
 	if err != nil || !ok || got != language.JS {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
 	}
 	framework, found, err := language.DetectFramework(dir, "")
-	if err != nil || !found || framework.Framework != "next" {
-		t.Errorf("DetectFramework = %+v, %v, %v, want next", framework, found, err)
+	if err != nil || !found || framework != "next" {
+		t.Errorf("DetectFramework = %q, %v, %v, want next", framework, found, err)
 	}
 }
 
@@ -156,7 +157,7 @@ func TestASvelteKitAppWinsOverARequirementsTxtWithNoMainPy(t *testing.T) {
 		"requirements.txt": "black\n",
 	})
 
-	if got, ok, err := language.Detect(dir, ""); err != nil || !ok || got != language.JS {
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.JS {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
 	}
 }
@@ -170,7 +171,7 @@ func TestDetectRefusesToChooseBetweenTwoLanguagesThatEachHoldAnApp(t *testing.T)
 		"main.py":        "app = None\n",
 	})
 
-	_, _, err := language.Detect(dir, "")
+	_, _, err := language.Detect(dir)
 	var ambiguity *language.AmbiguityError
 	if !errors.As(err, &ambiguity) {
 		t.Fatalf("Detect err = %v, want an AmbiguityError", err)
@@ -194,12 +195,12 @@ func TestDetectRefusesToChooseBetweenManifestsNoneOfWhichHoldsAnApp(t *testing.T
 		"pyproject.toml": "[project]\nname = \"helpers\"\n",
 	})
 
-	_, _, err := language.Detect(dir, "")
+	_, _, err := language.Detect(dir)
 	var ambiguity *language.AmbiguityError
 	if !errors.As(err, &ambiguity) {
 		t.Fatalf("Detect err = %v, want an AmbiguityError", err)
 	}
-	if want := "both a pyproject.toml and a package.json"; ambiguity.Holdings() != want {
+	if want := "both a pyproject.toml with no main.py and a package.json with no next or @sveltejs/kit dependency and no entrypoint among " + strings.Join(language.NodeEntrypoints, ", "); ambiguity.Holdings() != want {
 		t.Errorf("Holdings = %q, want %q", ambiguity.Holdings(), want)
 	}
 }
@@ -216,7 +217,7 @@ func TestANextAppWinsOverAGoModuleWithNoMainPackageBesideIt(t *testing.T) {
 	if got, ok := language.Of(dir); !ok || got != language.JS {
 		t.Errorf("Of = %q, %v, want %q: the go build compiles the directory itself, and its package is no main", got, ok, language.JS)
 	}
-	if got, ok, err := language.Detect(dir, ""); err != nil || !ok || got != language.JS {
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.JS {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
 	}
 }
@@ -234,7 +235,7 @@ func TestAGoMainPackageBesideANextPackageJSONIsAmbiguousAndReadAsGo(t *testing.T
 		t.Errorf("Of = %q, %v, want %q: between two apps the precedence decides what an image is built in", got, ok, language.Go)
 	}
 	var ambiguity *language.AmbiguityError
-	if _, _, err := language.Detect(dir, ""); !errors.As(err, &ambiguity) {
+	if _, _, err := language.Detect(dir); !errors.As(err, &ambiguity) {
 		t.Errorf("Detect err = %v, want an AmbiguityError", err)
 	}
 }
@@ -248,7 +249,7 @@ func TestAPackageJSONBesideAGoMainPackageWithNoEntrypointIsTheGoProjectsTooling(
 		"main.go":      "package main\n\nfunc main() {}\n",
 	})
 
-	if got, ok, err := language.Detect(dir, ""); err != nil || !ok || got != language.Go {
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.Go {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.Go)
 	}
 }
@@ -256,10 +257,10 @@ func TestAPackageJSONBesideAGoMainPackageWithNoEntrypointIsTheGoProjectsTooling(
 func TestDetectReadsADirectoryOfOneLanguageAsThatLanguage(t *testing.T) {
 	t.Parallel()
 
-	if got, ok, err := language.Detect(dirContaining(t, "pyproject.toml"), ""); err != nil || !ok || got != language.Python {
+	if got, ok, err := language.Detect(dirContaining(t, "pyproject.toml")); err != nil || !ok || got != language.Python {
 		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.Python)
 	}
-	if got, ok, err := language.Detect(dirContaining(t, "Dockerfile"), ""); err != nil || ok {
+	if got, ok, err := language.Detect(dirContaining(t, "Dockerfile")); err != nil || ok {
 		t.Errorf("Detect = %q, %v, %v, want no language", got, ok, err)
 	}
 }
