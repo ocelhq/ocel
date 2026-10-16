@@ -111,7 +111,8 @@ Fails when:
 
 - A per-deploy path writes to a key shared across deploys — one parameter, one record, one
   file — without a compare-and-set.
-- Per-deploy work could have been done once at bootstrap.
+- Per-deploy work could have been done once: at bootstrap, or by the first deploy or command
+  that needs it, recorded so that every later one pays a single read to skip it.
 - Parallelism is unbounded against a provider quota, with no backpressure.
 
 Ask "why is this per-deploy at all?" before "how do we make it concurrent-safe?" A
