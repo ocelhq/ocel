@@ -30,6 +30,7 @@ const (
 	partReady     = "ready"
 	partCurrent   = "current"
 	partBehind    = "behind"
+	partRetires   = "retires with"
 	addedDate     = "2006-01-02"
 	statusCommand = "ocel bootstrap status"
 )
@@ -143,6 +144,8 @@ func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
 				UsedBy:           part.GetUsedBy(),
 				IdleMonthlyFixed: part.IdleMonthlyFixed,
 				Currency:         part.GetCurrency(),
+
+				RetiresWithLastUser: part.GetRetiresWithLastUser(),
 			}
 			for _, resource := range part.GetResources() {
 				out.Resources = append(out.Resources, &resultv1.BootstrapPartResource{Kind: resource.GetKind(), Id: resource.GetId()})
@@ -268,6 +271,8 @@ func stateCell(part *contractv1.BootstrapPart, tier environmentv1.Tier) string {
 	switch {
 	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING:
 		return partCreating
+	case part.GetCurrent() && part.GetRetiresWithLastUser() && len(part.GetUsedBy()) > 0:
+		return partRetires + " " + strings.Join(part.GetUsedBy(), ", ")
 	case part.GetCurrent():
 		return partCurrent
 	}

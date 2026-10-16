@@ -507,6 +507,8 @@ message BootstrapPart {
   optional string idle_monthly_fixed = 9;
 
   string currency = 10;
+
+  bool retires_with_last_user = 11;
 }
 
 message BootstrapPartResource {

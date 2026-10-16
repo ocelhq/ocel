@@ -145,6 +145,22 @@ func TestBootstrapStatusAsJSONSaysWhichCommandAddedAPart(t *testing.T) {
 	t.Fatalf("json parts = %v, want an edge-kit part", parts)
 }
 
+func TestBootstrapStatusSaysAPartWithAnIdleCostRetiresWithTheProjectsThatUseIt(t *testing.T) {
+	project, invocation := statusProject(t)
+	project.Provider.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{
+		Name:                "balancer",
+		Current:             true,
+		UsedBy:              []string{"shop"},
+		RetiresWithLastUser: true,
+	})
+
+	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
+
+	if got, want := strings.Join(rowOf(t, out, "balancer"), " "), "balancer — shop — retires with shop"; got != want {
+		t.Errorf("balancer row = %q, want %q: the deploy or destroy that removes its last user takes it down", got, want)
+	}
+}
+
 func TestBootstrapStatusWithResourcesListsWhatEachPartHolds(t *testing.T) {
 	project, invocation := statusProject(t)
 

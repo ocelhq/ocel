@@ -673,20 +673,21 @@ func (x *BootstrapTierStatus) GetParts() []*BootstrapPartStatus {
 }
 
 type BootstrapPartStatus struct {
-	state            protoimpl.MessageState   `protogen:"open.v1"`
-	Name             string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Summary          string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	AddedBy          string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
-	AddedAt          string                   `protobuf:"bytes,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
-	State            string                   `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
-	Current          bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
-	UsedBy           []string                 `protobuf:"bytes,7,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
-	IdleMonthlyFixed *string                  `protobuf:"bytes,8,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
-	Currency         string                   `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
-	Resources        []*BootstrapPartResource `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
-	AddedWith        string                   `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState   `protogen:"open.v1"`
+	Name                string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Summary             string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	AddedBy             string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
+	AddedAt             string                   `protobuf:"bytes,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
+	State               string                   `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	Current             bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
+	UsedBy              []string                 `protobuf:"bytes,7,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
+	IdleMonthlyFixed    *string                  `protobuf:"bytes,8,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
+	Currency            string                   `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
+	Resources           []*BootstrapPartResource `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
+	AddedWith           string                   `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
+	RetiresWithLastUser bool                     `protobuf:"varint,12,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *BootstrapPartStatus) Reset() {
@@ -794,6 +795,13 @@ func (x *BootstrapPartStatus) GetAddedWith() string {
 		return x.AddedWith
 	}
 	return ""
+}
+
+func (x *BootstrapPartStatus) GetRetiresWithLastUser() bool {
+	if x != nil {
+		return x.RetiresWithLastUser
+	}
+	return false
 }
 
 type BootstrapPartResource struct {
@@ -4064,7 +4072,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13BootstrapTierStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x128\n" +
-	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\x8b\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xc0\x03\n" +
 	"\x13BootstrapPartStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -4078,7 +4086,8 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\tresources\x18\n" +
 	" \x03(\v2$.cli.result.v1.BootstrapPartResourceR\tresources\x12\x1d\n" +
 	"\n" +
-	"added_with\x18\v \x01(\tR\taddedWithB\x15\n" +
+	"added_with\x18\v \x01(\tR\taddedWith\x123\n" +
+	"\x16retires_with_last_user\x18\f \x01(\bR\x13retiresWithLastUserB\x15\n" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +

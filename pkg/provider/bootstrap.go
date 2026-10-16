@@ -51,14 +51,15 @@ type BootstrapStack struct {
 const BasePart = "base"
 
 type BootstrapPart struct {
-	Name               string
-	Summary            string
-	Current            bool
-	Digest             string
-	Resources          []PartResource
-	UsedBy             []string
-	UsedByEveryProject bool
-	Shape              *PartShape
+	Name                string
+	Summary             string
+	Current             bool
+	Digest              string
+	Resources           []PartResource
+	UsedBy              []string
+	UsedByEveryProject  bool
+	RetiresWithLastUser bool
+	Shape               *PartShape
 }
 
 type PartResource struct {
