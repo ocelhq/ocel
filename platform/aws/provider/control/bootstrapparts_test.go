@@ -9,6 +9,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -68,17 +69,32 @@ func TestAnAWSBootstrapsBaseHoldsTheResourcesOfItsCoreStack(t *testing.T) {
 	}
 }
 
+func TestAnAWSBootstrapsPartsStillReadWhenItsStacksResourcesCannotBeListed(t *testing.T) {
+	t.Parallel()
+	b := installedBootstrapper(t, environment.TierProduction)
+	b.CFN.(*teardownCFN).listing = &smithy.GenericAPIError{Code: "AccessDenied", Message: "not authorized to perform: cloudformation:ListStackResources"}
+
+	base := describeParts(t, b)[provider.BasePart]
+
+	if base.Resources != nil {
+		t.Errorf("base resources = %+v, want them unknown", base.Resources)
+	}
+	if base.Shape == nil || len(base.Shape.Resources) == 0 {
+		t.Errorf("base shape = %+v, want the core stack still priced", base.Shape)
+	}
+}
+
 func TestAnAWSBootstrapReportsItsBastionOnlyOnceAPortForwardHasMadeIt(t *testing.T) {
 	t.Parallel()
 	b := installedBootstrapper(t, environment.TierProduction)
-	if _, raised := describeParts(t, b)["bastion"]; raised {
+	if _, found := describeParts(t, b)["bastion"]; found {
 		t.Fatal("DescribeParts() reports a bastion no port forward made")
 	}
 
 	b.Bastion.ECS = &presentBastion{}
 
-	got, raised := describeParts(t, b)["bastion"]
-	if !raised || len(got.Resources) == 0 || got.Resources[0].ID != bastion.NameFor(environment.TierProduction) {
-		t.Errorf("bastion = %+v, %v, want it reported with its cluster", got, raised)
+	got, found := describeParts(t, b)["bastion"]
+	if !found || len(got.Resources) == 0 || got.Resources[0].ID != bastion.NameFor(environment.TierProduction) {
+		t.Errorf("bastion = %+v, %v, want it reported with its cluster", got, found)
 	}
 }

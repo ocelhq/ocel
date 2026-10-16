@@ -409,7 +409,7 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 			}),
 		},
 		{
-			Actions:   []string{"cloudformation:DescribeStacks"},
+			Actions:   []string{"cloudformation:DescribeStacks", "cloudformation:ListStackResources"},
 			Resources: r.BootstrapStacks,
 		},
 		{

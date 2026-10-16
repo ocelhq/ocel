@@ -468,6 +468,7 @@ type teardownCFN struct {
 
 	present   map[string]bootstrap.Deployed
 	resources map[string][]cfntypes.StackResourceSummary
+	listing   error
 	deleted   []string
 	describes int
 	described []string
@@ -496,6 +497,9 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 }
 
 func (c *teardownCFN) ListStackResources(_ context.Context, in *cloudformation.ListStackResourcesInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	if c.listing != nil {
+		return nil, c.listing
+	}
 	return &cloudformation.ListStackResourcesOutput{
 		StackResourceSummaries: c.resources[aws.ToString(in.StackName)],
 	}, nil

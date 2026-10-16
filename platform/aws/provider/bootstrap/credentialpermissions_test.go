@@ -339,6 +339,20 @@ func TestTheDeployCredentialIsGrantedGetFunctionConfiguration(t *testing.T) {
 	t.Error("the deploy credential does not grant lambda:GetFunctionConfiguration, so a log read cannot learn which log group a function writes to")
 }
 
+func TestEveryCredentialListsTheResourcesOfEveryBootstrapStackOfItsTier(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		for purpose, document := range map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc} {
+			grants := grantsOf(t, document)
+			for _, stack := range defaultNamespace.ScopedARNs(tier).BootstrapStacks {
+				if !grants[grant{action: "cloudformation:ListStackResources", resource: stack, condition: conditionJSON(t, nil)}] {
+					t.Errorf("the %s %s credential does not grant cloudformation:ListStackResources on %s, so `ocel bootstrap status --resources` cannot say what that stack holds", purpose, tier, stack)
+				}
+			}
+		}
+	}
+}
+
 func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
