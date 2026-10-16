@@ -60,6 +60,9 @@ func TestTheDeploymentURLIsInjectedUnderTheNameEachFrameworkReadsPublicValuesBy(
 		{"a node app gets no PUBLIC_OCEL_URL", "node", SvelteKitPublicURLEnvVar, false},
 		{"an app of no named framework gets no NEXT_PUBLIC_OCEL_URL", "", NextPublicURLEnvVar, false},
 		{"a go app gets no NEXT_PUBLIC_OCEL_URL", "go", NextPublicURLEnvVar, false},
+		{"a next app gets the host next resolves an unset metadataBase to", "next", NextMetadataBaseHostEnvVar, true},
+		{"a sveltekit app gets no host for next's metadataBase", "sveltekit", NextMetadataBaseHostEnvVar, false},
+		{"a node app gets no host for next's metadataBase", "node", NextMetadataBaseHostEnvVar, false},
 		{"another name is never injected", "next", "NEXT_PUBLIC_API_URL", false},
 	} {
 		if got := IsInjected(tc.framework, tc.key); got != tc.want {
