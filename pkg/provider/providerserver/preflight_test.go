@@ -151,6 +151,23 @@ func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	}
 }
 
+func TestPreflightRefusesAnOptionWhoamiRefusedRatherThanReportingTheCredentials(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.Credentials().(*fake.Credentials).RejectOption(`option "region" names "nowher", which is not a region fake offers`)
+
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Fatalf("Preflight() = %v, %v, want an %s refusal: an option is refused for what it names, whatever call met it first", resp, err, refusal.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), `option "region" names "nowher"`) {
+		t.Errorf("Preflight() refused with %q, want the option's own wording", err)
+	}
+}
+
 func questionIn(err error) *contractv1.Question {
 	var wire *connect.Error
 	if !errors.As(err, &wire) {
