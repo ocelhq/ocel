@@ -18,7 +18,9 @@ type probed struct {
 
 func (p probed) ServingRouter(context.Context, string) (router.Kind, error) { return p.router, nil }
 
-func (p probed) LastProbeFailure(string) string { return p.failure }
+func (p probed) LastProbeFailure(string) provider.ProbeFailure {
+	return provider.ProbeFailure{Cause: p.failure}
+}
 
 func cloudflareAnswers() map[string][]string {
 	answers := hereOnly()

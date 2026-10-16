@@ -148,7 +148,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	if kind != "" {
 		t.Errorf("ServingRouter() = %q, want nothing: no header is readable off a handshake the client refused", kind)
 	}
-	if cause := p.LastProbeFailure("shop.example.com"); !strings.Contains(cause, "x509") {
+	if cause := p.LastProbeFailure("shop.example.com").Cause; !strings.Contains(cause, "x509") {
 		t.Errorf("LastProbeFailure() = %q, want the chain the client refused: the cutover gives up after a full minute with nothing for the operator to act on", cause)
 	}
 }
@@ -180,13 +180,13 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	if _, err := p.ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if p.LastProbeFailure("shop.example.com") == "" {
+	if p.LastProbeFailure("shop.example.com").Cause == "" {
 		t.Fatal("a hostname the probe never reached has no cause, and this test states nothing about clearing one")
 	}
 	if _, err := p.ServingRouter(context.Background(), "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if cause := p.LastProbeFailure("shop.example.com"); cause != "" {
+	if cause := p.LastProbeFailure("shop.example.com").Cause; cause != "" {
 		t.Errorf("LastProbeFailure() = %q for a hostname that answered, and a stale cause is read out on whatever the cutover gives up on next", cause)
 	}
 }
@@ -313,7 +313,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	if kind != "" {
 		t.Errorf("ServingRouter() = %q, want nothing", kind)
 	}
-	if cause := p.LastProbeFailure("web.localhost"); !strings.Contains(cause, "fallback.localhost") {
+	if cause := p.LastProbeFailure("web.localhost").Cause; !strings.Contains(cause, "fallback.localhost") {
 		t.Errorf("LastProbeFailure() = %q, want what stopped the probe on the box", cause)
 	}
 }

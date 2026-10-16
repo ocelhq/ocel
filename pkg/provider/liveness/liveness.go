@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -42,7 +43,10 @@ func (d netDNS) CNAME(ctx context.Context, host string) (string, error) {
 	return d.resolver.LookupCNAME(ctx, host)
 }
 
-type ProbeUnanswered struct{ Cause string }
+type ProbeUnanswered struct {
+	Cause      string
+	HTTPStatus int
+}
 
 func (u ProbeUnanswered) Error() string { return u.Cause }
 
@@ -57,7 +61,7 @@ type Net struct {
 	IsLoopbackOnly func(ctx context.Context, hostname string) (bool, error)
 
 	mu           sync.Mutex
-	lastFailures map[string]string
+	lastFailures map[string]provider.ProbeFailure
 }
 
 func (l *Net) ServingRouter(ctx context.Context, hostname string) (router.Kind, error) {
@@ -65,12 +69,12 @@ func (l *Net) ServingRouter(ctx context.Context, hostname string) (router.Kind, 
 	var unanswered ProbeUnanswered
 	switch {
 	case err == nil:
-		l.record(hostname, "")
+		l.record(hostname, provider.ProbeFailure{})
 		return answered, nil
 	case ctx.Err() != nil:
 		return "", ctx.Err()
 	case errors.As(err, &unanswered):
-		l.record(hostname, unanswered.Cause)
+		l.record(hostname, provider.ProbeFailure{Cause: unanswered.Cause, HTTPStatus: unanswered.HTTPStatus})
 		return "", nil
 	default:
 		return "", err
@@ -85,23 +89,23 @@ func (l *Net) CNAME(ctx context.Context, host string) (string, error) {
 	return l.system().CNAME(ctx, host)
 }
 
-func (l *Net) LastProbeFailure(hostname string) string {
+func (l *Net) LastProbeFailure(hostname string) provider.ProbeFailure {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.lastFailures[hostname]
 }
 
-func (l *Net) record(hostname, cause string) {
+func (l *Net) record(hostname string, failure provider.ProbeFailure) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if cause == "" {
+	if failure.Cause == "" {
 		delete(l.lastFailures, hostname)
 		return
 	}
 	if l.lastFailures == nil {
-		l.lastFailures = map[string]string{}
+		l.lastFailures = map[string]provider.ProbeFailure{}
 	}
-	l.lastFailures[hostname] = cause
+	l.lastFailures[hostname] = failure
 }
 
 func (l *Net) probe(ctx context.Context, hostname string) (router.Kind, error) {
@@ -172,7 +176,14 @@ func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []
 	}
 	defer said.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(said.Body, 1<<12))
-	return router.Kind(strings.TrimSpace(said.Header.Get(router.HeaderRouter))), nil
+	named := router.Kind(strings.TrimSpace(said.Header.Get(router.HeaderRouter)))
+	if named == "" {
+		return "", ProbeUnanswered{
+			Cause:      fmt.Sprintf("%s answered %d without %s", hostname, said.StatusCode, router.HeaderRouter),
+			HTTPStatus: said.StatusCode,
+		}
+	}
+	return named, nil
 }
 
 func (l *Net) dial(ctx context.Context, network, address string) (net.Conn, error) {

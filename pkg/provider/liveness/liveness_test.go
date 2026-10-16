@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -133,6 +134,47 @@ func TestTheLivenessProbeReadsWhichRouterAnswersOffItsMarkerAndNotItsStatus(t *t
 	}
 }
 
+func TestAnAnswerThatNamesNoRouterIsUnservedAndRecordsWhatAnswered(t *testing.T) {
+	t.Parallel()
+
+	probe := resolvedAt(t, "", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
+	if err != nil || kind != "" {
+		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
+	}
+	failure := probe.LastProbeFailure("shop.example.com")
+	if failure.HTTPStatus != http.StatusUnauthorized {
+		t.Errorf("LastProbeFailure().HTTPStatus = %d, want the 401 the hostname answered with: a hostname that answers over HTTP resolves and connects, and reads unlike one that does neither", failure.HTTPStatus)
+	}
+	if want := "shop.example.com answered 401 without " + router.HeaderRouter; failure.Cause != want {
+		t.Errorf("LastProbeFailure().Cause = %q, want %q", failure.Cause, want)
+	}
+}
+
+func TestAnAnswerThatNamesTheRouterClearsTheLastFailure(t *testing.T) {
+	t.Parallel()
+
+	named := false
+	probe := resolvedAt(t, "", func(w http.ResponseWriter, _ *http.Request) {
+		if named {
+			w.Header().Set(router.HeaderRouter, "cloudflare")
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	if _, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	named = true
+	if kind, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil || kind != "cloudflare" {
+		t.Fatalf("Serving() = %q, %v, want cloudflare", kind, err)
+	}
+	if failure := probe.LastProbeFailure("shop.example.com"); failure != (provider.ProbeFailure{}) {
+		t.Errorf("LastProbeFailure() = %+v for a hostname whose router answered, want none", failure)
+	}
+}
+
 func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testing.T) {
 	t.Parallel()
 
@@ -203,7 +245,7 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
 	}
-	if cause := probe.LastProbeFailure("shop.example.com"); !strings.Contains(cause, "x509") {
+	if cause := probe.LastProbeFailure("shop.example.com").Cause; !strings.Contains(cause, "x509") {
 		t.Errorf("LastProbeFailure() = %q, want the refused chain", cause)
 	}
 }
@@ -241,7 +283,7 @@ func TestAHostnameTheSystemResolverCannotSeeYetIsLocatedOffAnyOneOfItsZonesNames
 
 	kind, err := probe.ServingRouter(context.Background(), "shop.example.com")
 	if err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the router located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.LastProbeFailure("shop.example.com"))
+		t.Fatalf("Serving() = %q, %v (%s), want the router located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.LastProbeFailure("shop.example.com").Cause)
 	}
 }
 
@@ -256,7 +298,7 @@ func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameservers(t *testing.T) {
 
 	kind, err := probe.ServingRouter(context.Background(), "shop.example.co.uk")
 	if err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.LastProbeFailure("shop.example.co.uk"))
+		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.LastProbeFailure("shop.example.co.uk").Cause)
 	}
 }
 
@@ -270,7 +312,7 @@ func TestAHostnameTwoLabelsBelowItsZoneFindsTheZoneAboveIt(t *testing.T) {
 		})
 
 	if kind, err := probe.ServingRouter(context.Background(), "a.b.example.com"); err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s)", kind, err, probe.LastProbeFailure("a.b.example.com"))
+		t.Fatalf("Serving() = %q, %v (%s)", kind, err, probe.LastProbeFailure("a.b.example.com").Cause)
 	}
 }
 
@@ -284,7 +326,7 @@ func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
 		})
 
 	if kind, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the router where the alias the zone records resolves", kind, err, probe.LastProbeFailure("shop.example.com"))
+		t.Fatalf("Serving() = %q, %v (%s), want the router where the alias the zone records resolves", kind, err, probe.LastProbeFailure("shop.example.com").Cause)
 	}
 }
 
@@ -299,7 +341,7 @@ func TestAHostnameNoNameserverAnswersForYetIsUnservedAndSaysWhy(t *testing.T) {
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
-	cause := probe.LastProbeFailure("shop.example.com")
+	cause := probe.LastProbeFailure("shop.example.com").Cause
 	for _, named := range []string{"ns1.example.net", "ns2.example.net", "example.com"} {
 		if !strings.Contains(cause, named) {
 			t.Errorf("LastProbeFailure() = %q, want it to name %s", cause, named)
@@ -337,7 +379,7 @@ func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.
 
 	kind, err := probe.ServingRouter(context.Background(), "web.journey.test")
 	if err != nil || kind != "api-gateway" {
-		t.Fatalf("Serving() = %q, %v (%s), want the router the endpoint answered as", kind, err, probe.LastProbeFailure("web.journey.test"))
+		t.Fatalf("Serving() = %q, %v (%s), want the router the endpoint answered as", kind, err, probe.LastProbeFailure("web.journey.test").Cause)
 	}
 	if !slices.Equal(asked, []string{"web.journey.test"}) {
 		t.Errorf("the endpoint was asked for %v, want the hostname: the front routes on the name", asked)
@@ -413,7 +455,7 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	if !slices.Equal(asked, []string{"shop.localhost"}) {
 		t.Errorf("the loopback probe was asked %v", asked)
 	}
-	if cause := probe.LastProbeFailure("shop.localhost"); !strings.Contains(cause, "no certificate") {
+	if cause := probe.LastProbeFailure("shop.localhost").Cause; !strings.Contains(cause, "no certificate") {
 		t.Errorf("LastProbeFailure() = %q, want what the loopback probe said", cause)
 	}
 	if _, err := probe.ServingRouter(context.Background(), "shop.example.com"); err != nil {

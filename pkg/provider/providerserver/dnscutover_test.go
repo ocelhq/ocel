@@ -21,7 +21,7 @@ type answering struct {
 	asked int
 }
 
-func (*answering) LastProbeFailure(string) string { return "" }
+func (*answering) LastProbeFailure(string) provider.ProbeFailure { return provider.ProbeFailure{} }
 
 func (a *answering) ServingRouter(context.Context, string) (router.Kind, error) {
 	a.asked++
@@ -109,7 +109,7 @@ type boxProvider struct {
 
 func (p *boxProvider) Liveness() provider.Liveness { return p }
 
-func (*boxProvider) LastProbeFailure(string) string { return "" }
+func (*boxProvider) LastProbeFailure(string) provider.ProbeFailure { return provider.ProbeFailure{} }
 
 func (p *boxProvider) ServingRouter(_ context.Context, hostname string) (router.Kind, error) {
 	p.asked = append(p.asked, hostname)
@@ -123,7 +123,9 @@ type diagnosingProvider struct {
 
 func (p diagnosingProvider) Liveness() provider.Liveness { return p }
 
-func (p diagnosingProvider) LastProbeFailure(string) string { return p.cause }
+func (p diagnosingProvider) LastProbeFailure(string) provider.ProbeFailure {
+	return provider.ProbeFailure{Cause: p.cause}
+}
 
 type frontOf struct {
 	edge.Edge
@@ -179,7 +181,7 @@ type slowly struct {
 	asked *int
 }
 
-func (slowly) LastProbeFailure(string) string { return "" }
+func (slowly) LastProbeFailure(string) provider.ProbeFailure { return provider.ProbeFailure{} }
 
 func (s slowly) ServingRouter(context.Context, string) (router.Kind, error) {
 	*s.asked++
@@ -248,7 +250,7 @@ type answeringAfter struct {
 	kind  router.Kind
 }
 
-func (answeringAfter) LastProbeFailure(string) string { return "" }
+func (answeringAfter) LastProbeFailure(string) provider.ProbeFailure { return provider.ProbeFailure{} }
 
 func (a answeringAfter) ServingRouter(context.Context, string) (router.Kind, error) {
 	if a.clock.Before(a.at) {
@@ -259,7 +261,7 @@ func (a answeringAfter) ServingRouter(context.Context, string) (router.Kind, err
 
 type hanging struct{ asked *atomic.Int32 }
 
-func (hanging) LastProbeFailure(string) string { return "" }
+func (hanging) LastProbeFailure(string) provider.ProbeFailure { return provider.ProbeFailure{} }
 
 func (h hanging) ServingRouter(ctx context.Context, _ string) (router.Kind, error) {
 	h.asked.Add(1)
@@ -298,12 +300,15 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheCutoverAtItsDeadline(t
 }
 
 type stopped struct {
-	cause string
+	cause      string
+	httpStatus int
 }
 
 func (stopped) ServingRouter(context.Context, string) (router.Kind, error) { return "", nil }
 
-func (s stopped) LastProbeFailure(string) string { return s.cause }
+func (s stopped) LastProbeFailure(string) provider.ProbeFailure {
+	return provider.ProbeFailure{Cause: s.cause, HTTPStatus: s.httpStatus}
+}
 
 func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T) {
 	t.Parallel()
@@ -322,6 +327,40 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	}
 }
 
+func TestAHostnameThatAnsweredWithoutNamingTheRouterIsNotSentBackToDomainAdd(t *testing.T) {
+	t.Parallel()
+
+	cause := "shop.example.com answered 401 without x-ocel-router"
+	cutover, _ := waiting(stopped{cause: cause, httpStatus: 401}, 2)
+
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("await() = %v, want a not-ready refusal", err)
+	}
+	if !strings.Contains(refused.Message, cause) {
+		t.Errorf("await() refused with %q, want it to name what answered", refused.Message)
+	}
+	if strings.Contains(refused.Message, "ocel domain add") {
+		t.Errorf("await() refused with %q: the hostname resolves and answers over HTTP, so running `ocel domain add` again waits on the same answer", refused.Message)
+	}
+}
+
+func TestAHostnameThatNeverAnsweredOverHTTPIsSentBackToDomainAdd(t *testing.T) {
+	t.Parallel()
+
+	cutover, _ := waiting(stopped{cause: "shop.example.com resolves to nothing here (no such host)"}, 2)
+
+	_, err := cutover.await(context.Background(), "shop.example.com", "switchboard", func(string) {})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("await() = %v, want a refusal", err)
+	}
+	if !strings.Contains(refused.Message, "`ocel domain add` picks up where it stopped") {
+		t.Errorf("await() refused with %q, want it to say `ocel domain add` waits for a record that has not reached this machine yet", refused.Message)
+	}
+}
+
 type outlasting struct {
 	cause string
 }
@@ -330,7 +369,9 @@ func (outlasting) ServingRouter(context.Context, string) (router.Kind, error) {
 	return "", context.DeadlineExceeded
 }
 
-func (o outlasting) LastProbeFailure(string) string { return o.cause }
+func (o outlasting) LastProbeFailure(string) provider.ProbeFailure {
+	return provider.ProbeFailure{Cause: o.cause}
+}
 
 func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *testing.T) {
 	t.Parallel()

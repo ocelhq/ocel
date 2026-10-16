@@ -263,13 +263,19 @@ func (s dnsCutover) attempt(ctx context.Context, hostname string) (router.Kind, 
 func (s dnsCutover) unresolved(hostname string, serving router.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
-		failure := s.lastProbeFailure(hostname)
+		failure := s.liveness.LastProbeFailure(hostname)
+		said := describeProbeFailure(failure)
 		if outlasted != "" {
-			failure += ", and " + outlasted
+			said += ", and " + outlasted
+		}
+		if failure.HTTPStatus != 0 && outlasted == "" {
+			return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
+				"%s does not answer through %s yet%s — this run gave up after about %s",
+				hostname, describeFront(s.kind), said, waited))
 		}
 		return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer through %s yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, describeFront(s.kind), failure, waited))
+			hostname, describeFront(s.kind), said, waited))
 	}
 	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 		"%s is answered by another front, not through %s this project deploys to — this run gave up after about %s",
@@ -277,9 +283,12 @@ func (s dnsCutover) unresolved(hostname string, serving router.Kind, began time.
 }
 
 func (s dnsCutover) lastProbeFailure(hostname string) string {
-	cause := s.liveness.LastProbeFailure(hostname)
-	if cause == "" {
+	return describeProbeFailure(s.liveness.LastProbeFailure(hostname))
+}
+
+func describeProbeFailure(failure provider.ProbeFailure) string {
+	if failure.Cause == "" {
 		return ""
 	}
-	return ", and the last attempt to reach it ended in: " + cause
+	return ", and the last attempt to reach it ended in: " + failure.Cause
 }
