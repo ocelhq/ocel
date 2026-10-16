@@ -115,7 +115,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap), forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart}, nil
+	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap), forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, repairParts: p.repairParts}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }

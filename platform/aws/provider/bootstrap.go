@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -25,6 +26,7 @@ type forgetting struct {
 	region    string
 
 	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
+	repairParts   func(ctx context.Context, tier environment.Tier) ([]string, error)
 }
 
 func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
@@ -58,6 +60,9 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 		return err
 	}
 	s.forget()
+	if err := s.repair(ctx, req.Tier, progress); err != nil {
+		return err
+	}
 	if sealing == "" {
 		return nil
 	}
@@ -66,6 +71,32 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 		return err
 	}
 	return envsource.ForgetDigestKey(ctx, s.keyValues, req.Tier)
+}
+
+func (s forgetting) repair(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	if s.repairParts == nil {
+		return nil
+	}
+	repaired, err := s.repairParts(ctx, tier)
+	if err != nil || progress == nil {
+		return err
+	}
+	for _, part := range repaired {
+		progress.Say("Made the " + part + " part again from this build, mending any drift")
+	}
+	return nil
+}
+
+func (p *Provider) repairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
+	var works []stackrecords.PartWork
+	sync, keyed, err := p.envSourceSyncWork(ctx, tier, "")
+	if err != nil {
+		return nil, err
+	}
+	if keyed {
+		works = append(works, sync)
+	}
+	return stackrecords.RepairBootstrapParts(ctx, p.KeyValues(), tier, works)
 }
 
 func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {

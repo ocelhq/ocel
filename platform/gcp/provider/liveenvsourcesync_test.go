@@ -110,6 +110,16 @@ func TestLiveTheFirstScheduledEnvSourceRunsItsTiersSyncAndRemovingTheTierTakesIt
 		}
 	}
 
+	if _, err := schedules(t).Projects.Locations.Jobs.Pause(schedule, &cloudscheduler.PauseJobRequest{}).Context(ctx).Do(); err != nil {
+		t.Fatalf("Pause(%s) = %v", schedule, err)
+	}
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) again = %v", tier, err)
+	}
+	if resumed, err := schedules(t).Projects.Locations.Jobs.Get(schedule).Context(ctx).Do(); err != nil || resumed.State != "ENABLED" {
+		t.Errorf("the schedule paused by hand reads %+v (%v) once ocel bootstrap ran, want it calling the sync again", resumed, err)
+	}
+
 	account := "projects/" + liveProject() + "/serviceAccounts/" + names.EnvSourceSyncAccountEmail(tier)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(account).Context(ctx).Do(); err != nil {
 		t.Errorf("Get(%s) after a bootstrap = %v, want the account", account, err)

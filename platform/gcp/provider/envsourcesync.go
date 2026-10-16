@@ -49,22 +49,40 @@ func (b bootstrap) syncResources(tier environment.Tier) []provider.PartResource 
 }
 
 func (b bootstrap) ensureEnvSourceSync(ctx context.Context, tier environment.Tier, project string) error {
-	name := b.clients.EnvSourceSync(tier)
-	return stackrecords.EnsureBootstrapPart(ctx, b.records, tier, stackrecords.PartWork{
+	return stackrecords.EnsureBootstrapPart(ctx, b.records, tier, b.envSourceSyncWork(tier, project))
+}
+
+func (b bootstrap) envSourceSyncWork(tier environment.Tier, project string) stackrecords.PartWork {
+	return stackrecords.PartWork{
 		Name:      envSourceSyncPart,
 		WrittenBy: string(b.writtenBy),
 		Digest:    b.syncDigest(tier),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PartResource, error) {
-			if err := b.makeService(ctx, tier, name); err != nil {
-				return nil, err
-			}
-			if err := b.makeSchedule(ctx, tier, name); err != nil {
+			if err := b.mendEnvSourceSync(ctx, tier); err != nil {
 				return nil, err
 			}
 			return b.syncResources(tier), nil
 		},
-	})
+	}
+}
+
+func (b bootstrap) mendEnvSourceSync(ctx context.Context, tier environment.Tier) error {
+	name := b.clients.EnvSourceSync(tier)
+	service, err := b.servicePresence(ctx, tier, name)
+	if err != nil {
+		return err
+	}
+	if !service.present || service.mends != "" {
+		if err := b.makeService(ctx, tier, name); err != nil {
+			return err
+		}
+	}
+	schedule, err := b.schedulePresence(ctx, tier, name)
+	if err != nil || (schedule.present && schedule.mends == "") {
+		return err
+	}
+	return b.makeSchedule(ctx, tier, name)
 }
 
 func syncShape(name, region string) []pricing.Shaped {

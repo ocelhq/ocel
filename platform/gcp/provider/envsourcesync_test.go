@@ -68,6 +68,66 @@ func TestTheFirstScheduledEnvSourceAddsTheSyncServiceAndScheduleAsAPartItRecords
 	}
 }
 
+func TestABootstrapResumesAnEnvSourceSyncSchedulePausedByHand(t *testing.T) {
+	t.Parallel()
+	server, b := syncPartBootstrap(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	path := schedulePath(b.clients, b.clients.EnvSourceSync(tier))
+	if err := b.ensureEnvSourceSync(ctx, tier, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	server.change(func() { server.schedules[path].State = schedulePaused })
+
+	repaired, err := b.repairParts(ctx, tier)
+	if err != nil {
+		t.Fatalf("repairParts() = %v", err)
+	}
+
+	if !slices.Equal(repaired, []string{envSourceSyncPart}) {
+		t.Errorf("repairParts() = %v, want the env source sync made again", repaired)
+	}
+	if mended := server.schedule(path); mended == nil || mended.State != scheduleEnabled {
+		t.Errorf("the schedule is %s after a bootstrap, want it calling the sync again", encoded(t, mended))
+	}
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, envSourceSyncPart)
+	if err != nil || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
+		t.Errorf("part record = %+v (%v), want it ready and still added by shop", recorded, err)
+	}
+}
+
+func TestABootstrapLeavesACurrentEnvSourceSyncAsItIs(t *testing.T) {
+	t.Parallel()
+	server, b := syncPartBootstrap(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	if err := b.ensureEnvSourceSync(ctx, tier, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	pushes, patches := len(server.pushed), len(server.patched)
+
+	if _, err := b.repairParts(ctx, tier); err != nil {
+		t.Fatalf("repairParts() = %v", err)
+	}
+
+	if len(server.pushed) != pushes || len(server.patched) != patches {
+		t.Errorf("a bootstrap over a sync with no drift pushed or redeployed it, want it read and left alone")
+	}
+}
+
+func TestABootstrapAddsNoEnvSourceSyncNoScheduledEnvSourceAdded(t *testing.T) {
+	t.Parallel()
+	server, b := syncPartBootstrap(t)
+	tier := environment.TierProduction
+
+	if repaired, err := b.repairParts(context.Background(), tier); err != nil || len(repaired) != 0 {
+		t.Fatalf("repairParts() = %v, %v, want nothing made", repaired, err)
+	}
+	if server.service(b.clients.servicePath(b.clients.EnvSourceSync(tier))) != nil {
+		t.Error("a bootstrap made the env source sync, which only a scheduled env source adds")
+	}
+}
+
 func TestAnEnvSourceSyncANewerReleaseWroteIsLeftAlone(t *testing.T) {
 	t.Parallel()
 	server, b := syncPartBootstrap(t)
