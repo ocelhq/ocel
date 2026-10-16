@@ -41,7 +41,7 @@ func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testin
 	t.Parallel()
 
 	catalogue := bootstrap{}.Catalogue()
-	at := slices.IndexFunc(catalogue, func(f provider.Feature) bool { return f.Name == albShieldedFeature })
+	at := slices.IndexFunc(catalogue, func(f provider.Feature) bool { return f.Name == "cloudflare-origin" })
 	if at < 0 {
 		t.Fatalf("Catalogue() = %v, want the %q feature: the load balancer Cloudflare forwards to costs every month, and a recurring cost is consented to by being planned", catalogue, albShieldedFeature)
 	}

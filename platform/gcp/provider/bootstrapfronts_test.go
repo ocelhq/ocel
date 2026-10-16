@@ -289,8 +289,8 @@ func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichTier(t *testi
 	}
 
 	want := []string{
-		"INFO Installing feature alb-cloudflare-origin for production: " + b.Catalogue()[0].Summary,
-		"INFO Taking down the alb edge's front for preview: this bootstrap no longer requests feature alb-cloudflare-origin",
+		"INFO Installing feature cloudflare-origin for production: " + b.Catalogue()[0].Summary,
+		"INFO Taking down the alb edge's front for preview: this bootstrap no longer requests feature cloudflare-origin",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the bootstrap said %q, want %q", got, want)

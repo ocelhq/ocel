@@ -15,7 +15,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-const albShieldedFeature = "alb-cloudflare-origin"
+const albShieldedFeature = "cloudflare-origin"
 
 var (
 	albBaseAPIs     = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
