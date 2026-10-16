@@ -257,9 +257,15 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 }
 
 func (s costShape) containerInfra(scope string, tier environment.Tier) {
-	s.plain(scope, tfECSCluster, ContainersSlug, map[string]any{})
-	s.plain(scope, tfLoadBalancer, ContainersSlug, map[string]any{"load_balancer_type": "application", "internal": true})
-	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)})
+	s.tree.AddShaped(scope, vendor, s.region, ShapeContainerInfrastructure(tier))
+}
+
+func ShapeContainerInfrastructure(tier environment.Tier) []pricing.Shaped {
+	return []pricing.Shaped{
+		{Name: ContainersSlug, Type: tfECSCluster, Properties: map[string]any{}},
+		{Name: ContainersSlug, Type: tfLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
+		{Name: ContainersSlug, Type: tfLogGroup, Properties: map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)}},
+	}
 }
 
 func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
