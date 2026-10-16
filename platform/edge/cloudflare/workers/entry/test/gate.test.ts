@@ -264,6 +264,36 @@ describe("the gate on a project's preview worker", () => {
     expect(response.headers.get("x-robots-tag")).toBe("noindex");
     expect(wire.calls).toHaveLength(0);
   });
+
+  it("names the router on every response the gate answers itself", async () => {
+    const env = await projectEnv();
+    const answered = [
+      await visit(new Request(`https://${PROJECT_HOST}/.well-known/ocel-edge`), env),
+      await visit(
+        new Request(`https://${PROJECT_HOST}/.ocel/login`, {
+          method: "POST",
+          headers: { authorization: basic(PASSWORD) },
+        }),
+        env,
+      ),
+      await visit(
+        new Request(`https://${PROJECT_HOST}/users`, {
+          headers: { "x-ocel-bypass": BYPASS, "x-ocel-set-bypass-cookie": "true" },
+        }),
+        env,
+      ),
+      await visit(
+        new Request(`https://${PROJECT_HOST}/users`),
+        await projectEnv({ RELEASES: bindingHolding({ p1: "{not json" }) }),
+      ),
+    ];
+
+    expect(answered.map(({ response }) => response.status)).toEqual([401, 204, 303, 503]);
+    for (const { response, wire } of answered) {
+      expect(response.headers.get("x-ocel-router")).toBe("cloudflare");
+      expect(wire.calls).toHaveLength(0);
+    }
+  });
 });
 
 describe("the gate on a project's production worker", () => {
