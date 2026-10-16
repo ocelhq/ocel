@@ -388,6 +388,25 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	}
 }
 
+func TestRemoveProjectForgetsThePartsItWantedAndNoOtherProjectsWants(t *testing.T) {
+	client, vendor := deployedProject(t)
+	ctx := context.Background()
+	recordWant(t, vendor, fake.FeatureImages, "shop")
+	recordWant(t, vendor, fake.FeatureImages, "blog")
+
+	stream, err := client.RemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	if wants := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(wants[fake.FeatureImages], []string{"blog"}) {
+		t.Errorf("wants after the removal = %v, want blog's alone: shop is gone", wants)
+	}
+}
+
 func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 	t.Parallel()
 	client, _ := contractServed(t, "1.0.0")
