@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
@@ -23,4 +24,12 @@ func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 		}
 	}
 	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which router answers a hostname, so no hostname behind this load balancer is ever cut over", added, router.HeaderRouter, Kind)
+}
+
+func TestTheGatePluginNamesTheRouterTheURLMapNames(t *testing.T) {
+	t.Parallel()
+
+	if router.Kind(gateplugin.RouterKind) != router.Kind(Kind) {
+		t.Errorf("the gate plugin answers as %q and the url map as %q: a protected hostname answers the liveness probe through the plugin, so it reads as served by another front", gateplugin.RouterKind, Kind)
+	}
 }

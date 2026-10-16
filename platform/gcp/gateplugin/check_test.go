@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
 
@@ -178,4 +180,43 @@ func sessionCookie(held gate.Gate, host string, now time.Time) string {
 	cookie := held.Check(login, now).Response.Header.Get("Set-Cookie")
 	pair, _, _ := strings.Cut(cookie, ";")
 	return pair
+}
+
+func TestEveryResponseThePluginAnswersItselfNamesTheLoadBalancerAsTheRouter(t *testing.T) {
+	t.Parallel()
+
+	held := gate.Gate{Key: "k", BypassSecrets: []string{"bypass"}}
+	held.PasswordMAC = gate.HashPassword(held.Key, "pw")
+	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
+		map[string]string{"gated.example.dev": "shop"},
+		map[string]gate.Gate{"shop": held},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := map[int][][2]string{
+		401: {{":method", "GET"}, {":path", edge.LivenessProbePath}},
+		204: {{":method", "POST"}, {":path", gate.LoginPath}, {"authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte(":pw"))}},
+		303: {{":method", "GET"}, {":path", "/"}, {"x-ocel-bypass", "bypass"}, {"x-ocel-set-bypass-cookie", "true"}},
+	}
+	for status, pairs := range asked {
+		req := gateplugin.ReadRequest(append(pairs, [2]string{":authority", "gated.example.dev"}))
+
+		verdict := config.Check(req, time.Unix(1700000000, 0))
+
+		if verdict.Response == nil || verdict.Response.Status != status {
+			t.Fatalf("Check(%v) = %+v, want the plugin to answer %d itself", pairs, verdict, status)
+		}
+		if got := verdict.Response.Header.Get(router.HeaderRouter); got != gateplugin.RouterKind {
+			t.Errorf("the %d the plugin answers carries %s %q, want %q: an edge extension answers before the load balancer evaluates the URL map whose header action names the router, and without it the deploy's readiness probe reads a protected hostname as unserved", status, router.HeaderRouter, got, gateplugin.RouterKind)
+		}
+	}
+}
+
+func TestThePluginNamesTheRouterUnderTheHeaderTheProbeReads(t *testing.T) {
+	t.Parallel()
+
+	if gateplugin.RouterHeader != router.HeaderRouter {
+		t.Errorf("the plugin names the router under %q, want %q: the readiness probe reads that header and nothing else", gateplugin.RouterHeader, router.HeaderRouter)
+	}
 }

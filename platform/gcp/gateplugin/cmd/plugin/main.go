@@ -49,7 +49,7 @@ type httpContext struct {
 func (h *httpContext) OnHttpRequestHeaders(int, bool) types.Action {
 	pairs, err := proxywasm.GetHttpRequestHeaders()
 	if err != nil {
-		answer(500, nil)
+		answer(500, map[string][]string{gateplugin.RouterHeader: {gateplugin.RouterKind}})
 		return types.ActionPause
 	}
 	req := gateplugin.ReadRequest(pairs)
