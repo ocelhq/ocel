@@ -61,7 +61,7 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err != nil {
 		return nil, err
 	}
-	p := NewProvider(decoded, settings.Transforms, cfg, bootstrap.Namespace(ns))
+	p := NewProvider(decoded, settings.Transforms, addRegionCheck(cfg, decoded.Region), bootstrap.Namespace(ns))
 	p.projectDir = settings.ProjectDir
 	p.writtenBy = settings.WrittenBy
 	return p, nil

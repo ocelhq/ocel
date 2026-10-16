@@ -95,7 +95,10 @@ func refuseCallerIdentity(err error) error {
 	hasAPIError := errors.As(err, &apiErr)
 	var invalidToken *ssocreds.InvalidTokenError
 	var unsent *smithyhttp.RequestSendError
+	var refused refusal.Option
 	switch {
+	case errors.As(err, &refused):
+		return refused
 	case strings.Contains(err.Error(), "Missing Region"):
 		return refusal.Refuse(refusal.CodeInvalid, "%s: %v", regionHint, err)
 	case errors.As(err, &invalidToken),

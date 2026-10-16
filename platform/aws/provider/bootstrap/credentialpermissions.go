@@ -439,7 +439,7 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 			Resources: r.BootstrapStacks,
 		},
 		{
-			Actions:   []string{"sts:GetCallerIdentity"},
+			Actions:   []string{"ec2:DescribeRegions", "sts:GetCallerIdentity"},
 			Resources: []string{UnscopedResource},
 		},
 	}
