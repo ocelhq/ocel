@@ -32,7 +32,7 @@ func TestRunStamps(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if stale := deployed.Stale(featureNames()); len(stale) != 0 {
+		if stale := deployed.Stale(partNames()); len(stale) != 0 {
 			t.Errorf("a bootstrap this build just wrote reads as stale: %+v", stale)
 		}
 	})

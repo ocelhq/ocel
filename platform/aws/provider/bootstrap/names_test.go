@@ -49,8 +49,8 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 	return map[string]string{
 		"core stack":            production,
 		"preview core stack":    preview,
-		"feature stack":         n.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction),
-		"preview feature stack": n.FeatureStackName(FeatureCloudflareEdge, environment.TierPreview),
+		"part stack":            n.PartStackName(CloudflareEdgePart, environment.TierProduction),
+		"preview part stack":    n.PartStackName(CloudflareEdgePart, environment.TierPreview),
 		"passphrase param":      n.PassphraseParamFor(environment.TierProduction),
 		"edge user":             edgeUser,
 		"preview edge user":     edgeUserPreview,
@@ -83,8 +83,8 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 	want := map[string]string{
 		"core stack":            "ocel-bootstrap",
 		"preview core stack":    "ocel-bootstrap-preview",
-		"feature stack":         "ocel-bootstrap-cloudflare-edge",
-		"preview feature stack": "ocel-bootstrap-cloudflare-edge-preview",
+		"part stack":            "ocel-bootstrap-cloudflare-edge",
+		"preview part stack":    "ocel-bootstrap-cloudflare-edge-preview",
 		"passphrase param":      "/ocel/pulumi/passphrase",
 		"edge user":             "ocel-edge",
 		"preview edge user":     "ocel-edge-preview",
@@ -137,8 +137,8 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 	limits := map[string]int{
 		"core stack":            128,
 		"preview core stack":    128,
-		"feature stack":         128,
-		"preview feature stack": 128,
+		"part stack":            128,
+		"preview part stack":    128,
 		"passphrase param":      2048,
 		"edge user":             64,
 		"preview edge user":     64,

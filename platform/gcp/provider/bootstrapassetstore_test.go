@@ -287,8 +287,8 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 func TestACloudflareBootstrapChecksTheHMACKeyPermissionsAndAPlainOneDoesNot(t *testing.T) {
 	t.Parallel()
 	for _, permission := range assetStorePermissions {
-		if !slices.Contains(permissionsFor([]string{albShieldedFeature}), permission) {
-			t.Errorf("a %q bootstrap does not check %s, and the apply would fail when it mints the asset reader's key", albShieldedFeature, permission)
+		if !slices.Contains(permissionsFor([]string{cloudflareOriginPart}), permission) {
+			t.Errorf("a %q bootstrap does not check %s, and the apply would fail when it mints the asset reader's key", cloudflareOriginPart, permission)
 		}
 		if slices.Contains(permissionsFor(nil), permission) {
 			t.Errorf("a bootstrap that raises no Cloudflare front checks %s, and would refuse a credential for a key it never mints", permission)
@@ -305,7 +305,7 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 	b, registry := frontWithAssetReader(h)
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{cloudflareOriginPart}}
 	recorded := func() edgeCredentials {
 		credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, registry.front.Kind())
 		if err != nil {
@@ -321,7 +321,7 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 		t.Fatalf("raising the front left the active keys %v and credential %+v, want one key recorded", h.hmac.active(), recorded())
 	}
 
-	if err := b.tearFronts(t.Context(), environment.TierProduction, []string{albShieldedFeature}); err != nil {
+	if err := b.tearFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart}); err != nil {
 		t.Fatalf("tearFronts() = %v", err)
 	}
 	if len(h.hmac.keys) != 0 || len(h.iam.deletedAccounts) != 1 {
@@ -337,7 +337,7 @@ func TestRaisingAFrontThatRunsNoCodeRaisesNoAssetReader(t *testing.T) {
 	h := newAssetStoreHarness(t)
 	b, registry := frontWithAssetReader(h)
 	registry.front.runsCode = false
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{cloudflareOriginPart}}
 
 	if err := b.raiseFronts(t.Context(), req, nil); err != nil {
 		t.Fatalf("raiseFronts() = %v", err)
@@ -353,7 +353,7 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 	h := newAssetStoreHarness(t)
 	b, _ := frontWithAssetReader(h)
 
-	groups, err := b.plannedFronts(t.Context(), environment.TierProduction, []string{albShieldedFeature})
+	groups, err := b.plannedFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart})
 	if err != nil {
 		t.Fatalf("plannedFronts() = %v", err)
 	}
@@ -361,7 +361,7 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 		t.Fatalf("the plan = %+v, want one edge group that creates the reader's account and key", groups)
 	}
 
-	removed, err := b.removedFronts(t.Context(), environment.TierProduction, []string{albShieldedFeature})
+	removed, err := b.removedFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart})
 	if err != nil {
 		t.Fatalf("removedFronts() = %v", err)
 	}

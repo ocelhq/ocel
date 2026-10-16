@@ -118,7 +118,7 @@ func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, ke
 		return appBundle{Live: manifest, Referenced: referenced}, nil
 	}
 	if cfg.VariablesKeyARN == "" {
-		return appBundle{}, fmt.Errorf("app %s declares sensitive variables, and this account names no key to encrypt their data key under in the function's environment; bootstrap the variables-key feature first", app)
+		return appBundle{}, fmt.Errorf("app %s declares sensitive variables, and this account names no key to encrypt their data key under in the function's environment; bootstrap the variables-key part first", app)
 	}
 
 	key := make([]byte, baked.KeyBytes)

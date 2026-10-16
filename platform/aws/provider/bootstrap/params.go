@@ -66,11 +66,11 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier envi
 		}
 		adopted = append(adopted, changes...)
 	}
-	written, err := featureParams(ctx, apis, ns, tier, req, req.Features, func(f feature) paramChanges { return f.afterPlan })
+	written, err := partParams(ctx, apis, ns, tier, req, req.Parts, func(f part) paramChanges { return f.afterPlan })
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	severed, err := featureParams(ctx, apis, ns, tier, req, Removing(req.Features, req.Remove), func(f feature) paramChanges { return f.dropPlan })
+	severed, err := partParams(ctx, apis, ns, tier, req, Removing(req.Parts, req.Remove), func(f part) paramChanges { return f.dropPlan })
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -82,9 +82,9 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier envi
 
 type paramChanges func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request, named []string, hook func(feature) paramChanges) ([]provider.Change, error) {
+func partParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request, named []string, hook func(part) paramChanges) ([]provider.Change, error) {
 	var changes []provider.Change
-	for _, f := range featureRegistry {
+	for _, f := range partRegistry {
 		plan := hook(f)
 		if plan == nil || !slices.Contains(named, f.name) {
 			continue

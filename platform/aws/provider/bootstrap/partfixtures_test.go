@@ -25,28 +25,28 @@ func fixtureRefs() stackRefs {
 	}
 }
 
-func everyFeature() FeatureSet {
-	set := FeatureSet{}
-	for _, name := range featureNames() {
+func everyPart() PartSet {
+	set := PartSet{}
+	for _, name := range partNames() {
 		set[name] = true
 	}
 	return set
 }
 
-func featureTemplate(name string, tier environment.Tier) string {
-	return featureTemplateWith(name, tier, everyFeature())
+func partTemplate(name string, tier environment.Tier) string {
+	return partTemplateWith(name, tier, everyPart())
 }
 
-func featureTemplateWith(name string, tier environment.Tier, alongside FeatureSet) string {
-	return featureStackFor(name, tier, alongside).body
+func partTemplateWith(name string, tier environment.Tier, alongside PartSet) string {
+	return partStackFor(name, tier, alongside).body
 }
 
-func featureStackFor(name string, tier environment.Tier, alongside FeatureSet) featureStack {
-	f, ok := featureNamed(name)
+func partStackFor(name string, tier environment.Tier, alongside PartSet) partStack {
+	f, ok := partNamed(name)
 	if !ok {
-		panic("no feature named " + name)
+		panic("no part named " + name)
 	}
-	return renderedTemplate(f, featureInputs{
+	return renderedTemplate(f, partInputs{
 		ns:        defaultNamespace,
 		tier:      tier,
 		refs:      fixtureRefs(),
@@ -54,7 +54,7 @@ func featureStackFor(name string, tier environment.Tier, alongside FeatureSet) f
 	})
 }
 
-func renderedTemplate(f feature, in featureInputs) featureStack {
+func renderedTemplate(f part, in partInputs) partStack {
 	stack, err := f.template(in)
 	if err != nil {
 		panic(err)

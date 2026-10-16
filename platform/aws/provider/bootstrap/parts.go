@@ -13,10 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 )
 
-const FeatureCloudflareEdge = "cloudflare-edge"
+const CloudflareEdgePart = "cloudflare-edge"
 
 type stackRefs struct {
 	assetBucket         string
@@ -26,15 +25,15 @@ type stackRefs struct {
 	stateTableStreamARN string
 }
 
-type featureInputs struct {
+type partInputs struct {
 	ns           Namespace
 	tier         environment.Tier
 	refs         stackRefs
-	alongside    FeatureSet
+	alongside    PartSet
 	variablesKey string
 }
 
-type featureStack struct {
+type partStack struct {
 	body   string
 	params []cfntypes.Parameter
 }
@@ -47,63 +46,61 @@ type stepDeps struct {
 	progress progress.Log
 }
 
-type feature struct {
-	name      string
-	summary   string
-	dependsOn []string
-	edges     []edge.Kind
+type part struct {
+	name    string
+	summary string
+	edges   []edge.Kind
 
-	template  func(featureInputs) (featureStack, error)
+	template  func(partInputs) (partStack, error)
 	after     func(context.Context, stepDeps) error
 	afterPlan func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 	drop      func(context.Context, stepDeps) error
 	dropPlan  func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 }
 
-func (f feature) edgeKind() (edge.Kind, bool) {
+func (f part) edgeKind() (edge.Kind, bool) {
 	if len(f.edges) == 0 {
 		return edge.None, false
 	}
 	return f.edges[0], true
 }
 
-func (f feature) stackName(ns Namespace, tier environment.Tier) string {
-	return ns.featureStackName(f.name, tier)
+func (f part) stackName(ns Namespace, tier environment.Tier) string {
+	return ns.partStackName(f.name, tier)
 }
 
-var featureRegistry = []feature{
-	cloudflareEdgeFeature,
-	variablesKeyFeature,
+var partRegistry = []part{
+	cloudflareEdgePart,
+	variablesKeyPart,
 }
 
-func Catalogue() []provider.Feature {
-	out := make([]provider.Feature, 0, len(featureRegistry))
-	for _, f := range featureRegistry {
-		out = append(out, provider.Feature{
-			Name:      f.name,
-			Summary:   f.summary,
-			DependsOn: slices.Clone(f.dependsOn),
-			Edges:     slices.Clone(f.edges),
+func Parts() []provider.Part {
+	out := make([]provider.Part, 0, len(partRegistry))
+	for _, f := range partRegistry {
+		out = append(out, provider.Part{
+			Name:    f.name,
+			Summary: f.summary,
+			Edges:   slices.Clone(f.edges),
 		})
 	}
 	return out
 }
 
-func featureNamed(name string) (feature, bool) {
-	for _, f := range featureRegistry {
+func partNamed(name string) (part, bool) {
+	for _, f := range partRegistry {
 		if f.name == name {
 			return f, true
 		}
 	}
-	return feature{}, false
+	return part{}, false
 }
 
-func edgeKinds() []edge.Kind { return EdgeKindsFor(featureNames()) }
+func edgeKinds() []edge.Kind { return EdgeKindsFor(partNames()) }
 
 func EdgeKindsFor(names []string) []edge.Kind {
 	var kinds []edge.Kind
 	for _, name := range names {
-		f, ok := featureNamed(name)
+		f, ok := partNamed(name)
 		if !ok {
 			continue
 		}
@@ -115,35 +112,31 @@ func EdgeKindsFor(names []string) []edge.Kind {
 	return kinds
 }
 
-func Removing(features, remove []string) []string {
+func Removing(parts, remove []string) []string {
 	var out []string
 	for _, name := range remove {
-		if !slices.Contains(features, name) {
+		if !slices.Contains(parts, name) {
 			out = append(out, name)
 		}
 	}
 	return out
 }
 
-func featureNames() []string {
-	out := make([]string, 0, len(featureRegistry))
-	for _, f := range featureRegistry {
+func partNames() []string {
+	out := make([]string, 0, len(partRegistry))
+	for _, f := range partRegistry {
 		out = append(out, f.name)
 	}
 	return out
 }
 
-func featureLevels(names []string) ([][]string, error) {
-	return bootstrapplan.FeatureLevels(Catalogue(), names)
-}
+type PartSet map[string]bool
 
-type FeatureSet map[string]bool
+func (s PartSet) Has(name string) bool { return s[name] }
 
-func (s FeatureSet) Has(name string) bool { return s[name] }
-
-func (s FeatureSet) Names() []string {
+func (s PartSet) Names() []string {
 	var out []string
-	for _, name := range featureNames() {
+	for _, name := range partNames() {
 		if s[name] {
 			out = append(out, name)
 		}

@@ -608,17 +608,17 @@ func apisAcross(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore
 	return APIs{CFN: stacks, SSM: ssmc, IAM: iamc, Layers: newFakeLayers(), Store: store, Records: newFakeRecords().in, Edge: front, Edges: registry}
 }
 
-func everything() Request { return Request{Features: featureNames()} }
+func everything() Request { return Request{Parts: partNames()} }
 
 func edgeStack(tier environment.Tier) string {
-	return defaultNamespace.FeatureStackName(FeatureCloudflareEdge, tier)
+	return defaultNamespace.PartStackName(CloudflareEdgePart, tier)
 }
 func keyStack(tier environment.Tier) string {
-	return defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
+	return defaultNamespace.PartStackName(provider.VariablesKeyPart, tier)
 }
 
 func TestRun(t *testing.T) {
-	t.Run("core alone provisions no feature stack", func(t *testing.T) {
+	t.Run("core alone provisions no part stack", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		ed := &fakeEdge{}
 		frontedBy(t, ed)
@@ -631,7 +631,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("stacks = %v, want %v", got, want)
 		}
 		if ed.bootstraps != 1 {
-			t.Errorf("the front was bootstrapped %d times for a core-only bootstrap, want 1: the edge is the front, not a feature", ed.bootstraps)
+			t.Errorf("the front was bootstrapped %d times for a core-only bootstrap, want 1: the edge is the front, not a part", ed.bootstraps)
 		}
 		if len(iamc.created) != 0 {
 			t.Errorf("minted %v for a core-only bootstrap", iamc.created)
@@ -643,7 +643,7 @@ func TestRun(t *testing.T) {
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{FeatureCloudflareEdge}}, nil)
+			Request{Parts: []string{CloudflareEdgePart}}, nil)
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -654,7 +654,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("the core is applied before every feature stack", func(t *testing.T) {
+	t.Run("the core is applied before every part stack", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
@@ -663,11 +663,11 @@ func TestRun(t *testing.T) {
 		}
 		core := stacks.firstApplied(coreStackName)
 		for _, name := range []string{edgeStack(environment.TierProduction), keyStack(environment.TierProduction)} {
-			feature := stacks.firstApplied(name)
-			if core < 0 || feature < 0 {
+			part := stacks.firstApplied(name)
+			if core < 0 || part < 0 {
 				t.Fatalf("applied %v, want the core and %s among them", stacks.applied, name)
 			}
-			if core >= feature {
+			if core >= part {
 				t.Errorf("applied in order %v, want the core before %s", stacks.applied, name)
 			}
 		}
@@ -687,7 +687,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("the cloudflare edge feature provisions the edge reader", func(t *testing.T) {
+	t.Run("the cloudflare edge part provisions the edge reader", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		ed := &fakeEdge{kind: "cloudflare"}
 		frontedBy(t, ed)
@@ -699,7 +699,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("edge bootstrapped %d times, want exactly 1", ed.bootstraps)
 		}
 		if !hasEdgeUser(t, stacks.template(edgeStack(environment.TierProduction))) {
-			t.Error("the cloudflare edge feature did not provision the edge reader IAM user")
+			t.Error("the cloudflare edge part did not provision the edge reader IAM user")
 		}
 		if hasEdgeUser(t, stacks.template(coreStackName)) {
 			t.Error("core provisioned an edge reader; only the edge that needs one may")
@@ -753,7 +753,7 @@ func TestRun(t *testing.T) {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{})
 
-				req := Request{Features: []string{provider.FeatureVariablesKey}}
+				req := Request{Parts: []string{provider.VariablesKeyPart}}
 				if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tc.tier, req, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
@@ -913,15 +913,15 @@ func TestRun(t *testing.T) {
 		if creds.AccessKeyID != "AKIAEDGE" {
 			t.Errorf("stored key = %q, want the first minted key", creds.AccessKeyID)
 		}
-		if want := 1 + len(featureNames()); stacks.creates != want {
-			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its %d features", stacks.creates, len(featureNames()))
+		if want := 1 + len(partNames()); stacks.creates != want {
+			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its %d parts", stacks.creates, len(partNames()))
 		}
-		if want := 1 + len(featureNames()); stacks.noops != want {
+		if want := 1 + len(partNames()); stacks.noops != want {
 			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", stacks.noops, want)
 		}
 	})
 
-	t.Run("edge bootstrap failure stops provisioning the feature it belongs to", func(t *testing.T) {
+	t.Run("edge bootstrap failure stops provisioning the part it belongs to", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare", err: errors.New("edge API unreachable")})
 
@@ -945,11 +945,11 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		dropped := Request{Remove: []string{provider.FeatureVariablesKey, FeatureCloudflareEdge}}
+		dropped := Request{Remove: []string{provider.VariablesKeyPart, CloudflareEdgePart}}
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, dropped, nil); err != nil {
-			t.Fatalf("Run without the features: %v", err)
+			t.Fatalf("Run without the parts: %v", err)
 		}
-		want := []string{edgeStack(environment.TierProduction), keyStack(environment.TierProduction)}
+		want := []string{keyStack(environment.TierProduction), edgeStack(environment.TierProduction)}
 		if !slices.Equal(stacks.deleted, want) {
 			t.Errorf("deleted %v, want %v", stacks.deleted, want)
 		}
@@ -992,10 +992,10 @@ func TestRunPreview(t *testing.T) {
 			}
 		}
 
-		if want := 1 + len(featureNames()); stacks.creates != want {
-			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core and its %d features", stacks.creates, len(featureNames()))
+		if want := 1 + len(partNames()); stacks.creates != want {
+			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core and its %d parts", stacks.creates, len(partNames()))
 		}
-		if want := 1 + len(featureNames()); stacks.noops != want {
+		if want := 1 + len(partNames()); stacks.noops != want {
 			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", stacks.noops, want)
 		}
 		for _, name := range stacks.stacks() {
@@ -1086,7 +1086,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			t.Fatal("expected Run to fail when the default edge cannot be bootstrapped")
 		}
 		if slices.Contains(stacks.stacks(), keyStack(environment.TierProduction)) {
-			t.Error("provisioned feature stacks on top of an edge that never came up")
+			t.Error("provisioned part stacks on top of an edge that never came up")
 		}
 	})
 }
@@ -1123,8 +1123,8 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 				}
 
 				req := Request{
-					Features: []string{provider.FeatureVariablesKey},
-					Remove:   []string{FeatureCloudflareEdge},
+					Parts:  []string{provider.VariablesKeyPart},
+					Remove: []string{CloudflareEdgePart},
 				}
 				if err := Run(context.Background(), apis, defaultNamespace, tc.tier, req, nil); err != nil {
 					t.Fatalf("dropping the cloudflare edge: %v", err)
@@ -1158,14 +1158,14 @@ func originSecretFor(t *testing.T, tier environment.Tier) string {
 }
 
 func TestUpsertRecoversFailedStacks(t *testing.T) {
-	t.Run("a rolled-back feature stack reads as absent, not enabled", func(t *testing.T) {
+	t.Run("a rolled-back part stack reads as absent, not enabled", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		stacks.blockName(keyStack(environment.TierProduction), 1)
 		recordWaits(t)
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
+			Request{Parts: []string{provider.VariablesKeyPart}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
@@ -1174,8 +1174,8 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if deployed.Features.Has(provider.FeatureVariablesKey) {
-			t.Error("a stack that rolled back and contains nothing reads as an enabled feature; every deploy that needs it is waved through")
+		if deployed.Parts.Has(provider.VariablesKeyPart) {
+			t.Error("a stack that rolled back and contains nothing reads as an enabled part; every deploy that needs it is waved through")
 		}
 	})
 
@@ -1185,7 +1185,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 		recordWaits(t)
 
-		req := Request{Features: []string{provider.FeatureVariablesKey}}
+		req := Request{Parts: []string{provider.VariablesKeyPart}}
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -1201,8 +1201,8 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if !deployed.Features.Has(provider.FeatureVariablesKey) {
-			t.Error("the re-run left the feature missing")
+		if !deployed.Parts.Has(provider.VariablesKeyPart) {
+			t.Error("the re-run left the part missing")
 		}
 	})
 
@@ -1212,12 +1212,12 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 		recordWaits(t)
 
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Parts: []string{provider.VariablesKeyPart}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		stacks.wedge(keyStack(environment.TierProduction))
 
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Remove: []string{provider.FeatureVariablesKey}}, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Remove: []string{provider.VariablesKeyPart}}, nil); err != nil {
 			t.Fatalf("dropping a wedged stack: %v", err)
 		}
 		if slices.Contains(stacks.stacks(), keyStack(environment.TierProduction)) {
@@ -1232,7 +1232,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks.blockName(keyStack(environment.TierProduction), 2)
 
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
+			Request{Parts: []string{provider.VariablesKeyPart}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if len(*waits) != 2 {
@@ -1253,7 +1253,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks.reason(keyStack(environment.TierProduction), "Resource handler returned message: Access denied")
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{provider.FeatureVariablesKey}}, nil)
+			Request{Parts: []string{provider.VariablesKeyPart}}, nil)
 		if err == nil {
 			t.Fatal("retried a failure that will never succeed on retry")
 		}

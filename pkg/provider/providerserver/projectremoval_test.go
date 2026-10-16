@@ -391,8 +391,8 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 func TestRemoveProjectForgetsThePartsItWantedAndNoOtherProjectsWants(t *testing.T) {
 	client, vendor := deployedProject(t)
 	ctx := context.Background()
-	recordWant(t, vendor, fake.FeatureImages, "shop")
-	recordWant(t, vendor, fake.FeatureImages, "blog")
+	recordWant(t, vendor, fake.PartImages, "shop")
+	recordWant(t, vendor, fake.PartImages, "blog")
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
 	if err != nil {
@@ -402,7 +402,7 @@ func TestRemoveProjectForgetsThePartsItWantedAndNoOtherProjectsWants(t *testing.
 		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
 	}
 
-	if wants := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(wants[fake.FeatureImages], []string{"blog"}) {
+	if wants := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(wants[fake.PartImages], []string{"blog"}) {
 		t.Errorf("wants after the removal = %v, want blog's alone: shop is gone", wants)
 	}
 }

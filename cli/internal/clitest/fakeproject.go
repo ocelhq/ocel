@@ -21,19 +21,19 @@ func SetUpProject(t *testing.T) FakeProject {
 
 	root := writeProject(t)
 	p := fake.NewForProject(fake.Options{}, root)
-	Bootstrap(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	Bootstrap(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 	return FakeProject{Root: root, Provider: p, Requests: ServeFake(t, p)}
 }
 
-func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, features ...string) {
+func Bootstrap(t *testing.T, p *fake.Provider, tier environment.Tier, parts ...string) {
 	t.Helper()
 	var others []string
-	for _, offered := range p.FakeBootstrap().Catalogue() {
-		if !slices.Contains(features, offered.Name) {
+	for _, offered := range p.FakeBootstrap().Parts() {
+		if !slices.Contains(parts, offered.Name) {
 			others = append(others, offered.Name)
 		}
 	}
-	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Features: features, Remove: others}, nil); err != nil {
+	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: tier, Parts: parts, Remove: others}, nil); err != nil {
 		t.Fatalf("bootstrap the fake provider's %s tier: %v", tier, err)
 	}
 }

@@ -26,17 +26,17 @@ func TestABootstrapNamingNoPartAddsEveryPartARecordedProjectWants(t *testing.T) 
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
 	applied := vendor.FakeBootstrap().Applied()
-	if last := applied[len(applied)-1]; !slices.Contains(last.Features, fake.FeatureCache) {
-		t.Errorf("Apply() features = %v, want %s, which shop wants", last.Features, fake.FeatureCache)
+	if last := applied[len(applied)-1]; !slices.Contains(last.Parts, fake.PartCache) {
+		t.Errorf("Apply() parts = %v, want %s, which shop wants", last.Parts, fake.PartCache)
 	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, fake.FeatureCache)
+	recorded, present, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, fake.PartCache)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
-		t.Errorf("ReadBootstrapPart(%s) = %+v, %v, %v, want it ready and added for shop", fake.FeatureCache, recorded, present, err)
+		t.Errorf("ReadBootstrapPart(%s) = %+v, %v, %v, want it ready and added for shop", fake.PartCache, recorded, present, err)
 	}
 }
 
@@ -44,15 +44,15 @@ func TestAPartABootstrapAddsIsAddedByTheFirstProjectThatWantedIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 	time.Sleep(time.Millisecond)
-	recordWant(t, vendor, fake.FeatureCache, "blog")
+	recordWant(t, vendor, fake.PartCache, "blog")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
-	recorded, _, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, fake.FeatureCache)
+	recorded, _, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, fake.PartCache)
 	if err != nil || recorded.AddedBy != "shop" {
-		t.Errorf("ReadBootstrapPart(%s) = %+v, %v, want it added by shop, which wanted it before blog", fake.FeatureCache, recorded, err)
+		t.Errorf("ReadBootstrapPart(%s) = %+v, %v, want it added by shop, which wanted it before blog", fake.PartCache, recorded, err)
 	}
 }
 
@@ -60,12 +60,12 @@ func TestAPartABootstrapAddsForAProjectReadsAsAddedByTheBootstrapForThatProject(
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
-	if part := describedParts(t, client)[fake.FeatureCache]; part.GetAddedWith() != "ocel bootstrap" || part.GetAddedBy() != "shop" {
-		t.Errorf("%s added with %q for %q, want `ocel bootstrap` for shop: no deploy of shop added it", fake.FeatureCache, part.GetAddedWith(), part.GetAddedBy())
+	if part := describedParts(t, client)[fake.PartCache]; part.GetAddedWith() != "ocel bootstrap" || part.GetAddedBy() != "shop" {
+		t.Errorf("%s added with %q for %q, want `ocel bootstrap` for shop: no deploy of shop added it", fake.PartCache, part.GetAddedWith(), part.GetAddedBy())
 	}
 }
 
@@ -73,8 +73,8 @@ func TestAPartABootstrapAddedIsNoLongerWanted(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
-	recordWant(t, vendor, fake.FeatureCache, "blog")
+	recordWant(t, vendor, fake.PartCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "blog")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
@@ -87,15 +87,15 @@ func TestADryBootstrapPlansTheWantedPartsAndRecordsNothing(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 
 	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Dry: true})
 
-	if !slices.ContainsFunc(plan.GetGroups(), func(group *planv1.ChangeGroup) bool { return group.GetFeature() == fake.FeatureCache }) {
-		t.Errorf("plan groups = %v, want one adding %s", plan.GetGroups(), fake.FeatureCache)
+	if !slices.ContainsFunc(plan.GetGroups(), func(group *planv1.ChangeGroup) bool { return group.GetPart() == fake.PartCache }) {
+		t.Errorf("plan groups = %v, want one adding %s", plan.GetGroups(), fake.PartCache)
 	}
-	if wants := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(wants[fake.FeatureCache], []string{"shop"}) {
-		t.Errorf("wants = %v, want shop's want of %s kept by a dry run", wants, fake.FeatureCache)
+	if wants := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(wants[fake.PartCache], []string{"shop"}) {
+		t.Errorf("wants = %v, want shop's want of %s kept by a dry run", wants, fake.PartCache)
 	}
 }
 
@@ -103,14 +103,14 @@ func TestABootstrapRemovingAPartAProjectWantsRemovesItAndAddsNothing(t *testing.
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache)
+	recordWant(t, vendor, fake.PartCache, "shop")
 
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Remove: []string{fake.FeatureCache}, Force: true})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Remove: []string{fake.PartCache}, Force: true})
 
 	applied := vendor.FakeBootstrap().Applied()
-	if last := applied[len(applied)-1]; slices.Contains(last.Features, fake.FeatureCache) || !slices.Contains(last.Remove, fake.FeatureCache) {
-		t.Errorf("Apply() = features %v, remove %v, want %s removed: the run named it", last.Features, last.Remove, fake.FeatureCache)
+	if last := applied[len(applied)-1]; slices.Contains(last.Parts, fake.PartCache) || !slices.Contains(last.Remove, fake.PartCache) {
+		t.Errorf("Apply() = parts %v, remove %v, want %s removed: the run named it", last.Parts, last.Remove, fake.PartCache)
 	}
 }
 
@@ -118,16 +118,16 @@ func TestAPartProjectsWantThatTheBootstrapLacksIsDescribedAsWantedByThem(t *test
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
-	recordWant(t, vendor, fake.FeatureCache, "blog")
+	recordWant(t, vendor, fake.PartCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "blog")
 
-	cache := describedParts(t, client)[fake.FeatureCache]
+	cache := describedParts(t, client)[fake.PartCache]
 
 	if cache.GetState() != contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED || !slices.Equal(cache.GetWantedBy(), []string{"blog", "shop"}) {
-		t.Errorf("%s = %+v, want blog and shop to want it", fake.FeatureCache, cache)
+		t.Errorf("%s = %+v, want blog and shop to want it", fake.PartCache, cache)
 	}
 	if cache.GetSummary() == "" || cache.GetAddedAt() != 0 || len(cache.GetUsedBy()) != 0 {
-		t.Errorf("%s = %+v, want its summary, and nobody to have added or to use it", fake.FeatureCache, cache)
+		t.Errorf("%s = %+v, want its summary, and nobody to have added or to use it", fake.PartCache, cache)
 	}
 }
 
@@ -135,13 +135,13 @@ func TestAWantOfAPartTheBootstrapHoldsDescribesThePartAlone(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache)
+	recordWant(t, vendor, fake.PartCache, "shop")
 
-	cache := describedParts(t, client)[fake.FeatureCache]
+	cache := describedParts(t, client)[fake.PartCache]
 
 	if cache.GetState() != contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY || len(cache.GetWantedBy()) != 0 {
-		t.Errorf("%s = %+v, want it ready and wanted by nobody: it is there", fake.FeatureCache, cache)
+		t.Errorf("%s = %+v, want it ready and wanted by nobody: it is there", fake.PartCache, cache)
 	}
 }
 
@@ -154,8 +154,8 @@ func TestAWantOfAPartTheProviderNoLongerOffersIsLeftOut(t *testing.T) {
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
 	applied := vendor.FakeBootstrap().Applied()
-	if last := applied[len(applied)-1]; slices.Contains(last.Features, "retired-part") {
-		t.Errorf("Apply() features = %v, want nothing this provider does not offer", last.Features)
+	if last := applied[len(applied)-1]; slices.Contains(last.Parts, "retired-part") {
+		t.Errorf("Apply() parts = %v, want nothing this provider does not offer", last.Parts)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestRemovingABootstrapForgetsWhatProjectsWantedOfIt(t *testing.T) {
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 
 	stream, err := client.RemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -190,7 +190,7 @@ func TestADeployThroughAnEdgeIsRefusedByABootstrapLackingThePartsThatEdgeRequire
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded, want it refused for the parts its edge requires")
 	}
-	if want := "lacks a part this project wants: " + fake.FeatureCache + ", " + fake.FeatureImages; !strings.Contains(result.GetError(), want) {
+	if want := "lacks a part this project wants: " + fake.PartImages; !strings.Contains(result.GetError(), want) {
 		t.Errorf("Deploy() error = %q, want it to name %q", result.GetError(), want)
 	}
 }
@@ -210,7 +210,7 @@ func TestARefusedDeployLeavesTheWantForTheBootstrapCommandToAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := wants[fake.FeatureImages]; !slices.Equal(got, []string{"shop"}) {
-		t.Errorf("projects wanting %s = %v, want [shop]", fake.FeatureImages, got)
+	if got := wants[fake.PartImages]; !slices.Equal(got, []string{"shop"}) {
+		t.Errorf("projects wanting %s = %v, want [shop]", fake.PartImages, got)
 	}
 }

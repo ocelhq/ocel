@@ -109,7 +109,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		t.Errorf("the bootstrap is installed without an app boundary: %+v", deployed)
 	}
 	if deployed.VariablesKeyARN != "" {
-		t.Errorf("a run that never asked for %s made a key anyway: %+v", provider.FeatureVariablesKey, deployed)
+		t.Errorf("a run that never asked for %s made a key anyway: %+v", provider.VariablesKeyPart, deployed)
 	}
 	for _, param := range []string{origin, passphraseParam} {
 		if !a.paramExists(t, param) {

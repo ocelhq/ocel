@@ -82,7 +82,7 @@ func acted(group *planv1.ChangeGroup, acting []*planv1.Change) *planv1.ChangeGro
 	shown := &planv1.ChangeGroup{
 		Kind:    group.GetKind(),
 		Name:    group.GetName(),
-		Feature: group.GetFeature(),
+		Part:    group.GetPart(),
 		Action:  group.GetAction(),
 		Reason:  group.GetReason(),
 		Slow:    group.GetSlow(),
@@ -173,8 +173,8 @@ func changeLabel(change *planv1.Change) string {
 }
 
 func groupTag(group *planv1.ChangeGroup) string {
-	if feature := group.GetFeature(); feature != "" {
-		return feature
+	if part := group.GetPart(); part != "" {
+		return part
 	}
 	if group.GetKind() != provider.StackGroupKind {
 		return ""

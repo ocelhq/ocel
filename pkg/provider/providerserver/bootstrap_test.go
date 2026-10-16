@@ -89,7 +89,7 @@ func bootstrapOK(t *testing.T, client contractv1connect.ProviderServiceClient, r
 	}
 }
 
-func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
+func TestBootstrapAddsThePartItsEdgeRequiresAndRefusesReplacementsUnlessAsked(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
@@ -101,8 +101,8 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 	if len(applied) != 1 {
 		t.Fatalf("Apply() ran %d times, want once", len(applied))
 	}
-	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(applied[0].Features, want) {
-		t.Errorf("Apply() was asked for %v, want %v", applied[0].Features, want)
+	if want := []string{fake.PartImages}; !slices.Equal(applied[0].Parts, want) {
+		t.Errorf("Apply() was asked for %v, want %v", applied[0].Parts, want)
 	}
 	if applied[0].Tier != environment.TierProduction {
 		t.Errorf("Apply() ran against %s, want %s", applied[0].Tier, environment.TierProduction)
@@ -141,12 +141,12 @@ func TestBootstrapRefusesToRemoveAPartThisProviderDoesNotOffer(t *testing.T) {
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("Bootstrap() removing an unknown part: code = %v, want %v (%v)", got, connect.CodeInvalidArgument, err)
 	}
-	if !strings.Contains(err.Error(), fake.FeatureCache) {
+	if !strings.Contains(err.Error(), fake.PartCache) {
 		t.Errorf("Bootstrap() = %v, want it to name what this provider does offer", err)
 	}
 }
 
-func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
+func TestBootstrapRefusesToRemoveAPartAProjectRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -154,12 +154,12 @@ func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
-	recordProject(t, vendor, "shop", fake.FeatureImages)
+	recordProject(t, vendor, "shop", fake.PartImages)
 
 	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{
 		Tier:   environmentv1.Tier_TIER_PRODUCTION,
 		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
-		Remove: []string{fake.FeatureImages},
+		Remove: []string{fake.PartImages},
 	})
 	if err != nil {
 		t.Fatalf("Bootstrap() error = %v", err)
@@ -169,42 +169,43 @@ func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
 		t.Fatalf("Bootstrap() stream = %v", err)
 	}
 	if result.GetSuccess() {
-		t.Fatal("Bootstrap() removed a feature a deployed project recorded")
+		t.Fatal("Bootstrap() removed a part a deployed project recorded")
 	}
-	for _, want := range []string{fake.FeatureImages, "shop", "--force"} {
+	for _, want := range []string{fake.PartImages, "shop", "--force"} {
 		if !strings.Contains(result.GetError(), want) {
 			t.Errorf("Bootstrap() refused with %q, want it to contain %q", result.GetError(), want)
 		}
 	}
 }
 
-func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
+func TestBootstrapRemovesWhatItIsToldWhenForced(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
-	recordProject(t, vendor, "shop", fake.FeatureImages)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache)
+	recordProject(t, vendor, "shop", fake.PartImages)
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:   environmentv1.Tier_TIER_PRODUCTION,
 		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
-		Remove: []string{fake.FeatureCache},
+		Remove: []string{fake.PartImages, fake.PartCache},
 		Force:  true,
 	})
 
 	applied := vendor.FakeBootstrap().Applied()
 	removing := applied[len(applied)-1]
-	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(removing.Remove, want) {
-		t.Errorf("Apply() removed %v, want %v — what depends on a feature goes first", removing.Remove, want)
+	if want := []string{fake.PartCache, fake.PartImages}; !slices.Equal(removing.Remove, want) {
+		t.Errorf("Apply() removed %v, want %v, the parts named, in the order the provider offers them", removing.Remove, want)
 	}
-	if len(removing.Features) != 0 {
-		t.Errorf("Apply() was asked for %v, want a run that named only removals to ensure nothing", removing.Features)
+	if len(removing.Parts) != 0 {
+		t.Errorf("Apply() was asked for %v, want a run that named only removals to ensure nothing", removing.Parts)
 	}
 }
 
-func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
+func TestBootstrapLeavesAPartNoRunNamed(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
@@ -220,14 +221,14 @@ func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
 	last := applied[len(applied)-1]
 	if len(last.Remove) != 0 {
 		t.Errorf("Apply() removed %v, want a run naming only %s to leave the rest of the account alone",
-			last.Remove, fake.FeatureCache)
+			last.Remove, fake.PartCache)
 	}
 }
 
-func recordProject(t *testing.T, vendor *fake.Provider, slug string, features ...string) {
+func recordProject(t *testing.T, vendor *fake.Provider, slug string, parts ...string) {
 	t.Helper()
 
-	body, err := json.Marshal(stackrecords.Project{Features: features})
+	body, err := json.Marshal(stackrecords.Project{Parts: parts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +245,7 @@ func TestDescribeBootstrapAnswersTheCurrentStatus(t *testing.T) {
 
 	ctx := context.Background()
 	client, p := contractServed(t, "1.2.3")
-	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache)
+	bootstrapped(t, p, environment.TierProduction, fake.PartCache)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
@@ -339,7 +340,7 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartImages)
 
 	req := &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
@@ -349,14 +350,14 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	if consented == nil {
 		t.Fatal("the dry run streamed no plan, and the only thing consented to is the plan")
 	}
-	vendor.FakeBootstrap().MarkStale(fake.FeatureCache)
+	vendor.FakeBootstrap().MarkStale(fake.PartImages)
 
 	req.Dry, req.Consented = false, consented
 	_, err := streamedEvents(t, client, req)
 	if err == nil {
 		t.Fatal("Bootstrap() = nil, want an apply that outgrew its consented plan refused")
 	}
-	if !strings.Contains(err.Error(), fake.FeatureCache) {
+	if !strings.Contains(err.Error(), fake.PartImages) {
 		t.Errorf("the refusal reads %q, want it to name what moved under the plan", err)
 	}
 }
@@ -385,7 +386,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache)
 
 	scope := &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION}
 	consented, err := client.PlanRemoveBootstrap(ctx, scope)
@@ -393,7 +394,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	scope.Consented = consented
 	stream, err := client.RemoveBootstrap(ctx, scope)
@@ -406,7 +407,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	if stream.Err() == nil {
 		t.Fatal("RemoveBootstrap() = nil, want a removal that outgrew its consented plan refused")
 	}
-	if !strings.Contains(stream.Err().Error(), fake.FeatureImages) {
+	if !strings.Contains(stream.Err().Error(), fake.PartImages) {
 		t.Errorf("the refusal reads %q, want it to name what the plan installed", stream.Err())
 	}
 }
@@ -427,8 +428,8 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	if plan.GetEdgeKind() != string(fake.KindRelay) {
 		t.Errorf("plan was drawn against the %q edge, want the default the apply bootstraps", plan.GetEdgeKind())
 	}
-	if len(plan.GetGroups()) != 3 {
-		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
+	if len(plan.GetGroups()) != 2 {
+		t.Fatalf("plan = %v, want the baseline and images, the part the relay edge requires", plan.GetGroups())
 	}
 	for _, group := range plan.GetGroups() {
 		if group.GetAction() != planv1.Change_ACTION_CREATE {
@@ -652,7 +653,7 @@ func TestPlanRemoveBootstrapNamesTheTierAndWhatGoes(t *testing.T) {
 
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapped(t, vendor, environment.TierPreview, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierPreview, fake.PartCache)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
@@ -666,7 +667,7 @@ func TestPlanRemoveBootstrapNamesTheTierAndWhatGoes(t *testing.T) {
 		t.Errorf("subject = %q, want the tier the CLI asks the user to type back", plan.GetSubject())
 	}
 	if len(plan.GetGroups()) != 3 {
-		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack, the core and the edge", len(plan.GetGroups()))
+		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the part stack, the core and the edge", len(plan.GetGroups()))
 	}
 	for _, item := range plan.GetGroups() {
 		if item.GetAction() != planv1.Change_ACTION_DELETE {

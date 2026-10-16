@@ -34,7 +34,7 @@ func projectWith(t *testing.T, protection string) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		clitest.Bootstrap(t, project.Provider, tier, fake.FeatureCache, fake.FeatureImages)
+		clitest.Bootstrap(t, project.Provider, tier, fake.PartCache, fake.PartImages)
 		clitest.RecordEdgeStack(t, project, tier, fake.KindRelay)
 	}
 	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `

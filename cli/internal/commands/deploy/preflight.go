@@ -36,7 +36,7 @@ func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.Op
 	return commands.OpenOptions{
 		Pinning:         executables.ChoosePinning(policy.DryRun),
 		Tier:            environmentv1.Tier_TIER_PREVIEW,
-		Require:         readiness.Features,
+		Require:         readiness.Parts,
 		Slug:            cfg.Slug,
 		ClaimsDomains:   true,
 		ProjectRegistry: true,
@@ -126,7 +126,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 	return commands.OpenOptions{
 		Pinning:         executables.ChoosePinning(policy.DryRun),
 		Tier:            environmentv1.Tier_TIER_PRODUCTION,
-		Require:         readiness.Features,
+		Require:         readiness.Parts,
 		Slug:            cfg.Slug,
 		ClaimsDomains:   true,
 		RequireHostname: true,

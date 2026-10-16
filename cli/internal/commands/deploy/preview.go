@@ -389,7 +389,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.CanAsk(stdin), stdout, stdin)
 
 	var removed *consolev1.EnvironmentEvent
-	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
 		if err != nil {
@@ -508,7 +508,7 @@ func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string,
 		return err
 	}
 
-	return dependencies.WithProvider(ctx, cfg, "ocel preview prune", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, "ocel preview prune", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		registry, warning := readiness.RemovalRegistry(cfg)
 		if warning != "" {
 			p.Check.Warn(warning)

@@ -39,12 +39,12 @@ func bootstrapperWithEdge(t *testing.T, front edge.Edge) Bootstrap {
 	if err != nil {
 		t.Fatalf("StackNameFor: %v", err)
 	}
-	stacks.present[defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, environment.TierProduction)] = stacks.present[core]
+	stacks.present[defaultNamespace.PartStackName(bootstrap.CloudflareEdgePart, environment.TierProduction)] = stacks.present[core]
 	b.Edge, b.Edges, b.Kinds = front, registryOf(front), kindsOf(front)
 	return b
 }
 
-func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testing.T) {
+func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsPart(t *testing.T) {
 	t.Parallel()
 
 	front := &describingEdge{parts: []edge.BootstrapPart{
@@ -58,8 +58,8 @@ func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testi
 		t.Fatalf("Describe: %v", err)
 	}
 	want := []provider.BootstrapStack{
-		{Name: "cloudflare/ocel-releases-store/BOOTSTRAP_SECRET", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: true},
-		{Name: "cloudflare/ocel-sample-worker", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: false},
+		{Name: "cloudflare/ocel-releases-store/BOOTSTRAP_SECRET", Part: bootstrap.CloudflareEdgePart, Present: true, DigestCurrent: true},
+		{Name: "cloudflare/ocel-sample-worker", Part: bootstrap.CloudflareEdgePart, Present: true, DigestCurrent: false},
 	}
 	var got []provider.BootstrapStack
 	for _, stack := range described.Stacks {
@@ -84,7 +84,7 @@ func TestAnAWSBootstrapStatusReportsAnUndescribableEdgeAsUnreadableRatherThanFai
 	if err != nil {
 		t.Fatalf("Describe = %v, want the status to survive an edge it cannot read", err)
 	}
-	want := provider.BootstrapStack{Name: "cloudflare/bootstrap", Feature: bootstrap.FeatureCloudflareEdge, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"}
+	want := provider.BootstrapStack{Name: "cloudflare/bootstrap", Part: bootstrap.CloudflareEdgePart, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"}
 	var got []provider.BootstrapStack
 	for _, stack := range described.Stacks {
 		if strings.HasPrefix(stack.Name, string(cloudflareKind)+"/") {
@@ -101,8 +101,8 @@ func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 
 	planned := []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanKeep}}
 	req := provider.BootstrapRequest{
-		Tier:     environment.TierProduction,
-		Features: []string{bootstrap.FeatureCloudflareEdge},
+		Tier:  environment.TierProduction,
+		Parts: []string{bootstrap.CloudflareEdgePart},
 	}
 	planWith := func(front edge.Edge) provider.Plan {
 		t.Helper()

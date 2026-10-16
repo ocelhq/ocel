@@ -165,7 +165,7 @@ func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	root := fixture.Root
 	addAppToFixtureConfig(t, root)
 	writeHosting(t, root, "api", "bld_api_1")
-	fixture.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
+	fixture.Provider.FakeBootstrap().MarkStale(fake.PartImages)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -239,7 +239,7 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	dependencies := newDryRunDependencies(t)
 	terminalStdin(&dependencies)
-	root := setUpProjectLackingFeatures(t).Root
+	root := setUpProjectLackingParts(t).Root
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)

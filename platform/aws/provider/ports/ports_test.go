@@ -93,12 +93,12 @@ func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
 	table, ddb := newKeyValues(t)
 	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
-	if _, err := table.Write(context.Background(), keyvalue.Entry{Key: key, Value: []byte(`{"features":["cache"]}`)}); err != nil {
+	if _, err := table.Write(context.Background(), keyvalue.Entry{Key: key, Value: []byte(`{"parts":["cache"]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	item := ddb.item("projects", "shop#")
 	value, ok := item["value"].(*ddbtypes.AttributeValueMemberS)
-	if !ok || value.Value != `{"features":["cache"]}` {
+	if !ok || value.Value != `{"parts":["cache"]}` {
 		t.Fatalf("the item holds value %#v, want the JSON as a string a reader of the table sees as written", item["value"])
 	}
 }

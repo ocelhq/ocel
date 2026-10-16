@@ -121,21 +121,21 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 	vendor := string(r.provider.Facts().Vendor)
 	for _, stack := range r.apps {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    vendor + "/" + stack.String(),
-			Feature: stack.App,
-			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "everything this release of " + stack.App + " provisioned",
+			Kind:   provider.StackGroupKind,
+			Name:   vendor + "/" + stack.String(),
+			Part:   stack.App,
+			Action: planv1.Change_ACTION_DELETE,
+			Reason: "everything this release of " + stack.App + " provisioned",
 		})
 	}
 	for _, stack := range r.infra {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    vendor + "/" + stack.String(),
-			Feature: stack.Env,
-			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "the resources every app in " + stack.Env + " binds to",
-			Slow:    true,
+			Kind:   provider.StackGroupKind,
+			Name:   vendor + "/" + stack.String(),
+			Part:   stack.Env,
+			Action: planv1.Change_ACTION_DELETE,
+			Reason: "the resources every app in " + stack.Env + " binds to",
+			Slow:   true,
 		})
 	}
 	scope := edge.ProjectScope{

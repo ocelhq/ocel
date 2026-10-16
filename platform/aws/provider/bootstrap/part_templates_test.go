@@ -27,11 +27,11 @@ var (
 
 var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition", "AWS::URLSuffix", "AWS::StackName", "AWS::NoValue"}
 
-func TestFeatureTemplates(t *testing.T) {
-	for _, name := range featureNames() {
+func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *testing.T) {
+	for _, name := range partNames() {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 			t.Run(name+"/"+string(tier), func(t *testing.T) {
-				stack := featureStackFor(name, tier, everyFeature())
+				stack := partStackFor(name, tier, everyPart())
 
 				var tmpl declaredTemplate
 				if err := yaml.Unmarshal([]byte(stack.body), &tmpl); err != nil {
@@ -63,7 +63,7 @@ func TestFeatureTemplates(t *testing.T) {
 				t.Run("reaches across stacks by parameter alone", func(t *testing.T) {
 					for _, forbidden := range []string{"ImportValue", "Fn::ImportValue", "Export:"} {
 						if strings.Contains(stack.body, forbidden) {
-							t.Errorf("template uses %s; a feature reads its upstream from a parameter, never from a CloudFormation export", forbidden)
+							t.Errorf("template uses %s; a part reads its upstream from a parameter, never from a CloudFormation export", forbidden)
 						}
 					}
 				})

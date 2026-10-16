@@ -172,7 +172,7 @@ func joinNames(names []string) string {
 type deployRun struct {
 	*edgeSession
 	readiness    Readiness
-	features     []string
+	parts        []string
 	uses         []buildoutput.Uses
 	transforms   []string
 	artifactRoot string
@@ -283,10 +283,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), readiness.Edge)
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
+	parts := bootstrapplan.RequiredParts(readiness.Bootstrap.Parts(), readiness.Edge)
 	run := &deployRun{
 		edgeSession: &edgeSession{
 			sharedStack: shared,
@@ -296,7 +293,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		},
 		readiness:      readiness,
 		previewKeys:    &h.session.previewKeys,
-		features:       features,
+		parts:          parts,
 		uses:           uses,
 		transforms:     h.session.transforms(),
 		artifactRoot:   h.session.artifactRoot(),
@@ -459,7 +456,7 @@ func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) 
 	if r.dry {
 		wantedBy = ""
 	}
-	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, wantedBy, r.features, progress)
+	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, wantedBy, r.parts, progress)
 	return err
 }
 
@@ -580,15 +577,15 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 			return nil, false, err
 		}
 		if !read {
-			base, read = current.Features, true
+			base, read = current.Parts, true
 		}
-		features := slices.Clone(r.features)
-		for _, feature := range current.Features {
-			if !slices.Contains(base, feature) && !slices.Contains(features, feature) {
-				features = append(features, feature)
+		parts := slices.Clone(r.parts)
+		for _, part := range current.Parts {
+			if !slices.Contains(base, part) && !slices.Contains(parts, part) {
+				parts = append(parts, part)
 			}
 		}
-		value, err := json.Marshal(stackrecords.Project{Features: features})
+		value, err := json.Marshal(stackrecords.Project{Parts: parts})
 		return value, true, err
 	})
 }

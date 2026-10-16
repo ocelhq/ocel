@@ -491,12 +491,12 @@ func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 	}
 }
 
-func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
+func TestTeardownRemovesEachPartStackBeforeCore(t *testing.T) {
 	t.Parallel()
 
 	stacks := map[string]teardownStack{coreStackName: {}}
-	for _, name := range featureNames() {
-		stacks[defaultNamespace.FeatureStackName(name, environment.TierProduction)] = teardownStack{}
+	for _, name := range partNames() {
+		stacks[defaultNamespace.PartStackName(name, environment.TierProduction)] = teardownStack{}
 	}
 	cfnc := &teardownCFN{stacks: stacks}
 	apis := TeardownAPIs{
@@ -514,21 +514,21 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		t.Fatalf("Teardown: %v", err)
 	}
 	want := []string{
-		defaultNamespace.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction),
-		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction),
+		defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction),
+		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction),
 		coreStackName,
 	}
 	if !slices.Equal(cfnc.deleted, want) {
-		t.Errorf("deleted %v, want %v: every feature stack goes first and core goes last", cfnc.deleted, want)
+		t.Errorf("deleted %v, want %v: every part stack goes first and core goes last", cfnc.deleted, want)
 	}
 }
 
-func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
+func TestTeardownLeavesAPartStackThatWasNeverThere(t *testing.T) {
 	t.Parallel()
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {},
-		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction): {},
+		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {},
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,
@@ -544,18 +544,18 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction), coreStackName}
+	want := []string{defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction), coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v", stacks.deleted, want)
 	}
 }
 
-func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
+func TestTeardownRemovesAWedgedPartStack(t *testing.T) {
 	t.Parallel()
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {},
-		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
+		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,
@@ -571,7 +571,7 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction), coreStackName}
+	want := []string{defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction), coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v: a stack that rolled back still has to go", stacks.deleted, want)
 	}
@@ -580,10 +580,10 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	t.Parallel()
 
-	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
+	part := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {status: cfntypes.StackStatusRollbackComplete},
-		feature:       {},
+		part:          {},
 	}}
 	iamc := &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}}
 	apis := TeardownAPIs{
@@ -600,7 +600,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{feature, coreStackName}
+	want := []string{part, coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v: a core that never finished creating names nothing, and everything beside it still has to go", stacks.deleted, want)
 	}
@@ -612,8 +612,8 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	t.Parallel()
 
-	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
-	stacks := &teardownCFN{stacks: map[string]teardownStack{feature: {}}}
+	part := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
+	stacks := &teardownCFN{stacks: map[string]teardownStack{part: {}}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,
 		RemoveEnvSourceSync: removeNoEnvSourceSync,
@@ -628,7 +628,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if want := []string{feature}; !slices.Equal(stacks.deleted, want) {
-		t.Errorf("deleted %v, want %v: a feature stack outliving its core still has to go, and no core delete is attempted", stacks.deleted, want)
+	if want := []string{part}; !slices.Equal(stacks.deleted, want) {
+		t.Errorf("deleted %v, want %v: a part stack outliving its core still has to go, and no core delete is attempted", stacks.deleted, want)
 	}
 }

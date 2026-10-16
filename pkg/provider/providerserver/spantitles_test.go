@@ -101,7 +101,7 @@ func TestEverySpanALifecycleCallOpensNamesWhichThingItWorksOnAndWhatItDoes(t *te
 	}{
 		{"a bootstrap", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return c.Bootstrap(t.Context(), &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-		}, openedSpan{"production", "Updating bootstrap stacks fake-production, fake-production-cache and fake-production-images"}},
+		}, openedSpan{"production", "Updating bootstrap stacks fake-production and fake-production-images"}},
 		{"a bootstrap removal", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return c.RemoveBootstrap(t.Context(), &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 		}, openedSpan{"production", "Removing the bootstrap"}},

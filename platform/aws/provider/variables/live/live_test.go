@@ -52,8 +52,8 @@ func TestRender(t *testing.T) {
 			t.Errorf("error = %v, want it to name %s alone", err, want)
 		}
 		var wanted provider.WantedPartError
-		if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
-			t.Errorf("error = %#v, want it to say it is for want of %s, for the deploy to record", err, provider.FeatureVariablesKey)
+		if !errors.As(err, &wanted) || wanted.Part != provider.VariablesKeyPart {
+			t.Errorf("error = %#v, want it to say it is for want of %s, for the deploy to record", err, provider.VariablesKeyPart)
 		}
 	})
 

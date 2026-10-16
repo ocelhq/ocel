@@ -399,7 +399,7 @@ func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	if err := runEnvList(context.Background(), dependencies, root, envOptions{}, &stdout, &stderr); err != nil {
-		t.Fatalf("a variable this bootstrap stores was refused over a feature no variable needs: %v", err)
+		t.Fatalf("a variable this bootstrap stores was refused over a part no variable needs: %v", err)
 	}
 }
 
@@ -899,7 +899,7 @@ func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *t
 	}
 }
 
-var variablesKey = provider.Feature{Name: provider.FeatureVariablesKey, Summary: "a key the variables are sealed under"}
+var variablesKey = provider.Part{Name: provider.VariablesKeyPart, Summary: "a key the variables are sealed under"}
 
 func setUpVariablesKeyFixture(t *testing.T) clitest.FakeProject {
 	t.Helper()
@@ -922,7 +922,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := provider.FeatureVariablesKey; !strings.Contains(stderr.String(), want) {
+		if want := provider.VariablesKeyPart; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
 		}
 		if want := "`ocel bootstrap production`"; !strings.Contains(stderr.String(), want) || strings.Contains(stderr.String(), "--features") {
@@ -941,8 +941,8 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(wants[provider.FeatureVariablesKey]) != 1 || len(wants) != 1 {
-			t.Errorf("wants = %v, want this project's want of %s alone, for `ocel bootstrap production` to add", wants, provider.FeatureVariablesKey)
+		if len(wants[provider.VariablesKeyPart]) != 1 || len(wants) != 1 {
+			t.Errorf("wants = %v, want this project's want of %s alone, for `ocel bootstrap production` to add", wants, provider.VariablesKeyPart)
 		}
 	})
 
@@ -957,7 +957,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 
 	t.Run("a write goes through where the key is installed", func(t *testing.T) {
 		project := setUpVariablesKeyFixture(t)
-		clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.FeatureVariablesKey)
+		clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.VariablesKeyPart)
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
@@ -970,17 +970,17 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 
 	t.Run("a write asks for the key and for nothing else the bootstrap lacks", func(t *testing.T) {
 		project := setUpEnvFixture(t)
-		project.Provider.FakeBootstrap().Offers(append(project.Provider.FakeBootstrap().Catalogue(), variablesKey)...)
+		project.Provider.FakeBootstrap().Offers(append(project.Provider.FakeBootstrap().Parts(), variablesKey)...)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "does not include what this project needs: " + provider.FeatureVariablesKey + "."; !strings.Contains(stderr.String(), want) {
+		if want := "does not include what this project needs: " + provider.VariablesKeyPart + "."; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %q", stderr.String(), want)
 		}
-		if strings.Contains(err.Error(), fake.FeatureImages) {
+		if strings.Contains(err.Error(), fake.PartImages) {
 			t.Errorf("runEnvSet err = %v, want a write to ask for the key it seals under, not for what a deploy would need", err)
 		}
 	})
@@ -1025,19 +1025,19 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if len(applied) == 0 {
 			t.Fatal("the bootstrap the offer accepted never reached the provider")
 		}
-		if got := applied[len(applied)-1].Features; !slices.Equal(got, []string{provider.FeatureVariablesKey}) {
+		if got := applied[len(applied)-1].Parts; !slices.Equal(got, []string{provider.VariablesKeyPart}) {
 			t.Errorf("the provider was asked for %q, want the key alone, which the refused write recorded", got)
 		}
 	})
 }
 
-func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
-	t.Run("a write against a catalogue that never lists the key goes straight through", func(t *testing.T) {
+func TestAProviderWithoutTheVariablesKeyPartIsOfferedNothing(t *testing.T) {
+	t.Run("a write against a provider that never offers the key goes straight through", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 
 		var stdout, stderr bytes.Buffer
 		if err := runEnvSet(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvSet err = %v, want a provider that has no such feature never asked for it; stderr=%s", err, stderr.String())
+			t.Fatalf("runEnvSet err = %v, want a provider that has no such part never asked for it; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
 			t.Errorf("stdout = %q, want the write reported", stdout.String())
@@ -1054,10 +1054,10 @@ func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 			t.Fatalf("runEnvSet err = %v, want the write to land unbidden; stderr=%s", err, stderr.String())
 		}
 		if strings.Contains(stderr.String(), "Run `ocel bootstrap") {
-			t.Errorf("stderr = %q, want no offer of a feature this provider has no name for", stderr.String())
+			t.Errorf("stderr = %q, want no offer of a part this provider has no name for", stderr.String())
 		}
 		if requested := bootstrapsRequested(t, project); len(requested) != 0 {
-			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", requested)
+			t.Errorf("the provider was bootstrapped for a part it does not offer: %v", requested)
 		}
 	})
 }

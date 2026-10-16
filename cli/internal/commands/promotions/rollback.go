@@ -82,7 +82,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
 		Pinning: executables.ChoosePinning(opts.dry),
 		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Require: readiness.Features,
+		Require: readiness.Parts,
 	}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		history, err := promotionHistory(ctx, check, provider, cfg)

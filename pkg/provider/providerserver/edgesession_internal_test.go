@@ -142,7 +142,7 @@ func TestAnEdgeCheckpointLeavesTheEdgeStackAnotherPreviewWroteWhenThisOneLeftItA
 	}
 }
 
-func TestRememberingAProjectRacedByAnotherPreviewKeepsTheFeatureThatOneAdded(t *testing.T) {
+func TestRememberingAProjectRacedByAnotherPreviewKeepsThePartThatOneAdded(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	vendor := fake.NewProvider(fake.Options{})
@@ -151,12 +151,12 @@ func TestRememberingAProjectRacedByAnotherPreviewKeepsTheFeatureThatOneAdded(t *
 	writeProject(t, store, name, []string{"edge"})
 
 	store.BeforeNextWrite(name, func() { writeProject(t, store, name, []string{"edge", "images"}) })
-	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, features: []string{"edge", "queues"}}
+	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, parts: []string{"edge", "queues"}}
 	if err := run.rememberProject(ctx); err != nil {
 		t.Fatalf("rememberProject() raced by another preview = %v, want it re-read and re-applied", err)
 	}
-	if got, want := readProjectFeatures(t, store, name), []string{"edge", "queues", "images"}; !slices.Equal(got, want) {
-		t.Errorf("recorded features %v, want %v: this preview's features and the one the other preview added", got, want)
+	if got, want := readProjectParts(t, store, name), []string{"edge", "queues", "images"}; !slices.Equal(got, want) {
+		t.Errorf("recorded parts %v, want %v: this preview's parts and the one the other preview added", got, want)
 	}
 }
 
@@ -168,22 +168,22 @@ func TestEnsuringAProjectAnotherPreviewRecordedFirstKeepsThatRecord(t *testing.T
 	name := stackrecords.ProjectKey(environment.TierPreview, "shop")
 
 	store.BeforeNextWrite(name, func() { writeProject(t, store, name, []string{"images"}) })
-	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, features: []string{"queues"}}
+	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, parts: []string{"queues"}}
 	if err := run.ensureProject(ctx); err != nil {
 		t.Fatalf("ensureProject() raced by another preview = %v, want the record that preview wrote kept", err)
 	}
-	if got, want := readProjectFeatures(t, store, name), []string{"images"}; !slices.Equal(got, want) {
-		t.Errorf("recorded features %v, want %v", got, want)
+	if got, want := readProjectParts(t, store, name), []string{"images"}; !slices.Equal(got, want) {
+		t.Errorf("recorded parts %v, want %v", got, want)
 	}
 }
 
-func writeProject(t *testing.T, store keyvalue.Store, name keyvalue.Key, features []string) {
+func writeProject(t *testing.T, store keyvalue.Store, name keyvalue.Key, parts []string) {
 	t.Helper()
 	entry, err := keyvalue.ReadOrEmpty(context.Background(), store, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Value, err = json.Marshal(stackrecords.Project{Features: features}); err != nil {
+	if entry.Value, err = json.Marshal(stackrecords.Project{Parts: parts}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Write(context.Background(), entry); err != nil {
@@ -191,7 +191,7 @@ func writeProject(t *testing.T, store keyvalue.Store, name keyvalue.Key, feature
 	}
 }
 
-func readProjectFeatures(t *testing.T, store keyvalue.Store, name keyvalue.Key) []string {
+func readProjectParts(t *testing.T, store keyvalue.Store, name keyvalue.Key) []string {
 	t.Helper()
 	entry, err := store.Read(context.Background(), name)
 	if err != nil {
@@ -201,5 +201,5 @@ func readProjectFeatures(t *testing.T, store keyvalue.Store, name keyvalue.Key) 
 	if err := json.Unmarshal(entry.Value, &project); err != nil {
 		t.Fatal(err)
 	}
-	return project.Features
+	return project.Parts
 }

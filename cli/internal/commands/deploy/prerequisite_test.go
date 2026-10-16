@@ -331,10 +331,10 @@ func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
 	}
 }
 
-func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun(t *testing.T) {
+func TestAFirstDeployOfAProjectNeedingAPartBootstrapsWithItAndDeploysInOneRun(t *testing.T) {
 	fixture := clitest.SetUpProject(t)
 	removeBootstrap(t, fixture, environment.TierProduction)
-	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
+	fixture.Provider.FakeBootstrap().Offers(provider.Part{Name: fake.PartCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
 	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
@@ -348,18 +348,18 @@ func TestAFirstDeployOfAProjectNeedingAFeatureBootstrapsWithItAndDeploysInOneRun
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
 	applied := fixture.Provider.FakeBootstrap().Applied()[before:]
-	if len(applied) != 1 || !slices.Contains(applied[0].Features, fake.FeatureCache) {
-		t.Errorf("the provider applied %+v, want one bootstrap that includes %s, which the project needs", applied, fake.FeatureCache)
+	if len(applied) != 1 || !slices.Contains(applied[0].Parts, fake.PartCache) {
+		t.Errorf("the provider applied %+v, want one bootstrap that includes %s, which the project needs", applied, fake.PartCache)
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 1 {
 		t.Errorf("the CLI sent %d deploys, want the first bootstrap to leave nothing missing for the deploy; stdout=%s", len(sent), stdout.String())
 	}
 }
 
-func TestADeployAgainstABootstrapLackingAFeatureItNeedsAddsItAndDeploysInOneRun(t *testing.T) {
+func TestADeployAgainstABootstrapLackingAPartItNeedsAddsItAndDeploysInOneRun(t *testing.T) {
 	fixture := clitest.SetUpProject(t)
 	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
-	fixture.Provider.FakeBootstrap().Offers(provider.Feature{Name: fake.FeatureCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
+	fixture.Provider.FakeBootstrap().Offers(provider.Part{Name: fake.PartCache, Summary: "a cache every direct-edge project needs", Edges: []edge.Kind{"direct"}})
 	writeUsageMonorepoWithProvider(t, fixture.Root, "edge: \"direct\"", "")
 	before := len(fixture.Provider.FakeBootstrap().Applied())
 	dependencies := newTestDependencies()
@@ -370,16 +370,16 @@ func TestADeployAgainstABootstrapLackingAFeatureItNeedsAddsItAndDeploysInOneRun(
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\ny\n")); err != nil {
-		t.Fatalf("runDeploy err = %v, want the missing feature offered before the build; stdout=%s", err, stdout.String())
+		t.Fatalf("runDeploy err = %v, want the missing part offered before the build; stdout=%s", err, stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "does not include what this project needs: "+fake.FeatureCache) {
-		t.Errorf("stdout = %q, want the check to name the feature the bootstrap lacks", stdout.String())
+	if !strings.Contains(stdout.String(), "does not include what this project needs: "+fake.PartCache) {
+		t.Errorf("stdout = %q, want the check to name the part the bootstrap lacks", stdout.String())
 	}
 	applied := fixture.Provider.FakeBootstrap().Applied()[before:]
-	if len(applied) != 1 || !slices.Contains(applied[0].Features, fake.FeatureCache) {
-		t.Errorf("the provider applied %+v, want one bootstrap that adds %s", applied, fake.FeatureCache)
+	if len(applied) != 1 || !slices.Contains(applied[0].Parts, fake.PartCache) {
+		t.Errorf("the provider applied %+v, want one bootstrap that adds %s", applied, fake.PartCache)
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 1 {
-		t.Errorf("the CLI sent %d deploys, want one once the feature was added; stdout=%s", len(sent), stdout.String())
+		t.Errorf("the CLI sent %d deploys, want one once the part was added; stdout=%s", len(sent), stdout.String())
 	}
 }

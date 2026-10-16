@@ -557,7 +557,7 @@ func TestARemovalSaysSoWhenTheInstalledBootstrapFrontsNoEdge(t *testing.T) {
 	w.forgetPart(t)
 
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err == nil {
-		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap installed without the edge feature is not an account with none")
+		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap installed without the edge part is not an account with none")
 	}
 }
 

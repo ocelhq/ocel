@@ -151,7 +151,7 @@ func TestBootstrapDestroyTakesTheTierOrItsAliasAsItsArgument(t *testing.T) {
 
 func TestBootstrapReadsThePartsThenPlansTheApplyItIsAboutToSend(t *testing.T) {
 	t.Run("bootstrap reads the parts, then plans the apply it is about to send", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
@@ -170,19 +170,19 @@ func TestBootstrapReadsThePartsThenPlansTheApplyItIsAboutToSend(t *testing.T) {
 }
 
 const (
-	featureISR               = "isr"
-	featureImageOptimization = "image-optimization"
-	featureRelayEdge         = "relay-edge"
-	featureDirectEdge        = "direct-edge"
+	partISR               = "isr"
+	partImageOptimization = "image-optimization"
+	partRelayEdge         = "relay-edge"
+	partDirectEdge        = "direct-edge"
 )
 
-func catalogue() []provider.Feature {
-	return []provider.Feature{
-		{Name: featureISR, Summary: "incremental static regeneration"},
-		{Name: featureImageOptimization, Summary: "on-demand image optimization"},
-		{Name: provider.FeatureVariablesKey, Summary: "a key the variables are sealed under"},
-		{Name: featureRelayEdge, Summary: "a relay front", DependsOn: []string{featureISR}, Edges: []edge.Kind{"relay"}},
-		{Name: featureDirectEdge, Summary: "a direct front", Edges: []edge.Kind{"direct"}},
+func offered() []provider.Part {
+	return []provider.Part{
+		{Name: partISR, Summary: "incremental static regeneration"},
+		{Name: partImageOptimization, Summary: "on-demand image optimization"},
+		{Name: provider.VariablesKeyPart, Summary: "a key the variables are sealed under"},
+		{Name: partRelayEdge, Summary: "a relay front", Edges: []edge.Kind{"relay"}},
+		{Name: partDirectEdge, Summary: "a direct front", Edges: []edge.Kind{"direct"}},
 	}
 }
 
@@ -190,7 +190,7 @@ func bootstrapProject(t *testing.T, declaration string, installed ...string) (cl
 	t.Helper()
 	project := clitest.SetUpMonorepoProject(t, declaration)
 	invocation := clitest.NewInvocation()
-	project.Provider.FakeBootstrap().Offers(catalogue()...)
+	project.Provider.FakeBootstrap().Offers(offered()...)
 	clitest.Bootstrap(t, project.Provider, environment.TierProduction, installed...)
 	return project, invocation
 }
@@ -205,21 +205,21 @@ func mixedPlan() provider.Plan {
 			},
 		},
 		{
-			Kind: provider.StackGroupKind, Name: "fake/ocel-production-image-optimization", Feature: featureImageOptimization, Action: provider.ActionCreate,
+			Kind: provider.StackGroupKind, Name: "fake/ocel-production-image-optimization", Part: partImageOptimization, Action: provider.ActionCreate,
 			Changes: []provider.Change{{Kind: "Fake::Function", Name: "OcelImageFunction", Action: provider.ActionCreate}},
 		},
 		{
-			Kind: provider.StackGroupKind, Name: "fake/ocel-production-isr", Feature: featureISR, Action: provider.ActionDelete,
+			Kind: provider.StackGroupKind, Name: "fake/ocel-production-isr", Part: partISR, Action: provider.ActionDelete,
 			Reason: "web, api were deployed against it", Slow: true,
 			Changes: []provider.Change{{Kind: "Fake::Table", Name: "OcelRevalidationTable", Action: provider.ActionDelete}},
 		},
-		{Kind: provider.StackGroupKind, Name: "fake/ocel-production-secrets", Feature: "secrets", Action: provider.ActionKeep, Reason: "already current"},
+		{Kind: provider.StackGroupKind, Name: "fake/ocel-production-secrets", Part: "secrets", Action: provider.ActionKeep, Reason: "already current"},
 	}}
 }
 
 func withRelayEdge(plan provider.Plan) provider.Plan {
 	plan.Groups = append(plan.Groups, provider.ChangeGroup{
-		Kind: edge.EdgeGroupKind, Name: edge.EdgeGroupName("relay"), Feature: featureRelayEdge, Action: provider.ActionCreate,
+		Kind: edge.EdgeGroupKind, Name: edge.EdgeGroupName("relay"), Part: partRelayEdge, Action: provider.ActionCreate,
 		Changes: []provider.Change{
 			{Kind: "Fake::EdgeBucket", Name: "ocel-edge-cache", Action: provider.ActionCreate},
 			{Kind: "Fake::EdgeScript", Name: "ocel-releases-store", Action: provider.ActionCreate},
@@ -346,7 +346,7 @@ func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *te
 	})
 
 	t.Run("--dry prints the plan, removes nothing, and needs no terminal", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
@@ -357,7 +357,7 @@ func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *te
 		for _, want := range []string{
 			"This will permanently remove the production bootstrap",
 			"– fake-production-isr  [isr]",
-			"– fake-production  [core]  — the core every feature above was built on (slow)",
+			"– fake-production  [core]  — the core every part above was built on (slow)",
 			"– relay/edge",
 			"    – relay-front  Fake::Edge::Front",
 			"Run without --dry to destroy.",
@@ -437,7 +437,7 @@ func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *te
 }
 
 func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
-	project, invocation := bootstrapProject(t, "", featureISR)
+	project, invocation := bootstrapProject(t, "", partISR)
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
@@ -504,7 +504,7 @@ export default {
 
 func TestBootstrapShowsItsPlan(t *testing.T) {
 	t.Run("it renders every group and the tally before applying", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
 		var stdout, stderr bytes.Buffer
@@ -536,7 +536,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("the selected edge is listed beside the stacks, in its own vocabulary", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "edge: \"relay\"", featureISR)
+		project, invocation := bootstrapProject(t, "edge: \"relay\"", partISR)
 		project.Provider.FakeBootstrap().PlansWith(withRelayEdge(mixedPlan()))
 
 		var stdout, stderr bytes.Buffer
@@ -565,7 +565,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("credentials the plan cannot reach stop the run before it prints half a plan", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "edge: \"relay\"", featureISR)
+		project, invocation := bootstrapProject(t, "edge: \"relay\"", partISR)
 		project.Provider.FakeBootstrap().RefusePlan(errors.New("plan the relay edge bootstrap: FAKE_RELAY_ACCOUNT is not set; export it and re-run"))
 
 		var stdout, stderr bytes.Buffer
@@ -590,7 +590,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("--dry stops at the plan", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
 		var stdout, stderr bytes.Buffer
@@ -611,7 +611,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("a plan that changes nothing still applies, because the apply is the repair path", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		project.Provider.FakeBootstrap().PlansWith(keepPlan())
 
 		var stdout, stderr bytes.Buffer
@@ -629,7 +629,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("a provider that plans nothing still applies", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		project.Provider.FakeBootstrap().PlansWith(provider.Plan{})
 
 		var stdout, stderr bytes.Buffer
@@ -646,32 +646,32 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("--remove passes the force the apply needs, and leaves the rest installed", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
+		project, invocation := bootstrapProject(t, "", partISR, partImageOptimization)
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: featureISR, Force: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: partISR, Force: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
 			t.Errorf("stdout = %q, want the deletion shown before it is applied", stdout.String())
 		}
 		if got := intents(t, project); len(got) != 1 || got[0] != "remove=isr force=true acceptReplacements=true" {
-			t.Errorf("provider was asked to apply %v, want the named removal passed through and the unnamed feature ensured", got)
+			t.Errorf("provider was asked to apply %v, want the named removal passed through and the unnamed part ensured", got)
 		}
 	})
 
-	t.Run("--remove of a feature that is not installed says so and stops", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+	t.Run("--remove of a part that is not installed says so and stops", func(t *testing.T) {
+		project, invocation := bootstrapProject(t, "", partISR)
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: featureImageOptimization}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: partImageOptimization}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "image-optimization is not in the production bootstrap, so there is nothing to remove.") {
-			t.Errorf("stdout = %q, want it to say the named feature was never there", stdout.String())
+			t.Errorf("stdout = %q, want it to say the named part was never there", stdout.String())
 		}
 		if got := applies(t, project); len(got) != 0 {
 			t.Errorf("provider was asked to apply %v, want a run that was only a removal of nothing to apply nothing", intents(t, project))
@@ -681,7 +681,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 func TestBootstrapYesMeansYes(t *testing.T) {
 	t.Run("an interactive yes on a plan containing a replacement passes the consent it needs", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
@@ -702,13 +702,13 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 	})
 
 	t.Run("one plan and one yes cover an add and a removal together", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
+		project, invocation := bootstrapProject(t, "", partISR, partImageOptimization)
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: featureISR}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: partISR}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
@@ -723,13 +723,13 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 	})
 
 	t.Run("a silent plan still says what the removal takes, and a no stops there", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 		project.Provider.FakeBootstrap().PlansWith(provider.Plan{})
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: featureISR}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Remove: partISR}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -747,7 +747,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 	})
 
 	t.Run("what the removal takes rides the stream, so a json run consents to something it was shown", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		invocation.Presentation = func(io.Writer) terminal.Presentation {
 			return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 		}
@@ -755,7 +755,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: partISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -771,7 +771,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 }
 
 func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
-	project, invocation := bootstrapProject(t, "", featureISR)
+	project, invocation := bootstrapProject(t, "", partISR)
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
@@ -848,13 +848,13 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 	}{
 		{
 			name:      "removing a part that is not there",
-			installed: []string{featureISR},
-			opts:      Options{Yes: true, Remove: featureImageOptimization},
+			installed: []string{partISR},
+			opts:      Options{Yes: true, Remove: partImageOptimization},
 			wants:     []string{"image-optimization is not in the production bootstrap, so there is nothing to remove."},
 		},
 		{
 			name:      "content going backwards",
-			installed: []string{featureISR},
+			installed: []string{partISR},
 			arrange: func(t *testing.T, project clitest.FakeProject) {
 				writtenByANewerOcel(t, project)
 				project.Provider.FakeBootstrap().PlansWith(keepPlan())
@@ -893,12 +893,12 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 
 func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	t.Run("--dry previews a removal instead of demanding --force", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
+		project, invocation := bootstrapProject(t, "", partISR, partImageOptimization)
 		project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Dry: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Dry: true, Remove: partISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "– fake/ocel-production-isr") {
@@ -910,12 +910,12 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	})
 
 	t.Run("--dry previews a removal a silent provider draws no plan for", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		project.Provider.FakeBootstrap().PlansWith(provider.Plan{})
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Dry: true, Remove: featureISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Dry: true, Remove: partISR}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Removing isr from the production bootstrap tears down what it installed.") {
@@ -927,7 +927,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	})
 
 	t.Run("--dry says the content is going backwards", func(t *testing.T) {
-		project, invocation := bootstrapProject(t, "", featureISR)
+		project, invocation := bootstrapProject(t, "", partISR)
 		writtenByANewerOcel(t, project)
 		project.Provider.FakeBootstrap().PlansWith(keepPlan())
 
@@ -943,7 +943,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 }
 
 func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
-	project, invocation := bootstrapProject(t, "", featureISR, featureImageOptimization)
+	project, invocation := bootstrapProject(t, "", partISR, partImageOptimization)
 
 	var stdout, stderr bytes.Buffer
 	opts := Options{Yes: true, Remove: "image-optimization", Force: true}

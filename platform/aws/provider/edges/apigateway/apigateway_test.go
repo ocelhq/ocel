@@ -173,11 +173,11 @@ func TestTheAPIGatewayEdgeRunsNoCode(t *testing.T) {
 	}
 }
 
-func TestTheEdgeKindNeedsNoBootstrapFeature(t *testing.T) {
+func TestTheEdgeKindNeedsNoBootstrapPart(t *testing.T) {
 	t.Parallel()
 
-	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != "" {
-		t.Errorf("bootstrapping with the %q edge raises the %q feature, want none: its invoke role is in the base and its not-found API is the %s part", Kind, got, notfoundapi.Part)
+	if got := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), Kind); got != "" {
+		t.Errorf("bootstrapping with the %q edge raises the %q part, want none: its invoke role is in the base and its not-found API is the %s part", Kind, got, notfoundapi.Part)
 	}
 }
 

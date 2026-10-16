@@ -23,18 +23,18 @@ func TestPrefixWithVendorNamesEveryGroupUnderTheVendorThatOwnsIt(t *testing.T) {
 	}
 }
 
-func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.T) {
+func TestPartNeedingEdgeFindsThePartTheEdgeParticipatesThrough(t *testing.T) {
 	t.Parallel()
 
-	catalogue := []provider.Feature{
+	offered := []provider.Part{
 		{Name: "isr"},
 		{Name: "cloudflare-edge", Edges: []edge.Kind{"cloudflare"}},
 	}
-	if got := bootstrapplan.FeatureNeedingEdge(catalogue, "cloudflare"); got != "cloudflare-edge" {
-		t.Errorf("FeatureNeedingEdge(cloudflare) = %q, want the feature that names it", got)
+	if got := bootstrapplan.PartFrontingEdge(offered, "cloudflare"); got != "cloudflare-edge" {
+		t.Errorf("PartFrontingEdge(cloudflare) = %q, want the part that names it", got)
 	}
-	if got := bootstrapplan.FeatureNeedingEdge(catalogue, "cloudfront"); got != "" {
-		t.Errorf("FeatureNeedingEdge(cloudfront) = %q, want nothing where no feature names it", got)
+	if got := bootstrapplan.PartFrontingEdge(offered, "cloudfront"); got != "" {
+		t.Errorf("PartFrontingEdge(cloudfront) = %q, want nothing where no part names it", got)
 	}
 }
 
@@ -46,16 +46,16 @@ func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 		Present: true,
 		Stacks: []provider.BootstrapStack{
 			{Name: "core", Present: true, DigestCurrent: true},
-			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true},
+			{Name: "cache-stack", Part: fake.PartCache, Present: true},
 		},
 	}
-	groups := bootstrapplan.ChangeGroups(described, fake.NewBootstrap().Catalogue(), provider.BootstrapRequest{
-		Tier:     environment.TierPreview,
-		Features: []string{fake.FeatureCache},
-		Remove:   []string{fake.FeatureImages},
+	groups := bootstrapplan.ChangeGroups(described, fake.NewBootstrap().Parts(), provider.BootstrapRequest{
+		Tier:   environment.TierPreview,
+		Parts:  []string{fake.PartCache},
+		Remove: []string{fake.PartImages},
 	})
 	if len(groups) != 3 {
-		t.Fatalf("ChangeGroups() = %v, want the baseline, the kept feature and the dropped one", groups)
+		t.Fatalf("ChangeGroups() = %v, want the baseline, the kept part and the dropped one", groups)
 	}
 	if groups[0].Name != "core" || groups[0].Action != provider.ActionKeep {
 		t.Errorf("the baseline group = %+v, want core kept", groups[0])
@@ -63,7 +63,7 @@ func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	if groups[1].Name != "cache-stack" || groups[1].Action != provider.ActionUpdate {
 		t.Errorf("the cache group = %+v, want the stale stack updated", groups[1])
 	}
-	if groups[2].Action != provider.ActionDelete || groups[2].Feature != fake.FeatureImages {
-		t.Errorf("the images group = %+v, want the dropped feature deleted", groups[2])
+	if groups[2].Action != provider.ActionDelete || groups[2].Part != fake.PartImages {
+		t.Errorf("the images group = %+v, want the dropped part deleted", groups[2])
 	}
 }

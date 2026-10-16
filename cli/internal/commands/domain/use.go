@@ -29,7 +29,7 @@ func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wild
 	if err != nil {
 		return err
 	}
-	return invocation.WithProvider(ctx, cfg, "ocel domain use", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, "ocel domain use", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		req := &contractv1.UsePreviewWildcardRequest{

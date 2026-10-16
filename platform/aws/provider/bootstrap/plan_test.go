@@ -32,14 +32,14 @@ func planned(t *testing.T, stacks cfn.API, tier environment.Tier, req Request) [
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
-			Feature:       stack.Feature,
+			Part:          stack.Part,
 			Present:       stack.Present,
 			DigestCurrent: stack.Current(),
 		})
 	}
 	groups, err := PlanChanges(ctx, stacks, newFakeLayers(), read, req, bootstrapplan.ChangeGroups(
-		WithDefaultStackNames(defaultNamespace, described), Catalogue(),
-		provider.BootstrapRequest{Tier: tier, Features: req.Features, Remove: req.Remove}))
+		WithDefaultStackNames(defaultNamespace, described), Parts(),
+		provider.BootstrapRequest{Tier: tier, Parts: req.Parts, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
@@ -219,17 +219,17 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	}
 
 	var groups []provider.ChangeGroup
-	for _, feature := range append([]string{""}, featureNames()...) {
+	for _, part := range append([]string{""}, partNames()...) {
 		stack := coreStackName
-		if feature != "" {
-			stack = defaultNamespace.FeatureStackName(feature, environment.TierProduction)
+		if part != "" {
+			stack = defaultNamespace.PartStackName(part, environment.TierProduction)
 		}
 		stacks.fallBehind(stack)
 		groups = append(groups, provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    stack,
-			Feature: feature,
-			Action:  provider.ActionUpdate,
+			Kind:   provider.StackGroupKind,
+			Name:   stack,
+			Part:   part,
+			Action: provider.ActionUpdate,
 		})
 	}
 	gate := gateOf(stacks, min(len(groups), planFanOut))
@@ -280,17 +280,17 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 	}
 }
 
-func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
+func TestPlanListsWhatADroppedPartTakesWithIt(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
 	stack := edgeStack(environment.TierProduction)
 
 	groups := planned(t, stacks, environment.TierProduction, Request{
-		Features: []string{provider.FeatureVariablesKey},
-		Remove:   []string{FeatureCloudflareEdge},
+		Parts:  []string{provider.VariablesKeyPart},
+		Remove: []string{CloudflareEdgePart},
 	})
 	group := groupNamed(t, groups, stack)
-	if group.Action != provider.ActionDelete || group.Feature != FeatureCloudflareEdge {
-		t.Fatalf("%s = %+v, want the dropped feature deleted", stack, group)
+	if group.Action != provider.ActionDelete || group.Part != CloudflareEdgePart {
+		t.Fatalf("%s = %+v, want the dropped part deleted", stack, group)
 	}
 	user := changeNamed(t, group, "EdgeUser")
 	if user.Action != provider.ActionDelete || user.Kind == "" {
@@ -312,8 +312,8 @@ func TestPlanListsTheResourcesTheProvisionedStackContainsNotTheOnesThisBuildWoul
 	stacks.setTemplate(stack, leftoverTemplate)
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, Request{
-		Features: []string{provider.FeatureVariablesKey},
-		Remove:   []string{FeatureCloudflareEdge},
+		Parts:  []string{provider.VariablesKeyPart},
+		Remove: []string{CloudflareEdgePart},
 	}), stack)
 	leftover := changeNamed(t, group, "LeftoverQueue")
 	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != provider.ActionDelete {
@@ -337,8 +337,8 @@ func TestPlanFallsBackToTheTemplateWhenItCannotReadTheProvisionedStack(t *testin
 	stack := edgeStack(environment.TierProduction)
 
 	group := groupNamed(t, planned(t, unlistable{stacks}, environment.TierProduction, Request{
-		Features: []string{provider.FeatureVariablesKey},
-		Remove:   []string{FeatureCloudflareEdge},
+		Parts:  []string{provider.VariablesKeyPart},
+		Remove: []string{CloudflareEdgePart},
 	}), stack)
 	if user := changeNamed(t, group, "EdgeUser"); user.Action != provider.ActionDelete {
 		t.Errorf("EdgeUser = %+v, want the template's best guess at what goes", user)
@@ -353,7 +353,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	stacks := newFakeCFN()
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
-	req := Request{Features: []string{provider.FeatureVariablesKey}, VariablesKey: broughtKeyARN}
+	req := Request{Parts: []string{provider.VariablesKeyPart}, VariablesKey: broughtKeyARN}
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
-	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction))
+	group := groupNamed(t, groups, defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction))
 	for _, change := range group.Changes {
 		if change.Name == "VariablesKey" || change.Name == "VariablesKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key or an alias this account brought", change.Name)
@@ -378,12 +378,12 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 	ctx := context.Background()
 	stacks := newFakeCFN()
 	core := defaultNamespace.CoreStackName()
-	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
-	for _, name := range []string{core, feature} {
+	part := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
+	for _, name := range []string{core, part} {
 		stacks.templates[name] = "Resources: {}"
 	}
 	stacks.statuses[core] = cfntypes.StackStatusRollbackComplete
-	stacks.statuses[feature] = cfntypes.StackStatusCreateComplete
+	stacks.statuses[part] = cfntypes.StackStatusCreateComplete
 
 	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
 	if err != nil {
@@ -400,10 +400,10 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 		}
 		names = append(names, group.Name)
 	}
-	if got := groupNamed(t, groups, feature).Feature; got != provider.FeatureVariablesKey {
-		t.Errorf("%s is labelled feature %q, want %q", feature, got, provider.FeatureVariablesKey)
+	if got := groupNamed(t, groups, part).Part; got != provider.VariablesKeyPart {
+		t.Errorf("%s is labelled part %q, want %q", part, got, provider.VariablesKeyPart)
 	}
-	if want := []string{feature, core}; !slices.Equal(names, want) {
+	if want := []string{part, core}; !slices.Equal(names, want) {
 		t.Errorf("PlanRemove() plans %v, want %v: a destroy that plans nothing never runs the teardown that removes them", names, want)
 	}
 }

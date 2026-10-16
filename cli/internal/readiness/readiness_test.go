@@ -119,8 +119,8 @@ func TestAMatchingInfrastructureTierIsNotRefused(t *testing.T) {
 func TestATierWithNoInfrastructureIsABootstrapToSetUpNamingItsCommand(t *testing.T) {
 	status := &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PRODUCTION, Stacks: []*contractv1.BootstrapStack{
 		{Name: "ocel-bootstrap", Required: true},
-		{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
-		{Name: "ocel-bootstrap-queues", Feature: "queues"},
+		{Name: "ocel-bootstrap-isr", Part: "isr", Required: true},
+		{Name: "ocel-bootstrap-queues", Part: "queues"},
 	}}
 	resp := &contractv1.PreflightResponse{Bootstrap: status, Identity: &contractv1.Identity{Account: "203.0.113.7"}}
 	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure})
@@ -171,22 +171,22 @@ func TestACommandNamingNoTierIsRefusedAnAccountWithNone(t *testing.T) {
 	}
 }
 
-func TestABootstrapLackingAFeatureTheProjectNeedsIsABootstrapToSetUp(t *testing.T) {
+func TestABootstrapLackingAPartTheProjectNeedsIsABootstrapToSetUp(t *testing.T) {
 	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
 	resp.Bootstrap = bootstrapOf(
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
-		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Required: true},
 	)
-	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Features})
+	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Parts})
 	if missing.Missing() != prerequisite.Bootstrap || missing.Remedy() != "`ocel bootstrap production`" {
 		t.Errorf("missing = %v %q, want the bootstrap that adds isr", missing.Missing(), missing.Remedy())
 	}
 	if missing.Hint() != "ocel bootstrap production" {
 		t.Errorf("hint = %q, want the bootstrap that adds isr as typed", missing.Hint())
 	}
-	var lacking MissingFeaturesError
+	var lacking MissingPartsError
 	if !errors.As(missing, &lacking) || !slices.Equal(lacking.Gap.Missing, []string{"isr"}) {
-		t.Errorf("missing = %#v, want a MissingFeaturesError naming isr", missing)
+		t.Errorf("missing = %#v, want a MissingPartsError naming isr", missing)
 	}
 }
 
@@ -194,9 +194,9 @@ func TestADryRunLackingAPartSaysToRunWithoutDryBeforeTheBootstrap(t *testing.T) 
 	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
 	resp.Bootstrap = bootstrapOf(
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
-		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Required: true},
 	)
-	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Features, RecordWants: true, DryRun: true})
+	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Parts, RecordWants: true, DryRun: true})
 
 	want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"
 	if missing.Hint() != want || !strings.Contains(missing.Error(), want) || !strings.Contains(missing.Remedy(), want) {
@@ -251,7 +251,7 @@ func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing
 
 func TestATierWithNoInfrastructureReportsBootstrapMissingHintingTheCommandThroughWrapping(t *testing.T) {
 	resp := &contractv1.PreflightResponse{Bootstrap: &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PRODUCTION, Stacks: []*contractv1.BootstrapStack{
-		{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+		{Name: "ocel-bootstrap-isr", Part: "isr", Required: true},
 	}}}
 	err := RefuseUnready(resp, nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure})
 
@@ -278,19 +278,19 @@ func TestAnotherTiersInfrastructureReportsBootstrapMissingHintingTheTierToSetUp(
 	}
 }
 
-func TestABootstrapLackingAFeatureReportsBootstrapFeaturesMissingHintingTheRepair(t *testing.T) {
+func TestABootstrapLackingAPartReportsBootstrapPartsMissingHintingTheRepair(t *testing.T) {
 	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
 	resp.Bootstrap = bootstrapOf(
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
-		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Required: true},
 	)
-	err := RefuseUnready(resp, nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Features})
+	err := RefuseUnready(resp, nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Parts})
 
 	got := clierror.NewRunError(fmt.Errorf("deploy: %w", err))
-	if got.GetCode() != "bootstrap.features_missing" || got.GetHint() != "ocel bootstrap production" {
-		t.Fatalf("run error = %s, want bootstrap.features_missing hinting the repair command", protojson.Format(got))
+	if got.GetCode() != "bootstrap.parts_missing" || got.GetHint() != "ocel bootstrap production" {
+		t.Fatalf("run error = %s, want bootstrap.parts_missing hinting the repair command", protojson.Format(got))
 	}
-	var lacking MissingFeaturesError
+	var lacking MissingPartsError
 	if !errors.As(err, &lacking) {
 		t.Errorf("err = %T, want the typed error still found through the code", err)
 	}
@@ -299,14 +299,14 @@ func TestABootstrapLackingAFeatureReportsBootstrapFeaturesMissingHintingTheRepai
 	}
 }
 
-func TestAGapRefusingMissingFeaturesReportsBootstrapFeaturesMissing(t *testing.T) {
+func TestAGapRefusingMissingPartsReportsBootstrapPartsMissing(t *testing.T) {
 	gap := Gap{Missing: []string{"isr"}}
 	for name, err := range map[string]error{
 		"RefuseMissing":    gap.RefuseMissing(environmentv1.Tier_TIER_PRODUCTION),
 		"RefuseIncomplete": gap.RefuseIncomplete(environmentv1.Tier_TIER_PRODUCTION),
 	} {
-		if got := clierror.NewRunError(err); got.GetCode() != "bootstrap.features_missing" {
-			t.Errorf("%s: run error = %s, want bootstrap.features_missing", name, protojson.Format(got))
+		if got := clierror.NewRunError(err); got.GetCode() != "bootstrap.parts_missing" {
+			t.Errorf("%s: run error = %s, want bootstrap.parts_missing", name, protojson.Format(got))
 		}
 	}
 }

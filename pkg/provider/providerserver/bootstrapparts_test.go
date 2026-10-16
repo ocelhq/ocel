@@ -42,7 +42,7 @@ func TestABootstrapsPartsNameWhoAddedThemAndWhoUsesThem(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	recordProject(t, vendor, "shop", fake.FeatureCache)
+	recordProject(t, vendor, "shop", fake.PartImages)
 	recordProject(t, vendor, "blog")
 
 	parts := describedParts(t, client)
@@ -57,9 +57,9 @@ func TestABootstrapsPartsNameWhoAddedThemAndWhoUsesThem(t *testing.T) {
 	if len(base.GetResources()) == 0 {
 		t.Errorf("base = %+v, want the resources it holds", base)
 	}
-	cache := parts[fake.FeatureCache]
-	if !slices.Equal(cache.GetUsedBy(), []string{"shop"}) {
-		t.Errorf("%s used by %v, want the project that recorded it", fake.FeatureCache, cache.GetUsedBy())
+	images := parts[fake.PartImages]
+	if !slices.Equal(images.GetUsedBy(), []string{"shop"}) {
+		t.Errorf("%s used by %v, want the project that recorded it", fake.PartImages, images.GetUsedBy())
 	}
 }
 
@@ -68,7 +68,7 @@ func TestABootstrapRecordsWhatEachPartItCreatedHoldsAndTheDigestOfItsContent(t *
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	for _, name := range []string{provider.BasePart, fake.FeatureCache} {
+	for _, name := range []string{provider.BasePart, fake.PartImages} {
 		recorded, present, err := stackrecords.ReadBootstrapPart(context.Background(), vendor.KeyValues(), environment.TierProduction, name)
 		if err != nil || !present {
 			t.Fatalf("ReadBootstrapPart(%s) = %v, %v, want the part recorded", name, present, err)
@@ -150,7 +150,7 @@ func TestABootstrapThatFailsLeavesNoPartItClaimedCreating(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.PartCache, "shop")
 	vendor.FakeBootstrap().RefuseApply(errors.New("the stack update timed out"))
 
 	stream, err := client.Bootstrap(context.Background(), &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
@@ -161,20 +161,20 @@ func TestABootstrapThatFailsLeavesNoPartItClaimedCreating(t *testing.T) {
 		t.Fatal("Bootstrap() succeeded, want the refused apply to fail it")
 	}
 
-	if part := describedParts(t, client)[fake.FeatureCache]; part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING {
+	if part := describedParts(t, client)[fake.PartCache]; part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING {
 		t.Errorf("parts hold %+v after the bootstrap adding it failed, want no claim left creating", part)
 	}
 }
 
-func TestARemovedFeatureLeavesNoPartBehind(t *testing.T) {
+func TestARemovedPartLeavesNoPartBehind(t *testing.T) {
 	t.Parallel()
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
 
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Remove: []string{fake.FeatureCache}, Force: true, Edge: direct})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Remove: []string{fake.PartCache}, Force: true, Edge: direct})
 
-	if part, kept := describedParts(t, client)[fake.FeatureCache]; kept {
-		t.Errorf("parts hold %+v after its feature was removed", part)
+	if part, kept := describedParts(t, client)[fake.PartCache]; kept {
+		t.Errorf("parts hold %+v after its part was removed", part)
 	}
 }
 

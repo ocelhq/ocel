@@ -10,7 +10,7 @@ import (
 )
 
 type Bootstrap interface {
-	Catalogue() []Feature
+	Parts() []Part
 
 	Describe(ctx context.Context, tier environment.Tier) (BootstrapDescription, error)
 
@@ -37,7 +37,7 @@ type BootstrapDescription struct {
 
 type BootstrapStack struct {
 	Name    string
-	Feature string
+	Part    string
 	Present bool
 
 	DigestCurrent bool
@@ -72,17 +72,16 @@ type PartShape struct {
 	Resources []pricing.Shaped
 }
 
-type Feature struct {
-	Name      string
-	Summary   string
-	DependsOn []string
-	Edges     []edge.Kind
+type Part struct {
+	Name    string
+	Summary string
+	Edges   []edge.Kind
 }
 
 type BootstrapRequest struct {
 	Tier environment.Tier
 
-	Features []string
+	Parts []string
 
 	Remove []string
 
@@ -102,7 +101,7 @@ func (e WantedPartError) Error() string { return e.Err.Error() }
 
 func (e WantedPartError) Unwrap() error { return e.Err }
 
-const FeatureVariablesKey = "variables-key"
+const VariablesKeyPart = "variables-key"
 
 func BootstrapCommand(tier environment.Tier) string {
 	if tier == environment.TierPreview {

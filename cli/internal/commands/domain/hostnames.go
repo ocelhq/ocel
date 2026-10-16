@@ -133,7 +133,7 @@ func changeHostnames(ctx context.Context, invocation commands.Invocation, cfg *p
 		}
 	}
 
-	return invocation.WithProvider(ctx, cfg, change.command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, change.command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		if change.asks != nil {

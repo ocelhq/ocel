@@ -31,7 +31,7 @@ type BootstrapStatus struct {
 	Tier        environment.Tier
 	Present     bool
 	Stacks      []provider.BootstrapStack
-	Features    []string
+	Parts       []string
 	WrittenBy   provider.WrittenBy
 	Unfinished  bool
 	VendorState any
@@ -46,15 +46,15 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 		Unfinished: described.Unfinished, VendorState: described.VendorState}
 	var present []string
 	for _, stack := range described.Stacks {
-		if stack.Feature == "" {
+		if stack.Part == "" {
 			status.WrittenBy = provider.WrittenBy(stack.WrittenBy)
 			continue
 		}
 		if stack.Present {
-			present = append(present, stack.Feature)
+			present = append(present, stack.Part)
 		}
 	}
-	status.Features = bootstrapplan.InCatalogueOrder(r.Bootstrap.Catalogue(), present)
+	status.Parts = bootstrapplan.InOfferedOrder(r.Bootstrap.Parts(), present)
 	return status, nil
 }
 
@@ -64,7 +64,7 @@ func (s BootstrapStatus) Stale(required []string) []string {
 		if !stack.Present || stack.DigestCurrent || stack.ReadError != "" {
 			continue
 		}
-		if stack.Feature != "" && !slices.Contains(required, stack.Feature) {
+		if stack.Part != "" && !slices.Contains(required, stack.Part) {
 			continue
 		}
 		out = append(out, stack.Name)
@@ -78,7 +78,7 @@ func (s BootstrapStatus) Unreadable(required []string) []string {
 		if stack.ReadError == "" {
 			continue
 		}
-		if stack.Feature != "" && !slices.Contains(required, stack.Feature) {
+		if stack.Part != "" && !slices.Contains(required, stack.Part) {
 			continue
 		}
 		out = append(out, stack.Name+" ("+stack.ReadError+")")
@@ -98,45 +98,40 @@ type ApplyRequest struct {
 	AcceptReplacements bool
 }
 
-type featureChange struct {
+type partChange struct {
 	status    BootstrapStatus
 	requested []string
 	removing  []string
-	ordered   []string
 	wants     map[string][]string
 }
 
-func (r Readiness) resolveFeatureChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (featureChange, error) {
-	catalogue := r.Bootstrap.Catalogue()
-	removing, err := bootstrapplan.FeaturesToRemove(catalogue, status.Features, req.Remove)
+func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (partChange, error) {
+	offered := r.Bootstrap.Parts()
+	removing, err := bootstrapplan.PartsToRemove(offered, status.Parts, req.Remove)
 	if err != nil {
-		return featureChange{}, err
+		return partChange{}, err
 	}
-	if err := r.refuseRemovingEdgeFeature(catalogue, req.Remove, removing); err != nil {
-		return featureChange{}, err
+	if err := r.refuseRemovingEdgePart(offered, removing); err != nil {
+		return partChange{}, err
 	}
-	wants, err := r.wantedParts(ctx, status.Tier, catalogue, removing)
+	wants, err := r.wantedParts(ctx, status.Tier, offered, removing)
 	if err != nil {
-		return featureChange{}, err
+		return partChange{}, err
 	}
-	named := r.withEdgeFeature(catalogue, nil)
+	var requested []string
+	if edgePart := bootstrapplan.PartFrontingEdge(offered, r.Edge); edgePart != "" {
+		requested = append(requested, edgePart)
+	}
 	for _, part := range slices.Sorted(maps.Keys(wants)) {
-		if !slices.Contains(named, part) {
-			named = append(slices.Clone(named), part)
+		if !slices.Contains(requested, part) {
+			requested = append(requested, part)
 		}
 	}
-	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, named)
-	if err != nil {
-		return featureChange{}, err
-	}
-	ordered, err := bootstrapplan.DeleteOrder(catalogue, removing)
-	if err != nil {
-		return featureChange{}, err
-	}
-	return featureChange{status: status, requested: requested, removing: removing, ordered: ordered, wants: wants}, nil
+	requested = bootstrapplan.InOfferedOrder(offered, requested)
+	return partChange{status: status, requested: requested, removing: removing, wants: wants}, nil
 }
 
-func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, catalogue []provider.Feature, removing []string) (map[string][]string, error) {
+func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offered []provider.Part, removing []string) (map[string][]string, error) {
 	recorded, err := stackrecords.ListBootstrapWants(ctx, r.KeyValues, tier)
 	if storeAbsent(err) {
 		return nil, nil
@@ -144,9 +139,8 @@ func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, catal
 	if err != nil {
 		return nil, err
 	}
-	offered := bootstrapplan.InCatalogueOrder(catalogue, slices.Collect(maps.Keys(recorded)))
 	wants := map[string][]string{}
-	for _, part := range offered {
+	for _, part := range bootstrapplan.InOfferedOrder(offered, slices.Collect(maps.Keys(recorded))) {
 		if !slices.Contains(removing, part) {
 			wants[part] = recorded[part]
 		}
@@ -154,34 +148,21 @@ func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, catal
 	return wants, nil
 }
 
-func (r Readiness) withEdgeFeature(catalogue []provider.Feature, requested []string) []string {
-	edgeFeature := bootstrapplan.FeatureNeedingEdge(catalogue, r.Edge)
-	if edgeFeature == "" || slices.Contains(requested, edgeFeature) {
-		return requested
-	}
-	return append(slices.Clone(requested), edgeFeature)
-}
-
-func (r Readiness) refuseRemovingEdgeFeature(catalogue []provider.Feature, named, removing []string) error {
-	edgeFeature := bootstrapplan.FeatureNeedingEdge(catalogue, r.Edge)
-	if edgeFeature == "" || !slices.Contains(removing, edgeFeature) {
+func (r Readiness) refuseRemovingEdgePart(offered []provider.Part, removing []string) error {
+	edgePart := bootstrapplan.PartFrontingEdge(offered, r.Edge)
+	if edgePart == "" || !slices.Contains(removing, edgePart) {
 		return nil
 	}
-	if slices.Contains(named, edgeFeature) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"%s fronts this project's deploys, so this run will not remove it: point the project at another edge first",
-			edgeFeature)
-	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"removing %s takes %s down with it, and %s fronts this project's deploys: point the project at another edge first",
-		strings.Join(named, ", "), edgeFeature, edgeFeature)
+		"%s fronts this project's deploys, so this run will not remove it: point the project at another edge first",
+		edgePart)
 }
 
-func (c featureChange) request(tier environment.Tier, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
+func (c partChange) request(tier environment.Tier, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
 	return provider.BootstrapRequest{
 		Tier:               tier,
-		Features:           c.requested,
-		Remove:             c.ordered,
+		Parts:              c.requested,
+		Remove:             c.removing,
 		RefuseReplacements: !req.AcceptReplacements,
 		WrittenBy:          writer,
 		VendorState:        c.status.VendorState,
@@ -197,7 +178,7 @@ func (r Readiness) Plan(ctx context.Context, tier environment.Tier, req ApplyReq
 }
 
 func (r Readiness) PlanFrom(ctx context.Context, status BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
-	change, err := r.resolveFeatureChange(ctx, status, req)
+	change, err := r.resolvePartChange(ctx, status, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -212,22 +193,22 @@ func (r Readiness) PlanFrom(ctx context.Context, status BootstrapStatus, req App
 func (r Readiness) noteDependents(ctx context.Context, tier environment.Tier, groups []provider.ChangeGroup) error {
 	var dropped []string
 	for _, group := range groups {
-		if group.Action == provider.ActionDelete && group.Feature != "" {
-			dropped = append(dropped, group.Feature)
+		if group.Action == provider.ActionDelete && group.Part != "" {
+			dropped = append(dropped, group.Part)
 		}
 	}
 	if len(dropped) == 0 {
 		return nil
 	}
-	recorded, err := r.RecordedFeatures(ctx, tier)
+	recorded, err := r.RecordedParts(ctx, tier)
 	if err != nil {
 		return err
 	}
 	for i, group := range groups {
-		if group.Action != provider.ActionDelete || group.Feature == "" {
+		if group.Action != provider.ActionDelete || group.Part == "" {
 			continue
 		}
-		dependents := ProjectsDependingOn(recorded, []string{group.Feature})
+		dependents := ProjectsDependingOn(recorded, []string{group.Part})
 		if len(dependents) == 0 {
 			continue
 		}
@@ -241,7 +222,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if err != nil {
 		return err
 	}
-	change, err := r.resolveFeatureChange(ctx, status, req)
+	change, err := r.resolvePartChange(ctx, status, req)
 	if err != nil {
 		return err
 	}
@@ -310,7 +291,7 @@ func (r Readiness) admitRemovals(ctx context.Context, tier environment.Tier, rem
 	if len(removing) == 0 || force {
 		return nil
 	}
-	recorded, err := r.RecordedFeatures(ctx, tier)
+	recorded, err := r.RecordedParts(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -323,7 +304,7 @@ func (r Readiness) admitRemovals(ctx context.Context, tier environment.Tier, rem
 		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
-func (r Readiness) RecordedFeatures(ctx context.Context, tier environment.Tier) (map[string][]string, error) {
+func (r Readiness) RecordedParts(ctx context.Context, tier environment.Tier) (map[string][]string, error) {
 	projects, err := r.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
 	if err != nil && !storeAbsent(err) {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
@@ -338,15 +319,15 @@ func (r Readiness) RecordedFeatures(ctx context.Context, tier environment.Tier) 
 		if err := json.Unmarshal(entry.Value, &project); err != nil {
 			return nil, fmt.Errorf("read %s's record: %w", entry.Key, err)
 		}
-		recorded[rest[0]] = project.Features
+		recorded[rest[0]] = project.Parts
 	}
 	return recorded, nil
 }
 
 func ProjectsDependingOn(recorded map[string][]string, dropped []string) []string {
 	var out []string
-	for project, features := range recorded {
-		for _, name := range features {
+	for project, parts := range recorded {
+		for _, name := range parts {
 			if slices.Contains(dropped, name) {
 				out = append(out, project)
 				break
@@ -366,7 +347,7 @@ func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wante
 	if !status.Present {
 		return status, refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
 	}
-	if missing := bootstrapplan.MissingFeatures(status.Features, required); len(missing) > 0 {
+	if missing := bootstrapplan.MissingParts(status.Parts, required); len(missing) > 0 {
 		return status, errors.Join(refuseLacking(missing, command, wantedBy != ""), r.RecordWants(ctx, tier, wantedBy, missing))
 	}
 	if stale := status.Stale(required); len(stale) > 0 {

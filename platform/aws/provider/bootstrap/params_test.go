@@ -18,7 +18,7 @@ func cloudflareAdoption() edge.Adoption {
 	}
 }
 
-func fronting() Request { return Request{Features: []string{FeatureCloudflareEdge}} }
+func fronting() Request { return Request{Parts: []string{CloudflareEdgePart}} }
 
 func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	t.Helper()
@@ -47,7 +47,7 @@ func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) prov
 	t.Helper()
 
 	var adoptions []EdgeAdoption
-	if slices.Contains(req.Features, FeatureCloudflareEdge) {
+	if slices.Contains(req.Parts, CloudflareEdgePart) {
 		adoptions = []EdgeAdoption{{Kind: KindCloudflare, Adoption: cloudflareAdoption()}}
 	}
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace,
@@ -69,8 +69,8 @@ func actions(group provider.ChangeGroup) map[string]provider.ChangeAction {
 func TestPlanParametersOnAFreshAccountCreatesEveryParameter(t *testing.T) {
 	group := plannedParams(t, newFakeSSM(), &fakeIAM{}, fronting())
 
-	if group.Kind != provider.ParameterGroupKind || group.Name != ParamGroupName || group.Feature != "" {
-		t.Errorf("group = %+v, want the unfeatured parameters group", group)
+	if group.Kind != provider.ParameterGroupKind || group.Name != ParamGroupName || group.Part != "" {
+		t.Errorf("group = %+v, want the parameters group no part owns", group)
 	}
 	if group.Action != provider.ActionCreate {
 		t.Errorf("group action = %q, want create where nothing is provisioned", group.Action)
@@ -143,7 +143,7 @@ func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testin
 func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 	ssmc, iamc := installedParams(t)
 
-	group := plannedParams(t, ssmc, iamc, Request{Remove: []string{FeatureCloudflareEdge}})
+	group := plannedParams(t, ssmc, iamc, Request{Remove: []string{CloudflareEdgePart}})
 
 	names := cloudflareNames(environment.TierProduction)
 	got := actions(group)
@@ -201,10 +201,10 @@ func TestPlanParametersRemintsTheKeyTheAccountNoLongerHas(t *testing.T) {
 	}
 }
 
-func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
-	registered := featureRegistry
-	t.Cleanup(func() { featureRegistry = registered })
-	featureRegistry = append(slices.Clone(registered), feature{
+func TestPlanParametersAsksEveryPartThatManagesOne(t *testing.T) {
+	registered := partRegistry
+	t.Cleanup(func() { partRegistry = registered })
+	partRegistry = append(slices.Clone(registered), part{
 		name: "test-edge",
 		afterPlan: func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error) {
 			return []provider.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: provider.ActionCreate}}, nil
@@ -216,20 +216,20 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 
 	ssmc, iamc := installedParams(t)
 
-	planned := actions(plannedParams(t, ssmc, iamc, Request{Features: []string{"test-edge"}}))
+	planned := actions(plannedParams(t, ssmc, iamc, Request{Parts: []string{"test-edge"}}))
 	if planned["/ocel/test/written"] != provider.ActionCreate {
-		t.Errorf("the plan says %q about the parameter the feature writes, want it created", planned["/ocel/test/written"])
+		t.Errorf("the plan says %q about the parameter the part writes, want it created", planned["/ocel/test/written"])
 	}
 	if _, named := planned["/ocel/test/severed"]; named {
-		t.Error("the plan names what dropping the feature would take while the feature is being asked for")
+		t.Error("the plan names what dropping the part would take while the part is being asked for")
 	}
 
 	dropped := actions(plannedParams(t, ssmc, iamc, Request{Remove: []string{"test-edge"}}))
 	if dropped["/ocel/test/severed"] != provider.ActionDelete {
-		t.Errorf("the plan says %q about what dropping the feature takes, want it deleted", dropped["/ocel/test/severed"])
+		t.Errorf("the plan says %q about what dropping the part takes, want it deleted", dropped["/ocel/test/severed"])
 	}
 	if _, named := dropped["/ocel/test/written"]; named {
-		t.Error("the plan names a parameter the dropped feature would write")
+		t.Error("the plan names a parameter the dropped part would write")
 	}
 }
 

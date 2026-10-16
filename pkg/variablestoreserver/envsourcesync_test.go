@@ -103,7 +103,7 @@ func TestAScheduledEnvSourceWhoseSyncCannotBeAddedIsNeverRegistered(t *testing.T
 
 func TestAScheduledEnvSourceRefusedForAWantedPartRecordsTheWantForTheRegisteringProject(t *testing.T) {
 	syncs := &addedSyncs{refuse: providercontract.WantedPartError{
-		Part: providercontract.FeatureVariablesKey,
+		Part: providercontract.VariablesKeyPart,
 		Err:  refusal.Refuse(refusal.CodeNotReady, "the production bootstrap has no key to seal a value under"),
 	}}
 	vendor := fake.NewProvider(fake.Options{})
@@ -117,7 +117,7 @@ func TestAScheduledEnvSourceRefusedForAWantedPartRecordsTheWantForTheRegistering
 	}
 
 	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
-	if err != nil || !slices.Equal(wants[providercontract.FeatureVariablesKey], []string{slug}) {
+	if err != nil || !slices.Equal(wants[providercontract.VariablesKeyPart], []string{slug}) {
 		t.Errorf("ListBootstrapWants() = %v, %v, want %s's want of the variables key, for `ocel bootstrap production` to add", wants, err, slug)
 	}
 }

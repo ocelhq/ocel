@@ -98,13 +98,13 @@ func (b bootstrap) surveyedParts(read survey, stacks []provider.BootstrapStack) 
 		switch stack.Name {
 		case baseStack:
 			parts[0].Current = stack.DigestCurrent
-		case baseStack + "/" + stack.Feature:
+		case baseStack + "/" + stack.Part:
 			if stack.Present {
 				parts = append(parts, provider.BootstrapPart{
-					Name:    stack.Feature,
-					Summary: b.summaryOf(stack.Feature),
+					Name:    stack.Part,
+					Summary: b.summaryOf(stack.Part),
 					Current: stack.DigestCurrent,
-					Shape:   featureShape(read, stack.Feature),
+					Shape:   partShape(read, stack.Part),
 				})
 			}
 		default:
@@ -114,8 +114,8 @@ func (b bootstrap) surveyedParts(read survey, stacks []provider.BootstrapStack) 
 	return parts
 }
 
-func featureShape(read survey, feature string) *provider.PartShape {
-	if feature != albShieldedFeature {
+func partShape(read survey, part string) *provider.PartShape {
+	if part != cloudflareOriginPart {
 		return nil
 	}
 	shape, err := alb.Shape(pricing.EdgeSite{Tier: read.Tier, Region: read.Region})

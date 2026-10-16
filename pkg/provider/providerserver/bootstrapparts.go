@@ -38,7 +38,7 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 	if err != nil {
 		return nil, err
 	}
-	recorded, err := r.RecordedFeatures(ctx, status.Tier)
+	recorded, err := r.RecordedParts(ctx, status.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -46,16 +46,16 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 	if err != nil {
 		return nil, err
 	}
-	catalogue := r.Bootstrap.Catalogue()
-	wants, err := r.wantedParts(ctx, status.Tier, catalogue, nil)
+	offer := r.Bootstrap.Parts()
+	wants, err := r.wantedParts(ctx, status.Tier, offer, nil)
 	if err != nil {
 		return nil, err
 	}
-	catalogued := map[string]bool{}
+	offered := map[string]bool{}
 	summaries := map[string]string{}
-	for _, feature := range catalogue {
-		catalogued[feature.Name] = true
-		summaries[feature.Name] = feature.Summary
+	for _, part := range offer {
+		offered[part.Name] = true
+		summaries[part.Name] = part.Summary
 	}
 
 	slices.SortStableFunc(described, func(a, b provider.BootstrapPart) int {
@@ -68,7 +68,7 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 			Summary: part.Summary,
 			State:   contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY,
 			Current: part.Current,
-			UsedBy:  usersOf(part, recorded, catalogued[part.Name]),
+			UsedBy:  usersOf(part, recorded, offered[part.Name]),
 
 			RetiresWithLastUser: part.RetiresWithLastUser,
 		}
@@ -132,13 +132,13 @@ func applyRecord(out *contractv1.BootstrapPart, record stackrecords.BootstrapPar
 	}
 }
 
-func usersOf(part provider.BootstrapPart, recorded map[string][]string, catalogued bool) []string {
+func usersOf(part provider.BootstrapPart, recorded map[string][]string, offered bool) []string {
 	switch {
 	case part.UsedBy != nil:
 		return part.UsedBy
 	case part.Name == provider.BasePart || part.UsedByEveryProject:
 		return slices.Sorted(maps.Keys(recorded))
-	case catalogued:
+	case offered:
 		return ProjectsDependingOn(recorded, []string{part.Name})
 	}
 	return nil
@@ -191,9 +191,9 @@ func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, addin
 	if !status.Present {
 		names = append(names, provider.BasePart)
 	}
-	for _, feature := range adding {
-		if !slices.Contains(status.Features, feature) {
-			names = append(names, feature)
+	for _, part := range adding {
+		if !slices.Contains(status.Parts, part) {
+			names = append(names, part)
 		}
 	}
 	claimed := map[string]stackrecords.BootstrapPart{}
@@ -230,7 +230,7 @@ const claimReleaseTimeout = 30 * time.Second
 
 const addedWithBootstrap = "ocel bootstrap"
 
-func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, features, removed []string) error {
+func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, parts, removed []string) error {
 	status, err := r.Status(ctx, tier)
 	if err != nil {
 		return err
@@ -243,7 +243,7 @@ func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, featu
 	for _, part := range described {
 		named[part.Name] = part
 	}
-	for _, name := range append([]string{provider.BasePart}, features...) {
+	for _, name := range append([]string{provider.BasePart}, parts...) {
 		if err := stackrecords.MarkBootstrapPartReady(ctx, r.KeyValues, tier, name, stackrecords.BootstrapPart{
 			WrittenBy: string(r.WrittenBy),
 			Digest:    named[name].Digest,

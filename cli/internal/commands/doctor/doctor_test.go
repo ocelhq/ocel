@@ -385,10 +385,10 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	}
 }
 
-func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
+func TestRunDoctorWarnsAboutAStaleStackNoPartRequires(t *testing.T) {
 	project := healthyProject(t)
-	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.FeatureCache)
-	project.Provider.FakeBootstrap().MarkStale(fake.FeatureCache)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.PartCache)
+	project.Provider.FakeBootstrap().MarkStale(fake.PartCache)
 
 	invocation := clitest.NewInvocation()
 
@@ -413,8 +413,8 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 
 func TestRunDoctorWarnsAboutAStackItCouldNotReadWithoutCallingItStale(t *testing.T) {
 	project := healthyProject(t)
-	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.FeatureCache)
-	project.Provider.FakeBootstrap().MarkUnreadable(fake.FeatureCache, "the edge was rate limited")
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction, fake.PartCache)
+	project.Provider.FakeBootstrap().MarkUnreadable(fake.PartCache, "the edge was rate limited")
 
 	invocation := clitest.NewInvocation()
 

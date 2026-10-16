@@ -15,7 +15,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-const albShieldedFeature = "cloudflare-origin"
+const cloudflareOriginPart = "cloudflare-origin"
 
 var (
 	albBaseAPIs     = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
@@ -23,9 +23,9 @@ var (
 	albShieldedAPIs = slices.Concat(albBaseAPIs, []string{"networksecurity.googleapis.com"})
 )
 
-func (bootstrap) Catalogue() []provider.Feature {
-	return []provider.Feature{{
-		Name: albShieldedFeature,
+func (bootstrap) Parts() []provider.Part {
+	return []provider.Part{{
+		Name: cloudflareOriginPart,
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
 			"a recurring cost, about $18 a month plus egress, " +
 			"and a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with",
@@ -33,29 +33,29 @@ func (bootstrap) Catalogue() []provider.Feature {
 	}}
 }
 
-func installedFeatures(catalogue []provider.Feature, recorded []string, req provider.BootstrapRequest) []string {
+func installedParts(offered []provider.Part, recorded []string, req provider.BootstrapRequest) []string {
 	var installed []string
-	for _, feature := range catalogue {
-		named := slices.Contains(recorded, feature.Name) || slices.Contains(req.Features, feature.Name)
-		if named && !slices.Contains(req.Remove, feature.Name) {
-			installed = append(installed, feature.Name)
+	for _, part := range offered {
+		named := slices.Contains(recorded, part.Name) || slices.Contains(req.Parts, part.Name)
+		if named && !slices.Contains(req.Remove, part.Name) {
+			installed = append(installed, part.Name)
 		}
 	}
 	return installed
 }
 
-func (b bootstrap) fronted(features []string) []provider.Feature {
-	var wanted []provider.Feature
-	for _, feature := range b.Catalogue() {
-		if slices.Contains(features, feature.Name) && len(feature.Edges) > 0 {
-			wanted = append(wanted, feature)
+func (b bootstrap) fronted(parts []string) []provider.Part {
+	var wanted []provider.Part
+	for _, part := range b.Parts() {
+		if slices.Contains(parts, part.Name) && len(part.Edges) > 0 {
+			wanted = append(wanted, part)
 		}
 	}
 	return wanted
 }
 
-func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edge.Edge) error) error {
-	wanted := b.fronted(features)
+func (b bootstrap) eachFront(parts []string, visit func(provider.Part, edge.Edge) error) error {
+	wanted := b.fronted(parts)
 	if len(wanted) == 0 {
 		return nil
 	}
@@ -63,13 +63,13 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s installs an edge's front, and this bootstrap was opened with no edge registry to open it through", wanted[0].Name)
 	}
-	for _, feature := range wanted {
-		for _, kind := range feature.Edges {
+	for _, part := range wanted {
+		for _, kind := range part.Edges {
 			front, err := b.fronts.Open(kind, nil)
 			if err != nil {
 				return err
 			}
-			if err := visit(feature, front); err != nil {
+			if err := visit(part, front); err != nil {
 				return err
 			}
 		}
@@ -77,22 +77,22 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	return nil
 }
 
-func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+func (b bootstrap) raiseParts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.raiseFronts(ctx, req, progress)
 }
 
 func (b bootstrap) summaryOf(name string) string {
-	for _, feature := range b.Catalogue() {
-		if feature.Name == name {
-			return feature.Summary
+	for _, part := range b.Parts() {
+		if part.Name == name {
+			return part.Summary
 		}
 	}
 	return ""
 }
 
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
-		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Tier) + ": " + feature.Summary)
+	return b.eachFront(req.Parts, func(part provider.Part, front edge.Edge) error {
+		ensureProgress(progress).Say("Adding the " + part.Name + " part of the " + string(req.Tier) + " bootstrap: " + part.Summary)
 		out, err := front.Bootstrap(ctx, req.Tier)
 		if err != nil {
 			return err
@@ -109,10 +109,10 @@ func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapReques
 	})
 }
 
-func droppedFeatures(recorded []string, req provider.BootstrapRequest) []string {
+func droppedParts(recorded []string, req provider.BootstrapRequest) []string {
 	var dropping []string
 	for _, name := range req.Remove {
-		if slices.Contains(recorded, name) && !slices.Contains(req.Features, name) {
+		if slices.Contains(recorded, name) && !slices.Contains(req.Parts, name) {
 			dropping = append(dropping, name)
 		}
 	}
@@ -125,31 +125,31 @@ func (b bootstrap) dropFronts(
 	req provider.BootstrapRequest,
 	progress progress.Log,
 ) error {
-	dropping := droppedFeatures(read.Stamp.Features, req)
+	dropping := droppedParts(read.Stamp.Parts, req)
 	if err := b.frontsFree(ctx, req.Tier, dropping); err != nil {
 		return err
 	}
-	return b.eachFront(dropping, func(feature provider.Feature, front edge.Edge) error {
+	return b.eachFront(dropping, func(part provider.Part, front edge.Edge) error {
 		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
-			": this bootstrap no longer requests feature " + feature.Name)
+			": the " + part.Name + " part is being removed")
 		return b.retireFront(ctx, req.Tier, front)
 	})
 }
 
-func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
+func (b bootstrap) dropParts(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.dropFronts(ctx, read, req, progress)
 }
 
-func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, features []string) error {
-	return b.tearFronts(ctx, tier, features)
+func (b bootstrap) tearParts(ctx context.Context, tier environment.Tier, parts []string) error {
+	return b.tearFronts(ctx, tier, parts)
 }
 
-func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
-	return b.frontInstalled(ctx, tier, feature)
+func (b bootstrap) partInstalled(ctx context.Context, tier environment.Tier, part string) (bool, error) {
+	return b.frontInstalled(ctx, tier, part)
 }
 
-func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, features []string) error {
-	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
+func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, parts []string) error {
+	return b.eachFront(parts, func(_ provider.Part, front edge.Edge) error {
 		return b.retireFront(ctx, tier, front)
 	})
 }
@@ -166,9 +166,9 @@ func (b bootstrap) retireFront(ctx context.Context, tier environment.Tier, front
 	return forgetEdgeOffers(ctx, b.clients, b.records, tier, front.Kind())
 }
 
-func (b bootstrap) frontInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
+func (b bootstrap) frontInstalled(ctx context.Context, tier environment.Tier, part string) (bool, error) {
 	installed := true
-	err := b.eachFront([]string{feature}, func(_ provider.Feature, front edge.Edge) error {
+	err := b.eachFront([]string{part}, func(_ provider.Part, front edge.Edge) error {
 		checkInstalled := front.Hooks().CheckBootstrapInstalled
 		if checkInstalled == nil {
 			return nil
@@ -183,8 +183,8 @@ func (b bootstrap) frontInstalled(ctx context.Context, tier environment.Tier, fe
 	return installed, err
 }
 
-func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, features []string) error {
-	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
+func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, parts []string) error {
+	return b.eachFront(parts, func(_ provider.Part, front edge.Edge) error {
 		boundHostnames := front.Hooks().ListBoundHostnames
 		if boundHostnames == nil {
 			return nil
@@ -200,13 +200,13 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 	})
 }
 
-func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, features []string) error {
-	return b.frontsFree(ctx, tier, features)
+func (b bootstrap) partsFree(ctx context.Context, tier environment.Tier, parts []string) error {
+	return b.frontsFree(ctx, tier, parts)
 }
 
-func apisFor(tier environment.Tier, features []string) []string {
+func apisFor(tier environment.Tier, parts []string) []string {
 	apis := slices.Clone(BootstrapAPIs)
-	if slices.Contains(features, albShieldedFeature) {
+	if slices.Contains(parts, cloudflareOriginPart) {
 		apis = appendMissing(apis, albShieldedAPIs)
 	}
 	return apis
@@ -221,9 +221,9 @@ func appendMissing(listed, more []string) []string {
 	return listed
 }
 
-func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
+func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, parts []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
-	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
+	err := b.eachFront(parts, func(part provider.Part, front edge.Edge) error {
 		var planned []edge.PlanChange
 		if plan := front.Hooks().PlanBootstrap; plan != nil {
 			var err error
@@ -241,16 +241,16 @@ func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, fea
 		if len(planned) == 0 && len(assets) == 0 {
 			return nil
 		}
-		group, err := bootstrapplan.EdgeGroup(front.Kind(), feature.Name, planned, assets...)
+		group, err := bootstrapplan.EdgeGroup(front.Kind(), part.Name, planned, assets...)
 		groups = append(groups, group)
 		return err
 	})
 	return groups, err
 }
 
-func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
+func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, parts []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
-	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
+	err := b.eachFront(parts, func(part provider.Part, front edge.Edge) error {
 		var changes []provider.Change
 		if plan := front.Hooks().PlanRemoveBootstrap; plan != nil {
 			planned, err := plan(ctx, tier)
@@ -274,7 +274,7 @@ func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, fea
 		groups = append(groups, provider.ChangeGroup{
 			Kind:    edge.EdgeGroupKind,
 			Name:    edge.EdgeGroupName(front.Kind()),
-			Feature: feature.Name,
+			Part:    part.Name,
 			Action:  provider.ActionDelete,
 			Changes: changes,
 		})

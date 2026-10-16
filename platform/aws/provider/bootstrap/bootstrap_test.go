@@ -377,7 +377,7 @@ func TestCheckDeployed(t *testing.T) {
 		}
 		want := Deployed{
 			Present:        true,
-			Features:       FeatureSet{},
+			Parts:          PartSet{},
 			StateBucket:    "bucket-123",
 			StateTable:     "state-abc",
 			ArtifactBucket: "artifacts-xyz",
@@ -392,8 +392,8 @@ func TestCheckDeployed(t *testing.T) {
 					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")),
 					WrittenBy: "1.4.0",
 				},
-				{Name: coreStackName + "-" + FeatureCloudflareEdge, Feature: FeatureCloudflareEdge},
-				{Name: coreStackName + "-" + provider.FeatureVariablesKey, Feature: provider.FeatureVariablesKey},
+				{Name: coreStackName + "-" + CloudflareEdgePart, Part: CloudflareEdgePart},
+				{Name: coreStackName + "-" + provider.VariablesKeyPart, Part: provider.VariablesKeyPart},
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -413,18 +413,18 @@ func TestCheckDeployed(t *testing.T) {
 		}
 	})
 
-	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
+	t.Run("a part stack is what says the part is on", func(t *testing.T) {
 		api := stubStacksAPI{
-			coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
-			coreStackName + "-" + FeatureCloudflareEdge: outputs(nil).stamped(Stamp{}),
+			coreStackName:                            outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
+			coreStackName + "-" + CloudflareEdgePart: outputs(nil).stamped(Stamp{}),
 		}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if want := []string{FeatureCloudflareEdge}; !reflect.DeepEqual(got.Features.Names(), want) {
-			t.Errorf("Features = %v, want %v", got.Features.Names(), want)
+		if want := []string{CloudflareEdgePart}; !reflect.DeepEqual(got.Parts.Names(), want) {
+			t.Errorf("Parts = %v, want %v", got.Parts.Names(), want)
 		}
 	})
 
@@ -454,7 +454,7 @@ func TestCheckDeployed(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if stale := got.Stale(nil); len(stale) != 1 || stale[0].Name != coreStackName {
-			t.Errorf("Stale() = %+v, want the core stack alone: a feature that was never installed is not stale", stale)
+			t.Errorf("Stale() = %+v, want the core stack alone: a part that was never installed is not stale", stale)
 		}
 	})
 

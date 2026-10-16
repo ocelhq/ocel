@@ -14,9 +14,9 @@ func TestTheFakeBootstrapOffersAndPlansWhatATestGivesIt(t *testing.T) {
 	t.Parallel()
 
 	b := fake.NewBootstrap()
-	b.Offers(provider.Feature{Name: "search"})
-	if catalogue := b.Catalogue(); len(catalogue) != 1 || catalogue[0].Name != "search" {
-		t.Errorf("catalogue = %v, want the one feature offered", catalogue)
+	b.Offers(provider.Part{Name: "search"})
+	if offered := b.Parts(); len(offered) != 1 || offered[0].Name != "search" {
+		t.Errorf("Parts() = %v, want the one part offered", offered)
 	}
 
 	given := provider.Plan{Groups: []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "fake-production", Action: provider.ActionUpdate}}}

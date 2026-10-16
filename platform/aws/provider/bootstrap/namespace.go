@@ -29,15 +29,15 @@ func (n Namespace) StackNameFor(tier environment.Tier) (string, error) {
 	}
 }
 
-func (n Namespace) featureStackName(feature string, tier environment.Tier) string {
-	return suffixed(tier, n.CoreStackName()+"-"+feature)
+func (n Namespace) partStackName(part string, tier environment.Tier) string {
+	return suffixed(tier, n.CoreStackName()+"-"+part)
 }
 
-func (n Namespace) FeatureStackName(name string, tier environment.Tier) string {
-	if _, ok := featureNamed(name); !ok {
+func (n Namespace) PartStackName(name string, tier environment.Tier) string {
+	if _, ok := partNamed(name); !ok {
 		return name
 	}
-	return n.featureStackName(name, tier)
+	return n.partStackName(name, tier)
 }
 
 func (n Namespace) paramRoot() string { return "/" + string(n) }

@@ -513,7 +513,7 @@ message BootstrapPartResource {
 message BootstrapStack {
   string name = 1;
 
-  string feature = 2;
+  string part = 2;
 
   bool present = 3;
 

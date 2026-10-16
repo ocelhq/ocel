@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	FeatureCache  = "cache"
-	FeatureImages = "images"
+	PartCache  = "cache"
+	PartImages = "images"
 )
 
 type Bootstrap struct {
@@ -29,7 +29,7 @@ type Bootstrap struct {
 	front       edge.Kind
 	raised      []edge.Kind
 	unfinished  bool
-	catalogue   []provider.Feature
+	offered     []provider.Part
 	planned     *provider.Plan
 	planRefusal error
 	removal     *provider.Plan
@@ -65,10 +65,10 @@ func (b *Bootstrap) DefaultEdge() edge.Kind {
 	return b.front
 }
 
-func (b *Bootstrap) Offers(catalogue ...provider.Feature) {
+func (b *Bootstrap) Offers(offered ...provider.Part) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.catalogue = catalogue
+	b.offered = offered
 }
 
 func (b *Bootstrap) PlansWith(plan provider.Plan) {
@@ -89,42 +89,41 @@ func (b *Bootstrap) PlansRemovalWith(plan provider.Plan) {
 	b.removal = &plan
 }
 
-func (b *Bootstrap) Catalogue() []provider.Feature {
+func (b *Bootstrap) Parts() []provider.Part {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.catalogueLocked()
+	return b.offeredLocked()
 }
 
-func (b *Bootstrap) catalogueLocked() []provider.Feature {
-	if b.catalogue != nil {
-		return slices.Clone(b.catalogue)
+func (b *Bootstrap) offeredLocked() []provider.Part {
+	if b.offered != nil {
+		return slices.Clone(b.offered)
 	}
-	return []provider.Feature{
+	return []provider.Part{
 		{
-			Name:    FeatureCache,
+			Name:    PartCache,
 			Summary: "the reference provider's response cache",
 		},
 		{
-			Name:      FeatureImages,
-			Summary:   "the reference provider's image optimizer",
-			DependsOn: []string{FeatureCache},
-			Edges:     []edge.Kind{"relay"},
+			Name:    PartImages,
+			Summary: "the reference provider's image optimizer",
+			Edges:   []edge.Kind{"relay"},
 		},
 	}
 }
 
-func (b *Bootstrap) MarkStale(features ...string) {
+func (b *Bootstrap) MarkStale(parts ...string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, feature := range features {
-		b.stale[feature] = true
+	for _, part := range parts {
+		b.stale[part] = true
 	}
 }
 
-func (b *Bootstrap) MarkUnreadable(feature, cause string) {
+func (b *Bootstrap) MarkUnreadable(part, cause string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.unreadable[feature] = cause
+	b.unreadable[part] = cause
 }
 
 func (b *Bootstrap) SetWriter(writer string) {
@@ -161,34 +160,34 @@ func (b *Bootstrap) Describe(_ context.Context, tier environment.Tier) (provider
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.described++
-	features, present := b.applied[tier]
+	parts, present := b.applied[tier]
 	described := provider.BootstrapDescription{Tier: tier, Present: present, Unfinished: present && b.unfinished}
 	if !present {
 		return described, nil
 	}
 	described.Stacks = append(described.Stacks, b.stack(tier, ""))
-	for _, feature := range features {
-		described.Stacks = append(described.Stacks, b.stack(tier, feature))
+	for _, part := range parts {
+		described.Stacks = append(described.Stacks, b.stack(tier, part))
 	}
 	return described, nil
 }
 
-func stackNameOf(tier environment.Tier, feature string) string {
+func stackNameOf(tier environment.Tier, part string) string {
 	name := "fake-" + string(tier)
-	if feature != "" {
-		name += "-" + feature
+	if part != "" {
+		name += "-" + part
 	}
 	return name
 }
 
-func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.BootstrapStack {
+func (b *Bootstrap) stack(tier environment.Tier, part string) provider.BootstrapStack {
 	return provider.BootstrapStack{
-		Name:          stackNameOf(tier, feature),
-		Feature:       feature,
+		Name:          stackNameOf(tier, part),
+		Part:          part,
 		Present:       true,
-		DigestCurrent: !b.stale[feature] && b.unreadable[feature] == "",
+		DigestCurrent: !b.stale[part] && b.unreadable[part] == "",
 		WrittenBy:     b.writer,
-		ReadError:     b.unreadable[feature],
+		ReadError:     b.unreadable[part],
 	}
 }
 
@@ -203,7 +202,7 @@ func (b *Bootstrap) DescribeParts(_ context.Context, described provider.Bootstra
 	defer b.mu.Unlock()
 	var parts []provider.BootstrapPart
 	for _, stack := range described.Stacks {
-		name := stack.Feature
+		name := stack.Part
 		if name == "" {
 			name = provider.BasePart
 		}
@@ -235,7 +234,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(b.withDefaultStackNames(described), b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(b.withDefaultStackNames(described), b.Parts(), req)
 	for i, group := range groups {
 		if group.Action == provider.ActionKeep {
 			continue
@@ -250,8 +249,8 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 }
 
 func (b *Bootstrap) withDefaultStackNames(described provider.BootstrapDescription) provider.BootstrapDescription {
-	return bootstrapplan.WithDefaultStackNames(described, b.Catalogue(), func(feature string) string {
-		return stackNameOf(described.Tier, feature)
+	return bootstrapplan.WithDefaultStackNames(described, b.Parts(), func(part string) string {
+		return stackNameOf(described.Tier, part)
 	})
 }
 
@@ -263,13 +262,13 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 	}
 	b.requests = append(b.requests, req)
 	installed := slices.Clone(b.applied[req.Tier])
-	for _, feature := range req.Features {
-		if !slices.Contains(installed, feature) {
-			installed = append(installed, feature)
+	for _, part := range req.Parts {
+		if !slices.Contains(installed, part) {
+			installed = append(installed, part)
 		}
 	}
-	installed = slices.DeleteFunc(installed, func(feature string) bool { return slices.Contains(req.Remove, feature) })
-	b.applied[req.Tier] = bootstrapplan.InCatalogueOrder(b.catalogueLocked(), installed)
+	installed = slices.DeleteFunc(installed, func(part string) bool { return slices.Contains(req.Remove, part) })
+	b.applied[req.Tier] = bootstrapplan.InOfferedOrder(b.offeredLocked(), installed)
 	if b.applied[req.Tier] == nil {
 		b.applied[req.Tier] = []string{}
 	}
@@ -287,24 +286,24 @@ func (b *Bootstrap) PlanRemove(_ context.Context, tier environment.Tier) (provid
 	if b.removal != nil {
 		return clonePlan(*b.removal), nil
 	}
-	features, present := b.applied[tier]
+	parts, present := b.applied[tier]
 	if !present {
 		return provider.Plan{}, nil
 	}
-	plan := provider.Plan{Groups: make([]provider.ChangeGroup, 0, len(features)+1)}
-	for _, feature := range features {
+	plan := provider.Plan{Groups: make([]provider.ChangeGroup, 0, len(parts)+1)}
+	for _, part := range parts {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    b.stack(tier, feature).Name,
-			Feature: feature,
-			Action:  provider.ActionDelete,
+			Kind:   provider.StackGroupKind,
+			Name:   b.stack(tier, part).Name,
+			Part:   part,
+			Action: provider.ActionDelete,
 		})
 	}
 	plan.Groups = append(plan.Groups, provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
 		Name:   b.stack(tier, "").Name,
 		Action: provider.ActionDelete,
-		Reason: "the core every feature above was built on",
+		Reason: "the core every part above was built on",
 		Slow:   true,
 	})
 	for _, kind := range b.raisedEdges() {

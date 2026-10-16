@@ -10,7 +10,7 @@ import (
 func TestAPreflightRecordingWantsNamesThePartTheCommandWantsBeyondItsBuild(t *testing.T) {
 	t.Parallel()
 
-	sent := newPreflightRequest(&project.Project{}, Request{RecordWants: true, Feature: "variables-key"})
+	sent := newPreflightRequest(&project.Project{}, Request{RecordWants: true, Part: "variables-key"})
 
 	if !sent.GetRecordWants() || !reflect.DeepEqual(sent.GetWantedParts(), []string{"variables-key"}) {
 		t.Errorf("preflight = record_wants %v, wanted_parts %v, want the key recorded as wanted", sent.GetRecordWants(), sent.GetWantedParts())

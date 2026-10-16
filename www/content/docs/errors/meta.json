@@ -19,7 +19,7 @@
     "provider.version_mismatch",
     "prerequisite.missing",
     "bootstrap.missing",
-    "bootstrap.features_missing",
+    "bootstrap.parts_missing",
     "---Console---",
     "console.not_logged_in",
     "console.not_linked",

@@ -377,29 +377,19 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	t.Helper()
 
 	ctx := context.Background()
-	catalogue := bootstrap.Catalogue()
-	wanted, err := applicable(catalogue, kind)
-	if err != nil {
-		t.Fatalf("the features the %q edge installs = %v", kind, err)
-	}
+	offered := bootstrap.Parts()
+	wanted := applicable(offered, kind)
 
-	t.Run("every feature is one the catalogue can install", func(t *testing.T) {
-		named := make([]string, 0, len(catalogue))
-		for _, f := range catalogue {
-			if f.Name == "" {
-				t.Error("the catalogue has a feature with no name, and nothing can ask for it")
+	t.Run("every part has a name no other part and not the base shares", func(t *testing.T) {
+		var named []string
+		for _, part := range offered {
+			if part.Name == "" || part.Name == provider.BasePart {
+				t.Errorf("Parts() offers %+v, and nothing can name it to add or remove it", part)
 			}
-			named = append(named, f.Name)
-		}
-		for _, f := range catalogue {
-			for _, dep := range f.DependsOn {
-				if !slices.Contains(named, dep) {
-					t.Errorf("%s depends on %q, which this provider does not offer", f.Name, dep)
-				}
+			if slices.Contains(named, part.Name) {
+				t.Errorf("Parts() offers %q twice", part.Name)
 			}
-		}
-		if _, err := bootstrapplan.FeatureLevels(catalogue, named); err != nil {
-			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that installs every feature", err)
+			named = append(named, part.Name)
 		}
 	})
 
@@ -458,9 +448,9 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 	})
 
-	t.Run("Plan shows a dropped feature leaving", func(t *testing.T) {
+	t.Run("Plan shows a removed part leaving", func(t *testing.T) {
 		if len(wanted) == 0 {
-			t.Skipf("the %q edge installs no feature of this provider, so nothing can be dropped", kind)
+			t.Skipf("the %q edge installs no part of this provider, so nothing can be dropped", kind)
 		}
 		tier := environment.TierProduction
 		drop := wanted
@@ -470,8 +460,8 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 		leaving := map[string]provider.ChangeAction{}
 		for _, group := range plan.Groups {
-			if group.Feature != "" {
-				leaving[group.Feature] = group.Action
+			if group.Part != "" {
+				leaving[group.Part] = group.Action
 			}
 		}
 		for _, name := range drop {
@@ -488,11 +478,8 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 
 	t.Run("what Apply installs, Describe reports and Remove takes down", func(t *testing.T) {
 		tier := environment.TierPreview
-		raising, err := ordered(catalogue, wanted)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Features: raising}, nil); err != nil {
+		raising := wanted
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Parts: raising}, nil); err != nil {
 			t.Fatalf("Apply() of what the %q edge installs (%v) = %v", kind, raising, err)
 		}
 
@@ -501,8 +488,8 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 			t.Fatalf("Describe() after Apply() = %v", err)
 		}
 		for _, stack := range described.Stacks {
-			if stack.Feature != "" && !slices.Contains(raising, stack.Feature) {
-				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Feature)
+			if stack.Part != "" && !slices.Contains(raising, stack.Part) {
+				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Part)
 			}
 		}
 		parts, err := bootstrap.DescribeParts(ctx, described)
@@ -559,18 +546,10 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 	})
 
-	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
+	t.Run("Apply takes a removal of the parts it was given", func(t *testing.T) {
 		tier := environment.TierPreview
-		levels, err := bootstrapplan.FeatureLevels(catalogue, wanted)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var dropping []string
-		for i := len(levels) - 1; i >= 0; i-- {
-			dropping = append(dropping, levels[i]...)
-		}
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: dropping}, nil); err != nil {
-			t.Fatalf("Apply() dropping what the %q edge installs (%v) = %v", kind, dropping, err)
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: wanted}, nil); err != nil {
+			t.Fatalf("Apply() removing what the %q edge installs (%v) = %v", kind, wanted, err)
 		}
 		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
@@ -578,52 +557,15 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	})
 }
 
-func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) {
-	required, err := bootstrapplan.RequiredFeatures(catalogue, kind)
-	if err != nil {
-		return nil, err
-	}
-	applies := map[string]bool{}
-	for _, name := range required {
-		applies[name] = true
-	}
-	for _, f := range catalogue {
-		if len(f.Edges) == 0 {
-			applies[f.Name] = true
+func applicable(offered []provider.Part, kind edge.Kind) []string {
+	required := bootstrapplan.RequiredParts(offered, kind)
+	var wanted []string
+	for _, part := range offered {
+		if len(part.Edges) == 0 || slices.Contains(required, part.Name) {
+			wanted = append(wanted, part.Name)
 		}
 	}
-	for grew := true; grew; {
-		grew = false
-		for _, f := range catalogue {
-			if !applies[f.Name] {
-				continue
-			}
-			for _, dep := range f.DependsOn {
-				if !applies[dep] {
-					applies[dep], grew = true, true
-				}
-			}
-		}
-	}
-	wanted := make([]string, 0, len(applies))
-	for _, f := range catalogue {
-		if applies[f.Name] {
-			wanted = append(wanted, f.Name)
-		}
-	}
-	return wanted, nil
-}
-
-func ordered(catalogue []provider.Feature, wanted []string) ([]string, error) {
-	levels, err := bootstrapplan.FeatureLevels(catalogue, wanted)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, level := range levels {
-		out = append(out, level...)
-	}
-	return out, nil
+	return wanted
 }
 
 func RunCredentials(t *testing.T, credentials provider.Credentials) {

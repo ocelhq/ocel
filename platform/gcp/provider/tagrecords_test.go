@@ -79,7 +79,7 @@ func TestADryDeployWhoseBuildRevalidatesPlansTheTagDatabaseAndOneThatDoesNotRead
 	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
 		t.Fatalf("PreflightDeploy() = %v", err)
 	}
-	if len(planned) != 1 || planned[0].Feature != tagDatabasePart || planned[0].Action != provider.ActionCreate {
+	if len(planned) != 1 || planned[0].Part != tagDatabasePart || planned[0].Action != provider.ActionCreate {
 		t.Errorf("a dry deploy whose build revalidates planned %+v, want the %s part created", planned, tagDatabasePart)
 	}
 	p := failingOnAnyCall(t)

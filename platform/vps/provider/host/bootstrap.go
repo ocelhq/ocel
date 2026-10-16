@@ -32,7 +32,7 @@ func NewBootstrap(h *Host, vendor provider.Vendor, project string) Bootstrap {
 	return Bootstrap{host: h, vendor: vendor, project: project}
 }
 
-func (b Bootstrap) Catalogue() []provider.Feature { return nil }
+func (b Bootstrap) Parts() []provider.Part { return nil }
 
 func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	read, err := b.host.Observe(ctx, tier)
@@ -107,7 +107,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := b.host.refuseServingPortsHeld(ctx, read); err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(described, b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(described, b.Parts(), req)
 	groups[0].Changes = planned(read)
 	if read.rerendering && groups[0].Action == provider.ActionKeep {
 		groups[0].Action, groups[0].Reason = provider.ActionUpdate, ""

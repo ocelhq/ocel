@@ -46,7 +46,7 @@ func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd st
 }
 
 func readDomainStatus(ctx context.Context, invocation commands.Invocation, cfg *project.Project, wait bool, schedule domainWaitSchedule) (resp *contractv1.GetHostnameStatusResponse, err error) {
-	err = invocation.WithProvider(ctx, cfg, "ocel domain status", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = invocation.WithProvider(ctx, cfg, "ocel domain status", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: cfg.ConfiguredHostnames(environmentv1.Tier_TIER_PRODUCTION),

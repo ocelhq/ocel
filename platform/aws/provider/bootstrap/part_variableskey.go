@@ -18,17 +18,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-var variablesKeyFeature = feature{
-	name:      provider.FeatureVariablesKey,
+var variablesKeyPart = part{
+	name:      provider.VariablesKeyPart,
 	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
 	template:  variablesKeyTemplate,
 	afterPlan: validateBroughtKey,
 }
 
-func variablesKeyTemplate(in featureInputs) (featureStack, error) {
+func variablesKeyTemplate(in partInputs) (partStack, error) {
 	if in.variablesKey != "" {
-		return featureStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under. Ocel owns no key here and puts nothing on it."
+		return partStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap part (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under. Ocel owns no key here and puts nothing on it."
 Resources:
   VariablesKeyRecord:
     Type: AWS::CloudFormation::WaitConditionHandle
@@ -36,16 +36,16 @@ Resources:
       Description: "Placeholder for the %s tier's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
 Outputs:
 %s`,
-			provider.FeatureVariablesKey, in.tier, in.tier,
+			provider.VariablesKeyPart, in.tier, in.tier,
 			broughtVariablesKeyOutput(in.variablesKey))}, nil
 	}
-	return featureStack{
+	return partStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, and the alias naming it."
+Description: "Ocel bootstrap part (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, and the alias naming it."
 Resources:
 %sOutputs:
 %s`,
-			provider.FeatureVariablesKey, in.tier,
+			provider.VariablesKeyPart, in.tier,
 			variablesKeyResources(in.ns, in.tier),
 			variablesKeyOutputs()),
 	}, nil

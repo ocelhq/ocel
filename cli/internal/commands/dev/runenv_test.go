@@ -66,7 +66,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwards {
 func setUpDeployedProject(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	fixture := clitest.SetUpProject(t)
-	clitest.Bootstrap(t, fixture.Provider, environment.TierPreview, fake.FeatureCache, fake.FeatureImages)
+	clitest.Bootstrap(t, fixture.Provider, environment.TierPreview, fake.PartCache, fake.PartImages)
 	clitest.WriteUsageMonorepo(t, fixture.Root)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {

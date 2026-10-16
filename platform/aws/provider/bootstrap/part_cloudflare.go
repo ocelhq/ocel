@@ -14,8 +14,8 @@ import (
 
 const KindCloudflare = "cloudflare"
 
-var cloudflareEdgeFeature = feature{
-	name:      FeatureCloudflareEdge,
+var cloudflareEdgePart = part{
+	name:      CloudflareEdgePart,
 	summary:   "Cloudflare as the front — workers and the credential it reads the asset bucket with",
 	edges:     []edge.Kind{KindCloudflare},
 	template:  cloudflareEdgeTemplate,
@@ -25,22 +25,22 @@ var cloudflareEdgeFeature = feature{
 	dropPlan:  plannedCloudflareSever,
 }
 
-func cloudflareEdgeTemplate(in featureInputs) (featureStack, error) {
+func cloudflareEdgeTemplate(in partInputs) (partStack, error) {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the edge reader is scoped to the objects in it the deploy tagged edge-readable.", in.refs.assetBucketARN},
 	})
 
 	userName, err := in.ns.EdgeUserNameFor(in.tier)
 	if err != nil {
-		return featureStack{}, err
+		return partStack{}, err
 	}
-	return featureStack{
+	return partStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone."
+Description: "Ocel bootstrap part (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone."
 %sResources:
 %s`,
-			FeatureCloudflareEdge, in.tier, params,
+			CloudflareEdgePart, in.tier, params,
 			edgeUserResource(in.ns, userName, in.tier)),
 	}, nil
 }
@@ -129,7 +129,7 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, t
 	if err != nil {
 		return nil, err
 	}
-	reason := fmt.Sprintf(severedByRemove, FeatureCloudflareEdge, KindCloudflare)
+	reason := fmt.Sprintf(severedByRemove, CloudflareEdgePart, KindCloudflare)
 
 	var changes []provider.Change
 	keys, err := liveAccessKeys(ctx, apis.IAM, names.user)

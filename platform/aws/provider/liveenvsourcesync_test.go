@@ -23,11 +23,11 @@ func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemo
 	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{provider.FeatureVariablesKey}}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Parts: []string{provider.VariablesKeyPart}}
 	if err := boot.Apply(ctx, req, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", provider.FeatureVariablesKey, err)
+		t.Fatalf("Apply(%s) = %v", provider.VariablesKeyPart, err)
 	}
-	stack := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
+	stack := defaultNamespace.PartStackName(provider.VariablesKeyPart, tier)
 	if physical := a.stackResources(t, stack); physical["EnvSourceSync"] != "" {
 		t.Errorf("%s still makes the env source sync, which the first scheduled env source adds", stack)
 	}

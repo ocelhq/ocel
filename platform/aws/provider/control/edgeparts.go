@@ -12,7 +12,7 @@ import (
 
 func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]provider.BootstrapStack, error) {
 	var stacks []provider.BootstrapStack
-	for _, kind := range bootstrap.EdgeKindsFor(deployed.Features.Names()) {
+	for _, kind := range bootstrap.EdgeKindsFor(deployed.Parts.Names()) {
 		front, err := b.open(kind)
 		if err != nil {
 			return nil, err
@@ -21,28 +21,28 @@ func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tie
 		if describe == nil {
 			continue
 		}
-		feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
+		fronting := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind)
 		parts, err := describe(ctx, tier)
 		if err != nil {
 			stacks = append(stacks, provider.BootstrapStack{
 				Name:      string(kind) + "/bootstrap",
-				Feature:   feature,
+				Part:      fronting,
 				Present:   true,
 				ReadError: err.Error(),
 			})
 			continue
 		}
 		for _, part := range parts {
-			stacks = append(stacks, edgePartStack(kind, feature, part))
+			stacks = append(stacks, edgePartStack(kind, fronting, part))
 		}
 	}
 	return stacks, nil
 }
 
-func edgePartStack(kind edge.Kind, feature string, part edge.BootstrapPart) provider.BootstrapStack {
+func edgePartStack(kind edge.Kind, fronting string, part edge.BootstrapPart) provider.BootstrapStack {
 	return provider.BootstrapStack{
 		Name:          string(kind) + "/" + part.Name,
-		Feature:       feature,
+		Part:          fronting,
 		Present:       true,
 		DigestCurrent: part.Current,
 	}

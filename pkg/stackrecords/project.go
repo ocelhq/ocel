@@ -1,5 +1,5 @@
 package stackrecords
 
 type Project struct {
-	Features []string `json:"features,omitempty"`
+	Parts []string `json:"parts,omitempty"`
 }

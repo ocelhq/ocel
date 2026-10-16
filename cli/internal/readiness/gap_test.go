@@ -33,21 +33,21 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 		{
 			name: "everything this project needs is there and current",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true, DigestCurrent: true, Required: true},
 			),
 		},
 		{
-			name: "a required feature that is not there is added",
+			name: "a required part that is not there is added",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true, DigestCurrent: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Part: "image-optimization", Required: true},
 			),
 			missing: []string{"image-optimization"},
 		},
 		{
-			name: "a required feature that has fallen behind is refreshed",
+			name: "a required part that has fallen behind is refreshed",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true, Required: true},
 			),
 			stale: []string{"ocel-bootstrap-isr"},
 		},
@@ -55,22 +55,22 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 			name: "the core falling behind is a refresh of its own",
 			status: bootstrapOf(
 				&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, Required: true},
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true, DigestCurrent: true, Required: true},
 			),
 			stale: []string{"ocel-bootstrap"},
 		},
 		{
-			name: "a feature no project here needs is neither added nor refreshed",
+			name: "a part no project here needs is neither added nor refreshed",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true},
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Part: "image-optimization"},
 			),
 		},
 		{
 			name: "one set covers both what is missing and what is behind",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
-				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Part: "isr", Present: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Part: "image-optimization", Required: true},
 			),
 			missing: []string{"image-optimization"},
 			stale:   []string{"ocel-bootstrap-isr"},
@@ -78,7 +78,7 @@ func TestTheBootstrapGapHoldsOnlyWhatIsMissingOrStale(t *testing.T) {
 		{
 			name: "a part that could not be read is named with why, never as behind",
 			status: bootstrapOf(core,
-				&contractv1.BootstrapStack{Name: "cloudflare/bootstrap", Feature: "cloudflare-edge", Present: true, Required: true, ReadError: "rate limited"},
+				&contractv1.BootstrapStack{Name: "cloudflare/bootstrap", Part: "cloudflare-edge", Present: true, Required: true, ReadError: "rate limited"},
 			),
 			unreadable: []string{"cloudflare/bootstrap (rate limited)"},
 		},
@@ -116,10 +116,10 @@ func TestTheRepairRequestSendsTheEdgeTheProjectChose(t *testing.T) {
 	}
 }
 
-func TestABootstrapGapNamesEachFeatureOnce(t *testing.T) {
+func TestABootstrapGapNamesEachPartOnce(t *testing.T) {
 	status := bootstrapOf(
-		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store-secret", Feature: "cloudflare-edge", Present: true, Required: true},
-		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store", Feature: "cloudflare-edge", Present: true, Required: true},
+		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store-secret", Part: "cloudflare-edge", Present: true, Required: true},
+		&contractv1.BootstrapStack{Name: "cloudflare/ocel-releases-store", Part: "cloudflare-edge", Present: true, Required: true},
 	)
 
 	gap := NewGap(status)

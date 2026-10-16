@@ -506,15 +506,15 @@
           },
           "type": "array"
         },
-        "feature": {
-          "default": "",
-          "type": "string"
-        },
         "kind": {
           "default": "",
           "type": "string"
         },
         "name": {
+          "default": "",
+          "type": "string"
+        },
+        "part": {
           "default": "",
           "type": "string"
         },

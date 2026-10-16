@@ -58,9 +58,9 @@ func everyRenderedTemplate() map[string]string {
 		"core/" + string(environment.TierProduction): coreStackTemplate(defaultNamespace, environment.TierProduction, ""),
 		"core/" + string(environment.TierPreview):    coreStackTemplate(defaultNamespace, environment.TierPreview, ""),
 	}
-	for _, name := range featureNames() {
+	for _, name := range partNames() {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			rendered[name+"/"+string(tier)] = featureTemplateWith(name, tier, everyFeature())
+			rendered[name+"/"+string(tier)] = partTemplateWith(name, tier, everyPart())
 		}
 	}
 	return rendered

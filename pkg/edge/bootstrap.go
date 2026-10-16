@@ -19,7 +19,7 @@ type BootstrapPart struct {
 type PlanGroup struct {
 	Kind    string
 	Name    string
-	Feature string
+	Part    string
 	Action  PlanAction
 	Reason  string
 	Slow    bool

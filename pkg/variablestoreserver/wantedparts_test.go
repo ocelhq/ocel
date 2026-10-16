@@ -19,11 +19,11 @@ import (
 type keylessCipher struct{}
 
 func (keylessCipher) Seal(context.Context, environment.Tier, seal.AssociatedData, []byte) ([]byte, error) {
-	return nil, providercontract.WantedPartError{Part: providercontract.FeatureVariablesKey, Err: refusal.Refuse(refusal.CodeNotReady, "no key to seal under")}
+	return nil, providercontract.WantedPartError{Part: providercontract.VariablesKeyPart, Err: refusal.Refuse(refusal.CodeNotReady, "no key to seal under")}
 }
 
 func (keylessCipher) Open(context.Context, environment.Tier, seal.AssociatedData, []byte) ([]byte, error) {
-	return nil, providercontract.WantedPartError{Part: providercontract.FeatureVariablesKey, Err: refusal.Refuse(refusal.CodeNotReady, "no key to open under")}
+	return nil, providercontract.WantedPartError{Part: providercontract.VariablesKeyPart, Err: refusal.Refuse(refusal.CodeNotReady, "no key to open under")}
 }
 
 func TestAValueRefusedForWantOfAPartToSealUnderRecordsTheProjectsWant(t *testing.T) {
@@ -40,7 +40,7 @@ func TestAValueRefusedForWantOfAPartToSealUnderRecordsTheProjectsWant(t *testing
 	}
 
 	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
-	if err != nil || !slices.Equal(wants[providercontract.FeatureVariablesKey], []string{slug}) {
+	if err != nil || !slices.Equal(wants[providercontract.VariablesKeyPart], []string{slug}) {
 		t.Errorf("ListBootstrapWants() = %v, %v, want %s's want of the variables key", wants, err, slug)
 	}
 }

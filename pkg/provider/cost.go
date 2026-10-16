@@ -10,7 +10,7 @@ const CostSource = "ocel"
 type ShapeRequest struct {
 	Deploy     DeploySpec
 	Edge       edge.Kind
-	Features   []string
+	Parts      []string
 	Resources  []Resource
 	Functions  map[string][]FunctionSpec
 	Transforms []string

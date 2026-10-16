@@ -116,7 +116,7 @@ func promotionState(entry *contractv1.PromotionHistoryEntry) resultv1.PromotionS
 }
 
 func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
-	err = invocation.WithProvider(ctx, cfg, "ocel promotions ls", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(ctx, cfg, "ocel promotions ls", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 			listed, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
@@ -141,7 +141,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		return err
 	}
 
-	return invocation.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
 		plan.Say(fmt.Sprintf("This will reclaim every production promotion of project %q but the newest %d and the live one; none of them can be rolled back to afterwards", cfg.Slug, opts.keep))

@@ -1356,8 +1356,8 @@ func TestEveryCredentialReachesOnlyTheStateAndVariablesOfItsOwnTier(t *testing.T
 func TestEveryBucketAndTableABootstrapStackMakesIsOneTheCredentialsName(t *testing.T) {
 	for _, tier := range bothTiers {
 		templates := map[string]string{"core": coreStackTemplate(defaultNamespace, tier, "")}
-		for _, f := range featureRegistry {
-			templates[f.name] = featureTemplate(f.name, tier)
+		for _, f := range partRegistry {
+			templates[f.name] = partTemplate(f.name, tier)
 		}
 		for stack, body := range templates {
 			for logicalID, resource := range parseVariablesTemplate(t, body).Resources {
@@ -1381,8 +1381,8 @@ func TestEveryRoleABootstrapStackGeneratesIsOneOnlyItsOwnTiersCredentialMayPass(
 		ownDoc, _ := renderedCredentialsOf(t, tier)
 		siblingDoc, _ := renderedCredentialsOf(t, sibling)
 		templates := map[string]string{"core": coreStackTemplate(defaultNamespace, tier, "")}
-		for _, f := range featureRegistry {
-			templates[f.stackName(defaultNamespace, tier)] = featureTemplate(f.name, tier)
+		for _, f := range partRegistry {
+			templates[f.stackName(defaultNamespace, tier)] = partTemplate(f.name, tier)
 		}
 		for stack, body := range templates {
 			for logicalID, resource := range parseVariablesTemplate(t, body).Resources {
@@ -1628,12 +1628,12 @@ func TestABootstrapCredentialReachesTheBaseRolesOfOnlyItsOwnTier(t *testing.T) {
 func TestABootstrapCredentialReachesTheNamedBootstrapResourcesOfOnlyItsOwnTier(t *testing.T) {
 	const account = "us-east-1:111122223333"
 	named := func(tier environment.Tier) map[string]string {
-		feature := defaultNamespace.featureStackName(FeatureCloudflareEdge, tier)
+		part := defaultNamespace.partStackName(CloudflareEdgePart, tier)
 		core, _ := defaultNamespace.StackNameFor(tier)
 		edgeUser, _ := defaultNamespace.EdgeUserNameFor(tier)
 		return map[string]string{
 			"cloudformation:DeleteStack":     "arn:aws:cloudformation:" + account + ":stack/" + core + "/0a1b",
-			"cloudformation:CreateChangeSet": "arn:aws:cloudformation:" + account + ":stack/" + feature + "/0a1b",
+			"cloudformation:CreateChangeSet": "arn:aws:cloudformation:" + account + ":stack/" + part + "/0a1b",
 			"iam:PutUserPolicy":              "arn:aws:iam::111122223333:user/" + edgeUser,
 			"lambda:PublishLayerVersion":     "arn:aws:lambda:" + account + ":layer:" + runtimeLayerName(defaultNamespace, tier, arch.ARM64, "0123456789abcdef"),
 		}

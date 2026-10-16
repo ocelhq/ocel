@@ -97,7 +97,7 @@ func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) {
 
 var bound = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
 
-func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
+func TestSealingWithoutAKeyNamesThePart(t *testing.T) {
 	cipher := awsports.Cipher{Keys: keylessBootstrap{}}
 	_, err := cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live_secret"))
 	if err == nil {
@@ -111,8 +111,8 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 		t.Errorf("Seal err = %v, want it to name %s alone", err, want)
 	}
 	var wanted provider.WantedPartError
-	if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
-		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.FeatureVariablesKey)
+	if !errors.As(err, &wanted) || wanted.Part != provider.VariablesKeyPart {
+		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.VariablesKeyPart)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 		t.Errorf("Seal err = %v, want it to name %s alone", err, want)
 	}
 	var wanted provider.WantedPartError
-	if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
-		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.FeatureVariablesKey)
+	if !errors.As(err, &wanted) || wanted.Part != provider.VariablesKeyPart {
+		t.Errorf("Seal err = %#v, want it to say it is for want of %s, for the caller to record", err, provider.VariablesKeyPart)
 	}
 }
 

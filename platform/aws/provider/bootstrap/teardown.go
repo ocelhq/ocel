@@ -61,33 +61,17 @@ func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func featureStackNames(ns Namespace, names []string, tier environment.Tier) []string {
+func partStackNames(ns Namespace, names []string, tier environment.Tier) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		out = append(out, ns.FeatureStackName(name, tier))
+		out = append(out, ns.PartStackName(name, tier))
 	}
 	return out
 }
 
-func FeatureDeleteOrder(names []string) ([]string, error) {
-	levels, err := featureLevels(names)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for i := len(levels) - 1; i >= 0; i-- {
-		out = append(out, levels[i]...)
-	}
-	return out, nil
-}
-
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, names []string, progress progress.Log) error {
-	order, err := FeatureDeleteOrder(names)
-	if err != nil {
-		return err
-	}
-	for _, name := range order {
-		stackName := ns.FeatureStackName(name, tier)
+func deletePartStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, names []string, progress progress.Log) error {
+	for _, name := range names {
+		stackName := ns.PartStackName(name, tier)
 		out, err := cfn.StackOutputs(ctx, stacks, stackName)
 		if err != nil {
 			return err
@@ -149,14 +133,14 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		}
 	}
 
-	installed, err := installedFeatures(ctx, apis.CFN, ns, tier)
+	installed, err := installedParts(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
 	}
 	present := installed.Names()
 	if len(present) > 0 {
-		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, tier), ", ")))
-		if err := deleteFeatureStacks(ctx, apis.CFN, ns, tier, present, progress); err != nil {
+		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(partStackNames(ns, present, tier), ", ")))
+		if err := deletePartStacks(ctx, apis.CFN, ns, tier, present, progress); err != nil {
 			return err
 		}
 	}
