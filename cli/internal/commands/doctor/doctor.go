@@ -287,7 +287,10 @@ func appsCheck(cfg *project.Project, roots []discovery.Root, rootsErr error) che
 		return check{verdict: verdictPass, text: fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))}
 	}
 	config := filepath.Base(cfg.Path)
-	undetected := cfg.RootAppUndetected.Error()
+	undetected := "no app is detected at the project root"
+	if cfg.RootAppUndetected != nil {
+		undetected = cfg.RootAppUndetected.Error()
+	}
 	if len(roots) == 0 {
 		return check{
 			verdict: verdictWarn,

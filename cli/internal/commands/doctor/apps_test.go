@@ -64,6 +64,15 @@ func TestDoctorWarnsThatAProjectWithNoAppsAndNoResourcesHasNothingToDeploy(t *te
 	}
 }
 
+func TestDoctorWarnsOfNothingToDeployWhereTheProjectSaysNothingOfItsRoot(t *testing.T) {
+	t.Parallel()
+
+	got := appsCheck(&project.Project{Path: project.DefaultFileName}, nil, nil)
+	if want := "config loads — nothing to deploy: no apps or resources declared, and no app is detected at the project root"; got.verdict != verdictWarn || got.text != want {
+		t.Errorf("check = %+v, want a warning saying %q", got, want)
+	}
+}
+
 func TestDoctorWarnsWhyNoAppIsDetectedAtARootHoldingTwoApps(t *testing.T) {
 	t.Parallel()
 
